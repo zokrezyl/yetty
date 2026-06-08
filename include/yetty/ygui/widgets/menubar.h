@@ -18,6 +18,8 @@ struct yetty_ygui_menubar_data_ptr_result yetty_ygui_menubar_data(struct yetty_y
 
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_menubar_add(struct yetty_ygui_object *bar, const char *label, struct yetty_ygui_object *menu);
+struct yetty_ycore_void_result yetty_ygui_menubar_add(struct yetty_ygui_object *bar,
+                                                      const char *label,
+                                                      struct yetty_ygui_object *menu);
 
 #endif

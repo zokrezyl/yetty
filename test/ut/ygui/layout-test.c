@@ -239,7 +239,8 @@ static void test_widget_paint_emits_real_prims(void)
     yetty_ygui_widget_set_rect(label, rect(20, 20, 100, 40));
     yetty_ygui_widget_set_rect(btn, rect(20, 60, 100, 90));
 
-    struct yetty_ydraw_drawable_list_result dlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result dlr =
+        yetty_ydraw_drawable_list_config_buffer_create(NULL);
     assert(YETTY_IS_OK(dlr));
     struct yetty_ygui_emit_ctx ctx = {
         .framework = NULL,

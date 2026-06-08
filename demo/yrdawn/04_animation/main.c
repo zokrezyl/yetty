@@ -18,7 +18,7 @@
 
 #define W 256u
 #define H 256u
-#define FRAMES 150           /* ~5 s at 30 fps */
+#define FRAMES 150 /* ~5 s at 30 fps */
 #define FRAME_INTERVAL_MS 33
 
 static void hsv_to_rgb(float h, float s, float v, uint8_t *r, uint8_t *g, uint8_t *b)
@@ -27,12 +27,31 @@ static void hsv_to_rgb(float h, float s, float v, uint8_t *r, uint8_t *g, uint8_
     float hh = h * 6.0f;
     float x = c * (1.0f - fabsf(fmodf(hh, 2.0f) - 1.0f));
     float rr, gg, bb;
-    if (hh < 1.0f)      { rr = c; gg = x; bb = 0.0f; }
-    else if (hh < 2.0f) { rr = x; gg = c; bb = 0.0f; }
-    else if (hh < 3.0f) { rr = 0.0f; gg = c; bb = x; }
-    else if (hh < 4.0f) { rr = 0.0f; gg = x; bb = c; }
-    else if (hh < 5.0f) { rr = x; gg = 0.0f; bb = c; }
-    else                { rr = c; gg = 0.0f; bb = x; }
+    if (hh < 1.0f) {
+        rr = c;
+        gg = x;
+        bb = 0.0f;
+    } else if (hh < 2.0f) {
+        rr = x;
+        gg = c;
+        bb = 0.0f;
+    } else if (hh < 3.0f) {
+        rr = 0.0f;
+        gg = c;
+        bb = x;
+    } else if (hh < 4.0f) {
+        rr = 0.0f;
+        gg = x;
+        bb = c;
+    } else if (hh < 5.0f) {
+        rr = x;
+        gg = 0.0f;
+        bb = c;
+    } else {
+        rr = c;
+        gg = 0.0f;
+        bb = x;
+    }
     float m = v - c;
     *r = (uint8_t)((rr + m) * 255.0f);
     *g = (uint8_t)((gg + m) * 255.0f);
@@ -59,7 +78,11 @@ int main(void)
 {
     demo_raw_stdin();
     FILE *trace = demo_trace_open("04-animation");
-#define LOG(...) do { if (trace) fprintf(trace, __VA_ARGS__); } while (0)
+#define LOG(...)                                                                                   \
+    do {                                                                                           \
+        if (trace)                                                                                 \
+            fprintf(trace, __VA_ARGS__);                                                           \
+    } while (0)
 
     struct yetty_yrdawn_client *c = NULL;
     struct yetty_yrdawn_canvas *canvas =
@@ -86,18 +109,23 @@ int main(void)
         if (pr.ok != 1) {
             LOG("04_animation: frame %d present_frame failed: %s\n", i, pr.error.msg);
             ++failures;
-            if (failures > 3)
+            if (failures > 3) {
                 break;
+            }
         }
         (void)yetty_yrdawn_client_pump(c);
         demo_sleep_ms(FRAME_INTERVAL_MS);
     }
-    if (demo_quit_flag) LOG("04_animation: 'q' pressed at frame %d\n", i);
+    if (demo_quit_flag) {
+        LOG("04_animation: 'q' pressed at frame %d\n", i);
+    }
     free(pixels);
     LOG("04_animation: %d frames done (failures=%d)\n", FRAMES, failures);
 
     (void)yetty_yrdawn_canvas_destroy(canvas);
     (void)yetty_yrdawn_client_destroy(c);
-    if (trace) fclose(trace);
+    if (trace) {
+        fclose(trace);
+    }
     return 0;
 }

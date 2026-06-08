@@ -20,9 +20,8 @@
 
 #include <stdio.h>
 
-struct [[clang::annotate("class@yvehicle:sportscar")]]
-       [[clang::annotate("parent@yvehicle:car")]]
-       [[clang::annotate("uses@yvehicle:electric")]] sportscar_data {
+struct [[clang::annotate("class@yvehicle:sportscar")]] [[clang::annotate(
+    "parent@yvehicle:car")]] [[clang::annotate("uses@yvehicle:electric")]] sportscar_data {
     [[clang::annotate("property:ro")]] int top_speed; /* read-only to others */
     [[clang::annotate("property")]] int turbo_engaged;
 };
@@ -104,10 +103,11 @@ static struct str_result sportscar_describe(struct ctx *ctx, struct object *obj,
     YETTY_RETURN_IF_ERR(str, battery, "sportscar_describe: battery");
 
     struct str r;
-    snprintf(r.buf, sizeof(r.buf),
-             "sportscar@%p %d/%d km/h, %d doors, mileage=%d, battery=%d%%, turbo=%s (distance=%.1f)",
-             (void *)obj, speed.value, self.value->top_speed, doors.value, mileage.value,
-             battery.value, self.value->turbo_engaged ? "on" : "off", distance);
+    snprintf(
+        r.buf, sizeof(r.buf),
+        "sportscar@%p %d/%d km/h, %d doors, mileage=%d, battery=%d%%, turbo=%s (distance=%.1f)",
+        (void *)obj, speed.value, self.value->top_speed, doors.value, mileage.value, battery.value,
+        self.value->turbo_engaged ? "on" : "off", distance);
     ydebug("-> '%s'", r.buf);
     return YETTY_OK(str, r);
 }

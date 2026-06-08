@@ -19,7 +19,10 @@ struct yetty_ygui_panel_data_ptr_result yetty_ygui_panel_data(struct yetty_ygui_
 struct yetty_ycore_rgba;
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_ygui_object *obj, struct yetty_ycore_rgba color);
-struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_ygui_object *obj, struct yetty_ycore_rgba color, float width_px);
+struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_ygui_object *obj,
+                                                       struct yetty_ycore_rgba color);
+struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_ygui_object *obj,
+                                                           struct yetty_ycore_rgba color,
+                                                           float width_px);
 
 #endif

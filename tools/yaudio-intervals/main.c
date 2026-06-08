@@ -29,21 +29,22 @@
 #include <string.h>
 
 struct opts {
-    int   channel;            /* -1 → all channels */
+    int channel; /* -1 → all channels */
     float noise_percentile;
     float open_db;
     float close_db;
     double min_active_sec;
     double min_gap_sec;
-    int   frame_samples;
-    int   hop_samples;
-    int   print_header;
-    int   print_summary;      /* one extra stderr line per (file,channel) */
+    int frame_samples;
+    int hop_samples;
+    int print_header;
+    int print_summary; /* one extra stderr line per (file,channel) */
 };
 
 static void usage(FILE *out, const char *prog)
 {
-    fprintf(out,
+    fprintf(
+        out,
         "Usage: %s [options] file.wav [file2.wav ...]\n"
         "\n"
         "Find intervals of energy above the noise floor in PCM WAV files.\n"
@@ -73,21 +74,22 @@ enum {
     OPT_HOP,
 };
 
-static int process_channel(const char *path,
-                           const struct yetty_yaudio_wav *w,
-                           uint32_t channel,
-                           const struct opts *opts,
-                           FILE *tsv)
+static int process_channel(const char *path, const struct yetty_yaudio_wav *w, uint32_t channel,
+                           const struct opts *opts, FILE *tsv)
 {
     struct yetty_yaudio_intervals_config cfg;
     yetty_yaudio_intervals_config_defaults(&cfg);
-    cfg.noise_percentile     = opts->noise_percentile;
-    cfg.open_db_above_floor  = opts->open_db;
+    cfg.noise_percentile = opts->noise_percentile;
+    cfg.open_db_above_floor = opts->open_db;
     cfg.close_db_above_floor = opts->close_db;
-    cfg.min_active_sec       = opts->min_active_sec;
-    cfg.min_gap_sec          = opts->min_gap_sec;
-    if (opts->frame_samples > 0) cfg.frame_samples = (uint32_t)opts->frame_samples;
-    if (opts->hop_samples > 0)   cfg.hop_samples   = (uint32_t)opts->hop_samples;
+    cfg.min_active_sec = opts->min_active_sec;
+    cfg.min_gap_sec = opts->min_gap_sec;
+    if (opts->frame_samples > 0) {
+        cfg.frame_samples = (uint32_t)opts->frame_samples;
+    }
+    if (opts->hop_samples > 0) {
+        cfg.hop_samples = (uint32_t)opts->hop_samples;
+    }
 
     struct yetty_yaudio_intervals_ptr_result r =
         yetty_yaudio_intervals_find(w, channel, &cfg, NULL, NULL);
@@ -105,18 +107,15 @@ static int process_channel(const char *path,
         fprintf(stderr,
                 "%s ch%u: floor=%.1f dBFS open=%.1f close=%.1f "
                 "frames=%zu intervals=%zu\n",
-                path, channel, iv->noise_floor_dbfs,
-                iv->open_threshold_dbfs, iv->close_threshold_dbfs,
-                iv->total_frames, iv->n);
+                path, channel, iv->noise_floor_dbfs, iv->open_threshold_dbfs,
+                iv->close_threshold_dbfs, iv->total_frames, iv->n);
     }
 
     for (size_t i = 0; i < iv->n; i++) {
         const struct yetty_yaudio_interval *it = &iv->items[i];
-        fprintf(tsv, "%s\t%u\t%.6f\t%.6f\t%.6f\t%.2f\t%.2f\n",
-                path, channel,
-                it->start_sec, it->end_sec,
-                it->end_sec - it->start_sec,
-                (double)it->peak_dbfs, (double)it->rms_dbfs);
+        fprintf(tsv, "%s\t%u\t%.6f\t%.6f\t%.6f\t%.2f\t%.2f\n", path, channel, it->start_sec,
+                it->end_sec, it->end_sec - it->start_sec, (double)it->peak_dbfs,
+                (double)it->rms_dbfs);
     }
     yetty_yaudio_intervals_destroy(iv);
     return 0;
@@ -139,12 +138,14 @@ static int process_file(const char *path, const struct opts *opts, FILE *tsv)
     if (opts->channel < 0) {
         for (uint16_t c = 0; c < w->channels; c++) {
             int r = process_channel(path, w, c, opts, tsv);
-            if (r != 0) rc = r;
+            if (r != 0) {
+                rc = r;
+            }
         }
     } else {
         if ((uint32_t)opts->channel >= w->channels) {
-            fprintf(stderr, "%s: channel %d out of range (file has %u)\n",
-                    path, opts->channel, w->channels);
+            fprintf(stderr, "%s: channel %d out of range (file has %u)\n", path, opts->channel,
+                    w->channels);
             rc = 1;
         } else {
             rc = process_channel(path, w, (uint32_t)opts->channel, opts, tsv);
@@ -159,46 +160,70 @@ int main(int argc, char **argv)
     struct opts opts = {
         .channel = -1,
         .noise_percentile = 0.15f,
-        .open_db   = 10.0f,
-        .close_db  = 6.0f,
+        .open_db = 10.0f,
+        .close_db = 6.0f,
         .min_active_sec = 0.050,
-        .min_gap_sec    = 0.150,
-        .frame_samples  = 1024,
-        .hop_samples    = 1024,
-        .print_header   = 0,
-        .print_summary  = 0,
+        .min_gap_sec = 0.150,
+        .frame_samples = 1024,
+        .hop_samples = 1024,
+        .print_header = 0,
+        .print_summary = 0,
     };
 
     static const struct option long_opts[] = {
-        {"channel",    required_argument, NULL, 'c'},
+        {"channel", required_argument, NULL, 'c'},
         {"percentile", required_argument, NULL, 'p'},
-        {"open-db",    required_argument, NULL, OPT_OPEN_DB},
-        {"close-db",   required_argument, NULL, OPT_CLOSE_DB},
+        {"open-db", required_argument, NULL, OPT_OPEN_DB},
+        {"close-db", required_argument, NULL, OPT_CLOSE_DB},
         {"min-active", required_argument, NULL, OPT_MIN_ACTIVE},
-        {"min-gap",    required_argument, NULL, OPT_MIN_GAP},
-        {"frame",      required_argument, NULL, OPT_FRAME},
-        {"hop",        required_argument, NULL, OPT_HOP},
-        {"header",     no_argument,       NULL, 'H'},
-        {"summary",    no_argument,       NULL, 's'},
-        {"help",       no_argument,       NULL, 'h'},
+        {"min-gap", required_argument, NULL, OPT_MIN_GAP},
+        {"frame", required_argument, NULL, OPT_FRAME},
+        {"hop", required_argument, NULL, OPT_HOP},
+        {"header", no_argument, NULL, 'H'},
+        {"summary", no_argument, NULL, 's'},
+        {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0},
     };
 
     int c;
     while ((c = getopt_long(argc, argv, "c:p:Hsh", long_opts, NULL)) != -1) {
         switch (c) {
-        case 'c': opts.channel = atoi(optarg); break;
-        case 'p': opts.noise_percentile = (float)atof(optarg); break;
-        case OPT_OPEN_DB:    opts.open_db = (float)atof(optarg); break;
-        case OPT_CLOSE_DB:   opts.close_db = (float)atof(optarg); break;
-        case OPT_MIN_ACTIVE: opts.min_active_sec = atof(optarg); break;
-        case OPT_MIN_GAP:    opts.min_gap_sec    = atof(optarg); break;
-        case OPT_FRAME:      opts.frame_samples = atoi(optarg); break;
-        case OPT_HOP:        opts.hop_samples   = atoi(optarg); break;
-        case 'H': opts.print_header = 1; break;
-        case 's': opts.print_summary = 1; break;
-        case 'h': usage(stdout, argv[0]); return 0;
-        default:  usage(stderr, argv[0]); return 2;
+        case 'c':
+            opts.channel = atoi(optarg);
+            break;
+        case 'p':
+            opts.noise_percentile = (float)atof(optarg);
+            break;
+        case OPT_OPEN_DB:
+            opts.open_db = (float)atof(optarg);
+            break;
+        case OPT_CLOSE_DB:
+            opts.close_db = (float)atof(optarg);
+            break;
+        case OPT_MIN_ACTIVE:
+            opts.min_active_sec = atof(optarg);
+            break;
+        case OPT_MIN_GAP:
+            opts.min_gap_sec = atof(optarg);
+            break;
+        case OPT_FRAME:
+            opts.frame_samples = atoi(optarg);
+            break;
+        case OPT_HOP:
+            opts.hop_samples = atoi(optarg);
+            break;
+        case 'H':
+            opts.print_header = 1;
+            break;
+        case 's':
+            opts.print_summary = 1;
+            break;
+        case 'h':
+            usage(stdout, argv[0]);
+            return 0;
+        default:
+            usage(stderr, argv[0]);
+            return 2;
         }
     }
 
@@ -214,7 +239,9 @@ int main(int argc, char **argv)
     int rc = 0;
     for (int i = optind; i < argc; i++) {
         int r = process_file(argv[i], &opts, stdout);
-        if (r != 0) rc = r;
+        if (r != 0) {
+            rc = r;
+        }
         fflush(stdout);
     }
     return rc;

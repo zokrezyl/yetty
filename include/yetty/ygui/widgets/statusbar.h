@@ -14,11 +14,14 @@ struct yetty_yclass_ptr_result yetty_ygui_statusbar_class_get(void);
 struct yetty_ygui_object;
 struct statusbar_data;
 YETTY_YRESULT_DECLARE(yetty_ygui_statusbar_data_ptr, struct statusbar_data *);
-struct yetty_ygui_statusbar_data_ptr_result yetty_ygui_statusbar_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_statusbar_data_ptr_result yetty_ygui_statusbar_data(
+    struct yetty_ygui_object *obj);
 
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_statusbar_set_left(struct yetty_ygui_object *obj, const char *text);
-struct yetty_ycore_void_result yetty_ygui_statusbar_set_right(struct yetty_ygui_object *obj, const char *text);
+struct yetty_ycore_void_result yetty_ygui_statusbar_set_left(struct yetty_ygui_object *obj,
+                                                             const char *text);
+struct yetty_ycore_void_result yetty_ygui_statusbar_set_right(struct yetty_ygui_object *obj,
+                                                              const char *text);
 
 #endif

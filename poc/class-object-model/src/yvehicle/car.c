@@ -11,8 +11,8 @@
 
 #include <stdio.h>
 
-struct [[clang::annotate("class@yvehicle:car")]]
-       [[clang::annotate("parent@yvehicle:vehicle")]] car_data {
+struct [[clang::annotate("class@yvehicle:car")]] [[clang::annotate("parent@yvehicle:vehicle")]]
+car_data {
     [[clang::annotate("property")]] int doors;
 };
 

@@ -37,8 +37,7 @@ struct async_state {
     uint64_t device_h;
 };
 
-static void on_adapter(void *u, uint32_t status, uint32_t mid,
-                       const uint8_t *body, size_t body_len)
+static void on_adapter(void *u, uint32_t status, uint32_t mid, const uint8_t *body, size_t body_len)
 {
     (void)mid;
     (void)body;
@@ -46,11 +45,12 @@ static void on_adapter(void *u, uint32_t status, uint32_t mid,
     struct async_state *s = (struct async_state *)u;
     s->adapter_status = status;
     s->adapter_done = 1;
-    if (s->trace) fprintf(s->trace, "demo: adapter cb status=%u\n", status);
+    if (s->trace) {
+        fprintf(s->trace, "demo: adapter cb status=%u\n", status);
+    }
 }
 
-static void on_device(void *u, uint32_t status, uint32_t mid,
-                      const uint8_t *body, size_t body_len)
+static void on_device(void *u, uint32_t status, uint32_t mid, const uint8_t *body, size_t body_len)
 {
     (void)mid;
     (void)body;
@@ -58,7 +58,9 @@ static void on_device(void *u, uint32_t status, uint32_t mid,
     struct async_state *s = (struct async_state *)u;
     s->device_status = status;
     s->device_done = 1;
-    if (s->trace) fprintf(s->trace, "demo: device cb status=%u\n", status);
+    if (s->trace) {
+        fprintf(s->trace, "demo: device cb status=%u\n", status);
+    }
 }
 
 /* Raw mode on stdin: no canonical processing, no echo, no CR↔LF
@@ -68,8 +70,9 @@ static void on_device(void *u, uint32_t status, uint32_t mid,
 static void setup_raw_stdin(void)
 {
     struct termios t;
-    if (tcgetattr(STDIN_FILENO, &t) != 0)
+    if (tcgetattr(STDIN_FILENO, &t) != 0) {
         return;
+    }
     t.c_lflag &= ~(ICANON | ECHO | ECHOE | ECHOK | ECHONL | ISIG);
     t.c_iflag &= ~(IXON | IXOFF | ICRNL | INLCR | IGNCR | BRKINT | INPCK | ISTRIP);
     t.c_oflag &= ~OPOST;
@@ -84,9 +87,9 @@ static void make_gradient(uint8_t *p)
     for (uint32_t y = 0; y < H; ++y) {
         for (uint32_t x = 0; x < W; ++x) {
             uint8_t *px = p + (y * W + x) * 4u;
-            px[0] = (uint8_t)(x);          /* R sweeps left→right */
-            px[1] = (uint8_t)(y);          /* G sweeps top→bottom */
-            px[2] = (uint8_t)(255u - x);   /* B inverse of R */
+            px[0] = (uint8_t)(x);        /* R sweeps left→right */
+            px[1] = (uint8_t)(y);        /* G sweeps top→bottom */
+            px[2] = (uint8_t)(255u - x); /* B inverse of R */
             px[3] = 255u;
         }
     }
@@ -111,8 +114,15 @@ int main(int argc, char **argv)
     /* Trace lines go to a side log file. fprintf to stderr would mix
      * into the PTY stream and corrupt the wire protocol. */
     FILE *trace = fopen("/tmp/yrdawn-demo.trace", "w");
-    if (trace) setvbuf(trace, NULL, _IOLBF, 0);
-#define DEMO_TRACE(...) do { if (trace) { fprintf(trace, __VA_ARGS__); } } while (0)
+    if (trace) {
+        setvbuf(trace, NULL, _IOLBF, 0);
+    }
+#define DEMO_TRACE(...)                                                                            \
+    do {                                                                                           \
+        if (trace) {                                                                               \
+            fprintf(trace, __VA_ARGS__);                                                           \
+        }                                                                                          \
+    } while (0)
 
     DEMO_TRACE("demo: start\n");
 
@@ -199,6 +209,8 @@ int main(int argc, char **argv)
     (void)yetty_yrdawn_canvas_destroy(canvas);
     (void)yetty_yrdawn_client_destroy(c);
     DEMO_TRACE("demo: clean exit\n");
-    if (trace) fclose(trace);
+    if (trace) {
+        fclose(trace);
+    }
     return 0;
 }

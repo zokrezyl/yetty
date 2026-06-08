@@ -41,9 +41,9 @@ static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result
 /* CPU state                                                           */
 /* ------------------------------------------------------------------ */
 
-#define MAX_CORES   64
-#define MAX_PROCS   2048
-#define REFRESH_MS  1000
+#define MAX_CORES 64
+#define MAX_PROCS 2048
+#define REFRESH_MS 1000
 
 struct cpu_sample {
     uint64_t user, nice, sys, idle, iowait, irq, softirq, steal;
@@ -51,7 +51,7 @@ struct cpu_sample {
 
 struct cpu_state {
     int n_cores;
-    struct cpu_sample prev[MAX_CORES + 1];   /* [0]=aggregate, [1..N]=per-core */
+    struct cpu_sample prev[MAX_CORES + 1]; /* [0]=aggregate, [1..N]=per-core */
     struct cpu_sample curr[MAX_CORES + 1];
     float pct[MAX_CORES + 1];
 };
@@ -72,9 +72,8 @@ static int read_proc_stat(struct cpu_state *st)
             break;
         }
         struct cpu_sample s = {0};
-        int n = sscanf(line, "%*s %lu %lu %lu %lu %lu %lu %lu %lu",
-                       &s.user, &s.nice, &s.sys, &s.idle, &s.iowait, &s.irq,
-                       &s.softirq, &s.steal);
+        int n = sscanf(line, "%*s %lu %lu %lu %lu %lu %lu %lu %lu", &s.user, &s.nice, &s.sys,
+                       &s.idle, &s.iowait, &s.irq, &s.softirq, &s.steal);
         if (n < 4) {
             break;
         }
@@ -92,10 +91,10 @@ static float compute_pct(const struct cpu_sample *prev, const struct cpu_sample 
 {
     uint64_t prev_idle = prev->idle + prev->iowait;
     uint64_t curr_idle = curr->idle + curr->iowait;
-    uint64_t prev_total = prev->user + prev->nice + prev->sys + prev_idle
-                          + prev->irq + prev->softirq + prev->steal;
-    uint64_t curr_total = curr->user + curr->nice + curr->sys + curr_idle
-                          + curr->irq + curr->softirq + curr->steal;
+    uint64_t prev_total =
+        prev->user + prev->nice + prev->sys + prev_idle + prev->irq + prev->softirq + prev->steal;
+    uint64_t curr_total =
+        curr->user + curr->nice + curr->sys + curr_idle + curr->irq + curr->softirq + curr->steal;
     if (curr_total <= prev_total) {
         return 0.0f;
     }
@@ -110,13 +109,13 @@ static float compute_pct(const struct cpu_sample *prev, const struct cpu_sample 
 
 struct proc_entry {
     pid_t pid;
-    char  state;
-    uint64_t cpu_jiffies;       /* utime + stime — accumulated */
-    uint64_t cpu_jiffies_prev;  /* previous tick's value, for delta */
+    char state;
+    uint64_t cpu_jiffies;      /* utime + stime — accumulated */
+    uint64_t cpu_jiffies_prev; /* previous tick's value, for delta */
     uint64_t rss_kb;
     uid_t uid;
-    char  user[32];
-    char  comm[64];
+    char user[32];
+    char comm[64];
 };
 
 static int parse_pid_stat(pid_t pid, struct proc_entry *e)
@@ -157,7 +156,7 @@ static int parse_pid_stat(pid_t pid, struct proc_entry *e)
      *   [11] utime          — clock ticks
      *   [12] stime          — clock ticks
      */
-    char *p = rp + 2;   /* skip ") " */
+    char *p = rp + 2; /* skip ") " */
     e->state = *p;
     /* Walk to field 11 (utime) — that's 11 spaces past state. */
     for (int i = 0; i < 11; i++) {
@@ -203,8 +202,8 @@ static void parse_pid_status(pid_t pid, struct proc_entry *e)
 /* Read all PID dirs and populate the list. Returns the number of entries
  * filled in `out`. Carries `cpu_jiffies_prev` from the matching pid in
  * `prev_table` (if any) so we can compute %CPU on the next refresh. */
-static int read_processes(struct proc_entry *out, int max,
-                          const struct proc_entry *prev_table, int prev_count)
+static int read_processes(struct proc_entry *out, int max, const struct proc_entry *prev_table,
+                          int prev_count)
 {
     DIR *d = opendir("/proc");
     if (!d) {
@@ -259,7 +258,7 @@ static int proc_cmp_cpu_desc(const void *a, const void *b)
 /* Application state                                                   */
 /* ------------------------------------------------------------------ */
 
-#define MAX_TABLE_ROWS  32
+#define MAX_TABLE_ROWS 32
 
 struct app_state {
     struct yetty_ygui_framework *engine;
@@ -284,12 +283,12 @@ struct app_state {
 /* UI building                                                         */
 /* ------------------------------------------------------------------ */
 
-#define HEADER_H        28.0f
-#define ROW_H           22.0f
-#define BAR_W           140.0f
-#define LABEL_W         110.0f
-#define MARGIN          12.0f
-#define TABLE_TOP_PAD   8.0f
+#define HEADER_H 28.0f
+#define ROW_H 22.0f
+#define BAR_W 140.0f
+#define LABEL_W 110.0f
+#define MARGIN 12.0f
+#define TABLE_TOP_PAD 8.0f
 
 static uint32_t rgba(uint8_t r, uint8_t g, uint8_t b, uint8_t a)
 {
@@ -300,7 +299,7 @@ static uint32_t core_accent(int core)
 {
     static const uint8_t pal[8][3] = {
         {255, 110, 102}, {110, 220, 130}, {102, 170, 255}, {255, 222, 100},
-        {200, 130, 255}, {110, 230, 220}, {255, 165,  90}, {245, 130, 200},
+        {200, 130, 255}, {110, 230, 220}, {255, 165, 90},  {245, 130, 200},
     };
     const uint8_t *c = pal[core % 8];
     return rgba(c[0], c[1], c[2], 255);
@@ -308,8 +307,9 @@ static uint32_t core_accent(int core)
 
 /* Add `cls` under `parent`, position + size it absolutely, return it
  * (or NULL). Absolute placement mirrors ytop's hand-laid-out UI. */
-static struct yetty_ygui_object *ytop_place(struct app_state *s, struct yetty_yclass_ptr_result cls_r,
-                                            float x, float y, float w, float h)
+static struct yetty_ygui_object *ytop_place(struct app_state *s,
+                                            struct yetty_yclass_ptr_result cls_r, float x, float y,
+                                            float w, float h)
 {
     if (YETTY_IS_ERR(cls_r)) {
         yetty_ycore_error_destroy(cls_r.error);
@@ -355,16 +355,14 @@ static void build_ui(struct app_state *s, int n_cores)
         if (core_lbl) {
             yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(core_lbl, lbl_text));
         }
-        s->cpu_bars[i] =
-            ytop_place(s, yetty_ygui_progress_class_get(), x + 50.0f, y, BAR_W, ROW_H);
+        s->cpu_bars[i] = ytop_place(s, yetty_ygui_progress_class_get(), x + 50.0f, y, BAR_W, ROW_H);
         if (s->cpu_bars[i]) {
             yetty_ycore_error_destroy_safe(
                 yetty_ygui_progress_set_accent(s->cpu_bars[i], core_accent(i - 1)));
             yetty_ycore_error_destroy_safe(yetty_ygui_progress_set_value(s->cpu_bars[i], 0.0f));
         }
-        s->cpu_labels[i] =
-            ytop_place(s, yetty_ygui_label_class_get(), x + 50.0f + BAR_W + 8.0f, y + 4.0f,
-                       60.0f, 18.0f);
+        s->cpu_labels[i] = ytop_place(s, yetty_ygui_label_class_get(), x + 50.0f + BAR_W + 8.0f,
+                                      y + 4.0f, 60.0f, 18.0f);
         if (s->cpu_labels[i]) {
             yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(s->cpu_labels[i], "  0%"));
         }
@@ -382,8 +380,8 @@ static void build_ui(struct app_state *s, int n_cores)
     s->table = ytop_place(s, yetty_ygui_table_class_get(), MARGIN, table_y, table_w, table_h);
     if (s->table) {
         static const char *const names[] = {"PID", "USER", "STATE", "%CPU", "RSS", "COMMAND"};
-        yetty_ycore_error_destroy_safe(yetty_ygui_table_set_columns(
-            s->table, (int)(sizeof(names) / sizeof(names[0])), names));
+        yetty_ycore_error_destroy_safe(
+            yetty_ygui_table_set_columns(s->table, (int)(sizeof(names) / sizeof(names[0])), names));
     }
 }
 
@@ -417,7 +415,8 @@ static void refresh(struct app_state *s)
                 if (s->cpu_labels[i]) {
                     char buf[16];
                     snprintf(buf, sizeof(buf), "%5.1f%%", p);
-                    yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(s->cpu_labels[i], buf));
+                    yetty_ycore_error_destroy_safe(
+                        yetty_ygui_label_set_text(s->cpu_labels[i], buf));
                 }
             }
         }
@@ -446,12 +445,7 @@ static void refresh(struct app_state *s)
         snprintf(cpu_s, sizeof(cpu_s), "%5.1f", pct);
         format_rss(e->rss_kb, rss_s, sizeof(rss_s));
         const char *cells[] = {
-            pid_s,
-            e->user[0] ? e->user : "?",
-            state_s,
-            cpu_s,
-            rss_s,
-            e->comm,
+            pid_s, e->user[0] ? e->user : "?", state_s, cpu_s, rss_s, e->comm,
         };
         yetty_ycore_error_destroy_safe(yetty_ygui_table_add_row(s->table, cells, 6));
     }
@@ -697,7 +691,8 @@ int main(int argc, char **argv)
 
     /* Root + widget tree (absolutely positioned, mirroring ytop's
      * hand-laid-out chrome). */
-    struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
+    struct yetty_ygui_object_ptr_result rr =
+        yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
     if (YETTY_IS_OK(rr)) {
         s->root = rr.value;
         yetty_ycore_error_destroy_safe(yetty_ygui_framework_set_root(s->engine, s->root));

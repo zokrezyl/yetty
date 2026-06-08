@@ -68,9 +68,8 @@ struct yetty_ycore_void_result yetty_yui_tabbar_model_destroy(struct yetty_yui_t
  * signal coming from yetty_event_handler — propagated down to every
  * pane's terminal_render_frame so panes wipe stale pixels left behind
  * by yui chrome that's about to repaint. */
-struct yetty_ycore_void_result yetty_yui_tabbar_model_render(struct yetty_yui_tabbar_model *bar,
-                                                       struct yetty_ydraw_target *render_target,
-                                                       int force_redraw);
+struct yetty_ycore_void_result yetty_yui_tabbar_model_render(
+    struct yetty_yui_tabbar_model *bar, struct yetty_ydraw_target *render_target, int force_redraw);
 
 /* `width` × `height` is the workspace region (the strip occupies the top,
  * `height` already excludes any bottom statusbar inset). `total_height`
@@ -78,18 +77,20 @@ struct yetty_ycore_void_result yetty_yui_tabbar_model_render(struct yetty_yui_ta
  * the edge-resize hit-test reaches down to the real window bottom so the
  * user can grab the statusbar edge rather than the invisible workspace
  * bottom above it. */
-struct yetty_ycore_void_result yetty_yui_tabbar_model_resize(struct yetty_yui_tabbar_model *bar, float width,
-                                                       float height, float total_height);
+struct yetty_ycore_void_result yetty_yui_tabbar_model_resize(struct yetty_yui_tabbar_model *bar,
+                                                             float width, float height,
+                                                             float total_height);
 
 struct yetty_ycore_int_result yetty_yui_tabbar_model_on_event(struct yetty_yui_tabbar_model *bar,
-                                                        const struct yetty_yui_event *event);
+                                                              const struct yetty_yui_event *event);
 
 /* Returns the cursor shape (yetty_ycore_cursor_shape) appropriate for the
  * given mouse position over the tabbar's invisible edge-resize bands:
  * HRESIZE in the right band / bottom-right corner, VRESIZE in the bottom
  * band, DEFAULT otherwise. yui_compute_cursor_shape calls this so a
  * single code path owns the cursor decision (no race with widget cursors). */
-int yetty_yui_tabbar_model_edge_cursor_at(const struct yetty_yui_tabbar_model *bar, float x, float y);
+int yetty_yui_tabbar_model_edge_cursor_at(const struct yetty_yui_tabbar_model *bar, float x,
+                                          float y);
 
 /* Append a workspace by loading the layout from config (mirrors the
  * single-workspace path that workspace_load_layout used to drive). The new
@@ -110,8 +111,8 @@ struct yetty_ycore_void_result yetty_yui_tabbar_model_attach_empty_workspace(
     struct yetty_yui_workspace **out_ws);
 
 /* Find a workspace by id. NULL if not present. */
-struct yetty_yui_workspace *yetty_yui_tabbar_model_find_workspace(const struct yetty_yui_tabbar_model *bar,
-                                                            yetty_ycore_object_id workspace_id);
+struct yetty_yui_workspace *yetty_yui_tabbar_model_find_workspace(
+    const struct yetty_yui_tabbar_model *bar, yetty_ycore_object_id workspace_id);
 
 /* Kinds the "v" dropdown menu can spawn. Each kind toggles a small set
  * of config keys (ssh/enabled, telnet/enabled, vnc/client) so the
@@ -134,15 +135,18 @@ struct yetty_ycore_void_result yetty_yui_tabbar_model_add_workspace_of_kind(
  * and by yui's ygui titlebar sync helper that mirrors the model into
  * widgets. The "active index" is the 0-based slot in the workspaces
  * array; the active workspace pointer is just workspaces[active]. */
-struct yetty_yui_workspace *yetty_yui_tabbar_model_active_workspace(const struct yetty_yui_tabbar_model *bar);
+struct yetty_yui_workspace *yetty_yui_tabbar_model_active_workspace(
+    const struct yetty_yui_tabbar_model *bar);
 size_t yetty_yui_tabbar_model_count(const struct yetty_yui_tabbar_model *bar);
 size_t yetty_yui_tabbar_model_active_index(const struct yetty_yui_tabbar_model *bar);
 
 /* Model mutators usable from outside (ygui tab-widget callbacks). All
  * are no-ops when idx is out of range; switch_to additionally no-ops
  * when idx is already active. */
-struct yetty_ycore_void_result yetty_yui_tabbar_model_switch_to(struct yetty_yui_tabbar_model *bar, size_t idx);
-struct yetty_ycore_void_result yetty_yui_tabbar_model_close_at(struct yetty_yui_tabbar_model *bar, size_t idx);
+struct yetty_ycore_void_result yetty_yui_tabbar_model_switch_to(struct yetty_yui_tabbar_model *bar,
+                                                                size_t idx);
+struct yetty_ycore_void_result yetty_yui_tabbar_model_close_at(struct yetty_yui_tabbar_model *bar,
+                                                               size_t idx);
 
 /* Window-control wrappers — yui's ygui titlebar buttons (_, □, ✕)
  * trampoline through here so the click path doesn't have to know about
@@ -158,7 +162,8 @@ void yetty_yui_tabbar_model_close_window(struct yetty_yui_tabbar_model *bar);
  * Pass NULL to disarm. The tabbar does not own `userdata`. */
 typedef void (*yetty_yui_tabbar_model_v_menu_cb)(void *userdata, float anchor_x, float anchor_y);
 void yetty_yui_tabbar_model_set_v_menu_callback(struct yetty_yui_tabbar_model *bar,
-                                          yetty_yui_tabbar_model_v_menu_cb cb, void *userdata);
+                                                yetty_yui_tabbar_model_v_menu_cb cb,
+                                                void *userdata);
 
 #ifdef __cplusplus
 }

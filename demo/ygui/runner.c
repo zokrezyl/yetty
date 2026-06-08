@@ -227,7 +227,7 @@ static void runner_chrome_caption_refresh(struct demo_runner *r)
     const uint8_t *data = (const uint8_t *)yetty_ydraw_drawable_list_data(list);
     size_t size = yetty_ydraw_drawable_list_size(list);
     struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(r->chrome_caption);
-    struct yetty_yclass_object *fobj = (struct yetty_yclass_object *)(fig) - 1;
+    struct yetty_yclass_object *fobj = (struct yetty_yclass_object *)(fig)-1;
     struct yetty_ycore_void_result rc = yetty_yfigure_reset_content(NULL, fobj);
     if (YETTY_IS_ERR(rc)) {
         yetty_ycore_error_destroy(rc.error);
@@ -248,8 +248,9 @@ static void runner_chrome_caption_refresh(struct demo_runner *r)
 /* Create the pinned ygrid figure that composites chrome's self-rendered caption
  * on top of the app content. The caption pixels come entirely from ychrome
  * (ydraw), not ygui — a ygrid is just the framework's drawable-list→GPU figure. */
-static struct yetty_ycore_void_result runner_chrome_caption_create(
-    struct demo_runner *r, const struct yetty_context *ctx, float width)
+static struct yetty_ycore_void_result runner_chrome_caption_create(struct demo_runner *r,
+                                                                   const struct yetty_context *ctx,
+                                                                   float width)
 {
     struct yetty_ycore_rectangle rect = {.min = {0.0f, 0.0f},
                                          .max = {width, DEMO_CHROME_CAPTION_H}};
@@ -263,7 +264,7 @@ static struct yetty_ycore_void_result runner_chrome_caption_create(
         }
     }
     struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(r->chrome_caption);
-    struct yetty_yclass_object *fobj = (struct yetty_yclass_object *)(fig) - 1;
+    struct yetty_yclass_object *fobj = (struct yetty_yclass_object *)(fig)-1;
     /* Pin to the top (no scroll) and force on top of the app content. */
     struct yetty_ycore_void_result ar = yetty_yfigure_figure_absolute_coords_set(fobj, 1);
     if (YETTY_IS_ERR(ar)) {
@@ -410,7 +411,7 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
                 struct yetty_ycore_rectangle rect = {
                     .min = {0.0f, 0.0f}, .max = {(float)ev->resize.width, DEMO_CHROME_CAPTION_H}};
                 struct yetty_ycore_void_result rr =
-                    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(fig) - 1, rect);
+                    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(fig)-1, rect);
                 if (YETTY_IS_ERR(rr)) {
                     yetty_ycore_error_destroy(rr.error);
                 }

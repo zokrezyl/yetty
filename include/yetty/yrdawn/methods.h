@@ -6,6 +6,4 @@
 #include <yetty/ycore/types.h>
 #include "yetty/yrdawn/types.h"
 
-
-
 #endif

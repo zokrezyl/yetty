@@ -70,8 +70,8 @@ static struct yetty_ycore_size_result stub_pty_read(struct yetty_platform_pty *s
 }
 
 static struct yetty_ycore_void_result stub_pty_resize(struct yetty_platform_pty *self,
-                                                     uint32_t cols, uint32_t rows,
-                                                     uint32_t pixel_w, uint32_t pixel_h)
+                                                      uint32_t cols, uint32_t rows,
+                                                      uint32_t pixel_w, uint32_t pixel_h)
 {
     (void)self;
     (void)cols;
@@ -140,19 +140,21 @@ static const uint8_t k_bmp_2x2[] = {
 /* Build a headless engine whose root panel holds one 100x100 yimage.
  * The stub pty must outlive the returned engine — the caller owns it. */
 static struct yetty_ygui_framework *make_engine_with_yimage(struct yetty_platform_pty *stub,
-                                                          struct yetty_ygui_object **out_img)
+                                                            struct yetty_ygui_object **out_img)
 {
     struct yetty_ygui_framework_ptr_result er = yetty_ygui_framework_create(stub);
     CHECK(YETTY_IS_OK(er), "engine_create");
     struct yetty_ygui_framework *engine = er.value;
 
-    struct yetty_ygui_object_ptr_result rr = yetty_ygui_add(yetty_ygui_panel_class_get().value, NULL);
+    struct yetty_ygui_object_ptr_result rr =
+        yetty_ygui_add(yetty_ygui_panel_class_get().value, NULL);
     CHECK(YETTY_IS_OK(rr), "add panel");
     struct yetty_ygui_object *root = rr.value;
     struct yetty_ycore_void_result sr = yetty_ygui_framework_set_root(engine, root);
     CHECK(YETTY_IS_OK(sr), "engine_set_root");
 
-    struct yetty_ygui_object_ptr_result ir = yetty_ygui_add(yetty_ygui_yimage_class_get().value, root);
+    struct yetty_ygui_object_ptr_result ir =
+        yetty_ygui_add(yetty_ygui_yimage_class_get().value, root);
     CHECK(YETTY_IS_OK(ir), "add yimage");
     struct yetty_ygui_object *img = ir.value;
 
@@ -323,8 +325,7 @@ static void test_incremental_figure_skip(void)
     CHECK(engine->figure_bodies.size == 0, "skip: emit #2 omits clean figure body");
 
     /* A content change re-dirties the figure → it re-ships on next emit. */
-    CHECK(YETTY_IS_OK(yetty_ygui_label_set_text(label, "different content")),
-          "skip: change text");
+    CHECK(YETTY_IS_OK(yetty_ygui_label_set_text(label, "different content")), "skip: change text");
     CHECK(YETTY_IS_OK(yetty_ygui_framework_emit(engine)), "skip: emit #3");
     CHECK(engine->figure_bodies.size > 8, "skip: emit #3 re-ships dirtied figure body");
 
@@ -345,8 +346,7 @@ static void test_yimage_emit_rejects_malformed(void)
     struct yetty_ygui_framework *engine = make_engine_with_yimage(&stub, &img);
 
     uint8_t garbage[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04};
-    struct yetty_ycore_void_result br =
-        yetty_ygui_yimage_set_bytes(img, garbage, sizeof(garbage));
+    struct yetty_ycore_void_result br = yetty_ygui_yimage_set_bytes(img, garbage, sizeof(garbage));
     CHECK(YETTY_IS_OK(br), "yimage_set_bytes (garbage)");
 
     struct yetty_ycore_void_result rer = yetty_ygui_framework_emit(engine);

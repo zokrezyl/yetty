@@ -545,8 +545,8 @@ struct yetty_ycore_void_result yetty_yfigure_container_clear_all(
         }
     }
     {
-        struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(
-            (struct yetty_yclass_object *)(container->base) - 1, 1);
+        struct yetty_ycore_void_result set_r =
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(container->base) - 1, 1);
         if (YETTY_IS_ERR(set_r)) {
             if (have_err) {
                 yetty_ycore_error_destroy(first_err.error);

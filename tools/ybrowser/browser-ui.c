@@ -1604,7 +1604,6 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
-
     switch (ev->type) {
     case YETTY_YCORE_SHUTDOWN:
     case YETTY_YCORE_WINDOW_CLOSE:

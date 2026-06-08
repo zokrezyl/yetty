@@ -348,7 +348,8 @@ static struct yetty_ycore_void_result terminal_clear_figures_callback(void *user
     }
     ydebug("terminal_clear_figures_callback: full-screen erase/reset -> clearing root container");
     struct yetty_ycore_void_result r = yetty_yfigure_container_clear_all(terminal->root_container);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_clear_figures_callback: container clear_all");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
+                        "terminal_clear_figures_callback: container clear_all");
     return YETTY_OK_VOID();
 }
 

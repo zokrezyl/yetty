@@ -16,6 +16,7 @@ struct yetty_ydraw_drawable_list;
 /* Public constants — copied verbatim into the generated music.h. */
 #define YETTY_YMUSIC_NO_ELEMENT (-1) /* hit_test: no element under the point */
 #define YETTY_YMUSIC_FLAG_NONE 0x0u  /* reserved render flags */
-struct yetty_ycore_void_result yetty_ymusic_emit_osc(const struct yetty_ydraw_drawable_list *list, int fd);
+struct yetty_ycore_void_result yetty_ymusic_emit_osc(const struct yetty_ydraw_drawable_list *list,
+                                                     int fd);
 
 #endif

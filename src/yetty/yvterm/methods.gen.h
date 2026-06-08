@@ -4,5 +4,4 @@
 
 #include <yetty/yvterm/methods.h>
 
-
 #endif

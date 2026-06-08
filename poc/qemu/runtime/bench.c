@@ -14,23 +14,39 @@ typedef struct {
 
 int console_fd = -1;
 
-void print(const char *s) {
+void print(const char *s)
+{
     write(console_fd, s, strlen(s));
 }
 
-void print_num(long n) {
+void print_num(long n)
+{
     char buf[32];
     char out[32];
     int i = 0, j = 0, neg = 0;
-    if (n < 0) { neg = 1; n = -n; }
-    if (n == 0) { write(console_fd, "0", 1); return; }
-    while (n) { buf[i++] = '0' + (n % 10); n /= 10; }
-    if (neg) out[j++] = '-';
-    while (i--) out[j++] = buf[i];
+    if (n < 0) {
+        neg = 1;
+        n = -n;
+    }
+    if (n == 0) {
+        write(console_fd, "0", 1);
+        return;
+    }
+    while (n) {
+        buf[i++] = '0' + (n % 10);
+        n /= 10;
+    }
+    if (neg) {
+        out[j++] = '-';
+    }
+    while (i--) {
+        out[j++] = buf[i];
+    }
     write(console_fd, out, j);
 }
 
-void *heavy_work(void *arg) {
+void *heavy_work(void *arg)
+{
     thread_arg_t *t = (thread_arg_t *)arg;
     unsigned long sum = 0;
     for (int i = 0; i < ITERATIONS; i++) {
@@ -41,13 +57,20 @@ void *heavy_work(void *arg) {
     return NULL;
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     console_fd = open("/dev/console", O_WRONLY);
-    if (console_fd < 0) console_fd = open("/dev/hvc0", O_WRONLY);
-    if (console_fd < 0) console_fd = 1;
+    if (console_fd < 0) {
+        console_fd = open("/dev/hvc0", O_WRONLY);
+    }
+    if (console_fd < 0) {
+        console_fd = 1;
+    }
 
     int nthreads = 4;
-    if (argc > 1) nthreads = atoi(argv[1]);
+    if (argc > 1) {
+        nthreads = atoi(argv[1]);
+    }
 
     pthread_t *threads = malloc(nthreads * sizeof(pthread_t));
     thread_arg_t *args = malloc(nthreads * sizeof(thread_arg_t));
@@ -55,7 +78,9 @@ int main(int argc, char **argv) {
     struct timeval start, end;
     gettimeofday(&start, NULL);
 
-    print("Starting "); print_num(nthreads); print(" threads\n");
+    print("Starting ");
+    print_num(nthreads);
+    print(" threads\n");
 
     for (int i = 0; i < nthreads; i++) {
         args[i].id = i;
@@ -68,7 +93,9 @@ int main(int argc, char **argv) {
 
     gettimeofday(&end, NULL);
     long elapsed = (end.tv_sec - start.tv_sec) * 1000 + (end.tv_usec - start.tv_usec) / 1000;
-    print("Total time: "); print_num(elapsed); print(" ms\n");
+    print("Total time: ");
+    print_num(elapsed);
+    print(" ms\n");
 
     free(threads);
     free(args);

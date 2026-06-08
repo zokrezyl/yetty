@@ -84,8 +84,8 @@ static void print_sdf_prim(int idx, int indent, uint32_t t, const uint32_t *w, s
         cx = cy = 0.0f;
     }
     const char *prefix = (indent == 0) ? "  " : "      ";
-    if (t == YETTY_YSDF_BOX || t == YETTY_YSDF_ROUNDED_BOX ||
-        t == YETTY_YSDF_LINEAR_GRADIENT_BOX || t == YETTY_YSDF_RADIAL_GRADIENT_BOX) {
+    if (t == YETTY_YSDF_BOX || t == YETTY_YSDF_ROUNDED_BOX || t == YETTY_YSDF_LINEAR_GRADIENT_BOX ||
+        t == YETTY_YSDF_RADIAL_GRADIENT_BOX) {
         float hw = 0.0f, hh = 0.0f;
         if (words >= 9) {
             memcpy(&hw, &w[7], 4);
@@ -96,11 +96,10 @@ static void print_sdf_prim(int idx, int indent, uint32_t t, const uint32_t *w, s
             memcpy(&fill, &w[2], 4);
             memcpy(&stroke, &w[3], 4);
         }
-        const char *name =
-            (t == YETTY_YSDF_BOX) ? "BOX" :
-            (t == YETTY_YSDF_ROUNDED_BOX) ? "ROUNDED_BOX" :
-            (t == YETTY_YSDF_LINEAR_GRADIENT_BOX) ? "LINEAR_GRADIENT_BOX" :
-                                                    "RADIAL_GRADIENT_BOX";
+        const char *name = (t == YETTY_YSDF_BOX)                   ? "BOX"
+                           : (t == YETTY_YSDF_ROUNDED_BOX)         ? "ROUNDED_BOX"
+                           : (t == YETTY_YSDF_LINEAR_GRADIENT_BOX) ? "LINEAR_GRADIENT_BOX"
+                                                                   : "RADIAL_GRADIENT_BOX";
         out("%sprim #%d %s rect=(%.1f,%.1f)..(%.1f,%.1f) hw=%.1f hh=%.1f "
             "fill=0x%08x stroke=0x%08x\n",
             prefix, idx, name, cx - hw, cy - hh, cx + hw, cy + hh, hw, hh, fill, stroke);
@@ -111,8 +110,7 @@ static void print_sdf_prim(int idx, int indent, uint32_t t, const uint32_t *w, s
         }
         out("%sprim #%d CIRCLE c=(%.1f,%.1f) r=%.1f\n", prefix, idx, cx, cy, r);
     } else {
-        out("%sprim #%d SDF type=0x%08x c=(%.1f,%.1f) words=%zu\n",
-            prefix, idx, t, cx, cy, words);
+        out("%sprim #%d SDF type=0x%08x c=(%.1f,%.1f) words=%zu\n", prefix, idx, t, cx, cy, words);
     }
 }
 
@@ -141,7 +139,7 @@ static void print_text_span(int idx, int indent, const uint8_t *p, size_t psize)
     /* text_len decides v1 (text immediately after 32B fixed) vs v2 (40B fixed
      * with char_spacing/word_spacing). We can't distinguish from the prim
      * alone reliably — try v1 first; if text wouldn't fit, fall back. */
-    size_t text_off_v1 = 8u + 32u;     /* type+psize + fixed */
+    size_t text_off_v1 = 8u + 32u; /* type+psize + fixed */
     size_t text_off_v2 = 8u + 40u;
     size_t text_off = text_off_v1;
     if (text_off + text_len > psize && text_off_v2 + text_len <= psize) {
@@ -162,7 +160,9 @@ static void print_text_span(int idx, int indent, const uint8_t *p, size_t psize)
     /* Replace newlines/control bytes with '?' so the line stays printable. */
     for (uint32_t i = 0; i < show; i++) {
         unsigned char c = (unsigned char)buf[i];
-        if (c < 0x20 || c == 0x7f) buf[i] = '?';
+        if (c < 0x20 || c == 0x7f) {
+            buf[i] = '?';
+        }
     }
     const char *tail = (show < text_len) ? "..." : "";
     out("%sprim #%d TEXT_DRAWABLE_LIST @(%.1f,%.1f) fs=%.1f font=%d color=0x%08x "
@@ -183,8 +183,7 @@ static void print_font(int idx, int indent, const uint8_t *p, size_t psize)
     memcpy(&name_len, p + 12, 4);
     size_t name_off = 16;
     if (name_off + name_len > psize) {
-        out("%sprim #%d FONT id=%d name_len=%u (truncated)\n",
-            prefix, idx, font_id, name_len);
+        out("%sprim #%d FONT id=%d name_len=%u (truncated)\n", prefix, idx, font_id, name_len);
         return;
     }
     char nbuf[96];
@@ -199,8 +198,8 @@ static void print_font(int idx, int indent, const uint8_t *p, size_t psize)
     if (ttf_off + 4 <= psize) {
         memcpy(&ttf_len, p + ttf_off, 4);
     }
-    out("%sprim #%d FONT id=%d name(%u)=\"%s%s\" ttf=%u B\n",
-        prefix, idx, font_id, name_len, nbuf, nt, ttf_len);
+    out("%sprim #%d FONT id=%d name(%u)=\"%s%s\" ttf=%u B\n", prefix, idx, font_id, name_len, nbuf,
+        nt, ttf_len);
 }
 
 static void print_figure(int idx, int indent, uint32_t t, size_t psize)
@@ -211,9 +210,13 @@ static void print_figure(int idx, int indent, uint32_t t, size_t psize)
      * the producer. */
     const char *name = "COMPLEX";
     /* Best-effort known-id pretty names. */
-    if (t == 0x80000003u) name = "YPLOT";
-    else if (t == 0x80000004u) name = "YIMAGE";
-    else if (t == 0x80000005u) name = "YMESH";
+    if (t == 0x80000003u) {
+        name = "YPLOT";
+    } else if (t == 0x80000004u) {
+        name = "YIMAGE";
+    } else if (t == 0x80000005u) {
+        name = "YMESH";
+    }
     out("%sprim #%d %s type=0x%08x payload=%zu B\n", prefix, idx, name, t, psize - 8);
 }
 
@@ -284,8 +287,8 @@ static int walk_prims(const uint8_t *p, const uint8_t *end, int indent)
             memcpy(&id, p + 4, 4);
             memcpy(&plen, p + 8, 4);
             if (p + 12 + plen > end) {
-                fprintf(stderr, "%sprim #%d CMD_GROUP id=%u body truncated (%u B needed)\n",
-                        prefix, idx, id, plen);
+                fprintf(stderr, "%sprim #%d CMD_GROUP id=%u body truncated (%u B needed)\n", prefix,
+                        idx, id, plen);
                 return -1;
             }
             out("%sprim #%d CMD_GROUP id=%u (payload %u B) {\n", prefix, idx, id, plen);
@@ -307,8 +310,8 @@ static int walk_prims(const uint8_t *p, const uint8_t *end, int indent)
             if (wc > 0) {
                 psize = (size_t)wc * 4u;
                 if (p + psize > end) {
-                    fprintf(stderr, "%sprim #%d SDF type 0x%08x truncated (%zu B needed)\n",
-                            prefix, idx, t, psize);
+                    fprintf(stderr, "%sprim #%d SDF type 0x%08x truncated (%zu B needed)\n", prefix,
+                            idx, t, psize);
                     return -1;
                 }
                 print_sdf_prim(idx, indent, t, (const uint32_t *)p, psize / 4);
@@ -327,7 +330,8 @@ static int walk_prims(const uint8_t *p, const uint8_t *end, int indent)
         memcpy(&payload_size, p + 4, 4);
         psize = 8u + payload_size;
         if (p + psize > end) {
-            fprintf(stderr, "%sprim #%d FAM type 0x%08x payload truncated "
+            fprintf(stderr,
+                    "%sprim #%d FAM type 0x%08x payload truncated "
                     "(%u B needed, %zu remaining)\n",
                     prefix, idx, t, payload_size, (size_t)(end - p));
             return -1;
@@ -340,8 +344,7 @@ static int walk_prims(const uint8_t *p, const uint8_t *end, int indent)
         } else if (yetty_ydraw_is_composite(t)) {
             print_figure(idx, indent, t, psize);
         } else {
-            out("%sprim #%d UNKNOWN type=0x%08x payload=%u B\n",
-                prefix, idx, t, payload_size);
+            out("%sprim #%d UNKNOWN type=0x%08x payload=%u B\n", prefix, idx, t, payload_size);
         }
         p += psize;
         idx++;
@@ -349,8 +352,7 @@ static int walk_prims(const uint8_t *p, const uint8_t *end, int indent)
     return 0;
 }
 
-static int decode_envelope(struct yetty_yface *y,
-                           const char *body, size_t body_len)
+static int decode_envelope(struct yetty_yface *y, const char *body, size_t body_len)
 {
     /* body has the DCS shape "<code> y <b64-args> ; <b64-payload>", where
      * 'y' is the final byte (YETTY_YWIRE_DCS_FINAL) that separates the
@@ -360,7 +362,8 @@ static int decode_envelope(struct yetty_yface *y,
         code_len++;
     }
     if (code_len == 0 || code_len > 16 || code_len >= body_len) {
-        out("  bad code length %zu\n", code_len); return -1;
+        out("  bad code length %zu\n", code_len);
+        return -1;
     }
     if (body[code_len] != 'y') {
         out("  expected DCS final byte 'y' after code, got 0x%02x\n",
@@ -374,30 +377,28 @@ static int decode_envelope(struct yetty_yface *y,
     const char *after_code = body + code_len + 1;
     size_t after_code_len = body_len - code_len - 1;
     const char *semi2 = memchr(after_code, ';', after_code_len);
-    if (!semi2) { out("  no second ;\n"); return -1; }
+    if (!semi2) {
+        out("  no second ;\n");
+        return -1;
+    }
     size_t args_len = semi2 - after_code;
     const char *payload = semi2 + 1;
     size_t payload_len = after_code_len - args_len - 1;
 
-    out("  osc code: %d  (args b64=%zu  payload b64=%zu)\n",
-        osc_code, args_len, payload_len);
+    out("  osc code: %d  (args b64=%zu  payload b64=%zu)\n", osc_code, args_len, payload_len);
 
     /* Decode args. */
     int compressed = 0;
     if (args_len > 0) {
         char meta_raw[64] = {0};
-        size_t mlen = yetty_ycore_base64_decode(after_code, args_len,
-                                                meta_raw, sizeof(meta_raw));
+        size_t mlen = yetty_ycore_base64_decode(after_code, args_len, meta_raw, sizeof(meta_raw));
         out("  args decoded: %zu bytes\n", mlen);
         if (mlen >= sizeof(struct yetty_yface_bin_meta)) {
-            const struct yetty_yface_bin_meta *m =
-                (const struct yetty_yface_bin_meta *)meta_raw;
-            const char *magic_ok =
-                (m->magic == YETTY_YFACE_BIN_MAGIC) ? "OK" : "MISMATCH";
+            const struct yetty_yface_bin_meta *m = (const struct yetty_yface_bin_meta *)meta_raw;
+            const char *magic_ok = (m->magic == YETTY_YFACE_BIN_MAGIC) ? "OK" : "MISMATCH";
             out("  meta: magic=0x%08x [%s]  version=%u  "
                 "compressed=%u  algo=%u  raw_size=%llu\n",
-                m->magic, magic_ok, m->version,
-                m->compressed, m->compression_algo,
+                m->magic, magic_ok, m->version, m->compressed, m->compression_algo,
                 (unsigned long long)m->raw_size);
             compressed = (m->compressed != 0);
         }
@@ -429,8 +430,9 @@ static int decode_envelope(struct yetty_yface *y,
 
     struct yetty_ycore_buffer *in = yetty_yface_in_buf(y);
     out("  payload decoded: %zu bytes; first 16:", in->size);
-    for (size_t i = 0; i < in->size && i < 16; i++)
+    for (size_t i = 0; i < in->size && i < 16; i++) {
         out(" %02x", (unsigned char)in->data[i]);
+    }
     out("\n");
 
     /* Walk the framed payload past the 4B magic + 16B scene bounds +
@@ -443,8 +445,8 @@ static int decode_envelope(struct yetty_yface *y,
     memcpy(bnd, in->data + 4, 16);
     uint32_t byte_count;
     memcpy(&byte_count, in->data + 20, 4);
-    out("  scene_bounds=(%.1f,%.1f)..(%.1f,%.1f)  byte_count=%u\n",
-        bnd[0], bnd[1], bnd[2], bnd[3], byte_count);
+    out("  scene_bounds=(%.1f,%.1f)..(%.1f,%.1f)  byte_count=%u\n", bnd[0], bnd[1], bnd[2], bnd[3],
+        byte_count);
     if ((size_t)byte_count + 24 > in->size) {
         out("  byte_count overflows buffer — stopping\n");
         return 0;
@@ -484,11 +486,17 @@ static void splitter_destroy(struct splitter *s)
 
 static int splitter_grow(struct splitter *s, size_t need)
 {
-    if (need <= s->cap) return 0;
+    if (need <= s->cap) {
+        return 0;
+    }
     size_t newcap = s->cap ? s->cap : (1u << 14);
-    while (newcap < need) newcap *= 2;
+    while (newcap < need) {
+        newcap *= 2;
+    }
     char *g = realloc(s->buf, newcap);
-    if (!g) return -1;
+    if (!g) {
+        return -1;
+    }
     s->buf = g;
     s->cap = newcap;
     return 0;
@@ -518,11 +526,12 @@ static void splitter_consume(struct splitter *s)
             }
             close++;
         }
-        if (!found) break;
+        if (!found) {
+            break;
+        }
 
         size_t body_len = close - open;
-        out("envelope #%d at byte %zu (body %zu B):\n",
-            s->env_count, pos, body_len);
+        out("envelope #%d at byte %zu (body %zu B):\n", s->env_count, pos, body_len);
         if (decode_envelope(s->yface, s->buf + open, body_len) < 0) {
             s->err_count++;
         }
@@ -543,7 +552,10 @@ static void splitter_consume(struct splitter *s)
 static int run_capture(FILE *f, const char *label)
 {
     struct yetty_yface_ptr_result yr = yetty_yface_create();
-    if (!yr.ok) { fprintf(stderr, "yface_create failed\n"); return 1; }
+    if (!yr.ok) {
+        fprintf(stderr, "yface_create failed\n");
+        return 1;
+    }
     struct yetty_yface *y = yr.value;
 
     struct splitter s;
@@ -571,8 +583,8 @@ static int run_capture(FILE *f, const char *label)
         s.len += r;
         splitter_consume(&s);
     }
-    out("\nread from %s: found %d envelope(s), %d error(s); %zu B unparsed tail\n",
-        label, s.env_count, s.err_count, s.len);
+    out("\nread from %s: found %d envelope(s), %d error(s); %zu B unparsed tail\n", label,
+        s.env_count, s.err_count, s.len);
 
     int rc = s.err_count ? 1 : 0;
     splitter_destroy(&s);
@@ -588,7 +600,10 @@ static int run_capture(FILE *f, const char *label)
 static int run_interpose(void)
 {
     struct yetty_yface_ptr_result yr = yetty_yface_create();
-    if (!yr.ok) { fprintf(stderr, "yface_create failed\n"); return 1; }
+    if (!yr.ok) {
+        fprintf(stderr, "yface_create failed\n");
+        return 1;
+    }
     struct yetty_yface *y = yr.value;
 
     struct splitter s;
@@ -627,8 +642,8 @@ static int run_interpose(void)
             fflush(g_out);
         }
     }
-    out("\ninterpose closed: %d envelope(s), %d error(s); %zu B unparsed tail\n",
-        s.env_count, s.err_count, s.len);
+    out("\ninterpose closed: %d envelope(s), %d error(s); %zu B unparsed tail\n", s.env_count,
+        s.err_count, s.len);
 
     splitter_destroy(&s);
     yetty_yface_destroy(y);
@@ -741,7 +756,10 @@ int main(int argc, char **argv)
             label = "<stdin>";
         } else {
             f = fopen(path, "rb");
-            if (!f) { perror(path); return 1; }
+            if (!f) {
+                perror(path);
+                return 1;
+            }
             label = path;
         }
         rc = run_capture(f, label);

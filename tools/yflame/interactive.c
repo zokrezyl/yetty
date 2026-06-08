@@ -77,7 +77,8 @@ struct ui_state {
     bool want_quit;
 };
 
-static int emit_envelope(int out_fd, int osc_code, int compressed, const void *body, size_t body_len)
+static int emit_envelope(int out_fd, int osc_code, int compressed, const void *body,
+                         size_t body_len)
 {
     struct yetty_ycore_buffer envelope = {0};
     struct yetty_ycore_void_result r =
@@ -143,8 +144,7 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
     if ((osc_code == YETTY_OSC_SC_CLIENT_INPUT_MOUSE ||
          osc_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE) &&
         payload_len >= sizeof(struct yetty_client_input_mouse)) {
-        const struct yetty_client_input_mouse *m =
-            (const struct yetty_client_input_mouse *)payload;
+        const struct yetty_client_input_mouse *m = (const struct yetty_client_input_mouse *)payload;
         ydebug("yflame mouse: osc=%d kind=%u fig=%u x=%.1f y=%.1f btn=%d pressed=%d wheel=%.2f",
                osc_code, m->kind, m->figure_id, (double)m->x, (double)m->y, m->button, m->pressed,
                (double)m->wheel_dy);
@@ -167,8 +167,8 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         } else if (m->kind == YETTY_YMGUI_INPUT_MOUSE_BUTTON && m->pressed) {
             if (m->button == 0) { /* left → button action or zoom into a frame */
                 int32_t id = hit(ui, m->x, m->y);
-                ydebug("yflame left-click: hit_test(%.1f,%.1f) -> id=%d", (double)m->x, (double)m->y,
-                       id);
+                ydebug("yflame left-click: hit_test(%.1f,%.1f) -> id=%d", (double)m->x,
+                       (double)m->y, id);
                 if (id == YETTY_YFLAME_HIT_UP) {
                     (void)yetty_yflame_focus_parent(NULL, ui->flame);
                     ui->dirty = true;
@@ -283,9 +283,9 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
         return 1;
     }
     {
-        struct yetty_ycore_void_result cfg_r = yetty_yview_configure(
-            NULL, view_r.value, YFLAME_STDOUT_FD, YFLAME_GETPID(), /*kind=*/0u, YFLAME_BG_COLOR,
-            0.0f, 0.0f, viewport_w, viewport_h);
+        struct yetty_ycore_void_result cfg_r =
+            yetty_yview_configure(NULL, view_r.value, YFLAME_STDOUT_FD, YFLAME_GETPID(),
+                                  /*kind=*/0u, YFLAME_BG_COLOR, 0.0f, 0.0f, viewport_w, viewport_h);
         if (YETTY_IS_ERR(cfg_r)) {
             fprintf(stderr, "yflame: view configure failed: %s\n", cfg_r.error.msg);
             yetty_ycore_error_destroy(cfg_r.error);

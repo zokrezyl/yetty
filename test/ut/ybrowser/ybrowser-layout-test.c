@@ -20,26 +20,26 @@ static int g_passed = 0;
 
 #define EPS 0.5f
 
-#define ASSERT_NEAR(name, got, expect)                                                              \
-    do {                                                                                            \
-        float _g = (got);                                                                           \
-        float _e = (expect);                                                                        \
-        if (fabsf(_g - _e) > EPS) {                                                                 \
-            fprintf(stderr, "  FAIL %s: got %.2f expected %.2f\n", (name), _g, _e);                 \
-            g_failures++;                                                                           \
-        } else {                                                                                    \
-            g_passed++;                                                                             \
-        }                                                                                           \
+#define ASSERT_NEAR(name, got, expect)                                                             \
+    do {                                                                                           \
+        float _g = (got);                                                                          \
+        float _e = (expect);                                                                       \
+        if (fabsf(_g - _e) > EPS) {                                                                \
+            fprintf(stderr, "  FAIL %s: got %.2f expected %.2f\n", (name), _g, _e);                \
+            g_failures++;                                                                          \
+        } else {                                                                                   \
+            g_passed++;                                                                            \
+        }                                                                                          \
     } while (0)
 
-#define ASSERT_TRUE(name, cond)                                                                     \
-    do {                                                                                            \
-        if (!(cond)) {                                                                              \
-            fprintf(stderr, "  FAIL %s: condition false\n", (name));                                \
-            g_failures++;                                                                           \
-        } else {                                                                                    \
-            g_passed++;                                                                             \
-        }                                                                                           \
+#define ASSERT_TRUE(name, cond)                                                                    \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "  FAIL %s: condition false\n", (name));                               \
+            g_failures++;                                                                          \
+        } else {                                                                                   \
+            g_passed++;                                                                            \
+        }                                                                                          \
     } while (0)
 
 struct box_info {
@@ -110,11 +110,10 @@ static struct yetty_ylexbor *load(const char *html, int viewport_w, int viewport
 static void test_width_percent(void)
 {
     fprintf(stderr, "[test_width_percent]\n");
-    static const char html[] =
-        "<html><body>"
-        "<div id='full' style='width: 100%;'>x</div>"
-        "<div id='half' style='width: 50%;'>x</div>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<div id='full' style='width: 100%;'>x</div>"
+                               "<div id='half' style='width: 50%;'>x</div>"
+                               "</body></html>";
     /* viewport 1000 px, body has UA default margin: 8px → content area 984 px. */
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
@@ -154,11 +153,10 @@ static void test_width_percent(void)
 static void test_float_right(void)
 {
     fprintf(stderr, "[test_float_right]\n");
-    static const char html[] =
-        "<html><body>"
-        "<div id='rail' style='float: right; width: 150px;'>rail</div>"
-        "<p>main column</p>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<div id='rail' style='float: right; width: 150px;'>rail</div>"
+                               "<p>main column</p>"
+                               "</body></html>";
     /* viewport 1000 px → body content 984 px → right edge at x=8+984=992
      * → 150-wide rail sits at x = 992 - 150 = 842. */
     struct yetty_ylexbor *yl = load(html, 1000, 600);
@@ -184,11 +182,10 @@ static void test_float_right(void)
 static void test_float_left_flow(void)
 {
     fprintf(stderr, "[test_float_left_flow]\n");
-    static const char html[] =
-        "<html><body>"
-        "<div id='aside' style='float: left; width: 200px;'>aside</div>"
-        "<p>body text</p>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<div id='aside' style='float: left; width: 200px;'>aside</div>"
+                               "<p>body text</p>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     struct box_info aside = {0}, para = {0};
@@ -222,14 +219,13 @@ static void test_float_left_flow(void)
 static void test_flex_grow_ratios(void)
 {
     fprintf(stderr, "[test_flex_grow_ratios]\n");
-    static const char html[] =
-        "<html><body>"
-        "<div id='row' style='display: flex;'>"
-        "<div style='flex-grow: 1;'>a</div>"
-        "<div style='flex-grow: 2;'>b</div>"
-        "<div style='flex-grow: 1;'>c</div>"
-        "</div>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<div id='row' style='display: flex;'>"
+                               "<div style='flex-grow: 1;'>a</div>"
+                               "<div style='flex-grow: 2;'>b</div>"
+                               "<div style='flex-grow: 1;'>c</div>"
+                               "</div>"
+                               "</body></html>";
     /* viewport 1000 → body content 984. The flex container fills 984.
      * Items have basis auto (0) and grow 1/2/1 → widths 246 / 492 / 246. */
     struct yetty_ylexbor *yl = load(html, 1000, 600);
@@ -264,12 +260,11 @@ static void test_flex_grow_ratios(void)
 static void test_flex_space_between_auto_basis(void)
 {
     fprintf(stderr, "[test_flex_space_between_auto_basis]\n");
-    static const char html[] =
-        "<html><body>"
-        "<div style='display: flex; justify-content: space-between;'>"
-        "<div>logo</div><div>nav</div><div>user</div>"
-        "</div>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<div style='display: flex; justify-content: space-between;'>"
+                               "<div>logo</div><div>nav</div><div>user</div>"
+                               "</div>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     struct box_info logo = {0}, nav = {0}, user = {0};
@@ -297,11 +292,10 @@ static void test_flex_space_between_auto_basis(void)
 static void test_block_flow(void)
 {
     fprintf(stderr, "[test_block_flow]\n");
-    static const char html[] =
-        "<html><body>"
-        "<h1>title</h1>"
-        "<p>paragraph</p>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<h1>title</h1>"
+                               "<p>paragraph</p>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     struct box_info h1 = {0}, p = {0};
@@ -328,10 +322,9 @@ static void test_block_flow(void)
 static void test_width_pixels(void)
 {
     fprintf(stderr, "[test_width_pixels]\n");
-    static const char html[] =
-        "<html><body>"
-        "<div style='width: 200px;'>fixed</div>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<div style='width: 200px;'>fixed</div>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     struct box_info d = {0};
@@ -363,10 +356,9 @@ static void test_width_pixels(void)
 static void test_table_layout(void)
 {
     fprintf(stderr, "[test_table_layout]\n");
-    static const char html[] =
-        "<html><body>"
-        "<table><tr><td>a</td><td>b</td><td>c</td></tr></table>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<table><tr><td>a</td><td>b</td><td>c</td></tr></table>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     struct box_info td_a = {0}, td_b = {0}, td_c = {0};
@@ -402,14 +394,13 @@ static void test_table_layout(void)
 static void test_table_content_widths(void)
 {
     fprintf(stderr, "[test_table_content_widths]\n");
-    static const char html[] =
-        "<html><body>"
-        "<table><tr>"
-        "<td>x</td>"
-        "<td>A reasonably long label with several words</td>"
-        "<td>x</td>"
-        "</tr></table>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<table><tr>"
+                               "<td>x</td>"
+                               "<td>A reasonably long label with several words</td>"
+                               "<td>x</td>"
+                               "</tr></table>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     struct box_info a = {0}, b = {0}, c = {0};
@@ -442,12 +433,11 @@ static void test_table_content_widths(void)
 static void test_nav_hidden_header_visible(void)
 {
     fprintf(stderr, "[test_nav_hidden_header_visible]\n");
-    static const char html[] =
-        "<html><body>"
-        "<nav><ul><li>menu1</li><li>menu2</li></ul></nav>"
-        "<header><h1>Article title</h1></header>"
-        "<p>article body</p>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<nav><ul><li>menu1</li><li>menu2</li></ul></nav>"
+                               "<header><h1>Article title</h1></header>"
+                               "<p>article body</p>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     /* The <nav> menu items must NOT push content down. */
@@ -485,11 +475,10 @@ static void test_nav_hidden_header_visible(void)
 static void test_aria_hidden_skipped(void)
 {
     fprintf(stderr, "[test_aria_hidden_skipped]\n");
-    static const char html[] =
-        "<html><body>"
-        "<div aria-hidden=\"true\"><h2>hidden decoration</h2></div>"
-        "<p>visible body</p>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<div aria-hidden=\"true\"><h2>hidden decoration</h2></div>"
+                               "<p>visible body</p>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     struct box_info para = {0};
@@ -512,13 +501,12 @@ static void test_aria_hidden_skipped(void)
 static void test_wikipedia_float_class(void)
 {
     fprintf(stderr, "[test_wikipedia_float_class]\n");
-    static const char html[] =
-        "<html><body>"
-        "<figure class=\"mw-halign-right\" style=\"width: 200px;\">"
-        "<img width=\"200\" height=\"100\">"
-        "</figure>"
-        "<p>article body should flow around the float</p>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<figure class=\"mw-halign-right\" style=\"width: 200px;\">"
+                               "<img width=\"200\" height=\"100\">"
+                               "</figure>"
+                               "<p>article body should flow around the float</p>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     struct box_info fig = {0};
@@ -545,12 +533,11 @@ static void test_wikipedia_float_class(void)
 static void test_stacked_float_right(void)
 {
     fprintf(stderr, "[test_stacked_float_right]\n");
-    static const char html[] =
-        "<html><body>"
-        "<div style=\"float: right; width: 150px; height: 100px;\">A</div>"
-        "<div style=\"float: right; width: 150px; height: 100px;\">B</div>"
-        "<p>body</p>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<div style=\"float: right; width: 150px; height: 100px;\">A</div>"
+                               "<div style=\"float: right; width: 150px; height: 100px;\">B</div>"
+                               "<p>body</p>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     struct box_info a = {0}, b = {0};
@@ -576,10 +563,9 @@ static void test_stacked_float_right(void)
 static void test_img_attr_sizing(void)
 {
     fprintf(stderr, "[test_img_attr_sizing]\n");
-    static const char html[] =
-        "<html><body>"
-        "<img src=\"missing://nope\" width=\"280\" height=\"187\">"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<img src=\"missing://nope\" width=\"280\" height=\"187\">"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     struct box_info img = {0};
@@ -609,15 +595,14 @@ static void test_img_attr_sizing(void)
 static void test_float_no_width_doesnt_swallow_row(void)
 {
     fprintf(stderr, "[test_float_no_width_doesnt_swallow_row]\n");
-    static const char html[] =
-        "<html><body>"
-        "<figure class=\"mw-halign-right\">"
-        "<img width=\"280\" height=\"187\">"
-        "</figure>"
-        "<p>Surrounding body paragraph must keep a usable width — if "
-        "the float swallows the row, this text wraps to one glyph per "
-        "line at the right edge, the 'random garbage glyphs' bug.</p>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<figure class=\"mw-halign-right\">"
+                               "<img width=\"280\" height=\"187\">"
+                               "</figure>"
+                               "<p>Surrounding body paragraph must keep a usable width — if "
+                               "the float swallows the row, this text wraps to one glyph per "
+                               "line at the right edge, the 'random garbage glyphs' bug.</p>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     struct box_info p = {0};
@@ -761,15 +746,14 @@ static void test_wikipedia_shape(void)
 static void test_figure_img_positioned(void)
 {
     fprintf(stderr, "[test_figure_img_positioned]\n");
-    static const char html[] =
-        "<html><body>"
-        "<p>before</p>"
-        "<figure>"
-        "<img width=\"280\" height=\"187\">"
-        "<figcaption>caption</figcaption>"
-        "</figure>"
-        "<p>after</p>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<p>before</p>"
+                               "<figure>"
+                               "<img width=\"280\" height=\"187\">"
+                               "<figcaption>caption</figcaption>"
+                               "</figure>"
+                               "<p>after</p>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1024, 600);
 
     struct box_info img = {0};
@@ -812,15 +796,14 @@ static void test_figure_img_positioned(void)
 static void test_media_query_doesnt_override_root_vars(void)
 {
     fprintf(stderr, "[test_media_query_doesnt_override_root_vars]\n");
-    static const char html[] =
-        "<html><head><style>"
-        ":root { --x: #ff0000; }"
-        "@media (prefers-color-scheme: dark) {"
-        "  :root { --x: #0000ff; }"
-        "}"
-        "div { color: var(--x); }"
-        "</style></head>"
-        "<body><div>hello</div></body></html>";
+    static const char html[] = "<html><head><style>"
+                               ":root { --x: #ff0000; }"
+                               "@media (prefers-color-scheme: dark) {"
+                               "  :root { --x: #0000ff; }"
+                               "}"
+                               "div { color: var(--x); }"
+                               "</style></head>"
+                               "<body><div>hello</div></body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     /* Render once to ensure layout is computed. We can't easily read

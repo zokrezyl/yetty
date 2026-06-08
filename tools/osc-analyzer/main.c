@@ -83,26 +83,46 @@
 static const char *osc_code_name(int code)
 {
     switch (code) {
-    case YETTY_DCS_YDRAW_CLEAR:                    return "YDRAW_CLEAR";
-    case YETTY_DCS_YDRAW_BIN:                      return "YDRAW_BIN";
-    case YETTY_DCS_YDRAW_YAML:                     return "YDRAW_YAML";
-    case YETTY_DCS_YDRAW_OVERLAY:                  return "YDRAW_OVERLAY";
-    case YETTY_DCS_YDRAW_SCENE_BIN:                return "YDRAW_SCENE_BIN";
-    case YETTY_DCS_YCOMPOSITOR_BIN:                return "YCOMPOSITOR_BIN";
-    case YETTY_OSC_CS_CLIENT_INPUT_SUB:            return "CS_CLIENT_INPUT_SUB";
-    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE:   return "SC_CLIENT_INPUT_FIGURE_MOUSE";
-    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE:  return "SC_CLIENT_INPUT_FIGURE_RESIZE";
-    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_FOCUS:   return "SC_CLIENT_INPUT_FIGURE_FOCUS";
-    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY:     return "SC_CLIENT_INPUT_FIGURE_KEY";
-    case YETTY_OSC_SC_CLIENT_INPUT_MOUSE:          return "SC_CLIENT_INPUT_MOUSE";
-    case YETTY_OSC_SC_CLIENT_INPUT_RESIZE:         return "SC_CLIENT_INPUT_RESIZE";
-    case YETTY_OSC_SC_CLIENT_INPUT_KEY:            return "SC_CLIENT_INPUT_KEY";
-    case YMGUI_OSC_CS_CLEAR:                       return "YMGUI_CS_CLEAR";
-    case YMGUI_OSC_CS_FRAME:                       return "YMGUI_CS_FRAME";
-    case YMGUI_OSC_CS_TEX:                         return "YMGUI_CS_TEX";
-    case YMGUI_OSC_CS_CARD_PLACE:                  return "YMGUI_CS_CARD_PLACE";
-    case YMGUI_OSC_CS_CARD_REMOVE:                 return "YMGUI_CS_CARD_REMOVE";
-    default:                                       return "UNKNOWN";
+    case YETTY_DCS_YDRAW_CLEAR:
+        return "YDRAW_CLEAR";
+    case YETTY_DCS_YDRAW_BIN:
+        return "YDRAW_BIN";
+    case YETTY_DCS_YDRAW_YAML:
+        return "YDRAW_YAML";
+    case YETTY_DCS_YDRAW_OVERLAY:
+        return "YDRAW_OVERLAY";
+    case YETTY_DCS_YDRAW_SCENE_BIN:
+        return "YDRAW_SCENE_BIN";
+    case YETTY_DCS_YCOMPOSITOR_BIN:
+        return "YCOMPOSITOR_BIN";
+    case YETTY_OSC_CS_CLIENT_INPUT_SUB:
+        return "CS_CLIENT_INPUT_SUB";
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE:
+        return "SC_CLIENT_INPUT_FIGURE_MOUSE";
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE:
+        return "SC_CLIENT_INPUT_FIGURE_RESIZE";
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_FOCUS:
+        return "SC_CLIENT_INPUT_FIGURE_FOCUS";
+    case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY:
+        return "SC_CLIENT_INPUT_FIGURE_KEY";
+    case YETTY_OSC_SC_CLIENT_INPUT_MOUSE:
+        return "SC_CLIENT_INPUT_MOUSE";
+    case YETTY_OSC_SC_CLIENT_INPUT_RESIZE:
+        return "SC_CLIENT_INPUT_RESIZE";
+    case YETTY_OSC_SC_CLIENT_INPUT_KEY:
+        return "SC_CLIENT_INPUT_KEY";
+    case YMGUI_OSC_CS_CLEAR:
+        return "YMGUI_CS_CLEAR";
+    case YMGUI_OSC_CS_FRAME:
+        return "YMGUI_CS_FRAME";
+    case YMGUI_OSC_CS_TEX:
+        return "YMGUI_CS_TEX";
+    case YMGUI_OSC_CS_CARD_PLACE:
+        return "YMGUI_CS_CARD_PLACE";
+    case YMGUI_OSC_CS_CARD_REMOVE:
+        return "YMGUI_CS_CARD_REMOVE";
+    default:
+        return "UNKNOWN";
     }
 }
 
@@ -136,49 +156,74 @@ enum { kAnalyzedCodes_n = (int)(sizeof(kAnalyzedCodes) / sizeof(kAnalyzedCodes[0
 static const char *admin_op_name(uint32_t op)
 {
     switch (op) {
-    case YETTY_YFIGURE_ADMIN_CLEAR_ALL:       return "CLEAR_ALL";
-    case YETTY_YFIGURE_ADMIN_CREATE_CHILD:    return "CREATE_CHILD";
-    case YETTY_YFIGURE_ADMIN_DELETE_CHILD:    return "DELETE_CHILD";
-    case YETTY_YFIGURE_ADMIN_SET_CHILD_RECT:  return "SET_CHILD_RECT";
-    case YETTY_YFIGURE_ADMIN_SET_RECT:        return "SET_RECT";
-    default:                                   return "UNKNOWN_ADMIN_OP";
+    case YETTY_YFIGURE_ADMIN_CLEAR_ALL:
+        return "CLEAR_ALL";
+    case YETTY_YFIGURE_ADMIN_CREATE_CHILD:
+        return "CREATE_CHILD";
+    case YETTY_YFIGURE_ADMIN_DELETE_CHILD:
+        return "DELETE_CHILD";
+    case YETTY_YFIGURE_ADMIN_SET_CHILD_RECT:
+        return "SET_CHILD_RECT";
+    case YETTY_YFIGURE_ADMIN_SET_RECT:
+        return "SET_RECT";
+    default:
+        return "UNKNOWN_ADMIN_OP";
     }
 }
 
 static const char *figure_kind_name(uint32_t kind)
 {
     switch (kind) {
-    case YETTY_YFIGURE_KIND_CONTAINER: return "CONTAINER";
-    case YETTY_YFIGURE_KIND_YGRID:     return "YGRID";
-    case YETTY_YFIGURE_KIND_YMGUI:     return "YMGUI";
-    case YETTY_YFIGURE_KIND_YRDAWN:    return "YRDAWN";
-    case YETTY_YFIGURE_KIND_YPLOT:     return "YPLOT";
-    case YETTY_YFIGURE_KIND_YIMAGE:    return "YIMAGE";
-    case YETTY_YFIGURE_KIND_YVIDEO:    return "YVIDEO";
-    case YETTY_YFIGURE_KIND_YZOO:      return "YZOO";
-    case YETTY_YFIGURE_KIND_YJUNGLE:   return "YJUNGLE";
-    default:                            return "UNKNOWN_KIND";
+    case YETTY_YFIGURE_KIND_CONTAINER:
+        return "CONTAINER";
+    case YETTY_YFIGURE_KIND_YGRID:
+        return "YGRID";
+    case YETTY_YFIGURE_KIND_YMGUI:
+        return "YMGUI";
+    case YETTY_YFIGURE_KIND_YRDAWN:
+        return "YRDAWN";
+    case YETTY_YFIGURE_KIND_YPLOT:
+        return "YPLOT";
+    case YETTY_YFIGURE_KIND_YIMAGE:
+        return "YIMAGE";
+    case YETTY_YFIGURE_KIND_YVIDEO:
+        return "YVIDEO";
+    case YETTY_YFIGURE_KIND_YZOO:
+        return "YZOO";
+    case YETTY_YFIGURE_KIND_YJUNGLE:
+        return "YJUNGLE";
+    default:
+        return "UNKNOWN_KIND";
     }
 }
 
 static const char *ymgui_sub_op_name(uint32_t op)
 {
     switch (op) {
-    case YETTY_YMGUI_FIGURE_SUB_CLEAR:           return "SUB_CLEAR";
-    case YETTY_YMGUI_FIGURE_SUB_FRAME:           return "SUB_FRAME";
-    case YETTY_YMGUI_FIGURE_SUB_TEX_UPLOAD:      return "SUB_TEX_UPLOAD";
-    case YETTY_YMGUI_FIGURE_SUB_TEX_RELEASE:     return "SUB_TEX_RELEASE";
-    case YETTY_YMGUI_FIGURE_SUB_TERM_INPUT_SUB:  return "SUB_TERM_INPUT_SUB";
-    default:                                      return NULL;
+    case YETTY_YMGUI_FIGURE_SUB_CLEAR:
+        return "SUB_CLEAR";
+    case YETTY_YMGUI_FIGURE_SUB_FRAME:
+        return "SUB_FRAME";
+    case YETTY_YMGUI_FIGURE_SUB_TEX_UPLOAD:
+        return "SUB_TEX_UPLOAD";
+    case YETTY_YMGUI_FIGURE_SUB_TEX_RELEASE:
+        return "SUB_TEX_RELEASE";
+    case YETTY_YMGUI_FIGURE_SUB_TERM_INPUT_SUB:
+        return "SUB_TERM_INPUT_SUB";
+    default:
+        return NULL;
     }
 }
 
 static const char *ymgui_tex_fmt_name(uint32_t f)
 {
     switch (f) {
-    case YMGUI_TEX_FMT_R8:    return "R8";
-    case YMGUI_TEX_FMT_RGBA8: return "RGBA8";
-    default:                  return "UNKNOWN_TEX_FMT";
+    case YMGUI_TEX_FMT_R8:
+        return "R8";
+    case YMGUI_TEX_FMT_RGBA8:
+        return "RGBA8";
+    default:
+        return "UNKNOWN_TEX_FMT";
     }
 }
 
@@ -188,35 +233,64 @@ static const char *sdf_type_name(uint32_t type)
      * top bit set in its type word — same lookup table). */
     uint32_t t = type;
     switch (t) {
-    case YETTY_YSDF_CIRCLE:               return "circle";
-    case YETTY_YSDF_BOX:                  return "box";
-    case YETTY_YSDF_SEGMENT:              return "segment";
-    case YETTY_YSDF_TRIANGLE:             return "triangle";
-    case YETTY_YSDF_ELLIPSE:              return "ellipse";
-    case YETTY_YSDF_ARC:                  return "arc";
-    case YETTY_YSDF_ROUNDED_BOX:          return "rounded_box";
-    case YETTY_YSDF_RHOMBUS:              return "rhombus";
-    case YETTY_YSDF_PENTAGON:             return "pentagon";
-    case YETTY_YSDF_HEXAGON:              return "hexagon";
-    case YETTY_YSDF_STAR:                 return "star";
-    case YETTY_YSDF_PIE:                  return "pie";
-    case YETTY_YSDF_RING:                 return "ring";
-    case YETTY_YSDF_HEART:                return "heart";
-    case YETTY_YSDF_CROSS:                return "cross";
-    case YETTY_YSDF_ROUNDED_X:            return "rounded_x";
-    case YETTY_YSDF_CAPSULE:              return "capsule";
-    case YETTY_YSDF_MOON:                 return "moon";
-    case YETTY_YSDF_EGG:                  return "egg";
-    case YETTY_YSDF_OCTOGON:              return "octogon";
-    case YETTY_YSDF_HEXAGRAM:             return "hexagram";
-    case YETTY_YSDF_PENTAGRAM:            return "pentagram";
-    case YETTY_YSDF_LINEAR_GRADIENT_BOX:  return "linear_gradient_box";
-    case YETTY_YSDF_RADIAL_GRADIENT_BOX:  return "radial_gradient_box";
-    case YETTY_YSDF_SPHERE_3D:            return "sphere_3d";
-    case YETTY_YSDF_BOX_3D:               return "box_3d";
-    case YETTY_YSDF_TORUS_3D:             return "torus_3d";
-    case YETTY_YSDF_CYLINDER_3D:          return "cylinder_3d";
-    default:                              return NULL;
+    case YETTY_YSDF_CIRCLE:
+        return "circle";
+    case YETTY_YSDF_BOX:
+        return "box";
+    case YETTY_YSDF_SEGMENT:
+        return "segment";
+    case YETTY_YSDF_TRIANGLE:
+        return "triangle";
+    case YETTY_YSDF_ELLIPSE:
+        return "ellipse";
+    case YETTY_YSDF_ARC:
+        return "arc";
+    case YETTY_YSDF_ROUNDED_BOX:
+        return "rounded_box";
+    case YETTY_YSDF_RHOMBUS:
+        return "rhombus";
+    case YETTY_YSDF_PENTAGON:
+        return "pentagon";
+    case YETTY_YSDF_HEXAGON:
+        return "hexagon";
+    case YETTY_YSDF_STAR:
+        return "star";
+    case YETTY_YSDF_PIE:
+        return "pie";
+    case YETTY_YSDF_RING:
+        return "ring";
+    case YETTY_YSDF_HEART:
+        return "heart";
+    case YETTY_YSDF_CROSS:
+        return "cross";
+    case YETTY_YSDF_ROUNDED_X:
+        return "rounded_x";
+    case YETTY_YSDF_CAPSULE:
+        return "capsule";
+    case YETTY_YSDF_MOON:
+        return "moon";
+    case YETTY_YSDF_EGG:
+        return "egg";
+    case YETTY_YSDF_OCTOGON:
+        return "octogon";
+    case YETTY_YSDF_HEXAGRAM:
+        return "hexagram";
+    case YETTY_YSDF_PENTAGRAM:
+        return "pentagram";
+    case YETTY_YSDF_LINEAR_GRADIENT_BOX:
+        return "linear_gradient_box";
+    case YETTY_YSDF_RADIAL_GRADIENT_BOX:
+        return "radial_gradient_box";
+    case YETTY_YSDF_SPHERE_3D:
+        return "sphere_3d";
+    case YETTY_YSDF_BOX_3D:
+        return "box_3d";
+    case YETTY_YSDF_TORUS_3D:
+        return "torus_3d";
+    case YETTY_YSDF_CYLINDER_3D:
+        return "cylinder_3d";
+    default:
+        return NULL;
     }
 }
 
@@ -227,46 +301,70 @@ static const char *sdf_type_name(uint32_t type)
  * are: type, z_order, fill_color, stroke_color, stroke_width). */
 static const char *const *sdf_geom_field_names(uint32_t type, int *out_n)
 {
-    static const char *circle[]    = {"center_x", "center_y", "radius"};
-    static const char *box[]       = {"center_x", "center_y", "half_width", "half_height",
-                                      "corner_radius"};
-    static const char *segment[]   = {"start_x", "start_y", "end_x", "end_y"};
-    static const char *triangle[]  = {"vertex_a_x", "vertex_a_y", "vertex_b_x", "vertex_b_y",
-                                      "vertex_c_x", "vertex_c_y"};
-    static const char *ellipse[]   = {"center_x", "center_y", "radius_x", "radius_y"};
-    static const char *arc[]       = {"center_x", "center_y", "radius",
-                                      "thickness", "angle_start", "angle_end"};
-    static const char *rbox[]      = {"center_x", "center_y", "half_width", "half_height",
-                                      "radius_top_right", "radius_bottom_right",
-                                      "radius_top_left", "radius_bottom_left"};
-    static const char *capsule[]   = {"start_x", "start_y", "end_x", "end_y", "radius"};
-    static const char *gen5xy[]    = {"center_x", "center_y", "size", "rotation", "radius"};
-    static const char *star[]      = {"center_x", "center_y", "outer_radius", "inner_radius",
-                                      "points"};
-    static const char *ring[]      = {"center_x", "center_y", "outer_radius", "inner_radius",
-                                      "angle_start", "angle_end"};
-    static const char *pie[]       = {"center_x", "center_y", "radius", "angle_start",
-                                      "angle_end"};
+    static const char *circle[] = {"center_x", "center_y", "radius"};
+    static const char *box[] = {"center_x", "center_y", "half_width", "half_height",
+                                "corner_radius"};
+    static const char *segment[] = {"start_x", "start_y", "end_x", "end_y"};
+    static const char *triangle[] = {"vertex_a_x", "vertex_a_y", "vertex_b_x",
+                                     "vertex_b_y", "vertex_c_x", "vertex_c_y"};
+    static const char *ellipse[] = {"center_x", "center_y", "radius_x", "radius_y"};
+    static const char *arc[] = {"center_x",  "center_y",    "radius",
+                                "thickness", "angle_start", "angle_end"};
+    static const char *rbox[] = {"center_x",        "center_y",          "half_width",
+                                 "half_height",     "radius_top_right",  "radius_bottom_right",
+                                 "radius_top_left", "radius_bottom_left"};
+    static const char *capsule[] = {"start_x", "start_y", "end_x", "end_y", "radius"};
+    static const char *gen5xy[] = {"center_x", "center_y", "size", "rotation", "radius"};
+    static const char *star[] = {"center_x", "center_y", "outer_radius", "inner_radius", "points"};
+    static const char *ring[] = {"center_x",     "center_y",    "outer_radius",
+                                 "inner_radius", "angle_start", "angle_end"};
+    static const char *pie[] = {"center_x", "center_y", "radius", "angle_start", "angle_end"};
     switch (type) {
-    case YETTY_YSDF_CIRCLE:      *out_n = 3; return circle;
-    case YETTY_YSDF_BOX:         *out_n = 5; return box;
-    case YETTY_YSDF_SEGMENT:     *out_n = 4; return segment;
-    case YETTY_YSDF_TRIANGLE:    *out_n = 6; return triangle;
-    case YETTY_YSDF_ELLIPSE:     *out_n = 4; return ellipse;
-    case YETTY_YSDF_ARC:         *out_n = 6; return arc;
-    case YETTY_YSDF_ROUNDED_BOX: *out_n = 8; return rbox;
-    case YETTY_YSDF_CAPSULE:     *out_n = 5; return capsule;
-    case YETTY_YSDF_STAR:        *out_n = 5; return star;
-    case YETTY_YSDF_RING:        *out_n = 6; return ring;
-    case YETTY_YSDF_PIE:         *out_n = 5; return pie;
+    case YETTY_YSDF_CIRCLE:
+        *out_n = 3;
+        return circle;
+    case YETTY_YSDF_BOX:
+        *out_n = 5;
+        return box;
+    case YETTY_YSDF_SEGMENT:
+        *out_n = 4;
+        return segment;
+    case YETTY_YSDF_TRIANGLE:
+        *out_n = 6;
+        return triangle;
+    case YETTY_YSDF_ELLIPSE:
+        *out_n = 4;
+        return ellipse;
+    case YETTY_YSDF_ARC:
+        *out_n = 6;
+        return arc;
+    case YETTY_YSDF_ROUNDED_BOX:
+        *out_n = 8;
+        return rbox;
+    case YETTY_YSDF_CAPSULE:
+        *out_n = 5;
+        return capsule;
+    case YETTY_YSDF_STAR:
+        *out_n = 5;
+        return star;
+    case YETTY_YSDF_RING:
+        *out_n = 6;
+        return ring;
+    case YETTY_YSDF_PIE:
+        *out_n = 5;
+        return pie;
     case YETTY_YSDF_PENTAGON:
     case YETTY_YSDF_HEXAGON:
     case YETTY_YSDF_RHOMBUS:
     case YETTY_YSDF_HEART:
     case YETTY_YSDF_OCTOGON:
     case YETTY_YSDF_HEXAGRAM:
-    case YETTY_YSDF_PENTAGRAM:   *out_n = 3; return gen5xy;
-    default:                     *out_n = 0; return NULL;
+    case YETTY_YSDF_PENTAGRAM:
+        *out_n = 3;
+        return gen5xy;
+    default:
+        *out_n = 0;
+        return NULL;
     }
 }
 
@@ -292,7 +390,9 @@ static void out(const char *fmt, ...)
 
 static void ind(int depth)
 {
-    for (int i = 0; i < depth; i++) fputs("  ", g_out);
+    for (int i = 0; i < depth; i++) {
+        fputs("  ", g_out);
+    }
 }
 
 /*===========================================================================
@@ -339,20 +439,28 @@ static struct yetty_ydraw_drawable_list_registry *make_full_registry(void)
     }
     yetty_ydraw_drawable_list_registry_set_default(rr.value, yetty_ysdf_handler);
     struct yetty_ycore_void_result a;
-    a = yetty_ydraw_drawable_list_registry_add(rr.value, YETTY_YDRAW_CMD_BASE,
-                                           YETTY_YDRAW_CMD_END, yetty_ydraw_cmd_handler);
-    if (YETTY_IS_ERR(a)) goto err;
+    a = yetty_ydraw_drawable_list_registry_add(rr.value, YETTY_YDRAW_CMD_BASE, YETTY_YDRAW_CMD_END,
+                                               yetty_ydraw_cmd_handler);
+    if (YETTY_IS_ERR(a)) {
+        goto err;
+    }
     a = yetty_ydraw_drawable_list_registry_add(rr.value, YETTY_YDRAW_RESOURCE_FONT,
-                                           YETTY_YDRAW_RESOURCE_FONT,
-                                           yetty_ydraw_font_resource_handler);
-    if (YETTY_IS_ERR(a)) goto err;
+                                               YETTY_YDRAW_RESOURCE_FONT,
+                                               yetty_ydraw_font_resource_handler);
+    if (YETTY_IS_ERR(a)) {
+        goto err;
+    }
     a = yetty_ydraw_drawable_list_registry_add(rr.value, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
-                                           YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
-                                           yetty_ydraw_text_drawable_list_handler);
-    if (YETTY_IS_ERR(a)) goto err;
+                                               YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
+                                               yetty_ydraw_text_drawable_list_handler);
+    if (YETTY_IS_ERR(a)) {
+        goto err;
+    }
     a = yetty_ydraw_drawable_list_registry_add(rr.value, YETTY_YDRAW_COMPOSITE_TYPE_BASE,
-                                           0xFFFFFFFFu, yetty_ydraw_composite_handler);
-    if (YETTY_IS_ERR(a)) goto err;
+                                               0xFFFFFFFFu, yetty_ydraw_composite_handler);
+    if (YETTY_IS_ERR(a)) {
+        goto err;
+    }
     return rr.value;
 err:
     fprintf(stderr, "osc-analyzer: registry_add failed: %s\n", a.error.msg);
@@ -367,16 +475,23 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
                              const struct yetty_ydraw_command *cmd)
 {
     if (cmd->kind == YETTY_YDRAW_COMMAND_DELETE) {
-        ind(depth); out("- # rec %d\n", idx);
-        ind(depth); out("  kind: CMD_DELETE\n");
-        ind(depth); out("  id: %u\n", cmd->id);
+        ind(depth);
+        out("- # rec %d\n", idx);
+        ind(depth);
+        out("  kind: CMD_DELETE\n");
+        ind(depth);
+        out("  id: %u\n", cmd->id);
         return;
     }
     if (cmd->kind == YETTY_YDRAW_COMMAND_UPDATE) {
-        ind(depth); out("- # rec %d\n", idx);
-        ind(depth); out("  kind: CMD_UPDATE\n");
-        ind(depth); out("  id: %u\n", cmd->update.id);
-        ind(depth); out("  payload_size: %llu\n", (unsigned long long)cmd->update.size);
+        ind(depth);
+        out("- # rec %d\n", idx);
+        ind(depth);
+        out("  kind: CMD_UPDATE\n");
+        ind(depth);
+        out("  id: %u\n", cmd->update.id);
+        ind(depth);
+        out("  payload_size: %llu\n", (unsigned long long)cmd->update.size);
         return;
     }
     /* ADD — break down further by type. */
@@ -384,57 +499,86 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
 
     if (type == YETTY_YDRAW_CMD_GROUP) {
         if (rec_len < 12) {
-            ind(depth); out("- # rec %d (truncated CMD_GROUP)\n", idx);
+            ind(depth);
+            out("- # rec %d (truncated CMD_GROUP)\n", idx);
             return;
         }
         uint32_t id, payload_size;
-        memcpy(&id,           bytes + 4, 4);
+        memcpy(&id, bytes + 4, 4);
         memcpy(&payload_size, bytes + 8, 4);
-        ind(depth); out("- # rec %d\n", idx);
-        ind(depth); out("  kind: CMD_GROUP\n");
-        ind(depth); out("  id: %u\n", id);
-        ind(depth); out("  payload_size: %u\n", payload_size);
+        ind(depth);
+        out("- # rec %d\n", idx);
+        ind(depth);
+        out("  kind: CMD_GROUP\n");
+        ind(depth);
+        out("  id: %u\n", id);
+        ind(depth);
+        out("  payload_size: %u\n", payload_size);
         if (payload_size > 0 && rec_len >= 12u + payload_size) {
-            ind(depth); out("  body:\n");
+            ind(depth);
+            out("  body:\n");
             walk_ygrid_body(bytes + 12u, payload_size, depth + 2);
         } else {
-            ind(depth); out("  body: []\n");
+            ind(depth);
+            out("  body: []\n");
         }
         return;
     }
     if (type == YETTY_YDRAW_CMD_ZERO) {
-        ind(depth); out("- # rec %d\n", idx);
-        ind(depth); out("  kind: CMD_ZERO\n");
+        ind(depth);
+        out("- # rec %d\n", idx);
+        ind(depth);
+        out("  kind: CMD_ZERO\n");
         return;
     }
     if (type == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
         struct yetty_ydraw_text_drawable_list_view v;
         if (yetty_ydraw_text_drawable_list_parse((const uint32_t *)bytes, &v) == 0) {
-            ind(depth); out("- # rec %d\n", idx);
-            ind(depth); out("  kind: TEXT_DRAWABLE_LIST\n");
-            ind(depth); out("  x: %.2f\n", v.x);
-            ind(depth); out("  y: %.2f\n", v.y);
-            ind(depth); out("  font_size: %.2f\n", v.font_size);
-            ind(depth); out("  rotation: %.2f\n", v.rotation);
-            ind(depth); out("  color: 0x%08x\n", v.color);
-            ind(depth); out("  layer: %u\n", v.layer);
-            ind(depth); out("  font_id: %d\n", v.font_id);
-            ind(depth); out("  text_len: %u\n", v.text_len);
+            ind(depth);
+            out("- # rec %d\n", idx);
+            ind(depth);
+            out("  kind: TEXT_DRAWABLE_LIST\n");
+            ind(depth);
+            out("  x: %.2f\n", v.x);
+            ind(depth);
+            out("  y: %.2f\n", v.y);
+            ind(depth);
+            out("  font_size: %.2f\n", v.font_size);
+            ind(depth);
+            out("  rotation: %.2f\n", v.rotation);
+            ind(depth);
+            out("  color: 0x%08x\n", v.color);
+            ind(depth);
+            out("  layer: %u\n", v.layer);
+            ind(depth);
+            out("  font_id: %d\n", v.font_id);
+            ind(depth);
+            out("  text_len: %u\n", v.text_len);
             /* Print up to 80 chars of the text, quoted, with escapes
              * for control bytes so binary or multiline content doesn't
              * corrupt the YAML stream. */
-            ind(depth); out("  text: \"");
+            ind(depth);
+            out("  text: \"");
             uint32_t shown = v.text_len > 80u ? 80u : v.text_len;
             for (uint32_t i = 0; i < shown; i++) {
                 unsigned char c = (unsigned char)v.text[i];
-                if (c == '\\' || c == '"')      out("\\%c", c);
-                else if (c == '\n')             out("\\n");
-                else if (c == '\r')             out("\\r");
-                else if (c == '\t')             out("\\t");
-                else if (c < 0x20 || c >= 0x7f) out("\\x%02x", c);
-                else                            out("%c", c);
+                if (c == '\\' || c == '"') {
+                    out("\\%c", c);
+                } else if (c == '\n') {
+                    out("\\n");
+                } else if (c == '\r') {
+                    out("\\r");
+                } else if (c == '\t') {
+                    out("\\t");
+                } else if (c < 0x20 || c >= 0x7f) {
+                    out("\\x%02x", c);
+                } else {
+                    out("%c", c);
+                }
             }
-            if (v.text_len > shown) out("...");
+            if (v.text_len > shown) {
+                out("...");
+            }
             out("\"\n");
             return;
         }
@@ -443,19 +587,29 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
     if (type == YETTY_YDRAW_RESOURCE_FONT) {
         struct yetty_ydraw_font_resource_view v;
         if (yetty_ydraw_font_resource_parse((const uint32_t *)bytes, &v) == 0) {
-            ind(depth); out("- # rec %d\n", idx);
-            ind(depth); out("  kind: FONT\n");
-            ind(depth); out("  font_id: %d\n", v.font_id);
-            ind(depth); out("  name_len: %u\n", v.name_len);
-            ind(depth); out("  name: \"");
+            ind(depth);
+            out("- # rec %d\n", idx);
+            ind(depth);
+            out("  kind: FONT\n");
+            ind(depth);
+            out("  font_id: %d\n", v.font_id);
+            ind(depth);
+            out("  name_len: %u\n", v.name_len);
+            ind(depth);
+            out("  name: \"");
             for (uint32_t i = 0; i < v.name_len; i++) {
                 unsigned char c = (unsigned char)v.name[i];
-                if (c == '\\' || c == '"') out("\\%c", c);
-                else if (c >= 0x20 && c < 0x7f) out("%c", c);
-                else out("\\x%02x", c);
+                if (c == '\\' || c == '"') {
+                    out("\\%c", c);
+                } else if (c >= 0x20 && c < 0x7f) {
+                    out("%c", c);
+                } else {
+                    out("\\x%02x", c);
+                }
             }
             out("\"\n");
-            ind(depth); out("  ttf_len: %u  # <data omitted>\n", v.ttf_len);
+            ind(depth);
+            out("  ttf_len: %u  # <data omitted>\n", v.ttf_len);
             return;
         }
     }
@@ -466,17 +620,25 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
         memcpy(&gy, &w[3], 4);
         memcpy(&gs, &w[4], 4);
         uint32_t packed = w[5];
-        uint32_t color  = w[6];
-        ind(depth); out("- # rec %d\n", idx);
-        ind(depth); out("  kind: GLYPH\n");
-        ind(depth); out("  z_order: %u\n", w[1]);
-        ind(depth); out("  x: %.2f\n", gx);
-        ind(depth); out("  y: %.2f\n", gy);
-        ind(depth); out("  font_size: %.2f\n", gs);
-        ind(depth); out("  glyph_index: %u\n", packed & 0xFFFFu);
-        ind(depth); out("  font_slot: %u  # 0 = default-when-zero, else slot-1\n",
-                       (packed >> 16) & 0xFFFFu);
-        ind(depth); out("  color: 0x%08x\n", color);
+        uint32_t color = w[6];
+        ind(depth);
+        out("- # rec %d\n", idx);
+        ind(depth);
+        out("  kind: GLYPH\n");
+        ind(depth);
+        out("  z_order: %u\n", w[1]);
+        ind(depth);
+        out("  x: %.2f\n", gx);
+        ind(depth);
+        out("  y: %.2f\n", gy);
+        ind(depth);
+        out("  font_size: %.2f\n", gs);
+        ind(depth);
+        out("  glyph_index: %u\n", packed & 0xFFFFu);
+        ind(depth);
+        out("  font_slot: %u  # 0 = default-when-zero, else slot-1\n", (packed >> 16) & 0xFFFFu);
+        ind(depth);
+        out("  color: 0x%08x\n", color);
         return;
     }
     /* Complex prim (yplot / yimage / yvideo / yzoo / yjungle / etc.) —
@@ -486,10 +648,14 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
     if (type >= YETTY_YDRAW_COMPOSITE_TYPE_BASE && rec_len >= 8) {
         uint32_t payload_size;
         memcpy(&payload_size, bytes + 4, 4);
-        ind(depth); out("- # rec %d\n", idx);
-        ind(depth); out("  kind: COMPLEX_PRIM\n");
-        ind(depth); out("  type: 0x%08x\n", type);
-        ind(depth); out("  payload_size: %u  # <data omitted>\n", payload_size);
+        ind(depth);
+        out("- # rec %d\n", idx);
+        ind(depth);
+        out("  kind: COMPLEX_PRIM\n");
+        ind(depth);
+        out("  type: 0x%08x\n", type);
+        ind(depth);
+        out("  payload_size: %u  # <data omitted>\n", payload_size);
         return;
     }
     /* SDF prim — fixed size by type, geometry starting at word 5 (or
@@ -499,31 +665,53 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
         uint32_t base_type = type & ~YETTY_YDRAW_HAS_ID_FLAG;
         uint32_t wcount = yetty_ysdf_word_count((enum yetty_ysdf_type)base_type);
         if (wcount == 0) {
-            ind(depth); out("- # rec %d\n", idx);
-            ind(depth); out("  kind: UNKNOWN\n");
-            ind(depth); out("  type: 0x%08x\n", type);
-            ind(depth); out("  rec_bytes: %zu\n", rec_len);
+            ind(depth);
+            out("- # rec %d\n", idx);
+            ind(depth);
+            out("  kind: UNKNOWN\n");
+            ind(depth);
+            out("  type: 0x%08x\n", type);
+            ind(depth);
+            out("  rec_bytes: %zu\n", rec_len);
             return;
         }
         const uint32_t *w = (const uint32_t *)bytes;
         uint32_t off = 1u;
         const char *name = sdf_type_name(base_type);
-        ind(depth); out("- # rec %d\n", idx);
-        ind(depth); out("  kind: SDF\n");
-        ind(depth); out("  type: %s%s  # 0x%08x%s\n",
-                       name ? name : "unknown", "",
-                       base_type,
-                       (type & YETTY_YDRAW_HAS_ID_FLAG) ? " (HAS_ID)" : "");
+        ind(depth);
+        out("- # rec %d\n", idx);
+        ind(depth);
+        out("  kind: SDF\n");
+        ind(depth);
+        out("  type: %s%s  # 0x%08x%s\n", name ? name : "unknown", "", base_type,
+            (type & YETTY_YDRAW_HAS_ID_FLAG) ? " (HAS_ID)" : "");
         if (type & YETTY_YDRAW_HAS_ID_FLAG) {
-            if (off < wcount) { ind(depth); out("  id: %u\n", w[off]); off++; }
+            if (off < wcount) {
+                ind(depth);
+                out("  id: %u\n", w[off]);
+                off++;
+            }
         }
-        if (off < wcount) { ind(depth); out("  z_order: %u\n", w[off]); off++; }
-        if (off < wcount) { ind(depth); out("  fill_color: 0x%08x\n", w[off]); off++; }
-        if (off < wcount) { ind(depth); out("  stroke_color: 0x%08x\n", w[off]); off++; }
+        if (off < wcount) {
+            ind(depth);
+            out("  z_order: %u\n", w[off]);
+            off++;
+        }
+        if (off < wcount) {
+            ind(depth);
+            out("  fill_color: 0x%08x\n", w[off]);
+            off++;
+        }
+        if (off < wcount) {
+            ind(depth);
+            out("  stroke_color: 0x%08x\n", w[off]);
+            off++;
+        }
         if (off < wcount) {
             float sw;
             memcpy(&sw, &w[off], 4);
-            ind(depth); out("  stroke_width: %.2f\n", sw);
+            ind(depth);
+            out("  stroke_width: %.2f\n", sw);
             off++;
         }
         /* Remaining words are geometry — emit with named fields when
@@ -532,7 +720,8 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
         const char *const *names = sdf_geom_field_names(base_type, &n_geom_names);
         uint32_t geom_left = wcount - off;
         if (names && geom_left > 0) {
-            ind(depth); out("  geometry:\n");
+            ind(depth);
+            out("  geometry:\n");
             for (uint32_t i = 0; i < geom_left && off < wcount; i++, off++) {
                 const char *fn = (i < (uint32_t)n_geom_names) ? names[i] : NULL;
                 float v;
@@ -545,7 +734,8 @@ static void emit_record_yaml(const uint8_t *bytes, size_t rec_len, int depth, in
                 }
             }
         } else if (geom_left > 0) {
-            ind(depth); out("  geometry: [");
+            ind(depth);
+            out("  geometry: [");
             for (uint32_t i = 0; i < geom_left && off < wcount; i++, off++) {
                 float v;
                 memcpy(&v, &w[off], 4);
@@ -589,8 +779,7 @@ static void walk_ygrid_body(const uint8_t *bytes, size_t bytes_len, int depth)
         }
         if (pr.value == 0) {
             ind(depth);
-            out("# parser made no progress at offset %zu (trailing %zu B)\n",
-                off, bytes_len - off);
+            out("# parser made no progress at offset %zu (trailing %zu B)\n", off, bytes_len - off);
             return;
         }
         emit_record_yaml(bytes + off, pr.value, depth, idx, &cmd);
@@ -625,14 +814,13 @@ static void walk_admin_payload(const uint8_t *body, size_t blen, int depth)
         uint32_t child_id, kind, init_n;
         float r[4];
         memcpy(&child_id, tail + 0, 4);
-        memcpy(&kind,     tail + 4, 4);
-        memcpy(r,         tail + 8, 16);
-        memcpy(&init_n,   tail + 24, 4);
+        memcpy(&kind, tail + 4, 4);
+        memcpy(r, tail + 8, 16);
+        memcpy(&init_n, tail + 24, 4);
         ind(depth + 1);
         out("child_id=%u kind=%s(%u) rect=(%.1f,%.1f)..(%.1f,%.1f) "
             "init_payload=%u B\n",
-            child_id, figure_kind_name(kind), kind,
-            r[0], r[1], r[2], r[3], init_n);
+            child_id, figure_kind_name(kind), kind, r[0], r[1], r[2], r[3], init_n);
         if (init_n > 0 && (size_t)init_n + 28u <= tlen) {
             /* Init payload is the body of the figure being minted. For
              * YGRID, that's a CMD_GROUP/CMD_DELETE/SDF stream. */
@@ -667,10 +855,9 @@ static void walk_admin_payload(const uint8_t *body, size_t blen, int depth)
         uint32_t child_id;
         float r[4];
         memcpy(&child_id, tail + 0, 4);
-        memcpy(r,         tail + 4, 16);
+        memcpy(r, tail + 4, 16);
         ind(depth + 1);
-        out("child_id=%u rect=(%.1f,%.1f)..(%.1f,%.1f)\n",
-            child_id, r[0], r[1], r[2], r[3]);
+        out("child_id=%u rect=(%.1f,%.1f)..(%.1f,%.1f)\n", child_id, r[0], r[1], r[2], r[3]);
         break;
     }
     case YETTY_YFIGURE_ADMIN_SET_RECT: {
@@ -682,8 +869,7 @@ static void walk_admin_payload(const uint8_t *body, size_t blen, int depth)
         float r[4];
         memcpy(r, tail, 16);
         ind(depth + 1);
-        out("rect=(%.1f,%.1f)..(%.1f,%.1f)\n",
-            r[0], r[1], r[2], r[3]);
+        out("rect=(%.1f,%.1f)..(%.1f,%.1f)\n", r[0], r[1], r[2], r[3]);
         break;
     }
     default:
@@ -700,13 +886,12 @@ static void walk_ymgui_frame(const uint8_t *body, size_t blen, int depth)
         out("(ymgui FRAME truncated, %zu B)\n", blen);
         return;
     }
-    const struct yetty_ymgui_wire_frame *fh =
-        (const struct yetty_ymgui_wire_frame *)body;
+    const struct yetty_ymgui_wire_frame *fh = (const struct yetty_ymgui_wire_frame *)body;
     ind(depth);
     out("ymgui_wire_frame magic=0x%08x version=%u total=%u figure_id=%u "
         "cmd_lists=%u display=(%.1f x %.1f) flags=0x%x%s\n",
-        fh->magic, fh->version, fh->total_size, fh->figure_id,
-        fh->cmd_list_count, fh->display_size_x, fh->display_size_y, fh->flags,
+        fh->magic, fh->version, fh->total_size, fh->figure_id, fh->cmd_list_count,
+        fh->display_size_x, fh->display_size_y, fh->flags,
         (fh->flags & YMGUI_FRAME_FLAG_IDX32) ? " IDX32" : "");
 }
 
@@ -717,8 +902,7 @@ static void walk_ymgui_tex(const uint8_t *body, size_t blen, int depth)
         out("(ymgui TEX truncated, %zu B)\n", blen);
         return;
     }
-    const struct yetty_ymgui_wire_tex *th =
-        (const struct yetty_ymgui_wire_tex *)body;
+    const struct yetty_ymgui_wire_tex *th = (const struct yetty_ymgui_wire_tex *)body;
     ind(depth);
     out("ymgui_wire_tex magic=0x%08x version=%u total=%u figure_id=%u "
         "tex_id=%u format=%s(%u) %ux%u\n",
@@ -726,8 +910,7 @@ static void walk_ymgui_tex(const uint8_t *body, size_t blen, int depth)
         ymgui_tex_fmt_name(th->format), th->format, th->width, th->height);
 }
 
-static void walk_routed_payload(uint32_t id, const uint8_t *payload, size_t plen,
-                                int depth)
+static void walk_routed_payload(uint32_t id, const uint8_t *payload, size_t plen, int depth)
 {
     if (plen == 0) {
         ind(depth);
@@ -784,10 +967,10 @@ static void walk_routed_payload(uint32_t id, const uint8_t *payload, size_t plen
     /* Otherwise we don't know — dump the head so the operator can
      * eyeball it. */
     ind(depth);
-    out("(unrecognised routed payload, first u32=0x%08x, %zu B; first 16:",
-        first, plen);
-    for (size_t i = 0; i < plen && i < 16; i++)
+    out("(unrecognised routed payload, first u32=0x%08x, %zu B; first 16:", first, plen);
+    for (size_t i = 0; i < plen && i < 16; i++) {
         out(" %02x", payload[i]);
+    }
     out(")\n");
 }
 
@@ -798,8 +981,7 @@ static void walk_records(const uint8_t *bytes, size_t bytes_len, int depth)
     while (off < bytes_len) {
         if (bytes_len - off < sizeof(struct yetty_yfigure_wire_record)) {
             ind(depth);
-            out("record #%d header TRUNCATED (only %zu bytes left)\n",
-                idx, bytes_len - off);
+            out("record #%d header TRUNCATED (only %zu bytes left)\n", idx, bytes_len - off);
             return;
         }
         struct yetty_yfigure_wire_record hdr;
@@ -807,8 +989,8 @@ static void walk_records(const uint8_t *bytes, size_t bytes_len, int depth)
         off += sizeof(hdr);
         if (hdr.length > bytes_len - off) {
             ind(depth);
-            out("record #%d length=%u id=%u OVERRUNS buffer (only %zu B left)\n",
-                idx, hdr.length, hdr.id, bytes_len - off);
+            out("record #%d length=%u id=%u OVERRUNS buffer (only %zu B left)\n", idx, hdr.length,
+                hdr.id, bytes_len - off);
             return;
         }
 
@@ -860,10 +1042,11 @@ static struct yetty_ycore_void_result raw_sink_process_input(
             struct yetty_ycore_size_result rr =
                 yetty_ywire_wire_statemachine_read(sm, junk, sizeof(junk));
             if (YETTY_IS_ERR(rr)) {
-                return YETTY_ERR(yetty_ycore_void,
-                                 "raw_sink: SM read failed", rr);
+                return YETTY_ERR(yetty_ycore_void, "raw_sink: SM read failed", rr);
             }
-            if (rr.value == 0) break;
+            if (rr.value == 0) {
+                break;
+            }
             r->bytes_drained += (uint64_t)rr.value;
         }
         yetty_yplatform_coro_yield();
@@ -871,21 +1054,27 @@ static struct yetty_ycore_void_result raw_sink_process_input(
 }
 
 struct envelope_mock_layer {
-    int expected_code;            /* the one OSC code we're registered for */
+    int expected_code; /* the one OSC code we're registered for */
     uint8_t *buf;
-    size_t   cap;
-    size_t   len;
-    int      env_count;
-    int      err_count;
+    size_t cap;
+    size_t len;
+    int env_count;
+    int err_count;
 };
 
 static int mock_grow(struct envelope_mock_layer *m, size_t need)
 {
-    if (need <= m->cap) return 0;
+    if (need <= m->cap) {
+        return 0;
+    }
     size_t cap = m->cap ? m->cap : 4096;
-    while (cap < need) cap *= 2;
+    while (cap < need) {
+        cap *= 2;
+    }
     uint8_t *g = realloc(m->buf, cap);
-    if (!g) return -1;
+    if (!g) {
+        return -1;
+    }
     m->buf = g;
     m->cap = cap;
     return 0;
@@ -911,8 +1100,8 @@ static struct yetty_ycore_void_result envelope_mock_process_input(
         if (code != m->expected_code) {
             m->err_count++;
             return YETTY_ERR(yetty_ycore_void,
-                "envelope_mock: SM dispatched layer registered for one code "
-                "to a different code");
+                             "envelope_mock: SM dispatched layer registered for one code "
+                             "to a different code");
         }
 
         /* Banner on entry to a fresh envelope. The layer's own coro is
@@ -921,16 +1110,14 @@ static struct yetty_ycore_void_result envelope_mock_process_input(
          * banner here once per outer iteration is right. */
         m->env_count++;
         m->len = 0;
-        struct yetty_ywire_wire_statemachine_args args =
-            yetty_ywire_wire_statemachine_args(sm);
-        out("\nenvelope osc=%d (%s) args=%zu B",
-            code, osc_code_name(code), args.len);
+        struct yetty_ywire_wire_statemachine_args args = yetty_ywire_wire_statemachine_args(sm);
+        out("\nenvelope osc=%d (%s) args=%zu B", code, osc_code_name(code), args.len);
         if (args.len >= sizeof(struct yetty_yface_bin_meta)) {
             const struct yetty_yface_bin_meta *meta =
                 (const struct yetty_yface_bin_meta *)args.bytes;
             if (meta->magic == YETTY_YFACE_BIN_MAGIC) {
-                out(" meta{compressed=%u raw_size=%llu}",
-                    meta->compressed, (unsigned long long)meta->raw_size);
+                out(" meta{compressed=%u raw_size=%llu}", meta->compressed,
+                    (unsigned long long)meta->raw_size);
             }
         }
         out("\n");
@@ -952,10 +1139,11 @@ static struct yetty_ycore_void_result envelope_mock_process_input(
                 yetty_ywire_wire_statemachine_read(sm, chunk, sizeof(chunk));
             if (YETTY_IS_ERR(rr)) {
                 m->err_count++;
-                return YETTY_ERR(yetty_ycore_void,
-                                 "envelope_mock: SM read failed", rr);
+                return YETTY_ERR(yetty_ycore_void, "envelope_mock: SM read failed", rr);
             }
-            if (rr.value == 0) break;
+            if (rr.value == 0) {
+                break;
+            }
             if (mock_grow(m, m->len + rr.value) < 0) {
                 m->err_count++;
                 return YETTY_ERR(yetty_ycore_void, "envelope_mock: buf oom");
@@ -965,8 +1153,9 @@ static struct yetty_ycore_void_result envelope_mock_process_input(
         }
 
         out("  body decoded: %zu B; first 16:", m->len);
-        for (size_t i = 0; i < m->len && i < 16; i++)
+        for (size_t i = 0; i < m->len && i < 16; i++) {
             out(" %02x", m->buf[i]);
+        }
         out("\n");
 
         switch (code) {
@@ -977,12 +1166,11 @@ static struct yetty_ycore_void_result envelope_mock_process_input(
             if (m->len >= sizeof(struct yetty_client_input_sub)) {
                 const struct yetty_client_input_sub *s =
                     (const struct yetty_client_input_sub *)m->buf;
-                out("  client_input_sub magic=0x%08x flags=0x%x%s%s%s%s\n",
-                    s->magic, s->flags,
+                out("  client_input_sub magic=0x%08x flags=0x%x%s%s%s%s\n", s->magic, s->flags,
                     (s->flags & YETTY_CLIENT_INPUT_SUB_MOUSE_CLICK) ? " MOUSE_CLICK" : "",
-                    (s->flags & YETTY_CLIENT_INPUT_SUB_MOUSE_MOVE)  ? " MOUSE_MOVE"  : "",
+                    (s->flags & YETTY_CLIENT_INPUT_SUB_MOUSE_MOVE) ? " MOUSE_MOVE" : "",
                     (s->flags & YETTY_CLIENT_INPUT_SUB_MOUSE_WHEEL) ? " MOUSE_WHEEL" : "",
-                    (s->flags & YETTY_CLIENT_INPUT_SUB_KEY)         ? " KEY"         : "");
+                    (s->flags & YETTY_CLIENT_INPUT_SUB_KEY) ? " KEY" : "");
             }
             break;
         default:
@@ -1025,8 +1213,8 @@ static void *memmem(const void *hay, size_t hl, const void *need, size_t nl)
 }
 #endif
 
-static int pump_fd(struct yetty_ywire_wire_statemachine *sm, int in_fd,
-                   int out_fd, int forward_to_stdout)
+static int pump_fd(struct yetty_ywire_wire_statemachine *sm, int in_fd, int out_fd,
+                   int forward_to_stdout)
 {
     char chunk[1u << 13];
     for (;;) {
@@ -1050,7 +1238,9 @@ static int pump_fd(struct yetty_ywire_wire_statemachine *sm, int in_fd,
                 return 1;
             }
             size_t n = rr.value;
-            if (n == 0) break;
+            if (n == 0) {
+                break;
+            }
             got_bytes = 1;
             /* Byte-for-byte passthrough first, then feed the SM and drive
              * its coroutine — a downstream `tee` consumer sees the same
@@ -1066,15 +1256,13 @@ static int pump_fd(struct yetty_ywire_wire_statemachine *sm, int in_fd,
                     w += (size_t)k;
                 }
             }
-            struct yetty_ycore_void_result fr =
-                yetty_ywire_wire_statemachine_feed(sm, chunk, n);
+            struct yetty_ycore_void_result fr = yetty_ywire_wire_statemachine_feed(sm, chunk, n);
             if (YETTY_IS_ERR(fr)) {
                 fprintf(stderr, "osc-analyzer: SM feed failed: %s\n", fr.error.msg);
                 yetty_ycore_error_destroy(fr.error);
                 return 1;
             }
-            struct yetty_ycore_void_result pr2 =
-                yetty_ywire_wire_statemachine_process(sm);
+            struct yetty_ycore_void_result pr2 = yetty_ywire_wire_statemachine_process(sm);
             if (YETTY_IS_ERR(pr2)) {
                 fprintf(stderr, "osc-analyzer: SM process failed: %s\n", pr2.error.msg);
                 yetty_ycore_error_destroy(pr2.error);
@@ -1084,7 +1272,9 @@ static int pump_fd(struct yetty_ywire_wire_statemachine *sm, int in_fd,
         /* wait_readable reported ready but the drain read nothing — the fd
          * is at EOF / hung up. (A blocking wait never returns "ready" with
          * no bytes otherwise.) */
-        if (!got_bytes) return 0;
+        if (!got_bytes) {
+            return 0;
+        }
     }
 }
 
@@ -1092,8 +1282,7 @@ static int pump_fd(struct yetty_ywire_wire_statemachine *sm, int in_fd,
 /* Spawn argv under a freshly forked PTY and pump the master through
  * the SM. Returns the child's exit code (or 1 on internal error).
  * forkpty/execvp/waitpid are POSIX — the -e mode is Linux/macOS only. */
-static int run_exec(char **argv, int cols, int rows,
-                    struct yetty_ywire_wire_statemachine *sm)
+static int run_exec(char **argv, int cols, int rows, struct yetty_ywire_wire_statemachine *sm)
 {
     struct winsize ws = {0};
     ws.ws_col = (unsigned short)cols;
@@ -1112,16 +1301,20 @@ static int run_exec(char **argv, int cols, int rows,
         return 1;
     }
     if (pid == 0) {
-        for (int fd = 3; fd < 1024; fd++) close(fd);
+        for (int fd = 3; fd < 1024; fd++) {
+            close(fd);
+        }
         execvp(argv[0], argv);
         fprintf(stderr, "execvp(%s) failed: %s\n", argv[0], strerror(errno));
         _exit(127);
     }
-    fprintf(stderr, "osc-analyzer: spawned pid=%d cmd='%s' winsize=%ux%u\n",
-            pid, argv[0], ws.ws_col, ws.ws_row);
+    fprintf(stderr, "osc-analyzer: spawned pid=%d cmd='%s' winsize=%ux%u\n", pid, argv[0],
+            ws.ws_col, ws.ws_row);
 
     int flags = fcntl(pty_master, F_GETFL, 0);
-    if (flags >= 0) fcntl(pty_master, F_SETFL, flags | O_NONBLOCK);
+    if (flags >= 0) {
+        fcntl(pty_master, F_SETFL, flags | O_NONBLOCK);
+    }
 
     int rc = pump_fd(sm, pty_master, STDOUT_FILENO, /*forward_to_stdout=*/1);
 
@@ -1129,13 +1322,15 @@ static int run_exec(char **argv, int cols, int rows,
     int status = 0;
     if (waitpid(pid, &status, 0) >= 0) {
         if (WIFEXITED(status)) {
-            fprintf(stderr, "osc-analyzer: child exited rc=%d\n",
-                    WEXITSTATUS(status));
-            if (rc == 0) rc = WEXITSTATUS(status);
+            fprintf(stderr, "osc-analyzer: child exited rc=%d\n", WEXITSTATUS(status));
+            if (rc == 0) {
+                rc = WEXITSTATUS(status);
+            }
         } else if (WIFSIGNALED(status)) {
-            fprintf(stderr, "osc-analyzer: child killed by signal %d\n",
-                    WTERMSIG(status));
-            if (rc == 0) rc = 128 + WTERMSIG(status);
+            fprintf(stderr, "osc-analyzer: child killed by signal %d\n", WTERMSIG(status));
+            if (rc == 0) {
+                rc = 128 + WTERMSIG(status);
+            }
         }
     }
     return rc;
@@ -1149,14 +1344,15 @@ static int run_interpose(struct yetty_ywire_wire_statemachine *sm)
 
 static int run_file(const char *path, struct yetty_ywire_wire_statemachine *sm)
 {
-    int fd = (path && strcmp(path, "-") != 0) ? open(path, O_RDONLY)
-                                              : STDIN_FILENO;
+    int fd = (path && strcmp(path, "-") != 0) ? open(path, O_RDONLY) : STDIN_FILENO;
     if (fd < 0) {
         fprintf(stderr, "open %s: %s\n", path, strerror(errno));
         return 1;
     }
     int rc = pump_fd(sm, fd, -1, /*forward_to_stdout=*/0);
-    if (fd != STDIN_FILENO) close(fd);
+    if (fd != STDIN_FILENO) {
+        close(fd);
+    }
     return rc;
 }
 
@@ -1208,8 +1404,7 @@ static int run_records_file(const char *path)
     size_t p = 0;
     while (p < got) {
         /* Find next separator at-or-after p. */
-        const uint8_t *hit =
-            (const uint8_t *)memmem(buf + p, got - p, sep, sep_len);
+        const uint8_t *hit = (const uint8_t *)memmem(buf + p, got - p, sep, sep_len);
         if (!hit) {
             /* Trailing bytes after the last separator — decode as the
              * last frame (no following separator means EOF). */
@@ -1308,12 +1503,16 @@ int main(int argc, char **argv)
             continue;
         }
         if (!strcmp(argv[i], "--cols")) {
-            if (i + 1 >= argc) return 1;
+            if (i + 1 >= argc) {
+                return 1;
+            }
             cols = atoi(argv[++i]);
             continue;
         }
         if (!strcmp(argv[i], "--rows")) {
-            if (i + 1 >= argc) return 1;
+            if (i + 1 >= argc) {
+                return 1;
+            }
             rows = atoi(argv[++i]);
             continue;
         }
@@ -1337,8 +1536,7 @@ int main(int argc, char **argv)
         file_path = argv[i];
     }
 
-    int mode_count = (exec_at >= 0) + interpose + (file_path != NULL) +
-                     (records_path != NULL);
+    int mode_count = (exec_at >= 0) + interpose + (file_path != NULL) + (records_path != NULL);
     if (mode_count == 0) {
         print_help(argv[0]);
         return 1;
@@ -1374,7 +1572,9 @@ int main(int argc, char **argv)
             yetty_ydraw_drawable_list_registry_destroy(g_registry);
             g_registry = NULL;
         }
-        if (g_out != stderr) fclose(g_out);
+        if (g_out != stderr) {
+            fclose(g_out);
+        }
         return rrc;
     }
 
@@ -1385,10 +1585,11 @@ int main(int argc, char **argv)
     struct yetty_ywire_wire_statemachine_ptr_result sm_res =
         yetty_ywire_wire_statemachine_create(NULL);
     if (YETTY_IS_ERR(sm_res)) {
-        fprintf(stderr, "osc-analyzer: SM create failed: %s\n",
-                sm_res.error.msg);
+        fprintf(stderr, "osc-analyzer: SM create failed: %s\n", sm_res.error.msg);
         yetty_ycore_error_destroy(sm_res.error);
-        if (g_out != stderr) fclose(g_out);
+        if (g_out != stderr) {
+            fclose(g_out);
+        }
         return 1;
     }
     struct yetty_ywire_wire_statemachine *sm = sm_res.value;
@@ -1399,14 +1600,15 @@ int main(int argc, char **argv)
      * never drains and the scanner spins. */
     struct raw_sink_layer raw_sink = {0};
     {
-        struct yetty_ycore_void_result r = yetty_ywire_wire_statemachine_set_default(
-            sm, raw_sink_process_input, &raw_sink);
+        struct yetty_ycore_void_result r =
+            yetty_ywire_wire_statemachine_set_default(sm, raw_sink_process_input, &raw_sink);
         if (YETTY_IS_ERR(r)) {
-            fprintf(stderr, "osc-analyzer: SM set_default failed: %s\n",
-                    r.error.msg);
+            fprintf(stderr, "osc-analyzer: SM set_default failed: %s\n", r.error.msg);
             yetty_ycore_error_destroy(r.error);
             yetty_ywire_wire_statemachine_destroy(sm);
-            if (g_out != stderr) fclose(g_out);
+            if (g_out != stderr) {
+                fclose(g_out);
+            }
             return 1;
         }
     }
@@ -1416,12 +1618,13 @@ int main(int argc, char **argv)
      * the SM, so this also exercises the SM's per-layer dispatch /
      * read / yield path. A shared layer would funnel everything
      * through one coro and hide multi-layer bugs. */
-    struct envelope_mock_layer *mocks =
-        calloc((size_t)kAnalyzedCodes_n, sizeof(*mocks));
+    struct envelope_mock_layer *mocks = calloc((size_t)kAnalyzedCodes_n, sizeof(*mocks));
     if (!mocks) {
         fprintf(stderr, "osc-analyzer: oom allocating mocks\n");
         yetty_ywire_wire_statemachine_destroy(sm);
-        if (g_out != stderr) fclose(g_out);
+        if (g_out != stderr) {
+            fclose(g_out);
+        }
         return 1;
     }
     for (int i = 0; i < kAnalyzedCodes_n; i++) {
@@ -1430,14 +1633,17 @@ int main(int argc, char **argv)
             sm, YETTY_YWIRE_ENVELOPE_DCS, kAnalyzedCodes[i], /*has_args=*/1,
             envelope_mock_process_input, &mocks[i]);
         if (YETTY_IS_ERR(r)) {
-            fprintf(stderr,
-                    "osc-analyzer: SM register code=%d failed: %s\n",
-                    kAnalyzedCodes[i], r.error.msg);
+            fprintf(stderr, "osc-analyzer: SM register code=%d failed: %s\n", kAnalyzedCodes[i],
+                    r.error.msg);
             yetty_ycore_error_destroy(r.error);
-            for (int j = 0; j < kAnalyzedCodes_n; j++) free(mocks[j].buf);
+            for (int j = 0; j < kAnalyzedCodes_n; j++) {
+                free(mocks[j].buf);
+            }
             free(mocks);
             yetty_ywire_wire_statemachine_destroy(sm);
-            if (g_out != stderr) fclose(g_out);
+            if (g_out != stderr) {
+                fclose(g_out);
+            }
             return 1;
         }
     }
@@ -1461,13 +1667,11 @@ int main(int argc, char **argv)
 
     int total_env = 0, total_err = 0;
     out("\nper-layer summary:\n");
-    out("  default sink: %llu raw byte(s) drained\n",
-        (unsigned long long)raw_sink.bytes_drained);
+    out("  default sink: %llu raw byte(s) drained\n", (unsigned long long)raw_sink.bytes_drained);
     for (int i = 0; i < kAnalyzedCodes_n; i++) {
         if (mocks[i].env_count > 0 || mocks[i].err_count > 0) {
-            out("  code %d (%s): %d envelope(s), %d error(s)\n",
-                mocks[i].expected_code, osc_code_name(mocks[i].expected_code),
-                mocks[i].env_count, mocks[i].err_count);
+            out("  code %d (%s): %d envelope(s), %d error(s)\n", mocks[i].expected_code,
+                osc_code_name(mocks[i].expected_code), mocks[i].env_count, mocks[i].err_count);
         }
         total_env += mocks[i].env_count;
         total_err += mocks[i].err_count;
@@ -1475,12 +1679,16 @@ int main(int argc, char **argv)
     out("run closed: %d envelope(s), %d error(s)\n", total_env, total_err);
 
     yetty_ywire_wire_statemachine_destroy(sm);
-    for (int i = 0; i < kAnalyzedCodes_n; i++) free(mocks[i].buf);
+    for (int i = 0; i < kAnalyzedCodes_n; i++) {
+        free(mocks[i].buf);
+    }
     free(mocks);
     if (g_registry) {
         yetty_ydraw_drawable_list_registry_destroy(g_registry);
         g_registry = NULL;
     }
-    if (g_out != stderr) fclose(g_out);
+    if (g_out != stderr) {
+        fclose(g_out);
+    }
     return rc;
 }

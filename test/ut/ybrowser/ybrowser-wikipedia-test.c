@@ -30,38 +30,38 @@
 static int g_failures = 0;
 static int g_passed = 0;
 
-#define ASSERT_TRUE(name, cond)                                                                     \
-    do {                                                                                            \
-        if (!(cond)) {                                                                              \
-            fprintf(stderr, "  FAIL %s\n", (name));                                                 \
-            g_failures++;                                                                           \
-        } else {                                                                                    \
-            g_passed++;                                                                             \
-        }                                                                                           \
+#define ASSERT_TRUE(name, cond)                                                                    \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "  FAIL %s\n", (name));                                                \
+            g_failures++;                                                                          \
+        } else {                                                                                   \
+            g_passed++;                                                                            \
+        }                                                                                          \
     } while (0)
 
-#define ASSERT_LT(name, val, limit)                                                                 \
-    do {                                                                                            \
-        float _v = (float)(val);                                                                    \
-        float _l = (float)(limit);                                                                  \
-        if (_v >= _l) {                                                                             \
-            fprintf(stderr, "  FAIL %s: %.1f >= %.1f\n", (name), _v, _l);                           \
-            g_failures++;                                                                           \
-        } else {                                                                                    \
-            g_passed++;                                                                             \
-        }                                                                                           \
+#define ASSERT_LT(name, val, limit)                                                                \
+    do {                                                                                           \
+        float _v = (float)(val);                                                                   \
+        float _l = (float)(limit);                                                                 \
+        if (_v >= _l) {                                                                            \
+            fprintf(stderr, "  FAIL %s: %.1f >= %.1f\n", (name), _v, _l);                          \
+            g_failures++;                                                                          \
+        } else {                                                                                   \
+            g_passed++;                                                                            \
+        }                                                                                          \
     } while (0)
 
-#define ASSERT_GT(name, val, limit)                                                                 \
-    do {                                                                                            \
-        float _v = (float)(val);                                                                    \
-        float _l = (float)(limit);                                                                  \
-        if (_v <= _l) {                                                                             \
-            fprintf(stderr, "  FAIL %s: %.1f <= %.1f\n", (name), _v, _l);                           \
-            g_failures++;                                                                           \
-        } else {                                                                                    \
-            g_passed++;                                                                             \
-        }                                                                                           \
+#define ASSERT_GT(name, val, limit)                                                                \
+    do {                                                                                           \
+        float _v = (float)(val);                                                                   \
+        float _l = (float)(limit);                                                                 \
+        if (_v <= _l) {                                                                            \
+            fprintf(stderr, "  FAIL %s: %.1f <= %.1f\n", (name), _v, _l);                          \
+            g_failures++;                                                                          \
+        } else {                                                                                   \
+            g_passed++;                                                                            \
+        }                                                                                          \
     } while (0)
 
 struct yetty_ylexbor *load_wiki(int viewport_w, int viewport_h)
@@ -105,12 +105,12 @@ struct yetty_ylexbor *load_wiki(int viewport_w, int viewport_h)
 
 struct count_stats {
     int total;
-    int images;            /* INLINE_IMAGE boxes with w > 0 */
-    int images_left;       /* images with x in left half */
-    int images_right;      /* images with x in right half */
-    int single_glyph_text; /* text boxes with w <= 10 px — proxy for the
+    int images;             /* INLINE_IMAGE boxes with w > 0 */
+    int images_left;        /* images with x in left half */
+    int images_right;       /* images with x in right half */
+    int single_glyph_text;  /* text boxes with w <= 10 px — proxy for the
 	                        * one-char-per-line garbage */
-    int tiny_text_at_right;/* w <= 10 AND x > viewport*0.7 — the actual
+    int tiny_text_at_right; /* w <= 10 AND x > viewport*0.7 — the actual
 	                        * "garbage at the right edge" pattern */
     float min_x, max_x;
     float min_y, max_y;
@@ -139,10 +139,18 @@ static struct count_stats walk_boxes(struct yetty_ylexbor *yl, int viewport_w)
         if (w <= 0.0f || h <= 0.0f) {
             continue;
         }
-        if (x < s.min_x) s.min_x = x;
-        if (x > s.max_x) s.max_x = x;
-        if (y < s.min_y) s.min_y = y;
-        if (y > s.max_y) s.max_y = y;
+        if (x < s.min_x) {
+            s.min_x = x;
+        }
+        if (x > s.max_x) {
+            s.max_x = x;
+        }
+        if (y < s.min_y) {
+            s.min_y = y;
+        }
+        if (y > s.max_y) {
+            s.max_y = y;
+        }
 
         if (strcmp(tag, "img") == 0) {
             s.images++;
@@ -169,10 +177,18 @@ static int find_with_prefix(struct yetty_ylexbor *yl, const char *tag, float *ou
             continue;
         }
         if (strcmp(t, tag) == 0 && w > 0.0f && h > 0.0f) {
-            if (out_x) *out_x = x;
-            if (out_y) *out_y = y;
-            if (out_w) *out_w = w;
-            if (out_h) *out_h = h;
+            if (out_x) {
+                *out_x = x;
+            }
+            if (out_y) {
+                *out_y = y;
+            }
+            if (out_w) {
+                *out_w = w;
+            }
+            if (out_h) {
+                *out_h = h;
+            }
             return 0;
         }
     }
@@ -200,8 +216,7 @@ static void test_image_distribution(void)
      * mw-halign-right and should float right. We require at least 25 %
      * of them to actually land in the right half — anything below that
      * means the float CSS isn't being honoured. */
-    ASSERT_GT("at least 25% of images in right half", s.images_right * 4,
-              s.images_left * 1 + 0);
+    ASSERT_GT("at least 25% of images in right half", s.images_right * 4, s.images_left * 1 + 0);
     yetty_ylexbor_destroy(yl);
 }
 
@@ -458,15 +473,21 @@ static void test_no_one_letter_per_line_stacks_at_narrow_viewport(void)
         if (yetty_ylexbor_test_box_at(yl, i, &x, &y, &w, &h, tag, sizeof(tag)) != 0) {
             continue;
         }
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text, sizeof(text)) !=
+            0) {
             continue;
         }
-        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) continue;
+        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) {
+            continue;
+        }
         size_t tl = strlen(text);
-        if (tl != 1) continue;
+        if (tl != 1) {
+            continue;
+        }
         unsigned char c = (unsigned char)text[0];
-        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) continue;
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))) {
+            continue;
+        }
         int xb = (int)x;
         int found = 0;
         for (int j = 0; j < n_buckets; j++) {
@@ -490,8 +511,7 @@ static void test_no_one_letter_per_line_stacks_at_narrow_viewport(void)
             worst_x = buckets[j].x_bucket;
         }
     }
-    fprintf(stderr, "  worst stack: %d single-letter fragments at x=%d (cap=10)\n", worst,
-            worst_x);
+    fprintf(stderr, "  worst stack: %d single-letter fragments at x=%d (cap=10)\n", worst, worst_x);
     /* Real content never produces more than a handful of legitimate
 	 * single-letter alpha fragments at the same x (capital 'I'
 	 * standalone, indexing letters in lists). The bug produces 100+. */

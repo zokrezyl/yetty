@@ -46,23 +46,39 @@ static int s_map_done;
 static uint32_t s_map_status;
 
 static void on_adapter(void *u, uint32_t st, uint32_t mid, const uint8_t *b, size_t bl)
-{ (void)u;(void)mid;(void)b;(void)bl; s_adapter_status = st; s_adapter_done = 1; }
+{
+    (void)u;
+    (void)mid;
+    (void)b;
+    (void)bl;
+    s_adapter_status = st;
+    s_adapter_done = 1;
+}
 static void on_device(void *u, uint32_t st, uint32_t mid, const uint8_t *b, size_t bl)
-{ (void)u;(void)mid;(void)b;(void)bl; s_device_status = st; s_device_done = 1; }
+{
+    (void)u;
+    (void)mid;
+    (void)b;
+    (void)bl;
+    s_device_status = st;
+    s_device_done = 1;
+}
 static uint32_t s_map_payload;
 static void on_map(void *u, uint32_t st, uint32_t mid, const uint8_t *b, size_t bl)
 {
-    (void)u; (void)mid;
+    (void)u;
+    (void)mid;
     s_map_status = st;
-    s_map_payload = (bl >= sizeof(uint32_t) && b) ?
-        *(const uint32_t *)b : 0xFFFFFFFFu;
+    s_map_payload = (bl >= sizeof(uint32_t) && b) ? *(const uint32_t *)b : 0xFFFFFFFFu;
     s_map_done = 1;
 }
 
 static char *slurp(const char *path, size_t *out_len)
 {
     FILE *f = fopen(path, "rb");
-    if (!f) return NULL;
+    if (!f) {
+        return NULL;
+    }
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
     fseek(f, 0, SEEK_SET);
@@ -70,7 +86,9 @@ static char *slurp(const char *path, size_t *out_len)
     size_t got = fread(buf, 1, (size_t)n, f);
     fclose(f);
     buf[got] = '\0';
-    if (out_len) *out_len = got;
+    if (out_len) {
+        *out_len = got;
+    }
     return buf;
 }
 
@@ -78,8 +96,8 @@ static char *slurp(const char *path, size_t *out_len)
  * `time` from a uniform buffer at @group(0) @binding(0). Same shape
  * yetty's shader-glyph-layer uses internally (minus the cell grid),
  * proving the wrapping is equivalent. */
-static char *build_wgsl(const char *util_src, const char *body_src,
-                        uint32_t glyph_id, size_t *out_len)
+static char *build_wgsl(const char *util_src, const char *body_src, uint32_t glyph_id,
+                        size_t *out_len)
 {
     static const char wrapper[] =
         "struct U { time: f32, _p0: f32, _p1: f32, _p2: f32 };\n"
@@ -93,8 +111,8 @@ static char *build_wgsl(const char *util_src, const char *body_src,
         "  o.uv = p[vid] * 0.5 + vec2<f32>(0.5,0.5); return o;\n"
         "}\n"
         "@fragment fn fs_main(in: VsOut) -> @location(0) vec4<f32> {\n"
-        "  let fg = vec3<f32>(0.42, 0.66, 0.57);\n"   // BRAND_ACCENT
-        "  let bg = vec3<f32>(0.04, 0.06, 0.08);\n"   // BRAND_BG
+        "  let fg = vec3<f32>(0.42, 0.66, 0.57);\n" // BRAND_ACCENT
+        "  let bg = vec3<f32>(0.04, 0.06, 0.08);\n" // BRAND_BG
         "  let rgb = shader_glyph_%u(in.uv, u.time, fg, bg, in.uv * 256.0);\n"
         "  return vec4<f32>(rgb, 1.0);\n"
         "}\n";
@@ -105,7 +123,9 @@ static char *build_wgsl(const char *util_src, const char *body_src,
     char tail[2048];
     int m = snprintf(tail, sizeof(tail), wrapper, (unsigned)glyph_id);
     memcpy(buf + n, tail, (size_t)m + 1);
-    if (out_len) *out_len = (size_t)(n + m);
+    if (out_len) {
+        *out_len = (size_t)(n + m);
+    }
     return buf;
 }
 
@@ -113,7 +133,11 @@ int main(void)
 {
     demo_raw_stdin();
     FILE *trace = demo_trace_open("09-glyph-render");
-#define LOG(...) do { if (trace) fprintf(trace, __VA_ARGS__); } while (0)
+#define LOG(...)                                                                                   \
+    do {                                                                                           \
+        if (trace)                                                                                 \
+            fprintf(trace, __VA_ARGS__);                                                           \
+    } while (0)
 
     struct yetty_yrdawn_client *c = NULL;
     struct yetty_yrdawn_canvas *canvas =
@@ -125,16 +149,24 @@ int main(void)
     LOG("09: connected=%d\n", yetty_yrdawn_canvas_connected(canvas));
 
     uint64_t instance = yrdawn_client_wgpuCreateInstance(c);
-    uint64_t adapter  = yrdawn_client_wgpuInstanceRequestAdapter(c, instance, on_adapter, NULL);
+    uint64_t adapter = yrdawn_client_wgpuInstanceRequestAdapter(c, instance, on_adapter, NULL);
     for (int i = 0; i < 300 && !s_adapter_done; ++i) {
-        (void)yetty_yrdawn_client_pump(c); demo_sleep_ms(10);
+        (void)yetty_yrdawn_client_pump(c);
+        demo_sleep_ms(10);
     }
-    if (s_adapter_status != 0) { LOG("09: adapter failed\n"); goto cleanup; }
+    if (s_adapter_status != 0) {
+        LOG("09: adapter failed\n");
+        goto cleanup;
+    }
     uint64_t device = yrdawn_client_wgpuAdapterRequestDevice(c, adapter, on_device, NULL);
     for (int i = 0; i < 300 && !s_device_done; ++i) {
-        (void)yetty_yrdawn_client_pump(c); demo_sleep_ms(10);
+        (void)yetty_yrdawn_client_pump(c);
+        demo_sleep_ms(10);
     }
-    if (s_device_status != 0) { LOG("09: device failed\n"); goto cleanup; }
+    if (s_device_status != 0) {
+        LOG("09: device failed\n");
+        goto cleanup;
+    }
     uint64_t queue = yrdawn_client_wgpuDeviceGetQueue(c, device);
     LOG("09: device=%lu queue=%lu\n", (unsigned long)device, (unsigned long)queue);
 
@@ -143,7 +175,8 @@ int main(void)
     char *util = slurp(YETTY_GLYPH_SHADERS_DIR "/_util.wgsl", &util_n);
     char *body = slurp(YETTY_GLYPH_SHADERS_DIR "/0x0000-spinner.wgsl", &body_n);
     char *wgsl = build_wgsl(util, body, 0, &wgsl_n);
-    free(util); free(body);
+    free(util);
+    free(body);
     LOG("09: WGSL composed (%zu bytes)\n", wgsl_n);
 
     WGPUShaderSourceWGSL src_wgsl = {0};
@@ -159,16 +192,21 @@ int main(void)
     WGPUTextureDescriptor td = {0};
     td.usage = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_CopySrc;
     td.dimension = WGPUTextureDimension_2D;
-    td.size.width = W; td.size.height = H; td.size.depthOrArrayLayers = 1;
+    td.size.width = W;
+    td.size.height = H;
+    td.size.depthOrArrayLayers = 1;
     td.format = WGPUTextureFormat_RGBA8Unorm;
-    td.mipLevelCount = 1; td.sampleCount = 1;
+    td.mipLevelCount = 1;
+    td.sampleCount = 1;
     uint64_t tex = yrdawn_client_wgpuDeviceCreateTexture(c, device, &td);
 
     WGPUTextureViewDescriptor tvd = {0};
     tvd.format = WGPUTextureFormat_RGBA8Unorm;
     tvd.dimension = WGPUTextureViewDimension_2D;
-    tvd.baseArrayLayer = 0; tvd.arrayLayerCount = 1;
-    tvd.baseMipLevel = 0; tvd.mipLevelCount = 1;
+    tvd.baseArrayLayer = 0;
+    tvd.arrayLayerCount = 1;
+    tvd.baseMipLevel = 0;
+    tvd.mipLevelCount = 1;
     tvd.aspect = WGPUTextureAspect_All;
     uint64_t view = yrdawn_client_wgpuTextureCreateView(c, tex, &tvd);
 
@@ -182,8 +220,8 @@ int main(void)
     rbd.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
     rbd.size = pixel_count;
     uint64_t readback = yrdawn_client_wgpuDeviceCreateBuffer(c, device, &rbd);
-    LOG("09: tex=%lu view=%lu ubo=%lu readback=%lu\n",
-        (unsigned long)tex, (unsigned long)view, (unsigned long)ubo, (unsigned long)readback);
+    LOG("09: tex=%lu view=%lu ubo=%lu readback=%lu\n", (unsigned long)tex, (unsigned long)view,
+        (unsigned long)ubo, (unsigned long)readback);
 
     /* Render pipeline. Auto layout (pipeline.layout = 0) — Dawn reflects
      * the bind groups from the shader. */
@@ -223,7 +261,7 @@ int main(void)
 
     /* Render exactly one frame. (Animation = wrap this in a loop with
      * different `time` values and call present_frame each iteration.) */
-    float ubo_data[4] = { 0.35f, 0.0f, 0.0f, 0.0f };  /* time, pad×3 */
+    float ubo_data[4] = {0.35f, 0.0f, 0.0f, 0.0f}; /* time, pad×3 */
     (void)yrdawn_client_wgpuQueueWriteBuffer(c, queue, ubo, 0, ubo_data, sizeof(ubo_data));
 
     uint64_t encoder = yrdawn_client_wgpuDeviceCreateCommandEncoder(c, device);
@@ -252,11 +290,11 @@ int main(void)
     dst.layout.bytesPerRow = W * 4;
     dst.layout.rowsPerImage = H;
     dst.buffer = (WGPUBuffer)readback;
-    WGPUExtent3D copy_size = { W, H, 1 };
+    WGPUExtent3D copy_size = {W, H, 1};
     (void)yrdawn_client_wgpuCommandEncoderCopyTextureToBuffer(c, encoder, &src, &dst, &copy_size);
 
     uint64_t cb = yrdawn_client_wgpuCommandEncoderFinish(c, encoder);
-    uint64_t cbs[1] = { cb };
+    uint64_t cbs[1] = {cb};
     (void)yrdawn_client_wgpuQueueSubmit(c, queue, 1, (WGPUCommandBuffer const *)cbs);
     LOG("09: submitted; awaiting MapAsync\n");
 
@@ -264,21 +302,23 @@ int main(void)
      * Tick the bridge's WGPU instance every iteration — without that
      * Dawn never fires the MapAsync callback (the bridge runs its own
      * Dawn instance, separate from yetty's main one). */
-    (void)yrdawn_client_wgpuBufferMapAsync(c, readback, WGPUMapMode_Read, 0,
-                                          pixel_count, on_map, NULL);
+    (void)yrdawn_client_wgpuBufferMapAsync(c, readback, WGPUMapMode_Read, 0, pixel_count, on_map,
+                                           NULL);
     for (int i = 0; i < 500 && !s_map_done; ++i) {
         (void)yrdawn_client_wgpuDeviceTick(c, device);
         (void)yrdawn_client_wgpuInstanceProcessEvents(c, instance);
-        (void)yetty_yrdawn_client_pump(c); demo_sleep_ms(10);
+        (void)yetty_yrdawn_client_pump(c);
+        demo_sleep_ms(10);
     }
-    LOG("09: map reply_status=%u map_async_status=%u (done=%d)\n",
-        s_map_status, s_map_payload, s_map_done);
-    if (s_map_status != 0 || s_map_payload != 1) goto cleanup_pipeline;
+    LOG("09: map reply_status=%u map_async_status=%u (done=%d)\n", s_map_status, s_map_payload,
+        s_map_done);
+    if (s_map_status != 0 || s_map_payload != 1) {
+        goto cleanup_pipeline;
+    }
 
     uint8_t *pixels = (uint8_t *)malloc(pixel_count);
-    memset(pixels, 0xAA, pixel_count);  /* poison so a no-op ReadMappedRange is obvious. */
-    WGPUStatus rs = yrdawn_client_wgpuBufferReadMappedRange(c, readback, 0,
-                                                           pixels, pixel_count);
+    memset(pixels, 0xAA, pixel_count); /* poison so a no-op ReadMappedRange is obvious. */
+    WGPUStatus rs = yrdawn_client_wgpuBufferReadMappedRange(c, readback, 0, pixels, pixel_count);
     LOG("09: ReadMappedRange status=%u (%zu bytes)\n", (unsigned)rs, pixel_count);
     (void)yrdawn_client_wgpuBufferUnmap(c, readback);
 
@@ -294,27 +334,32 @@ int main(void)
         for (size_t i = 0; i < px; ++i) {
             for (int k = 0; k < 4; ++k) {
                 uint8_t v = pixels[i * 4u + k];
-                if (v < mn[k]) mn[k] = v;
-                if (v > mx[k]) mx[k] = v;
+                if (v < mn[k]) {
+                    mn[k] = v;
+                }
+                if (v > mx[k]) {
+                    mx[k] = v;
+                }
                 sum[k] += v;
             }
         }
         LOG("09: pixels R[min=%u max=%u mean=%lu] G[min=%u max=%u mean=%lu] "
             "B[min=%u max=%u mean=%lu] A[min=%u max=%u mean=%lu]\n",
-            mn[0], mx[0], (unsigned long)(sum[0] / px),
-            mn[1], mx[1], (unsigned long)(sum[1] / px),
-            mn[2], mx[2], (unsigned long)(sum[2] / px),
-            mn[3], mx[3], (unsigned long)(sum[3] / px));
+            mn[0], mx[0], (unsigned long)(sum[0] / px), mn[1], mx[1], (unsigned long)(sum[1] / px),
+            mn[2], mx[2], (unsigned long)(sum[2] / px), mn[3], mx[3], (unsigned long)(sum[3] / px));
         LOG("09: sample center pixel rgba=(%u,%u,%u,%u) corner=(%u,%u,%u,%u)\n",
-            pixels[(H/2 * W + W/2) * 4 + 0], pixels[(H/2 * W + W/2) * 4 + 1],
-            pixels[(H/2 * W + W/2) * 4 + 2], pixels[(H/2 * W + W/2) * 4 + 3],
-            pixels[0], pixels[1], pixels[2], pixels[3]);
+            pixels[(H / 2 * W + W / 2) * 4 + 0], pixels[(H / 2 * W + W / 2) * 4 + 1],
+            pixels[(H / 2 * W + W / 2) * 4 + 2], pixels[(H / 2 * W + W / 2) * 4 + 3], pixels[0],
+            pixels[1], pixels[2], pixels[3]);
     }
 
     struct yetty_ycore_void_result pr =
         yetty_yrdawn_canvas_present_frame(canvas, W, H, pixels, pixel_count);
-    if (pr.ok != 1) LOG("09: present_frame error: %s\n", pr.error.msg);
-    else LOG("09: presented %dx%d frame from real Dawn render\n", W, H);
+    if (pr.ok != 1) {
+        LOG("09: present_frame error: %s\n", pr.error.msg);
+    } else {
+        LOG("09: presented %dx%d frame from real Dawn render\n", W, H);
+    }
     free(pixels);
 
 cleanup_pipeline:
@@ -336,11 +381,14 @@ cleanup:
     /* Hold the connection open so yetty's render thread paints the
      * frame before we drop the PTY. Press 'q' to exit immediately. */
     for (int i = 0; i < 200 && !demo_quit_flag; ++i) {
-        (void)yetty_yrdawn_client_pump(c); demo_sleep_ms(10);
+        (void)yetty_yrdawn_client_pump(c);
+        demo_sleep_ms(10);
     }
     (void)yetty_yrdawn_canvas_destroy(canvas);
     (void)yetty_yrdawn_client_destroy(c);
     LOG("09: done\n");
-    if (trace) fclose(trace);
+    if (trace) {
+        fclose(trace);
+    }
     return 0;
 }

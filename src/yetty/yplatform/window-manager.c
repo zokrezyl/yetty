@@ -248,8 +248,8 @@ static struct yetty_ycore_void_result window_manager_drag_by(struct yetty_yclass
  * tabbar's edge/corner resize handles call this. */
 /* clang-format off: keep each annotation on one line — splitting the long
  * override string breaks the codegen parser. */
-[[clang::annotate("override@yplatform:window_manager:window_manager_resize_by")]]
-[[clang::annotate("local@yplatform:window_manager_resize_by")]]
+[[clang::annotate("override@yplatform:window_manager:window_manager_resize_by")]] [[clang::annotate(
+    "local@yplatform:window_manager_resize_by")]]
 /* clang-format on */
 static struct yetty_ycore_void_result window_manager_resize_by(struct yetty_yclass_ctx *ctx,
                                                                struct yetty_yclass_object *obj,

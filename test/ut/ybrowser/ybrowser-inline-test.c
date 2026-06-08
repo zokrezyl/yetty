@@ -79,8 +79,8 @@ static int count_text_with(struct yetty_ylexbor *yl, const char *needle)
     for (int i = 0; i < total; i++) {
         int kind = -1;
         char text[512];
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text, sizeof(text)) !=
+            0) {
             continue;
         }
         if (text[0] == '\0') {
@@ -105,10 +105,9 @@ static int count_text_with(struct yetty_ylexbor *yl, const char *needle)
 static void test_ul_bullet_marker(void)
 {
     fprintf(stderr, "[test_ul_bullet_marker]\n");
-    static const char html[] =
-        "<html><body>"
-        "<ul><li>first</li><li>second</li><li>third</li></ul>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<ul><li>first</li><li>second</li><li>third</li></ul>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000);
 
     /* U+2022 bullet, UTF-8: e2 80 a2. P1.4 stores the marker on the
@@ -135,10 +134,9 @@ static void test_ul_bullet_marker(void)
 static void test_ol_decimal_marker(void)
 {
     fprintf(stderr, "[test_ol_decimal_marker]\n");
-    static const char html[] =
-        "<html><body>"
-        "<ol><li>alpha</li><li>beta</li><li>gamma</li></ol>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<ol><li>alpha</li><li>beta</li><li>gamma</li></ol>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000);
 
     ASSERT_TRUE("first item marked '1.'", count_text_with(yl, "1.") >= 1);
@@ -194,10 +192,9 @@ static void test_utf8_wrap_safety(void)
      * forces the wrapper to break inside the run several times. Text
      * mixes ASCII, 2-byte (é), 3-byte (汉), and emoji (🌍 = 4-byte)
      * codepoints. */
-    static const char html[] =
-        "<html><body><p>"
-        "café 漢字テスト 🌍 résumé naïve façade über 日本語 αβγ ελληνικά"
-        "</p></body></html>";
+    static const char html[] = "<html><body><p>"
+                               "café 漢字テスト 🌍 résumé naïve façade über 日本語 αβγ ελληνικά"
+                               "</p></body></html>";
     struct yetty_ylexbor *yl = load(html, 160);
 
     int total = yetty_ylexbor_test_box_count(yl);
@@ -207,8 +204,8 @@ static void test_utf8_wrap_safety(void)
     for (int i = 0; i < total; i++) {
         int kind = -1;
         char text[512];
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text, sizeof(text)) !=
+            0) {
             continue;
         }
         if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) {
@@ -246,10 +243,9 @@ static void test_utf8_wrap_safety(void)
 static void test_anchor_underline(void)
 {
     fprintf(stderr, "[test_anchor_underline]\n");
-    static const char html[] =
-        "<html><body>"
-        "<p>before <a href=\"#x\">linktext</a> after</p>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<p>before <a href=\"#x\">linktext</a> after</p>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000);
 
     int total = yetty_ylexbor_test_box_count(yl);
@@ -277,10 +273,9 @@ static void test_anchor_underline(void)
 static void test_strong_weight_propagation(void)
 {
     fprintf(stderr, "[test_strong_weight_propagation]\n");
-    static const char html[] =
-        "<html><body>"
-        "<p>normal <strong>bolded</strong> normal</p>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<p>normal <strong>bolded</strong> normal</p>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000);
 
     int total = yetty_ylexbor_test_box_count(yl);
@@ -289,8 +284,8 @@ static void test_strong_weight_propagation(void)
     for (int i = 0; i < total; i++) {
         int kind = -1, weight = -1;
         char text[64];
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, &weight, NULL, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, &weight, NULL, NULL, text, sizeof(text)) !=
+            0) {
             continue;
         }
         if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) {
@@ -315,10 +310,9 @@ static void test_strong_weight_propagation(void)
 static void test_em_italic_propagation(void)
 {
     fprintf(stderr, "[test_em_italic_propagation]\n");
-    static const char html[] =
-        "<html><body>"
-        "<p>plain <em>slanted</em> plain</p>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<p>plain <em>slanted</em> plain</p>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000);
 
     int total = yetty_ylexbor_test_box_count(yl);
@@ -326,12 +320,11 @@ static void test_em_italic_propagation(void)
     for (int i = 0; i < total; i++) {
         int kind = -1, italic = -1;
         char text[64];
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, &italic, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, &italic, NULL, text, sizeof(text)) !=
+            0) {
             continue;
         }
-        if (kind == YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT && strstr(text, "slanted") &&
-            italic == 1) {
+        if (kind == YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT && strstr(text, "slanted") && italic == 1) {
             italic_hits++;
         }
     }
@@ -367,8 +360,8 @@ static void test_inline_inter_word_space(void)
         if (yetty_ylexbor_test_box_at(yl, i, &x, NULL, &w, NULL, NULL, 0) != 0) {
             continue;
         }
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text, sizeof(text)) !=
+            0) {
             continue;
         }
         if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) {
@@ -382,12 +375,11 @@ static void test_inline_inter_word_space(void)
             bar_x = x;
         }
     }
-    fprintf(stderr, "  foo.x=%.1f foo.end=%.1f bar.x=%.1f gap=%.1f\n", foo_x, foo_end,
-            bar_x, bar_x - foo_end);
+    fprintf(stderr, "  foo.x=%.1f foo.end=%.1f bar.x=%.1f gap=%.1f\n", foo_x, foo_end, bar_x,
+            bar_x - foo_end);
     ASSERT_TRUE("both fragments rendered", foo_x >= 0 && bar_x >= 0);
     /* The inter-word gap should be ≈ one glyph width (font*0.55 = 8.8). */
-    ASSERT_TRUE("space between sibling <a> preserved as visual gap",
-                bar_x - foo_end > 4.0f);
+    ASSERT_TRUE("space between sibling <a> preserved as visual gap", bar_x - foo_end > 4.0f);
 
     yetty_ylexbor_destroy(yl);
 }
@@ -401,11 +393,10 @@ static void test_inline_inter_word_space(void)
 static void test_heading_font_size(void)
 {
     fprintf(stderr, "[test_heading_font_size]\n");
-    static const char html[] =
-        "<html><body>"
-        "<h1>Big</h1>"
-        "<p>normal</p>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<h1>Big</h1>"
+                               "<p>normal</p>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000);
 
     int total = yetty_ylexbor_test_box_count(yl);
@@ -416,8 +407,8 @@ static void test_heading_font_size(void)
         if (yetty_ylexbor_test_box_at(yl, i, NULL, NULL, NULL, NULL, tag, sizeof(tag)) != 0) {
             continue;
         }
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text, sizeof(text)) !=
+            0) {
             continue;
         }
         /* The h1 inline text's parent block carries the heading font
@@ -443,8 +434,12 @@ static void test_heading_font_size(void)
         if (yetty_ylexbor_test_box_at(yl, i, NULL, NULL, NULL, &h, tag, sizeof(tag)) != 0) {
             continue;
         }
-        if (strcmp(tag, "h1") == 0 && h1_h == 0) h1_h = h;
-        if (strcmp(tag, "p") == 0 && p_h == 0) p_h = h;
+        if (strcmp(tag, "h1") == 0 && h1_h == 0) {
+            h1_h = h;
+        }
+        if (strcmp(tag, "p") == 0 && p_h == 0) {
+            p_h = h;
+        }
     }
     fprintf(stderr, "  h1.h=%.0f p.h=%.0f\n", h1_h, p_h);
     ASSERT_TRUE("h1 is taller than p (font-size scaling worked)", h1_h > p_h);
@@ -462,18 +457,23 @@ static void test_pre_preserves_newlines(void)
 {
     fprintf(stderr, "[test_pre_preserves_newlines]\n");
     /* Three explicit lines inside the <pre>. */
-    static const char html[] =
-        "<html><body>"
-        "<pre>line-one\nline-two\nline-three</pre>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<pre>line-one\nline-two\nline-three</pre>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000);
 
     /* Each source line should be a separate INLINE_TEXT box (wrapped
      * verbatim because preserve_ws=1). */
     int hits = 0;
-    if (count_text_with(yl, "line-one") > 0) hits++;
-    if (count_text_with(yl, "line-two") > 0) hits++;
-    if (count_text_with(yl, "line-three") > 0) hits++;
+    if (count_text_with(yl, "line-one") > 0) {
+        hits++;
+    }
+    if (count_text_with(yl, "line-two") > 0) {
+        hits++;
+    }
+    if (count_text_with(yl, "line-three") > 0) {
+        hits++;
+    }
     fprintf(stderr, "  preserved lines found=%d\n", hits);
     ASSERT_TRUE("pre keeps all three lines", hits == 3);
 
@@ -488,14 +488,19 @@ static void test_pre_preserves_newlines(void)
         if (yetty_ylexbor_test_box_at(yl, i, NULL, &y, NULL, NULL, NULL, 0) != 0) {
             continue;
         }
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text, sizeof(text)) !=
+            0) {
             continue;
         }
-        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) continue;
-        if (strstr(text, "line-")) ys[yc++] = y;
+        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) {
+            continue;
+        }
+        if (strstr(text, "line-")) {
+            ys[yc++] = y;
+        }
     }
-    ASSERT_TRUE("three <pre> lines at three distinct ys", yc == 3 && ys[0] < ys[1] && ys[1] < ys[2]);
+    ASSERT_TRUE("three <pre> lines at three distinct ys",
+                yc == 3 && ys[0] < ys[1] && ys[1] < ys[2]);
 
     yetty_ylexbor_destroy(yl);
 }
@@ -528,12 +533,16 @@ static void test_anchor_survives_wrap(void)
                                            sizeof(text)) != 0) {
             continue;
         }
-        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) continue;
+        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) {
+            continue;
+        }
         /* Each fragment of the link contains some subsequence of its
          * words; we look for the unique word "several" or "words". */
         if (strstr(text, "several") || strstr(text, "words") || strstr(text, "link")) {
             link_pieces++;
-            if (underline) link_pieces_underlined++;
+            if (underline) {
+                link_pieces_underlined++;
+            }
         }
     }
     fprintf(stderr, "  link pieces=%d underlined=%d\n", link_pieces, link_pieces_underlined);
@@ -554,11 +563,10 @@ static void test_anchor_survives_wrap(void)
 static void test_span_display_block(void)
 {
     fprintf(stderr, "[test_span_display_block]\n");
-    static const char html[] =
-        "<html><body>"
-        "<span style=\"display: block;\">first</span>"
-        "<span style=\"display: block;\">second</span>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<span style=\"display: block;\">first</span>"
+                               "<span style=\"display: block;\">second</span>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000);
 
     int total = yetty_ylexbor_test_box_count(yl);
@@ -570,13 +578,19 @@ static void test_span_display_block(void)
         if (yetty_ylexbor_test_box_at(yl, i, NULL, &y, NULL, NULL, NULL, 0) != 0) {
             continue;
         }
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text, sizeof(text)) !=
+            0) {
             continue;
         }
-        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) continue;
-        if (strstr(text, "first") && first_y < 0) first_y = y;
-        if (strstr(text, "second") && second_y < 0) second_y = y;
+        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) {
+            continue;
+        }
+        if (strstr(text, "first") && first_y < 0) {
+            first_y = y;
+        }
+        if (strstr(text, "second") && second_y < 0) {
+            second_y = y;
+        }
     }
     fprintf(stderr, "  first.y=%.0f second.y=%.0f\n", first_y, second_y);
     ASSERT_TRUE("both spans rendered", first_y >= 0 && second_y >= 0);
@@ -597,11 +611,10 @@ static void test_span_display_block(void)
 static void test_text_align_justify_falls_back(void)
 {
     fprintf(stderr, "[test_text_align_justify_falls_back]\n");
-    static const char html[] =
-        "<html><body>"
-        "<p style=\"text-align: justify;\">justify me everywhere</p>"
-        "<p>normal me</p>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<p style=\"text-align: justify;\">justify me everywhere</p>"
+                               "<p>normal me</p>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000);
 
     /* Both paragraphs' first inline fragment should land at the same
@@ -616,13 +629,19 @@ static void test_text_align_justify_falls_back(void)
         if (yetty_ylexbor_test_box_at(yl, i, &x, NULL, NULL, NULL, NULL, 0) != 0) {
             continue;
         }
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text, sizeof(text)) !=
+            0) {
             continue;
         }
-        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) continue;
-        if (strstr(text, "justify") && just_x < 0) just_x = x;
-        if (strstr(text, "normal") && normal_x < 0) normal_x = x;
+        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) {
+            continue;
+        }
+        if (strstr(text, "justify") && just_x < 0) {
+            just_x = x;
+        }
+        if (strstr(text, "normal") && normal_x < 0) {
+            normal_x = x;
+        }
     }
     fprintf(stderr, "  justified.x=%.0f normal.x=%.0f\n", just_x, normal_x);
     ASSERT_NEAR("justify first fragment at content origin", just_x, normal_x);
@@ -663,16 +682,21 @@ static void test_text_decoration_line_through(void)
 static void test_css_white_space_pre(void)
 {
     fprintf(stderr, "[test_css_white_space_pre]\n");
-    static const char html[] =
-        "<html><body>"
-        "<div style=\"white-space: pre;\">line-a\nline-b\nline-c</div>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<div style=\"white-space: pre;\">line-a\nline-b\nline-c</div>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000);
 
     int hits = 0;
-    if (count_text_with(yl, "line-a") > 0) hits++;
-    if (count_text_with(yl, "line-b") > 0) hits++;
-    if (count_text_with(yl, "line-c") > 0) hits++;
+    if (count_text_with(yl, "line-a") > 0) {
+        hits++;
+    }
+    if (count_text_with(yl, "line-b") > 0) {
+        hits++;
+    }
+    if (count_text_with(yl, "line-c") > 0) {
+        hits++;
+    }
     fprintf(stderr, "  lines preserved=%d\n", hits);
     ASSERT_TRUE("CSS white-space: pre preserves source newlines", hits == 3);
 
@@ -692,11 +716,17 @@ static void test_zwsp_wrap_opportunity(void)
     /* String literals are split at each ZWSP to keep the hex escape
 	 * from greedy-eating the next ASCII char (compilers parse
 	 * `\xe2\x80\x8bcali` as one giant escape otherwise). */
-    static const char html[] =
-        "<html><body><p>"
-        "supe" "\xe2\x80\x8b" "cali" "\xe2\x80\x8b" "frag" "\xe2\x80\x8b"
-        "ilis" "\xe2\x80\x8b" "tice"
-        "</p></body></html>";
+    static const char html[] = "<html><body><p>"
+                               "supe"
+                               "\xe2\x80\x8b"
+                               "cali"
+                               "\xe2\x80\x8b"
+                               "frag"
+                               "\xe2\x80\x8b"
+                               "ilis"
+                               "\xe2\x80\x8b"
+                               "tice"
+                               "</p></body></html>";
     struct yetty_ylexbor *yl = load(html, 120);
 
     int total = yetty_ylexbor_test_box_count(yl);
@@ -704,12 +734,16 @@ static void test_zwsp_wrap_opportunity(void)
     for (int i = 0; i < total; i++) {
         int kind = -1;
         char text[64];
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text, sizeof(text)) !=
+            0) {
             continue;
         }
-        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) continue;
-        if (text[0] == '\0') continue;
+        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) {
+            continue;
+        }
+        if (text[0] == '\0') {
+            continue;
+        }
         frag_count++;
     }
     fprintf(stderr, "  fragments=%d (>1 if ZWSP wraps worked)\n", frag_count);
@@ -729,8 +763,7 @@ static void test_zwsp_wrap_opportunity(void)
 static void test_anchor_box_has_element(void)
 {
     fprintf(stderr, "[test_anchor_box_has_element]\n");
-    static const char html[] =
-        "<html><body><p>click <a href=\"#x\">here</a></p></body></html>";
+    static const char html[] = "<html><body><p>click <a href=\"#x\">here</a></p></body></html>";
     struct yetty_ylexbor *yl = load(html, 1000);
 
     int total = yetty_ylexbor_test_box_count(yl);
@@ -741,15 +774,16 @@ static void test_anchor_box_has_element(void)
         if (yetty_ylexbor_test_box_at(yl, i, &x, &y, &w, &h, tag, sizeof(tag)) != 0) {
             continue;
         }
-        if (strcmp(tag, "a") != 0) continue;
-        int kind = -1;
-        char text[32];
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (strcmp(tag, "a") != 0) {
             continue;
         }
-        if (kind == YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT && w > 0 && h > 0 &&
-            strstr(text, "here")) {
+        int kind = -1;
+        char text[32];
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text, sizeof(text)) !=
+            0) {
+            continue;
+        }
+        if (kind == YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT && w > 0 && h > 0 && strstr(text, "here")) {
             a_fragments++;
         }
     }
@@ -767,11 +801,10 @@ static void test_anchor_box_has_element(void)
 static void test_marker_separate_from_body(void)
 {
     fprintf(stderr, "[test_marker_separate_from_body]\n");
-    static const char html[] =
-        "<html><body>"
-        "<ul><li>alpha bravo charlie delta</li></ul>"
-        "<ol><li>numbered item content</li></ol>"
-        "</body></html>";
+    static const char html[] = "<html><body>"
+                               "<ul><li>alpha bravo charlie delta</li></ul>"
+                               "<ol><li>numbered item content</li></ol>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000);
 
     int total = yetty_ylexbor_test_box_count(yl);
@@ -779,11 +812,13 @@ static void test_marker_separate_from_body(void)
     for (int i = 0; i < total; i++) {
         int kind = -1;
         char text[64];
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text, sizeof(text)) !=
+            0) {
             continue;
         }
-        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) continue;
+        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) {
+            continue;
+        }
         if (strstr(text, "alpha bravo") && text[0] == 'a') {
             ul_clean = 1;
         }
@@ -809,8 +844,13 @@ static void test_nbsp_collapsed_to_space(void)
 {
     fprintf(stderr, "[test_nbsp_collapsed_to_space]\n");
     /* `\xc2\xa0` is U+00A0 NBSP. Three NBSPs between words. */
-    static const char html[] =
-        "<html><body><p>foo" "\xc2\xa0" "bar" "\xc2\xa0" "baz" "\xc2\xa0" "qux</p></body></html>";
+    static const char html[] = "<html><body><p>foo"
+                               "\xc2\xa0"
+                               "bar"
+                               "\xc2\xa0"
+                               "baz"
+                               "\xc2\xa0"
+                               "qux</p></body></html>";
     struct yetty_ylexbor *yl = load(html, 1000);
 
     int total = yetty_ylexbor_test_box_count(yl);
@@ -819,15 +859,16 @@ static void test_nbsp_collapsed_to_space(void)
     for (int i = 0; i < total; i++) {
         int kind = -1;
         char text[64];
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text, sizeof(text)) !=
+            0) {
             continue;
         }
-        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) continue;
+        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) {
+            continue;
+        }
         /* Detect NBSP bytes (0xC2 0xA0) anywhere in the fragment. */
         for (size_t k = 0; text[k]; k++) {
-            if ((unsigned char)text[k] == 0xC2 &&
-                (unsigned char)text[k + 1] == 0xA0) {
+            if ((unsigned char)text[k] == 0xC2 && (unsigned char)text[k + 1] == 0xA0) {
                 nbsp_spans++;
                 break;
             }
@@ -854,10 +895,9 @@ static void test_nbsp_collapsed_to_space(void)
 static void test_no_whitespace_only_fragments(void)
 {
     fprintf(stderr, "[test_no_whitespace_only_fragments]\n");
-    static const char html[] =
-        "<html><body><p>"
-        "<a href=\"#\">one</a> <a href=\"#\">two</a> <a href=\"#\">three</a>"
-        "</p></body></html>";
+    static const char html[] = "<html><body><p>"
+                               "<a href=\"#\">one</a> <a href=\"#\">two</a> <a href=\"#\">three</a>"
+                               "</p></body></html>";
     struct yetty_ylexbor *yl = load(html, 1000);
 
     int total = yetty_ylexbor_test_box_count(yl);
@@ -865,13 +905,17 @@ static void test_no_whitespace_only_fragments(void)
     for (int i = 0; i < total; i++) {
         int kind = -1;
         char text[64];
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text, sizeof(text)) !=
+            0) {
             continue;
         }
-        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) continue;
+        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) {
+            continue;
+        }
         size_t n = strlen(text);
-        if (n == 0) continue;
+        if (n == 0) {
+            continue;
+        }
         int ws_only = 1;
         for (size_t k = 0; k < n; k++) {
             if (text[k] != ' ' && text[k] != '\t') {
@@ -921,15 +965,16 @@ static void test_nested_inline_collapses_to_one_fragment(void)
     for (int i = 0; i < total; i++) {
         int kind = -1;
         char text[64];
-        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text,
-                                           sizeof(text)) != 0) {
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, text, sizeof(text)) !=
+            0) {
             continue;
         }
-        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) continue;
+        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT) {
+            continue;
+        }
         /* Any inline-text fragment that contains a citation character
 		 * ([, 1, 2, ]) — count fragments that pertain to this citation. */
-        if (strchr(text, '[') || strchr(text, ']') ||
-            (strstr(text, "12") && strlen(text) <= 4)) {
+        if (strchr(text, '[') || strchr(text, ']') || (strstr(text, "12") && strlen(text) <= 4)) {
             citation_fragments++;
         }
     }

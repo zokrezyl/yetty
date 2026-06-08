@@ -4,5 +4,4 @@
 
 #include <yetty/ymgui/methods.h>
 
-
 #endif

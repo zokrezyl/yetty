@@ -16,7 +16,10 @@
 
 /* -------- server (process-global) state ---------------------------- */
 
-struct object_entry { uint64_t handle; void *ptr; };
+struct object_entry {
+    uint64_t handle;
+    void *ptr;
+};
 
 struct skel_lookup_node {
     skel_lookup_fn fn;
@@ -56,9 +59,13 @@ void rpc_init(void)
 
 void rpc_add_skel_lookup(skel_lookup_fn fn)
 {
-    if (!fn) return;
+    if (!fn) {
+        return;
+    }
     struct skel_lookup_node *node = calloc(1, sizeof(*node));
-    if (!node) return;
+    if (!node) {
+        return;
+    }
     struct rpc_server_state *s = server();
     node->fn = fn;
     node->next = s->lookup_chain;
@@ -68,22 +75,32 @@ void rpc_add_skel_lookup(skel_lookup_fn fn)
 rpc_skel_fn rpc_skel_for(method_slot slot)
 {
     struct rpc_server_state *s = server();
-    if (slot == METHOD_SLOT_UNDEFINED) return NULL;
+    if (slot == METHOD_SLOT_UNDEFINED) {
+        return NULL;
+    }
 
     struct skel_cache_entry *e = NULL;
     HASH_FIND(hh, s->skel_cache, &slot, sizeof(slot), e);
-    if (e) return e->fn;
+    if (e) {
+        return e->fn;
+    }
 
     /* Walk the chain. First hit wins. */
     rpc_skel_fn fn = NULL;
     for (struct skel_lookup_node *n = s->lookup_chain; n; n = n->next) {
         fn = n->fn(slot);
-        if (fn) break;
+        if (fn) {
+            break;
+        }
     }
-    if (!fn) return NULL;
+    if (!fn) {
+        return NULL;
+    }
 
     e = calloc(1, sizeof(*e));
-    if (!e) return fn;
+    if (!e) {
+        return fn;
+    }
     e->slot = slot;
     e->fn = fn;
     HASH_ADD(hh, s->skel_cache, slot, sizeof(slot), e);
@@ -93,7 +110,9 @@ rpc_skel_fn rpc_skel_for(method_slot slot)
 uint64_t rpc_register_object(void *obj)
 {
     struct rpc_server_state *s = server();
-    if (s->object_count >= MAX_OBJECTS) return 0;
+    if (s->object_count >= MAX_OBJECTS) {
+        return 0;
+    }
     uint64_t h = s->next_handle++;
     s->objects[s->object_count].handle = h;
     s->objects[s->object_count].ptr = obj;
@@ -103,10 +122,15 @@ uint64_t rpc_register_object(void *obj)
 
 void *rpc_handle_resolve(uint64_t h)
 {
-    if (!h) return NULL;
+    if (!h) {
+        return NULL;
+    }
     struct rpc_server_state *s = server();
-    for (size_t i = 0; i < s->object_count; ++i)
-        if (s->objects[i].handle == h) return s->objects[i].ptr;
+    for (size_t i = 0; i < s->object_count; ++i) {
+        if (s->objects[i].handle == h) {
+            return s->objects[i].ptr;
+        }
+    }
     return NULL;
 }
 
@@ -117,8 +141,14 @@ static int read_full(int fd, void *buf, size_t n)
     char *p = buf;
     while (n) {
         ssize_t r = read(fd, p, n);
-        if (r > 0) { p += r; n -= (size_t)r; continue; }
-        if (r < 0 && errno == EINTR) continue;
+        if (r > 0) {
+            p += r;
+            n -= (size_t)r;
+            continue;
+        }
+        if (r < 0 && errno == EINTR) {
+            continue;
+        }
         return -1;
     }
     return 0;
@@ -129,8 +159,14 @@ static int write_full(int fd, const void *buf, size_t n)
     const char *p = buf;
     while (n) {
         ssize_t w = write(fd, p, n);
-        if (w > 0) { p += w; n -= (size_t)w; continue; }
-        if (w < 0 && errno == EINTR) continue;
+        if (w > 0) {
+            p += w;
+            n -= (size_t)w;
+            continue;
+        }
+        if (w < 0 && errno == EINTR) {
+            continue;
+        }
         return -1;
     }
     return 0;
@@ -138,8 +174,7 @@ static int write_full(int fd, const void *buf, size_t n)
 
 /* -------- admin handlers (server side) ----------------------------- */
 
-static size_t handle_resolve_slot(const void *body, size_t body_len,
-                                  void *resp, size_t resp_max)
+static size_t handle_resolve_slot(const void *body, size_t body_len, void *resp, size_t resp_max)
 {
     char name[128];
     size_t n = body_len < sizeof(name) - 1 ? body_len : sizeof(name) - 1;
@@ -153,29 +188,39 @@ static size_t handle_resolve_slot(const void *body, size_t body_len,
     } else {
         out = (uint32_t)sr.value;
     }
-    if (resp_max < sizeof(out)) return 0;
+    if (resp_max < sizeof(out)) {
+        return 0;
+    }
     memcpy(resp, &out, sizeof(out));
     ydebug("resolve_slot('%s') -> %u", name, out);
     return sizeof(out);
 }
 
-struct get_class_ctx { uint8_t *out; size_t off; size_t cap; };
+struct get_class_ctx {
+    uint8_t *out;
+    size_t off;
+    size_t cap;
+};
 
 static void get_class_emit(const char *name, method_slot slot, void *ud)
 {
     struct get_class_ctx *gc = ud;
     size_t name_len = strlen(name);
     size_t need = 2 + name_len + 4;
-    if (gc->off + need > gc->cap) return;
+    if (gc->off + need > gc->cap) {
+        return;
+    }
     uint16_t nl = (uint16_t)name_len;
-    memcpy(gc->out + gc->off, &nl, 2);          gc->off += 2;
-    memcpy(gc->out + gc->off, name, name_len);  gc->off += name_len;
+    memcpy(gc->out + gc->off, &nl, 2);
+    gc->off += 2;
+    memcpy(gc->out + gc->off, name, name_len);
+    gc->off += name_len;
     uint32_t rid = (uint32_t)slot;
-    memcpy(gc->out + gc->off, &rid, 4);         gc->off += 4;
+    memcpy(gc->out + gc->off, &rid, 4);
+    gc->off += 4;
 }
 
-static size_t handle_get_class(const void *body, size_t body_len,
-                               void *resp, size_t resp_max)
+static size_t handle_get_class(const void *body, size_t body_len, void *resp, size_t resp_max)
 {
     char name[128];
     size_t n = body_len < sizeof(name) - 1 ? body_len : sizeof(name) - 1;
@@ -193,8 +238,7 @@ static size_t handle_get_class(const void *body, size_t body_len,
     return gc.off;
 }
 
-static size_t handle_create(const void *body, size_t body_len,
-                            void *resp, size_t resp_max)
+static size_t handle_create(const void *body, size_t body_len, void *resp, size_t resp_max)
 {
     char name[128];
     size_t n = body_len < sizeof(name) - 1 ? body_len : sizeof(name) - 1;
@@ -213,7 +257,9 @@ static size_t handle_create(const void *body, size_t body_len,
         return 0;
     }
     uint64_t h = rpc_register_object(or.value);
-    if (resp_max < sizeof(h)) return 0;
+    if (resp_max < sizeof(h)) {
+        return 0;
+    }
     memcpy(resp, &h, sizeof(h));
     ydebug("create('%s') -> handle=%llu", name, (unsigned long long)h);
     return sizeof(h);
@@ -230,13 +276,21 @@ void rpc_server_run(int fd)
     (void)gs;
     for (;;) {
         uint32_t header = 0, body_len = 0;
-        if (read_full(fd, &header, 4) < 0) return;
-        if (read_full(fd, &body_len, 4) < 0) return;
-        if (body_len > BUF_MAX) return;
-        if (body_len && read_full(fd, body, body_len) < 0) return;
+        if (read_full(fd, &header, 4) < 0) {
+            return;
+        }
+        if (read_full(fd, &body_len, 4) < 0) {
+            return;
+        }
+        if (body_len > BUF_MAX) {
+            return;
+        }
+        if (body_len && read_full(fd, body, body_len) < 0) {
+            return;
+        }
 
         enum rpc_op op = RPC_HDR_OP(header);
-        uint32_t id   = RPC_HDR_ID(header);
+        uint32_t id = RPC_HDR_ID(header);
         uint32_t resp_len = 0;
 
         switch (op) {
@@ -264,14 +318,21 @@ void rpc_server_run(int fd)
             break;
         }
 
-        if (write_full(fd, &resp_len, 4) < 0) return;
-        if (resp_len && write_full(fd, resp, resp_len) < 0) return;
+        if (write_full(fd, &resp_len, 4) < 0) {
+            return;
+        }
+        if (resp_len && write_full(fd, resp, resp_len) < 0) {
+            return;
+        }
     }
 }
 
 /* -------- client session ------------------------------------------- */
 
-struct translated_class { char *name; UT_hash_handle hh; };
+struct translated_class {
+    char *name;
+    UT_hash_handle hh;
+};
 
 struct remote_id_entry {
     method_slot local_slot;
@@ -284,31 +345,39 @@ struct rpc_session {
     /* Local slot → remote id. Local slots are sparse (domain id in
      * upper bits), so hash by slot rather than flat-array. */
     struct remote_id_entry *remote_ids;
-    struct translated_class *translated;  /* by class name */
+    struct translated_class *translated; /* by class name */
 };
 
 struct rpc_session *rpc_session_create(int fd)
 {
     struct rpc_session *s = calloc(1, sizeof(*s));
-    if (s) s->fd = fd;
+    if (s) {
+        s->fd = fd;
+    }
     return s;
 }
 
 void rpc_session_destroy(struct rpc_session *s)
 {
-    if (!s) return;
+    if (!s) {
+        return;
+    }
     struct translated_class *cur, *tmp;
-    HASH_ITER(hh, s->translated, cur, tmp) {
+    HASH_ITER(hh, s->translated, cur, tmp)
+    {
         HASH_DEL(s->translated, cur);
         free(cur->name);
         free(cur);
     }
     struct remote_id_entry *rcur, *rtmp;
-    HASH_ITER(hh, s->remote_ids, rcur, rtmp) {
+    HASH_ITER(hh, s->remote_ids, rcur, rtmp)
+    {
         HASH_DEL(s->remote_ids, rcur);
         free(rcur);
     }
-    if (s->fd >= 0) close(s->fd);
+    if (s->fd >= 0) {
+        close(s->fd);
+    }
     free(s);
 }
 
@@ -319,41 +388,56 @@ void rpc_session_destroy(struct rpc_session *s)
 
 uint32_t rpc_session_remote_id(struct rpc_session *s, method_slot slot)
 {
-    if (!s) return REMOTE_ID_UNRESOLVED;
+    if (!s) {
+        return REMOTE_ID_UNRESOLVED;
+    }
     struct remote_id_entry *e = NULL;
     HASH_FIND(hh, s->remote_ids, &slot, sizeof(slot), e);
     return e ? e->remote_id : REMOTE_ID_UNRESOLVED;
 }
 
-void rpc_session_set_remote_id(struct rpc_session *s, method_slot slot,
-                               uint32_t remote_id)
+void rpc_session_set_remote_id(struct rpc_session *s, method_slot slot, uint32_t remote_id)
 {
-    if (!s) return;
+    if (!s) {
+        return;
+    }
     struct remote_id_entry *e = NULL;
     HASH_FIND(hh, s->remote_ids, &slot, sizeof(slot), e);
     if (!e) {
         e = calloc(1, sizeof(*e));
-        if (!e) return;
+        if (!e) {
+            return;
+        }
         e->local_slot = slot;
         HASH_ADD(hh, s->remote_ids, local_slot, sizeof(method_slot), e);
     }
     e->remote_id = remote_id;
 }
 
-size_t rpc_call(struct rpc_session *s, enum rpc_op op, uint32_t id,
-                const void *body, size_t body_len, void *resp, size_t resp_max)
+size_t rpc_call(struct rpc_session *s, enum rpc_op op, uint32_t id, const void *body,
+                size_t body_len, void *resp, size_t resp_max)
 {
-    if (!s) return 0;
+    if (!s) {
+        return 0;
+    }
     uint32_t header = RPC_HDR_MAKE(op, id);
     ydebug("op=%u id=%u body_len=%zu", op, id, body_len);
 
     uint32_t bl = (uint32_t)body_len;
-    if (write_full(s->fd, &header, 4) < 0) return 0;
-    if (write_full(s->fd, &bl, 4) < 0) return 0;
-    if (body_len && write_full(s->fd, body, body_len) < 0) return 0;
+    if (write_full(s->fd, &header, 4) < 0) {
+        return 0;
+    }
+    if (write_full(s->fd, &bl, 4) < 0) {
+        return 0;
+    }
+    if (body_len && write_full(s->fd, body, body_len) < 0) {
+        return 0;
+    }
 
     uint32_t resp_len = 0;
-    if (read_full(s->fd, &resp_len, 4) < 0) return 0;
+    if (read_full(s->fd, &resp_len, 4) < 0) {
+        return 0;
+    }
     if (resp_len > resp_max) {
         /* Drain the oversized payload so the next frame read starts
          * aligned. Without this we'd parse garbage from mid-stream. */
@@ -361,20 +445,28 @@ size_t rpc_call(struct rpc_session *s, enum rpc_op op, uint32_t id,
         size_t remain = resp_len;
         while (remain) {
             size_t chunk = remain > sizeof(drain) ? sizeof(drain) : remain;
-            if (read_full(s->fd, drain, chunk) < 0) return 0;
+            if (read_full(s->fd, drain, chunk) < 0) {
+                return 0;
+            }
             remain -= chunk;
         }
         return 0;
     }
-    if (resp_len && read_full(s->fd, resp, resp_len) < 0) return 0;
+    if (resp_len && read_full(s->fd, resp, resp_len) < 0) {
+        return 0;
+    }
     return resp_len;
 }
 
 uint32_t rpc_session_ensure_remote_id(struct rpc_session *s, method_slot local_slot)
 {
-    if (!s) return REMOTE_ID_UNRESOLVED;
+    if (!s) {
+        return REMOTE_ID_UNRESOLVED;
+    }
     uint32_t cached = rpc_session_remote_id(s, local_slot);
-    if (cached != REMOTE_ID_UNRESOLVED) return cached;
+    if (cached != REMOTE_ID_UNRESOLVED) {
+        return cached;
+    }
 
     struct const_char_ptr_result nr = method_slot_name(local_slot);
     if (YETTY_IS_ERR(nr)) {
@@ -384,10 +476,10 @@ uint32_t rpc_session_ensure_remote_id(struct rpc_session *s, method_slot local_s
     const char *name = nr.value;
 
     uint32_t remote = REMOTE_ID_UNRESOLVED;
-    size_t n =
-        rpc_call(s, RPC_OP_RESOLVE_SLOT, 0, name, strlen(name), &remote, sizeof(remote));
-    if (n != sizeof(remote) || remote == REMOTE_ID_UNRESOLVED)
+    size_t n = rpc_call(s, RPC_OP_RESOLVE_SLOT, 0, name, strlen(name), &remote, sizeof(remote));
+    if (n != sizeof(remote) || remote == REMOTE_ID_UNRESOLVED) {
         return REMOTE_ID_UNRESOLVED;
+    }
 
     rpc_session_set_remote_id(s, local_slot, remote);
     ydebug("lazy resolve '%s' local=%u remote=%u", name, local_slot, remote);
@@ -396,29 +488,38 @@ uint32_t rpc_session_ensure_remote_id(struct rpc_session *s, method_slot local_s
 
 int rpc_session_translate_class(struct rpc_session *s, const char *class_name)
 {
-    if (!s || !class_name) return -1;
+    if (!s || !class_name) {
+        return -1;
+    }
     struct translated_class *t = NULL;
     HASH_FIND_STR(s->translated, class_name, t);
-    if (t) return 0;
+    if (t) {
+        return 0;
+    }
 
     uint8_t buf[BUF_MAX];
     size_t name_len = strlen(class_name);
-    size_t resp_len = rpc_call(s, RPC_OP_GET_CLASS, 0, class_name, name_len,
-                               buf, sizeof(buf));
-    if (resp_len == 0) return -1;
+    size_t resp_len = rpc_call(s, RPC_OP_GET_CLASS, 0, class_name, name_len, buf, sizeof(buf));
+    if (resp_len == 0) {
+        return -1;
+    }
 
     size_t off = 0;
     while (off + 2 + 4 <= resp_len) {
         uint16_t nl;
-        memcpy(&nl, buf + off, 2); off += 2;
-        if (off + nl + 4 > resp_len) break;
+        memcpy(&nl, buf + off, 2);
+        off += 2;
+        if (off + nl + 4 > resp_len) {
+            break;
+        }
         char slot_name[128];
         size_t copy = nl < sizeof(slot_name) - 1 ? nl : sizeof(slot_name) - 1;
         memcpy(slot_name, buf + off, copy);
         slot_name[copy] = 0;
         off += nl;
         uint32_t rid;
-        memcpy(&rid, buf + off, 4); off += 4;
+        memcpy(&rid, buf + off, 4);
+        off += 4;
 
         struct method_slot_result lr = method_slot_by_qname(slot_name);
         if (YETTY_IS_OK(lr)) {
@@ -430,9 +531,14 @@ int rpc_session_translate_class(struct rpc_session *s, const char *class_name)
     }
 
     t = calloc(1, sizeof(*t));
-    if (!t) return 0;
+    if (!t) {
+        return 0;
+    }
     t->name = strdup(class_name);
-    if (!t->name) { free(t); return 0; }
+    if (!t->name) {
+        free(t);
+        return 0;
+    }
     HASH_ADD_KEYPTR(hh, s->translated, t->name, strlen(t->name), t);
     return 0;
 }

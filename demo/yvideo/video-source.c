@@ -81,7 +81,10 @@
 
 #ifdef _WIN32
 #include <windows.h>
-static void sleep_ms(int ms) { Sleep((DWORD)ms); }
+static void sleep_ms(int ms)
+{
+    Sleep((DWORD)ms);
+}
 #else
 #include <unistd.h>
 #include <time.h>
@@ -122,12 +125,12 @@ struct opts {
     int audio_chunk;
 
     /* Playback-control flags (#198 item 3). */
-    int      seek_ms;             /* -1 = no seek */
-    float    speed;               /* 0.0 = no SET_SPEED emit */
-    int      start_paused;
-    int      pause_after_ms;      /* -1 = no mid-stream pause */
-    int      resume_after_ms;     /* -1 = no mid-stream resume */
-    int      loop_off;
+    int seek_ms; /* -1 = no seek */
+    float speed; /* 0.0 = no SET_SPEED emit */
+    int start_paused;
+    int pause_after_ms;  /* -1 = no mid-stream pause */
+    int resume_after_ms; /* -1 = no mid-stream resume */
+    int loop_off;
 };
 
 static void usage(const char *prog)
@@ -149,7 +152,9 @@ static int parse_int(const char *s, int *out)
 {
     char *end = NULL;
     long v = strtol(s, &end, 10);
-    if (!end || *end != '\0') return -1;
+    if (!end || *end != '\0') {
+        return -1;
+    }
     *out = (int)v;
     return 0;
 }
@@ -157,7 +162,9 @@ static int parse_u32(const char *s, uint32_t *out)
 {
     char *end = NULL;
     unsigned long v = strtoul(s, &end, 10);
-    if (!end || *end != '\0') return -1;
+    if (!end || *end != '\0') {
+        return -1;
+    }
     *out = (uint32_t)v;
     return 0;
 }
@@ -165,7 +172,9 @@ static int parse_float(const char *s, float *out)
 {
     char *end = NULL;
     float v = strtof(s, &end);
-    if (!end || *end != '\0') return -1;
+    if (!end || *end != '\0') {
+        return -1;
+    }
     *out = v;
     return 0;
 }
@@ -188,21 +197,37 @@ static int parse_args(int argc, char **argv, struct opts *o)
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         if (strncmp(a, "--video-w=", 10) == 0) {
-            if (parse_u32(a + 10, &o->video_w) < 0) return -1;
+            if (parse_u32(a + 10, &o->video_w) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--video-h=", 10) == 0) {
-            if (parse_u32(a + 10, &o->video_h) < 0) return -1;
+            if (parse_u32(a + 10, &o->video_h) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--fps=", 6) == 0) {
-            if (parse_float(a + 6, &o->fps) < 0) return -1;
+            if (parse_float(a + 6, &o->fps) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--bounds-w=", 11) == 0) {
-            if (parse_float(a + 11, &o->bounds_w) < 0) return -1;
+            if (parse_float(a + 11, &o->bounds_w) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--bounds-h=", 11) == 0) {
-            if (parse_float(a + 11, &o->bounds_h) < 0) return -1;
+            if (parse_float(a + 11, &o->bounds_h) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--chunk=", 8) == 0) {
-            if (parse_int(a + 8, &o->chunk) < 0) return -1;
+            if (parse_int(a + 8, &o->chunk) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--period-ms=", 12) == 0) {
-            if (parse_int(a + 12, &o->period_ms) < 0) return -1;
+            if (parse_int(a + 12, &o->period_ms) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--stream-id=", 12) == 0) {
-            if (parse_int(a + 12, &o->stream_id) < 0) return -1;
+            if (parse_int(a + 12, &o->stream_id) < 0) {
+                return -1;
+            }
         } else if (strcmp(a, "--no-sleep") == 0) {
             o->no_sleep = 1;
         } else if (strcmp(a, "--no-loop") == 0) {
@@ -212,21 +237,35 @@ static int parse_args(int argc, char **argv, struct opts *o)
         } else if (strncmp(a, "--audio-file=", 13) == 0) {
             o->audio_path = a + 13;
         } else if (strncmp(a, "--audio-sample-rate=", 20) == 0) {
-            if (parse_u32(a + 20, &o->audio_sample_rate) < 0) return -1;
+            if (parse_u32(a + 20, &o->audio_sample_rate) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--audio-channels=", 17) == 0) {
-            if (parse_u32(a + 17, &o->audio_channels) < 0) return -1;
+            if (parse_u32(a + 17, &o->audio_channels) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--audio-chunk=", 14) == 0) {
-            if (parse_int(a + 14, &o->audio_chunk) < 0) return -1;
+            if (parse_int(a + 14, &o->audio_chunk) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--seek-ms=", 10) == 0) {
-            if (parse_int(a + 10, &o->seek_ms) < 0) return -1;
+            if (parse_int(a + 10, &o->seek_ms) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--speed=", 8) == 0) {
-            if (parse_float(a + 8, &o->speed) < 0) return -1;
+            if (parse_float(a + 8, &o->speed) < 0) {
+                return -1;
+            }
         } else if (strcmp(a, "--start-paused") == 0) {
             o->start_paused = 1;
         } else if (strncmp(a, "--pause-after-ms=", 17) == 0) {
-            if (parse_int(a + 17, &o->pause_after_ms) < 0) return -1;
+            if (parse_int(a + 17, &o->pause_after_ms) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--resume-after-ms=", 18) == 0) {
-            if (parse_int(a + 18, &o->resume_after_ms) < 0) return -1;
+            if (parse_int(a + 18, &o->resume_after_ms) < 0) {
+                return -1;
+            }
         } else if (strcmp(a, "--loop-off") == 0) {
             o->loop_off = 1;
         } else if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
@@ -238,8 +277,8 @@ static int parse_args(int argc, char **argv, struct opts *o)
             return -1;
         }
     }
-    if (!o->path || o->video_w == 0 || o->video_h == 0 || o->chunk <= 0 ||
-        o->stream_id <= 0 || o->fps <= 0.0f || o->audio_chunk <= 0) {
+    if (!o->path || o->video_w == 0 || o->video_h == 0 || o->chunk <= 0 || o->stream_id <= 0 ||
+        o->fps <= 0.0f || o->audio_chunk <= 0) {
         return -1;
     }
     if ((o->video_w & 1u) || (o->video_h & 1u)) {
@@ -287,14 +326,19 @@ static struct yetty_ycore_void_result emit_scene_bin(const struct yetty_ydraw_dr
 
 /* INIT envelope: GROUP(stream_id) wrapping a yvideo prim with the
  * first chunks of NAL bytes + audio packets. */
-static struct yetty_ycore_void_result emit_create_envelope(
-    const struct opts *o,
-    const uint8_t *first_nals,  size_t first_nal_len,
-    const uint8_t *first_audio, size_t first_audio_len)
+static struct yetty_ycore_void_result emit_create_envelope(const struct opts *o,
+                                                           const uint8_t *first_nals,
+                                                           size_t first_nal_len,
+                                                           const uint8_t *first_audio,
+                                                           size_t first_audio_len)
 {
     uint32_t flags = 0u;
-    if (!o->no_loop)     flags |= YETTY_YVIDEO_FLAG_LOOP;
-    if (!o->no_autoplay) flags |= YETTY_YVIDEO_FLAG_AUTOPLAY;
+    if (!o->no_loop) {
+        flags |= YETTY_YVIDEO_FLAG_LOOP;
+    }
+    if (!o->no_autoplay) {
+        flags |= YETTY_YVIDEO_FLAG_AUTOPLAY;
+    }
 
     struct yetty_yvideo_uniforms u = {
         .bounds_x = 0.0f,
@@ -308,9 +352,9 @@ static struct yetty_ycore_void_result emit_create_envelope(
         .fps = o->fps,
         .color_matrix = 1u, /* BT.709 */
         .flags = flags,
-        .audio_codec       = o->audio_path ? YACODEC_CODEC_OPUS : 0u,
+        .audio_codec = o->audio_path ? YACODEC_CODEC_OPUS : 0u,
         .audio_sample_rate = o->audio_path ? o->audio_sample_rate : 0u,
-        .audio_channels    = o->audio_path ? o->audio_channels    : 0u,
+        .audio_channels = o->audio_path ? o->audio_channels : 0u,
     };
 
     size_t nal_words = (first_nal_len + 3u) / 4u;
@@ -333,9 +377,9 @@ static struct yetty_ycore_void_result emit_create_envelope(
         memcpy(audio_words_buf, first_audio, first_audio_len);
     }
     struct yetty_yvideo_buffers bufs = {
-        .nal_stream       = nal_words_buf,
-        .nal_stream_len   = nal_words,
-        .audio_stream     = audio_words_buf,
+        .nal_stream = nal_words_buf,
+        .nal_stream_len = nal_words,
+        .audio_stream = audio_words_buf,
         .audio_stream_len = audio_words,
     };
 
@@ -398,8 +442,8 @@ static struct yetty_ycore_void_result emit_create_envelope(
 
 /* UPDATE envelope: CMD_UPDATE carrying a typed payload — 4-byte
  * [op][reserved×3] header followed by the op's body bytes. */
-static struct yetty_ycore_void_result emit_update_envelope(
-    int stream_id, uint8_t op, const uint8_t *bytes, size_t len)
+static struct yetty_ycore_void_result emit_update_envelope(int stream_id, uint8_t op,
+                                                           const uint8_t *bytes, size_t len)
 {
     /* Stage the typed payload: [op][0][0][0][bytes...]. */
     size_t total = 4u + len;
@@ -441,7 +485,9 @@ int main(int argc, char **argv)
 {
     struct opts o;
     int r = parse_args(argc, argv, &o);
-    if (r == 1) return 0;
+    if (r == 1) {
+        return 0;
+    }
     if (r < 0) {
         usage(argv[0]);
         return 2;
@@ -468,17 +514,23 @@ int main(int argc, char **argv)
         free(chunk);
         free(achunk);
         fclose(f);
-        if (af) fclose(af);
+        if (af) {
+            fclose(af);
+        }
         fprintf(stderr, "video-source: chunk alloc failed\n");
         return 1;
     }
 
     /* Read first chunks from both streams. */
-    size_t first_nal   = fread(chunk,  1, (size_t)o.chunk,       f);
+    size_t first_nal = fread(chunk, 1, (size_t)o.chunk, f);
     size_t first_audio = af ? fread(achunk, 1, (size_t)o.audio_chunk, af) : 0u;
     if (first_nal == 0) {
-        free(chunk); free(achunk);
-        fclose(f); if (af) fclose(af);
+        free(chunk);
+        free(achunk);
+        fclose(f);
+        if (af) {
+            fclose(af);
+        }
         fprintf(stderr, "video-source: empty input\n");
         return 1;
     }
@@ -487,8 +539,12 @@ int main(int argc, char **argv)
     if (YETTY_IS_ERR(cr)) {
         fprintf(stderr, "video-source: init envelope failed: %s\n", cr.error.msg);
         yetty_ycore_error_destroy(cr.error);
-        free(chunk); free(achunk);
-        fclose(f); if (af) fclose(af);
+        free(chunk);
+        free(achunk);
+        fclose(f);
+        if (af) {
+            fclose(af);
+        }
         return 1;
     }
 
@@ -497,17 +553,20 @@ int main(int argc, char **argv)
      * stream-loop bytes that follow land in the post-seek decoder
      * state; SET_PLAYING(0) is last so the figure is fully configured
      * before being paused. Each ctrl envelope is its own CMD_UPDATE. */
-#define CTRL_EMIT(op, body, len, desc)                                                              \
-    do {                                                                                            \
-        struct yetty_ycore_void_result _ur =                                                        \
-            emit_update_envelope(o.stream_id, (op), (body), (len));                                 \
-        if (YETTY_IS_ERR(_ur)) {                                                                    \
-            fprintf(stderr, "video-source: " desc " failed: %s\n", _ur.error.msg);                  \
-            yetty_ycore_error_destroy(_ur.error);                                                   \
-            free(chunk); free(achunk);                                                              \
-            fclose(f); if (af) fclose(af);                                                          \
-            return 1;                                                                               \
-        }                                                                                           \
+#define CTRL_EMIT(op, body, len, desc)                                                             \
+    do {                                                                                           \
+        struct yetty_ycore_void_result _ur =                                                       \
+            emit_update_envelope(o.stream_id, (op), (body), (len));                                \
+        if (YETTY_IS_ERR(_ur)) {                                                                   \
+            fprintf(stderr, "video-source: " desc " failed: %s\n", _ur.error.msg);                 \
+            yetty_ycore_error_destroy(_ur.error);                                                  \
+            free(chunk);                                                                           \
+            free(achunk);                                                                          \
+            fclose(f);                                                                             \
+            if (af)                                                                                \
+                fclose(af);                                                                        \
+            return 1;                                                                              \
+        }                                                                                          \
     } while (0)
 
     if (o.speed > 0.0f) {
@@ -537,7 +596,7 @@ int main(int argc, char **argv)
      * the configured thresholds are crossed. */
     int nal_eof = 0;
     int audio_eof = (af == NULL);
-    int pause_emitted  = 0;
+    int pause_emitted = 0;
     int resume_emitted = 0;
     int elapsed_ms = 0;
     for (;;) {
@@ -546,13 +605,17 @@ int main(int argc, char **argv)
             if (n == 0) {
                 nal_eof = 1;
             } else {
-                struct yetty_ycore_void_result ur = emit_update_envelope(
-                    o.stream_id, YETTY_YVIDEO_UPDATE_OP_APPEND_NAL, chunk, n);
+                struct yetty_ycore_void_result ur =
+                    emit_update_envelope(o.stream_id, YETTY_YVIDEO_UPDATE_OP_APPEND_NAL, chunk, n);
                 if (YETTY_IS_ERR(ur)) {
                     fprintf(stderr, "video-source: NAL update failed: %s\n", ur.error.msg);
                     yetty_ycore_error_destroy(ur.error);
-                    free(chunk); free(achunk);
-                    fclose(f); if (af) fclose(af);
+                    free(chunk);
+                    free(achunk);
+                    fclose(f);
+                    if (af) {
+                        fclose(af);
+                    }
                     return 1;
                 }
             }
@@ -567,13 +630,19 @@ int main(int argc, char **argv)
                 if (YETTY_IS_ERR(ur)) {
                     fprintf(stderr, "video-source: audio update failed: %s\n", ur.error.msg);
                     yetty_ycore_error_destroy(ur.error);
-                    free(chunk); free(achunk);
-                    fclose(f); if (af) fclose(af);
+                    free(chunk);
+                    free(achunk);
+                    fclose(f);
+                    if (af) {
+                        fclose(af);
+                    }
                     return 1;
                 }
             }
         }
-        if (nal_eof && audio_eof) break;
+        if (nal_eof && audio_eof) {
+            break;
+        }
 
         /* Mid-stream control: fire pause / resume when the elapsed
          * wall-clock crosses the configured ms threshold. */
@@ -588,12 +657,18 @@ int main(int argc, char **argv)
             resume_emitted = 1;
         }
 
-        if (!o.no_sleep) sleep_ms(o.period_ms);
+        if (!o.no_sleep) {
+            sleep_ms(o.period_ms);
+        }
         elapsed_ms += o.period_ms;
     }
 #undef CTRL_EMIT
 
-    free(chunk); free(achunk);
-    fclose(f); if (af) fclose(af);
+    free(chunk);
+    free(achunk);
+    fclose(f);
+    if (af) {
+        fclose(af);
+    }
     return 0;
 }

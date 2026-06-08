@@ -18,8 +18,11 @@ struct yetty_ygui_button_data_ptr_result yetty_ygui_button_data(struct yetty_ygu
 
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_ygui_object *obj, const char *label);
-struct yetty_ycore_void_result yetty_ygui_button_set_chrome_icon(struct yetty_ygui_object *obj, int kind);
-struct yetty_ycore_const_char_ptr_result yetty_ygui_button_get_label(const struct yetty_ygui_object *obj);
+struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_ygui_object *obj,
+                                                           const char *label);
+struct yetty_ycore_void_result yetty_ygui_button_set_chrome_icon(struct yetty_ygui_object *obj,
+                                                                 int kind);
+struct yetty_ycore_const_char_ptr_result yetty_ygui_button_get_label(
+    const struct yetty_ygui_object *obj);
 
 #endif

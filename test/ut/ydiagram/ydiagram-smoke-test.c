@@ -18,20 +18,19 @@
 #include <yetty/ydiagram/ydiagram.h>
 #include <yetty/ydraw-core/drawable-list.h>
 
-#define REQUIRE(cond, msg)                                                       \
-    do {                                                                         \
-        if (!(cond)) {                                                           \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, msg);        \
-            return 1;                                                            \
-        }                                                                        \
+#define REQUIRE(cond, msg)                                                                         \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, msg);                          \
+            return 1;                                                                              \
+        }                                                                                          \
     } while (0)
 
-static const char *k_mermaid_input =
-    "graph TD\n"
-    "  A[Start] --> B{Decision}\n"
-    "  B -->|Yes| C(Process)\n"
-    "  B -->|No|  D((Done))\n"
-    "  C --> D\n";
+static const char *k_mermaid_input = "graph TD\n"
+                                     "  A[Start] --> B{Decision}\n"
+                                     "  B -->|Yes| C(Process)\n"
+                                     "  B -->|No|  D((Done))\n"
+                                     "  C --> D\n";
 
 int main(void)
 {

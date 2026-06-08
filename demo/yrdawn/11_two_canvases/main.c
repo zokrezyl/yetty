@@ -33,8 +33,8 @@ static void make_left(uint8_t *p)
         for (uint32_t x = 0; x < W; ++x) {
             uint8_t *px = p + (y * W + x) * 4u;
             float u = (float)x / (float)(W - 1u);
-            px[0] = 255u;                    /* red */
-            px[1] = (uint8_t)(u * 255.0f);   /* green ramps L→R */
+            px[0] = 255u;                  /* red */
+            px[1] = (uint8_t)(u * 255.0f); /* green ramps L→R */
             px[2] = 0u;
             px[3] = 255u;
         }
@@ -48,8 +48,8 @@ static void make_right(uint8_t *p)
             uint8_t *px = p + (y * W + x) * 4u;
             float v = (float)y / (float)(H - 1u);
             px[0] = 0u;
-            px[1] = (uint8_t)(v * 255.0f);   /* green ramps T→B */
-            px[2] = 255u;                    /* blue */
+            px[1] = (uint8_t)(v * 255.0f); /* green ramps T→B */
+            px[2] = 255u;                  /* blue */
             px[3] = 255u;
         }
     }
@@ -59,10 +59,10 @@ int main(void)
 {
     demo_raw_stdin();
     FILE *trace = demo_trace_open("11-two-canvases");
-#define LOG(...) \
-    do { \
-        if (trace) \
-            fprintf(trace, __VA_ARGS__); \
+#define LOG(...)                                                                                   \
+    do {                                                                                           \
+        if (trace)                                                                                 \
+            fprintf(trace, __VA_ARGS__);                                                           \
     } while (0)
 
     /* One client, one session — both canvases share the same WGPU
@@ -93,9 +93,8 @@ int main(void)
     }
     struct yetty_yrdawn_canvas *left = lr.value;
 
-    struct yetty_yrdawn_canvas_ptr_result rr =
-        yetty_yrdawn_canvas_create(c, /*figure_id=*/2, 16.0f + (float)W + 16.0f, 16.0f, (float)W,
-                                   (float)H);
+    struct yetty_yrdawn_canvas_ptr_result rr = yetty_yrdawn_canvas_create(
+        c, /*figure_id=*/2, 16.0f + (float)W + 16.0f, 16.0f, (float)W, (float)H);
     if (rr.ok != 1) {
         LOG("11: right canvas create failed: %s\n", rr.error.msg);
         (void)yetty_yrdawn_canvas_destroy(left);

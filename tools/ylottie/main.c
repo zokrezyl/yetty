@@ -140,8 +140,12 @@ int main(int argc, char **argv)
     int opt;
     while ((opt = yetty_yplatform_getopt_long(argc, argv, "w:H:v", long_opts, NULL)) != -1) {
         switch (opt) {
-        case 'w': width_cells = (uint32_t)atoi(yetty_yplatform_optarg); break;
-        case 'H': height_cells = (uint32_t)atoi(yetty_yplatform_optarg); break;
+        case 'w':
+            width_cells = (uint32_t)atoi(yetty_yplatform_optarg);
+            break;
+        case 'H':
+            height_cells = (uint32_t)atoi(yetty_yplatform_optarg);
+            break;
         case OPT_FRAME:
             single_frame = (float)atof(yetty_yplatform_optarg);
             have_single_frame = 1;
@@ -150,13 +154,27 @@ int main(int argc, char **argv)
             single_time = (float)atof(yetty_yplatform_optarg);
             have_single_time = 1;
             break;
-        case OPT_FPS: fps_override = (float)atof(yetty_yplatform_optarg); break;
-        case OPT_LOOP: do_loop = 1; break;
-        case OPT_BG: bg = yetty_yplatform_optarg; break;
-        case OPT_NO_CLEAR: do_clear = 0; break;
-        case 'v': verbose = 1; break;
-        case OPT_HELP: usage(argv[0]); return 0;
-        default: usage(argv[0]); return 1;
+        case OPT_FPS:
+            fps_override = (float)atof(yetty_yplatform_optarg);
+            break;
+        case OPT_LOOP:
+            do_loop = 1;
+            break;
+        case OPT_BG:
+            bg = yetty_yplatform_optarg;
+            break;
+        case OPT_NO_CLEAR:
+            do_clear = 0;
+            break;
+        case 'v':
+            verbose = 1;
+            break;
+        case OPT_HELP:
+            usage(argv[0]);
+            return 0;
+        default:
+            usage(argv[0]);
+            return 1;
         }
     }
     if (yetty_yplatform_optind >= argc) {
@@ -198,9 +216,8 @@ int main(int argc, char **argv)
     }
 
     if (verbose) {
-        fprintf(stderr,
-                "yetty-ylottie: %s  comp=%.0fx%.0f  fr=%.2f  ip=%.2f  op=%.2f  layers=%d\n", path,
-                info.width, info.height, info.frame_rate, info.in_point, info.out_point,
+        fprintf(stderr, "yetty-ylottie: %s  comp=%.0fx%.0f  fr=%.2f  ip=%.2f  op=%.2f  layers=%d\n",
+                path, info.width, info.height, info.frame_rate, info.in_point, info.out_point,
                 info.layer_count);
     }
 
@@ -216,8 +233,8 @@ int main(int argc, char **argv)
     }
 
     /* Animation mode. */
-    float fps = (fps_override > 0.0f) ? fps_override
-                                      : (info.frame_rate > 0.0f ? info.frame_rate : 30.0f);
+    float fps =
+        (fps_override > 0.0f) ? fps_override : (info.frame_rate > 0.0f ? info.frame_rate : 30.0f);
     unsigned delay_ms = (unsigned)(1000.0f / fps + 0.5f);
     if (delay_ms == 0) {
         delay_ms = 1;

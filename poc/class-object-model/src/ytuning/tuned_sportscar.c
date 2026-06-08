@@ -20,8 +20,8 @@
 
 #include <stdio.h>
 
-struct [[clang::annotate("class@ytuning:tuned_sportscar")]]
-       [[clang::annotate("parent@yvehicle:sportscar")]] tuned_sportscar_data {
+struct [[clang::annotate("class@ytuning:tuned_sportscar")]] [[clang::annotate(
+    "parent@yvehicle:sportscar")]] tuned_sportscar_data {
     [[clang::annotate("property")]] int boost_level;
 };
 
