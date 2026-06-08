@@ -53,7 +53,7 @@
  * fallback chain as src/yetty/yplatform/paths/linux.c. */
 static const char *resolve_data_dir(char *buf, size_t buf_size)
 {
-    const char *xdg  = getenv("XDG_DATA_HOME");
+    const char *xdg = getenv("XDG_DATA_HOME");
     if (xdg && *xdg) {
         snprintf(buf, buf_size, "%s/yetty", xdg);
         return buf;
@@ -81,7 +81,9 @@ static float measure_with_font(const char *text, size_t text_len, float font_siz
 
 static bool path_readable(const char *path)
 {
-    if (!path) return false;
+    if (!path) {
+        return false;
+    }
     struct stat st;
     return stat(path, &st) == 0;
 }
@@ -89,18 +91,18 @@ static bool path_readable(const char *path)
 /* Build the standard yetty asset paths from the platform's data_dir. The
  * canvas does the same construction in src/yetty/ydraw/canvas.c:335. */
 static struct yetty_yfont_font *open_default_font(const char *cdb_override,
-                                                   const char *shader_override)
+                                                  const char *shader_override)
 {
     char cdb_buf[512];
     char sh_buf[512];
     const char *cdb_path = cdb_override;
-    const char *sh_path  = shader_override;
+    const char *sh_path = shader_override;
 
-    char        data_buf[512];
+    char data_buf[512];
     const char *data_dir = NULL;
     if (!cdb_path || !sh_path) {
         const char *fonts_env = getenv("YETTY_FONTS_DIR");
-        const char *sh_env    = getenv("YETTY_SHADERS_DIR");
+        const char *sh_env = getenv("YETTY_SHADERS_DIR");
         if (!fonts_env || !sh_env) {
             data_dir = resolve_data_dir(data_buf, sizeof(data_buf));
         }
@@ -151,18 +153,19 @@ static struct yetty_yfont_font *open_default_font(const char *cdb_override,
  * OSC / raw emission (unchanged)
  *===========================================================================*/
 
-static int emit_envelope(FILE *out, int osc_code, int compressed, const void *args,
-                         size_t args_len, const void *body, size_t body_len)
+static int emit_envelope(FILE *out, int osc_code, int compressed, const void *args, size_t args_len,
+                         const void *body, size_t body_len)
 {
     struct yetty_ycore_buffer env = {0};
     struct yetty_ycore_void_result r =
         yetty_yface_emit(osc_code, compressed, args, args_len, body, body_len, &env);
     int rc = 0;
     if (YETTY_IS_OK(r) && env.size > 0) {
-        if (fwrite(env.data, 1, env.size, out) != env.size) rc = 1;
+        if (fwrite(env.data, 1, env.size, out) != env.size) {
+            rc = 1;
+        }
     } else if (YETTY_IS_ERR(r)) {
-        fprintf(stderr, "ydiagram: yface_emit failed: %s\n",
-                r.error.msg ? r.error.msg : "?");
+        fprintf(stderr, "ydiagram: yface_emit failed: %s\n", r.error.msg ? r.error.msg : "?");
         rc = 1;
     }
     yetty_ycore_buffer_destroy(&env);
@@ -171,28 +174,28 @@ static int emit_envelope(FILE *out, int osc_code, int compressed, const void *ar
 
 static int emit_osc_bin(FILE *out, struct yetty_ydraw_drawable_list *buf)
 {
-    const uint8_t *raw  = NULL;
-    size_t         size = yetty_ydraw_drawable_list_serialize(buf, &raw);
+    const uint8_t *raw = NULL;
+    size_t size = yetty_ydraw_drawable_list_serialize(buf, &raw);
     if (size == 0 || !raw) {
         fprintf(stderr, "ydiagram: serialize produced empty buffer\n");
         return 1;
     }
     struct yetty_yface_bin_meta meta = {
-        .magic            = YETTY_YFACE_BIN_MAGIC,
-        .version          = YETTY_YFACE_BIN_VERSION,
-        .compressed       = YETTY_YFACE_COMP_LZ4F,
+        .magic = YETTY_YFACE_BIN_MAGIC,
+        .version = YETTY_YFACE_BIN_VERSION,
+        .compressed = YETTY_YFACE_COMP_LZ4F,
         .compression_algo = 0,
-        .raw_size         = size,
-        .reserved         = {0, 0},
+        .raw_size = size,
+        .reserved = {0, 0},
     };
-    return emit_envelope(out, YETTY_DCS_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta),
-                         raw, size);
+    return emit_envelope(out, YETTY_DCS_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw,
+                         size);
 }
 
 static int write_raw(FILE *out, struct yetty_ydraw_drawable_list *buf)
 {
-    const uint8_t *raw  = NULL;
-    size_t         size = yetty_ydraw_drawable_list_serialize(buf, &raw);
+    const uint8_t *raw = NULL;
+    size_t size = yetty_ydraw_drawable_list_serialize(buf, &raw);
     if (size == 0 || !raw) {
         fprintf(stderr, "ydiagram: serialize produced empty buffer\n");
         return 1;
@@ -211,20 +214,24 @@ static char *slurp_file(const char *path, size_t *out_len)
         fprintf(stderr, "ydiagram: cannot open '%s': %s\n", path, strerror(errno));
         return NULL;
     }
-    size_t cap  = 8192;
+    size_t cap = 8192;
     size_t size = 0;
-    char  *buf  = malloc(cap);
+    char *buf = malloc(cap);
     if (!buf) {
-        if (f != stdin) fclose(f);
+        if (f != stdin) {
+            fclose(f);
+        }
         return NULL;
     }
     for (;;) {
         if (size + 4096 + 1 > cap) {
             size_t nc = cap * 2;
-            char  *nb = realloc(buf, nc);
+            char *nb = realloc(buf, nc);
             if (!nb) {
                 free(buf);
-                if (f != stdin) fclose(f);
+                if (f != stdin) {
+                    fclose(f);
+                }
                 return NULL;
             }
             buf = nb;
@@ -232,10 +239,14 @@ static char *slurp_file(const char *path, size_t *out_len)
         }
         size_t n = fread(buf + size, 1, cap - size - 1, f);
         size += n;
-        if (n == 0) break;
+        if (n == 0) {
+            break;
+        }
     }
     buf[size] = 0;
-    if (f != stdin) fclose(f);
+    if (f != stdin) {
+        fclose(f);
+    }
     *out_len = size;
     return buf;
 }
@@ -261,28 +272,43 @@ int main(int argc, char **argv)
 {
     ytrace_set_all_enabled(false);
 
-    const char *input_path    = NULL;
-    const char *out_path      = NULL;
-    const char *cdb_override  = NULL;
-    const char *sh_override   = NULL;
-    bool        no_font       = false;
+    const char *input_path = NULL;
+    const char *out_path = NULL;
+    const char *cdb_override = NULL;
+    const char *sh_override = NULL;
+    bool no_font = false;
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
-        if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) { usage(argv[0]); return 0; }
-        if (strcmp(a, "--no-font") == 0) { no_font = true; continue; }
+        if (strcmp(a, "-h") == 0 || strcmp(a, "--help") == 0) {
+            usage(argv[0]);
+            return 0;
+        }
+        if (strcmp(a, "--no-font") == 0) {
+            no_font = true;
+            continue;
+        }
         if (strcmp(a, "-o") == 0) {
-            if (i + 1 >= argc) { fprintf(stderr, "ydiagram: -o requires a path\n"); return 2; }
+            if (i + 1 >= argc) {
+                fprintf(stderr, "ydiagram: -o requires a path\n");
+                return 2;
+            }
             out_path = argv[++i];
             continue;
         }
         if (strcmp(a, "--font-cdb") == 0) {
-            if (i + 1 >= argc) { fprintf(stderr, "ydiagram: --font-cdb requires a path\n"); return 2; }
+            if (i + 1 >= argc) {
+                fprintf(stderr, "ydiagram: --font-cdb requires a path\n");
+                return 2;
+            }
             cdb_override = argv[++i];
             continue;
         }
         if (strcmp(a, "--font-shader") == 0) {
-            if (i + 1 >= argc) { fprintf(stderr, "ydiagram: --font-shader requires a path\n"); return 2; }
+            if (i + 1 >= argc) {
+                fprintf(stderr, "ydiagram: --font-shader requires a path\n");
+                return 2;
+            }
             sh_override = argv[++i];
             continue;
         }
@@ -291,29 +317,37 @@ int main(int argc, char **argv)
             usage(argv[0]);
             return 2;
         }
-        if (input_path) { fprintf(stderr, "ydiagram: multiple inputs\n"); return 2; }
+        if (input_path) {
+            fprintf(stderr, "ydiagram: multiple inputs\n");
+            return 2;
+        }
         input_path = a;
     }
-    if (!input_path) { usage(argv[0]); return 2; }
+    if (!input_path) {
+        usage(argv[0]);
+        return 2;
+    }
 
     size_t in_len = 0;
-    char  *in_buf = slurp_file(input_path, &in_len);
-    if (!in_buf) return 1;
+    char *in_buf = slurp_file(input_path, &in_len);
+    if (!in_buf) {
+        return 1;
+    }
 
     /* Open the MSDF font for text measurement. On failure (no asset
      * install yet, --no-font, etc.) fall back to the heuristic so the
      * tool still works — boxes will just be a bit off. */
-    struct yetty_yfont_font *font =
-        no_font ? NULL : open_default_font(cdb_override, sh_override);
+    struct yetty_yfont_font *font = no_font ? NULL : open_default_font(cdb_override, sh_override);
     yetty_ydiagram_measure_text_fn measure_fn = font ? measure_with_font : NULL;
 
-    struct yetty_ydiagram_buffer_result br = yetty_ydiagram_render_mermaid_full(
-        in_buf, in_len, NULL, NULL, measure_fn, font);
+    struct yetty_ydiagram_buffer_result br =
+        yetty_ydiagram_render_mermaid_full(in_buf, in_len, NULL, NULL, measure_fn, font);
     free(in_buf);
     if (YETTY_IS_ERR(br)) {
-        fprintf(stderr, "ydiagram: render failed: %s\n",
-                br.error.msg ? br.error.msg : "?");
-        if (font && font->ops && font->ops->destroy) font->ops->destroy(font);
+        fprintf(stderr, "ydiagram: render failed: %s\n", br.error.msg ? br.error.msg : "?");
+        if (font && font->ops && font->ops->destroy) {
+            font->ops->destroy(font);
+        }
         return 1;
     }
 
@@ -325,7 +359,9 @@ int main(int argc, char **argv)
             rc = 1;
         } else {
             rc = write_raw(out, br.value);
-            if (out != stdout) fclose(out);
+            if (out != stdout) {
+                fclose(out);
+            }
         }
     } else {
         rc = emit_osc_bin(stdout, br.value);
@@ -333,6 +369,8 @@ int main(int argc, char **argv)
     }
 
     yetty_ydraw_drawable_list_destroy(br.value);
-    if (font && font->ops && font->ops->destroy) font->ops->destroy(font);
+    if (font && font->ops && font->ops->destroy) {
+        font->ops->destroy(font);
+    }
     return rc;
 }

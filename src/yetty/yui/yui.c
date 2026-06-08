@@ -799,8 +799,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         if (context->runtime && context->runtime->window_manager) {
             struct yetty_ychrome_host_ptr_result ch = yetty_ychrome_host_create(
                 yui->root_container, yui->font, context, context->runtime->window_manager,
-                (float)surface_w, (float)surface_h, TITLEBAR_STRIP_H, 8.0f,
-                YETTY_YCHROME_FLAG_ALL);
+                (float)surface_w, (float)surface_h, TITLEBAR_STRIP_H, 8.0f, YETTY_YCHROME_FLAG_ALL);
             if (YETTY_IS_OK(ch)) {
                 yui->chrome = ch.value;
             } else {

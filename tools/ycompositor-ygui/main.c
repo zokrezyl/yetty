@@ -566,12 +566,10 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
     /* Window chrome gets first dibs on pointer events. It only claims caption
      * drags / edge resizes / its own buttons (all outside the app's content),
      * so anything it doesn't consume falls through to the scene below. */
-    if (app->chrome &&
-        (ev->type == YETTY_YCORE_MOUSE_DOWN || ev->type == YETTY_YCORE_MOUSE_UP ||
-         ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
-         ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
-        struct yetty_ycore_int_result cr =
-            yetty_ychrome_host_handle_event(app->chrome, ev);
+    if (app->chrome && (ev->type == YETTY_YCORE_MOUSE_DOWN || ev->type == YETTY_YCORE_MOUSE_UP ||
+                        ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
+                        ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
+        struct yetty_ycore_int_result cr = yetty_ychrome_host_handle_event(app->chrome, ev);
         int consumed = YETTY_IS_OK(cr) && cr.value;
         if (YETTY_IS_ERR(cr)) {
             yetty_ycore_error_destroy(cr.error);

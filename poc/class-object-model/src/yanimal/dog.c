@@ -10,9 +10,8 @@
 
 #include <stdio.h>
 
-struct [[clang::annotate("class@yanimal:dog")]]
-       [[clang::annotate("parent@yanimal:animal")]]
-       [[clang::annotate("uses@yanimal:pet")]] dog_data {
+struct [[clang::annotate("class@yanimal:dog")]] [[clang::annotate(
+    "parent@yanimal:animal")]] [[clang::annotate("uses@yanimal:pet")]] dog_data {
     [[clang::annotate("property")]] int loyalty;
 };
 

@@ -17,24 +17,25 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define REQUIRE(cond, msg)                                                     \
-    do {                                                                       \
-        if (!(cond)) {                                                         \
-            fprintf(stderr, "FAIL: %s:%d: %s\n", __FILE__, __LINE__, msg);     \
-            return 1;                                                          \
-        }                                                                      \
+#define REQUIRE(cond, msg)                                                                         \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "FAIL: %s:%d: %s\n", __FILE__, __LINE__, msg);                         \
+            return 1;                                                                              \
+        }                                                                                          \
     } while (0)
 
 #ifndef YPDF_TEST_TTF
 #define YPDF_TEST_TTF "DejaVuSansMono-Regular.ttf"
 #endif
 
-int main(void) {
+int main(void)
+{
     struct yetty_font_font_result fr =
         yetty_yfont_raster_font_create_from_file(YPDF_TEST_TTF, NULL, 32.0f);
     if (YETTY_IS_ERR(fr)) {
-        fprintf(stderr, "skipping: raster_font from '%s' failed: %s\n",
-                YPDF_TEST_TTF, fr.error.msg);
+        fprintf(stderr, "skipping: raster_font from '%s' failed: %s\n", YPDF_TEST_TTF,
+                fr.error.msg);
         return 77; /* skip */
     }
 

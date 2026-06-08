@@ -543,8 +543,7 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_button(
 {
     (void)mods;
     if (!framework) {
-        return YETTY_ERR(yetty_ycore_int,
-                         "yetty_ygui_framework_feed_mouse_button: NULL framework");
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_framework_feed_mouse_button: NULL framework");
     }
     if (!framework->root) {
         return YETTY_OK(yetty_ycore_int, 0);
@@ -598,8 +597,7 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_motion(
     struct yetty_ygui_framework *framework, float x, float y)
 {
     if (!framework) {
-        return YETTY_ERR(yetty_ycore_int,
-                         "yetty_ygui_framework_feed_mouse_motion: NULL framework");
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_framework_feed_mouse_motion: NULL framework");
     }
     if (!framework->root) {
         return YETTY_OK(yetty_ycore_int, 0);

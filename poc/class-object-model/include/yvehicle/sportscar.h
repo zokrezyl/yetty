@@ -5,7 +5,7 @@
 #define POC_YVEHICLE_SPORTSCAR_H
 
 #include "class.h"
-#include "methods.gen.h"  /* every public method stub in this module */
+#include "methods.gen.h" /* every public method stub in this module */
 #include "yvehicle/car.h"
 #include "yvehicle/electric.h"
 

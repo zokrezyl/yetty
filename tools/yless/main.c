@@ -53,11 +53,11 @@
  *===========================================================================*/
 
 struct yless_opts {
-    int x_cells;    /* origin column (cells); 0 = pane left */
-    int y_cells;    /* origin row (cells);    0 = pane top  */
-    int w_cells;    /* width  in cells; 0 = to right edge */
-    int h_cells;    /* height in cells; 0 = to bottom edge */
-    float opacity;  /* background opacity 0.0..1.0 (1.0 = opaque) */
+    int x_cells;   /* origin column (cells); 0 = pane left */
+    int y_cells;   /* origin row (cells);    0 = pane top  */
+    int w_cells;   /* width  in cells; 0 = to right edge */
+    int h_cells;   /* height in cells; 0 = to bottom edge */
+    float opacity; /* background opacity 0.0..1.0 (1.0 = opaque) */
 };
 
 /* Brand near-black background (#0B1014), per the palette. RGB only — the
@@ -205,8 +205,8 @@ static struct yetty_ycore_void_result capture_first_envelope(
         return YETTY_OK_VOID(); /* keep only the first */
     }
     const uint8_t *blob = NULL;
-    size_t blob_len = yetty_ydraw_drawable_list_serialize(
-        (struct yetty_ydraw_drawable_list *)envelope, &blob);
+    size_t blob_len =
+        yetty_ydraw_drawable_list_serialize((struct yetty_ydraw_drawable_list *)envelope, &blob);
     if (blob_len == 0 || !blob) {
         return YETTY_ERR(yetty_ycore_void, "capture_first_envelope: serialize empty");
     }
@@ -330,7 +330,7 @@ static bool is_lilypond(const uint8_t *bytes, size_t len, const char *path)
         return true;
     }
     size_t scan = len < 4096 ? len : 4096;
-    static const char *markers[] = {"\\relative", "\\version", "\\score",
+    static const char *markers[] = {"\\relative",  "\\version", "\\score",
                                     "\\new Staff", "\\clef",    "\\time"};
     for (size_t i = 0; i < sizeof(markers) / sizeof(markers[0]); i++) {
         if (window_contains(bytes, scan, markers[i])) {
@@ -594,9 +594,12 @@ int main(int argc, char **argv)
     struct yless_opts opts = {.opacity = 1.0f};
 
     static const struct yetty_yplatform_option long_opts[] = {
-        {"x", required_argument, NULL, 'x'},      {"y", required_argument, NULL, 'y'},
-        {"width", required_argument, NULL, 'w'},  {"height", required_argument, NULL, 'H'},
-        {"alpha", required_argument, NULL, 'a'},  {"help", no_argument, NULL, 'h'},
+        {"x", required_argument, NULL, 'x'},
+        {"y", required_argument, NULL, 'y'},
+        {"width", required_argument, NULL, 'w'},
+        {"height", required_argument, NULL, 'H'},
+        {"alpha", required_argument, NULL, 'a'},
+        {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0},
     };
 
@@ -661,8 +664,10 @@ int main(int argc, char **argv)
     /* Resolve the viewport rect (cells → pixels), defaulting to the pane. */
     float origin_x = (float)opts.x_cells * (float)vp.cell_w;
     float origin_y = (float)opts.y_cells * (float)vp.cell_h;
-    float rect_w = opts.w_cells > 0 ? (float)opts.w_cells * (float)vp.cell_w : vp.pixel_w - origin_x;
-    float rect_h = opts.h_cells > 0 ? (float)opts.h_cells * (float)vp.cell_h : vp.pixel_h - origin_y;
+    float rect_w =
+        opts.w_cells > 0 ? (float)opts.w_cells * (float)vp.cell_w : vp.pixel_w - origin_x;
+    float rect_h =
+        opts.h_cells > 0 ? (float)opts.h_cells * (float)vp.cell_h : vp.pixel_h - origin_y;
 
     struct yetty_ycat_config cfg = {
         .cell_width = vp.cell_w,

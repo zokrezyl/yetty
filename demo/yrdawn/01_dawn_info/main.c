@@ -55,10 +55,10 @@ int main(void)
      * the yrdawn client writes directly to the same stdout fd. */
     setvbuf(stdout, NULL, _IONBF, 0);
     FILE *trace = demo_trace_open("01-dawn-info");
-#define LOG(...) \
-    do { \
-        if (trace) \
-            fprintf(trace, __VA_ARGS__); \
+#define LOG(...)                                                                                   \
+    do {                                                                                           \
+        if (trace)                                                                                 \
+            fprintf(trace, __VA_ARGS__);                                                           \
     } while (0)
 
     struct yetty_yrdawn_client *c = NULL;
@@ -115,7 +115,8 @@ int main(void)
     (void)yetty_yrdawn_canvas_destroy(canvas);
     (void)yetty_yrdawn_client_destroy(c);
     LOG("01_dawn_info: done\n");
-    if (trace)
+    if (trace) {
         fclose(trace);
+    }
     return 0;
 }

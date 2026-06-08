@@ -302,8 +302,7 @@ static int chrome_button_at(const struct chrome_data *chrome, float x, float y)
  * background spanning (width × caption_height) plus the minimize/maximize/close
  * glyphs flush right. The caller composites the list as a pinned top figure and
  * destroys it. Uses font_id=-1 (the default font), so no font dependency. */
-[[clang::annotate("override@ychrome:chrome:render")]]
-[[clang::annotate("local@ychrome:render")]]
+[[clang::annotate("override@ychrome:chrome:render")]] [[clang::annotate("local@ychrome:render")]]
 static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass_ctx *ctx,
                                                              struct yetty_yclass_object *obj)
 {
@@ -333,8 +332,8 @@ static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass
      * minimize = a bar, maximize = a box outline, close = an X. Each centered in
      * its YCHROME_BTN_W slot. */
     float cy = height * 0.5f;
-    float r = height * 0.18f;   /* icon half-extent */
-    float stroke = 1.5f;        /* line thickness */
+    float r = height * 0.18f; /* icon half-extent */
+    float stroke = 1.5f;      /* line thickness */
     for (int i = 0; i < 3; i++) {
         float slot_left = width - (float)((3 - i) * YCHROME_BTN_W);
         float cx = slot_left + (float)YCHROME_BTN_W * 0.5f;
@@ -342,8 +341,8 @@ static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass
         if (chrome->hover_button == i + 1) {
             struct yetty_ysdf_box hl = {cx, cy, (float)YCHROME_BTN_W * 0.5f, height * 0.5f, 0.0f};
             uint32_t hl_color = (i == 2) ? YCHROME_HOVER_CLOSE_BG : YCHROME_HOVER_BG;
-            struct yetty_ycore_void_result hl_r = yetty_ydraw_drawable_list_add_cmd_add_box(
-                list, 0, 0, hl_color, 0u, 0.0f, &hl);
+            struct yetty_ycore_void_result hl_r =
+                yetty_ydraw_drawable_list_add_cmd_add_box(list, 0, 0, hl_color, 0u, 0.0f, &hl);
             if (YETTY_IS_ERR(hl_r)) {
                 yetty_ydraw_drawable_list_destroy(list);
                 return YETTY_ERR(yetty_ydraw_drawable_list, "chrome render: hover", hl_r);
@@ -364,8 +363,8 @@ static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass
             /* close: two diagonals forming an X */
             struct yetty_ysdf_segment a = {cx - r, cy - r, cx + r, cy + r};
             struct yetty_ysdf_segment b = {cx - r, cy + r, cx + r, cy - r};
-            icon = yetty_ydraw_drawable_list_add_cmd_add_segment(list, 0, 1, 0u, YCHROME_GLYPH_COLOR,
-                                                                 stroke, &a);
+            icon = yetty_ydraw_drawable_list_add_cmd_add_segment(list, 0, 1, 0u,
+                                                                 YCHROME_GLYPH_COLOR, stroke, &a);
             if (YETTY_IS_OK(icon)) {
                 icon = yetty_ydraw_drawable_list_add_cmd_add_segment(
                     list, 0, 1, 0u, YCHROME_GLYPH_COLOR, stroke, &b);
@@ -514,13 +513,13 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
         int edge_left, edge_right, edge_top, edge_bottom;
         chrome_edges_at(chrome, x, y, &edge_left, &edge_right, &edge_top, &edge_bottom);
         if (edge_left || edge_right || edge_top || edge_bottom) {
-            int shape = (edge_left || edge_right) ? YETTY_YCORE_CURSOR_HRESIZE
-                                                  : YETTY_YCORE_CURSOR_VRESIZE;
+            int shape =
+                (edge_left || edge_right) ? YETTY_YCORE_CURSOR_HRESIZE : YETTY_YCORE_CURSOR_VRESIZE;
             wm_absorb(yetty_yplatform_window_manager_set_cursor(NULL, wm, shape));
             chrome->edge_cursor_on = 1;
         } else if (chrome->edge_cursor_on) {
-            wm_absorb(yetty_yplatform_window_manager_set_cursor(NULL, wm,
-                                                                YETTY_YCORE_CURSOR_DEFAULT));
+            wm_absorb(
+                yetty_yplatform_window_manager_set_cursor(NULL, wm, YETTY_YCORE_CURSOR_DEFAULT));
             chrome->edge_cursor_on = 0;
         }
     }
@@ -574,7 +573,6 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
             return YETTY_OK(yetty_ycore_int, 1);
         }
     }
-
 
     /* --- caption double-click → toggle maximize ------------------------ */
     if ((chrome->flags & YETTY_YCHROME_FLAG_MAXIMIZE) && in_caption &&

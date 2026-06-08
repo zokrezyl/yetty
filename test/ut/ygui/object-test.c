@@ -247,7 +247,8 @@ static void test_tooltip_pilot(void)
 
     /* Drive a minimal pass-2 emit: set up an ad-hoc drawable_list, call
      * paint, and verify a TEXT_DRAWABLE_LIST drawable-list entry record landed. */
-    struct yetty_ydraw_drawable_list_result dlr = yetty_ydraw_drawable_list_config_buffer_create(NULL);
+    struct yetty_ydraw_drawable_list_result dlr =
+        yetty_ydraw_drawable_list_config_buffer_create(NULL);
     assert(YETTY_IS_OK(dlr));
     struct yetty_ygui_emit_ctx ctx = {
         .framework = NULL,

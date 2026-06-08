@@ -18,8 +18,10 @@ struct yetty_ygui_table_data_ptr_result yetty_ygui_table_data(struct yetty_ygui_
 
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_table_set_columns(struct yetty_ygui_object *obj, int n_cols, const char *const *headers);
-struct yetty_ycore_void_result yetty_ygui_table_add_row(struct yetty_ygui_object *obj, const char *const *cells, int n_cells);
+struct yetty_ycore_void_result yetty_ygui_table_set_columns(struct yetty_ygui_object *obj,
+                                                            int n_cols, const char *const *headers);
+struct yetty_ycore_void_result yetty_ygui_table_add_row(struct yetty_ygui_object *obj,
+                                                        const char *const *cells, int n_cells);
 struct yetty_ycore_void_result yetty_ygui_table_clear_rows(struct yetty_ygui_object *obj);
 
 #endif

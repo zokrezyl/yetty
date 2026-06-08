@@ -62,36 +62,36 @@ static bool in_yetty_terminal(void)
 static void usage(FILE *out, const char *prog)
 {
     fprintf(out,
-        "Usage: %s [options] [text...]\n"
-        "\n"
-        "Echo text with embedded glyphs and styled blocks.\n"
-        "\n"
-        "Grammar:\n"
-        "  @name           shader glyph (e.g. @spinner, @heart)\n"
-        "  {attrs: text}   styled block (e.g. {color=#ff0000: hello})\n"
-        "  \\@ \\{ \\}        escaped literals\n"
-        "\n"
-        "Block attributes (semicolon-separated):\n"
-        "  color=#RRGGBB   text color\n"
-        "  bg=#RRGGBB      background color\n"
-        "  style=bold      bold | italic | underline (combinable with '|')\n"
-        "\n"
-        "Inside a yetty terminal, the input is rendered to a ydraw buffer\n"
-        "and emitted via OSC 600001 (YDRAW_BIN). Otherwise the raw input\n"
-        "is written through.\n"
-        "\n"
-        "Options:\n"
-        "  -w, --width=N        layout width in cells (default: term cols)\n"
-        "  -H, --height=N       layout height in cells (default: 0)\n"
-        "      --font-size=F    text size in pixels (default: 16)\n"
-        "  -n                   no trailing newline\n"
-        "  -l, --list           list available glyphs and exit\n"
-        "      --osc            force OSC emission even outside a yetty terminal\n"
-        "  -r, --raw            force raw passthrough (no rendering)\n"
-        "  -h, --help           show this help\n"
-        "\n"
-        "  Use '-' or no args to read from stdin.\n",
-        prog);
+            "Usage: %s [options] [text...]\n"
+            "\n"
+            "Echo text with embedded glyphs and styled blocks.\n"
+            "\n"
+            "Grammar:\n"
+            "  @name           shader glyph (e.g. @spinner, @heart)\n"
+            "  {attrs: text}   styled block (e.g. {color=#ff0000: hello})\n"
+            "  \\@ \\{ \\}        escaped literals\n"
+            "\n"
+            "Block attributes (semicolon-separated):\n"
+            "  color=#RRGGBB   text color\n"
+            "  bg=#RRGGBB      background color\n"
+            "  style=bold      bold | italic | underline (combinable with '|')\n"
+            "\n"
+            "Inside a yetty terminal, the input is rendered to a ydraw buffer\n"
+            "and emitted via OSC 600001 (YDRAW_BIN). Otherwise the raw input\n"
+            "is written through.\n"
+            "\n"
+            "Options:\n"
+            "  -w, --width=N        layout width in cells (default: term cols)\n"
+            "  -H, --height=N       layout height in cells (default: 0)\n"
+            "      --font-size=F    text size in pixels (default: 16)\n"
+            "  -n                   no trailing newline\n"
+            "  -l, --list           list available glyphs and exit\n"
+            "      --osc            force OSC emission even outside a yetty terminal\n"
+            "  -r, --raw            force raw passthrough (no rendering)\n"
+            "  -h, --help           show this help\n"
+            "\n"
+            "  Use '-' or no args to read from stdin.\n",
+            prog);
 }
 
 static void list_glyphs(FILE *out)
@@ -151,28 +151,46 @@ int main(int argc, char **argv)
     struct yecho_opts opts = {0};
 
     static const struct yetty_yplatform_option long_opts[] = {
-        {"width",     required_argument, NULL, 'w'},
-        {"height",    required_argument, NULL, 'H'},
+        {"width", required_argument, NULL, 'w'},
+        {"height", required_argument, NULL, 'H'},
         {"font-size", required_argument, NULL, OPT_FONT_SIZE},
-        {"list",      no_argument,       NULL, 'l'},
-        {"osc",       no_argument,       NULL, OPT_OSC},
-        {"raw",       no_argument,       NULL, 'r'},
-        {"help",      no_argument,       NULL, 'h'},
-        {NULL,        0,                 NULL, 0  },
+        {"list", no_argument, NULL, 'l'},
+        {"osc", no_argument, NULL, OPT_OSC},
+        {"raw", no_argument, NULL, 'r'},
+        {"help", no_argument, NULL, 'h'},
+        {NULL, 0, NULL, 0},
     };
 
     int c;
     while ((c = yetty_yplatform_getopt_long(argc, argv, "w:H:nlrh", long_opts, NULL)) != -1) {
         switch (c) {
-        case 'w':           opts.width_cells = atoi(yetty_yplatform_optarg); break;
-        case 'H':           opts.height_cells = atoi(yetty_yplatform_optarg); break;
-        case OPT_FONT_SIZE: opts.font_size = (float)atof(yetty_yplatform_optarg); break;
-        case 'n':           opts.no_newline = true; break;
-        case 'l':           opts.list_glyphs = true; break;
-        case OPT_OSC:       opts.force_osc = true; break;
-        case 'r':           opts.force_raw = true; break;
-        case 'h':           usage(stdout, argv[0]); return 0;
-        default:            usage(stderr, argv[0]); return 2;
+        case 'w':
+            opts.width_cells = atoi(yetty_yplatform_optarg);
+            break;
+        case 'H':
+            opts.height_cells = atoi(yetty_yplatform_optarg);
+            break;
+        case OPT_FONT_SIZE:
+            opts.font_size = (float)atof(yetty_yplatform_optarg);
+            break;
+        case 'n':
+            opts.no_newline = true;
+            break;
+        case 'l':
+            opts.list_glyphs = true;
+            break;
+        case OPT_OSC:
+            opts.force_osc = true;
+            break;
+        case 'r':
+            opts.force_raw = true;
+            break;
+        case 'h':
+            usage(stdout, argv[0]);
+            return 0;
+        default:
+            usage(stderr, argv[0]);
+            return 2;
         }
     }
 

@@ -52,31 +52,31 @@ struct yplot_opts {
 static void usage(FILE *out, const char *prog)
 {
     fprintf(out,
-        "Usage: %s [options] <expression> [<expression> ...]\n"
-        "\n"
-        "Emit a YPlot OSC envelope (YETTY_DCS_YDRAW_BIN, 600001) consumed\n"
-        "by the yetty ydraw scrolling layer.\n"
-        "\n"
-        "Multi-function syntax (yexpr-plot):\n"
-        "  '<expr>'                     single function (auto-named plot1)\n"
-        "  'f=expr; g=expr; ...'        named functions\n"
-        "  '@f.color=#RRGGBB; ...'      per-plot color overrides\n"
-        "\n"
-        "Options:\n"
-        "  -w, --width=N             plot width  in pixels (default 400)\n"
-        "  -H, --height=N            plot height in pixels (default 200)\n"
-        "      --xrange=lo..hi       X axis range (default -3.14..3.14)\n"
-        "      --yrange=lo..hi       Y axis range (default -1.5..1.5)\n"
-        "      --no-grid             disable the grid overlay\n"
-        "      --no-axes             disable the axes overlay\n"
-        "      --no-labels           disable axis labels\n"
-        "  -n                        no trailing newline after the OSC\n"
-        "  -h, --help                show this help\n"
-        "\n"
-        "Multiple <expression> args are joined with '; ' before parsing,\n"
-        "so quoting commas / semicolons inside one arg vs across many is\n"
-        "equivalent.\n",
-        prog);
+            "Usage: %s [options] <expression> [<expression> ...]\n"
+            "\n"
+            "Emit a YPlot OSC envelope (YETTY_DCS_YDRAW_BIN, 600001) consumed\n"
+            "by the yetty ydraw scrolling layer.\n"
+            "\n"
+            "Multi-function syntax (yexpr-plot):\n"
+            "  '<expr>'                     single function (auto-named plot1)\n"
+            "  'f=expr; g=expr; ...'        named functions\n"
+            "  '@f.color=#RRGGBB; ...'      per-plot color overrides\n"
+            "\n"
+            "Options:\n"
+            "  -w, --width=N             plot width  in pixels (default 400)\n"
+            "  -H, --height=N            plot height in pixels (default 200)\n"
+            "      --xrange=lo..hi       X axis range (default -3.14..3.14)\n"
+            "      --yrange=lo..hi       Y axis range (default -1.5..1.5)\n"
+            "      --no-grid             disable the grid overlay\n"
+            "      --no-axes             disable the axes overlay\n"
+            "      --no-labels           disable axis labels\n"
+            "  -n                        no trailing newline after the OSC\n"
+            "  -h, --help                show this help\n"
+            "\n"
+            "Multiple <expression> args are joined with '; ' before parsing,\n"
+            "so quoting commas / semicolons inside one arg vs across many is\n"
+            "equivalent.\n",
+            prog);
 }
 
 /* Parse "lo..hi" into two floats. Returns 0 on success, -1 on error. */
@@ -125,28 +125,32 @@ int main(int argc, char **argv)
         .w = 400.0f,
         .h = 200.0f,
         .x_min = -3.14159f,
-        .x_max =  3.14159f,
+        .x_max = 3.14159f,
         .y_min = -1.5f,
-        .y_max =  1.5f,
+        .y_max = 1.5f,
     };
 
     static const struct yetty_yplatform_option long_opts[] = {
-        {"width",     required_argument, NULL, 'w'},
-        {"height",    required_argument, NULL, 'H'},
-        {"xrange",    required_argument, NULL, OPT_XRANGE},
-        {"yrange",    required_argument, NULL, OPT_YRANGE},
-        {"no-grid",   no_argument,       NULL, OPT_NO_GRID},
-        {"no-axes",   no_argument,       NULL, OPT_NO_AXES},
-        {"no-labels", no_argument,       NULL, OPT_NO_LABELS},
-        {"help",      no_argument,       NULL, 'h'},
-        {NULL,        0,                 NULL, 0  },
+        {"width", required_argument, NULL, 'w'},
+        {"height", required_argument, NULL, 'H'},
+        {"xrange", required_argument, NULL, OPT_XRANGE},
+        {"yrange", required_argument, NULL, OPT_YRANGE},
+        {"no-grid", no_argument, NULL, OPT_NO_GRID},
+        {"no-axes", no_argument, NULL, OPT_NO_AXES},
+        {"no-labels", no_argument, NULL, OPT_NO_LABELS},
+        {"help", no_argument, NULL, 'h'},
+        {NULL, 0, NULL, 0},
     };
 
     int c;
     while ((c = yetty_yplatform_getopt_long(argc, argv, "w:H:nh", long_opts, NULL)) != -1) {
         switch (c) {
-        case 'w': opts.w = (float)atof(yetty_yplatform_optarg); break;
-        case 'H': opts.h = (float)atof(yetty_yplatform_optarg); break;
+        case 'w':
+            opts.w = (float)atof(yetty_yplatform_optarg);
+            break;
+        case 'H':
+            opts.h = (float)atof(yetty_yplatform_optarg);
+            break;
         case OPT_XRANGE:
             if (parse_range(yetty_yplatform_optarg, &opts.x_min, &opts.x_max) < 0) {
                 fprintf(stderr, "yplot: invalid xrange %s\n", yetty_yplatform_optarg);
@@ -161,12 +165,24 @@ int main(int argc, char **argv)
             }
             opts.y_range_set = true;
             break;
-        case OPT_NO_GRID:   opts.no_grid = true; break;
-        case OPT_NO_AXES:   opts.no_axes = true; break;
-        case OPT_NO_LABELS: opts.no_labels = true; break;
-        case 'n':           opts.no_newline = true; break;
-        case 'h':           usage(stdout, argv[0]); return 0;
-        default:            usage(stderr, argv[0]); return 2;
+        case OPT_NO_GRID:
+            opts.no_grid = true;
+            break;
+        case OPT_NO_AXES:
+            opts.no_axes = true;
+            break;
+        case OPT_NO_LABELS:
+            opts.no_labels = true;
+            break;
+        case 'n':
+            opts.no_newline = true;
+            break;
+        case 'h':
+            usage(stdout, argv[0]);
+            return 0;
+        default:
+            usage(stderr, argv[0]);
+            return 2;
         }
     }
 
@@ -201,9 +217,15 @@ int main(int argc, char **argv)
     size_t source_len = pos;
 
     uint32_t flags = YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS;
-    if (opts.no_grid)   flags &= ~YETTY_YPLOT_FLAG_GRID;
-    if (opts.no_axes)   flags &= ~YETTY_YPLOT_FLAG_AXES;
-    if (opts.no_labels) flags &= ~YETTY_YPLOT_FLAG_LABELS;
+    if (opts.no_grid) {
+        flags &= ~YETTY_YPLOT_FLAG_GRID;
+    }
+    if (opts.no_axes) {
+        flags &= ~YETTY_YPLOT_FLAG_AXES;
+    }
+    if (opts.no_labels) {
+        flags &= ~YETTY_YPLOT_FLAG_LABELS;
+    }
 
     struct yetty_yplot_render_config cfg = {
         .bounds_w = opts.w,
@@ -220,15 +242,14 @@ int main(int argc, char **argv)
      * eaten — better to be explicit). */
     if (!opts.x_range_set) {
         cfg.x_min = -3.14159f;
-        cfg.x_max =  3.14159f;
+        cfg.x_max = 3.14159f;
     }
     if (!opts.y_range_set) {
         cfg.y_min = -1.5f;
-        cfg.y_max =  1.5f;
+        cfg.y_max = 1.5f;
     }
 
-    struct yetty_ydraw_drawable_list_result rr =
-        yetty_yplot_render(source, source_len, &cfg);
+    struct yetty_ydraw_drawable_list_result rr = yetty_yplot_render(source, source_len, &cfg);
     free(source);
     if (YETTY_IS_ERR(rr)) {
         fprintf(stderr, "yplot: render failed: %s\n", rr.error.msg);

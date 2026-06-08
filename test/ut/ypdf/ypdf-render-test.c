@@ -25,20 +25,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define REQUIRE(cond, msg)                                                     \
-    do {                                                                       \
-        if (!(cond)) {                                                         \
-            fprintf(stderr, "FAIL: %s:%d: %s\n", __FILE__, __LINE__, msg);     \
-            return 1;                                                          \
-        }                                                                      \
+#define REQUIRE(cond, msg)                                                                         \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "FAIL: %s:%d: %s\n", __FILE__, __LINE__, msg);                         \
+            return 1;                                                                              \
+        }                                                                                          \
     } while (0)
 
 #ifndef YPDF_TEST_PDF
 #define YPDF_TEST_PDF "test-comprehensive.pdf"
 #endif
 
-static bool error_cb(struct _pdfio_file_s *f, const char *s, void *d) {
-    (void)f; (void)d;
+static bool error_cb(struct _pdfio_file_s *f, const char *s, void *d)
+{
+    (void)f;
+    (void)d;
     fprintf(stderr, "pdfio: %s\n", s);
     return true;
 }
@@ -50,31 +52,37 @@ struct drawable_counts {
 };
 
 static struct drawable_counts count_prims(struct yetty_ydraw_drawable_list *buf,
-                                      struct yetty_ydraw_drawable_list_registry *reg)
+                                          struct yetty_ydraw_drawable_list_registry *reg)
 {
     struct drawable_counts c = {0};
-    struct yetty_ydraw_drawable_iter_result ir =
-        yetty_ydraw_drawable_list_drawable_first(buf, reg);
-    if (YETTY_IS_ERR(ir))
+    struct yetty_ydraw_drawable_iter_result ir = yetty_ydraw_drawable_list_drawable_first(buf, reg);
+    if (YETTY_IS_ERR(ir)) {
         return c;
+    }
     struct yetty_ydraw_drawable_iter it = ir.value;
     for (;;) {
         uint32_t t = it.fw.data[0];
-        if (t == YETTY_YDRAW_RESOURCE_FONT)            c.fonts++;
-        else if (t == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST)  c.text_spans++;
-        else                                        c.other++;
+        if (t == YETTY_YDRAW_RESOURCE_FONT) {
+            c.fonts++;
+        } else if (t == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
+            c.text_spans++;
+        } else {
+            c.other++;
+        }
 
         struct yetty_ydraw_drawable_iter_result nx =
             yetty_ydraw_drawable_list_drawable_next(buf, reg, &it);
-        if (YETTY_IS_ERR(nx)) break;
+        if (YETTY_IS_ERR(nx)) {
+            break;
+        }
         it = nx.value;
     }
     return c;
 }
 
-int main(void) {
-    struct _pdfio_file_s *pdf = pdfioFileOpen(YPDF_TEST_PDF, NULL, NULL,
-                                      error_cb, NULL);
+int main(void)
+{
+    struct _pdfio_file_s *pdf = pdfioFileOpen(YPDF_TEST_PDF, NULL, NULL, error_cb, NULL);
     REQUIRE(pdf, "pdfioFileOpen failed");
 
     struct yetty_ypdf_render_result res = yetty_ypdf_render_pdf(pdf);
@@ -102,8 +110,7 @@ int main(void) {
 
     printf("OK: %d pages, %u FONT prims, %u TEXT_DRAWABLE_LIST prims, %u other, "
            "total_h=%.1f\n",
-           out->page_count, c.fonts, c.text_spans, c.other,
-           out->total_height);
+           out->page_count, c.fonts, c.text_spans, c.other, out->total_height);
 
     yetty_ydraw_drawable_list_registry_destroy(reg);
     yetty_ydraw_drawable_list_destroy(out->buffer);

@@ -28,6 +28,12 @@ struct yetty_yvterm_content_layer {
      * skips the ydraw pass (the shader-glyph + root container carry the
      * new-OSC stack) and renders only the text grid. */
     int new_osc_path_active;
+
+    /* Optional terminal-level hook fired after the sub-renderers are cleared on
+     * a full-screen erase (CSI 2J/3J or RIS). The terminal registers it to also
+     * clear its root figure container, which the sub-renderers don't own. */
+    yetty_yvterm_content_clear_hook_fn clear_hook_fn;
+    void *clear_hook_userdata;
 };
 
 /*-----------------------------------------------------------------------
@@ -120,6 +126,12 @@ static struct yetty_ycore_void_result content_on_clear_screen(void *userdata)
             YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
                                 "content_on_clear_screen: layer clear_screen failed");
         }
+    }
+    /* Then let the terminal wipe state the sub-renderers don't own — the root
+     * figure container (positioned compositor figures: yview, ygui, …). */
+    if (content->clear_hook_fn) {
+        struct yetty_ycore_void_result r = content->clear_hook_fn(content->clear_hook_userdata);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "content_on_clear_screen: clear hook failed");
     }
     return YETTY_OK_VOID();
 }
@@ -530,4 +542,14 @@ struct yetty_ycore_void_result yetty_yvterm_content_layer_register_wire(
                             "content_layer_register_wire: register ydraw DCS code failed");
     }
     return YETTY_OK_VOID();
+}
+
+void yetty_yvterm_content_layer_set_clear_hook(struct yetty_yrender_terminal_layer *self,
+                                               yetty_yvterm_content_clear_hook_fn fn,
+                                               void *userdata)
+{
+    struct yetty_yvterm_content_layer *content =
+        container_of(self, struct yetty_yvterm_content_layer, base);
+    content->clear_hook_fn = fn;
+    content->clear_hook_userdata = userdata;
 }

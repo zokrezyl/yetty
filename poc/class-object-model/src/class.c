@@ -18,7 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct class {
+struct class
+{
     const struct class_descriptor *desc;
     const struct class *parent;
     const struct class **mixins;
@@ -38,8 +39,8 @@ struct class {
 };
 
 struct slot_entry {
-    char *qname;             /* owned: "<domain>_<local_name>" */
-    const char *local_name;  /* points into qname after the boundary */
+    char *qname;            /* owned: "<domain>_<local_name>" */
+    const char *local_name; /* points into qname after the boundary */
     method_id_t local_id;
     method_slot slot_index;  /* packed (domain_id, local_idx) */
     UT_hash_handle hh_lname; /* by local_name within the per-domain table */
@@ -109,8 +110,7 @@ struct slot_table_ptr_result slot_table_get(const char *domain)
     return YETTY_OK(slot_table_ptr, tbl);
 }
 
-struct method_slot_result method_slot_register(const char *domain, const char *name,
-                                               method_id_t id)
+struct method_slot_result method_slot_register(const char *domain, const char *name, method_id_t id)
 {
     ydebug("domain=%s name=%s id=%p", domain ? domain : "(null)", name ? name : "(null)",
            (void *)id);
@@ -353,9 +353,8 @@ struct class_ptr_result class_register(const struct class_descriptor *desc, cons
                                        size_t ops_count, const struct class *parent,
                                        const struct class *const *mixins, size_t mixin_count)
 {
-    ydebug("class=%s ops=%zu parent=%s mixins=%zu",
-           desc && desc->name ? desc->name : "(null)", ops_count,
-           parent && parent->desc ? parent->desc->name : "(none)", mixin_count);
+    ydebug("class=%s ops=%zu parent=%s mixins=%zu", desc && desc->name ? desc->name : "(null)",
+           ops_count, parent && parent->desc ? parent->desc->name : "(none)", mixin_count);
     if (!desc) {
         return YETTY_ERR(class_ptr, "class_register: NULL descriptor");
     }
@@ -489,8 +488,7 @@ struct class_ptr_result class_by_name(const char *name)
 }
 
 void class_for_each_slot(const struct class *cls,
-                         void (*cb)(const char *name, method_slot slot, void *ud),
-                         void *userdata)
+                         void (*cb)(const char *name, method_slot slot, void *ud), void *userdata)
 {
     ydebug("cls=%s", cls && cls->desc ? cls->desc->name : "(null)");
     if (!cls || !cb) {
@@ -535,9 +533,10 @@ void object_free(struct object *obj)
 }
 
 struct yetty_ycore_size_result object_data_offset(const struct class *obj_class,
-                                                   const struct class *target)
+                                                  const struct class *target)
 {
-    ydebug("obj_class=%s target=%s", obj_class && obj_class->desc ? obj_class->desc->name : "(null)",
+    ydebug("obj_class=%s target=%s",
+           obj_class && obj_class->desc ? obj_class->desc->name : "(null)",
            target && target->desc ? target->desc->name : "(null)");
     if (!obj_class || !target) {
         return YETTY_ERR(yetty_ycore_size, "object_data_offset: NULL class");

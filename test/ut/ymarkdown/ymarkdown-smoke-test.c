@@ -17,12 +17,12 @@
 #include <yetty/ymarkdown/ymarkdown.h>
 #include <yetty/ysdf/types.gen.h>
 
-#define REQUIRE(cond, msg)                                                       \
-    do {                                                                         \
-        if (!(cond)) {                                                           \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, msg);        \
-            return 1;                                                            \
-        }                                                                        \
+#define REQUIRE(cond, msg)                                                                         \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, msg);                          \
+            return 1;                                                                              \
+        }                                                                                          \
     } while (0)
 
 /* Count word-pattern occurrences of `tag` (host byte order) anywhere in the
@@ -61,8 +61,7 @@ static int render_counts(const char *md, struct counts *out)
         .width_cells = 80,
         .height_cells = 24,
     };
-    struct yetty_ymarkdown_render_result r =
-        yetty_ymarkdown_render(md, strlen(md), NULL, 0, &cfg);
+    struct yetty_ymarkdown_render_result r = yetty_ymarkdown_render(md, strlen(md), NULL, 0, &cfg);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return -1;
@@ -123,24 +122,23 @@ int main(void)
     REQUIRE(c.boxes >= 1, "strikethrough emits a line box");
 
     /* 9. The kitchen-sink document renders cleanly and is non-trivial. */
-    const char *all =
-        "# Title\n"
-        "\n"
-        "Body with **bold**, *italic*, `code`, ~~strike~~ and a [link](http://x).\n"
-        "\n"
-        "1. one\n"
-        "2. two\n"
-        "\n"
-        "> a quote\n"
-        "\n"
-        "| key | value |\n"
-        "|:----|------:|\n"
-        "| a   | 1     |\n"
-        "| b   | 2     |\n"
-        "\n"
-        "```\ncode block\n```\n"
-        "\n"
-        "---\n";
+    const char *all = "# Title\n"
+                      "\n"
+                      "Body with **bold**, *italic*, `code`, ~~strike~~ and a [link](http://x).\n"
+                      "\n"
+                      "1. one\n"
+                      "2. two\n"
+                      "\n"
+                      "> a quote\n"
+                      "\n"
+                      "| key | value |\n"
+                      "|:----|------:|\n"
+                      "| a   | 1     |\n"
+                      "| b   | 2     |\n"
+                      "\n"
+                      "```\ncode block\n```\n"
+                      "\n"
+                      "---\n";
     REQUIRE(render_counts(all, &c) == 0, "kitchen-sink render");
     REQUIRE(c.bytes > 0, "kitchen-sink non-empty");
     REQUIRE(c.segments >= 6, "kitchen-sink table grid present");

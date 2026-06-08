@@ -26,22 +26,21 @@ struct rpc_session;
 /* Wire-bytes → typed-call bridge for one slot. Generator emits one body
  * per method; the RPC layer owns the slot→skel table. The class layer
  * is unaware of this type. */
-typedef size_t (*rpc_skel_fn)(const void *body, size_t body_len,
-                              void *resp, size_t resp_max);
+typedef size_t (*rpc_skel_fn)(const void *body, size_t body_len, void *resp, size_t resp_max);
 
 enum rpc_op {
-    RPC_OP_CALL = 0,        /* id = slot index; body = packed args */
-    RPC_OP_RESOLVE_SLOT,    /* body = slot name; resp = u32 server slot id */
-    RPC_OP_GET_CLASS,       /* body = class name; resp = (u16 nl, name, u32 id)* */
-    RPC_OP_CREATE,          /* body = class name; resp = u64 handle */
+    RPC_OP_CALL = 0,     /* id = slot index; body = packed args */
+    RPC_OP_RESOLVE_SLOT, /* body = slot name; resp = u32 server slot id */
+    RPC_OP_GET_CLASS,    /* body = class name; resp = (u16 nl, name, u32 id)* */
+    RPC_OP_CREATE,       /* body = class name; resp = u64 handle */
 };
 
-#define RPC_OP_SHIFT        28
-#define RPC_OP_MASK         0xFu
-#define RPC_ID_MASK         0x0FFFFFFFu
+#define RPC_OP_SHIFT 28
+#define RPC_OP_MASK 0xFu
+#define RPC_ID_MASK 0x0FFFFFFFu
 #define RPC_HDR_MAKE(op, id) (((uint32_t)(op) << RPC_OP_SHIFT) | ((id) & RPC_ID_MASK))
-#define RPC_HDR_OP(h)        ((enum rpc_op)(((h) >> RPC_OP_SHIFT) & RPC_OP_MASK))
-#define RPC_HDR_ID(h)        ((h) & RPC_ID_MASK)
+#define RPC_HDR_OP(h) ((enum rpc_op)(((h) >> RPC_OP_SHIFT) & RPC_OP_MASK))
+#define RPC_HDR_ID(h) ((h) & RPC_ID_MASK)
 
 /* ---- Server side -------------------------------------------------- */
 
@@ -66,9 +65,8 @@ struct rpc_session *rpc_session_create(int fd);
 void rpc_session_destroy(struct rpc_session *s);
 
 /* Generic call. Packs (op, id) into the wire header. */
-size_t rpc_call(struct rpc_session *s, enum rpc_op op, uint32_t id,
-                const void *body, size_t body_len,
-                void *resp, size_t resp_max);
+size_t rpc_call(struct rpc_session *s, enum rpc_op op, uint32_t id, const void *body,
+                size_t body_len, void *resp, size_t resp_max);
 
 /* T2 translation table — indexed by local slot. UINT32_MAX = unresolved
  * (no valid wire id can be ≥ 2^28 since the wire reserves the top 4
@@ -76,8 +74,7 @@ size_t rpc_call(struct rpc_session *s, enum rpc_op op, uint32_t id,
 #define RPC_REMOTE_ID_UNRESOLVED UINT32_MAX
 
 uint32_t rpc_session_remote_id(struct rpc_session *s, method_slot local_slot);
-void rpc_session_set_remote_id(struct rpc_session *s, method_slot local_slot,
-                               uint32_t remote_id);
+void rpc_session_set_remote_id(struct rpc_session *s, method_slot local_slot, uint32_t remote_id);
 
 /* Batched per-class trigger. Sends GET_CLASS, parses entries, populates
  * the session xlat for every slot of `class_name` the client knows.

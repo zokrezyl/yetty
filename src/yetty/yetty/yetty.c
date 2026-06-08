@@ -151,8 +151,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
         ytime_start(workspace_render);
         if (yetty->tabbar) {
-            struct yetty_ycore_void_result res =
-                yetty_yui_tabbar_model_render(yetty->tabbar, yetty->runtime->render_target, yui_force);
+            struct yetty_ycore_void_result res = yetty_yui_tabbar_model_render(
+                yetty->tabbar, yetty->runtime->render_target, yui_force);
             if (!YETTY_IS_OK(res)) {
                 yerror("yetty: tabbar render failed: %s", res.error.msg);
             }
@@ -336,7 +336,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
                 {
                     struct yetty_ycore_int_result drop_r =
                         yetty_yui_tabbar_model_on_event(yetty->tabbar, &apply);
-                    YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_model_on_event");
+                    YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r,
+                                        "drop: yetty_yui_tabbar_model_on_event");
                 }
             }
         }
@@ -461,7 +462,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
             {
                 struct yetty_ycore_int_result drop_r =
                     yetty_yui_tabbar_model_on_event(yetty->tabbar, event);
-                YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_model_on_event");
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r,
+                                    "drop: yetty_yui_tabbar_model_on_event");
             }
         }
         return YETTY_OK(yetty_ycore_int, 1);
@@ -510,8 +512,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
         }
         if (yetty->tabbar) {
             {
-                struct yetty_ycore_void_result drop_r =
-                    yetty_yui_tabbar_model_resize(yetty->tabbar, (float)width, ws_height, (float)height);
+                struct yetty_ycore_void_result drop_r = yetty_yui_tabbar_model_resize(
+                    yetty->tabbar, (float)width, ws_height, (float)height);
                 YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_model_resize");
             }
         }
@@ -570,8 +572,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
     if (event->type == YETTY_YCORE_PANE_CREATE) {
         if (yetty->tabbar) {
-            struct yetty_yui_workspace *ws =
-                yetty_yui_tabbar_model_find_workspace(yetty->tabbar, event->pane_create.workspace_id);
+            struct yetty_yui_workspace *ws = yetty_yui_tabbar_model_find_workspace(
+                yetty->tabbar, event->pane_create.workspace_id);
             if (!ws) {
                 ywarn("yetty: PANE_CREATE: workspace %llu not found",
                       (unsigned long long)event->pane_create.workspace_id);
@@ -639,8 +641,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
     if (event->type == YETTY_YCORE_PANE_SPLIT) {
         if (yetty->tabbar) {
-            struct yetty_yui_workspace *ws =
-                yetty_yui_tabbar_model_find_workspace(yetty->tabbar, event->pane_split.workspace_id);
+            struct yetty_yui_workspace *ws = yetty_yui_tabbar_model_find_workspace(
+                yetty->tabbar, event->pane_split.workspace_id);
             if (!ws) {
                 ywarn("yetty: PANE_SPLIT: workspace %llu not found",
                       (unsigned long long)event->pane_split.workspace_id);
@@ -707,8 +709,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
     if (event->type == YETTY_YCORE_SPLIT_RESIZE) {
         if (yetty->tabbar) {
-            struct yetty_yui_workspace *ws =
-                yetty_yui_tabbar_model_find_workspace(yetty->tabbar, event->split_resize.workspace_id);
+            struct yetty_yui_workspace *ws = yetty_yui_tabbar_model_find_workspace(
+                yetty->tabbar, event->split_resize.workspace_id);
             if (ws) {
                 struct yetty_ycore_void_result r = yetty_yui_workspace_resize_split(
                     ws, event->split_resize.split_id, event->split_resize.ratio);
@@ -743,7 +745,8 @@ static struct yetty_ycore_int_result yetty_event_handler(
             {
                 struct yetty_ycore_int_result drop_r =
                     yetty_yui_tabbar_model_on_event(yetty->tabbar, event);
-                YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "drop: yetty_yui_tabbar_model_on_event");
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r,
+                                    "drop: yetty_yui_tabbar_model_on_event");
             }
         }
         if (yetty->event_loop && yetty->event_loop->ops->stop) {
@@ -1158,7 +1161,8 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
     default:
         return;
     }
-    struct yetty_ycore_void_result r = yetty_yui_tabbar_model_add_workspace_of_kind(yetty->tabbar, tk);
+    struct yetty_ycore_void_result r =
+        yetty_yui_tabbar_model_add_workspace_of_kind(yetty->tabbar, tk);
     if (YETTY_IS_ERR(r)) {
         /* Surface the failure as an in-canvas toast so the user actually
          * sees it — silent failure was the original Telnet/SSH bug. The
@@ -1299,8 +1303,8 @@ struct yetty_yetty_yetty_result yetty_create(struct yetty_yframework *runtime,
 #endif
     if (needs_console_telnet_pair) {
         ydebug("yetty_create: %s — adding telnet tab", which);
-        struct yetty_ycore_void_result tab2_res =
-            yetty_yui_tabbar_model_add_workspace_from_config(yetty->tabbar, config, &yetty->context);
+        struct yetty_ycore_void_result tab2_res = yetty_yui_tabbar_model_add_workspace_from_config(
+            yetty->tabbar, config, &yetty->context);
         if (!YETTY_IS_OK(tab2_res)) {
             yerror("yetty_create: failed to add telnet tab: %s", tab2_res.error.msg);
             yetty_ycore_error_destroy(tab2_res.error);

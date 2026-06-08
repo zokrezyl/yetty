@@ -30,7 +30,7 @@ struct yetty_ychrome_host {
 static struct yetty_yclass_object *caption_figure_obj(struct yetty_ychrome_host *host)
 {
     struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(host->caption);
-    return (struct yetty_yclass_object *)(fig) - 1;
+    return (struct yetty_yclass_object *)(fig)-1;
 }
 
 /* Repaint: ychrome renders its caption to a drawable list (pure ydraw); load
@@ -90,19 +90,17 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
     host->chrome = chrome_r.value;
     host->caption_height = caption_height;
 
-    struct yetty_ycore_void_result cfg = yetty_ychrome_configure(
-        NULL, host->chrome, window_manager, caption_height, edge_size, flags);
+    struct yetty_ycore_void_result cfg = yetty_ychrome_configure(NULL, host->chrome, window_manager,
+                                                                 caption_height, edge_size, flags);
     if (YETTY_IS_ERR(cfg)) {
         yetty_ycore_error_destroy(cfg.error);
     }
-    struct yetty_ycore_void_result sz =
-        yetty_ychrome_set_size(NULL, host->chrome, width, height);
+    struct yetty_ycore_void_result sz = yetty_ychrome_set_size(NULL, host->chrome, width, height);
     if (YETTY_IS_ERR(sz)) {
         yetty_ycore_error_destroy(sz.error);
     }
 
-    struct yetty_ycore_rectangle rect = {.min = {0.0f, 0.0f},
-                                         .max = {width, caption_height}};
+    struct yetty_ycore_rectangle rect = {.min = {0.0f, 0.0f}, .max = {width, caption_height}};
     struct yetty_ygrid_grid_ptr_result gr = yetty_ygrid_create(rect, 1, 1, ctx);
     if (YETTY_IS_ERR(gr)) {
         free(host);
@@ -116,7 +114,7 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
         }
     }
     struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(host->caption);
-    struct yetty_yclass_object *fobj = (struct yetty_yclass_object *)(fig) - 1;
+    struct yetty_yclass_object *fobj = (struct yetty_yclass_object *)(fig)-1;
     struct yetty_ycore_void_result ar = yetty_yfigure_figure_absolute_coords_set(fobj, 1);
     if (YETTY_IS_ERR(ar)) {
         yetty_ycore_error_destroy(ar.error);
@@ -171,14 +169,13 @@ struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_h
     if (!host) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result sz =
-        yetty_ychrome_set_size(NULL, host->chrome, width, height);
+    struct yetty_ycore_void_result sz = yetty_ychrome_set_size(NULL, host->chrome, width, height);
     if (YETTY_IS_ERR(sz)) {
         yetty_ycore_error_destroy(sz.error);
     }
-    struct yetty_ycore_rectangle rect = {.min = {0.0f, 0.0f},
-                                         .max = {width, host->caption_height}};
-    struct yetty_ycore_void_result rr = yetty_yfigure_figure_rect_set(caption_figure_obj(host), rect);
+    struct yetty_ycore_rectangle rect = {.min = {0.0f, 0.0f}, .max = {width, host->caption_height}};
+    struct yetty_ycore_void_result rr =
+        yetty_yfigure_figure_rect_set(caption_figure_obj(host), rect);
     if (YETTY_IS_ERR(rr)) {
         yetty_ycore_error_destroy(rr.error);
     }

@@ -59,29 +59,29 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
 static void usage(FILE *out, const char *prog)
 {
     fprintf(out,
-        "Usage: %s [options] [file]\n"
-        "\n"
-        "Render folded stacks (perf/FlameGraph format) as a flame-graph OSC\n"
-        "envelope (YETTY_DCS_YDRAW_BIN, 600001) for the yetty ydraw layer.\n"
-        "Reads from <file>, or stdin when no file is given.\n"
-        "\n"
-        "Input format (one collapsed stack per line):\n"
-        "  main;parse;lex 42\n"
-        "\n"
-        "Options:\n"
-        "  -w, --width=N         graph width in pixels (default 1200)\n"
-        "  -f, --frame-height=N  height per stack level in pixels (default 18)\n"
-        "      --min-width=N     skip boxes narrower than N pixels (default 0.5)\n"
-        "      --icicle          root at the top, growing downward\n"
-        "      --no-labels       omit frame-name labels\n"
-        "  -I, --interactive     live figure: hover highlights, left-click zooms\n"
-        "                        in, right-click/Esc zooms out, q quits (in yetty)\n"
-        "  -n                    no trailing newline\n"
-        "  -h, --help            show this help\n"
-        "\n"
-        "Example:\n"
-        "  perf script | stackcollapse-perf.pl | %s\n",
-        prog, prog);
+            "Usage: %s [options] [file]\n"
+            "\n"
+            "Render folded stacks (perf/FlameGraph format) as a flame-graph OSC\n"
+            "envelope (YETTY_DCS_YDRAW_BIN, 600001) for the yetty ydraw layer.\n"
+            "Reads from <file>, or stdin when no file is given.\n"
+            "\n"
+            "Input format (one collapsed stack per line):\n"
+            "  main;parse;lex 42\n"
+            "\n"
+            "Options:\n"
+            "  -w, --width=N         graph width in pixels (default 1200)\n"
+            "  -f, --frame-height=N  height per stack level in pixels (default 18)\n"
+            "      --min-width=N     skip boxes narrower than N pixels (default 0.5)\n"
+            "      --icicle          root at the top, growing downward\n"
+            "      --no-labels       omit frame-name labels\n"
+            "  -I, --interactive     live figure: hover highlights, left-click zooms\n"
+            "                        in, right-click/Esc zooms out, q quits (in yetty)\n"
+            "  -n                    no trailing newline\n"
+            "  -h, --help            show this help\n"
+            "\n"
+            "Example:\n"
+            "  perf script | stackcollapse-perf.pl | %s\n",
+            prog, prog);
 }
 
 /* Read the whole stream into a heap buffer. Returns NULL on error. */
@@ -125,28 +125,46 @@ int main(int argc, char **argv)
     };
 
     static const struct yetty_yplatform_option long_opts[] = {
-        {"width",        required_argument, NULL, 'w'},
+        {"width", required_argument, NULL, 'w'},
         {"frame-height", required_argument, NULL, 'f'},
-        {"min-width",    required_argument, NULL, OPT_MIN_WIDTH},
-        {"icicle",       no_argument,       NULL, OPT_ICICLE},
-        {"no-labels",    no_argument,       NULL, OPT_NO_LABELS},
-        {"interactive",  no_argument,       NULL, 'I'},
-        {"help",         no_argument,       NULL, 'h'},
+        {"min-width", required_argument, NULL, OPT_MIN_WIDTH},
+        {"icicle", no_argument, NULL, OPT_ICICLE},
+        {"no-labels", no_argument, NULL, OPT_NO_LABELS},
+        {"interactive", no_argument, NULL, 'I'},
+        {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0},
     };
 
     int c;
     while ((c = yetty_yplatform_getopt_long(argc, argv, "w:f:nhI", long_opts, NULL)) != -1) {
         switch (c) {
-        case 'w':           opts.width = (float)atof(yetty_yplatform_optarg); break;
-        case 'f':           opts.frame_height = (float)atof(yetty_yplatform_optarg); break;
-        case OPT_MIN_WIDTH: opts.min_width = (float)atof(yetty_yplatform_optarg); break;
-        case OPT_ICICLE:    opts.icicle = true; break;
-        case OPT_NO_LABELS: opts.no_labels = true; break;
-        case 'I':           opts.interactive = true; break;
-        case 'n':           opts.no_newline = true; break;
-        case 'h':           usage(stdout, argv[0]); return 0;
-        default:            usage(stderr, argv[0]); return 2;
+        case 'w':
+            opts.width = (float)atof(yetty_yplatform_optarg);
+            break;
+        case 'f':
+            opts.frame_height = (float)atof(yetty_yplatform_optarg);
+            break;
+        case OPT_MIN_WIDTH:
+            opts.min_width = (float)atof(yetty_yplatform_optarg);
+            break;
+        case OPT_ICICLE:
+            opts.icicle = true;
+            break;
+        case OPT_NO_LABELS:
+            opts.no_labels = true;
+            break;
+        case 'I':
+            opts.interactive = true;
+            break;
+        case 'n':
+            opts.no_newline = true;
+            break;
+        case 'h':
+            usage(stdout, argv[0]);
+            return 0;
+        default:
+            usage(stderr, argv[0]);
+            return 2;
         }
     }
 

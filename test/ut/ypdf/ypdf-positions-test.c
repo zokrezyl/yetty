@@ -52,23 +52,23 @@
 #include "pdf-sample-expected-lines.h"
 #include "pdf-sample-expected-chars.h"
 
-#define REQUIRE(cond, msg)                                                                        \
-    do {                                                                                          \
-        if (!(cond)) {                                                                            \
-            fprintf(stderr, "FAIL: %s:%d: %s\n", __FILE__, __LINE__, msg);                        \
-            return 1;                                                                             \
-        }                                                                                         \
+#define REQUIRE(cond, msg)                                                                         \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            fprintf(stderr, "FAIL: %s:%d: %s\n", __FILE__, __LINE__, msg);                         \
+            return 1;                                                                              \
+        }                                                                                          \
     } while (0)
 
-#define REQUIRE_NEAR(actual, expected, tol, label)                                                \
-    do {                                                                                          \
-        float _a = (float)(actual);                                                               \
-        float _e = (float)(expected);                                                             \
-        if (fabsf(_a - _e) > (float)(tol)) {                                                      \
-            fprintf(stderr, "FAIL: %s:%d: %s: got %.3f, expected %.3f ± %.3f\n", __FILE__,        \
-                    __LINE__, label, _a, _e, (float)(tol));                                       \
-            return 1;                                                                             \
-        }                                                                                         \
+#define REQUIRE_NEAR(actual, expected, tol, label)                                                 \
+    do {                                                                                           \
+        float _a = (float)(actual);                                                                \
+        float _e = (float)(expected);                                                              \
+        if (fabsf(_a - _e) > (float)(tol)) {                                                       \
+            fprintf(stderr, "FAIL: %s:%d: %s: got %.3f, expected %.3f ± %.3f\n", __FILE__,         \
+                    __LINE__, label, _a, _e, (float)(tol));                                        \
+            return 1;                                                                              \
+        }                                                                                          \
     } while (0)
 
 #ifndef YPDF_TEST_PDF
@@ -85,8 +85,7 @@ static bool error_cb(struct _pdfio_file_s *f, const char *s, void *d)
 
 /* True if `view->text` contains `needle` as a substring. text is NOT
  * NUL-terminated. */
-static int text_contains(const struct yetty_ydraw_text_drawable_list_view *view,
-                         const char *needle)
+static int text_contains(const struct yetty_ydraw_text_drawable_list_view *view, const char *needle)
 {
     size_t nlen = strlen(needle);
     if (nlen == 0 || view->text_len < nlen) {
@@ -103,7 +102,7 @@ static int text_contains(const struct yetty_ydraw_text_drawable_list_view *view,
 struct span_summary {
     uint32_t total_spans;
     uint32_t spans_with_text;
-    uint32_t spans_at_same_xy;     /* count of spans whose (x, y) collides */
+    uint32_t spans_at_same_xy; /* count of spans whose (x, y) collides */
     float min_x, max_x;
     float min_y, max_y;
     float min_font_size, max_font_size;
@@ -121,7 +120,8 @@ int main(void)
     REQUIRE(out->buffer, "buffer is NULL");
     REQUIRE(out->page_count == 1, "expected 1 page");
 
-    struct yetty_ydraw_drawable_list_registry_ptr_result rfr = yetty_ydraw_drawable_list_registry_create_default();
+    struct yetty_ydraw_drawable_list_registry_ptr_result rfr =
+        yetty_ydraw_drawable_list_registry_create_default();
     REQUIRE(rfr.ok, "drawable-list entry_create failed");
     struct yetty_ydraw_drawable_list_registry *reg = rfr.value;
 
@@ -148,7 +148,7 @@ int main(void)
     int found_body = 0;
     float body_min_x = 1e9f;
     float body_size = 0;
-    int found_print = 0;            /* second-half text on page */
+    int found_print = 0; /* second-half text on page */
     float print_y = 0;
 
     struct yetty_ydraw_drawable_iter_result ir =
@@ -167,22 +167,32 @@ int main(void)
                     size_t n = v.text_len < sizeof(snippet) - 1 ? v.text_len : sizeof(snippet) - 1;
                     memcpy(snippet, v.text, n);
                     snippet[n] = '\0';
-                    fprintf(stderr,
-                            "  span[%2d] x=%7.2f y=%7.2f sz=%5.2f font=%2d text='%s'\n",
+                    fprintf(stderr, "  span[%2d] x=%7.2f y=%7.2f sz=%5.2f font=%2d text='%s'\n",
                             dump_count - 1, v.x, v.y, v.font_size, v.font_id, snippet);
                 }
                 sum.total_spans++;
                 if (v.text_len > 0) {
                     sum.spans_with_text++;
                 }
-                if (v.x < sum.min_x) sum.min_x = v.x;
-                if (v.x > sum.max_x) sum.max_x = v.x;
-                if (v.y < sum.min_y) sum.min_y = v.y;
-                if (v.y > sum.max_y) sum.max_y = v.y;
-                if (v.font_size < sum.min_font_size) sum.min_font_size = v.font_size;
-                if (v.font_size > sum.max_font_size) sum.max_font_size = v.font_size;
-                if (prev_x >= 0 && fabsf(v.x - prev_x) < 0.001f &&
-                    fabsf(v.y - prev_y) < 0.001f) {
+                if (v.x < sum.min_x) {
+                    sum.min_x = v.x;
+                }
+                if (v.x > sum.max_x) {
+                    sum.max_x = v.x;
+                }
+                if (v.y < sum.min_y) {
+                    sum.min_y = v.y;
+                }
+                if (v.y > sum.max_y) {
+                    sum.max_y = v.y;
+                }
+                if (v.font_size < sum.min_font_size) {
+                    sum.min_font_size = v.font_size;
+                }
+                if (v.font_size > sum.max_font_size) {
+                    sum.max_font_size = v.font_size;
+                }
+                if (prev_x >= 0 && fabsf(v.x - prev_x) < 0.001f && fabsf(v.y - prev_y) < 0.001f) {
                     sum.spans_at_same_xy++;
                 }
                 prev_x = v.x;
@@ -212,7 +222,9 @@ int main(void)
         }
         struct yetty_ydraw_drawable_iter_result nx =
             yetty_ydraw_drawable_list_drawable_next(out->buffer, reg, &it);
-        if (!nx.ok) break;
+        if (!nx.ok) {
+            break;
+        }
         it = nx.value;
     }
 
@@ -296,8 +308,8 @@ int main(void)
     REQUIRE(ir2.ok, "iterator first (rescan) failed");
 
     const float Y_TOL = 2.0f;
-    const float X_LEFT_TOL = 5.0f;     /* leftmost x — ypdf's text matrix  */
-    const float X_RIGHT_TOL = 25.0f;   /* right edge — looser, font-dependent */
+    const float X_LEFT_TOL = 5.0f;   /* leftmost x — ypdf's text matrix  */
+    const float X_RIGHT_TOL = 25.0f; /* right edge — looser, font-dependent */
     const float SZ_TOL = 1.5f;
     const size_t n_lines = sizeof(EXPECTED_LINES) / sizeof(EXPECTED_LINES[0]);
     size_t matched_left = 0;
@@ -315,9 +327,8 @@ int main(void)
         for (;;) {
             if (it3.fw.data[0] == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
                 struct yetty_ydraw_text_drawable_list_view v;
-                if (yetty_ydraw_text_drawable_list_parse(it3.fw.data, &v) == 0 &&
-                    v.text_len > 0 && fabsf(v.y - ml->y) <= Y_TOL &&
-                    fabsf(v.font_size - ml->font_size) <= SZ_TOL) {
+                if (yetty_ydraw_text_drawable_list_parse(it3.fw.data, &v) == 0 && v.text_len > 0 &&
+                    fabsf(v.y - ml->y) <= Y_TOL && fabsf(v.font_size - ml->font_size) <= SZ_TOL) {
                     found = 1;
                     if (v.x < ypdf_left) {
                         ypdf_left = v.x;
@@ -331,7 +342,9 @@ int main(void)
             }
             struct yetty_ydraw_drawable_iter_result nx3 =
                 yetty_ydraw_drawable_list_drawable_next(out->buffer, reg, &it3);
-            if (!nx3.ok) break;
+            if (!nx3.ok) {
+                break;
+            }
             it3 = nx3.value;
         }
 
@@ -350,8 +363,12 @@ int main(void)
          * spans. Overestimate is OK (estimate is an upper bound). */
         int right_ok = ypdf_right_estimate + X_RIGHT_TOL >= ml->x_right;
 
-        if (left_ok) matched_left++;
-        if (right_ok) matched_right++;
+        if (left_ok) {
+            matched_left++;
+        }
+        if (right_ok) {
+            matched_right++;
+        }
 
         if (!left_ok || !right_ok) {
             if (first_fail++ < 10) {
@@ -366,8 +383,7 @@ int main(void)
         }
     }
 
-    fprintf(stderr,
-            "per-line match: %zu/%zu lines found, %zu/%zu left-x ok, %zu/%zu right-x ok\n",
+    fprintf(stderr, "per-line match: %zu/%zu lines found, %zu/%zu left-x ok, %zu/%zu right-x ok\n",
             found_lines, n_lines, matched_left, n_lines, matched_right, n_lines);
 
     /* Every line must be present, every line's left-x must match within
@@ -375,8 +391,7 @@ int main(void)
      * edge (within wider tolerance). All three are required. */
     REQUIRE(found_lines == n_lines, "some text lines missing from ypdf output");
     REQUIRE(matched_left == n_lines, "some text lines have wrong leftmost-x");
-    REQUIRE(matched_right == n_lines,
-            "some text lines fall short on the right (cumulative drift)");
+    REQUIRE(matched_right == n_lines, "some text lines fall short on the right (cumulative drift)");
 
     /* === Per-character position match (strongest invariant) ============== *
      *
@@ -410,9 +425,8 @@ int main(void)
             struct yetty_ydraw_font_resource_view fv;
             if (yetty_ydraw_font_resource_parse(it4.fw.data, &fv) == 0 && fv.font_id >= 0 &&
                 fv.font_id < MAX_FONTS_LOCAL && fv.ttf && fv.ttf_len > 0) {
-                struct yetty_font_font_result rf =
-                    yetty_yfont_raster_font_create_from_data(fv.ttf, fv.ttf_len, "test", NULL,
-                                                             32.0f);
+                struct yetty_font_font_result rf = yetty_yfont_raster_font_create_from_data(
+                    fv.ttf, fv.ttf_len, "test", NULL, 32.0f);
                 if (rf.ok) {
                     fonts[fv.font_id] = rf.value;
                     loaded_fonts++;
@@ -421,7 +435,9 @@ int main(void)
         }
         struct yetty_ydraw_drawable_iter_result nx4 =
             yetty_ydraw_drawable_list_drawable_next(out->buffer, reg, &it4);
-        if (!nx4.ok) break;
+        if (!nx4.ok) {
+            break;
+        }
         it4 = nx4.value;
     }
     fprintf(stderr, "loaded %d fonts from FONT prims for per-char layout sim\n", loaded_fonts);
@@ -453,12 +469,21 @@ int main(void)
                 while (k < v.text_len) {
                     unsigned char c0 = (unsigned char)v.text[k];
                     int seqlen;
-                    if (c0 < 0x80) seqlen = 1;
-                    else if ((c0 & 0xE0) == 0xC0) seqlen = 2;
-                    else if ((c0 & 0xF0) == 0xE0) seqlen = 3;
-                    else if ((c0 & 0xF8) == 0xF0) seqlen = 4;
-                    else { k++; continue; }
-                    if (k + (uint32_t)seqlen > v.text_len) break;
+                    if (c0 < 0x80) {
+                        seqlen = 1;
+                    } else if ((c0 & 0xE0) == 0xC0) {
+                        seqlen = 2;
+                    } else if ((c0 & 0xF0) == 0xE0) {
+                        seqlen = 3;
+                    } else if ((c0 & 0xF8) == 0xF0) {
+                        seqlen = 4;
+                    } else {
+                        k++;
+                        continue;
+                    }
+                    if (k + (uint32_t)seqlen > v.text_len) {
+                        break;
+                    }
 
                     struct float_result r =
                         f->ops->measure_text(f, v.text + k, (size_t)seqlen, v.font_size);
@@ -474,8 +499,12 @@ int main(void)
                         int hit = 0;
                         const size_t n_chars = sizeof(EXPECTED_CHARS) / sizeof(EXPECTED_CHARS[0]);
                         for (size_t mi = 0; mi < n_chars; mi++) {
-                            if ((unsigned char)EXPECTED_CHARS[mi].c != c0) continue;
-                            if (fabsf(EXPECTED_CHARS[mi].y - v.y) > CHAR_Y_TOL) continue;
+                            if ((unsigned char)EXPECTED_CHARS[mi].c != c0) {
+                                continue;
+                            }
+                            if (fabsf(EXPECTED_CHARS[mi].y - v.y) > CHAR_Y_TOL) {
+                                continue;
+                            }
                             if (fabsf(EXPECTED_CHARS[mi].x - cursor_x) <= CHAR_X_TOL) {
                                 hit = 1;
                                 break;
@@ -498,7 +527,9 @@ int main(void)
         }
         struct yetty_ydraw_drawable_iter_result nx5 =
             yetty_ydraw_drawable_list_drawable_next(out->buffer, reg, &it5);
-        if (!nx5.ok) break;
+        if (!nx5.ok) {
+            break;
+        }
         it5 = nx5.value;
     }
     fprintf(stderr, "per-char layout sim: %zu/%zu chars match mutool (%.1f%%)\n", matched_chars,
@@ -523,27 +554,30 @@ int main(void)
                     fonts[dv.font_id]) {
                     int has_sma = 0;
                     for (uint32_t k = 0; k + 3 <= dv.text_len; k++) {
-                        if (dv.text[k] == 's' && dv.text[k+1] == 'm' && dv.text[k+2] == 'a') {
+                        if (dv.text[k] == 's' && dv.text[k + 1] == 'm' && dv.text[k + 2] == 'a') {
                             has_sma = 1;
                             break;
                         }
                     }
                     if (has_sma) {
-                        fprintf(stderr, "  span x=%.3f y=%.3f font_id=%d sz=%.2f Tc=%.4f Tw=%.4f text='",
-                                dv.x, dv.y, dv.font_id, dv.font_size, dv.char_spacing, dv.word_spacing);
+                        fprintf(stderr,
+                                "  span x=%.3f y=%.3f font_id=%d sz=%.2f Tc=%.4f Tw=%.4f text='",
+                                dv.x, dv.y, dv.font_id, dv.font_size, dv.char_spacing,
+                                dv.word_spacing);
                         fwrite(dv.text, 1, dv.text_len, stderr);
                         fprintf(stderr, "'\n");
                         struct yetty_yfont_font *f = fonts[dv.font_id];
                         float cx = dv.x;
                         for (uint32_t k = 0; k < dv.text_len; k++) {
                             unsigned char c0 = (unsigned char)dv.text[k];
-                            if (c0 >= 0x80) continue;
+                            if (c0 >= 0x80) {
+                                continue;
+                            }
                             struct float_result mr =
                                 f->ops->measure_text(f, dv.text + k, 1, dv.font_size);
                             float adv = mr.ok ? mr.value : 0.0f;
-                            fprintf(stderr, "    '%c' x=%.3f adv=%.3f Tc=%.3f%s\n",
-                                    (char)c0, cx, adv, dv.char_spacing,
-                                    c0 == 0x20 ? " (+Tw)" : "");
+                            fprintf(stderr, "    '%c' x=%.3f adv=%.3f Tc=%.3f%s\n", (char)c0, cx,
+                                    adv, dv.char_spacing, c0 == 0x20 ? " (+Tw)" : "");
                             cx += adv + dv.char_spacing + (c0 == 0x20 ? dv.word_spacing : 0.0f);
                         }
                     }
@@ -551,7 +585,9 @@ int main(void)
             }
             struct yetty_ydraw_drawable_iter_result nxd =
                 yetty_ydraw_drawable_list_drawable_next(out->buffer, reg, &dit);
-            if (!nxd.ok) break;
+            if (!nxd.ok) {
+                break;
+            }
             dit = nxd.value;
         }
     }

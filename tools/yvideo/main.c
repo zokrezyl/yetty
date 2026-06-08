@@ -49,7 +49,10 @@
 
 #ifdef _WIN32
 #include <windows.h>
-static void sleep_ms(int ms) { Sleep((DWORD)ms); }
+static void sleep_ms(int ms)
+{
+    Sleep((DWORD)ms);
+}
 #else
 #include <unistd.h>
 #include <time.h>
@@ -166,8 +169,8 @@ static int h264_extract_dimensions(const uint8_t *buf, size_t size, uint32_t *ou
         /* Find the next start code to bound this NAL. */
         size_t nal_end = size;
         for (size_t j = hdr + 1; j + 3 <= size; j++) {
-            if (buf[j] == 0 && buf[j + 1] == 0 && (buf[j + 2] == 1 ||
-                (j + 4 <= size && buf[j + 2] == 0 && buf[j + 3] == 1))) {
+            if (buf[j] == 0 && buf[j + 1] == 0 &&
+                (buf[j + 2] == 1 || (j + 4 <= size && buf[j + 2] == 0 && buf[j + 3] == 1))) {
                 nal_end = j;
                 break;
             }
@@ -190,10 +193,9 @@ static int h264_extract_dimensions(const uint8_t *buf, size_t size, uint32_t *ou
 
         (void)br_read_ue(&br); /* seq_parameter_set_id */
 
-        if (profile_idc == 100 || profile_idc == 110 || profile_idc == 122 ||
-            profile_idc == 244 || profile_idc == 44 || profile_idc == 83 ||
-            profile_idc == 86 || profile_idc == 118 || profile_idc == 128 ||
-            profile_idc == 138 || profile_idc == 139 || profile_idc == 134 ||
+        if (profile_idc == 100 || profile_idc == 110 || profile_idc == 122 || profile_idc == 244 ||
+            profile_idc == 44 || profile_idc == 83 || profile_idc == 86 || profile_idc == 118 ||
+            profile_idc == 128 || profile_idc == 138 || profile_idc == 139 || profile_idc == 134 ||
             profile_idc == 135) {
             uint32_t chroma = br_read_ue(&br);
             if (chroma == 3) {
@@ -258,8 +260,12 @@ static int h264_extract_dimensions(const uint8_t *buf, size_t size, uint32_t *ou
             uint32_t sx = 2u, sy = 2u;
             uint32_t cx = sx * (left + right);
             uint32_t cy = sy * (top + bottom) * (2u - frame_mbs_only_flag);
-            if (cx < width) width -= cx;
-            if (cy < height) height -= cy;
+            if (cx < width) {
+                width -= cx;
+            }
+            if (cy < height) {
+                height -= cy;
+            }
         }
         *out_w = width;
         *out_h = height;
@@ -299,20 +305,27 @@ static bool is_mp4(const uint8_t *buf, size_t size)
 }
 
 /* Append `[00 00 00 01][nal_bytes]` to *out (realloc'd as needed). */
-static int annexb_append(uint8_t **out, size_t *out_len, size_t *out_cap,
-                         const uint8_t *nal, size_t nal_len)
+static int annexb_append(uint8_t **out, size_t *out_len, size_t *out_cap, const uint8_t *nal,
+                         size_t nal_len)
 {
     size_t need = *out_len + 4u + nal_len;
     if (need > *out_cap) {
         size_t new_cap = *out_cap ? *out_cap : 4096;
-        while (new_cap < need) new_cap *= 2;
+        while (new_cap < need) {
+            new_cap *= 2;
+        }
         uint8_t *nb = realloc(*out, new_cap);
-        if (!nb) return -1;
+        if (!nb) {
+            return -1;
+        }
         *out = nb;
         *out_cap = new_cap;
     }
     uint8_t *p = *out + *out_len;
-    p[0] = 0; p[1] = 0; p[2] = 0; p[3] = 1;
+    p[0] = 0;
+    p[1] = 0;
+    p[2] = 0;
+    p[3] = 1;
     memcpy(p + 4, nal, nal_len);
     *out_len = need;
     return 0;
@@ -354,10 +367,12 @@ static int demux_mp4_to_annexb(const uint8_t *mp4_data, size_t mp4_size, uint8_t
     }
 
     /* Emit SPS NALs from track's DSI. */
-    for (int n = 0; ; n++) {
+    for (int n = 0;; n++) {
         int sps_bytes = 0;
         const void *sps = MP4D_read_sps(&mp4, (unsigned)track_idx, n, &sps_bytes);
-        if (!sps) break;
+        if (!sps) {
+            break;
+        }
         if (annexb_append(out, out_len, &out_cap, sps, (size_t)sps_bytes) < 0) {
             free(*out);
             MP4D_close(&mp4);
@@ -365,10 +380,12 @@ static int demux_mp4_to_annexb(const uint8_t *mp4_data, size_t mp4_size, uint8_t
         }
     }
     /* Emit PPS NALs. */
-    for (int n = 0; ; n++) {
+    for (int n = 0;; n++) {
         int pps_bytes = 0;
         const void *pps = MP4D_read_pps(&mp4, (unsigned)track_idx, n, &pps_bytes);
-        if (!pps) break;
+        if (!pps) {
+            break;
+        }
         if (annexb_append(out, out_len, &out_cap, pps, (size_t)pps_bytes) < 0) {
             free(*out);
             MP4D_close(&mp4);
@@ -382,17 +399,16 @@ static int demux_mp4_to_annexb(const uint8_t *mp4_data, size_t mp4_size, uint8_t
     MP4D_track_t *tr = &mp4.track[track_idx];
     for (unsigned s = 0; s < tr->sample_count; s++) {
         unsigned frame_bytes = 0;
-        MP4D_file_offset_t off = MP4D_frame_offset(&mp4, (unsigned)track_idx, s, &frame_bytes,
-                                                   NULL, NULL);
+        MP4D_file_offset_t off =
+            MP4D_frame_offset(&mp4, (unsigned)track_idx, s, &frame_bytes, NULL, NULL);
         if (off + frame_bytes > mp4_size || frame_bytes < 4) {
             continue;
         }
         const uint8_t *p = mp4_data + off;
         const uint8_t *end = p + frame_bytes;
         while (p + 4 <= end) {
-            uint32_t nal_len =
-                ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) |
-                (uint32_t)p[3];
+            uint32_t nal_len = ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
+                               ((uint32_t)p[2] << 8) | (uint32_t)p[3];
             p += 4;
             if (nal_len == 0 || p + nal_len > end) {
                 break;
@@ -433,37 +449,39 @@ struct yvideo_opts {
 static void usage(FILE *out, const char *prog)
 {
     fprintf(out,
-        "Usage: %s [options] <file.h264>\n"
-        "\n"
-        "Emit a yvideo OSC envelope stream for the given H.264 Annex-B\n"
-        "byte stream. INIT envelope wraps the first chunk in CMD_GROUP(id);\n"
-        "subsequent chunks ship as CMD_UPDATE envelopes targeting that id.\n"
-        "Video dimensions are taken from the first SPS NAL — they MUST\n"
-        "match what the decoder will produce, so they're not user\n"
-        "overridable. Use --bounds-w / --bounds-h for display size.\n"
-        "\n"
-        "Options:\n"
-        "      --fps=F         playback rate, default 30\n"
-        "      --bounds-w=N    display width in pane px (default = video width)\n"
-        "      --bounds-h=N    display height in pane px (default = video height)\n"
-        "      --chunk=N       split the stream into N-byte CMD_UPDATE envelopes\n"
-        "                      (default 0 = send the whole stream in one INIT envelope;\n"
-        "                       only use --chunk for clips too large to buffer on\n"
-        "                       the receiver — chunking adds per-envelope render kicks)\n"
-        "      --period-ms=N   sleep between UPDATEs, default 33\n"
-        "      --no-sleep      emit as fast as possible (PTY backpressure paces)\n"
-        "      --stream-id=N   addressable id for the figure, default 1\n"
-        "      --no-loop       drop the LOOP flag\n"
-        "      --no-autoplay   drop the AUTOPLAY flag\n"
-        "  -h, --help          show this help\n",
-        prog);
+            "Usage: %s [options] <file.h264>\n"
+            "\n"
+            "Emit a yvideo OSC envelope stream for the given H.264 Annex-B\n"
+            "byte stream. INIT envelope wraps the first chunk in CMD_GROUP(id);\n"
+            "subsequent chunks ship as CMD_UPDATE envelopes targeting that id.\n"
+            "Video dimensions are taken from the first SPS NAL — they MUST\n"
+            "match what the decoder will produce, so they're not user\n"
+            "overridable. Use --bounds-w / --bounds-h for display size.\n"
+            "\n"
+            "Options:\n"
+            "      --fps=F         playback rate, default 30\n"
+            "      --bounds-w=N    display width in pane px (default = video width)\n"
+            "      --bounds-h=N    display height in pane px (default = video height)\n"
+            "      --chunk=N       split the stream into N-byte CMD_UPDATE envelopes\n"
+            "                      (default 0 = send the whole stream in one INIT envelope;\n"
+            "                       only use --chunk for clips too large to buffer on\n"
+            "                       the receiver — chunking adds per-envelope render kicks)\n"
+            "      --period-ms=N   sleep between UPDATEs, default 33\n"
+            "      --no-sleep      emit as fast as possible (PTY backpressure paces)\n"
+            "      --stream-id=N   addressable id for the figure, default 1\n"
+            "      --no-loop       drop the LOOP flag\n"
+            "      --no-autoplay   drop the AUTOPLAY flag\n"
+            "  -h, --help          show this help\n",
+            prog);
 }
 
 static int parse_int(const char *s, int *out)
 {
     char *end = NULL;
     long v = strtol(s, &end, 10);
-    if (!end || *end != '\0') return -1;
+    if (!end || *end != '\0') {
+        return -1;
+    }
     *out = (int)v;
     return 0;
 }
@@ -471,7 +489,9 @@ static int parse_float(const char *s, float *out)
 {
     char *end = NULL;
     float v = strtof(s, &end);
-    if (!end || *end != '\0') return -1;
+    if (!end || *end != '\0') {
+        return -1;
+    }
     *out = v;
     return 0;
 }
@@ -500,22 +520,35 @@ static int parse_args(int argc, char **argv, struct yvideo_opts *o)
         } else if (strncmp(a, "--width=", 8) == 0 || strcmp(a, "-w") == 0 ||
                    strcmp(a, "--width") == 0 || strncmp(a, "--height=", 9) == 0 ||
                    strcmp(a, "-H") == 0 || strcmp(a, "--height") == 0) {
-            fprintf(stderr, "%s: --width / --height removed — dimensions come "
-                            "from the SPS; use --bounds-w / --bounds-h for display size.\n",
+            fprintf(stderr,
+                    "%s: --width / --height removed — dimensions come "
+                    "from the SPS; use --bounds-w / --bounds-h for display size.\n",
                     argv[0]);
             return -1;
         } else if (strncmp(a, "--fps=", 6) == 0) {
-            if (parse_float(a + 6, &o->fps) < 0) return -1;
+            if (parse_float(a + 6, &o->fps) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--bounds-w=", 11) == 0) {
-            if (parse_float(a + 11, &o->bounds_w) < 0) return -1;
+            if (parse_float(a + 11, &o->bounds_w) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--bounds-h=", 11) == 0) {
-            if (parse_float(a + 11, &o->bounds_h) < 0) return -1;
+            if (parse_float(a + 11, &o->bounds_h) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--chunk=", 8) == 0) {
-            if (parse_int(a + 8, &o->chunk) < 0) return -1;
+            if (parse_int(a + 8, &o->chunk) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--period-ms=", 12) == 0) {
-            if (parse_int(a + 12, &o->period_ms) < 0) return -1;
+            if (parse_int(a + 12, &o->period_ms) < 0) {
+                return -1;
+            }
         } else if (strncmp(a, "--stream-id=", 12) == 0) {
-            if (parse_int(a + 12, &o->stream_id) < 0) return -1;
+            if (parse_int(a + 12, &o->stream_id) < 0) {
+                return -1;
+            }
         } else if (strcmp(a, "--no-sleep") == 0) {
             o->no_sleep = true;
         } else if (strcmp(a, "--no-loop") == 0) {
@@ -530,10 +563,18 @@ static int parse_args(int argc, char **argv, struct yvideo_opts *o)
             return -1;
         }
     }
-    if (!o->path) return -1;
-    if (o->chunk < 0 || o->stream_id <= 0 || o->fps <= 0.0f) return -1;
-    if (o->video_w && (o->video_w & 1u)) return -1;
-    if (o->video_h && (o->video_h & 1u)) return -1;
+    if (!o->path) {
+        return -1;
+    }
+    if (o->chunk < 0 || o->stream_id <= 0 || o->fps <= 0.0f) {
+        return -1;
+    }
+    if (o->video_w && (o->video_w & 1u)) {
+        return -1;
+    }
+    if (o->video_h && (o->video_h & 1u)) {
+        return -1;
+    }
     return 0;
 }
 
@@ -595,12 +636,16 @@ static struct yetty_ycore_void_result emit_zero(void)
 
 /* INIT envelope: GROUP(stream_id) wrapping a yvideo prim with the first
  * NAL chunk. Mirrors what demo/yvideo/video-source.c does. */
-static struct yetty_ycore_void_result emit_init(const struct yvideo_opts *o,
-                                                const uint8_t *first, size_t first_len)
+static struct yetty_ycore_void_result emit_init(const struct yvideo_opts *o, const uint8_t *first,
+                                                size_t first_len)
 {
     uint32_t flags = 0u;
-    if (!o->no_loop)     flags |= YETTY_YVIDEO_FLAG_LOOP;
-    if (!o->no_autoplay) flags |= YETTY_YVIDEO_FLAG_AUTOPLAY;
+    if (!o->no_loop) {
+        flags |= YETTY_YVIDEO_FLAG_LOOP;
+    }
+    if (!o->no_autoplay) {
+        flags |= YETTY_YVIDEO_FLAG_AUTOPLAY;
+    }
 
     struct yetty_yvideo_uniforms u = {
         .bounds_x = 0.0f,
@@ -647,8 +692,10 @@ static struct yetty_ycore_void_result emit_init(const struct yvideo_opts *o,
     }
 
     struct yetty_ydraw_drawable_list_config dlcfg = {
-        .scene_min_x = 0.0f, .scene_min_y = 0.0f,
-        .scene_max_x = u.bounds_w, .scene_max_y = u.bounds_h,
+        .scene_min_x = 0.0f,
+        .scene_min_y = 0.0f,
+        .scene_max_x = u.bounds_w,
+        .scene_max_y = u.bounds_h,
     };
     struct yetty_ydraw_drawable_list_result dlr =
         yetty_ydraw_drawable_list_config_buffer_create(&dlcfg);
@@ -665,15 +712,13 @@ static struct yetty_ycore_void_result emit_init(const struct yvideo_opts *o,
         free(prim_bytes);
         return YETTY_ERR(yetty_ycore_void, "yvideo: begin_group", gr);
     }
-    struct yetty_ydraw_id_result ar =
-        yetty_ydraw_drawable_list_add_prim(dl, prim_bytes, prim_size);
+    struct yetty_ydraw_id_result ar = yetty_ydraw_drawable_list_add_prim(dl, prim_bytes, prim_size);
     free(prim_bytes);
     if (YETTY_IS_ERR(ar)) {
         yetty_ydraw_drawable_list_destroy(dl);
         return YETTY_ERR(yetty_ycore_void, "yvideo: add_prim", ar);
     }
-    struct yetty_ycore_void_result er =
-        yetty_ydraw_drawable_list_end_group(dl, (uint32_t)gr.value);
+    struct yetty_ycore_void_result er = yetty_ydraw_drawable_list_end_group(dl, (uint32_t)gr.value);
     if (YETTY_IS_ERR(er)) {
         yetty_ydraw_drawable_list_destroy(dl);
         return YETTY_ERR(yetty_ycore_void, "yvideo: end_group", er);
@@ -685,8 +730,7 @@ static struct yetty_ycore_void_result emit_init(const struct yvideo_opts *o,
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result emit_update(int stream_id, const uint8_t *bytes,
-                                                  size_t len)
+static struct yetty_ycore_void_result emit_update(int stream_id, const uint8_t *bytes, size_t len)
 {
     /* v2 typed payload (#198 item 3): [u8 op][u8 reserved[3]][body...].
      * Op 0x00 = APPEND_NAL — body is raw H.264 Annex-B bytes. The
@@ -730,7 +774,9 @@ int main(int argc, char **argv)
 {
     struct yvideo_opts o;
     int pa = parse_args(argc, argv, &o);
-    if (pa == 1) return 0;
+    if (pa == 1) {
+        return 0;
+    }
     if (pa < 0) {
         usage(stderr, argv[0]);
         return 2;
@@ -782,7 +828,8 @@ int main(int argc, char **argv)
             free(file_buf);
             fprintf(stderr,
                     "yvideo: MP4 demux failed (%d) — only single-track AVC/H.264 "
-                    "MP4 files are supported.\n", dr);
+                    "MP4 files are supported.\n",
+                    dr);
             return 1;
         }
         stream = demuxed;
@@ -798,8 +845,7 @@ int main(int argc, char **argv)
         if (!h264_extract_dimensions(stream, stream_len, &w, &h)) {
             free(demuxed);
             free(file_buf);
-            fprintf(stderr,
-                    "yvideo: no SPS NAL found in stream (after demux=%s).\n",
+            fprintf(stderr, "yvideo: no SPS NAL found in stream (after demux=%s).\n",
                     demuxed ? "yes" : "no");
             return 1;
         }
@@ -809,8 +855,8 @@ int main(int argc, char **argv)
     if ((o.video_w & 1u) || (o.video_h & 1u)) {
         free(demuxed);
         free(file_buf);
-        fprintf(stderr, "yvideo: video dimensions must be even (got %ux%u)\n",
-                o.video_w, o.video_h);
+        fprintf(stderr, "yvideo: video dimensions must be even (got %ux%u)\n", o.video_w,
+                o.video_h);
         return 1;
     }
 
@@ -847,7 +893,9 @@ int main(int argc, char **argv)
 
     while (cursor < stream_len) {
         size_t n = stream_len - cursor;
-        if ((size_t)o.chunk > 0 && n > (size_t)o.chunk) n = (size_t)o.chunk;
+        if ((size_t)o.chunk > 0 && n > (size_t)o.chunk) {
+            n = (size_t)o.chunk;
+        }
         struct yetty_ycore_void_result ur = emit_update(o.stream_id, stream + cursor, n);
         if (YETTY_IS_ERR(ur)) {
             fprintf(stderr, "yvideo: update envelope failed: %s\n", ur.error.msg);
@@ -857,7 +905,9 @@ int main(int argc, char **argv)
             return 1;
         }
         cursor += n;
-        if (!o.no_sleep && cursor < stream_len) sleep_ms(o.period_ms);
+        if (!o.no_sleep && cursor < stream_len) {
+            sleep_ms(o.period_ms);
+        }
     }
 
     /* Keep the PTY child alive until the receiving terminal has had
@@ -868,16 +918,18 @@ int main(int argc, char **argv)
      * countable. The user can Ctrl-C to break out early. */
     if (!o.no_sleep) {
         uint32_t slices = 0;
-        for (size_t i = 0; i + 4 < stream_len; ) {
-            bool sc4 = (stream[i] == 0 && stream[i + 1] == 0 && stream[i + 2] == 0 &&
-                        stream[i + 3] == 1);
+        for (size_t i = 0; i + 4 < stream_len;) {
+            bool sc4 =
+                (stream[i] == 0 && stream[i + 1] == 0 && stream[i + 2] == 0 && stream[i + 3] == 1);
             bool sc3 = (stream[i] == 0 && stream[i + 1] == 0 && stream[i + 2] == 1);
             if (!sc3 && !sc4) {
                 i++;
                 continue;
             }
             size_t hdr = i + (sc4 ? 4u : 3u);
-            if (hdr >= stream_len) break;
+            if (hdr >= stream_len) {
+                break;
+            }
             uint8_t t = stream[hdr] & 0x1fu;
             if (t == 1u || t == 5u) {
                 slices++;

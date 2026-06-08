@@ -55,7 +55,7 @@ typedef uint32_t method_slot;
 #define METHOD_SLOT_INDEX_MASK ((1u << METHOD_SLOT_INDEX_SHIFT) - 1)
 #define METHOD_SLOT_DOMAIN_OF(s) (((s) >> METHOD_SLOT_INDEX_SHIFT) & 0xFu)
 #define METHOD_SLOT_INDEX_OF(s) ((s) & METHOD_SLOT_INDEX_MASK)
-#define METHOD_SLOT_PACK(dom, idx) \
+#define METHOD_SLOT_PACK(dom, idx)                                                                 \
     (((uint32_t)(dom) << METHOD_SLOT_INDEX_SHIFT) | ((idx) & METHOD_SLOT_INDEX_MASK))
 
 struct class_descriptor {
@@ -132,11 +132,9 @@ impl_t class_dispatch_lookup(const struct class *cls, method_slot slot);
 
 const struct class *object_class(const struct object *obj);
 
-struct class_ptr_result class_register(const struct class_descriptor *desc,
-                                       const struct op *ops, size_t ops_count,
-                                       const struct class *parent,
-                                       const struct class *const *mixins,
-                                       size_t mixin_count);
+struct class_ptr_result class_register(const struct class_descriptor *desc, const struct op *ops,
+                                       size_t ops_count, const struct class *parent,
+                                       const struct class *const *mixins, size_t mixin_count);
 
 /* uthash-backed. O(1) on cache hit. On miss, calls the installed lazy
  * accessor lookup (see class_add_accessor_lookup) — that's the path
@@ -153,8 +151,7 @@ struct yetty_ycore_void_result class_add_accessor_lookup(accessor_lookup_fn fn);
 /* Walk the class's populated dispatch slots — used by the GET_CLASS
  * handler on the server. */
 void class_for_each_slot(const struct class *cls,
-                         void (*cb)(const char *name, method_slot slot, void *ud),
-                         void *userdata);
+                         void (*cb)(const char *name, method_slot slot, void *ud), void *userdata);
 
 struct object_ptr_result object_alloc(const struct class *cls);
 void object_free(struct object *obj);
@@ -170,6 +167,6 @@ void object_free(struct object *obj);
  * data handle (`<domain>_<class>_data`) and the member getters/setters are
  * thin typed wrappers over this. */
 struct yetty_ycore_size_result object_data_offset(const struct class *obj_class,
-                                                   const struct class *target);
+                                                  const struct class *target);
 
 #endif /* POC_CLASS_H */

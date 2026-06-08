@@ -147,12 +147,10 @@ static void handle_event(struct yzoo_app *app, const struct yetty_yui_event *ev)
 {
     /* Window chrome gets first dibs on pointer events; anything it doesn't
      * claim (caption drag / edge resize / its buttons) falls through. */
-    if (app->chrome &&
-        (ev->type == YETTY_YCORE_MOUSE_DOWN || ev->type == YETTY_YCORE_MOUSE_UP ||
-         ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
-         ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
-        struct yetty_ycore_int_result chrome_r =
-            yetty_ychrome_host_handle_event(app->chrome, ev);
+    if (app->chrome && (ev->type == YETTY_YCORE_MOUSE_DOWN || ev->type == YETTY_YCORE_MOUSE_UP ||
+                        ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
+                        ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
+        struct yetty_ycore_int_result chrome_r = yetty_ychrome_host_handle_event(app->chrome, ev);
         int chrome_consumed = YETTY_IS_OK(chrome_r) && chrome_r.value;
         if (YETTY_IS_ERR(chrome_r)) {
             yetty_ycore_error_destroy(chrome_r.error);

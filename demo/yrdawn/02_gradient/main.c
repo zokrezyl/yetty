@@ -34,10 +34,10 @@ int main(void)
 {
     demo_raw_stdin();
     FILE *trace = demo_trace_open("02-gradient");
-#define LOG(...) \
-    do { \
-        if (trace) \
-            fprintf(trace, __VA_ARGS__); \
+#define LOG(...)                                                                                   \
+    do {                                                                                           \
+        if (trace)                                                                                 \
+            fprintf(trace, __VA_ARGS__);                                                           \
     } while (0)
 
     struct yetty_yrdawn_client *c = NULL;
@@ -73,7 +73,8 @@ int main(void)
     (void)yetty_yrdawn_canvas_destroy(canvas);
     (void)yetty_yrdawn_client_destroy(c);
     LOG("02_gradient: done\n");
-    if (trace)
+    if (trace) {
         fclose(trace);
+    }
     return 0;
 }

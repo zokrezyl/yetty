@@ -9,8 +9,8 @@
 
 #include <stdio.h>
 
-struct [[clang::annotate("class@yvehicle:motorbike")]]
-       [[clang::annotate("parent@yvehicle:vehicle")]] motorbike_data {
+struct [[clang::annotate("class@yvehicle:motorbike")]] [[clang::annotate(
+    "parent@yvehicle:vehicle")]] motorbike_data {
     [[clang::annotate("property")]] int has_sidecar;
 };
 
