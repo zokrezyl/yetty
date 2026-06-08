@@ -518,6 +518,48 @@ static struct yetty_ycore_void_result container_process_bytes(struct yetty_yfigu
                                                               const uint8_t *bytes,
                                                               size_t bytes_len);
 
+/* Remove and destroy every child figure, then mark the container dirty so the
+ * empty result is repainted. Shared by the CLEAR_ALL admin op and the terminal's
+ * full-screen-erase / reset path. Best-effort: keeps tearing down on a per-child
+ * error, stashing the first to surface at the end. */
+struct yetty_ycore_void_result yetty_yfigure_container_clear_all(
+    struct yetty_yfigure_container *container)
+{
+    if (!container) {
+        return YETTY_ERR(yetty_ycore_void, "container clear_all: NULL container");
+    }
+    struct child_entry *e, *tmp;
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
+    int have_err = 0;
+    HASH_ITER(hh, container->children, e, tmp)
+    {
+        HASH_DEL(container->children, e);
+        struct yetty_ycore_void_result entry_r = entry_destroy(e);
+        if (YETTY_IS_ERR(entry_r)) {
+            if (!have_err) {
+                first_err = entry_r;
+                have_err = 1;
+            } else {
+                yetty_ycore_error_destroy(entry_r.error);
+            }
+        }
+    }
+    {
+        struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(
+            (struct yetty_yclass_object *)(container->base) - 1, 1);
+        if (YETTY_IS_ERR(set_r)) {
+            if (have_err) {
+                yetty_ycore_error_destroy(first_err.error);
+            }
+            return YETTY_ERR(yetty_ycore_void, "container clear_all: figure attr set", set_r);
+        }
+    }
+    if (have_err) {
+        return YETTY_ERR(yetty_ycore_void, "container clear_all: child destroy", first_err);
+    }
+    return YETTY_OK_VOID();
+}
+
 /* Admin sub-cmd dispatcher (byte-buffer source). Reads the first u32
  * as the admin op and dispatches with the remaining bytes as body. */
 static struct yetty_ycore_void_result handle_admin_bytes(struct yetty_yfigure_container *container,
@@ -537,31 +579,8 @@ static struct yetty_ycore_void_result handle_admin_bytes(struct yetty_yfigure_co
             return YETTY_ERR(yetty_ycore_void,
                              "container admin CLEAR_ALL: unexpected trailing bytes");
         }
-        struct child_entry *e, *tmp;
-        struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
-        int have_err = 0;
-        HASH_ITER(hh, container->children, e, tmp)
-        {
-            HASH_DEL(container->children, e);
-            struct yetty_ycore_void_result entry_r = entry_destroy(e);
-            if (YETTY_IS_ERR(entry_r)) {
-                if (!have_err) {
-                    first_err = entry_r;
-                    have_err = 1;
-                } else {
-                    yetty_ycore_error_destroy(entry_r.error);
-                }
-            }
-        }
-        {
-            struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(
-                (struct yetty_yclass_object *)(container->base) - 1, 1);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-        }
-        if (have_err) {
-            return YETTY_ERR(yetty_ycore_void, "container admin CLEAR_ALL: child destroy",
-                             first_err);
-        }
+        struct yetty_ycore_void_result clear_r = yetty_yfigure_container_clear_all(container);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, clear_r, "container admin CLEAR_ALL");
         return YETTY_OK_VOID();
     }
 

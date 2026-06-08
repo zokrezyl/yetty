@@ -36,6 +36,8 @@ struct yetty_yfigure_figure *yetty_yfigure_container_as_figure(struct yetty_yfig
 struct yetty_ycore_void_result yetty_yfigure_container_add_child(struct yetty_yfigure_container *container, struct yetty_yfigure_figure *child, uint32_t id);
 struct yetty_yfigure_figure *yetty_yfigure_container_find_child_by_id(const struct yetty_yfigure_container *container, uint32_t id);
 struct yetty_ycore_void_result yetty_yfigure_container_remove_child_by_id(struct yetty_yfigure_container *container, uint32_t id);
+/* Remove and destroy every child figure (CLEAR_ALL admin op; also the terminal's full-screen erase / reset path). */
+struct yetty_ycore_void_result yetty_yfigure_container_clear_all(struct yetty_yfigure_container *container);
 struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id(struct yetty_yfigure_container *container, uint32_t id);
 struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yfigure_container *container, float x, float y);
 

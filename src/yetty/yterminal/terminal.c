@@ -337,6 +337,21 @@ static struct yetty_ycore_void_result terminal_pty_write_callback(const char *da
     return YETTY_OK_VOID();
 }
 
+/* Content-layer clear hook (full-screen erase / reset): wipe every positioned
+ * compositor figure in the root container. Registered in terminal_create after
+ * the container exists. */
+static struct yetty_ycore_void_result terminal_clear_figures_callback(void *userdata)
+{
+    struct yetty_yterminal_terminal *terminal = userdata;
+    if (!terminal || !terminal->root_container) {
+        return YETTY_OK_VOID();
+    }
+    ydebug("terminal_clear_figures_callback: full-screen erase/reset -> clearing root container");
+    struct yetty_ycore_void_result r = yetty_yfigure_container_clear_all(terminal->root_container);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_clear_figures_callback: container clear_all");
+    return YETTY_OK_VOID();
+}
+
 /* yetty_yclass_rpc_dcs_emit_fn impl — ships an already-encoded DCS
  * envelope through the PTY master so the subprocess sees it on its
  * stdin. Looping write because pty write ops are single-shot (one
@@ -1296,6 +1311,13 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     yetty_yfigure_container_set_registry(terminal->root_container, terminal->figure_registry);
     yetty_yfigure_container_set_rect(terminal->root_container, root_rect);
     ydebug("terminal_create: root container ready");
+
+    /* On a full-screen erase / reset (CSI 2J/3J or RIS — e.g. `clear`, Ctrl-L,
+     * `reset`) the content layer wipes the text grid and ydraw canvas, but the
+     * positioned compositor figures live in the root container, which it does
+     * not own. Hook into the same clear path to wipe them too. */
+    yetty_yvterm_content_layer_set_clear_hook(terminal->layer, terminal_clear_figures_callback,
+                                              terminal);
 
     /* Register the root container directly with the wire SM —
      * userdata is the container itself; no terminal-local wrapper. */

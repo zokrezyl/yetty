@@ -41,6 +41,14 @@ struct yetty_yterminal_layer_result yetty_yvterm_content_layer_create(
 struct yetty_ycore_void_result yetty_yvterm_content_layer_register_wire(
     struct yetty_yrender_terminal_layer *self, struct yetty_ywire_wire_statemachine *sm);
 
+/* Optional hook fired after the sub-renderers are cleared on a full-screen erase
+ * (CSI 2J/3J or RIS). The terminal registers it to also clear its root figure
+ * container — positioned compositor figures the sub-renderers don't own. */
+typedef struct yetty_ycore_void_result (*yetty_yvterm_content_clear_hook_fn)(void *userdata);
+void yetty_yvterm_content_layer_set_clear_hook(struct yetty_yrender_terminal_layer *self,
+                                               yetty_yvterm_content_clear_hook_fn fn,
+                                               void *userdata);
+
 #ifdef __cplusplus
 }
 #endif
