@@ -42,12 +42,14 @@
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/methods.h> /* yetty_yplatform_window_manager_* slots */
+#include <yetty/ychrome/chrome.h>    /* YETTY_YCHROME_FLAG_* */
+#include <yetty/ychrome/host.h>      /* the shared window chrome (the ONE chrome) */
 
 #include "config-dialog.h"
 #include "debug-window.h"
 
 #include <yetty/ywire/wire-statemachine.h>
-#include "tabbar.h"
+#include "tabbar-model.h"
 
 /* GLFW keycode for Backspace — KEY_DOWN delivers raw GLFW keycodes;
  * the new ygui textinput wants the ASCII DEL byte. */
@@ -113,7 +115,14 @@ struct yetty_yui {
     struct yetty_yui_config_dialog *config_dialog;
 
     /* Bound tabbar model. */
-    struct yetty_yui_tabbar *tabbar_model;
+    struct yetty_yui_tabbar_model *tabbar_model;
+
+    /* The window chrome — the ONE shared engine (drag / edge-resize / maximize +
+     * SDF min/max/close + edge cursor), composited as a pinned figure over
+     * root_container. yui implements none of that itself anymore; it just paints
+     * its ygui tabbar into the title-bar area and lets chrome handle whatever the
+     * tabbar didn't (client-first). NULL if chrome creation failed. */
+    struct yetty_ychrome_host *chrome;
 
     /* Engine titlebar — flex-row hbox holding:
      *   [≡ hamburger][native TABBAR widget (flex:1, owns its own "+")][_][□][×] */
@@ -783,6 +792,23 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             }
         }
 
+        /* Window chrome — the shared ychrome, composited over the same container
+         * the engine paints into. It overlays the SDF min/max/close and owns
+         * drag/edge-resize/maximize for whatever the title-bar tabbar doesn't
+         * consume (client-first). Best-effort, like the titlebar above. */
+        if (context->runtime && context->runtime->window_manager) {
+            struct yetty_ychrome_host_ptr_result ch = yetty_ychrome_host_create(
+                yui->root_container, yui->font, context, context->runtime->window_manager,
+                (float)surface_w, (float)surface_h, TITLEBAR_STRIP_H, 8.0f,
+                YETTY_YCHROME_FLAG_ALL);
+            if (YETTY_IS_OK(ch)) {
+                yui->chrome = ch.value;
+            } else {
+                ywarn("yui_create: chrome host: %s", ch.error.msg);
+                yetty_ycore_error_destroy(ch.error);
+            }
+        }
+
         /* Spacer pushes the statusbar to the bottom. */
         struct yetty_ygui_object_ptr_result spacer_r =
             yui_add(yui->root, yetty_ygui_vbox_class_get());
@@ -882,7 +908,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     return YETTY_OK(yetty_yui_ptr, yui);
 }
 
-void yetty_yui_set_tabbar_model(struct yetty_yui *yui, struct yetty_yui_tabbar *tabbar)
+void yetty_yui_set_tabbar_model(struct yetty_yui *yui, struct yetty_yui_tabbar_model *tabbar)
 {
     if (!yui) {
         return;
@@ -906,6 +932,14 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
         s_active_yui = NULL;
     }
     yui_active_unlock();
+
+    if (yui->chrome) {
+        struct yetty_ycore_void_result cr = yetty_ychrome_host_destroy(yui->chrome);
+        if (YETTY_IS_ERR(cr)) {
+            yetty_ycore_error_destroy(cr.error);
+        }
+        yui->chrome = NULL;
+    }
 
     if (yui->engine) {
         struct yetty_ycore_void_result r = yetty_ygui_framework_destroy(yui->engine);
@@ -1122,7 +1156,7 @@ static struct yetty_ycore_void_result yui_splitters_sync(struct yetty_yui *yui)
     if (!yui || !yui->engine || !yui->tabbar_model) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yui_workspace *ws = yetty_yui_tabbar_active_workspace(yui->tabbar_model);
+    struct yetty_yui_workspace *ws = yetty_yui_tabbar_model_active_workspace(yui->tabbar_model);
     yetty_ycore_object_id ws_id = ws ? yetty_yui_workspace_id(ws) : 0;
     struct yetty_yui_tile *root = ws ? yetty_yui_workspace_root(ws) : NULL;
 
@@ -1149,9 +1183,9 @@ static void yui_splitter_on_change(struct yetty_ygui_object *widget, float delta
     if (!t || !t->yui || !t->yui->ctx) {
         return;
     }
-    struct yetty_yui_tabbar *bar = t->yui->tabbar_model;
+    struct yetty_yui_tabbar_model *bar = t->yui->tabbar_model;
     struct yetty_yui_workspace *ws =
-        bar ? yetty_yui_tabbar_find_workspace(bar, t->workspace_id) : NULL;
+        bar ? yetty_yui_tabbar_model_find_workspace(bar, t->workspace_id) : NULL;
     if (!ws) {
         return;
     }
@@ -1323,7 +1357,7 @@ static struct yetty_ycore_void_result yui_debug_windows_sync(struct yetty_yui *y
     if (!yui || !yui->engine || !yui->tabbar_model) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yui_workspace *ws = yetty_yui_tabbar_active_workspace(yui->tabbar_model);
+    struct yetty_yui_workspace *ws = yetty_yui_tabbar_model_active_workspace(yui->tabbar_model);
     yetty_ycore_object_id ws_id = ws ? yetty_yui_workspace_id(ws) : 0;
     struct yetty_yui_tile *root = ws ? yetty_yui_workspace_root(ws) : NULL;
 
@@ -1986,6 +2020,10 @@ static struct yetty_ycore_void_result yui_titlebar_build(struct yetty_yui *yui)
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(yui->titlebar_tabbar);
         l.flex_grow = 1.0f;
         l.height = TITLEBAR_STRIP_H;
+        /* Leave room on the right for the window controls the chrome overlays on
+         * this strip — the client's responsibility, so no tab sits under a
+         * control (3 × 46 px). */
+        l.padding_right = 3.0f * 46.0f;
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(yui->titlebar_tabbar, &l));
         yetty_ycore_error_destroy_safe(yetty_ygui_object_subscribe(
             yui->titlebar_tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, yui_titlebar_on_tab_change, yui));
@@ -1997,18 +2035,12 @@ static struct yetty_ycore_void_result yui_titlebar_build(struct yetty_yui *yui)
             yetty_ygui_tabbar_set_on_new_tab(yui->titlebar_tabbar, yui_titlebar_on_new_tab, yui));
     }
 
-    struct yetty_ygui_object_ptr_result min_r =
-        yui_titlebar_icon_button(yui, 1 /* minimize */, yui_titlebar_on_min);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, min_r, "titlebar_build: min button");
-    yui->titlebar_min = min_r.value;
-    struct yetty_ygui_object_ptr_result max_r =
-        yui_titlebar_icon_button(yui, 2 /* maximize */, yui_titlebar_on_max);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, max_r, "titlebar_build: max button");
-    yui->titlebar_max = max_r.value;
-    struct yetty_ygui_object_ptr_result close_r =
-        yui_titlebar_icon_button(yui, 3 /* close */, yui_titlebar_on_close_window);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, close_r, "titlebar_build: close button");
-    yui->titlebar_close = close_r.value;
+    /* No window-control buttons here anymore — the shared ychrome overlays the
+     * SDF min/max/close on the right of this strip and handles their clicks.
+     * The tabbar's padding_right (set above) keeps tabs clear of them. */
+    yui->titlebar_min = NULL;
+    yui->titlebar_max = NULL;
+    yui->titlebar_close = NULL;
 
     yui->titlebar_synced_active = -1;
     yui->titlebar_synced_count = 0;
@@ -2020,8 +2052,8 @@ static struct yetty_ycore_void_result yui_titlebar_sync(struct yetty_yui *yui)
     if (!yui || !yui->titlebar_tabbar || !yui->tabbar_model) {
         return YETTY_OK_VOID();
     }
-    size_t count = yetty_yui_tabbar_count(yui->tabbar_model);
-    size_t active = yetty_yui_tabbar_active_index(yui->tabbar_model);
+    size_t count = yetty_yui_tabbar_model_count(yui->tabbar_model);
+    size_t active = yetty_yui_tabbar_model_active_index(yui->tabbar_model);
 
     int wcount = yetty_ygui_tabbar_count(yui->titlebar_tabbar);
     while ((size_t)wcount < count) {
@@ -2077,7 +2109,7 @@ static void yui_titlebar_on_new_tab(struct yetty_ygui_object *tabbar, void *user
         return;
     }
     struct yetty_ycore_void_result add_r =
-        yetty_yui_tabbar_add_workspace_of_kind(yui->tabbar_model, YETTY_YUI_TAB_SHELL);
+        yetty_yui_tabbar_model_add_workspace_of_kind(yui->tabbar_model, YETTY_YUI_TAB_SHELL);
     if (YETTY_IS_ERR(add_r)) {
         yerror("yui: titlebar new-tab failed: %s", add_r.error.msg);
         yetty_ycore_error_destroy(add_r.error);
@@ -2091,7 +2123,7 @@ static struct yetty_ycore_void_result yui_titlebar_on_min(struct yetty_yclass_ct
     (void)ctx;
     (void)btn;
     struct yetty_yui *yui = userdata;
-    yetty_yui_tabbar_iconify(yui ? yui->tabbar_model : NULL);
+    yetty_yui_tabbar_model_iconify(yui ? yui->tabbar_model : NULL);
     return YETTY_OK_VOID();
 }
 
@@ -2102,7 +2134,7 @@ static struct yetty_ycore_void_result yui_titlebar_on_max(struct yetty_yclass_ct
     (void)ctx;
     (void)btn;
     struct yetty_yui *yui = userdata;
-    yetty_yui_tabbar_toggle_maximize(yui ? yui->tabbar_model : NULL);
+    yetty_yui_tabbar_model_toggle_maximize(yui ? yui->tabbar_model : NULL);
     return YETTY_OK_VOID();
 }
 
@@ -2113,7 +2145,7 @@ static struct yetty_ycore_void_result yui_titlebar_on_close_window(struct yetty_
     (void)ctx;
     (void)btn;
     struct yetty_yui *yui = userdata;
-    yetty_yui_tabbar_close_window(yui ? yui->tabbar_model : NULL);
+    yetty_yui_tabbar_model_close_window(yui ? yui->tabbar_model : NULL);
     return YETTY_OK_VOID();
 }
 
@@ -2131,11 +2163,11 @@ static struct yetty_ycore_void_result yui_titlebar_on_tab_change(
         return YETTY_OK_VOID();
     }
     size_t idx = (size_t)event->i0;
-    if (idx != yetty_yui_tabbar_active_index(yui->tabbar_model)) {
+    if (idx != yetty_yui_tabbar_model_active_index(yui->tabbar_model)) {
         {
             struct yetty_ycore_void_result drop_r =
-                yetty_yui_tabbar_switch_to(yui->tabbar_model, idx);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tabbar_switch_to");
+                yetty_yui_tabbar_model_switch_to(yui->tabbar_model, idx);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tabbar_model_switch_to");
         }
     }
     return YETTY_OK_VOID();
@@ -2152,7 +2184,7 @@ static void yui_titlebar_on_tab_close(struct yetty_ygui_object *tabbar, int inde
         return;
     }
     struct yetty_ycore_void_result close_r =
-        yetty_yui_tabbar_close_at(yui->tabbar_model, (size_t)index);
+        yetty_yui_tabbar_model_close_at(yui->tabbar_model, (size_t)index);
     if (YETTY_IS_ERR(close_r)) {
         yerror("yui: titlebar close-tab failed: %s", close_r.error.msg);
         yetty_ycore_error_destroy(close_r.error);
@@ -2360,12 +2392,8 @@ static struct yetty_ycore_int_result yui_compute_cursor_shape(struct yetty_yui *
         return YETTY_OK(yetty_ycore_int,
                         axis == 1 ? YETTY_YCORE_CURSOR_HRESIZE : YETTY_YCORE_CURSOR_VRESIZE);
     }
-    if (yui->tabbar_model) {
-        int edge_shape = yetty_yui_tabbar_edge_cursor_at(yui->tabbar_model, mouse_x, mouse_y);
-        if (edge_shape != YETTY_YCORE_CURSOR_DEFAULT) {
-            return YETTY_OK(yetty_ycore_int, edge_shape);
-        }
-    }
+    /* Window-edge resize cursor is owned by the chrome now (it sets it directly
+     * while hovering an edge); yui only decides the splitter cursor here. */
     return YETTY_OK(yetty_ycore_int, YETTY_YCORE_CURSOR_DEFAULT);
 }
 
@@ -2391,6 +2419,23 @@ static struct yetty_ycore_void_result yui_apply_cursor(struct yetty_yui *yui, fl
     }
     yui->last_cursor_shape = shape;
     return YETTY_OK_VOID();
+}
+
+/* Client-first / chrome-fallback: hand a pointer event the ygui engine didn't
+ * consume to the window chrome (drag / edge-resize / maximize / window
+ * controls). Chrome works in raw framebuffer px, so the unscaled event passes
+ * straight through. Returns 1 if chrome claimed it. */
+static int yui_chrome_fallback(struct yetty_yui *yui, const struct yetty_yui_event *event)
+{
+    if (!yui->chrome) {
+        return 0;
+    }
+    struct yetty_ycore_int_result cr = yetty_ychrome_host_handle_event(yui->chrome, event);
+    int consumed = YETTY_IS_OK(cr) && cr.value;
+    if (YETTY_IS_ERR(cr)) {
+        yetty_ycore_error_destroy(cr.error);
+    }
+    return consumed;
 }
 
 struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
@@ -2448,39 +2493,62 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
                 return YETTY_OK(yetty_ycore_int, 1);
             }
         }
-        yetty_ycore_error_destroy_safe(yetty_ygui_framework_feed_mouse_button(
-            yui->engine, event->mouse.x / scale, event->mouse.y / scale, event->mouse.button, 1,
-            event->mouse.mods));
+        int down_consumed;
+        {
+            struct yetty_ycore_int_result feed_r = yetty_ygui_framework_feed_mouse_button(
+                yui->engine, event->mouse.x / scale, event->mouse.y / scale, event->mouse.button, 1,
+                event->mouse.mods);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, feed_r, "on_event: feed button down");
+            down_consumed = feed_r.value;
+        }
         {
             struct yetty_ycore_void_result cursor_r =
                 yui_apply_cursor(yui, event->mouse.x, event->mouse.y);
             YETTY_RETURN_IF_ERR(yetty_ycore_int, cursor_r, "on_event: apply_cursor (down)");
         }
-        if (active || yetty_ygui_framework_has_pressed_widget(yui->engine)) {
+        if (down_consumed || active || yetty_ygui_framework_has_pressed_widget(yui->engine)) {
             return YETTY_OK(yetty_ycore_int, 1);
         }
-        return YETTY_OK(yetty_ycore_int, 0);
+        /* Client-first: the ygui engine didn't take it — give the window chrome
+         * a shot (title-bar drag / edges / controls). If chrome claims it, stop;
+         * otherwise it's a body click → fall through to the terminal. */
+        return YETTY_OK(yetty_ycore_int, yui_chrome_fallback(yui, event) ? 1 : 0);
     }
-    case YETTY_YCORE_MOUSE_UP:
-        yetty_ycore_error_destroy_safe(yetty_ygui_framework_feed_mouse_button(
+    case YETTY_YCORE_MOUSE_UP: {
+        struct yetty_ycore_int_result feed_r = yetty_ygui_framework_feed_mouse_button(
             yui->engine, event->mouse.x / scale, event->mouse.y / scale, event->mouse.button, 0,
-            event->mouse.mods));
+            event->mouse.mods);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, feed_r, "on_event: feed button up");
         {
             struct yetty_ycore_void_result cursor_r =
                 yui_apply_cursor(yui, event->mouse.x, event->mouse.y);
             YETTY_RETURN_IF_ERR(yetty_ycore_int, cursor_r, "on_event: apply_cursor (up)");
         }
-        return YETTY_OK(yetty_ycore_int, active || has_pressed ? 1 : 0);
+        if (feed_r.value || active || has_pressed) {
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+        return YETTY_OK(yetty_ycore_int, yui_chrome_fallback(yui, event) ? 1 : 0);
+    }
+    case YETTY_YCORE_MOUSE_DOUBLE_CLICK:
+        /* ygui has no double-click here; it's the chrome's title-bar maximize. */
+        return YETTY_OK(yetty_ycore_int, yui_chrome_fallback(yui, event) ? 1 : 0);
     case YETTY_YCORE_MOUSE_MOVE:
-    case YETTY_YCORE_MOUSE_DRAG:
-        yetty_ycore_error_destroy_safe(yetty_ygui_framework_feed_mouse_motion(
-            yui->engine, event->mouse.x / scale, event->mouse.y / scale));
+    case YETTY_YCORE_MOUSE_DRAG: {
+        struct yetty_ycore_int_result feed_r = yetty_ygui_framework_feed_mouse_motion(
+            yui->engine, event->mouse.x / scale, event->mouse.y / scale);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, feed_r, "on_event: feed motion");
         {
             struct yetty_ycore_void_result cursor_r =
                 yui_apply_cursor(yui, event->mouse.x, event->mouse.y);
             YETTY_RETURN_IF_ERR(yetty_ycore_int, cursor_r, "on_event: apply_cursor (move)");
         }
+        /* Chrome runs after apply_cursor so its resize-edge cursor wins at the
+         * window margins; over the body it leaves the cursor alone. */
+        if (!feed_r.value && !has_pressed) {
+            yui_chrome_fallback(yui, event);
+        }
         return YETTY_OK(yetty_ycore_int, active || has_pressed ? 1 : 0);
+    }
     case YETTY_YCORE_KEY_DOWN:
         /* Route editing keys to the focused dialog textinput. Printable
          * characters arrive via YETTY_YCORE_CHAR; KEY_DOWN carries the
@@ -2543,6 +2611,13 @@ struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t 
     }
     yui->surface_w = (float)surface_w;
     yui->surface_h = (float)surface_h;
+    if (yui->chrome) {
+        struct yetty_ycore_void_result cr =
+            yetty_ychrome_host_resized(yui->chrome, (float)surface_w, (float)surface_h);
+        if (YETTY_IS_ERR(cr)) {
+            yetty_ycore_error_destroy(cr.error);
+        }
+    }
     if (yui->engine) {
         /* Logical viewport (see yui_create); container rect below stays
          * in framebuffer pixels. */

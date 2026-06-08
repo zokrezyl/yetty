@@ -643,8 +643,13 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
         return;
     case YETTY_YCORE_MOUSE_DOWN:
         if (app->ygui) {
-            yetty_ycore_error_destroy_safe(yetty_ygui_framework_feed_mouse_button(
-                app->ygui, ev->mouse.x, ev->mouse.y, ev->mouse.button, 1, ev->mouse.mods));
+            {
+                struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_button(
+                    app->ygui, ev->mouse.x, ev->mouse.y, ev->mouse.button, 1, ev->mouse.mods);
+                if (YETTY_IS_ERR(fr)) {
+                    yetty_ycore_error_destroy(fr.error);
+                }
+            }
             /* Mouse input may have fired a widget callback that mutated
              * state; re-emit so the visual catches up. */
             struct yetty_ycore_void_result pr = push_ygui_scene(app);
@@ -656,8 +661,13 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
         return;
     case YETTY_YCORE_MOUSE_UP:
         if (app->ygui) {
-            yetty_ycore_error_destroy_safe(yetty_ygui_framework_feed_mouse_button(
-                app->ygui, ev->mouse.x, ev->mouse.y, ev->mouse.button, 0, ev->mouse.mods));
+            {
+                struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_button(
+                    app->ygui, ev->mouse.x, ev->mouse.y, ev->mouse.button, 0, ev->mouse.mods);
+                if (YETTY_IS_ERR(fr)) {
+                    yetty_ycore_error_destroy(fr.error);
+                }
+            }
             struct yetty_ycore_void_result pr = push_ygui_scene(app);
             if (YETTY_IS_ERR(pr)) {
                 yerror("ycompositor-ygui: push (mouse_up) failed: %s", pr.error.msg);
@@ -668,8 +678,13 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG:
         if (app->ygui) {
-            yetty_ycore_error_destroy_safe(
-                yetty_ygui_framework_feed_mouse_motion(app->ygui, ev->mouse.x, ev->mouse.y));
+            {
+                struct yetty_ycore_int_result fr =
+                    yetty_ygui_framework_feed_mouse_motion(app->ygui, ev->mouse.x, ev->mouse.y);
+                if (YETTY_IS_ERR(fr)) {
+                    yetty_ycore_error_destroy(fr.error);
+                }
+            }
             struct yetty_ycore_void_result pr = push_ygui_scene(app);
             if (YETTY_IS_ERR(pr)) {
                 yerror("ycompositor-ygui: push (mouse_move) failed: %s", pr.error.msg);

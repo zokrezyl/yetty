@@ -1,7 +1,7 @@
 add_library(yetty_yui STATIC
     tile.c
     workspace.c
-    tabbar.c
+    tabbar-model.c
     config-dialog.c
     debug-window.c
     yui.c
@@ -26,6 +26,7 @@ target_link_libraries(yetty_yui
         yetty_yui_core
         yetty_yterminal
         ygui
+        yetty_ychrome
 )
 
 if(YETTY_ENABLE_FEATURE_YMGUI)

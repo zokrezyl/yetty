@@ -538,16 +538,16 @@ static struct yetty_ygui_object *hit_test(struct yetty_ygui_object *node, float 
     return deepest;
 }
 
-struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_button(
+struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_button(
     struct yetty_ygui_framework *framework, float x, float y, int button, int pressed, int mods)
 {
     (void)mods;
     if (!framework) {
-        return YETTY_ERR(yetty_ycore_void,
+        return YETTY_ERR(yetty_ycore_int,
                          "yetty_ygui_framework_feed_mouse_button: NULL framework");
     }
     if (!framework->root) {
-        return YETTY_OK_VOID();
+        return YETTY_OK(yetty_ycore_int, 0);
     }
     struct yetty_ygui_object *target;
     if (pressed) {
@@ -579,7 +579,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_button(
                     : yetty_ygui_widget_on_release(NULL, (struct yetty_yclass_object *)target, x, y,
                                                    button);
         if (YETTY_IS_ERR(r)) {
-            return YETTY_ERR(yetty_ycore_void,
+            return YETTY_ERR(yetty_ycore_int,
                              "yetty_ygui_framework_feed_mouse_button: on_press/release", r);
         }
         if (r.value) {
@@ -587,41 +587,42 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_button(
                 framework->pressed_obj = target; /* capture for the drag */
             }
             framework->dirty = 1;
-            return YETTY_OK_VOID();
+            return YETTY_OK(yetty_ycore_int, 1); /* an interactive widget consumed it */
         }
         target = target->parent;
     }
-    return YETTY_OK_VOID();
+    return YETTY_OK(yetty_ycore_int, 0); /* fell through — chrome should handle it */
 }
 
-struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_motion(
+struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_motion(
     struct yetty_ygui_framework *framework, float x, float y)
 {
     if (!framework) {
-        return YETTY_ERR(yetty_ycore_void,
+        return YETTY_ERR(yetty_ycore_int,
                          "yetty_ygui_framework_feed_mouse_motion: NULL framework");
     }
     if (!framework->root) {
-        return YETTY_OK_VOID();
+        return YETTY_OK(yetty_ycore_int, 0);
     }
     /* During a drag, route motion to the capture target regardless of
      * where the cursor is — that's what makes slider / splitter drags
-     * track past the widget's own rect. */
+     * track past the widget's own rect. A drag is in progress, so the client
+     * owns the pointer: report consumed regardless of which widget handled it. */
     if (framework->pressed_obj) {
         struct yetty_ygui_object *cap = framework->pressed_obj;
         while (cap) {
             struct yetty_ycore_int_result r =
                 yetty_ygui_widget_on_motion(NULL, (struct yetty_yclass_object *)cap, x, y);
             if (YETTY_IS_ERR(r)) {
-                return YETTY_ERR(yetty_ycore_void,
+                return YETTY_ERR(yetty_ycore_int,
                                  "yetty_ygui_framework_feed_mouse_motion: capture on_motion", r);
             }
             if (r.value) {
-                return YETTY_OK_VOID();
+                return YETTY_OK(yetty_ycore_int, 1);
             }
             cap = cap->parent;
         }
-        return YETTY_OK_VOID();
+        return YETTY_OK(yetty_ycore_int, 1);
     }
     struct yetty_ygui_object *target = hit_test(framework->root, x, y);
     /* Hover bookkeeping — flip enter/leave when the deepest-hit widget
@@ -643,15 +644,15 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_motion(
         struct yetty_ycore_int_result r =
             yetty_ygui_widget_on_motion(NULL, (struct yetty_yclass_object *)target, x, y);
         if (YETTY_IS_ERR(r)) {
-            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_feed_mouse_motion: on_motion",
+            return YETTY_ERR(yetty_ycore_int, "yetty_ygui_framework_feed_mouse_motion: on_motion",
                              r);
         }
         if (r.value) {
-            return YETTY_OK_VOID();
+            return YETTY_OK(yetty_ycore_int, 1);
         }
         target = target->parent;
     }
-    return YETTY_OK_VOID();
+    return YETTY_OK(yetty_ycore_int, 0);
 }
 
 struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_scroll(

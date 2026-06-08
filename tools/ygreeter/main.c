@@ -2356,18 +2356,6 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *_yc
 
 /* Title-bar close-x handler — the window widget emits EVENT_CLOSE; we
  * react by running the app's mode-specific stop hook. */
-/* Right edge (px) of the titlebar tab band — the span chrome yields to ygui so
- * the tabs stay clickable. Covers the laid-out tabs (TAB_PITCH each) plus a
- * little slack, clamped so it never reaches the window-control cluster
- * (3 × 46 px). The strip to its right stays a chrome drag/maximize handle. */
-static float ygreeter_tab_band_right(float window_width)
-{
-    enum { TAB_PITCH = 134 /* 130 px tab + 4 px gap */ };
-    float tabs = (float)(TOP_TAB_COUNT * TAB_PITCH) + 12.0f;
-    float controls_left = window_width - 3.0f * 46.0f;
-    return tabs < controls_left ? tabs : controls_left;
-}
-
 static struct yetty_ycore_void_result build_ui(struct app *app)
 {
     /* yinit already ran ygreeter_extract_assets_cb early in startup, so
@@ -2833,7 +2821,7 @@ static struct yetty_ycore_void_result client_mouse_handler(void *userdata,
         if (got == sizeof(msg) && msg.magic == YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
             switch (msg.kind) {
             case YETTY_YMGUI_INPUT_MOUSE_BUTTON: {
-                struct yetty_ycore_void_result r = yetty_ygui_framework_feed_mouse_button(
+                struct yetty_ycore_int_result r = yetty_ygui_framework_feed_mouse_button(
                     app->engine, msg.x, msg.y, msg.button, msg.pressed, 0);
                 if (YETTY_IS_ERR(r)) {
                     yetty_ycore_error_destroy(r.error);
@@ -2841,7 +2829,7 @@ static struct yetty_ycore_void_result client_mouse_handler(void *userdata,
                 break;
             }
             case YETTY_YMGUI_INPUT_MOUSE_POS: {
-                struct yetty_ycore_void_result r =
+                struct yetty_ycore_int_result r =
                     yetty_ygui_framework_feed_mouse_motion(app->engine, msg.x, msg.y);
                 if (YETTY_IS_ERR(r)) {
                     yetty_ycore_error_destroy(r.error);
@@ -3269,6 +3257,21 @@ static void standalone_pty_resize_cb(void *userdata, uint32_t cols, uint32_t row
     yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
 }
 
+/* Client-first / chrome-fallback: hand a pointer event the greeter UI didn't
+ * consume to the window chrome (drag / edge-resize / maximize / window
+ * controls). chrome works in raw framebuffer px, so the unscaled event is
+ * passed straight through. */
+static void ygreeter_chrome_fallback(struct app *app, const struct yetty_yui_event *ev)
+{
+    if (!app->chrome) {
+        return;
+    }
+    struct yetty_ycore_int_result cr = yetty_ychrome_host_handle_event(app->chrome, ev);
+    if (YETTY_IS_ERR(cr)) {
+        yetty_ycore_error_destroy(cr.error);
+    }
+}
+
 static struct yetty_ycore_int_result standalone_event_handler(
     struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *ev)
 {
@@ -3327,24 +3330,6 @@ static struct yetty_ycore_int_result standalone_event_handler(
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
-    /* Window chrome gets first dibs on pointer events; anything it doesn't
-     * claim (caption drag / edge resize / its buttons) falls through to the
-     * greeter UI. */
-    if (app->chrome &&
-        (ev->type == YETTY_YCORE_MOUSE_DOWN || ev->type == YETTY_YCORE_MOUSE_UP ||
-         ev->type == YETTY_YCORE_MOUSE_MOVE || ev->type == YETTY_YCORE_MOUSE_DRAG ||
-         ev->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK)) {
-        struct yetty_ycore_int_result chrome_r =
-            yetty_ychrome_host_handle_event(app->chrome, ev);
-        int chrome_consumed = YETTY_IS_OK(chrome_r) && chrome_r.value;
-        if (YETTY_IS_ERR(chrome_r)) {
-            yetty_ycore_error_destroy(chrome_r.error);
-        }
-        if (chrome_consumed) {
-            return YETTY_OK(yetty_ycore_int, 1);
-        }
-    }
-
     switch (ev->type) {
     case YETTY_YCORE_SHUTDOWN:
     case YETTY_YCORE_WINDOW_CLOSE:
@@ -3384,10 +3369,6 @@ static struct yetty_ycore_int_result standalone_event_handler(
             if (YETTY_IS_ERR(chrome_rz)) {
                 yetty_ycore_error_destroy(chrome_rz.error);
             }
-            /* Re-clamp the tab band to the new width so it never runs under the
-             * (now-moved) window controls. */
-            yetty_ycore_error_destroy_safe(yetty_ychrome_host_set_content_band(
-                app->chrome, 1, 0.0f, ygreeter_tab_band_right((float)ev->resize.width)));
         }
         if (app->yframework->event_loop->ops->request_render) {
             app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
@@ -3411,17 +3392,31 @@ static struct yetty_ycore_int_result standalone_event_handler(
     }
     case YETTY_YCORE_MOUSE_DOWN:
     case YETTY_YCORE_MOUSE_UP: {
-        struct yetty_ycore_void_result r = yetty_ygui_framework_feed_mouse_button(
+        struct yetty_ycore_int_result r = yetty_ygui_framework_feed_mouse_button(
             app->engine, ev->mouse.x / scale, ev->mouse.y / scale, ev->mouse.button,
             ev->type == YETTY_YCORE_MOUSE_DOWN ? 1 : 0, ev->mouse.mods);
+        int consumed = YETTY_IS_OK(r) && r.value;
         if (YETTY_IS_ERR(r)) {
             yetty_ycore_error_destroy(r.error);
+        }
+        /* Client-first: only if the greeter UI (tabs/buttons) didn't take it
+         * does the window chrome get a shot (empty title-bar drag, edges). */
+        if (!consumed) {
+            ygreeter_chrome_fallback(app, ev);
         }
         if (app->yframework->event_loop->ops->request_render) {
             app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
+    case YETTY_YCORE_MOUSE_DOUBLE_CLICK:
+        /* ygui has no double-click concept here; it's the chrome's
+         * title-bar maximize gesture. */
+        ygreeter_chrome_fallback(app, ev);
+        if (app->yframework->event_loop->ops->request_render) {
+            app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
+        }
+        return YETTY_OK(yetty_ycore_int, 1);
     case YETTY_YCORE_MOUSE_SCROLL: {
         /* Positions are scaled like the others; the wheel deltas are not. */
         struct yetty_ycore_void_result r = yetty_ygui_framework_feed_mouse_scroll(
@@ -3437,10 +3432,16 @@ static struct yetty_ycore_int_result standalone_event_handler(
     }
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG: {
-        struct yetty_ycore_void_result r = yetty_ygui_framework_feed_mouse_motion(
+        struct yetty_ycore_int_result r = yetty_ygui_framework_feed_mouse_motion(
             app->engine, ev->mouse.x / scale, ev->mouse.y / scale);
+        int consumed = YETTY_IS_OK(r) && r.value;
         if (YETTY_IS_ERR(r)) {
             yetty_ycore_error_destroy(r.error);
+        }
+        /* Client-first fallback: chrome gets the move (resize-edge cursor /
+         * in-progress drag) only if no widget claimed it. */
+        if (!consumed) {
+            ygreeter_chrome_fallback(app, ev);
         }
         /* Hover state may have flipped — request a render so the new
          * hovered widget repaints before the next event. */
@@ -3628,15 +3629,6 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
             YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             app->chrome = chrome_r.value;
-            /* Mount the greeter's top tabbar INTO the titlebar (header-bar
-             * model): the tabbar widget is the first row of the scene and
-             * paints the full-width strip. Yield only the actual tab extent to
-             * ygui so the tabs stay clickable; the strip to the right of the
-             * tabs stays a chrome drag handle (and double-click there toggles
-             * maximize). Clamp to the window-control cluster. Updated on
-             * resize. */
-            yetty_ycore_error_destroy_safe(
-                yetty_ychrome_host_set_content_band(app->chrome, 1, 0.0f, ygreeter_tab_band_right((float)rt->surface_width)));
         } else {
             ywarn("ygreeter standalone: chrome host create failed: %s", chrome_r.error.msg);
             yetty_ycore_error_destroy(chrome_r.error);

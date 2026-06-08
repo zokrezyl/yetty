@@ -13,7 +13,6 @@ struct yetty_yui_event;
 
 struct yetty_ycore_void_result yetty_ychrome_configure(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yetty_yclass_object * window_manager, float caption_height, float edge_size, uint32_t flags);
 struct yetty_ycore_void_result yetty_ychrome_set_size(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, float width, float height);
-struct yetty_ycore_void_result yetty_ychrome_content_band_set(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, int active, float left, float right);
 struct yetty_ycore_void_result yetty_ychrome_destroy(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj);
 struct yetty_ycore_int_result yetty_ychrome_edge_cursor_at(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, float x, float y);
 struct yetty_ydraw_drawable_list_result yetty_ychrome_render(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj);

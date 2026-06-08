@@ -194,7 +194,7 @@ static struct yetty_ycore_void_result handle_event(struct yrich_app *app,
         }
         return YETTY_OK_VOID();
     case YETTY_YCORE_MOUSE_DOWN: {
-        struct yetty_ycore_void_result feed_r = yetty_ygui_framework_feed_mouse_button(
+        struct yetty_ycore_int_result feed_r = yetty_ygui_framework_feed_mouse_button(
             app->ygui, ev->mouse.x, ev->mouse.y, ev->mouse.button, 1, ev->mouse.mods);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, feed_r, "yrich: mouse down");
         struct yetty_ycore_void_result scene_r = push_scene(app);
@@ -202,7 +202,7 @@ static struct yetty_ycore_void_result handle_event(struct yrich_app *app,
         return YETTY_OK_VOID();
     }
     case YETTY_YCORE_MOUSE_UP: {
-        struct yetty_ycore_void_result feed_r = yetty_ygui_framework_feed_mouse_button(
+        struct yetty_ycore_int_result feed_r = yetty_ygui_framework_feed_mouse_button(
             app->ygui, ev->mouse.x, ev->mouse.y, ev->mouse.button, 0, ev->mouse.mods);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, feed_r, "yrich: mouse up");
         struct yetty_ycore_void_result scene_r = push_scene(app);
@@ -211,7 +211,7 @@ static struct yetty_ycore_void_result handle_event(struct yrich_app *app,
     }
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG: {
-        struct yetty_ycore_void_result feed_r =
+        struct yetty_ycore_int_result feed_r =
             yetty_ygui_framework_feed_mouse_motion(app->ygui, ev->mouse.x, ev->mouse.y);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, feed_r, "yrich: mouse move");
         struct yetty_ycore_void_result scene_r = push_scene(app);

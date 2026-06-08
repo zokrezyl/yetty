@@ -446,7 +446,7 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
          * capture, so a press on the empty strip falls through to chrome. On
          * release, chrome ends an active move/resize before the widget tree. */
         if (ev->type == YETTY_YCORE_MOUSE_DOWN) {
-            struct yetty_ycore_void_result fr = yetty_ygui_framework_feed_mouse_button(
+            struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_button(
                 r->engine, ev->mouse.x, ev->mouse.y, ev->mouse.button, 1, ev->mouse.mods);
             if (YETTY_IS_ERR(fr)) {
                 yetty_ycore_error_destroy(fr.error);
@@ -457,7 +457,7 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
             }
         } else {
             if (!runner_chrome_handle(r, ev)) {
-                struct yetty_ycore_void_result fr = yetty_ygui_framework_feed_mouse_button(
+                struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_button(
                     r->engine, ev->mouse.x, ev->mouse.y, ev->mouse.button, 0, ev->mouse.mods);
                 if (YETTY_IS_ERR(fr)) {
                     yetty_ycore_error_destroy(fr.error);
@@ -486,7 +486,7 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
         /* While chrome owns an active move/resize it consumes motion; otherwise
          * the widget tree gets it (hover, slider drag, …). */
         if (!runner_chrome_handle(r, ev)) {
-            struct yetty_ycore_void_result fr =
+            struct yetty_ycore_int_result fr =
                 yetty_ygui_framework_feed_mouse_motion(r->engine, ev->mouse.x, ev->mouse.y);
             if (YETTY_IS_ERR(fr)) {
                 yetty_ycore_error_destroy(fr.error);
@@ -1150,7 +1150,7 @@ static struct yetty_ycore_void_result client_mouse_handler(void *userdata,
         if (got == sizeof(msg) && msg.magic == YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
             switch (msg.kind) {
             case YETTY_YMGUI_INPUT_MOUSE_BUTTON: {
-                struct yetty_ycore_void_result r = yetty_ygui_framework_feed_mouse_button(
+                struct yetty_ycore_int_result r = yetty_ygui_framework_feed_mouse_button(
                     runner->engine, msg.x, msg.y, msg.button, msg.pressed, 0);
                 if (YETTY_IS_ERR(r)) {
                     yetty_ycore_error_destroy(r.error);
@@ -1158,7 +1158,7 @@ static struct yetty_ycore_void_result client_mouse_handler(void *userdata,
                 break;
             }
             case YETTY_YMGUI_INPUT_MOUSE_POS: {
-                struct yetty_ycore_void_result r =
+                struct yetty_ycore_int_result r =
                     yetty_ygui_framework_feed_mouse_motion(runner->engine, msg.x, msg.y);
                 if (YETTY_IS_ERR(r)) {
                     yetty_ycore_error_destroy(r.error);
