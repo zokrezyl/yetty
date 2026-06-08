@@ -126,6 +126,18 @@ struct [[clang::annotate("class@ychrome:chrome")]] chrome_data {
     /* Window-control button currently under the pointer: 1=minimize,
      * 2=maximize, 3=close, 0=none. Drawn with a highlight backing. */
     int hover_button;
+
+    /* Content band — the header-bar (CSD) content slot. When `content_active`,
+     * the app has mounted its own content (e.g. a ygui tabbar) into the caption
+     * across [content_left, content_right]. In that band chrome yields pointer
+     * events to the app (so the tabs are clickable) and paints no background —
+     * the app's content (a full-width strip) provides the bar look. Outside the
+     * band (and minus the window controls) the caption is still chrome's drag
+     * handle. Set via content_band_set(); inactive by default → chrome owns and
+     * paints the whole caption as before. */
+    int content_active;
+    float content_left;
+    float content_right;
 };
 
 /* Resolve the object's chrome_data slice, preserving the class_get /
@@ -209,6 +221,29 @@ static struct yetty_ycore_void_result chrome_set_size(struct yetty_yclass_ctx *c
     struct chrome_data *chrome = data_r.value;
     chrome->width = width;
     chrome->height = height;
+    return YETTY_OK_VOID();
+}
+
+/* Declare the content band — the header-bar content slot the app fills with its
+ * own UI (e.g. a ygui tabbar). With `active` non-zero, chrome yields pointer
+ * events inside [left, right] across the caption to the app and stops painting a
+ * background there (the app's content paints the strip). Pass active=0 to take
+ * the whole caption back. left/right are caption-relative px; keep right at or
+ * left of the window-control cluster (width - 3*button) so the controls stay
+ * clickable. Call again whenever the content's extent changes (tabs added). */
+[[clang::annotate("override@ychrome:chrome:content_band_set")]] [[clang::annotate(
+    "local@ychrome:content_band_set")]]
+static struct yetty_ycore_void_result chrome_content_band_set(struct yetty_yclass_ctx *ctx,
+                                                              struct yetty_yclass_object *obj,
+                                                              int active, float left, float right)
+{
+    (void)ctx;
+    struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "chrome content_band_set: object");
+    struct chrome_data *chrome = data_r.value;
+    chrome->content_active = active ? 1 : 0;
+    chrome->content_left = left;
+    chrome->content_right = right;
     return YETTY_OK_VOID();
 }
 
@@ -320,18 +355,23 @@ static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, list_r, "chrome render: list create");
     struct yetty_ydraw_drawable_list *list = list_r.value;
 
-    /* Background strip. */
-    struct yetty_ysdf_box bg = {.center_x = width * 0.5f,
-                                .center_y = height * 0.5f,
-                                .half_width = width * 0.5f,
-                                .half_height = height * 0.5f,
-                                .corner_radius = 0.0f};
-    struct yetty_ycore_void_result bg_r =
-        yetty_ydraw_drawable_list_add_cmd_add_box(list, /*id=*/0, /*z_order=*/0, YCHROME_STRIP_BG,
-                                                  /*stroke=*/0u, /*stroke_width=*/0.0f, &bg);
-    if (YETTY_IS_ERR(bg_r)) {
-        yetty_ydraw_drawable_list_destroy(list);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "chrome render: bg box", bg_r);
+    /* Background strip. Skipped in content-active mode: the app's mounted
+     * content (a full-width tab strip) paints the bar background itself, so a
+     * chrome strip on top would hide it. Only the window-control icons are drawn
+     * then, sitting directly on the app's strip. */
+    if (!chrome->content_active) {
+        struct yetty_ysdf_box bg = {.center_x = width * 0.5f,
+                                    .center_y = height * 0.5f,
+                                    .half_width = width * 0.5f,
+                                    .half_height = height * 0.5f,
+                                    .corner_radius = 0.0f};
+        struct yetty_ycore_void_result bg_r = yetty_ydraw_drawable_list_add_cmd_add_box(
+            list, /*id=*/0, /*z_order=*/0, YCHROME_STRIP_BG,
+            /*stroke=*/0u, /*stroke_width=*/0.0f, &bg);
+        if (YETTY_IS_ERR(bg_r)) {
+            yetty_ydraw_drawable_list_destroy(list);
+            return YETTY_ERR(yetty_ydraw_drawable_list, "chrome render: bg box", bg_r);
+        }
     }
 
     /* Window-control icons, flush right, drawn as SDF primitives — NO font:
@@ -554,6 +594,16 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
                                   (bottom ? YETTY_YCORE_RESIZE_EDGE_BOTTOM : 0);
             return YETTY_OK(yetty_ycore_int, 1);
         }
+    }
+
+    /* --- content band → yield to the app's mounted UI ------------------ *
+     * Events inside the header-bar content slot (e.g. the tabs) belong to the
+     * app. Return not-claimed so the caller routes them to its own widgets.
+     * Reached only after the window controls and resize edges had priority, so
+     * those still win where they overlap the band's margins. */
+    if (chrome->content_active && in_caption && x >= chrome->content_left &&
+        x < chrome->content_right) {
+        return YETTY_OK(yetty_ycore_int, 0);
     }
 
     /* --- caption double-click → toggle maximize ------------------------ */

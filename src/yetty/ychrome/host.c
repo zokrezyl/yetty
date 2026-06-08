@@ -186,6 +186,20 @@ struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_h
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_void_result yetty_ychrome_host_set_content_band(struct yetty_ychrome_host *host,
+                                                                   int active, float left,
+                                                                   float right)
+{
+    if (!host) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result br =
+        yetty_ychrome_content_band_set(NULL, host->chrome, active, left, right);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "ychrome_host_set_content_band");
+    host_caption_refresh(host);
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ycore_void_result yetty_ychrome_host_destroy(struct yetty_ychrome_host *host)
 {
     if (!host) {

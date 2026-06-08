@@ -8,6 +8,8 @@ static yetty_ychrome_configure_fn yetty_ychrome_chrome_yetty_ychrome_configure_c
 [[maybe_unused]]
 static yetty_ychrome_set_size_fn yetty_ychrome_chrome_yetty_ychrome_set_size_check = chrome_set_size;
 [[maybe_unused]]
+static yetty_ychrome_content_band_set_fn yetty_ychrome_chrome_yetty_ychrome_content_band_set_check = chrome_content_band_set;
+[[maybe_unused]]
 static yetty_ychrome_destroy_fn yetty_ychrome_chrome_yetty_ychrome_destroy_check = chrome_destroy;
 [[maybe_unused]]
 static yetty_ychrome_edge_cursor_at_fn yetty_ychrome_chrome_yetty_ychrome_edge_cursor_at_check = chrome_edge_cursor_at;
@@ -30,6 +32,7 @@ struct yetty_yclass_ptr_result yetty_ychrome_chrome_class_get(void)
     static const struct yetty_yclass_op ops[] = {
         {"yetty_ychrome", "configure", (yetty_yclass_method_id_t)yetty_ychrome_configure, (yetty_yclass_impl_t)chrome_configure},
         {"yetty_ychrome", "set_size", (yetty_yclass_method_id_t)yetty_ychrome_set_size, (yetty_yclass_impl_t)chrome_set_size},
+        {"yetty_ychrome", "content_band_set", (yetty_yclass_method_id_t)yetty_ychrome_content_band_set, (yetty_yclass_impl_t)chrome_content_band_set},
         {"yetty_ychrome", "destroy", (yetty_yclass_method_id_t)yetty_ychrome_destroy, (yetty_yclass_impl_t)chrome_destroy},
         {"yetty_ychrome", "edge_cursor_at", (yetty_yclass_method_id_t)yetty_ychrome_edge_cursor_at, (yetty_yclass_impl_t)chrome_edge_cursor_at},
         {"yetty_ychrome", "render", (yetty_yclass_method_id_t)yetty_ychrome_render, (yetty_yclass_impl_t)chrome_render},

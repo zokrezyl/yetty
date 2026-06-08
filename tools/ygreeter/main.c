@@ -2398,6 +2398,9 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(app->tabbar);
         l.height = 36;
         l.gap = 4;
+        /* Keep the tabs clear of the window controls (3 × 46 px) that chrome
+         * paints flush-right on top of this strip. */
+        l.padding_right = 3.0f * 46.0f;
         struct yetty_ycore_void_result r = yetty_ygui_widget_layout_set(app->tabbar, &l);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "build_ui: tabbar layout");
     }
@@ -3369,6 +3372,11 @@ static struct yetty_ycore_int_result standalone_event_handler(
             if (YETTY_IS_ERR(chrome_rz)) {
                 yetty_ycore_error_destroy(chrome_rz.error);
             }
+            /* Keep the yielded tab band running up to the (now-moved) window
+             * controls so the rightmost tabs stay clickable. */
+            float band_right = (float)ev->resize.width - 3.0f * 46.0f;
+            yetty_ycore_error_destroy_safe(
+                yetty_ychrome_host_set_content_band(app->chrome, 1, 0.0f, band_right));
         }
         if (app->yframework->event_loop->ops->request_render) {
             app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
@@ -3605,17 +3613,18 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
             app->root_container, app->font, &ctx, app->yframework->window_manager,
-            (float)rt->surface_width, (float)rt->surface_height, 34.0f, 8.0f,
+            (float)rt->surface_width, (float)rt->surface_height, 36.0f, 8.0f,
             YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             app->chrome = chrome_r.value;
-            /* Inset the greeter content below the chrome caption so its own
-             * tabbar isn't hidden under the titlebar. */
-            if (app->root) {
-                struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(app->root);
-                l.padding_top = 34.0f;
-                yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(app->root, &l));
-            }
+            /* Mount the greeter's top tabbar INTO the titlebar (header-bar
+             * model): the tabbar widget is the first row of the scene and
+             * paints the full-width strip; yield the strip up to the window
+             * controls to ygui so the tabs stay clickable, and let chrome paint
+             * only the min/max/close icons on top. Updated on resize. */
+            float band_right = (float)rt->surface_width - 3.0f * 46.0f;
+            yetty_ycore_error_destroy_safe(
+                yetty_ychrome_host_set_content_band(app->chrome, 1, 0.0f, band_right));
         } else {
             ywarn("ygreeter standalone: chrome host create failed: %s", chrome_r.error.msg);
             yetty_ycore_error_destroy(chrome_r.error);

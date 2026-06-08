@@ -31,6 +31,22 @@ methods:
       - name: height
         type: float
     local: true
+  - slot: content_band_set
+    domain: ychrome
+    owning_class: chrome
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: active
+        type: int
+      - name: left
+        type: float
+      - name: right
+        type: float
+    local: true
   - slot: destroy
     domain: ychrome
     owning_class: chrome
@@ -175,6 +191,18 @@ classes:
         type: int
         get: false
         set: false
+      - name: content_active
+        type: int
+        get: false
+        set: false
+      - name: content_left
+        type: float
+        get: false
+        set: false
+      - name: content_right
+        type: float
+        get: false
+        set: false
     ops:
       - slot: configure
         slot_domain: ychrome
@@ -182,6 +210,9 @@ classes:
       - slot: set_size
         slot_domain: ychrome
         impl: chrome_set_size
+      - slot: content_band_set
+        slot_domain: ychrome
+        impl: chrome_content_band_set
       - slot: destroy
         slot_domain: ychrome
         impl: chrome_destroy
