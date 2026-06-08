@@ -127,6 +127,11 @@ struct [[clang::annotate("class@ychrome:chrome")]] chrome_data {
      * 2=maximize, 3=close, 0=none. Drawn with a highlight backing. */
     int hover_button;
 
+    /* 1 while chrome is showing a resize cursor for a hovered edge, so it can
+     * restore the default cursor exactly once when the pointer leaves the edge
+     * (and otherwise leave the app's own cursor alone). */
+    int edge_cursor_on;
+
     /* Content band — the header-bar (CSD) content slot. When `content_active`,
      * the app has mounted its own content (e.g. a ygui tabbar) into the caption
      * across [content_left, content_right]. In that band chrome yields pointer
@@ -546,6 +551,30 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
     if (!have_xy) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
+
+    /* Resize-edge cursor feedback. The window is frameless, so without a cursor
+     * change the resize edges are invisible and the window reads as "not
+     * resizable" even though dragging an edge does resize it. Show the H/V
+     * resize cursor while hovering a live edge (matching yetty's titlebar);
+     * restore the default exactly once when leaving an edge, and don't touch the
+     * cursor over content so the app keeps control of its own cursors. Skipped
+     * mid-gesture (an in-progress resize/drag returns above). */
+    if ((chrome->flags & YETTY_YCHROME_FLAG_RESIZE) && chrome->width > 0.0f &&
+        chrome->height > 0.0f) {
+        int edge_left, edge_right, edge_top, edge_bottom;
+        chrome_edges_at(chrome, x, y, &edge_left, &edge_right, &edge_top, &edge_bottom);
+        if (edge_left || edge_right || edge_top || edge_bottom) {
+            int shape = (edge_left || edge_right) ? YETTY_YCORE_CURSOR_HRESIZE
+                                                  : YETTY_YCORE_CURSOR_VRESIZE;
+            wm_absorb(yetty_yplatform_window_manager_set_cursor(NULL, wm, shape));
+            chrome->edge_cursor_on = 1;
+        } else if (chrome->edge_cursor_on) {
+            wm_absorb(yetty_yplatform_window_manager_set_cursor(NULL, wm,
+                                                                YETTY_YCORE_CURSOR_DEFAULT));
+            chrome->edge_cursor_on = 0;
+        }
+    }
+
     int in_caption = y < chrome->caption_height;
 
     /* --- window-control buttons (minimize / maximize / close) ---------- *
