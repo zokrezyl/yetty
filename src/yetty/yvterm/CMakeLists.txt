@@ -4,6 +4,7 @@
 # prefix: yetty_yvterm_.
 add_library(yetty_yvterm
     content-layer.c
+    grid.c
     text-layer.c
     text-scrollback.c
     ydraw-content.c

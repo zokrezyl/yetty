@@ -302,6 +302,12 @@ exposed:
       - name: indent
         type: int
   - source_file: src/yetty/yfigure/container.c
+    name: yetty_yfigure_container_clear_all
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: container
+        type: "struct yetty_yfigure_container *"
+  - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_from
     return_type: "struct yetty_yfigure_container *"
     args:

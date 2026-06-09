@@ -234,6 +234,7 @@ static struct yetty_ycore_int_result text_layer_render(struct yetty_yrender_term
                                                        struct yetty_ydraw_target *target,
                                                        int force);
 static uint32_t text_layer_get_live_anchor(const struct yetty_yrender_terminal_layer *self);
+static uint32_t text_layer_get_scrollback_floor(const struct yetty_yrender_terminal_layer *self);
 static struct yetty_ycore_void_result text_layer_set_view_top(
     struct yetty_yrender_terminal_layer *self, int active, uint32_t view_top_total_idx);
 static void text_layer_build_view(struct yetty_yvterm_text_layer *layer);
@@ -505,6 +506,7 @@ static const struct yetty_yterminal_layer_ops text_layer_ops = {
     .scroll = text_layer_scroll,
     .set_cursor = text_layer_set_cursor,
     .get_live_anchor = text_layer_get_live_anchor,
+    .get_scrollback_floor = text_layer_get_scrollback_floor,
     .set_view_top = text_layer_set_view_top,
     .set_selection = text_layer_set_selection,
     .get_selection_text = text_layer_get_selection_text,
@@ -1488,7 +1490,21 @@ static uint32_t text_layer_get_live_anchor(const struct yetty_yrender_terminal_l
 {
     const struct yetty_yvterm_text_layer *text_layer = container_of(
         (struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_text_layer, base);
-    return text_layer->sb.lines_count;
+    /* ABSOLUTE index of the live-screen top in libvterm's full timeline:
+     * scrollback lines ever pushed, net of pops. Equals the ydraw canvas's
+     * rolling_row_0 (both advance 1:1 via the lockstep scroll), so the two
+     * layers index the same line by the same number even after eviction
+     * starts saturating lines_count. */
+    return (uint32_t)(text_layer->sb.lines_evicted + text_layer->sb.lines_count);
+}
+
+/* Oldest absolute line index still held in the scrollback arena — the floor a
+ * scrollback view may scroll up to. Below this the line has been evicted. */
+static uint32_t text_layer_get_scrollback_floor(const struct yetty_yrender_terminal_layer *self)
+{
+    const struct yetty_yvterm_text_layer *text_layer = container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_text_layer, base);
+    return (uint32_t)text_layer->sb.lines_evicted;
 }
 
 /* Reallocate view_staging if the requested cell count outgrew capacity.
@@ -1534,24 +1550,33 @@ static void text_layer_build_view(struct yetty_yvterm_text_layer *layer)
     VTermScreenCell blank;
     memset(&blank, 0, sizeof(blank));
 
+    /* view_top_total_idx is now an ABSOLUTE line index in libvterm's full
+     * timeline (matching the ydraw canvas's rolling_row_0). The arena holds
+     * the half-open absolute window [evicted, evicted+lines_count); above that
+     * is the live screen; below `evicted` the line is gone. */
+    uint32_t evicted = (uint32_t)layer->sb.lines_evicted;
+    uint32_t live_top = evicted + layer->sb.lines_count;
+
     for (uint32_t gpu_y = 0; gpu_y < rows; gpu_y++) {
         uint32_t total_idx = layer->view_top_total_idx + gpu_y;
         VTermScreenCell *dst = layer->view_staging + (size_t)gpu_y * cols;
 
-        if (total_idx < layer->sb.lines_count) {
+        if (total_idx >= evicted && total_idx < live_top) {
+            uint32_t arena_slot = total_idx - evicted;
             const struct yetty_yvterm_text_sb_line_rec *rec =
-                yetty_yvterm_text_sb_arena_peek(&layer->sb, total_idx);
+                yetty_yvterm_text_sb_arena_peek(&layer->sb, arena_slot);
             /* Sanity-check the record. If anything looks off (uninit slot,
              * stale offset, negative cols), fill blank and shout. Without
              * this we segfault deep in memcpy with no breadcrumbs. */
             if (!rec || rec->cols <= 0 || rec->offset >= layer->sb.cells_cap ||
                 (size_t)rec->cols * sizeof(VTermScreenCell) > layer->sb.cells_cap) {
-                yerror("build_view: bogus rec total_idx=%u view_top=%u gpu_y=%u "
-                       "lines_count=%u lines_cap=%u lines_tail=%u rec=%p "
+                yerror("build_view: bogus rec total_idx=%u arena_slot=%u view_top=%u gpu_y=%u "
+                       "evicted=%u lines_count=%u lines_cap=%u lines_tail=%u rec=%p "
                        "rec->cols=%d rec->offset=%zu cells_cap=%zu",
-                       total_idx, layer->view_top_total_idx, gpu_y, layer->sb.lines_count,
-                       layer->sb.lines_cap, layer->sb.lines_tail, (const void *)rec,
-                       rec ? rec->cols : 0, rec ? rec->offset : (size_t)0, layer->sb.cells_cap);
+                       total_idx, arena_slot, layer->view_top_total_idx, gpu_y, evicted,
+                       layer->sb.lines_count, layer->sb.lines_cap, layer->sb.lines_tail,
+                       (const void *)rec, rec ? rec->cols : 0, rec ? rec->offset : (size_t)0,
+                       layer->sb.cells_cap);
                 for (uint32_t c = 0; c < cols; c++) {
                     dst[c] = blank;
                 }
@@ -1562,8 +1587,8 @@ static void text_layer_build_view(struct yetty_yvterm_text_layer *layer)
             for (int c = copy; c < (int)cols; c++) {
                 dst[c] = blank;
             }
-        } else if (live) {
-            uint32_t live_row = total_idx - layer->sb.lines_count;
+        } else if (total_idx >= live_top && live) {
+            uint32_t live_row = total_idx - live_top;
             if (live_row < rows) {
                 memcpy(dst, live + (size_t)(live_root_row + live_row) * cols,
                        (size_t)cols * sizeof(VTermScreenCell));
@@ -1573,6 +1598,8 @@ static void text_layer_build_view(struct yetty_yvterm_text_layer *layer)
                 }
             }
         } else {
+            /* total_idx < evicted: line aged out of the arena, or no live
+             * buffer — nothing to show. */
             for (uint32_t c = 0; c < cols; c++) {
                 dst[c] = blank;
             }

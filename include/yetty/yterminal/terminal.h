@@ -149,6 +149,12 @@ struct yetty_yterminal_layer_ops {
    * during scrollback view. Optional — NULL means the layer can't anchor a
    * scrollback view (it'll be skipped by set_view_top). */
     uint32_t (*get_live_anchor)(const struct yetty_yrender_terminal_layer *self);
+    /* Oldest absolute line index the layer can still show in a scrollback view
+   * — the floor view_top_total_idx may be scrolled up to. Below it the line
+   * has aged out of the layer's history. The terminal clamps wheel-up to the
+   * max floor across layers so it never scrolls into evicted (blank) rows.
+   * Optional — NULL means "no floor" (treated as 0). */
+    uint32_t (*get_scrollback_floor)(const struct yetty_yrender_terminal_layer *self);
     /* Pin the viewport to the absolute line index `view_top_total_idx` while
    * `active` is non-zero. When active=0, return to live (track the live
    * anchor). The layer is expected to freeze its display at the given
