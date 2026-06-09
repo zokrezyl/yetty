@@ -108,6 +108,13 @@ else()
 endif()
 if(YETTY_ENABLE_LIB_WEBGPU)
     target_compile_definitions(ygreeter PRIVATE YETTY_YGREETER_HAS_STANDALONE)
+    # Window chrome (ychrome) is available in BOTH standalone and client/
+    # in-terminal mode. It is its own flag — not "standalone" — because it
+    # gates a client-mode feature too. It still tracks YETTY_ENABLE_LIB_WEBGPU
+    # only because the chrome caption composites through ygrid, a GPU-backed
+    # lib that is not built on the headless no-WebGPU cross targets; on every
+    # desktop/web build (all that matter here) it is on.
+    target_compile_definitions(ygreeter PRIVATE YETTY_YGREETER_HAS_CHROME)
 endif()
 
 find_package(Threads REQUIRED)
