@@ -25,10 +25,16 @@
 #include <yetty/yvterm/grid.h>
 #include <yetty/ytrace/ytrace.h>
 
-/* Lowest stacking order: the container sorts children by (z, insertion-seq)
- * and renders back-to-front, so the most-negative z renders first (bottom).
- * Every other figure defaults to z=0, so this keeps the content underneath. */
-#define YETTY_YVTERM_GRID_Z (-1000000)
+/* Absolute lowest stacking order: the container sorts children by
+ * (z, insertion-seq) and renders back-to-front, so the most-negative z renders
+ * first (bottom). The terminal content is the floor of the pane — it must sit
+ * below EVERY other figure, including a wire app's opaque chrome backdrop
+ * (ychrome host uses z=-1000000 to sit "far below every app figure"). If the
+ * grid shared that z, ordering would fall to insertion-seq, and a backdrop that
+ * arrives/re-mints in the wrong order (or, over a slow guest transport, arrives
+ * late) would no longer reliably cover the console text. Pin the grid strictly
+ * beneath the backdrop so it can never sort above the content. */
+#define YETTY_YVTERM_GRID_Z (-2000000000)
 
 struct [[clang::annotate("class@yvterm:grid")]] [[clang::annotate("parent@yfigure:figure")]]
 yetty_yvterm_grid {

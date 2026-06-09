@@ -2650,11 +2650,6 @@ struct client_state {
     struct yetty_ychrome_host *chrome_host;
     int chrome_width;
     int chrome_height;
-    /* Frames left to re-emit the chrome on (counts down in client_prep_cb).
-     * The first emit can race the host pane's container readiness on a slow
-     * guest/telnet transport (--temu/--qemu) and get dropped; re-establishing
-     * it over the next few drawn frames closes that window. */
-    int chrome_resync_frames;
 #endif
 };
 
@@ -2833,9 +2828,6 @@ static struct yetty_ycore_void_result client_chrome_sync(struct client_state *cs
         cs->chrome_host = host_result.value;
         cs->chrome_width = (int)width;
         cs->chrome_height = (int)height;
-        /* Re-establish the chrome over the next few drawn frames in case this
-         * first emit raced the host pane's readiness (slow guest transport). */
-        cs->chrome_resync_frames = 3;
         return YETTY_OK_VOID();
     }
     if ((int)width != cs->chrome_width || (int)height != cs->chrome_height) {
@@ -3122,17 +3114,24 @@ static void client_prep_cb(uv_prepare_t *handle)
             yetty_ycore_error_destroy(r.error);
         }
 #ifdef YETTY_YGREETER_HAS_CHROME
-        /* Co-emit the chrome on the same frames the framework draws, for a few
-         * frames after creation — survives an initial emit that raced the host
-         * pane's container readiness (notably the --temu/--qemu transport). */
-        if (cs->chrome_host && cs->chrome_resync_frames > 0) {
+        /* Co-emit the chrome on EVERY frame the framework draws, not just the
+         * first few. The chrome figures (opaque backdrop + caption) must reach
+         * the host pane with the same reliability as the widgets, and the only
+         * thing that gives the widgets that reliability is being re-emitted on
+         * each dirty frame. Over a slow guest transport (--temu/--qemu) the
+         * pane's container isn't ready for the first ~boot's worth of frames,
+         * so an emit bounded to the first N frames is spent before the link is
+         * live — the widgets then arrive (they keep re-emitting) but a one-shot
+         * backdrop does not, leaving the host's console text visible underneath.
+         * The framework only marks itself dirty on real UI changes, so this is
+         * naturally throttled to the widget-emit cadence, not every vsync. */
+        if (cs->chrome_host) {
             struct yetty_ycore_void_result resync_result =
                 yetty_ychrome_host_resync(cs->chrome_host);
             if (YETTY_IS_ERR(resync_result)) {
                 ywarn("ygreeter client: chrome resync failed: %s", resync_result.error.msg);
                 yetty_ycore_error_destroy(resync_result.error);
             }
-            cs->chrome_resync_frames--;
         }
 #endif
     }
