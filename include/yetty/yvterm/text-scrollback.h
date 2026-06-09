@@ -44,6 +44,13 @@ struct yetty_yvterm_text_sb_arena {
     uint32_t lines_tail;
     uint32_t lines_count;
 
+    /* Count of lines evicted off the oldest end since init. Together with
+     * lines_count this gives the ABSOLUTE index of the live-screen top in
+     * libvterm's full timeline (lines_evicted + lines_count) — the same
+     * absolute space the ydraw canvas's rolling_row_0 counts in, so both
+     * layers share one scroll coordinate even after the cap is hit. */
+    uint64_t lines_evicted;
+
     uint32_t max_lines;
 };
 

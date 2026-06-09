@@ -5,6 +5,7 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 
+struct yetty_yclass_object_ptr_result yetty_yvterm_grid_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_yvterm_shader_glyph_create(
     struct yetty_yclass_ctx *ctx);
 

@@ -349,6 +349,26 @@ static uint32_t content_layer_get_live_anchor(const struct yetty_yrender_termina
     return anchor;
 }
 
+/* Scrollback floor — the most-restrictive (largest) floor across sub-renderers
+ * so a wheel-up never scrolls past what BOTH layers can still show. */
+static uint32_t content_layer_get_scrollback_floor(const struct yetty_yrender_terminal_layer *self)
+{
+    const struct yetty_yvterm_content_layer *content = container_of(
+        (struct yetty_yrender_terminal_layer *)self, struct yetty_yvterm_content_layer, base);
+    uint32_t floor = 0;
+    struct yetty_yrender_terminal_layer *layers[2] = {content->text, content->ydraw};
+    for (size_t i = 0; i < 2; i++) {
+        struct yetty_yrender_terminal_layer *layer = layers[i];
+        if (layer && layer->ops && layer->ops->get_scrollback_floor) {
+            uint32_t f = layer->ops->get_scrollback_floor(layer);
+            if (f > floor) {
+                floor = f;
+            }
+        }
+    }
+    return floor;
+}
+
 static struct yetty_ycore_void_result content_layer_set_view_top(
     struct yetty_yrender_terminal_layer *self, int active, uint32_t view_top_total_idx)
 {
@@ -419,6 +439,7 @@ static const struct yetty_yterminal_layer_ops content_layer_ops = {
     /* scroll / set_cursor are unused with a single layer — the text<->ydraw
      * cross-wiring above handles all propagation internally. */
     .get_live_anchor = content_layer_get_live_anchor,
+    .get_scrollback_floor = content_layer_get_scrollback_floor,
     .set_view_top = content_layer_set_view_top,
     .set_selection = content_layer_set_selection,
     .get_selection_text = content_layer_get_selection_text,

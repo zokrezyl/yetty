@@ -144,6 +144,12 @@ struct yetty_yterminal_terminal {
     struct yetty_yfigure_container *root_container;
     struct yetty_yfigure_registry *figure_registry;
 
+    /* The content (text grid + ydraw canvas) seated as the lowest-z child of
+     * root_container and rendered through the figure path. Borrows
+     * terminal->layer; owned by the container. NULL until terminal_create
+     * wires it. */
+    struct yetty_yvterm_grid *grid;
+
     /* Default MSDF font attached to every ygrid the root container
      * mints (registered as user-data on KIND_YGRID factory). Borrowed
      * by each ygrid; terminal owns lifetime. Teardown destroys the
@@ -187,6 +193,11 @@ struct yetty_yterminal_terminal {
 
 /* How many lines a single mouse-wheel notch moves the scrollback view. */
 #define YETTY_YTERMINAL_WHEEL_LINES_PER_TICK 3
+
+/* Reserved root-container child id for the content grid figure (text + ydraw),
+ * seated at the lowest z. High sentinel so it can't collide with producer
+ * figure ids arriving over the wire. */
+#define YETTY_YTERMINAL_GRID_FIGURE_ID 0xFFFFFFFDu
 
 /* Forward declarations */
 static struct yetty_ycore_void_result terminal_read_pty(struct yetty_yterminal_terminal *terminal);
@@ -628,6 +639,18 @@ static uint32_t terminal_live_anchor(struct yetty_yterminal_terminal *terminal)
     return 0;
 }
 
+/* Oldest absolute line index a scrollback view may scroll up to. Lines below
+ * this have aged out of the layer's bounded history (scrollback/lines), so a
+ * wheel-up clamps here instead of marching into blank evicted rows. */
+static uint32_t terminal_scrollback_floor(struct yetty_yterminal_terminal *terminal)
+{
+    struct yetty_yrender_terminal_layer *layer = terminal->layer;
+    if (layer && layer->ops && layer->ops->get_scrollback_floor) {
+        return layer->ops->get_scrollback_floor(layer);
+    }
+    return 0;
+}
+
 /* Push the current scrollback view state into the content layer. */
 static struct yetty_ycore_void_result terminal_push_view_top(
     struct yetty_yterminal_terminal *terminal)
@@ -669,8 +692,13 @@ static struct yetty_ycore_void_result terminal_scrollback_apply(
     }
 
     if (lines > 0) {
-        if ((uint32_t)lines > terminal->view_top_total_idx) {
-            terminal->view_top_total_idx = 0;
+        /* Clamp to the oldest line still retained, not to 0 — once eviction
+         * starts the floor rises above 0 and scrolling to 0 would show blank
+         * aged-out rows. */
+        uint32_t floor = terminal_scrollback_floor(terminal);
+        if (terminal->view_top_total_idx < floor ||
+            (uint32_t)lines >= terminal->view_top_total_idx - floor) {
+            terminal->view_top_total_idx = floor;
         } else {
             terminal->view_top_total_idx -= (uint32_t)lines;
         }
@@ -968,52 +996,32 @@ static struct yetty_ycore_void_result terminal_render_frame(
      * sharing the big target can't stomp each other — loadOp ignores
      * scissor, so a Clear would have wiped every other pane. */
     ytime_start(layers);
-    /* The pane has a single content layer (text grid + ydraw canvas, which it
-     * composites internally bottom→top). It paints directly into big_target
-     * with LoadOp_Load — pixels persist frame to frame. The shader-glyph, ymgui,
-     * yrdawn, yplot, … are all figures in the root container, rendered after.
-     *
-     * Force a full repaint when the content layer is dirty OR the root
-     * container is dirty (its semi-transparent figures composite over the
-     * layer, so the layer must repaint to cover any pixels they vacate). */
-    int force = force_redraw;
-    struct yetty_yrender_terminal_layer *layer = terminal->layer;
-    if (!layer || !layer->ops || !layer->ops->render) {
-        return YETTY_ERR(yetty_ycore_void, "terminal_render_frame: no content layer to render");
+    /* One render walk: the content (text grid + ydraw canvas) is the lowest-z
+     * child of the root container, with producer figures (ymgui, yrdawn, yplot,
+     * shader-glyph, …) stacked above. The container paints children back-to-
+     * front in a single pass, each into big_target with LoadOp_Load. The grid
+     * figure force-repaints the content every walk so figures composited above
+     * always sit on freshly-drawn pixels — so force_redraw needs no separate
+     * handling here. */
+    (void)force_redraw;
+    if (!terminal->root_container) {
+        return YETTY_ERR(yetty_ycore_void, "terminal_render_frame: no root container to render");
     }
-    if (!force && layer->ops->is_dirty && layer->ops->is_dirty(layer)) {
-        force = 1;
-    }
-    if (!force && terminal->root_container) {
+    {
         struct yetty_yfigure_figure *rf =
             yetty_yfigure_container_as_figure(terminal->root_container);
-        if (rf && yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rf)-1).value) {
-            force = 1;
-        }
+        struct yetty_ycore_void_result render_res =
+            yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, render_res,
+                            "terminal_render_frame: root container render");
+        struct yetty_ycore_void_result dirty_clear_res =
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dirty_clear_res,
+                            "terminal_render_frame: clear container dirty");
     }
-
-    struct yetty_ycore_int_result res = layer->ops->render(layer, target, force);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, res,
-                        "terminal_render_frame: content layer render failed");
     ytime_report(layers);
 
-    /* Root container renders LAST — topmost of the rendering stack. The content
-     * layer paints underneath; everything addressed via YCOMPOSITOR_BIN figure
-     * records composes on top. */
-    if (terminal->root_container) {
-        struct yetty_yfigure_figure *rf =
-            yetty_yfigure_container_as_figure(terminal->root_container);
-        struct yetty_ycore_void_result rr =
-            yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "terminal_render_frame: root container render");
-        {
-            struct yetty_ycore_void_result drop_r =
-                yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 0);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yfigure_figure_dirty_set");
-        }
-    }
-
-    ydebug("terminal_render_frame: done (content layer + root container, no blend)");
+    ydebug("terminal_render_frame: done (root container single pass, no blend)");
     ytime_report(frame_render);
     return YETTY_OK_VOID();
 }
@@ -1313,6 +1321,23 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     yetty_yfigure_container_set_rect(terminal->root_container, root_rect);
     ydebug("terminal_create: root container ready");
 
+    /* Seat the content (libvterm text grid + ydraw canvas) as the lowest-z
+     * child of the root container so it renders through the figure path,
+     * beneath every producer figure, instead of a bespoke pre-container pass.
+     * The grid figure borrows terminal->layer; the container owns the figure. */
+    {
+        struct yetty_yvterm_grid_ptr_result grid_res =
+            yetty_yvterm_grid_figure_create(terminal->layer, root_rect);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, grid_res,
+                            "terminal_create: grid figure create failed");
+        terminal->grid = grid_res.value;
+        struct yetty_ycore_void_result add_res = yetty_yfigure_container_add_child(
+            terminal->root_container, yetty_yvterm_grid_as_figure(terminal->grid),
+            YETTY_YTERMINAL_GRID_FIGURE_ID);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, add_res,
+                            "terminal_create: add grid figure to root container failed");
+    }
+
     /* On a full-screen erase / reset (CSI 2J/3J or RIS — e.g. `clear`, Ctrl-L,
      * `reset`) the content layer wipes the text grid and ydraw canvas, but the
      * positioned compositor figures live in the root container, which it does
@@ -1550,6 +1575,16 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
             struct yetty_ycore_void_result drop_r =
                 yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yfigure_figure_dirty_set");
+        }
+
+        /* The content grid figure spans the whole pane — keep its rect in
+         * lockstep with the container so its render/clip bounds track resizes. */
+        if (terminal->grid) {
+            struct yetty_ycore_void_result grid_rect_res = yetty_yfigure_figure_rect_set(
+                (struct yetty_yclass_object *)(yetty_yvterm_grid_as_figure(terminal->grid)) - 1,
+                new_rect);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_rect_res,
+                                "yetty_yterminal_terminal_resize_grid: grid figure rect_set");
         }
     }
     /* The shader-glyph figure tracks the resize through the content layer's own

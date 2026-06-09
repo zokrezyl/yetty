@@ -522,6 +522,7 @@ static struct yetty_ycore_void_result container_process_bytes(struct yetty_yfigu
  * empty result is repainted. Shared by the CLEAR_ALL admin op and the terminal's
  * full-screen-erase / reset path. Best-effort: keeps tearing down on a per-child
  * error, stashing the first to surface at the end. */
+[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_yfigure_container_clear_all(
     struct yetty_yfigure_container *container)
 {

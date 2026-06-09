@@ -34,6 +34,7 @@ static void sb_arena_drop_oldest(struct yetty_yvterm_text_sb_arena *arena)
     arena->cells_used -= bytes;
     arena->lines_tail = (arena->lines_tail + 1) % arena->lines_cap;
     arena->lines_count--;
+    arena->lines_evicted++;
 }
 
 /* Drop the newest line. Used by pop. */
