@@ -35,6 +35,23 @@ void yetty_ycore_error_destroy(struct yetty_ycore_error err)
     }
 }
 
+struct yetty_ycore_void_result yetty_ycore_void_chain(struct yetty_ycore_void_result chain,
+                                                      struct yetty_ycore_void_result step)
+{
+    if (YETTY_IS_OK(step)) {
+        return chain;
+    }
+    if (YETTY_IS_OK(chain)) {
+        return step;
+    }
+    /* Both failed. The latest step's top message is always a static literal;
+     * keep it as the new head and link the accumulated chain beneath it. Free
+     * step's own deeper cause first so it is not leaked. */
+    const char *head_message = step.error.msg;
+    yetty_ycore_error_destroy(step.error);
+    return YETTY_ERR(yetty_ycore_void, head_message, chain);
+}
+
 void yetty_ycore_error_print(FILE *out, const char *headline, struct yetty_ycore_error err)
 {
     if (!out) {

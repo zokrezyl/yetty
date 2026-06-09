@@ -186,9 +186,10 @@ static struct yetty_ycore_void_result chrome_configure(struct yetty_yclass_ctx *
                                                        uint32_t flags)
 {
     (void)ctx;
-    if (!window_manager) {
-        return YETTY_ERR(yetty_ycore_void, "chrome configure: window_manager required");
-    }
+    /* window_manager may be NULL: the in-terminal / client case has no OS
+     * window to drive. Chrome still renders its caption and tracks hover so the
+     * app can act on a control click itself; only the live OS-window gestures
+     * (drag / resize / maximize / close → window_manager slots) are skipped. */
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "chrome configure: object");
     struct chrome_data *chrome = data_r.value;
@@ -399,11 +400,6 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
     YETTY_RETURN_IF_ERR(yetty_ycore_int, data_r, "chrome handle_event: object");
     struct chrome_data *chrome = data_r.value;
     struct yetty_yclass_object *wm = chrome->window_manager;
-    if (!wm) {
-        ydebug("CHROMETRACE: handle_event type=%d but window_manager is NULL — ignoring",
-               (int)event->type);
-        return YETTY_OK(yetty_ycore_int, 0);
-    }
 
     float x = 0.0f, y = 0.0f;
     int have_xy = chrome_event_xy(event, &x, &y);
@@ -413,6 +409,18 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
     if (have_xy) {
         chrome->hover_button =
             (chrome->dragging || chrome->resizing) ? 0 : chrome_button_at(chrome, x, y);
+    }
+    /* No window_manager → in-terminal / client mode: there is no OS window to
+     * drag, resize, or maximize, so skip every gesture below. Keep the hover
+     * highlight live and claim clicks inside the caption strip (so they do not
+     * fall through to the app's content); the app reads
+     * yetty_ychrome_hover_button() to act on a control click itself. */
+    if (!wm) {
+        int in_caption = have_xy && y >= 0.0f && y < chrome->caption_height && x >= 0.0f &&
+                         x < chrome->width;
+        int is_click =
+            event->type == YETTY_YCORE_MOUSE_DOWN || event->type == YETTY_YCORE_MOUSE_UP;
+        return YETTY_OK(yetty_ycore_int, (in_caption && is_click) ? 1 : 0);
     }
     ydebug("CHROMETRACE: type=%d xy=(%.1f,%.1f) have_xy=%d caption_h=%.1f wh=(%.1f,%.1f) "
            "dragging=%d resizing=%d flags=0x%x",

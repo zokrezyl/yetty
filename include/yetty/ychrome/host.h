@@ -37,6 +37,7 @@ extern "C" {
 
 struct yetty_ychrome_host;
 struct yetty_yfigure_container;
+struct yetty_yfigure_producer;
 struct yetty_yfont_font;
 struct yetty_context;
 struct yetty_yclass_object;
@@ -52,6 +53,16 @@ YETTY_YRESULT_DECLARE(yetty_ychrome_host_ptr, struct yetty_ychrome_host *);
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
     struct yetty_yfigure_container *container, struct yetty_yfont_font *font,
     const struct yetty_context *ctx, struct yetty_yclass_object *window_manager, float width,
+    float height, float caption_height, float edge_size, unsigned int flags);
+
+/* Wire variant for client / in-terminal mode: instead of pinning figures into
+ * a local container, EMIT the backdrop + caption as figure-tree records over
+ * `producer` (the emit side of the figure wire), so they render in a hosting
+ * yetty's pane. The opaque backdrop is what hides the host terminal's text
+ * beneath the app. `producer` is borrowed; `window_manager` is typically a
+ * wire adapter (close/min/max → pane ops) or NULL. */
+struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
+    struct yetty_yfigure_producer *producer, struct yetty_yclass_object *window_manager, float width,
     float height, float caption_height, float edge_size, unsigned int flags);
 
 /* The underlying ychrome:chrome object — feed it mouse events via

@@ -68,6 +68,22 @@ struct yetty_ycore_error *yetty_ycore_error_chain(struct yetty_ycore_error prev)
  * onwards — not `err`. NULL-cause-safe. */
 void yetty_ycore_error_destroy(struct yetty_ycore_error err);
 
+/* Fold one best-effort cleanup step into a running teardown chain WITHOUT
+ * swallowing anything. Use it to accumulate the failures of a multi-step
+ * destroy/resize where every step must run:
+ *
+ *   struct yetty_ycore_void_result teardown = YETTY_OK_VOID();
+ *   teardown = yetty_ycore_void_chain(teardown, step_a());
+ *   teardown = yetty_ycore_void_chain(teardown, step_b());
+ *   ... surface `teardown` at the end (the root consumer destroys the chain).
+ *
+ * Semantics: an OK `step` returns `chain` unchanged; the first failure is
+ * returned verbatim (chain intact); a later failure becomes the new head with
+ * the accumulated `chain` linked beneath as its cause (the latest step's own
+ * deeper cause is freed so it is not leaked). */
+struct yetty_ycore_void_result yetty_ycore_void_chain(struct yetty_ycore_void_result chain,
+                                                      struct yetty_ycore_void_result step);
+
 /* Print an error and every link in its cause chain to `out`. Each frame
  * shows the file:line:func captured at its YETTY_ERR call site.
  * The first frame is labelled with `headline` (e.g. "fatal error" /

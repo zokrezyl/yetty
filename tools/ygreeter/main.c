@@ -40,6 +40,7 @@
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
+#include <yetty/yfigure/producer.h>
 #include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/yfont/msdf-font.h>
@@ -2640,6 +2641,16 @@ struct client_state {
     struct yetty_ywire_wire_statemachine *wire_sm;
     struct app *app;
     int running;
+#ifdef YETTY_YGREETER_HAS_CHROME
+    /* Window chrome over the wire — the same ychrome the standalone window
+     * gets, but emitted as figures into the hosting yetty's pane. The opaque
+     * backdrop it pins hides the pane's terminal text beneath us; the caption
+     * gives the in-terminal app a titlebar. */
+    struct yetty_yfigure_producer *chrome_producer;
+    struct yetty_ychrome_host *chrome_host;
+    int chrome_width;
+    int chrome_height;
+#endif
 };
 
 /*-----------------------------------------------------------------------------
@@ -2794,6 +2805,93 @@ static struct yetty_ycore_void_result client_default_sink(void *userdata,
  * dispatch to ygui's framework_feed_mouse_* entry points (same path
  * the standalone mode uses for synthetic events).
  *---------------------------------------------------------------------------*/
+#ifdef YETTY_YGREETER_HAS_CHROME
+/* Create the wire chrome host on the first known pane size, and keep it sized
+ * to the pane thereafter. The host emits its opaque backdrop (hides the pane's
+ * terminal text) + caption into the hosting yetty over cs->chrome_producer.
+ * The caption height matches the standalone window (run_standalone_mode) and
+ * the space ygreeter's tabbar already reserves for window controls.
+ *
+ * Returns a Result so the coroutine / callback caller can chain the failure
+ * rather than swallow it. */
+static struct yetty_ycore_void_result client_chrome_sync(struct client_state *cs, float width,
+                                                         float height)
+{
+    if (!cs || !cs->chrome_producer || width <= 0.0f || height <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+    if (!cs->chrome_host) {
+        struct yetty_ychrome_host_ptr_result host_result = yetty_ychrome_host_create_wire(
+            cs->chrome_producer, /*window_manager=*/NULL, width, height, 34.0f, 8.0f,
+            YETTY_YCHROME_FLAG_ALL);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, host_result, "client_chrome_sync: create wire host");
+        cs->chrome_host = host_result.value;
+        cs->chrome_width = (int)width;
+        cs->chrome_height = (int)height;
+        return YETTY_OK_VOID();
+    }
+    if ((int)width != cs->chrome_width || (int)height != cs->chrome_height) {
+        cs->chrome_width = (int)width;
+        cs->chrome_height = (int)height;
+        struct yetty_ycore_void_result resized_result =
+            yetty_ychrome_host_resized(cs->chrome_host, width, height);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, resized_result, "client_chrome_sync: resize host");
+    }
+    return YETTY_OK_VOID();
+}
+
+static void client_stop(struct app *app);
+
+/* Feed a forwarded pointer event to the wire chrome host before ygui sees it.
+ * Returns 1 if chrome claimed the event (caption strip / window controls), so
+ * ygui must not also process it. A release on the close control exits the app;
+ * minimize/maximize of an in-terminal pane have no host-side semantics yet, so
+ * they are claimed but inert (a host pane-control protocol would make them
+ * act). */
+static int client_chrome_consume_mouse(struct client_state *cs,
+                                       const struct yetty_client_input_mouse *msg)
+{
+    if (!cs || !cs->chrome_host) {
+        return 0;
+    }
+    struct yetty_yui_event event = {0};
+    if (msg->kind == YETTY_YMGUI_INPUT_MOUSE_BUTTON) {
+        event.type = msg->pressed ? YETTY_YCORE_MOUSE_DOWN : YETTY_YCORE_MOUSE_UP;
+        event.mouse.button = msg->button;
+    } else if (msg->kind == YETTY_YMGUI_INPUT_MOUSE_POS) {
+        event.type = YETTY_YCORE_MOUSE_MOVE;
+    } else {
+        return 0;
+    }
+    event.mouse.x = msg->x;
+    event.mouse.y = msg->y;
+
+    struct yetty_ycore_int_result handle_result =
+        yetty_ychrome_host_handle_event(cs->chrome_host, &event);
+    if (YETTY_IS_ERR(handle_result)) {
+        ywarn("ygreeter client: chrome handle_event failed: %s", handle_result.error.msg);
+        yetty_ycore_error_destroy(handle_result.error);
+        return 0;
+    }
+    if (!handle_result.value) {
+        return 0;
+    }
+    /* Chrome claimed it. Act on the release of a window control. */
+    if (event.type == YETTY_YCORE_MOUSE_UP) {
+        struct yetty_ycore_int_result hover_result =
+            yetty_ychrome_hover_button(yetty_ychrome_host_chrome(cs->chrome_host));
+        if (YETTY_IS_OK(hover_result)) {
+            if (hover_result.value == 3) { /* 3 = close */
+                client_stop(cs->app);
+            }
+        } else {
+            yetty_ycore_error_destroy(hover_result.error);
+        }
+    }
+    return 1;
+}
+#endif
+
 static struct yetty_ycore_void_result client_mouse_handler(void *userdata,
                                                            struct yetty_ywire_wire_statemachine *sm)
 {
@@ -2819,26 +2917,38 @@ static struct yetty_ycore_void_result client_mouse_handler(void *userdata,
             got += rr.value;
         }
         if (got == sizeof(msg) && msg.magic == YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
+            /* ygreeter's UI (tabs/buttons) gets first refusal; only events it
+             * does not consume fall through to the window chrome — mirrors the
+             * standalone client-first / chrome-fallback ordering, so the chrome
+             * caption never steals a tab click. */
+            int ygui_consumed = 0;
             switch (msg.kind) {
             case YETTY_YMGUI_INPUT_MOUSE_BUTTON: {
-                struct yetty_ycore_int_result r = yetty_ygui_framework_feed_mouse_button(
+                struct yetty_ycore_int_result feed_result = yetty_ygui_framework_feed_mouse_button(
                     app->engine, msg.x, msg.y, msg.button, msg.pressed, 0);
-                if (YETTY_IS_ERR(r)) {
-                    yetty_ycore_error_destroy(r.error);
+                ygui_consumed = YETTY_IS_OK(feed_result) && feed_result.value;
+                if (YETTY_IS_ERR(feed_result)) {
+                    yetty_ycore_error_destroy(feed_result.error);
                 }
                 break;
             }
             case YETTY_YMGUI_INPUT_MOUSE_POS: {
-                struct yetty_ycore_int_result r =
+                struct yetty_ycore_int_result feed_result =
                     yetty_ygui_framework_feed_mouse_motion(app->engine, msg.x, msg.y);
-                if (YETTY_IS_ERR(r)) {
-                    yetty_ycore_error_destroy(r.error);
+                ygui_consumed = YETTY_IS_OK(feed_result) && feed_result.value;
+                if (YETTY_IS_ERR(feed_result)) {
+                    yetty_ycore_error_destroy(feed_result.error);
                 }
                 break;
             }
             default:
                 break;
             }
+#ifdef YETTY_YGREETER_HAS_CHROME
+            if (!ygui_consumed) {
+                client_chrome_consume_mouse(app->client, &msg);
+            }
+#endif
         }
         /* Yield AFTER each envelope (or partial-read failure) so the SM
          * scanner can transition out of SCAN_OSC_BODY and dispatch the
@@ -2885,6 +2995,18 @@ static struct yetty_ycore_void_result client_resize_handler(
                 yetty_ycore_error_destroy(r.error);
             }
             yetty_ygui_framework_mark_dirty(app->engine);
+#ifdef YETTY_YGREETER_HAS_CHROME
+            /* Event-loop coroutine boundary: a transient chrome-sync failure
+             * must not kill the resize handler, so surface it to the trace log
+             * and free the chain rather than tearing the coro down. */
+            struct yetty_ycore_void_result chrome_sync_result =
+                client_chrome_sync(app->client, msg.width, msg.height);
+            if (YETTY_IS_ERR(chrome_sync_result)) {
+                ywarn("ygreeter client: chrome sync (resize) failed: %s",
+                      chrome_sync_result.error.msg);
+                yetty_ycore_error_destroy(chrome_sync_result.error);
+            }
+#endif
         }
         yetty_yplatform_coro_yield();
     }
@@ -2965,6 +3087,16 @@ static void client_pickup_winsz(struct client_state *cs)
         if (YETTY_IS_ERR(r)) {
             yetty_ycore_error_destroy(r.error);
         }
+#ifdef YETTY_YGREETER_HAS_CHROME
+        /* uv signal/callback boundary — surface + free, don't swallow. */
+        struct yetty_ycore_void_result chrome_sync_result =
+            client_chrome_sync(cs, (float)ws.ws_xpixel, (float)ws.ws_ypixel);
+        if (YETTY_IS_ERR(chrome_sync_result)) {
+            ywarn("ygreeter client: chrome sync (winsz) failed: %s",
+                  chrome_sync_result.error.msg);
+            yetty_ycore_error_destroy(chrome_sync_result.error);
+        }
+#endif
     }
 }
 
@@ -3026,6 +3158,24 @@ static int run_client_mode(void)
     yetty_ygui_framework_set_key_cb(app.engine, on_key, &kc);
     cs.app = &app;
     cs.running = 1;
+
+#ifdef YETTY_YGREETER_HAS_CHROME
+    /* Emit-side of the figure wire: ships the window chrome (backdrop +
+     * caption) into the hosting yetty's pane. The chrome host itself is
+     * created lazily once we know the pane pixel size (client_chrome_sync,
+     * driven from the resize handler / winsize pickup). */
+    {
+        struct yetty_yfigure_producer_ptr_result producer_result =
+            yetty_yfigure_producer_create(&cs.out.base);
+        if (YETTY_IS_OK(producer_result)) {
+            cs.chrome_producer = producer_result.value;
+        } else {
+            ywarn("ygreeter client: chrome producer create failed: %s",
+                  producer_result.error.msg);
+            yetty_ycore_error_destroy(producer_result.error);
+        }
+    }
+#endif
 
     struct yetty_ycore_void_result br = build_ui(&app);
     if (YETTY_IS_ERR(br)) {
@@ -3098,6 +3248,25 @@ static int run_client_mode(void)
 
     uv_run(&cs.loop, UV_RUN_DEFAULT);
 
+    /* Teardown runs every step best-effort and folds each failure into one
+     * chain (nothing swallowed); the root surfaces + frees the chain below. */
+    struct yetty_ycore_void_result teardown_result = YETTY_OK_VOID();
+
+#ifdef YETTY_YGREETER_HAS_CHROME
+    /* Tear down the wire chrome host + producer. The host's figures on the
+     * far end are dropped by the CLEAR_ALL below; this just frees our side. */
+    if (cs.chrome_host) {
+        teardown_result =
+            yetty_ycore_void_chain(teardown_result, yetty_ychrome_host_destroy(cs.chrome_host));
+        cs.chrome_host = NULL;
+    }
+    if (cs.chrome_producer) {
+        teardown_result = yetty_ycore_void_chain(
+            teardown_result, yetty_yfigure_producer_destroy(cs.chrome_producer));
+        cs.chrome_producer = NULL;
+    }
+#endif
+
     /* Undo client_enable_mouse_forwarding before we exit. The DEC private
      * modes 1500/1501 live in the host yetty's terminal state, not ours —
      * if we leave them set, the shell that reclaims this pane keeps
@@ -3109,9 +3278,13 @@ static int run_client_mode(void)
     {
         static const char disable_fwd[] = "\033[?1500l\033[?1501l";
         struct yetty_ycore_buffer seq = {0};
-        if (YETTY_IS_OK(yetty_ywire_tmux_wrap(disable_fwd, sizeof(disable_fwd) - 1, &seq))) {
+        struct yetty_ycore_void_result wrap_result =
+            yetty_ywire_tmux_wrap(disable_fwd, sizeof(disable_fwd) - 1, &seq);
+        if (YETTY_IS_OK(wrap_result)) {
             ssize_t fwd_n = write(STDOUT_FILENO, (const char *)seq.data, seq.size);
             (void)fwd_n;
+        } else {
+            teardown_result = yetty_ycore_void_chain(teardown_result, wrap_result);
         }
         yetty_ycore_buffer_destroy(&seq);
     }
@@ -3121,13 +3294,8 @@ static int run_client_mode(void)
      * reclaims the pane would render under a stale ygreeter image). Blocking
      * fd write for the same reason as disable_fwd above — the uv loop has
      * stopped so the async output pty can no longer flush. */
-    {
-        struct yetty_ycore_void_result cr =
-            yetty_ygui_framework_clear_remote_fd(app.engine, STDOUT_FILENO);
-        if (YETTY_IS_ERR(cr)) {
-            yetty_ycore_error_destroy(cr.error);
-        }
-    }
+    teardown_result = yetty_ycore_void_chain(
+        teardown_result, yetty_ygui_framework_clear_remote_fd(app.engine, STDOUT_FILENO));
 
     uv_poll_stop(&cs.stdin_poll);
     uv_signal_stop(&cs.sigwinch);
@@ -3139,18 +3307,24 @@ static int run_client_mode(void)
     uv_run(&cs.loop, UV_RUN_NOWAIT);
 
     if (cs.wire_sm) {
-        struct yetty_ycore_void_result wd = yetty_ywire_wire_statemachine_destroy(cs.wire_sm);
-        if (YETTY_IS_ERR(wd)) {
-            yetty_ycore_error_destroy(wd.error);
-        }
+        teardown_result = yetty_ycore_void_chain(
+            teardown_result, yetty_ywire_wire_statemachine_destroy(cs.wire_sm));
         cs.wire_sm = NULL;
     }
-    struct yetty_ycore_void_result dr = yetty_ygui_framework_destroy(app.engine);
-    if (YETTY_IS_ERR(dr)) {
-        yetty_ycore_error_destroy(dr.error);
-    }
+    teardown_result =
+        yetty_ycore_void_chain(teardown_result, yetty_ygui_framework_destroy(app.engine));
     uv_loop_close(&cs.loop);
     ygreeter_tty_restore();
+
+    /* Root of the client path: surface the whole teardown chain to the trace
+     * log (stderr would pollute the host PTY) and free it. */
+    if (YETTY_IS_ERR(teardown_result)) {
+        char teardown_message[512];
+        yetty_ycore_error_snprint(teardown_message, sizeof(teardown_message),
+                                  teardown_result.error);
+        ywarn("ygreeter client: teardown errors: %s", teardown_message);
+        yetty_ycore_error_destroy(teardown_result.error);
+    }
     return 0;
 }
 
