@@ -361,6 +361,17 @@ struct yetty_ylexbor {
 	 * to substitute `var(--foo)` references. */
     struct yetty_ylexbor_customs customs;
 
+    /* Sorted, de-duplicated set of every class token present in the current
+	 * document, built lazily from the DOM the first time the custom-property
+	 * scanner needs it. Lets the scanner reject design tokens scoped under a
+	 * class that isn't on the page (an inactive theme, e.g. Google News parks
+	 * its dark palette under `.dm7YTc` / `body.dm7YTc`) instead of capturing
+	 * them globally and, say, painting the fixed header dark. Owned; freed and
+	 * rebuilt on document replace. */
+    char **doc_classes;
+    int doc_class_count;
+    int doc_classes_built;
+
     /* Base URL of the loaded document — used to resolve relative
 	 * src= for external <script>, fetch(), XHR. NULL for HTML loaded
 	 * from a string with no associated URL. Owned, freed on destroy. */
@@ -534,6 +545,10 @@ float yetty_ylexbor_glyph_advance_ratio(const struct yetty_ylexbor *r);
  * html / *  and merge them into r->customs. Idempotent — later defs
  * overwrite earlier (closest to spec for our purposes). */
 void yetty_ylexbor_css_vars_scan(struct yetty_ylexbor *r, const char *css_source, size_t len);
+
+/* Drop the cached document class set (see r->doc_classes) so the next custom-
+ * property scan rebuilds it from the current DOM. Call on document replace. */
+void yetty_ylexbor_css_vars_reset_doc_classes(struct yetty_ylexbor *r);
 
 /* Scan `css_source` for the `minmax(0, <len>)` grid content-column idiom
  * and record the widest track in the readable-column range into

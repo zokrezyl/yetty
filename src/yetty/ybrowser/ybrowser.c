@@ -542,6 +542,10 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     yetty_ylexbor_prof("load_html START  html_bytes=%zu", html_len);
     double t_phase = yetty_ylexbor_prof_now_ms();
 
+    /* New DOM coming — drop the cached document class set so the custom-
+     * property scanner rebuilds it from this document. */
+    yetty_ylexbor_css_vars_reset_doc_classes(r);
+
     lxb_status_t s = lxb_html_document_parse(r->document, (const lxb_char_t *)html, html_len);
     if (s != LXB_STATUS_OK) {
         return YETTY_ERR(yetty_ycore_void, "html_document_parse failed");

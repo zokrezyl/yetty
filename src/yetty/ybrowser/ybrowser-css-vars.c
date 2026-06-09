@@ -96,6 +96,20 @@ void yetty_ylexbor_css_vars_destroy(struct yetty_ylexbor *r)
     free(r->customs.data);
     r->customs.data = NULL;
     r->customs.size = r->customs.cap = 0;
+    yetty_ylexbor_css_vars_reset_doc_classes(r);
+}
+
+/* Drop the cached document class set so the next scan rebuilds it from the
+ * replacement DOM. Called on document load and from destroy. */
+void yetty_ylexbor_css_vars_reset_doc_classes(struct yetty_ylexbor *r)
+{
+    for (int i = 0; i < r->doc_class_count; i++) {
+        free(r->doc_classes[i]);
+    }
+    free(r->doc_classes);
+    r->doc_classes = NULL;
+    r->doc_class_count = 0;
+    r->doc_classes_built = 0;
 }
 
 /* Scan for the `minmax(0, <len>)` grid content-column idiom (e.g.
@@ -166,49 +180,184 @@ void yetty_ylexbor_css_scan_grid_content_width(struct yetty_ylexbor *r, const ch
  * blocks for now (they'd need media-query evaluation which we don't do).
  * ===========================================================================*/
 
-static int sel_is_global_target_simple(const char *sel, size_t len)
+static int css_var_is_ws(char c)
 {
-    while (len > 0 && (*sel == ' ' || *sel == '\t' || *sel == '\n')) {
-        sel++;
-        len--;
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r';
+}
+
+static int css_var_is_class_char(char c)
+{
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' ||
+           c == '_';
+}
+
+/* Compare for qsort/bsearch over the document class-name set. */
+static int css_var_class_cmp(const void *a, const void *b)
+{
+    return strcmp(*(const char *const *)a, *(const char *const *)b);
+}
+
+/* Build (once) the sorted, de-duplicated set of every class token present in
+ * the live DOM. Used to reject design tokens scoped under a class that isn't
+ * on the page. Best-effort: on OOM it leaves the set empty, which makes the
+ * scanner fall back to permissive capture. */
+static void css_var_build_doc_classes(struct yetty_ylexbor *r)
+{
+    r->doc_classes_built = 1;
+    if (!r->document) {
+        return;
     }
-    while (len > 0 && (sel[len - 1] == ' ' || sel[len - 1] == '\t' || sel[len - 1] == '\n')) {
-        len--;
+    int cap = 0;
+    lxb_dom_node_t *node = lxb_dom_interface_node(r->document);
+    lxb_dom_node_t *root = node;
+    while (node) {
+        if (node->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+            lxb_dom_element_t *el = lxb_dom_interface_element(node);
+            size_t alen = 0;
+            const lxb_char_t *cv =
+                lxb_dom_element_get_attribute(el, (const lxb_char_t *)"class", 5, &alen);
+            if (cv && alen > 0) {
+                const char *p = (const char *)cv;
+                const char *end = p + alen;
+                while (p < end) {
+                    while (p < end && css_var_is_ws(*p)) {
+                        p++;
+                    }
+                    const char *s = p;
+                    while (p < end && !css_var_is_ws(*p)) {
+                        p++;
+                    }
+                    if (p > s) {
+                        if (r->doc_class_count == cap) {
+                            int nc = cap ? cap * 2 : 64;
+                            char **np = realloc(r->doc_classes, (size_t)nc * sizeof(char *));
+                            if (!np) {
+                                goto sort;
+                            }
+                            r->doc_classes = np;
+                            cap = nc;
+                        }
+                        char *tok = strndup(s, (size_t)(p - s));
+                        if (tok) {
+                            r->doc_classes[r->doc_class_count++] = tok;
+                        }
+                    }
+                }
+            }
+        }
+        /* Pre-order descent: child, else sibling, else up-and-over. */
+        if (node->first_child) {
+            node = node->first_child;
+        } else {
+            while (node && node != root && !node->next) {
+                node = node->parent;
+            }
+            if (!node || node == root) {
+                break;
+            }
+            node = node->next;
+        }
     }
-    if (len == 0) {
+sort:
+    if (r->doc_class_count > 1) {
+        qsort(r->doc_classes, (size_t)r->doc_class_count, sizeof(char *), css_var_class_cmp);
+        int w = 1;
+        for (int i = 1; i < r->doc_class_count; i++) {
+            if (strcmp(r->doc_classes[i], r->doc_classes[w - 1]) != 0) {
+                r->doc_classes[w++] = r->doc_classes[i];
+            } else {
+                free(r->doc_classes[i]);
+            }
+        }
+        r->doc_class_count = w;
+    }
+}
+
+/* True iff class token cls[0..clen) appears anywhere in the document. */
+static int css_var_doc_has_class(struct yetty_ylexbor *r, const char *cls, size_t clen)
+{
+    if (!r->doc_classes_built) {
+        css_var_build_doc_classes(r);
+    }
+    if (r->doc_class_count == 0 || clen == 0) {
         return 0;
     }
-    if (len == 5 && strncasecmp(sel, ":root", 5) == 0) {
-        return 1;
-    }
-    if (len == 4 && strncasecmp(sel, "html", 4) == 0) {
-        return 1;
-    }
-    if (len == 4 && strncasecmp(sel, "body", 4) == 0) {
-        return 1;
-    }
-    if (len == 1 && sel[0] == '*') {
-        return 1;
+    int lo = 0;
+    int hi = r->doc_class_count - 1;
+    while (lo <= hi) {
+        int mid = lo + (hi - lo) / 2;
+        const char *m = r->doc_classes[mid];
+        int c = strncmp(m, cls, clen);
+        if (c == 0) {
+            c = (m[clen] == '\0') ? 0 : 1; /* m longer than the token => greater */
+        }
+        if (c == 0) {
+            return 1;
+        }
+        if (c < 0) {
+            lo = mid + 1;
+        } else {
+            hi = mid - 1;
+        }
     }
     return 0;
 }
 
-static int sel_is_global_target(const char *sel, size_t len)
+/* Decide whether a rule's custom properties should be captured as global
+ * design tokens. The guard: a rule is rejected iff its selector references a
+ * `.class` token that does not appear anywhere in the document — i.e. it
+ * belongs to an INACTIVE scope (typically a non-current theme, e.g. Google
+ * News parks its dark palette under `.dm7YTc` / `body.dm7YTc`; capturing
+ * `--gm3-sys-color-background:#131314` from those painted the fixed header
+ * dark). Selectors with no class qualifier (`:root`, `html`, `body`, `*`,
+ * `[data-theme=…]`) stay permissively global, as before. Class tokens inside
+ * `[...]` attribute selectors and quoted strings are skipped. */
+static int sel_is_global_target(struct yetty_ylexbor *r, const char *sel, size_t len)
 {
-    /* For practical fidelity on real-world themes, we accept custom
-	 * properties from *any* rule and treat them as global. The
-	 * spec-correct approach scopes per-element, but every modern
-	 * site's design tokens live on attribute selectors like
-	 * `[data-color-mode="light"]` or `[data-theme="dark"]`. We
-	 * can't evaluate those at parse-time without running the full
-	 * cascade per element, so we collect everything; last-write-
-	 * wins. The user can still flip themes via JS — that mutates
-	 * the cascade output we read through computed style. */
-    (void)sel;
-    (void)len;
-    (void)sel_is_global_target_simple;
+    const char *p = sel;
+    const char *end = sel + len;
+    int in_attr = 0;
+    char quote = 0;
+    while (p < end) {
+        char c = *p;
+        if (quote) {
+            if (c == quote) {
+                quote = 0;
+            }
+            p++;
+            continue;
+        }
+        if (c == '"' || c == '\'') {
+            quote = c;
+            p++;
+            continue;
+        }
+        if (c == '[') {
+            in_attr = 1;
+            p++;
+            continue;
+        }
+        if (c == ']') {
+            in_attr = 0;
+            p++;
+            continue;
+        }
+        if (c == '.' && !in_attr) {
+            p++;
+            const char *s = p;
+            while (p < end && css_var_is_class_char(*p)) {
+                p++;
+            }
+            if (p > s && !css_var_doc_has_class(r, s, (size_t)(p - s))) {
+                return 0; /* references a class absent from the document */
+            }
+            continue;
+        }
+        p++;
+    }
     return 1;
 }
+
 
 /* Walk `src` looking for top-level rules. For each rule whose selector
  * looks like :root / html / body / asterisk-wildcard, scan its
@@ -332,7 +481,7 @@ void yetty_ylexbor_css_vars_scan(struct yetty_ylexbor *r, const char *src, size_
             p++;
         }
 
-        if (!sel_is_global_target(sel, sel_len)) {
+        if (!sel_is_global_target(r, sel, sel_len)) {
             continue;
         }
 
