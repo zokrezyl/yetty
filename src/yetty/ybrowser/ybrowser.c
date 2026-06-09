@@ -116,7 +116,15 @@ static void arena_reset(struct yetty_ylexbor *r)
  * Good enough for the same MVP layout shape ynetsurf uses.
  * ===========================================================================*/
 
-float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size)
+float yetty_ylexbor_glyph_advance_ratio(const struct yetty_ylexbor *r)
+{
+    if (r != NULL && r->glyph_advance_ratio > 0.0f) {
+        return r->glyph_advance_ratio;
+    }
+    return 0.55f;
+}
+
+float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size, float advance_ratio)
 {
     int n = 0;
     for (size_t i = 0; i < len;) {
@@ -134,7 +142,10 @@ float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size)
         }
         n++;
     }
-    float per_glyph = font_size * 0.55f;
+    if (advance_ratio <= 0.0f) {
+        advance_ratio = 0.55f;
+    }
+    float per_glyph = font_size * advance_ratio;
     if (per_glyph < 1.0f) {
         per_glyph = 1.0f;
     }
@@ -202,6 +213,7 @@ struct yetty_ycore_void_result yetty_ylexbor_destroy(struct yetty_ylexbor *r)
     }
     box_vec_destroy(&r->boxes);
     arena_reset(r);
+    yetty_ylexbor_grid_classes_free(r);
     free(r->text_chunks);
     free(r->base_url);
     for (int i = 0; i < r->img_cache_count; i++) {
@@ -222,6 +234,13 @@ struct yetty_ycore_void_result yetty_ylexbor_set_base_url(struct yetty_ylexbor *
     free(r->base_url);
     r->base_url = url ? strdup(url) : NULL;
     return YETTY_OK_VOID();
+}
+
+void yetty_ylexbor_set_glyph_advance_ratio(struct yetty_ylexbor *r, float ratio)
+{
+    if (r != NULL) {
+        r->glyph_advance_ratio = ratio;
+    }
 }
 
 int yetty_ylexbor_pump_timers(struct yetty_ylexbor *r)
@@ -468,6 +487,8 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     /* Replace the document — fresh parser state, drop any prior boxes. */
     box_vec_clear(&r->boxes);
     arena_reset(r);
+    yetty_ylexbor_grid_classes_free(r);
+    r->grid_content_max_px = 0.0f;
     r->content_height = 0;
 
     lxb_status_t s = lxb_html_document_parse(r->document, (const lxb_char_t *)html, html_len);
@@ -517,6 +538,11 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css(struct yetty_ylexbor *r, co
     /* Pre-scan for `:root { --x: y; }` etc. before lexbor parses,
 	 * so var() lookups see the latest definitions. */
     yetty_ylexbor_css_vars_scan(r, css, css_len);
+    /* Also note any grid content-column cap (minmax(0, Nrem)) — applied as
+     * a max-width on display:grid containers since we don't lay out grid
+     * tracks. */
+    yetty_ylexbor_css_scan_grid_content_width(r, css, css_len);
+    yetty_ylexbor_css_scan_grid_templates(r, css, css_len);
 
     /* Also push the same CSS through libcss so its cascade sees it. */
     (void)yetty_ybrowser_libcss_add_sheet(r, css, css_len, CSS_ORIGIN_AUTHOR);
@@ -681,6 +707,31 @@ int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int
             text_out[n] = '\0';
         }
     }
+    return 0;
+}
+
+int yetty_ylexbor_test_box_data_test_at(const struct yetty_ylexbor *r, int index, char *out_buf,
+                                        int cap)
+{
+    if (out_buf && cap > 0) {
+        out_buf[0] = '\0';
+    }
+    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size || out_buf == NULL || cap <= 0) {
+        return -1;
+    }
+    const struct yetty_ylexbor_box *b = &r->boxes.data[index];
+    if (b->element == NULL) {
+        return -1;
+    }
+    size_t vlen = 0;
+    const lxb_char_t *val =
+        lxb_dom_element_get_attribute(b->element, (const lxb_char_t *)"data-test", 9, &vlen);
+    if (val == NULL || vlen == 0) {
+        return -1;
+    }
+    int n = vlen < (size_t)(cap - 1) ? (int)vlen : cap - 1;
+    memcpy(out_buf, val, (size_t)n);
+    out_buf[n] = '\0';
     return 0;
 }
 

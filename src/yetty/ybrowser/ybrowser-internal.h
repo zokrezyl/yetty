@@ -46,10 +46,64 @@ enum yetty_ylexbor_layout_mode {
     YL_LAYOUT_FLEX_COLUMN, /* display:flex; flex-direction:column */
     YL_LAYOUT_TABLE,       /* display:table — rows laid out vertically,
 	                        * cells horizontally with equal column width */
+    YL_LAYOUT_GRID,        /* display:grid with a parsed grid-template-columns
+	                        * — children auto-flow into the columns. Only the
+	                        * track-sized column layout is modelled (no spans);
+	                        * activated for small explicit-track grids (story
+	                        * cards), the dominant real-world idiom. */
+};
+
+/* One grid-template-columns track. `is_fr` selects the unit: an `fr` track
+ * shares leftover space weighted by `value`; otherwise `value` is a fixed px
+ * width. `auto`/`min-content`/`max-content` are approximated as `1fr`. */
+struct yl_grid_track {
+    float value;
+    uint8_t is_fr;
+};
+
+#define YL_GRID_MAX_TRACKS 8
+
+/* A class-scoped grid template parsed from the author CSS
+ * (`.cls{display:grid;grid-template-columns:…;column-gap:…}`). Looked up by
+ * class name at box-build for grid containers. */
+struct yl_grid_class {
+    char *cls; /* owned; freed on document replace */
+    struct yl_grid_track tracks[YL_GRID_MAX_TRACKS];
+    uint8_t ntracks;
+    float col_gap;
+    float row_gap;
+};
+
+/* CSS `position` values. Mirrors the subset of CSS_POSITION_* the layout
+ * pass acts on; STICKY collapses to RELATIVE until proper sticky tracking
+ * exists. */
+enum yetty_ylexbor_position {
+    YL_POS_STATIC = 0,
+    YL_POS_RELATIVE,
+    YL_POS_ABSOLUTE,
+    YL_POS_FIXED,
 };
 
 struct yetty_ylexbor_color {
     uint8_t r, g, b, a;
+};
+
+/* Bits set in yetty_ylexbor_box.pct_mask when the matching margin/padding
+ * field holds a *percentage ratio* (e.g. 0.10 for 10%) rather than a
+ * resolved pixel value. The layout pass multiplies the ratio by the
+ * containing block's content width (the only correct basis for percent
+ * margins AND paddings per CSS) and clears the bit. A separate flag is
+ * needed — unlike width, margins may be legitimately negative px, so the
+ * sign cannot double as a "this is a percent" marker. */
+enum {
+    YL_PCT_MARGIN_TOP = 1u << 0,
+    YL_PCT_MARGIN_RIGHT = 1u << 1,
+    YL_PCT_MARGIN_BOTTOM = 1u << 2,
+    YL_PCT_MARGIN_LEFT = 1u << 3,
+    YL_PCT_PADDING_TOP = 1u << 4,
+    YL_PCT_PADDING_RIGHT = 1u << 5,
+    YL_PCT_PADDING_BOTTOM = 1u << 6,
+    YL_PCT_PADDING_LEFT = 1u << 7,
 };
 
 /* One styled sub-run inside an inline-text box's character stream.
@@ -88,6 +142,22 @@ struct yetty_ylexbor_box {
     int font_weight; /* CSS weight; 400 = normal, 700 = bold */
     bool font_italic;
 
+    /* Computed CSS `line-height` in px. 0 = unset / `normal` — the
+     * inline-wrap pass falls back to font_size * 1.25 in that case. A
+     * NUMBER value (e.g. line-height: 1.5) is pre-multiplied by font_size
+     * at box-build; a DIMENSION (e.g. 24px) is the resolved length. */
+    float line_height;
+
+    /* box-sizing. false = content-box (CSS initial): the explicit
+     * `css_width` is the content width, padding + border expand the box.
+     * true = border-box: `css_width` already includes padding + border,
+     * so the content area is the remainder. The layout pass branches on
+     * this when an explicit width is set. */
+    bool border_box;
+
+    /* Percent margin/padding marker — see YL_PCT_* above. */
+    uint8_t pct_mask;
+
     /* Layout mode for this block's children — vertical stacking by
 	 * default; flex row/column when display:flex is set. */
     enum yetty_ylexbor_layout_mode layout_mode;
@@ -122,12 +192,46 @@ struct yetty_ylexbor_box {
     int justify_content;
     int align_items;
 
+    /* Grid-container tracks (meaningful when layout_mode == YL_LAYOUT_GRID).
+	 * Parsed from the author CSS's grid-template-columns (libcss exposes none
+	 * of it). grid_ntracks == 0 means "not a resolved grid". */
+    struct yl_grid_track grid_tracks[YL_GRID_MAX_TRACKS];
+    uint8_t grid_ntracks;
+    float grid_col_gap;
+    float grid_row_gap;
+
     /* Float / clear. float_side: 0=none, 1=left, 2=right.
 	 * clear_side: 0=none, 1=left, 2=right, 3=both. Boxes with
 	 * float_side != 0 are removed from the parent's normal flow at
 	 * layout time; subsequent in-flow content flows around them. */
     uint8_t float_side;
     uint8_t clear_side;
+
+    /* CSS `position` (YL_POS_*). STATIC is normal flow. RELATIVE lays
+		 * out in flow then shifts visually by the insets. ABSOLUTE / FIXED
+		 * are removed from flow and placed against a containing block using
+		 * the insets. STICKY is treated as RELATIVE for now. */
+    uint8_t position;
+
+    /* Inset offsets (top/right/bottom/left). A side counts only when its
+		 * bit is set in `pos_set_mask` (0px is a valid offset, distinct from
+		 * `auto`). When the side's bit is also set in `pos_pct_mask`, the
+		 * value is a percent ratio (0.10 = 10%) resolved at layout against
+		 * the containing block; otherwise it is resolved px (may be negative
+		 * — `top:-8px` is legal). Bit order: 0=top,1=right,2=bottom,3=left. */
+    float pos_top, pos_right, pos_bottom, pos_left;
+    uint8_t pos_set_mask;
+    uint8_t pos_pct_mask;
+
+    /* CSS `transform: translate()` — a visual shift that moves the box and
+		 * its whole subtree without affecting flow (siblings ignore it). Only
+		 * the translate component is modelled; scale/rotate/matrix are not.
+		 * Percent translates resolve against the box's OWN border-box size
+		 * (the `translate(-50%,-50%)` centering idiom), not the containing
+		 * block. Parsed from the inline style at box-build. */
+    bool has_transform;
+    float tf_tx, tf_ty;
+    bool tf_tx_pct, tf_ty_pct;
 
     /* Text alignment for the block's inline children. Values:
 	 *   0 = left (default), 1 = center, 2 = right, 3 = justify. */
@@ -272,11 +376,46 @@ struct yetty_ylexbor {
     struct JSRuntime *js_rt;
     struct JSContext *js_ctx;
     int js_error_count; /* uncaught exceptions encountered */
+    /* When set, paint does NOT fetch <img> URLs over the network — it
+     * draws a placeholder for any not-yet-cached image and leaves the URL
+     * pending. Keeps paint (which runs on the host render / event-loop
+     * thread) from blocking for seconds on HTTP. The host then pulls one
+     * image at a time off the critical path via
+     * yetty_ylexbor_fetch_one_pending_image and re-renders, so the page
+     * fills in progressively while staying responsive. `data:` URIs still
+     * decode inline. Default 0 — one-shot callers keep synchronous fetch. */
+    int defer_image_fetch;
     int dom_dirty;      /* JS mutated the DOM — host should
 	                            * relayout. */
 
     int viewport_w, viewport_h;
     float default_font_size;
+
+    /* Content-column width (px) scanned out of the author CSS's grid
+     * track lists — the modern `grid-template-columns: ... minmax(0,
+     * <Nrem>) ...` idiom that caps the readable column. libcss reports
+     * display:grid but not the track sizes, and we don't lay out grid
+     * tracks; box-build applies this as a max-width on grid containers so
+     * the content lays out at a readable width instead of filling the
+     * whole container. 0 = none found. See ybrowser-css-vars.c. */
+    float grid_content_max_px;
+
+    /* Class-scoped grid templates parsed from author CSS (see
+     * yetty_ylexbor_css_scan_grid_templates). Looked up at box-build for
+     * grid containers; the array + each `cls` are freed on document replace. */
+    struct yl_grid_class *grid_classes;
+    int grid_class_count;
+    int grid_class_cap;
+
+    /* Per-glyph advance as a fraction of font-size, used by the naive
+     * text-width estimate that drives line wrap AND the x-advance between
+     * styled inline fragments on a line. It MUST match the advance of the
+     * font the host actually renders with, or per-fragment positions drift
+     * (scattered glyphs). 0 = the historical 0.55 default (kept for the
+     * unit tests, which pin positions against it); an interactive host
+     * renders with a monospace MSDF font and sets this to that font's real
+     * advance (~0.602) so per-segment link/bold/italic styling lines up. */
+    float glyph_advance_ratio;
 
     /* Layout output. Re-allocated on every load_html / set_viewport. */
     struct yetty_ylexbor_box_vec boxes;
@@ -345,7 +484,12 @@ const char *yetty_ylexbor_arena_dup(struct yetty_ylexbor *r, const char *bytes, 
 
 /* Naive text width: glyph_count(s) * font_size * 0.55. Same shortcut
  * ynetsurf uses; will be replaced by FreeType-driven metrics later. */
-float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size);
+float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size,
+                                     float advance_ratio);
+
+/* The effective per-glyph advance ratio for `r` — the configured value or
+ * the 0.55 default when unset. */
+float yetty_ylexbor_glyph_advance_ratio(const struct yetty_ylexbor *r);
 
 /* ===========================================================================
  * CSS custom-property resolver (ylexbor-css-vars.c) — fills the gap left
@@ -359,6 +503,28 @@ float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size)
  * html / *  and merge them into r->customs. Idempotent — later defs
  * overwrite earlier (closest to spec for our purposes). */
 void yetty_ylexbor_css_vars_scan(struct yetty_ylexbor *r, const char *css_source, size_t len);
+
+/* Scan `css_source` for the `minmax(0, <len>)` grid content-column idiom
+ * and record the widest track in the readable-column range into
+ * r->grid_content_max_px. Cheap substring pass; safe to call per sheet. */
+void yetty_ylexbor_css_scan_grid_content_width(struct yetty_ylexbor *r, const char *css_source,
+                                               size_t len);
+
+/* Scan `css_source` for class-scoped grid templates
+ * (`.cls{display:grid;grid-template-columns:…;column-gap/gap/grid-gap:…}`) and
+ * record them in r->grid_classes for box-build to look up by class name.
+ * Cheap substring pass; safe to call per sheet. */
+void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *css_source,
+                                           size_t len);
+
+/* Free r->grid_classes and each owned class name. Called on document replace. */
+void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r);
+
+/* Look up a parsed grid template by an element's class attribute (space-
+ * separated class list). Returns the matching entry or NULL. */
+const struct yl_grid_class *yetty_ylexbor_grid_class_lookup(struct yetty_ylexbor *r,
+                                                            const char *class_attr,
+                                                            size_t class_len);
 
 /* Resolve every `var(--name [, fallback])` reference in `value`. Returns
  * a freshly malloc'd NUL-terminated string the caller must free.

@@ -36,6 +36,9 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
  * yetty. Local mouse/keyboard (including the wheel) drive the UI, so
  * scrolling, clicking and link navigation all work. Only available when
  * built with YETTY_YBROWSER_HAS_STANDALONE (Linux + WebGPU). */
-int ybrowser_ui_run_standalone(const char *initial_url, float font_size, int argc, char **argv);
+/* `no_ui` hides the tab strip + address toolbar so the window is just the
+ * page content (clean recordings / screenshots). */
+int ybrowser_ui_run_standalone(const char *initial_url, float font_size, int no_ui, int argc,
+                               char **argv);
 
 #endif /* YETTY_TOOLS_YBROWSER_BROWSER_UI_H */

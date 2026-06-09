@@ -397,6 +397,13 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(struct
             return &r->img_cache[i];
         }
     }
+    /* Defer mode: never hit the network from the paint thread. Leave the
+     * URL pending (no cache entry) so the host can load it later via
+     * yetty_ylexbor_fetch_one_pending_image. `data:` URIs carry their
+     * bytes inline, so decode those regardless. */
+    if (r->defer_image_fetch && strncmp(url, "data:", 5) != 0) {
+        return NULL;
+    }
     if (r->img_cache_count == r->img_cache_cap) {
         int nc = r->img_cache_cap ? r->img_cache_cap * 2 : 8;
         struct yetty_ylexbor_img_cache_entry *p = realloc(r->img_cache, (size_t)nc * sizeof(*p));
@@ -474,6 +481,56 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(struct
     e->w = w;
     e->h = h;
     return e;
+}
+
+void yetty_ylexbor_set_defer_image_fetch(struct yetty_ylexbor *r, int on)
+{
+    if (r) {
+        r->defer_image_fetch = on ? 1 : 0;
+    }
+}
+
+int yetty_ylexbor_fetch_one_pending_image(struct yetty_ylexbor *r)
+{
+    if (r == NULL) {
+        return 0;
+    }
+    for (uint32_t i = 0; i < r->boxes.size; i++) {
+        struct yetty_ylexbor_box *b = &r->boxes.data[i];
+        if (b->kind != YL_BOX_INLINE_IMAGE || b->element == NULL) {
+            continue;
+        }
+        char *url = yetty_ylexbor_img_pick_url(r, b->element);
+        if (url == NULL) {
+            continue;
+        }
+        if (strncmp(url, "data:", 5) == 0) {
+            free(url); /* inline bytes — no network, handled during paint */
+            continue;
+        }
+        int cached = 0;
+        for (int k = 0; k < r->img_cache_count; k++) {
+            if (r->img_cache[k].url && strcmp(r->img_cache[k].url, url) == 0) {
+                cached = 1;
+                break;
+            }
+        }
+        if (cached) {
+            free(url);
+            continue;
+        }
+        /* Fetch exactly this one, bypassing defer so get_or_load does the
+         * network + decode + cache-insert. Restore defer afterwards so the
+         * next paint stays placeholder-only for the remaining pending
+         * images. */
+        int saved = r->defer_image_fetch;
+        r->defer_image_fetch = 0;
+        (void)yetty_ylexbor_img_cache_get_or_load(r, url);
+        r->defer_image_fetch = saved;
+        free(url);
+        return 1;
+    }
+    return 0;
 }
 
 /* Pick the best URL out of an `<img>`'s flock of source-ish attributes.
@@ -600,7 +657,10 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
 	 * origin × multiplexed streams — closer to what Chrome does.
 	 * Skips URLs already in the cache (re-paints) and `data:` URIs
 	 * (handled inline by img_cache_get_or_load). */
-    {
+    /* Skipped in defer mode — an interactive host streams images in one
+     * at a time off the render thread, so this batch fetch must never
+     * block the paint pass. */
+    if (!r->defer_image_fetch) {
         uint32_t img_count = 0;
         for (uint32_t i = 0; i < r->boxes.size; i++) {
             if (r->boxes.data[i].kind == YL_BOX_INLINE_IMAGE) {
@@ -911,20 +971,57 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
             (void)yetty_ydraw_drawable_list_add_text(buf, b->x, baseline_y, &txt, b->font_size,
                                                      pack_rgba(b->fg), z++, /*font_id=*/-1,
                                                      /*rotation=*/0.0f);
-            if (b->underline && b->w > 0) {
+            /* Text decorations are thin SDF rects spanning the run width,
+			 * each at a different vertical band relative to the text box:
+			 *   underline    — just below the baseline,
+			 *   line-through — through the x-height midline,
+			 *   overline     — above the cap line.
+			 * State is threaded through layout per inline fragment; emit a
+			 * rect for whichever flags are set. */
+            if ((b->underline || b->line_through || b->overline) && b->w > 0) {
                 float thickness = b->font_size * 0.06f;
                 if (thickness < 1.0f) {
                     thickness = 1.0f;
                 }
-                float underline_y = baseline_y + b->font_size * 0.12f;
-                struct yetty_ysdf_box ubx = {
-                    .center_x = b->x + b->w * 0.5f,
-                    .center_y = underline_y + thickness * 0.5f,
-                    .half_width = b->w * 0.5f,
-                    .half_height = thickness * 0.5f,
-                };
-                (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg), 0, 0,
-                                                                &ubx);
+                const float half_w = b->w * 0.5f;
+                const float center_x = b->x + half_w;
+                const float half_t = thickness * 0.5f;
+                if (b->underline) {
+                    float underline_y = baseline_y + b->font_size * 0.12f;
+                    struct yetty_ysdf_box ubx = {
+                        .center_x = center_x,
+                        .center_y = underline_y + half_t,
+                        .half_width = half_w,
+                        .half_height = half_t,
+                    };
+                    (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg), 0,
+                                                                    0, &ubx);
+                }
+                if (b->line_through) {
+                    /* Strike through the visual middle of the glyphs (≈ half
+					 * the cap height above the baseline). */
+                    float strike_y = baseline_y - b->font_size * 0.28f;
+                    struct yetty_ysdf_box sbx = {
+                        .center_x = center_x,
+                        .center_y = strike_y,
+                        .half_width = half_w,
+                        .half_height = half_t,
+                    };
+                    (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg), 0,
+                                                                    0, &sbx);
+                }
+                if (b->overline) {
+                    /* Above the cap line, near the top of the line box. */
+                    float overline_y = b->y + b->font_size * 0.08f;
+                    struct yetty_ysdf_box obx = {
+                        .center_x = center_x,
+                        .center_y = overline_y + half_t,
+                        .half_width = half_w,
+                        .half_height = half_t,
+                    };
+                    (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg), 0,
+                                                                    0, &obx);
+                }
             }
             break;
         }

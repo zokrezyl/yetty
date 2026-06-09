@@ -161,6 +161,11 @@ struct app {
     struct yetty_ygui_object *image;   /* yimage widget (raster) — shared */
     int showing_image;                 /* which content widget is visible */
 
+    /* `--no-ui`: hide the tab strip + toolbar so only the page content is
+	 * rendered (the whole window is the page). Useful for clean recordings /
+	 * screenshots of just the rendered page. */
+    int no_ui;
+
     struct tab tabs[MAX_TABS];
     int n_tabs;
     int active;
@@ -559,6 +564,16 @@ static int tab_ensure_engine(struct app *a, struct tab *t)
         return -1;
     }
     t->engine = r.value;
+    /* Interactive UI: never let the paint pass block the event loop on
+     * image HTTP. Render text + placeholders immediately; the per-frame
+     * pump streams images in one at a time (see pump_active). */
+    yetty_ylexbor_set_defer_image_fetch(t->engine, 1);
+    /* We render with a monospace MSDF font (DejaVu Sans Mono, advance
+	 * 1233/2048 ≈ 0.602 em). Tell the engine so its line-wrap and
+	 * inline-fragment positioning use the same advance the canvas does —
+	 * required for per-element styled runs (colored links, bold/italic) to
+	 * line up instead of drifting. */
+    yetty_ylexbor_set_glyph_advance_ratio(t->engine, 0.602f);
     t->rendered_w = 0.0f;
     return 0;
 }
@@ -578,10 +593,17 @@ static void tab_set_document(struct app *a, struct tab *t, const char *data, siz
         if (tab_ensure_engine(a, t) < 0) {
             return;
         }
-        err_ok(yetty_ylexbor_load_html(t->engine, data, len));
+        /* Set the base URL BEFORE load_html. load_html fetches external
+		 * <link rel=stylesheet> and <script src> during parse, and those
+		 * URLs are almost always root- or path-relative (e.g. Wikipedia's
+		 * /w/load.php skin CSS). Without the base set first they can't be
+		 * resolved, so the page renders with only its inline <style> —
+		 * which is why interactive mode looked far more broken than the
+		 * one-shot path that already ordered these correctly. */
         if (base_url) {
             err_ok(yetty_ylexbor_set_base_url(t->engine, base_url));
         }
+        err_ok(yetty_ylexbor_load_html(t->engine, data, len));
     } else {
         /* IMAGE/SVG: keep the raw bytes; the renderer consumes them. */
         t->raw = malloc(len ? len : 1);
@@ -951,6 +973,17 @@ static int pump_active(struct app *a)
             t->needs_render = 1;
             a->pending_render = 1;
         }
+        /* Stream one deferred image per pump: load the next pending <img>
+         * (blocks only for that single image), then flag a re-render so it
+         * appears and the following pump fetches the next. Keeps the page
+         * filling in progressively without ever blocking the loop on the
+         * whole image set. wait_ms drops to 0 so the loop comes straight
+         * back for the next one. */
+        if (yetty_ylexbor_fetch_one_pending_image(t->engine)) {
+            t->needs_render = 1;
+            a->pending_render = 1;
+            wait_ms = 0;
+        }
     }
     return wait_ms;
 }
@@ -1084,6 +1117,16 @@ static int build_ui(struct app *a)
     err_ok(
         yetty_ygui_object_subscribe(a->tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, on_tab_changed, a));
 
+    /* --no-ui: collapse the tab strip to zero height and hide it. The widget
+	 * stays created so tab bookkeeping elsewhere keeps working; it just takes
+	 * no space and never paints. */
+    if (a->no_ui) {
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(a->tabbar);
+        l.height = 0.0f;
+        err_ok(yetty_ygui_widget_layout_set(a->tabbar, &l));
+        err_ok(yetty_ygui_widget_set_visible(a->tabbar, 0));
+    }
+
     /* Toolbar: nav buttons + address bar. */
     struct yetty_ygui_object_ptr_result br =
         yetty_ygui_add(yetty_ygui_hbox_class_get().value, a->root);
@@ -1103,6 +1146,16 @@ static int build_ui(struct app *a)
         err_ok(yetty_ygui_widget_layout_set(toolbar, &l));
     }
     err_ok(yetty_ygui_widget_set_bg_color(toolbar, BR_TOOLBAR));
+
+    /* --no-ui: collapse + hide the address/nav toolbar too. */
+    if (a->no_ui) {
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(toolbar);
+        l.height = 0.0f;
+        l.padding_top = 0.0f;
+        l.padding_bottom = 0.0f;
+        err_ok(yetty_ygui_widget_layout_set(toolbar, &l));
+        err_ok(yetty_ygui_widget_set_visible(toolbar, 0));
+    }
 
     add_nav_button(toolbar, "<", 40.0f, on_back_click, a);
     add_nav_button(toolbar, ">", 40.0f, on_fwd_click, a);
@@ -1564,7 +1617,7 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         }
         /* Per-frame browser work: pump JS timers, re-render the active
 		 * tab into the embed when needed. */
-        pump_active(&s->app);
+        int pump_wait = pump_active(&s->app);
         if (s->app.pending_render || s->app.tabs[s->app.active].needs_render) {
             render_pass(&s->app);
         }
@@ -1593,8 +1646,10 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         if (YETTY_IS_ERR(pp)) {
             yetty_ycore_error_destroy(pp.error);
         }
-        /* Keep ticking while the framework is dirty (JS timers/animation). */
-        if (yetty_ygui_framework_is_dirty(s->app.fw)) {
+        /* Keep ticking while the framework is dirty (JS timers/animation),
+			 * or while there are still deferred images to stream in
+			 * (pump_active returns 0 when it just fetched one). */
+        if (yetty_ygui_framework_is_dirty(s->app.fw) || pump_wait == 0) {
             sa_request_render(s);
         }
         return YETTY_OK(yetty_ycore_int, 1);
@@ -2007,7 +2062,8 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
     return YETTY_OK_VOID();
 }
 
-int ybrowser_ui_run_standalone(const char *initial_url, float font_size, int argc, char **argv)
+int ybrowser_ui_run_standalone(const char *initial_url, float font_size, int no_ui, int argc,
+                               char **argv)
 {
     ytrace_init();
     /* Standalone runs in its own terminal, so surface page JS console
@@ -2016,6 +2072,7 @@ int ybrowser_ui_run_standalone(const char *initial_url, float font_size, int arg
     struct standalone s = {0};
     s.app.running = 1;
     s.app.font_size = font_size > 0.0f ? font_size : 16.0f;
+    s.app.no_ui = no_ui;
     s.initial_url = initial_url;
     struct yetty_yinit_app_config cfg = {.extract_assets_fn = yetty_platform_extract_assets};
     struct yetty_ycore_int_result run_result = yetty_yinit_run(argc, argv, &cfg, sa_worker, &s);

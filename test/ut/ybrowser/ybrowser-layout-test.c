@@ -823,10 +823,435 @@ static void test_media_query_doesnt_override_root_vars(void)
     yetty_ylexbor_destroy(yl);
 }
 
+/* ============================================================================
+ * Geometry P0 — box-sizing, percent padding basis, viewport units, and
+ * CSS line-height. These pin the four fixes that move static-page geometry
+ * toward real-browser behaviour.
+ * ============================================================================*/
+
+/* box-sizing: content-box (the CSS initial) expands the box by padding;
+ * border-box keeps the declared width as the outer width. */
+static void test_box_sizing(void)
+{
+    fprintf(stderr, "[test_box_sizing]\n");
+    static const char html[] =
+        "<html><body style='margin:0'>"
+        "<div id='cb' style='width:200px; padding:20px;'>x</div>"
+        "<div id='bb' style='width:200px; padding:20px; box-sizing:border-box;'>y</div>"
+        "</body></html>";
+    struct yetty_ylexbor *yl = load(html, 1000, 600);
+
+    struct box_info cb = {0}, bb = {0};
+    if (find_box(yl, "div", 0, &cb) != 0 || find_box(yl, "div", 1, &bb) != 0) {
+        fprintf(stderr, "  missing divs\n");
+        g_failures++;
+        yetty_ylexbor_destroy(yl);
+        return;
+    }
+    /* content-box: outer width = content 200 + left/right padding 20+20. */
+    ASSERT_NEAR("content-box width is 200 + 2*20", cb.w, 240.0f);
+    /* border-box: outer width = declared 200. */
+    ASSERT_NEAR("border-box width is exactly 200", bb.w, 200.0f);
+
+    yetty_ylexbor_destroy(yl);
+}
+
+/* Percent padding resolves against the containing block's content width
+ * (1000 here), not the old `font_size * 16` proxy (= 256 → 25.6 px). */
+static void test_percent_padding_basis(void)
+{
+    fprintf(stderr, "[test_percent_padding_basis]\n");
+    static const char html[] = "<html><body style='margin:0'>"
+                               "<div id='outer' style='padding-left:10%;'>"
+                               "<div id='inner'>x</div>"
+                               "</div>"
+                               "</body></html>";
+    struct yetty_ylexbor *yl = load(html, 1000, 600);
+
+    struct box_info inner = {0};
+    if (find_box(yl, "div", 1, &inner) != 0) {
+        fprintf(stderr, "  missing inner div\n");
+        g_failures++;
+        yetty_ylexbor_destroy(yl);
+        return;
+    }
+    /* 10% of the body's 1000 px content width = 100 px of left padding,
+     * so the inner block's content origin sits at x = 100. */
+    ASSERT_NEAR("percent padding uses containing-block width", inner.x, 100.0f);
+
+    yetty_ylexbor_destroy(yl);
+}
+
+/* Viewport units resolve against the live viewport: 50vw of a 1000 px
+ * viewport = 500; 50vh of a 600 px viewport = 300. */
+static void test_viewport_units(void)
+{
+    fprintf(stderr, "[test_viewport_units]\n");
+    static const char html[] = "<html><body style='margin:0'>"
+                               "<div id='vw' style='width:50vw;'>x</div>"
+                               "<div id='vh' style='width:50vh;'>y</div>"
+                               "</body></html>";
+    struct yetty_ylexbor *yl = load(html, 1000, 600);
+
+    struct box_info vw = {0}, vh = {0};
+    if (find_box(yl, "div", 0, &vw) != 0 || find_box(yl, "div", 1, &vh) != 0) {
+        fprintf(stderr, "  missing divs\n");
+        g_failures++;
+        yetty_ylexbor_destroy(yl);
+        return;
+    }
+    ASSERT_NEAR("50vw of 1000px viewport is 500", vw.w, 500.0f);
+    ASSERT_NEAR("50vh of 600px viewport is 300", vh.w, 300.0f);
+
+    yetty_ylexbor_destroy(yl);
+}
+
+/* CSS line-height drives the inline line box: a 40px line-height makes a
+ * single line of text consume 40px, so the following block lands at y=40
+ * instead of the default ~20 (font_size * 1.25). */
+static void test_line_height(void)
+{
+    fprintf(stderr, "[test_line_height]\n");
+    static const char html[] = "<html><body style='margin:0'>"
+                               "<div id='a' style='line-height:40px;'>one line</div>"
+                               "<div id='b'>after</div>"
+                               "</body></html>";
+    struct yetty_ylexbor *yl = load(html, 1000, 600);
+
+    struct box_info b = {0};
+    if (find_box(yl, "div", 1, &b) != 0) {
+        fprintf(stderr, "  missing second div\n");
+        g_failures++;
+        yetty_ylexbor_destroy(yl);
+        return;
+    }
+    /* First div is one line tall at the declared 40px line-height; the
+     * sibling stacks directly below it. */
+    ASSERT_NEAR("explicit line-height sets line box", b.y, 40.0f);
+
+    yetty_ylexbor_destroy(yl);
+}
+
+/* `position: relative` keeps the box in flow (siblings stack as if it were
+ * not shifted) but offsets the box itself by the insets. `left` wins over
+ * `right`, `top` over `bottom`. */
+static void test_position_relative(void)
+{
+    fprintf(stderr, "[test_position_relative]\n");
+    static const char html[] =
+        "<html><body style='margin:0'>"
+        "<div id='a' style='height:50px'>a</div>"
+        "<div id='b' style='position:relative; top:30px; left:40px; height:20px'>b</div>"
+        "<div id='c' style='height:10px'>c</div>"
+        "</body></html>";
+    struct yetty_ylexbor *yl = load(html, 1000, 600);
+
+    struct box_info b = {0}, c = {0};
+    if (find_box(yl, "div", 1, &b) != 0 || find_box(yl, "div", 2, &c) != 0) {
+        fprintf(stderr, "  missing divs\n");
+        g_failures++;
+        yetty_ylexbor_destroy(yl);
+        return;
+    }
+    /* Flow puts #b at y=50; relative shifts it to (40, 80). */
+    ASSERT_NEAR("relative left offset", b.x, 40.0f);
+    ASSERT_NEAR("relative top offset", b.y, 80.0f);
+    /* #c stacks as if #b were unshifted: directly below #b's flow slot. */
+    ASSERT_NEAR("relative does not disturb flow", c.y, 70.0f);
+
+    yetty_ylexbor_destroy(yl);
+}
+
+/* `position: absolute` removes the box from flow (siblings ignore it) and
+ * places it against the nearest positioned ancestor's box using the insets. */
+static void test_position_absolute(void)
+{
+    fprintf(stderr, "[test_position_absolute]\n");
+    static const char html[] =
+        "<html><body style='margin:0'>"
+        "<div id='wrap' style='position:relative; height:300px'>"
+        "<div id='card' style='position:absolute; top:100px; left:20px; "
+        "width:200px; height:80px'>card</div>"
+        "<div id='flow' style='height:40px'>flow</div>"
+        "</div>"
+        "</body></html>";
+    struct yetty_ylexbor *yl = load(html, 1000, 600);
+
+    struct box_info card = {0}, flow = {0};
+    if (find_box(yl, "div", 1, &card) != 0 || find_box(yl, "div", 2, &flow) != 0) {
+        fprintf(stderr, "  missing divs\n");
+        g_failures++;
+        yetty_ylexbor_destroy(yl);
+        return;
+    }
+    /* Absolute card placed at the wrap's padding box + insets. */
+    ASSERT_NEAR("absolute left", card.x, 20.0f);
+    ASSERT_NEAR("absolute top", card.y, 100.0f);
+    ASSERT_NEAR("absolute width", card.w, 200.0f);
+    /* The in-flow sibling starts at the top — the absolute box reserved no
+     * space. */
+    ASSERT_NEAR("absolute reserves no flow space", flow.y, 0.0f);
+
+    yetty_ylexbor_destroy(yl);
+}
+
+/* `transform: translate()` from an inline style visually shifts the box (and
+ * its subtree) without disturbing flow. This is how JS-driven sites position
+ * content (e.g. Google News cards). */
+static void test_transform_translate(void)
+{
+    fprintf(stderr, "[test_transform_translate]\n");
+    static const char html[] =
+        "<html><body style='margin:0'>"
+        "<div id='a' style='width:100px; height:40px; "
+        "transform:translate(200px,50px)'>a</div>"
+        "<div id='b' style='width:100px; height:40px; transform:translateY(80px)'>b</div>"
+        "</body></html>";
+    struct yetty_ylexbor *yl = load(html, 1000, 600);
+
+    struct box_info a = {0}, b = {0};
+    if (find_box(yl, "div", 0, &a) != 0 || find_box(yl, "div", 1, &b) != 0) {
+        fprintf(stderr, "  missing divs\n");
+        g_failures++;
+        yetty_ylexbor_destroy(yl);
+        return;
+    }
+    /* #a: flow (0,0) + translate(200,50). */
+    ASSERT_NEAR("translate x", a.x, 200.0f);
+    ASSERT_NEAR("translate y", a.y, 50.0f);
+    /* #b: flow y=40 (below #a's flow slot) + translateY(80) = 120. */
+    ASSERT_NEAR("translateY keeps flow slot", b.x, 0.0f);
+    ASSERT_NEAR("translateY adds to flow y", b.y, 120.0f);
+
+    yetty_ylexbor_destroy(yl);
+}
+
+/* A flex COLUMN item with no explicit height (auto main-size) must size to
+ * its content, not collapse to 0. This is the bug that piled Google News
+ * story cards on top of each other: a card is a flex column of [image,
+ * headline]; the headline (text-only, auto height) collapsed to 0, so the
+ * card shrank to the image and siblings overlapped. */
+static void test_flex_column_text_height(void)
+{
+    fprintf(stderr, "[test_flex_column_text_height]\n");
+    static const char html[] =
+        "<html><body style='margin:0'>"
+        "<div style='display:flex; flex-direction:column; width:280px'>"
+        "<div id='img' style='height:100px'>img</div>"
+        "<div id='txt'>headline text here</div>"
+        "</div>"
+        "</body></html>";
+    struct yetty_ylexbor *yl = load(html, 1000, 600);
+
+    /* div 0 = flex column, div 1 = image, div 2 = headline text. */
+    struct box_info img = {0}, txt = {0};
+    if (find_box(yl, "div", 1, &img) != 0 || find_box(yl, "div", 2, &txt) != 0) {
+        fprintf(stderr, "  missing divs\n");
+        g_failures++;
+        yetty_ylexbor_destroy(yl);
+        return;
+    }
+    /* The headline sits below the 100px image and has a real (line-box)
+     * height — not the collapsed 0 that caused the overlap. */
+    ASSERT_NEAR("flex-column text item stacks below the image", txt.y, 100.0f);
+    ASSERT_TRUE("flex-column text item has nonzero height", txt.h > 10.0f);
+
+    yetty_ylexbor_destroy(yl);
+}
+
+/* `insertBefore` / `replaceChild` must preserve DOM order, not append. They
+ * used to alias appendChild, which silently reordered JS-driven inserts to the
+ * end — scrambling app-shell content (Google News builds its feed this way). */
+static void test_dom_insert_before(void)
+{
+    fprintf(stderr, "[test_dom_insert_before]\n");
+    static const char html[] =
+        "<html><body style='margin:0'><div id='box'></div>"
+        "<script>"
+        "var c=document.getElementById('box');"
+        "var b=document.createElement('div');b.textContent='SECOND';"
+        "var a=document.createElement('div');a.textContent='FIRST';"
+        "c.appendChild(b);"
+        "c.insertBefore(a,b);" /* => FIRST, SECOND */
+        "var d=document.createElement('div');d.textContent='THIRD';c.appendChild(d);"
+        "var rep=document.createElement('div');rep.textContent='REPLACED';"
+        "c.replaceChild(rep,b);" /* => FIRST, REPLACED, THIRD */
+        "</script></body></html>";
+    struct yetty_ylexbor *yl = load(html, 800, 400);
+
+    /* Gather inline-text boxes top-to-bottom and check their order. */
+    int total = yetty_ylexbor_test_box_count(yl);
+    char topmost[32] = {0};
+    float topmost_y = 1e9f;
+    int saw_second = 0;
+    for (int i = 0; i < total; i++) {
+        int kind = 0;
+        char txt[32] = {0};
+        if (yetty_ylexbor_test_box_info_at(yl, i, &kind, NULL, NULL, NULL, txt, sizeof(txt)) != 0) {
+            continue;
+        }
+        if (kind != YETTY_YLEXBOR_BOX_KIND_INLINE_TEXT || txt[0] == '\0') {
+            continue;
+        }
+        float x, y, w, h;
+        char tag[16] = {0};
+        (void)yetty_ylexbor_test_box_at(yl, i, &x, &y, &w, &h, tag, sizeof(tag));
+        if (y < topmost_y) {
+            topmost_y = y;
+            strncpy(topmost, txt, sizeof(topmost) - 1);
+        }
+        if (strcmp(txt, "SECOND") == 0) {
+            saw_second = 1;
+        }
+    }
+    ASSERT_TRUE("insertBefore puts FIRST at the top", strcmp(topmost, "FIRST") == 0);
+    ASSERT_TRUE("replaceChild removed the replaced node", saw_second == 0);
+
+    yetty_ylexbor_destroy(yl);
+}
+
+/* A 2-column `display:grid` (the news-card idiom: `1fr <px>`) places the
+ * first child in the flexible column and the second in the fixed thumbnail
+ * column — so the thumbnail shrinks to its narrow track instead of filling
+ * the card. Track sizes come from the author CSS (libcss exposes no grid). */
+static void test_grid_two_column(void)
+{
+    fprintf(stderr, "[test_grid_two_column]\n");
+    static const char html[] =
+        "<html><head><style>"
+        ".card{display:grid;grid-template-columns:1fr 75px;column-gap:12px;width:400px}"
+        "</style></head><body style='margin:0'>"
+        "<div class='card'>"
+        "<div id='text'>Headline in the wide first column</div>"
+        "<div id='thumb' style='height:60px'>t</div>"
+        "</div>"
+        "</body></html>";
+    struct yetty_ylexbor *yl = load(html, 1000, 600);
+
+    /* div 0 = grid card, div 1 = text cell, div 2 = thumbnail cell. */
+    struct box_info text = {0}, thumb = {0};
+    if (find_box(yl, "div", 1, &text) != 0 || find_box(yl, "div", 2, &thumb) != 0) {
+        fprintf(stderr, "  missing cells\n");
+        g_failures++;
+        yetty_ylexbor_destroy(yl);
+        return;
+    }
+    /* 1fr column = 400 - 75 - 12 = 313, at x=0. Thumbnail = 75px at x=325. */
+    ASSERT_NEAR("grid 1fr column x", text.x, 0.0f);
+    ASSERT_NEAR("grid 1fr column width", text.w, 313.0f);
+    ASSERT_NEAR("grid fixed column x", thumb.x, 325.0f);
+    ASSERT_NEAR("grid fixed column width", thumb.w, 75.0f);
+
+    yetty_ylexbor_destroy(yl);
+}
+
+/* CSS `width`/`height` on an image must win over its natural decoded size.
+ * The real Google News favicons have NO width/height attributes and a large
+ * (96x96) natural image, sized down to 14px purely by CSS — box-build ignored
+ * CSS sizing and rendered them at natural size, burying the card. Here a 4x4
+ * PNG is forced to 14x14 by CSS: if CSS were ignored it would be 4x4. */
+static void test_css_image_size(void)
+{
+    fprintf(stderr, "[test_css_image_size]\n");
+    static const char html[] =
+        "<html><head><style>img{width:14px;height:14px}</style></head>"
+        "<body style='margin:0'>"
+        "<img src='data:image/png;base64,"
+        "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR42mP4z8DwHxkzkC4AADxAH+Ea86VIAAAAAEl"
+        "FTkSuQmCC'>"
+        "</body></html>";
+    struct yetty_ylexbor *yl = load(html, 1000, 600);
+
+    struct box_info img = {0};
+    if (find_box(yl, "img", 0, &img) != 0) {
+        fprintf(stderr, "  missing img\n");
+        g_failures++;
+        yetty_ylexbor_destroy(yl);
+        return;
+    }
+    ASSERT_NEAR("CSS width wins over natural", img.w, 14.0f);
+    ASSERT_NEAR("CSS height wins over natural", img.h, 14.0f);
+
+    yetty_ylexbor_destroy(yl);
+}
+
+/* A small image inside a flex row must keep its intrinsic size, not balloon to
+ * the flex line. This is the Google News bug: a 14x14 source favicon next to
+ * the headline ballooned to ~266x100 (column width + 100px fallback) and
+ * covered the article thumbnail. See test/ut/ybrowser/examples/gnews-card.html. */
+static void test_flex_image_intrinsic_size(void)
+{
+    fprintf(stderr, "[test_flex_image_intrinsic_size]\n");
+    static const char html[] =
+        "<html><body style='margin:0'>"
+        "<div style='display:flex; flex-direction:row; width:400px'>"
+        "<img width='14' height='14'>"
+        "<div>Source name and the rest of the headline text here</div>"
+        "</div>"
+        "</body></html>";
+    struct yetty_ylexbor *yl = load(html, 1000, 600);
+
+    struct box_info img = {0};
+    if (find_box(yl, "img", 0, &img) != 0) {
+        fprintf(stderr, "  missing img\n");
+        g_failures++;
+        yetty_ylexbor_destroy(yl);
+        return;
+    }
+    /* The favicon keeps its 14x14, not the ballooned flex-distributed size. */
+    ASSERT_NEAR("flex image keeps intrinsic width", img.w, 14.0f);
+    ASSERT_NEAR("flex image keeps intrinsic height", img.h, 14.0f);
+
+    yetty_ylexbor_destroy(yl);
+}
+
+/* A display:grid container with the content-column idiom
+ * `grid-template-columns: minmax(0, <Nrem>) ...` caps the content to N
+ * (≈ readable column) instead of filling the parent — we don't lay out
+ * grid tracks, but we scan that cap out of the CSS and apply it as a
+ * max-width. 30rem = 480px. */
+static void test_grid_content_column_cap(void)
+{
+    fprintf(stderr, "[test_grid_content_column_cap]\n");
+    static const char html[] =
+        "<html><head><style>"
+        ".body{display:grid;grid-template-columns:minmax(0,30rem) min-content}"
+        "</style></head><body style='margin:0'>"
+        "<div class='body'><p>x</p></div>"
+        "</body></html>";
+    struct yetty_ylexbor *yl = load(html, 1200, 800);
+
+    struct box_info g = {0};
+    if (find_box(yl, "div", 0, &g) != 0) {
+        fprintf(stderr, "  missing grid div\n");
+        g_failures++;
+        yetty_ylexbor_destroy(yl);
+        return;
+    }
+    /* Without the cap the div would fill the 1200px body; the scanned
+     * minmax(0,30rem) caps it to 480. */
+    ASSERT_NEAR("grid content column capped to 30rem", g.w, 480.0f);
+
+    yetty_ylexbor_destroy(yl);
+}
+
 int main(void)
 {
     fprintf(stderr, "ybrowser-layout-test\n");
 
+    test_grid_content_column_cap();
+    test_box_sizing();
+    test_percent_padding_basis();
+    test_viewport_units();
+    test_line_height();
+    test_position_relative();
+    test_position_absolute();
+    test_transform_translate();
+    test_flex_column_text_height();
+    test_grid_two_column();
+    test_css_image_size();
+    test_flex_image_intrinsic_size();
+    test_dom_insert_before();
     test_block_flow();
     test_width_pixels();
     test_width_percent();

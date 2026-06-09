@@ -173,6 +173,15 @@ static const struct yl_default_style *default_for(lxb_tag_id_t tag)
 
 struct yl_style_state {
     float font_size;
+    /* Inherited line-height. A unitless `line-height` inherits as the
+     * factor (resolved against each element's own font-size); a length
+     * inherits as a used px value. 0/0 = `normal` → the inline-wrap pass
+     * falls back to font_size * 1.25. Carried in the style state — not
+     * just on the source element's block box — so the anonymous inline-
+     * text boxes that flush_inline emits under a block inherit it, which
+     * is where line-height actually drives layout. */
+    float line_height_px;
+    float line_height_factor;
     int font_weight;
     bool font_italic;
     bool underline;    /* true inside <a> (and any other inline element
@@ -248,19 +257,19 @@ struct yl_inline_buf {
 static bool seg_style_matches(const struct yetty_ylexbor_inline_seg *seg,
                               const struct yl_style_state *style)
 {
-    (void)seg;
-    (void)style;
-    /* Always merge — match ylexbor's behaviour of emitting ONE
-	 * TEXT_DRAWABLE_LIST per wrapped line. Per-segment style tracking
-	 * created visible drift between fragments on the same line
-	 * (each fragment is positioned by our naive `font*0.55` per-glyph
-	 * width estimate, which doesn't match the canvas's actual font
-	 * advances — cumulative drift across many fragments per line
-	 * produced misaligned glyphs, visible as scattered descender
-	 * letters around the page). Losing per-element coloring is the
-	 * trade-off; the original ylexbor tool the user verified as
-	 * working takes the same trade-off. */
-    return true;
+    /* A run keeps merging into the current segment only while every
+	 * visible style attribute is unchanged. When any differs (entering an
+	 * <a>/<strong>/<em>, a color change, …) a new segment opens so the
+	 * fragment carries that element's own fg/weight/italic/underline +
+	 * hit-target element. The host renders monospace and sets a matching
+	 * glyph_advance_ratio, so fragment x-positions line up — which lets us
+	 * keep per-element styling (link color/underline, bold/italic runs)
+	 * without the drift that forced the earlier always-merge stub. */
+    return seg->fg.r == style->fg.r && seg->fg.g == style->fg.g && seg->fg.b == style->fg.b &&
+           seg->fg.a == style->fg.a && seg->font_weight == style->font_weight &&
+           seg->font_italic == style->font_italic && seg->underline == style->underline &&
+           seg->line_through == style->line_through && seg->overline == style->overline &&
+           seg->element == style->link_element;
 }
 
 /* Open a new style segment in `b` if the current style differs from the
@@ -367,6 +376,110 @@ static int inline_buf_append(struct yl_inline_buf *b, const char *s, size_t n)
  * DOM walker — recursive
  * ===========================================================================*/
 
+/* Parse one signed length token out of [s, end) — digits, sign, decimals.
+ * Sets *out to the numeric value and *is_pct to whether it is followed by
+ * '%'. Returns the cursor past the number (and unit), or `s` if no number. */
+static const char *parse_transform_number(const char *s, const char *end, float *out,
+                                          bool *is_pct)
+{
+    while (s < end && (*s == ' ' || *s == '\t')) {
+        s++;
+    }
+    char buf[32];
+    int n = 0;
+    while (s < end && n < 31 &&
+           (*s == '-' || *s == '+' || *s == '.' || (*s >= '0' && *s <= '9'))) {
+        buf[n++] = *s++;
+    }
+    if (n == 0) {
+        return s;
+    }
+    buf[n] = '\0';
+    *out = (float)atof(buf);
+    while (s < end && *s == ' ') {
+        s++;
+    }
+    *is_pct = (s < end && *s == '%');
+    return s;
+}
+
+/* Extract the `translate` component of a `transform` value from an inline
+ * style string (NOT NUL-terminated; length in style_len). Handles
+ * translate(x[,y]) / translateX(x) / translateY(y); scale/rotate/matrix are
+ * ignored. Percent values are kept as the raw number (e.g. -50 for -50%) with
+ * the matching *_pct flag, resolved against the box's own size at layout.
+ * Returns true if a translate was found. */
+static bool parse_transform_translate(const char *style, size_t style_len, float *out_tx,
+                                      float *out_ty, bool *out_tx_pct, bool *out_ty_pct)
+{
+    *out_tx = 0.0f;
+    *out_ty = 0.0f;
+    *out_tx_pct = false;
+    *out_ty_pct = false;
+    if (!style || style_len < 10) {
+        return false;
+    }
+    static const char needle[] = "translate";
+    const size_t needle_len = sizeof(needle) - 1;
+    for (size_t i = 0; i + needle_len < style_len; i++) {
+        bool match = true;
+        for (size_t k = 0; k < needle_len; k++) {
+            if (tolower((unsigned char)style[i + k]) != needle[k]) {
+                match = false;
+                break;
+            }
+        }
+        if (!match) {
+            continue;
+        }
+        size_t j = i + needle_len;
+        int axis = 0; /* 0 = both, 1 = X only, 2 = Y only */
+        if (j < style_len && (style[j] == 'x' || style[j] == 'X')) {
+            axis = 1;
+            j++;
+        } else if (j < style_len && (style[j] == 'y' || style[j] == 'Y')) {
+            axis = 2;
+            j++;
+        } else if (j < style_len && (style[j] == 'z' || style[j] == 'Z' || style[j] == '3')) {
+            continue; /* translateZ / translate3d — skip (no 2D layout effect we model) */
+        }
+        if (j >= style_len || style[j] != '(') {
+            continue;
+        }
+        j++;
+        const char *p = style + j;
+        const char *end = style + style_len;
+        const char *close = memchr(p, ')', (size_t)(end - p));
+        if (!close) {
+            return false;
+        }
+        const char *comma = memchr(p, ',', (size_t)(close - p));
+        const char *first_end = comma ? comma : close;
+        float v1 = 0.0f, v2 = 0.0f;
+        bool p1 = false, p2 = false;
+        if (parse_transform_number(p, first_end, &v1, &p1) == p) {
+            return false; /* no number present */
+        }
+        if (comma) {
+            (void)parse_transform_number(comma + 1, close, &v2, &p2);
+        }
+        if (axis == 1) {
+            *out_tx = v1;
+            *out_tx_pct = p1;
+        } else if (axis == 2) {
+            *out_ty = v1;
+            *out_ty_pct = p1;
+        } else {
+            *out_tx = v1;
+            *out_tx_pct = p1;
+            *out_ty = v2;
+            *out_ty_pct = p2;
+        }
+        return true;
+    }
+    return false;
+}
+
 static struct yetty_ycore_void_result box_alloc(struct yetty_ylexbor *r, uint32_t *out_idx)
 {
     struct yetty_ycore_void_result rr =
@@ -399,6 +512,16 @@ static void link_child(struct yetty_ylexbor *r, uint32_t parent_idx, uint32_t ci
 static void style_to_box(struct yetty_ylexbor_box *b, const struct yl_style_state *s)
 {
     b->font_size = s->font_size;
+    /* Resolve the inherited line-height against THIS element's font-size:
+     * a length used value wins outright, else a unitless factor scales by
+     * the element's own font, else 0 (normal) leaves the wrap default. */
+    if (s->line_height_px > 0.0f) {
+        b->line_height = s->line_height_px;
+    } else if (s->line_height_factor > 0.0f) {
+        b->line_height = s->line_height_factor * s->font_size;
+    } else {
+        b->line_height = 0.0f;
+    }
     b->font_weight = s->font_weight;
     b->font_italic = s->font_italic;
     b->fg = s->fg;
@@ -788,6 +911,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     bool italic;
                     float px;
                     bool ma;
+                    bool pct;
 
                     if (yetty_ybrowser_libcss_color(cs, &cc)) {
                         b->fg = cc;
@@ -810,6 +934,18 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         b->font_italic = italic;
                         s.font_italic = italic;
                     }
+                    b->border_box = yetty_ybrowser_libcss_box_sizing(cs) != 0;
+                    float lh_px = 0.0f;
+                    float lh_factor = 0.0f;
+                    if (yetty_ybrowser_libcss_line_height(r, cs, s.font_size, &lh_px, &lh_factor)) {
+                        /* Update the inherited line-height; a concrete
+                         * value replaces whichever form was inherited.
+                         * Propagating into `s` lets the inline-text boxes
+                         * flushed under this block inherit it. */
+                        s.line_height_px = lh_px;
+                        s.line_height_factor = lh_factor;
+                        b->line_height = lh_px > 0.0f ? lh_px : lh_factor * s.font_size;
+                    }
                     if (yetty_ybrowser_libcss_width(r, cs, s.font_size, pct_basis, &px)) {
                         b->css_width = px;
                     }
@@ -831,8 +967,9 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                             &b->border_left};
                     for (int side = 0; side < 4; side++) {
                         ma = false;
+                        pct = false;
                         if (yetty_ybrowser_libcss_margin(r, cs, side, s.font_size, pct_basis, &px,
-                                                         &ma)) {
+                                                         &ma, &pct)) {
                             if (ma) {
                                 if (side == 1) {
                                     b->margin_right_auto = true;
@@ -840,12 +977,22 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                     b->margin_left_auto = true;
                                 }
                             } else {
+                                /* On a percent value `px` holds the ratio;
+                                 * the layout pass resolves it against the
+                                 * parent content width and clears the bit. */
                                 *margin_dst[side] = px;
+                                if (pct) {
+                                    b->pct_mask |= (uint8_t)(YL_PCT_MARGIN_TOP << side);
+                                }
                             }
                         }
-                        if (yetty_ybrowser_libcss_padding(r, cs, side, s.font_size, pct_basis,
-                                                          &px)) {
+                        pct = false;
+                        if (yetty_ybrowser_libcss_padding(r, cs, side, s.font_size, pct_basis, &px,
+                                                          &pct)) {
                             *padding_dst[side] = px;
+                            if (pct) {
+                                b->pct_mask |= (uint8_t)(YL_PCT_PADDING_TOP << side);
+                            }
                         }
                         if (yetty_ybrowser_libcss_border_width(r, cs, side, s.font_size, &px)) {
                             *border_dst[side] = px;
@@ -901,6 +1048,44 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         b->align_items = yetty_ybrowser_libcss_align_items(cs);
                     } else if (disp == CSS_DISPLAY_TABLE || disp == CSS_DISPLAY_INLINE_TABLE) {
                         b->layout_mode = YL_LAYOUT_TABLE;
+                    } else if (disp == CSS_DISPLAY_GRID || disp == CSS_DISPLAY_INLINE_GRID) {
+                        /* No real grid track layout. The dominant visual
+						 * effect of the modern content-column grid idiom
+						 * (grid-template-columns: ... minmax(0, Nrem) ...)
+						 * is that the content column is capped to N. We
+						 * scanned that cap out of the author CSS; apply it
+						 * as a max-width so content lays out at a readable
+						 * width instead of filling the whole container.
+						 * Stays block flow otherwise; only set when the
+						 * element doesn't already carry an explicit
+						 * max-width (css_max_width == 0 means unset; a
+						 * negative value is a percent the cascade gave). */
+                        b->layout_mode = YL_LAYOUT_BLOCK;
+                        if (r->grid_content_max_px > 0.0f && b->css_max_width == 0.0f) {
+                            b->css_max_width = r->grid_content_max_px;
+                        }
+                        /* If we parsed an explicit small-track grid template
+						 * for this element's class, lay it out as a real grid.
+						 * Restricted to 2–4 tracks: that covers the dominant
+						 * story-card idiom (text + thumbnail) without needing
+						 * grid-column spans, which the many-column page grids
+						 * (repeat(12,…)) rely on — those safely stay block. */
+                        {
+                            size_t cls_len = 0;
+                            const lxb_char_t *cls_attr = lxb_dom_element_get_attribute(
+                                el, (const lxb_char_t *)"class", 5, &cls_len);
+                            if (cls_attr && cls_len > 0) {
+                                const struct yl_grid_class *gt = yetty_ylexbor_grid_class_lookup(
+                                    r, (const char *)cls_attr, cls_len);
+                                if (gt && gt->ntracks >= 2 && gt->ntracks <= 4) {
+                                    b->layout_mode = YL_LAYOUT_GRID;
+                                    memcpy(b->grid_tracks, gt->tracks, sizeof(b->grid_tracks));
+                                    b->grid_ntracks = gt->ntracks;
+                                    b->grid_col_gap = gt->col_gap;
+                                    b->grid_row_gap = gt->row_gap;
+                                }
+                            }
+                        }
                     } else if (disp == CSS_DISPLAY_BLOCK || disp == CSS_DISPLAY_INLINE_BLOCK ||
                                disp == CSS_DISPLAY_LIST_ITEM) {
                         b->layout_mode = YL_LAYOUT_BLOCK;
@@ -925,15 +1110,21 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     } else {
                         b->flex_basis_px = 0.0f;
                     }
-                    /* Float disabled — our wrap doesn't narrow lines
-				 * per-y by active floats, so floated content overlaps
-				 * the in-flow body text (visible as scattered letters
-				 * where two lines render in the same x range). ylexbor
-				 * — the reference tool — has no float handling at all
-				 * and stacks figures vertically. Match that for now;
-				 * proper float-aware line wrap is a separate change. */
-                    (void)yetty_ybrowser_libcss_float(cs);
-                    b->float_side = 0;
+                    /* Float side from the cascade. The layout pass pulls
+				 * floated blocks out of normal flow and narrows the
+				 * in-flow content rectangle (avail_x / avail_w) at each
+				 * y, and the inline-wrap pass wraps text into that
+				 * narrowed rectangle — so floated figures sit beside the
+				 * body text instead of overlapping it. This is what puts
+				 * Wikipedia's infobox and thumbnails on the right. */
+                    int flt = yetty_ybrowser_libcss_float(cs);
+                    if (flt == CSS_FLOAT_LEFT) {
+                        b->float_side = 1;
+                    } else if (flt == CSS_FLOAT_RIGHT) {
+                        b->float_side = 2;
+                    } else {
+                        b->float_side = 0;
+                    }
                     int clr = yetty_ybrowser_libcss_clear(cs);
                     if (clr == CSS_CLEAR_LEFT) {
                         b->clear_side = 1;
@@ -941,6 +1132,54 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         b->clear_side = 2;
                     } else if (clr == CSS_CLEAR_BOTH) {
                         b->clear_side = 3;
+                    }
+
+                    /* `position` + insets. RELATIVE shifts the box (and its
+					 * subtree) by the insets after normal-flow placement;
+					 * ABSOLUTE/FIXED pull it out of flow and place it against
+					 * a containing block. STICKY collapses to RELATIVE. */
+                    int pos = yetty_ybrowser_libcss_position(cs);
+                    if (pos == CSS_POSITION_RELATIVE || pos == CSS_POSITION_STICKY) {
+                        b->position = YL_POS_RELATIVE;
+                    } else if (pos == CSS_POSITION_ABSOLUTE) {
+                        b->position = YL_POS_ABSOLUTE;
+                    } else if (pos == CSS_POSITION_FIXED) {
+                        b->position = YL_POS_FIXED;
+                    } else {
+                        b->position = YL_POS_STATIC;
+                    }
+                    if (b->position != YL_POS_STATIC) {
+                        float inset = 0.0f;
+                        float *inset_field[4] = {&b->pos_top, &b->pos_right, &b->pos_bottom,
+                                                 &b->pos_left};
+                        for (int side = 0; side < 4; side++) {
+                            int got = yetty_ybrowser_libcss_inset(r, cs, side, s.font_size, pct_basis,
+                                                                  &inset);
+                            if (got) {
+                                *inset_field[side] = inset;
+                                b->pos_set_mask |= (uint8_t)(1u << side);
+                                if (got == 2) {
+                                    b->pos_pct_mask |= (uint8_t)(1u << side);
+                                }
+                            }
+                        }
+                    }
+
+                    /* `transform: translate(...)` from the inline style.
+					 * libcss doesn't expose `transform`, and JS-driven sites
+					 * (e.g. Google News) position cards by writing inline
+					 * translate offsets — so parse it off the raw style here. */
+                    if (istyle && istylen > 0) {
+                        float txv = 0.0f, tyv = 0.0f;
+                        bool txp = false, typ = false;
+                        if (parse_transform_translate((const char *)istyle, istylen, &txv, &tyv,
+                                                      &txp, &typ)) {
+                            b->has_transform = true;
+                            b->tf_tx = txv;
+                            b->tf_ty = tyv;
+                            b->tf_tx_pct = txp;
+                            b->tf_ty_pct = typ;
+                        }
                     }
 
                     /* `white-space` (CSS) drives the inline buffer's
@@ -1212,12 +1451,50 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 
                 int nat_w = (cached && !cached->failed) ? cached->w : 0;
                 int nat_h = (cached && !cached->failed) ? cached->h : 0;
-                if (attr_w > 0) {
+
+                /* CSS `width`/`height` on the image. These WIN over the HTML
+				 * presentation-hint attrs and the natural size — the common
+				 * real-world case (e.g. Google News favicons: no attrs,
+				 * `width:14px` in CSS, but a 96x96 natural image). Without
+				 * this the favicon rendered at 96x96 and buried the card.
+				 * Only definite lengths are honoured here; the bridge returns
+				 * a negative ratio for percentages, which we leave to the
+				 * attr/natural fallback (percent needs the containing block). */
+                float css_img_w = 0.0f, css_img_h = 0.0f;
+                {
+                    size_t img_istylen = 0;
+                    const lxb_char_t *img_istyle = lxb_dom_element_get_attribute(
+                        el, (const lxb_char_t *)"style", 5, &img_istylen);
+                    css_computed_style *img_cs = yetty_ybrowser_libcss_select(
+                        r, el, (const char *)img_istyle, img_istyle ? img_istylen : 0);
+                    /* box vector may have moved during select. */
+                    ib = &r->boxes.data[iidx];
+                    if (img_cs) {
+                        float px = 0.0f;
+                        float basis = s.font_size * 16.0f;
+                        if (yetty_ybrowser_libcss_width(r, img_cs, s.font_size, basis, &px) &&
+                            px > 0.0f) {
+                            css_img_w = px;
+                        }
+                        if (yetty_ybrowser_libcss_height(r, img_cs, s.font_size, basis, &px) &&
+                            px > 0.0f) {
+                            css_img_h = px;
+                        }
+                        yetty_ybrowser_libcss_release(img_cs);
+                        ib = &r->boxes.data[iidx];
+                    }
+                }
+
+                if (css_img_w > 0.0f) {
+                    ib->w = css_img_w;
+                } else if (attr_w > 0) {
                     ib->w = (float)attr_w;
                 } else if (nat_w > 0) {
                     ib->w = (float)nat_w;
                 }
-                if (attr_h > 0) {
+                if (css_img_h > 0.0f) {
+                    ib->h = css_img_h;
+                } else if (attr_h > 0) {
                     ib->h = (float)attr_h;
                 } else if (nat_h > 0) {
                     ib->h = (float)nat_h;

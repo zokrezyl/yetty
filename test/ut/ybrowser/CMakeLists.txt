@@ -58,3 +58,17 @@ target_link_libraries(ybrowser-inline-test PRIVATE
     yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core m)
 add_test(NAME ybrowser_inline COMMAND ybrowser-inline-test)
 
+# ybrowser-paint-test — pins the serialized ydraw drawable list ybrowser
+# emits (image bounds, text-decoration rects) with no Chrome and no GPU.
+add_executable(ybrowser-paint-test
+    ybrowser-paint-test.c
+    ${YBROWSER_TEST_SHIM_SOURCES}
+)
+target_include_directories(ybrowser-paint-test PRIVATE
+    ${YETTY_ROOT}/include
+    ${YETTY_ROOT}/src
+)
+target_link_libraries(ybrowser-paint-test PRIVATE
+    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core m)
+add_test(NAME ybrowser_paint COMMAND ybrowser-paint-test)
+

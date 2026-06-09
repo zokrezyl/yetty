@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+  * { font-family: monospace; font-size: 16px; margin: 0; padding: 0; }
+  /* News-card grid: flexible text column + fixed thumbnail column. */
+  .card { display: grid; grid-template-columns: 1fr 75px; column-gap: 12px; width: 400px; }
+</style></head><body>
+  <div class="card">
+    <div data-test="text">Headline text in the wide first column of the card</div>
+    <div data-test="thumb" style="height:60px;background:#cdf"></div>
+  </div>
+  <pre id="geom" style="display:none"></pre>
+  <script>
+  (function () {
+      var out = {};
+      document.querySelectorAll('[data-test]').forEach(function (el) {
+          var r = el.getBoundingClientRect();
+          out[el.getAttribute('data-test')] = {
+              x: Math.round(r.x*100)/100, y: Math.round(r.y*100)/100,
+              w: Math.round(r.width*100)/100, h: Math.round(r.height*100)/100 };
+      });
+      out['_viewport'] = { w: window.innerWidth, h: window.innerHeight };
+      document.getElementById('geom').textContent = JSON.stringify(out);
+  })();
+  </script></body></html>

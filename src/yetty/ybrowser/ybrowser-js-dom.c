@@ -701,6 +701,71 @@ static JSValue js_el_append(JSContext *ctx, JSValueConst this_val, int argc, JSV
     return JS_UNDEFINED;
 }
 
+/* insertBefore(newNode, refNode): insert newNode as a child of `this`
+ * immediately before refNode. A null/undefined or non-matching refNode falls
+ * back to append (per spec, a null ref means "append"). Returns newNode.
+ *
+ * This used to alias appendChild — which silently reordered every
+ * framework-driven insertion to the end of the parent. JS app shells (Google
+ * News, Turbo, React-ish renderers) rely on insertBefore to place nodes in the
+ * right order, so aliasing it to append scrambled the rendered DOM. */
+static JSValue js_el_insertBefore(JSContext *ctx, JSValueConst this_val, int argc,
+                                  JSValueConst *argv)
+{
+    if (argc < 1) {
+        return JS_UNDEFINED;
+    }
+    lxb_dom_node_t *parent = unwrap_node(this_val);
+    lxb_dom_node_t *node = unwrap_node(argv[0]);
+    if (!parent || !node) {
+        return JS_UNDEFINED;
+    }
+    if (node_would_cycle(parent, node)) {
+        return JS_DupValue(ctx, argv[0]);
+    }
+    lxb_dom_node_t *ref = (argc >= 2) ? unwrap_node(argv[1]) : NULL;
+    /* Detach from the current parent first — lexbor's insert paths assume an
+     * unlinked node (see appendChild). */
+    if (node->parent) {
+        lxb_dom_node_remove(node);
+    }
+    if (ref && ref->parent == parent) {
+        lxb_dom_node_insert_before(ref, node);
+    } else {
+        /* null ref, or ref not a child of parent → append. */
+        lxb_dom_node_insert_child(parent, node);
+    }
+    mark_dirty(ctx);
+    return JS_DupValue(ctx, argv[0]);
+}
+
+/* replaceChild(newChild, oldChild): replace oldChild (a child of `this`) with
+ * newChild, in place. Returns oldChild. Previously aliased to appendChild,
+ * which neither removed oldChild nor preserved its position. */
+static JSValue js_el_replaceChild(JSContext *ctx, JSValueConst this_val, int argc,
+                                  JSValueConst *argv)
+{
+    if (argc < 2) {
+        return JS_UNDEFINED;
+    }
+    lxb_dom_node_t *parent = unwrap_node(this_val);
+    lxb_dom_node_t *node = unwrap_node(argv[0]);
+    lxb_dom_node_t *old = unwrap_node(argv[1]);
+    if (!parent || !node || !old || old->parent != parent) {
+        return JS_UNDEFINED;
+    }
+    if (node_would_cycle(parent, node)) {
+        return JS_DupValue(ctx, argv[1]);
+    }
+    if (node->parent) {
+        lxb_dom_node_remove(node);
+    }
+    lxb_dom_node_insert_before(old, node);
+    lxb_dom_node_remove(old);
+    mark_dirty(ctx);
+    return JS_DupValue(ctx, argv[1]);
+}
+
 /* querySelector(All) on Element AND Document — same impl. */
 static JSValue js_el_querySelector(JSContext *ctx, JSValueConst this_val, int argc,
                                    JSValueConst *argv)
@@ -2985,22 +3050,66 @@ static JSValue js_el_cloneNode_stub(JSContext *ctx, JSValueConst this_val, int a
     return JS_DupValue(ctx, this_val);
 }
 
-static JSValue js_el_clientRect_stub(JSContext *ctx, JSValueConst this_val, int argc,
-                                     JSValueConst *argv)
+/* getBoundingClientRect — return the element's real laid-out rectangle (union
+ * of its boxes) instead of a zero stub. Boxes exist after the first layout
+ * pass; calls from initial inline scripts (which run before layout) still get
+ * zeros, but deferred / event-driven measurements — which is what JS app
+ * shells use to size cards and grids — now see true geometry. */
+static JSValue js_el_getBoundingClientRect(JSContext *ctx, JSValueConst this_val, int argc,
+                                           JSValueConst *argv)
 {
-    (void)this_val;
     (void)argc;
     (void)argv;
-    JSValue r = JS_NewObject(ctx);
-    JS_SetPropertyStr(ctx, r, "x", JS_NewFloat64(ctx, 0));
-    JS_SetPropertyStr(ctx, r, "y", JS_NewFloat64(ctx, 0));
-    JS_SetPropertyStr(ctx, r, "width", JS_NewFloat64(ctx, 0));
-    JS_SetPropertyStr(ctx, r, "height", JS_NewFloat64(ctx, 0));
-    JS_SetPropertyStr(ctx, r, "top", JS_NewFloat64(ctx, 0));
-    JS_SetPropertyStr(ctx, r, "left", JS_NewFloat64(ctx, 0));
-    JS_SetPropertyStr(ctx, r, "right", JS_NewFloat64(ctx, 0));
-    JS_SetPropertyStr(ctx, r, "bottom", JS_NewFloat64(ctx, 0));
-    return r;
+    float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+    struct yetty_ylexbor *r = runtime_ylex(ctx);
+    lxb_dom_node_t *node = unwrap_node(this_val);
+    if (r != NULL && node != NULL && node->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+        lxb_dom_element_t *el = lxb_dom_interface_element(node);
+        float min_x = 0.0f, min_y = 0.0f, max_x = 0.0f, max_y = 0.0f;
+        bool found = false;
+        for (uint32_t i = 0; i < r->boxes.size; i++) {
+            struct yetty_ylexbor_box *b = &r->boxes.data[i];
+            if (b->element != el) {
+                continue;
+            }
+            if (!found) {
+                min_x = b->x;
+                min_y = b->y;
+                max_x = b->x + b->w;
+                max_y = b->y + b->h;
+                found = true;
+            } else {
+                if (b->x < min_x) {
+                    min_x = b->x;
+                }
+                if (b->y < min_y) {
+                    min_y = b->y;
+                }
+                if (b->x + b->w > max_x) {
+                    max_x = b->x + b->w;
+                }
+                if (b->y + b->h > max_y) {
+                    max_y = b->y + b->h;
+                }
+            }
+        }
+        if (found) {
+            x = min_x;
+            y = min_y;
+            w = max_x - min_x;
+            h = max_y - min_y;
+        }
+    }
+    JSValue rect = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, rect, "x", JS_NewFloat64(ctx, x));
+    JS_SetPropertyStr(ctx, rect, "y", JS_NewFloat64(ctx, y));
+    JS_SetPropertyStr(ctx, rect, "width", JS_NewFloat64(ctx, w));
+    JS_SetPropertyStr(ctx, rect, "height", JS_NewFloat64(ctx, h));
+    JS_SetPropertyStr(ctx, rect, "top", JS_NewFloat64(ctx, y));
+    JS_SetPropertyStr(ctx, rect, "left", JS_NewFloat64(ctx, x));
+    JS_SetPropertyStr(ctx, rect, "right", JS_NewFloat64(ctx, x + w));
+    JS_SetPropertyStr(ctx, rect, "bottom", JS_NewFloat64(ctx, y + h));
+    return rect;
 }
 
 static JSValue js_el_clientRects_stub(JSContext *ctx, JSValueConst this_val, int argc,
@@ -3199,8 +3308,8 @@ static const JSCFunctionListEntry element_funcs[] = {
 	 * production code 99% of the time. */
     JS_CFUNC_DEF("prepend", 1, js_el_prepend),
     JS_CFUNC_DEF("append", 1, js_el_append),
-    JS_CFUNC_DEF("insertBefore", 2, js_el_appendChild),
-    JS_CFUNC_DEF("replaceChild", 2, js_el_appendChild),
+    JS_CFUNC_DEF("insertBefore", 2, js_el_insertBefore),
+    JS_CFUNC_DEF("replaceChild", 2, js_el_replaceChild),
     JS_CFUNC_DEF("replaceWith", 1, js_el_replaceWith),
     JS_CFUNC_DEF("before", 1, js_el_before),
     JS_CFUNC_DEF("after", 1, js_el_after),
@@ -3215,7 +3324,7 @@ static const JSCFunctionListEntry element_funcs[] = {
     JS_CFUNC_DEF("hasAttributes", 0, js_el_hasAttributes_stub),
     JS_CFUNC_DEF("getAttributeNames", 0, js_el_getAttributeNames_stub),
     JS_CFUNC_DEF("cloneNode", 1, js_el_cloneNode_stub),
-    JS_CFUNC_DEF("getBoundingClientRect", 0, js_el_clientRect_stub),
+    JS_CFUNC_DEF("getBoundingClientRect", 0, js_el_getBoundingClientRect),
     JS_CFUNC_DEF("getClientRects", 0, js_el_clientRects_stub),
     /* True no-ops — return undefined. */
     JS_CFUNC_DEF("scrollIntoView", 0, js_el_undef_stub),

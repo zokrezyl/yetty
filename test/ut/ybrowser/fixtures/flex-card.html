@@ -1,0 +1,19 @@
+<!DOCTYPE html><html><head><style>*{margin:0;padding:0;font-family:monospace;font-size:16px;box-sizing:border-box}</style></head><body>
+<!-- gnews-like: a flex ROW of two flex-COLUMN cards, each image+headline,
+     with an absolute inset:0 click overlay (the WwrzSb pattern). -->
+<div data-test="row" style="display:flex">
+  <div data-test="card1" style="display:flex;flex-direction:column;width:280px;position:relative">
+    <div style="height:100px;background:#ccc">img1</div>
+    <div data-test="h1">Headline one goes here</div>
+    <a data-test="ov1" href="#" style="position:absolute;top:0;left:0;right:0;bottom:0"></a>
+  </div>
+  <div data-test="card2" style="display:flex;flex-direction:column;width:280px;position:relative">
+    <div style="height:100px;background:#ddd">img2</div>
+    <div data-test="h2">Headline two goes here</div>
+    <a data-test="ov2" href="#" style="position:absolute;top:0;left:0;right:0;bottom:0"></a>
+  </div>
+</div>
+<pre id="geom" style="display:none"></pre>
+<script>var out={};document.querySelectorAll('[data-test]').forEach(function(el){var r=el.getBoundingClientRect();
+out[el.getAttribute('data-test')]={x:Math.round(r.x),y:Math.round(r.y),w:Math.round(r.width),h:Math.round(r.height)};});
+document.getElementById('geom').textContent=JSON.stringify(out);</script></body></html>

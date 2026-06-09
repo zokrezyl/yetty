@@ -120,6 +120,32 @@ void *yetty_ylexbor_curl_share(void);
  * none). The host calls this from its event loop. */
 int yetty_ylexbor_pump_timers(struct yetty_ylexbor *r);
 
+/* Set the per-glyph advance (fraction of font-size) the layout uses to
+ * estimate text width and to position styled inline fragments on a line.
+ * It must match the advance of the font the host renders with, or colored
+ * link / bold / italic runs drift out of alignment. An interactive host
+ * rendering with a monospace MSDF font passes that font's advance (~0.6);
+ * pass 0 to keep the 0.55 default. */
+void yetty_ylexbor_set_glyph_advance_ratio(struct yetty_ylexbor *r, float ratio);
+
+/* Image loading mode. By default _render() fetches every <img> URL over
+ * the network synchronously inside the paint pass — fine for a one-shot
+ * render, but it blocks the caller's thread for as long as the HTTP takes
+ * (seconds on an image-heavy page), which freezes an interactive host's
+ * event loop. Set `on` to 1 to defer: paint draws placeholders for images
+ * that aren't cached yet and returns immediately; the host then loads
+ * images off the critical path with yetty_ylexbor_fetch_one_pending_image
+ * and re-renders. `data:` URIs are unaffected (decoded inline). */
+void yetty_ylexbor_set_defer_image_fetch(struct yetty_ylexbor *r, int on);
+
+/* Fetch + decode at most ONE <img> whose URL isn't cached yet (the first
+ * in document order), blocking only for that single image. Returns 1 if it
+ * loaded one (the host should re-render to show it and call again for the
+ * next), 0 when no images are pending. Only meaningful with defer mode on;
+ * call it once per frame from the host loop to stream a page's images in
+ * without ever blocking for the whole set at once. */
+int yetty_ylexbor_fetch_one_pending_image(struct yetty_ylexbor *r);
+
 /* ===========================================================================
  * Test-only inspection.
  *
@@ -149,6 +175,15 @@ int yetty_ylexbor_test_box_at(const struct yetty_ylexbor *r, int index, float *x
 int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int *kind_out,
                                    int *font_weight_out, int *italic_out, int *underline_out,
                                    char *text_out, int text_cap);
+
+/* Test-only: fetch the box's `data-test` attribute (used by the Chrome
+ * geometry oracle to key boxes by a stable name independent of DOM order).
+ * Writes the NUL-terminated attribute value into out_buf (truncated to
+ * cap-1) and returns 0 on success; returns non-zero if the index is out of
+ * range or the box's element has no `data-test` attribute. out_buf is set
+ * to "" on any non-success. */
+int yetty_ylexbor_test_box_data_test_at(const struct yetty_ylexbor *r, int index, char *out_buf,
+                                        int cap);
 
 #ifdef __cplusplus
 }

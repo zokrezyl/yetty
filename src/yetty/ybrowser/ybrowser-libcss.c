@@ -1077,7 +1077,40 @@ static float resolve_length_to_px(struct yetty_ylexbor *r, const css_computed_st
     if (unit == CSS_UNIT_EX) {
         return fixed_to_float(length) * font_size * 0.5f;
     }
-    /* vh/vw/etc. — approximate */
+    if (unit == CSS_UNIT_CH) {
+        /* Advance of the '0' glyph. We have no real metrics; approximate
+         * as half the font size (same shortcut as ex). */
+        return fixed_to_float(length) * font_size * 0.5f;
+    }
+    if (unit == CSS_UNIT_Q) {
+        /* 1Q = 1/40 cm. */
+        return fixed_to_float(length) * (96.0f / 2.54f) / 40.0f;
+    }
+    if (unit == CSS_UNIT_LH) {
+        /* Relative to the line box; we don't resolve line-height here, so
+         * approximate with the default normal line box (1.25 * font). */
+        return fixed_to_float(length) * font_size * 1.25f;
+    }
+    /* Viewport-percentage units, resolved against the live viewport.
+     * Horizontal writing mode is assumed, so the inline axis (vi) maps to
+     * the viewport width and the block axis (vb) to the height. */
+    float viewport_w = r ? (float)r->viewport_w : 0.0f;
+    float viewport_h = r ? (float)r->viewport_h : 0.0f;
+    if (unit == CSS_UNIT_VW || unit == CSS_UNIT_VI) {
+        return fixed_to_float(length) * viewport_w / 100.0f;
+    }
+    if (unit == CSS_UNIT_VH || unit == CSS_UNIT_VB) {
+        return fixed_to_float(length) * viewport_h / 100.0f;
+    }
+    if (unit == CSS_UNIT_VMIN) {
+        float side = viewport_w < viewport_h ? viewport_w : viewport_h;
+        return fixed_to_float(length) * side / 100.0f;
+    }
+    if (unit == CSS_UNIT_VMAX) {
+        float side = viewport_w > viewport_h ? viewport_w : viewport_h;
+        return fixed_to_float(length) * side / 100.0f;
+    }
+    /* Unknown / angular / time units — return the raw magnitude. */
     return fixed_to_float(length);
 }
 
@@ -1199,14 +1232,25 @@ int yetty_ybrowser_libcss_min_width(struct yetty_ylexbor *r, const css_computed_
     return len_or_pct_property(k, l, u, CSS_MIN_WIDTH_SET, r, style, font_size, pct_basis, out_px);
 }
 
+/* Margin / padding percentages resolve against the containing block's
+ * content WIDTH, which the box pass doesn't know yet. So when the value
+ * is a percent we return the ratio (e.g. 0.10 for 10%) in *out_px and set
+ * *out_pct = true; the layout pass multiplies by the parent content width
+ * and clears the flag. Non-percent values round-trip as resolved px with
+ * *out_pct = false. `pct_basis` is therefore unused for percents now and
+ * only feeds em/viewport resolution for the non-percent path. */
 int yetty_ybrowser_libcss_margin(struct yetty_ylexbor *r, const css_computed_style *style, int side,
-                                 float font_size, float pct_basis, float *out_px, bool *out_auto)
+                                 float font_size, float pct_basis, float *out_px, bool *out_auto,
+                                 bool *out_pct)
 {
     if (!style) {
         return 0;
     }
     if (out_auto) {
         *out_auto = false;
+    }
+    if (out_pct) {
+        *out_pct = false;
     }
     css_fixed l = 0;
     css_unit u = CSS_UNIT_PX;
@@ -1234,17 +1278,28 @@ int yetty_ybrowser_libcss_margin(struct yetty_ylexbor *r, const css_computed_sty
         return 1;
     }
     if (kind == CSS_MARGIN_SET) {
-        *out_px = resolve_length_to_px(r, style, l, u, font_size, pct_basis);
+        if (u == CSS_UNIT_PCT) {
+            *out_px = fixed_to_float(l) / 100.0f;
+            if (out_pct) {
+                *out_pct = true;
+            }
+        } else {
+            *out_px = resolve_length_to_px(r, style, l, u, font_size, pct_basis);
+        }
         return 1;
     }
     return 0;
 }
 
 int yetty_ybrowser_libcss_padding(struct yetty_ylexbor *r, const css_computed_style *style,
-                                  int side, float font_size, float pct_basis, float *out_px)
+                                  int side, float font_size, float pct_basis, float *out_px,
+                                  bool *out_pct)
 {
     if (!style) {
         return 0;
+    }
+    if (out_pct) {
+        *out_pct = false;
     }
     css_fixed l = 0;
     css_unit u = CSS_UNIT_PX;
@@ -1266,7 +1321,55 @@ int yetty_ybrowser_libcss_padding(struct yetty_ylexbor *r, const css_computed_st
         return 0;
     }
     if (kind == CSS_PADDING_SET) {
-        *out_px = resolve_length_to_px(r, style, l, u, font_size, pct_basis);
+        if (u == CSS_UNIT_PCT) {
+            *out_px = fixed_to_float(l) / 100.0f;
+            if (out_pct) {
+                *out_pct = true;
+            }
+        } else {
+            *out_px = resolve_length_to_px(r, style, l, u, font_size, pct_basis);
+        }
+        return 1;
+    }
+    return 0;
+}
+
+/* box-sizing: returns 1 for border-box, 0 for content-box (the CSS
+ * initial) / inherit. */
+int yetty_ybrowser_libcss_box_sizing(const css_computed_style *style)
+{
+    if (!style) {
+        return 0;
+    }
+    return css_computed_box_sizing(style) == CSS_BOX_SIZING_BORDER_BOX ? 1 : 0;
+}
+
+/* line-height: returns 1 when the cascade has a concrete value, 0 for
+ * `normal` / inherit (caller keeps its default line box).
+ *
+ * A unitless NUMBER (e.g. line-height: 1.5) inherits as the *factor*, to
+ * be multiplied by each element's own font-size — so it is returned in
+ * *out_factor with *out_px = 0. A length / percentage resolves to a used
+ * px value that inherits as-is — returned in *out_px with *out_factor = 0.
+ * Keeping the two cases distinct is what lets an inherited `body { line-
+ * height: 1.33 }` scale correctly on a larger-font descendant like <h1>. */
+int yetty_ybrowser_libcss_line_height(struct yetty_ylexbor *r, const css_computed_style *style,
+                                      float font_size, float *out_px, float *out_factor)
+{
+    *out_px = 0.0f;
+    *out_factor = 0.0f;
+    if (!style) {
+        return 0;
+    }
+    css_fixed l = 0;
+    css_unit u = CSS_UNIT_PX;
+    uint8_t kind = css_computed_line_height(style, &l, &u);
+    if (kind == CSS_LINE_HEIGHT_NUMBER) {
+        *out_factor = fixed_to_float(l);
+        return 1;
+    }
+    if (kind == CSS_LINE_HEIGHT_DIMENSION) {
+        *out_px = resolve_length_to_px(r, style, l, u, font_size, font_size);
         return 1;
     }
     return 0;
@@ -1563,6 +1666,57 @@ int yetty_ybrowser_libcss_clear(const css_computed_style *style)
         return CSS_CLEAR_NONE;
     }
     return css_computed_clear(style);
+}
+
+int yetty_ybrowser_libcss_position(const css_computed_style *style)
+{
+    if (!style) {
+        return CSS_POSITION_STATIC;
+    }
+    return css_computed_position(style);
+}
+
+int yetty_ybrowser_libcss_inset(struct yetty_ylexbor *r, const css_computed_style *style, int side,
+                                float font_size, float pct_basis, float *out_value)
+{
+    if (!style || !out_value) {
+        return 0;
+    }
+    css_fixed length = 0;
+    css_unit unit = CSS_UNIT_PX;
+    uint8_t kind = 0;
+    int set_value = 0;
+    /* Bind the accessor's return before reading length/unit — the same
+     * unsequenced-evaluation hazard the width/height bridges document. */
+    switch (side) {
+    case 0:
+        kind = css_computed_top(style, &length, &unit);
+        set_value = CSS_TOP_SET;
+        break;
+    case 1:
+        kind = css_computed_right(style, &length, &unit);
+        set_value = CSS_RIGHT_SET;
+        break;
+    case 2:
+        kind = css_computed_bottom(style, &length, &unit);
+        set_value = CSS_BOTTOM_SET;
+        break;
+    case 3:
+        kind = css_computed_left(style, &length, &unit);
+        set_value = CSS_LEFT_SET;
+        break;
+    default:
+        return 0;
+    }
+    if (kind != set_value) {
+        return 0; /* auto / inherit-default → not specified */
+    }
+    if (unit == CSS_UNIT_PCT) {
+        *out_value = fixed_to_float(length) / 100.0f;
+        return 2;
+    }
+    *out_value = resolve_length_to_px(r, style, length, unit, font_size, pct_basis);
+    return 1;
 }
 
 int yetty_ybrowser_libcss_white_space(const css_computed_style *style)

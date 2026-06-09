@@ -1,0 +1,47 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+  *{margin:0;padding:0;font-family:monospace;font-size:16px;box-sizing:border-box}
+  body{padding:20px;background:#fff}
+  /* one Google-News-style story card: a flex row, thumbnail + text column.
+     The thumbnail is the ARTICLE photo (blue). The little favicon next to the
+     source name is the SOURCE LOGO (red). They must NOT be swapped. */
+  .card{display:flex;flex-direction:row;width:560px;margin-bottom:24px;border:1px solid #ccc;padding:8px}
+  .thumb{width:280px;height:168px;flex:0 0 280px}
+  .thumb img{width:100%;height:100%}
+  .body{padding-left:12px}
+  .src{display:flex;align-items:center;height:20px}
+  .src img{width:14px;height:14px}
+  .src span{padding-left:6px;color:#555;font-size:13px}
+  h3{font-size:18px;margin:6px 0}
+</style></head><body>
+  <h1>Story card image test — the big box must be the BLUE photo, the tiny favicon RED</h1>
+
+  <div class="card">
+    <div class="thumb">
+      <!-- ARTICLE PHOTO: src + srcset both the real (blue) image, like gnews -->
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAYCAIAAAAH5iiXAAAAKElEQVR42mPQiDoxIIhh1OJRi0ctHrV41OJRi0ctHrV41OJRi4ePxQBAjtW90ReocgAAAABJRU5ErkJggg==" srcset="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAYCAIAAAAH5iiXAAAAKElEQVR42mPQiDoxIIhh1OJRi0ctHrV41OJRi0ctHrV41OJRi4ePxQBAjtW90ReocgAAAABJRU5ErkJggg== 280w" width="280" height="168" alt="article">
+    </div>
+    <div class="body">
+      <div class="src">
+        <!-- SOURCE LOGO: a separate small (red) favicon img -->
+        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAYCAIAAAAH5iiXAAAAKElEQVR42mPQiDoxIIhh1OJRi0ctHrV41OJRi0ctHrV41OJRi4ePxQBAjtW90ReocgAAAABJRU5ErkJggg==" alt="logo"><!-- CSS-sized 14px, natural 40x24, no attrs (real gnews favicon) -->
+        <span>BBC News</span>
+      </div>
+      <h3>Sea drone rescues US army helicopter crew near Strait of Hormuz</h3>
+      <div class="src"><span>3 hours ago — By Yaroslav Lukiv</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="thumb">
+      <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAYCAIAAAAH5iiXAAAAKElEQVR42mPQiDoxIIhh1OJRi0ctHrV41OJRi0ctHrV41OJRi4ePxQBAjtW90ReocgAAAABJRU5ErkJggg==" srcset="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAYCAIAAAAH5iiXAAAAKElEQVR42mPQiDoxIIhh1OJRi0ctHrV41OJRi0ctHrV41OJRi4ePxQBAjtW90ReocgAAAABJRU5ErkJggg== 280w" width="280" height="168" alt="article">
+    </div>
+    <div class="body">
+      <div class="src">
+        <img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAYCAIAAAAH5iiXAAAAKElEQVR42mPQiDoxIIhh1OJRi0ctHrV41OJRi0ctHrV41OJRi4ePxQBAjtW90ReocgAAAABJRU5ErkJggg==" alt="logo"><!-- CSS-sized 14px, natural 40x24, no attrs (real gnews favicon) -->
+        <span>CNBC</span>
+      </div>
+      <h3>Trump says U.S. must 'respond' after Iran shoots down helicopter</h3>
+      <div class="src"><span>3 hours ago — By Reuters</span></div>
+    </div>
+  </div>
+</body></html>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<!-- Geometry oracle fixture. Forces monospace 16px so ybrowser's
+     glyph-advance estimate (~0.602em) lines up with Chrome's real
+     monospace metrics, making text-flow geometry comparable.
+
+     Key elements with data-test="NAME"; the script below writes their
+     getBoundingClientRect into the geometry sink so a headless
+     `chrome --dump-dom` captures the post-layout geometry as JSON. -->
+<style>
+  * { font-family: monospace; font-size: 16px; margin: 0; padding: 0; }
+</style>
+</head>
+<body>
+  <!-- content-box: outer width = 200 content + 2*20 padding = 240 -->
+  <div data-test="content" style="box-sizing:content-box; width:200px; padding:20px;">x</div>
+  <!-- border-box: outer width = declared 200 -->
+  <div data-test="border" style="box-sizing:border-box; width:200px; padding:20px;">y</div>
+
+  <pre id="geom" style="display:none"></pre>
+  <script>
+  (function () {
+      var out = {};
+      document.querySelectorAll('[data-test]').forEach(function (el) {
+          var r = el.getBoundingClientRect();
+          out[el.getAttribute('data-test')] = {
+              x: Math.round(r.x * 100) / 100,
+              y: Math.round(r.y * 100) / 100,
+              w: Math.round(r.width * 100) / 100,
+              h: Math.round(r.height * 100) / 100
+          };
+      });
+      // Record the viewport Chrome actually laid out at so the
+      // comparator can replay ybrowser at the same size (vw/vh parity).
+      out['_viewport'] = { w: window.innerWidth, h: window.innerHeight };
+      document.getElementById('geom').textContent = JSON.stringify(out);
+  })();
+  </script>
+</body>
+</html>

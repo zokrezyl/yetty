@@ -272,9 +272,37 @@ static struct yetty_ycore_void_result yimage_instance_render(struct yetty_ydraw_
      * pane_pixel comment for the matching shader-side fix. */
     wgpuRenderPassEncoderSetViewport(pass, target->viewport.x, target->viewport.y,
                                      target->viewport.w, target->viewport.h, 0.0f, 1.0f);
-    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)target->viewport.x,
-                                        (uint32_t)target->viewport.y, (uint32_t)target->viewport.w,
-                                        (uint32_t)target->viewport.h);
+    /* Scissor to the viewport, intersected with the compositor's clip rect
+     * when one is set (e.g. a scrolling ygrid's scroll-area bounds) so the
+     * image is clipped to its container instead of bleeding over surrounding
+     * chrome such as the tab bar. */
+    float scissor_x0 = target->viewport.x;
+    float scissor_y0 = target->viewport.y;
+    float scissor_x1 = target->viewport.x + target->viewport.w;
+    float scissor_y1 = target->viewport.y + target->viewport.h;
+    if (target->clip.w > 0.0f && target->clip.h > 0.0f) {
+        if (target->clip.x > scissor_x0) {
+            scissor_x0 = target->clip.x;
+        }
+        if (target->clip.y > scissor_y0) {
+            scissor_y0 = target->clip.y;
+        }
+        if (target->clip.x + target->clip.w < scissor_x1) {
+            scissor_x1 = target->clip.x + target->clip.w;
+        }
+        if (target->clip.y + target->clip.h < scissor_y1) {
+            scissor_y1 = target->clip.y + target->clip.h;
+        }
+    }
+    if (scissor_x1 < scissor_x0) {
+        scissor_x1 = scissor_x0;
+    }
+    if (scissor_y1 < scissor_y0) {
+        scissor_y1 = scissor_y0;
+    }
+    wgpuRenderPassEncoderSetScissorRect(pass, (uint32_t)scissor_x0, (uint32_t)scissor_y0,
+                                        (uint32_t)(scissor_x1 - scissor_x0),
+                                        (uint32_t)(scissor_y1 - scissor_y0));
 
     float w = self->bounds.max.x - self->bounds.min.x;
     float h = self->bounds.max.y - self->bounds.min.y;

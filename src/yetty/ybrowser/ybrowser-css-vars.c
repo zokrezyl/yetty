@@ -28,6 +28,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <strings.h> /* strncasecmp */
 
 /* ===========================================================================
@@ -95,6 +96,68 @@ void yetty_ylexbor_css_vars_destroy(struct yetty_ylexbor *r)
     free(r->customs.data);
     r->customs.data = NULL;
     r->customs.size = r->customs.cap = 0;
+}
+
+/* Scan for the `minmax(0, <len>)` grid content-column idiom (e.g.
+ * `grid-template-columns: ... minmax(0, 59.25rem) ...` used by modern
+ * skins to cap the readable column) and record the widest such track in
+ * the readable range into r->grid_content_max_px. minmax() only appears
+ * in grid track lists, so matching the call form alone is safe. We accept
+ * rem / em (×16) and px; anything else (1fr, %, auto) is not a fixed cap
+ * and is ignored. */
+void yetty_ylexbor_css_scan_grid_content_width(struct yetty_ylexbor *r, const char *src, size_t len)
+{
+    if (r == NULL || src == NULL || len < 8) {
+        return;
+    }
+    static const char needle[] = "minmax(";
+    const size_t nlen = sizeof(needle) - 1;
+    for (size_t i = 0; i + nlen < len;) {
+        if (memcmp(src + i, needle, nlen) != 0) {
+            i++;
+            continue;
+        }
+        size_t j = i + nlen;
+        /* Skip the min argument up to the separating comma. */
+        while (j < len && src[j] != ',' && src[j] != ')') {
+            j++;
+        }
+        if (j >= len || src[j] != ',') {
+            i += nlen;
+            continue;
+        }
+        j++; /* past the comma */
+        while (j < len && (src[j] == ' ' || src[j] == '\t')) {
+            j++;
+        }
+        /* Parse the max-track number. */
+        char numbuf[32];
+        size_t k = 0;
+        while (j < len && k < sizeof(numbuf) - 1 &&
+               (src[j] == '.' || src[j] == '+' || src[j] == '-' ||
+                (src[j] >= '0' && src[j] <= '9'))) {
+            numbuf[k++] = src[j++];
+        }
+        numbuf[k] = '\0';
+        if (k > 0) {
+            double value = atof(numbuf);
+            double px = -1.0;
+            if (j + 3 <= len && strncmp(src + j, "rem", 3) == 0) {
+                px = value * 16.0;
+            } else if (j + 2 <= len && strncmp(src + j, "em", 2) == 0) {
+                px = value * 16.0;
+            } else if (j + 2 <= len && strncmp(src + j, "px", 2) == 0) {
+                px = value;
+            }
+            /* Only a "content column" sized track — between ~30em and
+             * ~90em — is treated as the readable cap; small tracks are
+             * gallery/grid cells and full-page tracks aren't a cap. */
+            if (px >= 480.0 && px <= 1440.0 && (float)px > r->grid_content_max_px) {
+                r->grid_content_max_px = (float)px;
+            }
+        }
+        i += nlen;
+    }
 }
 
 /* ===========================================================================
@@ -493,4 +556,360 @@ char *yetty_ylexbor_css_vars_resolve(struct yetty_ylexbor *r, const char *value,
         }
     }
     return out;
+}
+
+/* ===========================================================================
+ * Class-scoped CSS Grid template scanning.
+ *
+ * libcss parses none of `grid-template-columns` / `gap` / `grid-column`, so we
+ * extract the templates ourselves from the author CSS, keyed by class. This
+ * covers the dominant real-world idiom — a card laid out as
+ * `.cls{display:grid;grid-template-columns:1fr 80px;column-gap:12px}` — which
+ * is what makes news sites' story cards (thumbnail + text) compact. We only
+ * parse the column track list; row tracks and spans are not modelled.
+ * ===========================================================================*/
+
+/* Copy [s, s+n) into buf (NUL-terminated, truncated to bufsz-1). */
+static void grid_tok_copy(const char *s, size_t n, char *buf, size_t bufsz)
+{
+    size_t k = 0;
+    while (k < n && k < bufsz - 1) {
+        buf[k] = s[k];
+        k++;
+    }
+    buf[k] = '\0';
+}
+
+/* Parse one track spec (already isolated): `<n>fr`, `<n>px`/`<n>`,
+ * `minmax(a,b)` (uses b), `auto`/`min-content`/`max-content` (≈ 1fr). */
+static int grid_parse_one_track(const char *s, size_t n, struct yl_grid_track *out)
+{
+    while (n > 0 && (*s == ' ' || *s == '\t')) {
+        s++;
+        n--;
+    }
+    while (n > 0 && (s[n - 1] == ' ' || s[n - 1] == '\t')) {
+        n--;
+    }
+    if (n == 0) {
+        return 0;
+    }
+    if (n >= 7 && strncmp(s, "minmax(", 7) == 0) {
+        const char *comma = memchr(s, ',', n);
+        if (!comma) {
+            return 0;
+        }
+        const char *b = comma + 1;
+        size_t bn = (size_t)((s + n) - b);
+        while (bn > 0 && (b[bn - 1] == ')' || b[bn - 1] == ' ')) {
+            bn--;
+        }
+        return grid_parse_one_track(b, bn, out);
+    }
+    if (n >= 2 && s[n - 1] == 'r' && s[n - 2] == 'f') {
+        char buf[32];
+        grid_tok_copy(s, n - 2, buf, sizeof(buf));
+        float v = (float)atof(buf);
+        out->is_fr = 1;
+        out->value = v > 0.0f ? v : 1.0f;
+        return 1;
+    }
+    if ((n >= 4 && strncmp(s, "auto", 4) == 0) || (n >= 11 && strstr(s, "content") != NULL)) {
+        out->is_fr = 1;
+        out->value = 1.0f; /* approximate intrinsic tracks as 1fr */
+        return 1;
+    }
+    {
+        char buf[32];
+        grid_tok_copy(s, n, buf, sizeof(buf));
+        float v = (float)atof(buf);
+        if (v <= 0.0f) {
+            return 0;
+        }
+        out->is_fr = 0;
+        out->value = v;
+        return 1;
+    }
+}
+
+/* Parse a full grid-template-columns value into tracks. Expands repeat(). */
+static int grid_parse_tracks(const char *v, size_t n, struct yl_grid_track *out, int maxn)
+{
+    int count = 0;
+    size_t i = 0;
+    while (i < n && count < maxn) {
+        while (i < n && (v[i] == ' ' || v[i] == '\t' || v[i] == ',')) {
+            i++;
+        }
+        if (i >= n) {
+            break;
+        }
+        if (i + 7 <= n && strncmp(v + i, "repeat(", 7) == 0) {
+            i += 7;
+            int rep = atoi(v + i);
+            while (i < n && v[i] != ',') {
+                i++;
+            }
+            if (i < n) {
+                i++; /* comma */
+            }
+            while (i < n && v[i] == ' ') {
+                i++;
+            }
+            size_t xstart = i;
+            int depth = 1;
+            while (i < n && depth > 0) {
+                if (v[i] == '(') {
+                    depth++;
+                } else if (v[i] == ')') {
+                    depth--;
+                    if (depth == 0) {
+                        break;
+                    }
+                }
+                i++;
+            }
+            struct yl_grid_track t = {0};
+            if (rep > 0 && grid_parse_one_track(v + xstart, i - xstart, &t)) {
+                for (int k = 0; k < rep && count < maxn; k++) {
+                    out[count++] = t;
+                }
+            }
+            if (i < n) {
+                i++; /* past ')' */
+            }
+        } else {
+            size_t tstart = i;
+            int depth = 0;
+            while (i < n && (depth > 0 || (v[i] != ' ' && v[i] != ',' && v[i] != '\t'))) {
+                if (v[i] == '(') {
+                    depth++;
+                } else if (v[i] == ')') {
+                    depth--;
+                }
+                i++;
+            }
+            struct yl_grid_track t = {0};
+            if (grid_parse_one_track(v + tstart, i - tstart, &t) && count < maxn) {
+                out[count++] = t;
+            }
+        }
+    }
+    return count;
+}
+
+/* Read a px length declaration `prop:Npx` inside [block, block+blen). Returns
+ * the px value, or -1 if absent. For two-value forms (`gap:R C`) `which`
+ * selects 0=first(row) or 1=second(col). */
+static float grid_find_len(const char *block, size_t blen, const char *prop, int which)
+{
+    size_t plen = strlen(prop);
+    for (size_t i = 0; i + plen < blen; i++) {
+        if ((i == 0 || block[i - 1] == ';' || block[i - 1] == '{' || block[i - 1] == ' ') &&
+            strncmp(block + i, prop, plen) == 0 && block[i + plen] == ':') {
+            size_t j = i + plen + 1;
+            for (int idx = 0;; idx++) {
+                while (j < blen && (block[j] == ' ' || block[j] == '\t')) {
+                    j++;
+                }
+                char buf[32];
+                size_t k = 0;
+                while (j < blen && block[j] != ';' && block[j] != '}' && block[j] != ' ' &&
+                       k < sizeof(buf) - 1) {
+                    buf[k++] = block[j++];
+                }
+                buf[k] = '\0';
+                if (idx == which || (which == 1 && (j >= blen || block[j] == ';' || block[j] == '}'))) {
+                    return (float)atof(buf);
+                }
+                if (j >= blen || block[j] == ';' || block[j] == '}') {
+                    return (float)atof(buf); /* only one value present */
+                }
+            }
+        }
+    }
+    return -1.0f;
+}
+
+void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *src, size_t len)
+{
+    if (r == NULL || src == NULL || len < 12) {
+        return;
+    }
+    static const char needle[] = "grid-template-columns:";
+    const size_t nlen = sizeof(needle) - 1;
+    for (size_t i = 0; i + nlen < len; i++) {
+        if (memcmp(src + i, needle, nlen) != 0) {
+            continue;
+        }
+        /* Find the enclosing rule's `{` (scan back) and its selector. */
+        size_t brace = i;
+        while (brace > 0 && src[brace] != '{') {
+            brace--;
+        }
+        if (src[brace] != '{') {
+            continue;
+        }
+        size_t sel_end = brace;
+        size_t sel_start = brace;
+        while (sel_start > 0 && src[sel_start - 1] != '}' && src[sel_start - 1] != '{' &&
+               src[sel_start - 1] != ';') {
+            sel_start--;
+        }
+        /* Selector must be a single `.classname` (no combinators/compound).
+         * Skip leading whitespace and any CSS comment block — a comment right
+         * before the rule would otherwise make the selector look like it
+         * starts with a slash. */
+        for (;;) {
+            while (sel_start < sel_end &&
+                   (src[sel_start] == ' ' || src[sel_start] == '\n' || src[sel_start] == '\t' ||
+                    src[sel_start] == '\r')) {
+                sel_start++;
+            }
+            if (sel_start + 1 < sel_end && src[sel_start] == '/' && src[sel_start + 1] == '*') {
+                sel_start += 2;
+                while (sel_start + 1 < sel_end &&
+                       !(src[sel_start] == '*' && src[sel_start + 1] == '/')) {
+                    sel_start++;
+                }
+                sel_start += 2;
+                continue;
+            }
+            break;
+        }
+        if (sel_start >= sel_end || src[sel_start] != '.') {
+            continue;
+        }
+        size_t cls_start = sel_start + 1;
+        size_t cls_end = cls_start;
+        while (cls_end < sel_end &&
+               (isalnum((unsigned char)src[cls_end]) || src[cls_end] == '-' || src[cls_end] == '_')) {
+            cls_end++;
+        }
+        /* Reject compound/descendant selectors (anything after the class). */
+        {
+            size_t t = cls_end;
+            while (t < sel_end && (src[t] == ' ' || src[t] == '\n')) {
+                t++;
+            }
+            if (t != sel_end) {
+                continue;
+            }
+        }
+        if (cls_end == cls_start) {
+            continue;
+        }
+        /* Value of grid-template-columns. */
+        size_t val_start = i + nlen;
+        size_t val_end = val_start;
+        while (val_end < len && src[val_end] != ';' && src[val_end] != '}') {
+            val_end++;
+        }
+        struct yl_grid_track tracks[YL_GRID_MAX_TRACKS];
+        int ntracks = grid_parse_tracks(src + val_start, val_end - val_start, tracks,
+                                        YL_GRID_MAX_TRACKS);
+        if (ntracks < 2) {
+            continue; /* a single column is just a block — nothing to gain */
+        }
+        /* Gaps from the same block. */
+        size_t block_end = brace + 1;
+        int depth = 1;
+        while (block_end < len && depth > 0) {
+            if (src[block_end] == '{') {
+                depth++;
+            } else if (src[block_end] == '}') {
+                depth--;
+            }
+            block_end++;
+        }
+        const char *block = src + brace;
+        size_t blen = block_end - brace;
+        float col_gap = grid_find_len(block, blen, "column-gap", 0);
+        float row_gap = -1.0f;
+        if (col_gap < 0.0f) {
+            col_gap = grid_find_len(block, blen, "gap", 1);
+            row_gap = grid_find_len(block, blen, "gap", 0);
+        }
+        if (col_gap < 0.0f) {
+            col_gap = grid_find_len(block, blen, "grid-gap", 1);
+            row_gap = grid_find_len(block, blen, "grid-gap", 0);
+        }
+
+        /* Store (grow the array; skip if this class is already recorded). */
+        char cls[64];
+        grid_tok_copy(src + cls_start, cls_end - cls_start, cls, sizeof(cls));
+        int dup = 0;
+        for (int e = 0; e < r->grid_class_count; e++) {
+            if (strcmp(r->grid_classes[e].cls, cls) == 0) {
+                dup = 1;
+                break;
+            }
+        }
+        if (dup) {
+            continue;
+        }
+        if (r->grid_class_count == r->grid_class_cap) {
+            int cap = r->grid_class_cap ? r->grid_class_cap * 2 : 16;
+            struct yl_grid_class *grown =
+                realloc(r->grid_classes, (size_t)cap * sizeof(struct yl_grid_class));
+            if (!grown) {
+                return;
+            }
+            r->grid_classes = grown;
+            r->grid_class_cap = cap;
+        }
+        struct yl_grid_class *entry = &r->grid_classes[r->grid_class_count];
+        entry->cls = strdup(cls);
+        if (!entry->cls) {
+            return;
+        }
+        memcpy(entry->tracks, tracks, sizeof(tracks));
+        entry->ntracks = (uint8_t)ntracks;
+        entry->col_gap = col_gap > 0.0f ? col_gap : 0.0f;
+        entry->row_gap = row_gap > 0.0f ? row_gap : 0.0f;
+        r->grid_class_count++;
+    }
+}
+
+void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
+{
+    if (r == NULL || r->grid_classes == NULL) {
+        return;
+    }
+    for (int e = 0; e < r->grid_class_count; e++) {
+        free(r->grid_classes[e].cls);
+    }
+    free(r->grid_classes);
+    r->grid_classes = NULL;
+    r->grid_class_count = 0;
+    r->grid_class_cap = 0;
+}
+
+const struct yl_grid_class *yetty_ylexbor_grid_class_lookup(struct yetty_ylexbor *r,
+                                                            const char *class_attr, size_t class_len)
+{
+    if (r == NULL || class_attr == NULL || r->grid_class_count == 0) {
+        return NULL;
+    }
+    size_t i = 0;
+    while (i < class_len) {
+        while (i < class_len && (class_attr[i] == ' ' || class_attr[i] == '\t')) {
+            i++;
+        }
+        size_t start = i;
+        while (i < class_len && class_attr[i] != ' ' && class_attr[i] != '\t') {
+            i++;
+        }
+        size_t tlen = i - start;
+        if (tlen == 0) {
+            continue;
+        }
+        for (int e = 0; e < r->grid_class_count; e++) {
+            const char *cls = r->grid_classes[e].cls;
+            if (strlen(cls) == tlen && strncmp(cls, class_attr + start, tlen) == 0) {
+                return &r->grid_classes[e];
+            }
+        }
+    }
+    return NULL;
 }

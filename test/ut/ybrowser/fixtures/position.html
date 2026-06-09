@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { font-family: monospace; font-size: 16px; margin: 0; padding: 0; }
+</style>
+</head>
+<body>
+  <!-- position:absolute cards laid out against a position:relative parent;
+       position:relative shifts in flow without disturbing siblings. -->
+  <div data-test="wrap" style="position:relative; height:300px; background:#eee">
+    <div data-test="card1" style="position:absolute; left:20px; top:0;   width:200px; height:80px"></div>
+    <div data-test="card2" style="position:absolute; left:20px; top:100px; width:200px; height:80px"></div>
+    <div data-test="card3" style="position:absolute; left:20px; top:200px; width:200px; height:80px"></div>
+  </div>
+  <div data-test="rel" style="position:relative; top:30px; left:50px">shifted</div>
+
+  <pre id="geom" style="display:none"></pre>
+  <script>
+  (function () {
+      var out = {};
+      document.querySelectorAll('[data-test]').forEach(function (el) {
+          var r = el.getBoundingClientRect();
+          out[el.getAttribute('data-test')] = {
+              x: Math.round(r.x * 100) / 100, y: Math.round(r.y * 100) / 100,
+              w: Math.round(r.width * 100) / 100, h: Math.round(r.height * 100) / 100
+          };
+      });
+      out['_viewport'] = { w: window.innerWidth, h: window.innerHeight };
+      document.getElementById('geom').textContent = JSON.stringify(out);
+  })();
+  </script>
+</body>
+</html>

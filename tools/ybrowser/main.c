@@ -261,12 +261,18 @@ static int emit_bin_osc(const uint8_t *bytes, size_t blen)
 static void usage(const char *argv0)
 {
     fprintf(stderr,
-            "usage: %s [--once|--interactive] [--osc|--raw]\n"
-            "            [-w W] [-H H] [--font-size PX] [<file>|<url>|-]\n"
+            "usage: %s [--once|--interactive] [--osc|--raw] [--no-ui]\n"
+            "            [--record FILE] [-w W] [-H H] [--font-size PX]\n"
+            "            [<file>|<url>|-]\n"
             "\n"
             "  Interactive (default on a TTY): a Chrome-like browser — tabbar,\n"
             "  address bar, back/forward/reload, scrollable page. <file>/<url>\n"
             "  is the optional first page.\n"
+            "\n"
+            "  --no-ui (standalone): hide the tab strip + address bar; the\n"
+            "  window is just the rendered page.\n"
+            "  --record FILE (standalone): record the run to an mp4 (the core\n"
+            "  yframework/yvnc recorder; captures the GPU output directly).\n"
             "\n"
             "  --once (legacy OSC mode; default when stdout is not a TTY):\n"
             "  read HTML from <file> (or '-' / no arg = stdin) or a url, render\n"
@@ -325,17 +331,34 @@ int main(int argc, char **argv)
     }
     float font_size = 16.0f;
     const char *path = NULL;
+    /* Debug: after layout, print one TSV row per box (kind, tag, x, y, w, h)
+     * to stdout and exit — no OSC. Feeds a wireframe renderer so layout
+     * changes (e.g. floats moving figures to the right rail) can be seen
+     * without a GPU window. */
+    int dump_boxes = 0;
+    /* Standalone-only: hide the browser chrome (tab strip + address bar) so
+     * the window is just the page, and record the GPU output to an mp4 via
+     * the core (yframework/yvnc) recorder. */
+    int no_ui = 0;
+    const char *record_path = NULL;
 
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         if (!strcmp(a, "--osc")) {
             osc = 1;
+        } else if (!strcmp(a, "--dump-boxes")) {
+            dump_boxes = 1;
+            interactive = 0;
         } else if (!strcmp(a, "--raw")) {
             osc = 0;
         } else if (!strcmp(a, "--once")) {
             interactive = 0;
         } else if (!strcmp(a, "--interactive")) {
             interactive = 1;
+        } else if (!strcmp(a, "--no-ui")) {
+            no_ui = 1;
+        } else if (!strcmp(a, "--record") && i + 1 < argc) {
+            record_path = argv[++i];
         } else if (!strcmp(a, "-w") && i + 1 < argc) {
             width = atoi(argv[++i]);
         } else if (!strcmp(a, "-H") && i + 1 < argc) {
@@ -364,8 +387,16 @@ int main(int argc, char **argv)
         if (!in_yetty) {
             /* Hand yinit a clean argv (just the program name) so it does
 			 * not try to parse ybrowser's URL/flags as yetty options. */
-            char *clean_argv[2] = {argv[0], NULL};
-            return ybrowser_ui_run_standalone(path, font_size, 1, clean_argv);
+            char record_arg[1100];
+            char *clean_argv[3];
+            int clean_argc = 0;
+            clean_argv[clean_argc++] = argv[0];
+            if (record_path && record_path[0]) {
+                snprintf(record_arg, sizeof(record_arg), "--record=%s", record_path);
+                clean_argv[clean_argc++] = record_arg;
+            }
+            clean_argv[clean_argc] = NULL;
+            return ybrowser_ui_run_standalone(path, font_size, no_ui, clean_argc, clean_argv);
         }
 #endif
         return ybrowser_ui_run(path, width, height, font_size);
@@ -451,6 +482,34 @@ int main(int argc, char **argv)
     }
     if (yetty_ylexbor_dom_dirty(yl)) {
         (void)yetty_ylexbor_relayout(yl);
+    }
+
+    if (dump_boxes) {
+        int count = yetty_ylexbor_test_box_count(yl);
+        /* `dt` keys a box by its `data-test` attribute so the Chrome
+         * geometry oracle can match boxes to its *.ref.json entries by name
+         * instead of by fragile DOM index. "-" when the box has none. */
+        printf("#kind\ttag\tdt\tx\ty\tw\th\n");
+        for (int bi = 0; bi < count; bi++) {
+            float x = 0, y = 0, w = 0, h = 0;
+            char tag[32] = {0};
+            if (yetty_ylexbor_test_box_at(yl, bi, &x, &y, &w, &h, tag, sizeof(tag)) != 0) {
+                continue;
+            }
+            int kind = 0, weight = 0, italic = 0, underline = 0;
+            char snippet[40] = {0};
+            (void)yetty_ylexbor_test_box_info_at(yl, bi, &kind, &weight, &italic, &underline, snippet,
+                                                 (int)sizeof(snippet));
+            char data_test[64] = {0};
+            (void)yetty_ylexbor_test_box_data_test_at(yl, bi, data_test, (int)sizeof(data_test));
+            printf("%d\t%s\t%s\t%.1f\t%.1f\t%.1f\t%.1f\tw=%d\ti=%d\tu=%d\t%s\n", kind,
+                   tag[0] ? tag : "-", data_test[0] ? data_test : "-", x, y, w, h, weight, italic,
+                   underline, snippet);
+        }
+        fflush(stdout);
+        yetty_ylexbor_destroy(yl);
+        free(html);
+        return 0;
     }
 
     struct yetty_ydraw_drawable_list_result br =
