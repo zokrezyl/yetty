@@ -467,16 +467,19 @@ static void test_nav_hidden_header_visible(void)
 }
 
 /* ============================================================================
- * Test 10 — `aria-hidden="true"` elements don't render. Wikipedia uses
- * this for decorative icons and off-screen helper text; without it we
- * leak "Jump to content" / "move to sidebar hide" into the visible
- * page.
+ * Test 10 — `aria-hidden="true"` is an ACCESSIBILITY hint, not a visual one:
+ * the element is removed from the a11y tree but still RENDERS (Chrome paints
+ * it). Mapping it to display:none wrongly drops visible content — e.g. Google
+ * News marks each story's thumbnail figure aria-hidden yet shows the image.
+ * So the aria-hidden block must occupy space and push the paragraph below it.
+ * (Site-specific hidden nav is handled by explicit selectors, not by abusing
+ * aria-hidden.)
  * ============================================================================*/
-static void test_aria_hidden_skipped(void)
+static void test_aria_hidden_still_renders(void)
 {
-    fprintf(stderr, "[test_aria_hidden_skipped]\n");
+    fprintf(stderr, "[test_aria_hidden_still_renders]\n");
     static const char html[] = "<html><body>"
-                               "<div aria-hidden=\"true\"><h2>hidden decoration</h2></div>"
+                               "<div aria-hidden=\"true\"><h2>decoration</h2></div>"
                                "<p>visible body</p>"
                                "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
@@ -488,7 +491,9 @@ static void test_aria_hidden_skipped(void)
         yetty_ylexbor_destroy(yl);
         return;
     }
-    ASSERT_TRUE("aria-hidden block didn't push visible content down", para.y < 50.0f);
+    /* The aria-hidden <h2> renders and takes vertical space, so the paragraph
+     * is pushed well below the top — NOT collapsed to y≈0. */
+    ASSERT_TRUE("aria-hidden block should render and push content down", para.y > 20.0f);
 
     yetty_ylexbor_destroy(yl);
 }
@@ -1262,7 +1267,7 @@ int main(void)
     test_table_layout();
     test_table_content_widths();
     test_nav_hidden_header_visible();
-    test_aria_hidden_skipped();
+    test_aria_hidden_still_renders();
     test_wikipedia_float_class();
     test_stacked_float_right();
     test_img_attr_sizing();

@@ -30,6 +30,9 @@
 #if YETTY_HAVE_TURBOJPEG
 #include <turbojpeg.h>
 #endif
+#if YETTY_HAVE_LIBWEBP
+#include <webp/decode.h>
+#endif
 
 #include <yetty/ycore/util.h>
 #include <yetty/yplatform/yworkpool.h>
@@ -294,11 +297,56 @@ static int decode_svg_placeholder(const uint8_t *bytes, size_t len, uint32_t **o
     return 1;
 }
 
+#if YETTY_HAVE_LIBWEBP
+/* Decode a WebP (lossy VP8 / lossless VP8L) byte stream into RGBA8 via
+ * libwebp. Allocates *out_pixels (caller frees with free()). Returns 1 on
+ * success, 0 on failure. WebP is now the default image format across the
+ * modern web — Google News serves every article thumbnail as WebP and
+ * ignores the Accept header, so without this path those images can only
+ * render as placeholders. */
+static int decode_webp(const uint8_t *bytes, size_t len, uint32_t **out_pixels, int *out_w,
+                       int *out_h)
+{
+    int width = 0, height = 0;
+    if (!WebPGetInfo(bytes, len, &width, &height) || width <= 0 || height <= 0) {
+        return 0;
+    }
+    /* libwebp writes bytes in R,G,B,A memory order — identical to the
+	 * libpng/turbojpeg paths above, so the packed uint32 layout matches. */
+    uint8_t *rgba = WebPDecodeRGBA(bytes, len, &width, &height);
+    if (!rgba) {
+        return 0;
+    }
+    size_t pixel_count = (size_t)width * (size_t)height;
+    uint32_t *pixels = malloc(pixel_count * sizeof(uint32_t));
+    if (!pixels) {
+        WebPFree(rgba);
+        return 0;
+    }
+    memcpy(pixels, rgba, pixel_count * sizeof(uint32_t));
+    WebPFree(rgba);
+    *out_pixels = pixels;
+    *out_w = width;
+    *out_h = height;
+    return 1;
+}
+#endif
+
 /* Identify image format by magic bytes and dispatch to the right
  * decoder. Returns 1 on success. */
 static int decode_image(const uint8_t *bytes, size_t len, uint32_t **out_pixels, int *out_w,
                         int *out_h)
 {
+    /* WebP: "RIFF"<u32 size>"WEBP". Check before the generic stb fallback,
+	 * which cannot decode it. */
+    if (len >= 12 && memcmp(bytes, "RIFF", 4) == 0 && memcmp(bytes + 8, "WEBP", 4) == 0) {
+#if YETTY_HAVE_LIBWEBP
+        if (decode_webp(bytes, len, out_pixels, out_w, out_h)) {
+            return 1;
+        }
+#endif
+        return decode_other(bytes, len, out_pixels, out_w, out_h);
+    }
     if (len >= 8 && bytes[0] == 0x89 && bytes[1] == 'P' && bytes[2] == 'N' && bytes[3] == 'G' &&
         bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A) {
 #if YETTY_HAVE_LIBPNG

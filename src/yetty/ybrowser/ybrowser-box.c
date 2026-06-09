@@ -753,10 +753,9 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
         /* libcss-side display: peek the cascade once. We use the
 		 * result for TWO decisions:
 		 *
-		 *   (a) display:none — skip the subtree. UA CSS rules like
-		 *       [aria-hidden="true"] { display: none } only surface
-		 *       through libcss, not the lexbor serialized inline
-		 *       style.
+		 *   (a) display:none — skip the subtree. UA/author display:none
+		 *       (e.g. `[hidden]`) only surfaces through libcss, not the
+		 *       lexbor serialized inline style.
 		 *
 		 *   (b) inline-vs-block override — author CSS commonly turns
 		 *       an inline element into a block (or vice-versa). The
@@ -1485,26 +1484,36 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     }
                 }
 
-                if (css_img_w > 0.0f) {
-                    ib->w = css_img_w;
-                } else if (attr_w > 0) {
-                    ib->w = (float)attr_w;
-                } else if (nat_w > 0) {
-                    ib->w = (float)nat_w;
-                }
-                if (css_img_h > 0.0f) {
-                    ib->h = css_img_h;
-                } else if (attr_h > 0) {
-                    ib->h = (float)attr_h;
-                } else if (nat_h > 0) {
-                    ib->h = (float)nat_h;
-                }
-                /* If only one dimension is known, preserve aspect ratio. */
-                if (ib->w > 0 && ib->h <= 0 && nat_w > 0 && nat_h > 0) {
-                    ib->h = ib->w * (float)nat_h / (float)nat_w;
-                }
-                if (ib->h > 0 && ib->w <= 0 && nat_w > 0 && nat_h > 0) {
-                    ib->w = ib->h * (float)nat_w / (float)nat_h;
+                /* Resolve the box's pixel size. Priority per axis: CSS length,
+				 * then the HTML presentation-hint attr, then the decoded
+				 * natural size. Crucially, when exactly ONE axis is given
+				 * explicitly the other is `auto` and must be derived from the
+				 * natural ASPECT RATIO — not left at the natural pixel size.
+				 * (Google News sizes its favicons with height:14 only; the
+				 * natural image is 96x96, so the width must scale to 14, not
+				 * stay at 96 and stretch the logo ~7x wide.) */
+                float exp_w = css_img_w > 0.0f ? css_img_w : (attr_w > 0 ? (float)attr_w : 0.0f);
+                float exp_h = css_img_h > 0.0f ? css_img_h : (attr_h > 0 ? (float)attr_h : 0.0f);
+                if (exp_w > 0.0f && exp_h > 0.0f) {
+                    ib->w = exp_w;
+                    ib->h = exp_h;
+                } else if (exp_w > 0.0f) {
+                    ib->w = exp_w;
+                    ib->h = (nat_w > 0 && nat_h > 0) ? exp_w * (float)nat_h / (float)nat_w
+                            : (nat_h > 0)            ? (float)nat_h
+                                                     : exp_w;
+                } else if (exp_h > 0.0f) {
+                    ib->h = exp_h;
+                    ib->w = (nat_w > 0 && nat_h > 0) ? exp_h * (float)nat_w / (float)nat_h
+                            : (nat_w > 0)            ? (float)nat_w
+                                                     : exp_h;
+                } else {
+                    if (nat_w > 0) {
+                        ib->w = (float)nat_w;
+                    }
+                    if (nat_h > 0) {
+                        ib->h = (float)nat_h;
+                    }
                 }
 
                 link_child(r, parent_idx, iidx);

@@ -108,15 +108,16 @@ static const char UA_DEFAULT_CSS[] =
     "em, i, cite, dfn { font-style: italic; }\n"
     "a { color: #00e; }\n"
     "hr { display: block; margin: 0.5em auto; border-top: 1px solid #888; }\n"
-    /* Accessibility / boilerplate — elements explicitly marked
-     * off-screen or decorative MUST NOT render. Wikipedia and most
-     * large sites leak nav/menu/jump-link junk through these attributes
-     * when their main stylesheet doesn't apply. `!important` so we beat
-     * the loaded author CSS (which often overrides these for sighted
-     * users via positional tricks we don't implement). */
-    "[aria-hidden=\"true\"] { display: none !important; }\n"
+    /* Only the HTML `hidden` attribute hides an element visually. NOTE:
+     * `aria-hidden="true"` and `role="presentation"` are ACCESSIBILITY hints
+     * — they remove an element from the a11y tree but DO NOT affect visual
+     * rendering (Chrome paints them normally). Mapping them to display:none
+     * wrongly drops visible content: e.g. Google News marks each story's
+     * thumbnail figure `aria-hidden="true" role="presentation"` (the headline
+     * conveys it to screen readers) yet still shows the image. Site-specific
+     * hidden-nav junk is handled by explicit selectors below, not by abusing
+     * these attributes. */
     "[hidden] { display: none !important; }\n"
-    "[role=\"presentation\"] { display: none !important; }\n"
     /* NOTE: Wikipedia's float helpers used to live here and were injected into
      * EVERY page — floating any site's generic `.thumb`/`.floatright`/`.infobox`
      * out of flow (a news card's thumbnail collapsed to 0x0). They now live in
@@ -883,7 +884,7 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
      * <h1>. The header element with that class IS the page title
      * region we want to render. */
     static const char NAV_HIDE_CSS[] =
-        "[aria-hidden=\"true\"], [hidden], [role=\"presentation\"],"
+        "[hidden],"
         " .mw-jump-link, .mw-editsection, .navbox, .navbar, .vector-menu,"
         " .vector-header, .vector-page-toolbar,"
         " .vector-sticky-header, .vector-sticky-pinned-container,"
