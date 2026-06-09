@@ -188,6 +188,10 @@ ffi: ## Generate FFI language bindings from the per-module model.yaml (run after
 	uv run tools/ffi-codegen/ffigen.py python
 	uv run tools/ffi-codegen/ffigen.py lua
 
+.PHONY: format-code
+format-code: ## clang-format all C/H sources under include/ src/ tools/ (parallel, in place)
+	uv run qa-tools/refactoring/code-format/apply-format.py include src tools
+
 #=============================================================================
 # Desktop - ytrace (full logging)
 #=============================================================================
