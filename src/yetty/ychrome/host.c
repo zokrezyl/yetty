@@ -29,7 +29,13 @@
 #include <yetty/yfigure/methods.h>
 #include <yetty/yfigure/producer.h>
 #include <yetty/yfigure/wire.h>
+#ifdef YETTY_YCHROME_HAS_LOCAL
+/* ygrid is GPU-backed (composites through a pipeline). Only the LOCAL sink —
+ * pinned ygrid figures the app renders itself — needs it. The WIRE sink emits
+ * figure-tree records over a producer and is GPU-free, so the headless
+ * no-WebGPU cross targets (riscv guest) build the wire path without ygrid. */
 #include <yetty/ygrid/ygrid.h>
+#endif
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
@@ -59,10 +65,12 @@ enum {
 struct yetty_ychrome_host {
     struct yetty_yclass_object *chrome; /* ychrome:chrome engine */
 
+#ifdef YETTY_YCHROME_HAS_LOCAL
     /* LOCAL sink — pinned figures owned by the app's container (NULL in wire
-     * mode). */
+     * mode). Only built when ygrid is available (GPU targets). */
     struct yetty_ygrid_grid *caption;
     struct yetty_ygrid_grid *backdrop;
+#endif
 
     /* WIRE sink — figures emitted over the producer (NULL in local mode;
      * borrowed). */
@@ -74,6 +82,7 @@ struct yetty_ychrome_host {
     int last_hover; /* last hovered control — re-paint the caption when it changes */
 };
 
+#ifdef YETTY_YCHROME_HAS_LOCAL
 /* The figure's yclass object sits one slot before the figure pointer (the data
  * slice follows the object header) — same accessor the runner/figure code uses. */
 static struct yetty_yclass_object *grid_figure_obj(struct yetty_ygrid_grid *grid)
@@ -81,6 +90,7 @@ static struct yetty_yclass_object *grid_figure_obj(struct yetty_ygrid_grid *grid
     struct yetty_yfigure_figure *figure = yetty_ygrid_as_figure(grid);
     return (struct yetty_yclass_object *)(figure)-1;
 }
+#endif
 
 /*===========================================================================
  * Backdrop / caption content.
@@ -108,8 +118,10 @@ static struct yetty_ydraw_drawable_list_result host_make_backdrop_list(float wid
 }
 
 /*===========================================================================
- * LOCAL sink.
+ * LOCAL sink. Pinned ygrid figures — GPU-backed, so built only on targets
+ * that have ygrid (YETTY_YCHROME_HAS_LOCAL).
  *=========================================================================*/
+#ifdef YETTY_YCHROME_HAS_LOCAL
 
 /* Reset a pinned figure's content and load a fresh record stream into it. */
 static struct yetty_ycore_void_result host_local_load(struct yetty_yclass_object *figure_obj,
@@ -158,6 +170,8 @@ static struct yetty_ygrid_grid_ptr_result host_pin_grid(struct yetty_yfigure_con
     YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, add_result, "chrome host pin: add_child");
     return YETTY_OK(yetty_ygrid_grid_ptr, grid);
 }
+
+#endif /* YETTY_YCHROME_HAS_LOCAL */
 
 /*===========================================================================
  * WIRE sink.
@@ -223,6 +237,7 @@ static struct yetty_ycore_void_result host_caption_refresh(struct yetty_ychrome_
     if (host->producer) {
         return host_wire_caption_emit(host);
     }
+#ifdef YETTY_YCHROME_HAS_LOCAL
     /* LOCAL: ychrome renders its caption to a drawable list (pure ydraw); load
      * that record stream into the pinned ygrid figure. */
     struct yetty_ydraw_drawable_list_result render_result =
@@ -235,6 +250,11 @@ static struct yetty_ycore_void_result host_caption_refresh(struct yetty_ychrome_
     yetty_ydraw_drawable_list_destroy(list);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, load_result, "chrome host caption refresh: load");
     return YETTY_OK_VOID();
+#else
+    /* Wire-only build: a host with no producer has no sink. Unreachable in
+     * practice (client hosts always carry a producer). */
+    return YETTY_ERR(yetty_ycore_void, "chrome host caption refresh: no sink (wire-only build)");
+#endif
 }
 
 /*===========================================================================
@@ -305,6 +325,7 @@ static struct yetty_ychrome_host_ptr_result host_build_fail(struct yetty_ychrome
  * Public API.
  *=========================================================================*/
 
+#ifdef YETTY_YCHROME_HAS_LOCAL
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
     struct yetty_yfigure_container *container, struct yetty_yfont_font *font,
     const struct yetty_context *ctx, struct yetty_yclass_object *window_manager, float width,
@@ -341,6 +362,7 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
     }
     return YETTY_OK(yetty_ychrome_host_ptr, host);
 }
+#endif /* YETTY_YCHROME_HAS_LOCAL */
 
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
     struct yetty_yfigure_producer *producer, struct yetty_yclass_object *window_manager,
@@ -440,6 +462,7 @@ struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_h
         return result;
     }
 
+#ifdef YETTY_YCHROME_HAS_LOCAL
     /* LOCAL: resize the backdrop figure + reload its box, reposition the
      * caption strip, then repaint the caption. */
     if (host->backdrop) {
@@ -470,6 +493,11 @@ struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_h
     }
     result = yetty_ycore_void_chain(result, host_caption_refresh(host));
     return result;
+#else
+    /* Wire-only build: no local sink. The wire branch above already returned;
+     * only the set_size result remains to surface. */
+    return result;
+#endif /* YETTY_YCHROME_HAS_LOCAL */
 }
 
 struct yetty_ycore_void_result yetty_ychrome_host_destroy(struct yetty_ychrome_host *host)

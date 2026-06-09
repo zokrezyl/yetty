@@ -106,15 +106,17 @@ else()
         YETTY_YGUI_HAS_UV
     )
 endif()
+# Window chrome (ychrome) works in BOTH standalone and client/in-terminal mode.
+# The CLIENT/wire path is GPU-free — it emits the backdrop + caption as figure
+# records the hosting yetty renders — so it is available on EVERY target,
+# including the headless no-WebGPU riscv guest that runs inside a hosting yetty
+# (--temu / --qemu). Without this, the guest greeter drew its widgets with no
+# opaque backdrop and the host's console text showed through underneath.
+# Only STANDALONE (ygreeter's own GPU window + locally-rendered chrome) needs
+# WebGPU.
+target_compile_definitions(ygreeter PRIVATE YETTY_YGREETER_HAS_CHROME)
 if(YETTY_ENABLE_LIB_WEBGPU)
     target_compile_definitions(ygreeter PRIVATE YETTY_YGREETER_HAS_STANDALONE)
-    # Window chrome (ychrome) is available in BOTH standalone and client/
-    # in-terminal mode. It is its own flag — not "standalone" — because it
-    # gates a client-mode feature too. It still tracks YETTY_ENABLE_LIB_WEBGPU
-    # only because the chrome caption composites through ygrid, a GPU-backed
-    # lib that is not built on the headless no-WebGPU cross targets; on every
-    # desktop/web build (all that matter here) it is on.
-    target_compile_definitions(ygreeter PRIVATE YETTY_YGREETER_HAS_CHROME)
 endif()
 
 find_package(Threads REQUIRED)
@@ -139,6 +141,12 @@ target_link_libraries(ygreeter PRIVATE
     yetty_yplatform_core
     yetty_yco
     yetty_telnet
+    # Window chrome — the GPU-free wire path (backdrop + caption emitted as
+    # figure records). ychrome's own CMake drops its ygrid dependency on no-GPU
+    # targets, so this links on the riscv guest too. The window_manager gesture
+    # symbols it references resolve via yetty_yplatform_core above (NULL object
+    # in client mode → the stubs early-return).
+    yetty_ychrome
     uv_a
     ${BROTLIDEC_LIBRARIES}
     Threads::Threads
@@ -174,7 +182,7 @@ if(YETTY_ENABLE_LIB_WEBGPU)
         ${YETTY_LIBS}
         yetty_yplatform_move_resize
         yetty_yplatform_window_manager
-        yetty_ychrome
+        # yetty_ychrome is linked unconditionally in the client link line above.
         ${FONTCONFIG_LIBRARIES}
     )
     target_include_directories(ygreeter PRIVATE ${FONTCONFIG_INCLUDE_DIRS})

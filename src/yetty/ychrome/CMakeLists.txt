@@ -30,11 +30,21 @@ target_link_libraries(yetty_ychrome PUBLIC
     yetty_ydraw_core
     yetty_ysdf
     yetty_yface
-    # host.c composites the caption as a pinned ygrid figure — framework
-    # figure libs, still not ygui.
-    yetty_ygrid
+    # host.c's WIRE sink emits figure-tree records over a producer (GPU-free);
+    # yfigure carries the producer and is available on the headless cross
+    # targets too.
     yetty_yfigure
 )
+
+# The LOCAL sink composites the caption as a pinned ygrid figure. ygrid is
+# GPU-backed and not built on the no-WebGPU cross targets (riscv guest), so the
+# local path is compiled in only where ygrid exists. The WIRE sink — all the
+# in-terminal/client chrome an app needs — builds without it, so an app running
+# inside a hosting yetty gets its backdrop + caption even on a headless guest.
+if(YETTY_ENABLE_LIB_WEBGPU)
+    target_link_libraries(yetty_ychrome PUBLIC yetty_ygrid)
+    target_compile_definitions(yetty_ychrome PUBLIC YETTY_YCHROME_HAS_LOCAL)
+endif()
 
 # chrome.c carries C23 `[[clang::annotate(...)]]` attributes.
 if(NOT MSVC)
