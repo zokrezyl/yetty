@@ -69,8 +69,25 @@ def main() -> int:
 
     paths = args.paths or scope_paths_from_env()
     files = list_sources(paths)
-    for f in files:
+    total = len(files)
+    is_tty = sys.stdout.isatty()
+    for index, f in enumerate(files, start=1):
+        try:
+            display = Path(f).relative_to(REPO_ROOT)
+        except ValueError:
+            display = f
+        progress = f"[{index}/{total}] {display}"
+        if is_tty:
+            # Overwrite the same line; \033[K clears to EOL so a shorter path
+            # doesn't leave tail characters from a longer previous one.
+            sys.stdout.write(f"\r\033[K{progress}")
+            sys.stdout.flush()
+        else:
+            print(progress)
         run([binary, "--style=file", "-i", str(f)])
+    if is_tty and total:
+        sys.stdout.write("\r\033[K")  # drop the progress line before the summary
+        sys.stdout.flush()
     ok(f"reformatted {len(files)} file(s) in place")
 
     if (REPO_ROOT / ".git").exists():
