@@ -13,6 +13,8 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -71,24 +73,44 @@ def main() -> int:
     files = list_sources(paths)
     total = len(files)
     is_tty = sys.stdout.isatty()
-    for index, f in enumerate(files, start=1):
+
+    # clang-format is an external subprocess that releases the GIL while it
+    # runs, so a thread pool gives real parallelism. One worker per core.
+    workers = min(total, os.cpu_count() or 1) or 1
+
+    # stdout is shared across workers: serialize every write under one lock and
+    # bump the shared progress counter inside the same critical section so the
+    # [done/total] count stays monotonic and lines never interleave.
+    print_lock = threading.Lock()
+    done = 0
+
+    def format_one(f) -> None:
+        nonlocal done
+        run([binary, "--style=file", "-i", str(f)])
         try:
             display = Path(f).relative_to(REPO_ROOT)
         except ValueError:
             display = f
-        progress = f"[{index}/{total}] {display}"
-        if is_tty:
-            # Overwrite the same line; \033[K clears to EOL so a shorter path
-            # doesn't leave tail characters from a longer previous one.
-            sys.stdout.write(f"\r\033[K{progress}")
-            sys.stdout.flush()
-        else:
-            print(progress)
-        run([binary, "--style=file", "-i", str(f)])
+        with print_lock:
+            done += 1
+            progress = f"[{done}/{total}] {display}"
+            if is_tty:
+                # Overwrite the same line; \033[K clears to EOL so a shorter
+                # path doesn't leave tail characters from a longer previous one.
+                sys.stdout.write(f"\r\033[K{progress}")
+                sys.stdout.flush()
+            else:
+                print(progress)
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        # Drain the iterator so any worker exception propagates here.
+        for _ in pool.map(format_one, files):
+            pass
+
     if is_tty and total:
         sys.stdout.write("\r\033[K")  # drop the progress line before the summary
         sys.stdout.flush()
-    ok(f"reformatted {len(files)} file(s) in place")
+    ok(f"reformatted {len(files)} file(s) in place with {workers} worker(s)")
 
     if (REPO_ROOT / ".git").exists():
         proc = run(["git", "-C", str(REPO_ROOT), "diff", "--name-only"])
