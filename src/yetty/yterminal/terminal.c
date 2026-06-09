@@ -1336,6 +1336,14 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
             YETTY_YTERMINAL_GRID_FIGURE_ID);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, add_res,
                             "terminal_create: add grid figure to root container failed");
+        /* The content grid is the host's own structural figure, not part of the
+         * producer-managed set. Protect it so a client's CLEAR_ALL (e.g. an app
+         * dropping its figures at exit) and a full-screen erase / reset cannot
+         * destroy the text layer along with the compositor children. */
+        struct yetty_ycore_void_result protect_res = yetty_yfigure_container_protect_child(
+            terminal->root_container, YETTY_YTERMINAL_GRID_FIGURE_ID);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, protect_res,
+                            "terminal_create: protect grid figure failed");
     }
 
     /* On a full-screen erase / reset (CSI 2J/3J or RIS — e.g. `clear`, Ctrl-L,

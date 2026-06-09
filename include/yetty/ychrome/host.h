@@ -65,6 +65,22 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
     struct yetty_yfigure_producer *producer, struct yetty_yclass_object *window_manager, float width,
     float height, float caption_height, float edge_size, unsigned int flags);
 
+/* Explicitly remove the wire chrome's figures (backdrop + caption) from the
+ * host pane by writing DELETE records straight to `fd` with a BLOCKING write.
+ * No-op for a local host. Call this at process teardown — after the event loop
+ * has stopped the producer's async pty can no longer flush, so the figures must
+ * be cleared over the fd directly (same approach as
+ * yetty_ygui_framework_clear_remote_fd). */
+struct yetty_ycore_void_result yetty_ychrome_host_clear_to_fd(struct yetty_ychrome_host *host,
+                                                              int fd);
+
+/* Re-emit the wire chrome's figures (backdrop + caption). No-op for a local
+ * host. Use it to re-establish the chrome when the host pane may not have the
+ * figures yet — e.g. the first frames over a slow guest/telnet transport where
+ * the initial emit can land before the pane container is ready, or after a
+ * container clear. Cheap to call a bounded number of times at startup. */
+struct yetty_ycore_void_result yetty_ychrome_host_resync(struct yetty_ychrome_host *host);
+
 /* The underlying ychrome:chrome object — feed it mouse events via
  * yetty_ychrome_handle_event. NULL if `host` is NULL. */
 struct yetty_yclass_object *yetty_ychrome_host_chrome(struct yetty_ychrome_host *host);

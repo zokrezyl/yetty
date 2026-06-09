@@ -95,6 +95,12 @@ struct child_entry {
      * order so the sort is deterministic regardless of uthash sort
      * stability and equal-z children keep insertion order. */
     uint64_t seq;
+    /* When set, clear_all (the CLEAR_ALL admin op and the terminal's
+     * full-screen-erase / reset hook) skips this child. Used for the host's
+     * own structural figures — notably the terminal content grid — that are
+     * NOT part of the producer-managed figure set a client means to drop.
+     * Container destroy still frees it; only clear_all spares it. */
+    int protected_from_clear;
     UT_hash_handle hh;
 };
 
@@ -534,6 +540,12 @@ struct yetty_ycore_void_result yetty_yfigure_container_clear_all(
     int have_err = 0;
     HASH_ITER(hh, container->children, e, tmp)
     {
+        /* Spare structural children a client's CLEAR_ALL must not drop (e.g.
+         * the terminal's own content grid). They live and die with the
+         * container itself, not with the producer-managed figure set. */
+        if (e->protected_from_clear) {
+            continue;
+        }
         HASH_DEL(container->children, e);
         struct yetty_ycore_void_result entry_r = entry_destroy(e);
         if (YETTY_IS_ERR(entry_r)) {
@@ -1461,6 +1473,30 @@ struct yetty_ycore_void_result yetty_yfigure_container_remove_child_by_id(
     struct yetty_ycore_void_result entry_r = entry_destroy(e);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, entry_r,
                         "yfigure_container_remove_child_by_id: child destroy failed");
+    return YETTY_OK_VOID();
+}
+
+/* Mark an existing child as protected from clear_all (the CLEAR_ALL admin op
+ * and the terminal's full-screen-erase / reset hook). The container's own
+ * structural figures — the terminal content grid above all — use this so a
+ * client emitting CLEAR_ALL to drop its figures cannot also wipe the host's
+ * content. Idempotent; a stale id (already removed) is a benign no-op. */
+[[clang::annotate("expose")]]
+struct yetty_ycore_void_result yetty_yfigure_container_protect_child(
+    struct yetty_yfigure_container *container, uint32_t id)
+{
+    if (!container) {
+        return YETTY_ERR(yetty_ycore_void, "yfigure_container_protect_child: NULL container");
+    }
+    if (id == 0) {
+        return YETTY_ERR(yetty_ycore_void, "yfigure_container_protect_child: id=0 is reserved");
+    }
+    struct child_entry *e;
+    HASH_FIND_INT(container->children, &id, e);
+    if (!e) {
+        return YETTY_OK_VOID();
+    }
+    e->protected_from_clear = 1;
     return YETTY_OK_VOID();
 }
 

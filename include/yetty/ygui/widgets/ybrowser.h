@@ -18,7 +18,6 @@ struct yetty_ygui_ybrowser_data_ptr_result yetty_ygui_ybrowser_data(struct yetty
 
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_ybrowser_set_html(struct yetty_ygui_object *obj,
-                                                            const char *html, size_t len);
+struct yetty_ycore_void_result yetty_ygui_ybrowser_set_html(struct yetty_ygui_object *obj, const char *html, size_t len);
 
 #endif

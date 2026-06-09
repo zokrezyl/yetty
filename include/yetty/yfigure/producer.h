@@ -70,4 +70,11 @@ struct yetty_ycore_void_result yetty_yfigure_producer_delete_child(
 struct yetty_ycore_void_result yetty_yfigure_producer_flush(
     struct yetty_yfigure_producer *producer);
 
+/* Same as flush(), but writes the envelope straight to `fd` with a BLOCKING
+ * write instead of the (async) output pty. Use this at process teardown, where
+ * the event loop has stopped and an async pty write can never drain — the same
+ * reason yetty_ygui_framework_clear_remote_fd writes to the fd directly. */
+struct yetty_ycore_void_result yetty_yfigure_producer_flush_fd(
+    struct yetty_yfigure_producer *producer, int fd);
+
 #endif /* YETTY_YFIGURE_PRODUCER_H */

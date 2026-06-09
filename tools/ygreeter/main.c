@@ -2650,6 +2650,11 @@ struct client_state {
     struct yetty_ychrome_host *chrome_host;
     int chrome_width;
     int chrome_height;
+    /* Frames left to re-emit the chrome on (counts down in client_prep_cb).
+     * The first emit can race the host pane's container readiness on a slow
+     * guest/telnet transport (--temu/--qemu) and get dropped; re-establishing
+     * it over the next few drawn frames closes that window. */
+    int chrome_resync_frames;
 #endif
 };
 
@@ -2828,6 +2833,9 @@ static struct yetty_ycore_void_result client_chrome_sync(struct client_state *cs
         cs->chrome_host = host_result.value;
         cs->chrome_width = (int)width;
         cs->chrome_height = (int)height;
+        /* Re-establish the chrome over the next few drawn frames in case this
+         * first emit raced the host pane's readiness (slow guest transport). */
+        cs->chrome_resync_frames = 3;
         return YETTY_OK_VOID();
     }
     if ((int)width != cs->chrome_width || (int)height != cs->chrome_height) {
@@ -3114,6 +3122,20 @@ static void client_prep_cb(uv_prepare_t *handle)
         if (YETTY_IS_ERR(r)) {
             yetty_ycore_error_destroy(r.error);
         }
+#ifdef YETTY_YGREETER_HAS_CHROME
+        /* Co-emit the chrome on the same frames the framework draws, for a few
+         * frames after creation — survives an initial emit that raced the host
+         * pane's container readiness (notably the --temu/--qemu transport). */
+        if (cs->chrome_host && cs->chrome_resync_frames > 0) {
+            struct yetty_ycore_void_result resync_result =
+                yetty_ychrome_host_resync(cs->chrome_host);
+            if (YETTY_IS_ERR(resync_result)) {
+                ywarn("ygreeter client: chrome resync failed: %s", resync_result.error.msg);
+                yetty_ycore_error_destroy(resync_result.error);
+            }
+            cs->chrome_resync_frames--;
+        }
+#endif
     }
     if (!cs->running) {
         uv_stop(handle->loop);
@@ -3253,9 +3275,12 @@ static int run_client_mode(void)
     struct yetty_ycore_void_result teardown_result = YETTY_OK_VOID();
 
 #ifdef YETTY_YGREETER_HAS_CHROME
-    /* Tear down the wire chrome host + producer. The host's figures on the
-     * far end are dropped by the CLEAR_ALL below; this just frees our side. */
+    /* Explicitly remove our backdrop + caption from the host pane FIRST, via a
+     * blocking fd write (the loop has stopped, so the producer's async pty can
+     * no longer flush). Then free our side. */
     if (cs.chrome_host) {
+        teardown_result = yetty_ycore_void_chain(
+            teardown_result, yetty_ychrome_host_clear_to_fd(cs.chrome_host, STDOUT_FILENO));
         teardown_result =
             yetty_ycore_void_chain(teardown_result, yetty_ychrome_host_destroy(cs.chrome_host));
         cs.chrome_host = NULL;

@@ -360,6 +360,33 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
     return YETTY_OK(yetty_ychrome_host_ptr, host);
 }
 
+struct yetty_ycore_void_result yetty_ychrome_host_resync(struct yetty_ychrome_host *host)
+{
+    if (!host || !host->producer) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result result = host_wire_backdrop_emit(host);
+    result = yetty_ycore_void_chain(result, host_wire_caption_emit(host));
+    return result;
+}
+
+struct yetty_ycore_void_result yetty_ychrome_host_clear_to_fd(struct yetty_ychrome_host *host,
+                                                              int fd)
+{
+    if (!host || !host->producer) {
+        return YETTY_OK_VOID();
+    }
+    /* Queue DELETEs for our two figures and ship them over the fd with a
+     * blocking write — the producer's pending buffer is empty here (each emit
+     * flushes it), so this envelope carries exactly the two DELETE records. */
+    struct yetty_ycore_void_result result =
+        yetty_yfigure_producer_delete_child(host->producer, YCHROME_WIRE_CAPTION_ID);
+    result = yetty_ycore_void_chain(
+        result, yetty_yfigure_producer_delete_child(host->producer, YCHROME_WIRE_BACKDROP_ID));
+    result = yetty_ycore_void_chain(result, yetty_yfigure_producer_flush_fd(host->producer, fd));
+    return result;
+}
+
 struct yetty_yclass_object *yetty_ychrome_host_chrome(struct yetty_ychrome_host *host)
 {
     return host ? host->chrome : NULL;
@@ -446,18 +473,16 @@ struct yetty_ycore_void_result yetty_ychrome_host_destroy(struct yetty_ychrome_h
         return YETTY_OK_VOID();
     }
     struct yetty_ycore_void_result result = YETTY_OK_VOID();
-    /* WIRE: ask the far end to drop our figures. Best-effort — the app's own
-     * teardown (CLEAR_ALL on exit) also covers this. */
-    if (host->producer) {
-        result = yetty_ycore_void_chain(
-            result, yetty_yfigure_producer_delete_child(host->producer, YCHROME_WIRE_CAPTION_ID));
-        result = yetty_ycore_void_chain(
-            result, yetty_yfigure_producer_delete_child(host->producer, YCHROME_WIRE_BACKDROP_ID));
-        result = yetty_ycore_void_chain(result, yetty_yfigure_producer_flush(host->producer));
-    }
-    /* LOCAL: the pinned figures are owned by the container (added via
-     * add_child); they are destroyed with the container. Only the chrome engine
-     * + host are ours. */
+    /* Figure removal is the container's responsibility, NOT this destroy's:
+     *  - WIRE: the host pane drops our children when the app emits CLEAR_ALL
+     *    (yetty_ygui_framework_clear_remote_fd) over a BLOCKING fd write at
+     *    exit. We must not emit DELETEs through the producer here: at process
+     *    teardown the app's event loop has already stopped, so an async pty
+     *    write can never flush and a half-queued one would corrupt the very
+     *    CLEAR_ALL the app writes next.
+     *  - LOCAL: the pinned figures are owned by the container (added via
+     *    add_child) and destroyed with it.
+     * Either way, destroy only frees what is ours: the chrome engine + host. */
     if (host->chrome) {
         result = yetty_ycore_void_chain(result, yetty_ychrome_destroy(NULL, host->chrome));
     }

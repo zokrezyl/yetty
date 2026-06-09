@@ -406,6 +406,14 @@ exposed:
       - name: id
         type: uint32_t
   - source_file: src/yetty/yfigure/container.c
+    name: yetty_yfigure_container_protect_child
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: container
+        type: "struct yetty_yfigure_container *"
+      - name: id
+        type: uint32_t
+  - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_raise_child_by_id
     return_type: struct yetty_ycore_void_result
     args:

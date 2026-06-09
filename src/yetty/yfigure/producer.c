@@ -287,3 +287,31 @@ struct yetty_ycore_void_result yetty_yfigure_producer_flush(struct yetty_yfigure
     yetty_ycore_buffer_clear(&producer->records);
     return YETTY_OK_VOID();
 }
+
+struct yetty_ycore_void_result yetty_yfigure_producer_flush_fd(
+    struct yetty_yfigure_producer *producer, int fd)
+{
+    if (!producer) {
+        return YETTY_ERR(yetty_ycore_void, "yfigure_producer_flush_fd: NULL producer");
+    }
+    if (producer->records.size == 0) {
+        return YETTY_OK_VOID();
+    }
+    if (fd < 0) {
+        return YETTY_ERR(yetty_ycore_void, "yfigure_producer_flush_fd: bad fd");
+    }
+    struct yetty_yface_bin_meta meta = {
+        .magic = YETTY_YFACE_BIN_MAGIC,
+        .version = YETTY_YFACE_BIN_VERSION,
+        .compressed = YETTY_YFACE_COMP_LZ4F,
+        .compression_algo = 0,
+        .raw_size = producer->records.size,
+        .reserved = {0, 0},
+    };
+    struct yetty_ycore_void_result emit_result = yetty_yface_emit_to_fd(
+        fd, YETTY_DCS_YCOMPOSITOR_BIN, /*compressed=*/1, &meta, sizeof(meta),
+        producer->records.data, producer->records.size);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_result, "yfigure_producer_flush_fd: yface_emit_to_fd");
+    yetty_ycore_buffer_clear(&producer->records);
+    return YETTY_OK_VOID();
+}
