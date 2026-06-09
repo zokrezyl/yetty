@@ -93,14 +93,16 @@ static struct yetty_ydraw_drawable_list_result host_make_backdrop_list(float wid
         .scene_min_x = 0.0f, .scene_min_y = 0.0f, .scene_max_x = width, .scene_max_y = height};
     struct yetty_ydraw_drawable_list_result list_result =
         yetty_ydraw_drawable_list_config_buffer_create(&config);
-    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, list_result, "chrome host backdrop: list create");
+    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, list_result,
+                        "chrome host backdrop: list create");
     struct yetty_ydraw_drawable_list *list = list_result.value;
     struct yetty_ysdf_box box = {width * 0.5f, height * 0.5f, width * 0.5f, height * 0.5f, 0.0f};
     struct yetty_ycore_void_result add_box_result = yetty_ydraw_drawable_list_add_cmd_add_box(
         list, 0, 0, YCHROME_BACKDROP_COLOR, 0u, 0.0f, &box);
     if (YETTY_IS_ERR(add_box_result)) {
         yetty_ydraw_drawable_list_destroy(list);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "chrome host backdrop: add_box", add_box_result);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "chrome host backdrop: add_box",
+                         add_box_result);
     }
     return YETTY_OK(yetty_ydraw_drawable_list, list);
 }
@@ -131,8 +133,8 @@ static struct yetty_ygrid_grid_ptr_result host_pin_grid(struct yetty_yfigure_con
                                                         const struct yetty_context *ctx,
                                                         struct yetty_yfont_font *font,
                                                         struct yetty_ycore_rectangle rect,
-                                                        const uint8_t *body, size_t body_len,
-                                                        int z, uint32_t id)
+                                                        const uint8_t *body, size_t body_len, int z,
+                                                        uint32_t id)
 {
     struct yetty_ygrid_grid_ptr_result grid_result = yetty_ygrid_create(rect, 1, 1, ctx);
     YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, grid_result, "chrome host pin: grid create");
@@ -197,7 +199,8 @@ static struct yetty_ycore_void_result host_wire_backdrop_emit(struct yetty_ychro
 
 static struct yetty_ycore_void_result host_wire_caption_emit(struct yetty_ychrome_host *host)
 {
-    struct yetty_ydraw_drawable_list_result render_result = yetty_ychrome_render(NULL, host->chrome);
+    struct yetty_ydraw_drawable_list_result render_result =
+        yetty_ychrome_render(NULL, host->chrome);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, render_result, "chrome host wire caption: render");
     struct yetty_ydraw_drawable_list *list = render_result.value;
     struct yetty_ycore_rectangle rect = {.min = {0.0f, 0.0f},
@@ -222,13 +225,13 @@ static struct yetty_ycore_void_result host_caption_refresh(struct yetty_ychrome_
     }
     /* LOCAL: ychrome renders its caption to a drawable list (pure ydraw); load
      * that record stream into the pinned ygrid figure. */
-    struct yetty_ydraw_drawable_list_result render_result = yetty_ychrome_render(NULL, host->chrome);
+    struct yetty_ydraw_drawable_list_result render_result =
+        yetty_ychrome_render(NULL, host->chrome);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, render_result, "chrome host caption refresh: render");
     struct yetty_ydraw_drawable_list *list = render_result.value;
-    struct yetty_ycore_void_result load_result =
-        host_local_load(grid_figure_obj(host->caption),
-                        (const uint8_t *)yetty_ydraw_drawable_list_data(list),
-                        yetty_ydraw_drawable_list_size(list));
+    struct yetty_ycore_void_result load_result = host_local_load(
+        grid_figure_obj(host->caption), (const uint8_t *)yetty_ydraw_drawable_list_data(list),
+        yetty_ydraw_drawable_list_size(list));
     yetty_ydraw_drawable_list_destroy(list);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, load_result, "chrome host caption refresh: load");
     return YETTY_OK_VOID();
@@ -269,7 +272,8 @@ static struct yetty_ychrome_host_ptr_result host_alloc(struct yetty_yclass_objec
     if (YETTY_IS_ERR(configure_result)) {
         struct yetty_ycore_void_result destroy_result = yetty_ychrome_destroy(NULL, host->chrome);
         free(host);
-        struct yetty_ycore_void_result chained = yetty_ycore_void_chain(configure_result, destroy_result);
+        struct yetty_ycore_void_result chained =
+            yetty_ycore_void_chain(configure_result, destroy_result);
         return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host: configure", chained);
     }
     struct yetty_ycore_void_result size_result =
@@ -277,7 +281,8 @@ static struct yetty_ychrome_host_ptr_result host_alloc(struct yetty_yclass_objec
     if (YETTY_IS_ERR(size_result)) {
         struct yetty_ycore_void_result destroy_result = yetty_ychrome_destroy(NULL, host->chrome);
         free(host);
-        struct yetty_ycore_void_result chained = yetty_ycore_void_chain(size_result, destroy_result);
+        struct yetty_ycore_void_result chained =
+            yetty_ycore_void_chain(size_result, destroy_result);
         return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host: set_size", chained);
     }
     return YETTY_OK(yetty_ychrome_host_ptr, host);
@@ -289,7 +294,8 @@ static struct yetty_ychrome_host_ptr_result host_build_fail(struct yetty_ychrome
                                                             const char *message,
                                                             struct yetty_ycore_void_result cause)
 {
-    struct yetty_ycore_void_result chrome_destroy_result = yetty_ychrome_destroy(NULL, host->chrome);
+    struct yetty_ycore_void_result chrome_destroy_result =
+        yetty_ychrome_destroy(NULL, host->chrome);
     struct yetty_ycore_void_result chained = yetty_ycore_void_chain(cause, chrome_destroy_result);
     free(host);
     return YETTY_ERR(yetty_ychrome_host_ptr, message, chained);
@@ -337,8 +343,8 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
 }
 
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
-    struct yetty_yfigure_producer *producer, struct yetty_yclass_object *window_manager, float width,
-    float height, float caption_height, float edge_size, unsigned int flags)
+    struct yetty_yfigure_producer *producer, struct yetty_yclass_object *window_manager,
+    float width, float height, float caption_height, float edge_size, unsigned int flags)
 {
     if (!producer) {
         return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host_create_wire: producer required");
@@ -438,30 +444,29 @@ struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_h
      * caption strip, then repaint the caption. */
     if (host->backdrop) {
         struct yetty_ycore_rectangle full = {.min = {0.0f, 0.0f}, .max = {width, height}};
-        result = yetty_ycore_void_chain(result,
-                                  yetty_yfigure_figure_rect_set(grid_figure_obj(host->backdrop),
-                                                                full));
+        result = yetty_ycore_void_chain(
+            result, yetty_yfigure_figure_rect_set(grid_figure_obj(host->backdrop), full));
         struct yetty_ydraw_drawable_list_result backdrop_list_result =
             host_make_backdrop_list(width, height);
         if (YETTY_IS_OK(backdrop_list_result)) {
             result = yetty_ycore_void_chain(
-                result, host_local_load(grid_figure_obj(host->backdrop),
-                                        (const uint8_t *)yetty_ydraw_drawable_list_data(
-                                            backdrop_list_result.value),
-                                        yetty_ydraw_drawable_list_size(backdrop_list_result.value)));
+                result,
+                host_local_load(
+                    grid_figure_obj(host->backdrop),
+                    (const uint8_t *)yetty_ydraw_drawable_list_data(backdrop_list_result.value),
+                    yetty_ydraw_drawable_list_size(backdrop_list_result.value)));
             yetty_ydraw_drawable_list_destroy(backdrop_list_result.value);
         } else {
             result = yetty_ycore_void_chain(result, YETTY_ERR(yetty_ycore_void,
-                                                        "ychrome_host_resized: backdrop list",
-                                                        backdrop_list_result));
+                                                              "ychrome_host_resized: backdrop list",
+                                                              backdrop_list_result));
         }
     }
     if (host->caption) {
         struct yetty_ycore_rectangle caption_rect = {.min = {0.0f, 0.0f},
                                                      .max = {width, host->caption_height}};
-        result = yetty_ycore_void_chain(result,
-                                  yetty_yfigure_figure_rect_set(grid_figure_obj(host->caption),
-                                                                caption_rect));
+        result = yetty_ycore_void_chain(
+            result, yetty_yfigure_figure_rect_set(grid_figure_obj(host->caption), caption_rect));
     }
     result = yetty_ycore_void_chain(result, host_caption_refresh(host));
     return result;

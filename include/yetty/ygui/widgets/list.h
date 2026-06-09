@@ -18,7 +18,8 @@ struct yetty_ygui_list_data_ptr_result yetty_ygui_list_data(struct yetty_ygui_ob
 
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_list_add(struct yetty_ygui_object *obj, const char *label);
+struct yetty_ycore_void_result yetty_ygui_list_add(struct yetty_ygui_object *obj,
+                                                   const char *label);
 struct yetty_ycore_void_result yetty_ygui_list_set_selected(struct yetty_ygui_object *obj, int i);
 struct yetty_ycore_int_result yetty_ygui_list_get_selected(const struct yetty_ygui_object *obj);
 

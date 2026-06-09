@@ -18,9 +18,12 @@ struct yetty_ygui_dropdown_data_ptr_result yetty_ygui_dropdown_data(struct yetty
 
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_dropdown_add_option(struct yetty_ygui_object *obj, const char *label);
-struct yetty_ycore_void_result yetty_ygui_dropdown_set_selected(struct yetty_ygui_object *obj, int index);
+struct yetty_ycore_void_result yetty_ygui_dropdown_add_option(struct yetty_ygui_object *obj,
+                                                              const char *label);
+struct yetty_ycore_void_result yetty_ygui_dropdown_set_selected(struct yetty_ygui_object *obj,
+                                                                int index);
 struct yetty_ycore_int_result yetty_ygui_dropdown_get_selected(const struct yetty_ygui_object *obj);
-struct yetty_ycore_void_result yetty_ygui_dropdown_set_menu(struct yetty_ygui_object *obj, struct yetty_ygui_object *menu);
+struct yetty_ycore_void_result yetty_ygui_dropdown_set_menu(struct yetty_ygui_object *obj,
+                                                            struct yetty_ygui_object *menu);
 
 #endif

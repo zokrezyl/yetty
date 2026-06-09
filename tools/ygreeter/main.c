@@ -2826,9 +2826,9 @@ static struct yetty_ycore_void_result client_chrome_sync(struct client_state *cs
         return YETTY_OK_VOID();
     }
     if (!cs->chrome_host) {
-        struct yetty_ychrome_host_ptr_result host_result = yetty_ychrome_host_create_wire(
-            cs->chrome_producer, /*window_manager=*/NULL, width, height, 34.0f, 8.0f,
-            YETTY_YCHROME_FLAG_ALL);
+        struct yetty_ychrome_host_ptr_result host_result =
+            yetty_ychrome_host_create_wire(cs->chrome_producer, /*window_manager=*/NULL, width,
+                                           height, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, host_result, "client_chrome_sync: create wire host");
         cs->chrome_host = host_result.value;
         cs->chrome_width = (int)width;
@@ -3100,8 +3100,7 @@ static void client_pickup_winsz(struct client_state *cs)
         struct yetty_ycore_void_result chrome_sync_result =
             client_chrome_sync(cs, (float)ws.ws_xpixel, (float)ws.ws_ypixel);
         if (YETTY_IS_ERR(chrome_sync_result)) {
-            ywarn("ygreeter client: chrome sync (winsz) failed: %s",
-                  chrome_sync_result.error.msg);
+            ywarn("ygreeter client: chrome sync (winsz) failed: %s", chrome_sync_result.error.msg);
             yetty_ycore_error_destroy(chrome_sync_result.error);
         }
 #endif
@@ -3192,8 +3191,7 @@ static int run_client_mode(void)
         if (YETTY_IS_OK(producer_result)) {
             cs.chrome_producer = producer_result.value;
         } else {
-            ywarn("ygreeter client: chrome producer create failed: %s",
-                  producer_result.error.msg);
+            ywarn("ygreeter client: chrome producer create failed: %s", producer_result.error.msg);
             yetty_ycore_error_destroy(producer_result.error);
         }
     }
@@ -3332,8 +3330,8 @@ static int run_client_mode(void)
     uv_run(&cs.loop, UV_RUN_NOWAIT);
 
     if (cs.wire_sm) {
-        teardown_result = yetty_ycore_void_chain(
-            teardown_result, yetty_ywire_wire_statemachine_destroy(cs.wire_sm));
+        teardown_result = yetty_ycore_void_chain(teardown_result,
+                                                 yetty_ywire_wire_statemachine_destroy(cs.wire_sm));
         cs.wire_sm = NULL;
     }
     teardown_result =

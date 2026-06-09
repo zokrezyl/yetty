@@ -6,7 +6,8 @@
 #include <yetty/ycore/result.h>
 
 struct yetty_yclass_object_ptr_result yetty_yvterm_grid_create(struct yetty_yclass_ctx *ctx);
-struct yetty_yclass_object_ptr_result yetty_yvterm_shader_glyph_create(struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_yvterm_shader_glyph_create(
+    struct yetty_yclass_ctx *ctx);
 
 /* Installs this module's yclass-RPC server-side discovery hooks
  * (accessor lookup feeding yetty_yclass_by_name; skel lookup

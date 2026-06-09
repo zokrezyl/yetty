@@ -53,8 +53,7 @@ struct yetty_ycore_void_result yetty_yfigure_producer_create_child(
  * without a re-CREATE. For a ygrid figure this is a fresh drawable-list
  * stream. */
 struct yetty_ycore_void_result yetty_yfigure_producer_figure_body(
-    struct yetty_yfigure_producer *producer, uint32_t child_id, const uint8_t *bytes,
-    uint32_t len);
+    struct yetty_yfigure_producer *producer, uint32_t child_id, const uint8_t *bytes, uint32_t len);
 
 struct yetty_ycore_void_result yetty_yfigure_producer_set_child_z(
     struct yetty_yfigure_producer *producer, uint32_t child_id, int32_t z);

@@ -62,8 +62,8 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
  * beneath the app. `producer` is borrowed; `window_manager` is typically a
  * wire adapter (close/min/max → pane ops) or NULL. */
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
-    struct yetty_yfigure_producer *producer, struct yetty_yclass_object *window_manager, float width,
-    float height, float caption_height, float edge_size, unsigned int flags);
+    struct yetty_yfigure_producer *producer, struct yetty_yclass_object *window_manager,
+    float width, float height, float caption_height, float edge_size, unsigned int flags);
 
 /* Explicitly remove the wire chrome's figures (backdrop + caption) from the
  * host pane by writing DELETE records straight to `fd` with a BLOCKING write.

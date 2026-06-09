@@ -18,6 +18,7 @@ struct yetty_ygui_ypdf_data_ptr_result yetty_ygui_ypdf_data(struct yetty_ygui_ob
 
 struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_ygui_object *obj, const char *path);
+struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_ygui_object *obj,
+                                                        const char *path);
 
 #endif
