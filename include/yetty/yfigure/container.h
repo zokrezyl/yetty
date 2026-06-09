@@ -50,6 +50,8 @@ struct yetty_yfigure_figure *yetty_yfigure_container_find_child_by_id(
     const struct yetty_yfigure_container *container, uint32_t id);
 struct yetty_ycore_void_result yetty_yfigure_container_remove_child_by_id(
     struct yetty_yfigure_container *container, uint32_t id);
+struct yetty_ycore_void_result yetty_yfigure_container_protect_child(
+    struct yetty_yfigure_container *container, uint32_t id);
 struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id(
     struct yetty_yfigure_container *container, uint32_t id);
 struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yfigure_container *container,

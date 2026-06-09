@@ -149,7 +149,7 @@ struct yetty_ycore_void_result yetty_yfigure_producer_create_child(
     }
     if (YETTY_IS_OK(write_result)) {
         write_result = append_admin_record(&producer->records, YETTY_YFIGURE_ADMIN_CREATE_CHILD,
-                                            body.data, (uint32_t)body.size);
+                                           body.data, (uint32_t)body.size);
     }
     yetty_ycore_buffer_destroy(&body);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, write_result, "yfigure_producer_create_child");
@@ -184,7 +184,7 @@ struct yetty_ycore_void_result yetty_yfigure_producer_set_child_z(
     }
     if (YETTY_IS_OK(write_result)) {
         write_result = append_admin_record(&producer->records, YETTY_YFIGURE_ADMIN_SET_CHILD_Z,
-                                            body.data, (uint32_t)body.size);
+                                           body.data, (uint32_t)body.size);
     }
     yetty_ycore_buffer_destroy(&body);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, write_result, "yfigure_producer_set_child_z");
@@ -213,7 +213,7 @@ struct yetty_ycore_void_result yetty_yfigure_producer_set_child_rect(
     }
     if (YETTY_IS_OK(write_result)) {
         write_result = append_admin_record(&producer->records, YETTY_YFIGURE_ADMIN_SET_CHILD_RECT,
-                                            body.data, (uint32_t)body.size);
+                                           body.data, (uint32_t)body.size);
     }
     yetty_ycore_buffer_destroy(&body);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, write_result, "yfigure_producer_set_child_rect");
@@ -230,7 +230,7 @@ struct yetty_ycore_void_result yetty_yfigure_producer_delete_child(
     struct yetty_ycore_void_result write_result = write_uint32_le(&body, child_id);
     if (YETTY_IS_OK(write_result)) {
         write_result = append_admin_record(&producer->records, YETTY_YFIGURE_ADMIN_DELETE_CHILD,
-                                            body.data, (uint32_t)body.size);
+                                           body.data, (uint32_t)body.size);
     }
     yetty_ycore_buffer_destroy(&body);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, write_result, "yfigure_producer_delete_child");
@@ -284,6 +284,35 @@ struct yetty_ycore_void_result yetty_yfigure_producer_flush(struct yetty_yfigure
         }
     }
     yetty_ycore_buffer_destroy(&wire_out);
+    yetty_ycore_buffer_clear(&producer->records);
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_yfigure_producer_flush_fd(
+    struct yetty_yfigure_producer *producer, int fd)
+{
+    if (!producer) {
+        return YETTY_ERR(yetty_ycore_void, "yfigure_producer_flush_fd: NULL producer");
+    }
+    if (producer->records.size == 0) {
+        return YETTY_OK_VOID();
+    }
+    if (fd < 0) {
+        return YETTY_ERR(yetty_ycore_void, "yfigure_producer_flush_fd: bad fd");
+    }
+    struct yetty_yface_bin_meta meta = {
+        .magic = YETTY_YFACE_BIN_MAGIC,
+        .version = YETTY_YFACE_BIN_VERSION,
+        .compressed = YETTY_YFACE_COMP_LZ4F,
+        .compression_algo = 0,
+        .raw_size = producer->records.size,
+        .reserved = {0, 0},
+    };
+    struct yetty_ycore_void_result emit_result =
+        yetty_yface_emit_to_fd(fd, YETTY_DCS_YCOMPOSITOR_BIN, /*compressed=*/1, &meta, sizeof(meta),
+                               producer->records.data, producer->records.size);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_result,
+                        "yfigure_producer_flush_fd: yface_emit_to_fd");
     yetty_ycore_buffer_clear(&producer->records);
     return YETTY_OK_VOID();
 }

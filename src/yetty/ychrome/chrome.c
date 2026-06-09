@@ -416,10 +416,9 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
      * fall through to the app's content); the app reads
      * yetty_ychrome_hover_button() to act on a control click itself. */
     if (!wm) {
-        int in_caption = have_xy && y >= 0.0f && y < chrome->caption_height && x >= 0.0f &&
-                         x < chrome->width;
-        int is_click =
-            event->type == YETTY_YCORE_MOUSE_DOWN || event->type == YETTY_YCORE_MOUSE_UP;
+        int in_caption =
+            have_xy && y >= 0.0f && y < chrome->caption_height && x >= 0.0f && x < chrome->width;
+        int is_click = event->type == YETTY_YCORE_MOUSE_DOWN || event->type == YETTY_YCORE_MOUSE_UP;
         return YETTY_OK(yetty_ycore_int, (in_caption && is_click) ? 1 : 0);
     }
     ydebug("CHROMETRACE: type=%d xy=(%.1f,%.1f) have_xy=%d caption_h=%.1f wh=(%.1f,%.1f) "

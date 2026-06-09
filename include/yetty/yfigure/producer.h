@@ -53,8 +53,7 @@ struct yetty_ycore_void_result yetty_yfigure_producer_create_child(
  * without a re-CREATE. For a ygrid figure this is a fresh drawable-list
  * stream. */
 struct yetty_ycore_void_result yetty_yfigure_producer_figure_body(
-    struct yetty_yfigure_producer *producer, uint32_t child_id, const uint8_t *bytes,
-    uint32_t len);
+    struct yetty_yfigure_producer *producer, uint32_t child_id, const uint8_t *bytes, uint32_t len);
 
 struct yetty_ycore_void_result yetty_yfigure_producer_set_child_z(
     struct yetty_yfigure_producer *producer, uint32_t child_id, int32_t z);
@@ -69,5 +68,12 @@ struct yetty_ycore_void_result yetty_yfigure_producer_delete_child(
  * and clear the record buffer. A no-op (and OK) when nothing is pending. */
 struct yetty_ycore_void_result yetty_yfigure_producer_flush(
     struct yetty_yfigure_producer *producer);
+
+/* Same as flush(), but writes the envelope straight to `fd` with a BLOCKING
+ * write instead of the (async) output pty. Use this at process teardown, where
+ * the event loop has stopped and an async pty write can never drain — the same
+ * reason yetty_ygui_framework_clear_remote_fd writes to the fd directly. */
+struct yetty_ycore_void_result yetty_yfigure_producer_flush_fd(
+    struct yetty_yfigure_producer *producer, int fd);
 
 #endif /* YETTY_YFIGURE_PRODUCER_H */
