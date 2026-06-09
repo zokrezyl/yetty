@@ -12,9 +12,9 @@ from __future__ import annotations
 
 import argparse
 import os
+import queue
 import sys
 import threading
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
@@ -75,42 +75,59 @@ def main() -> int:
     is_tty = sys.stdout.isatty()
 
     # clang-format is an external subprocess that releases the GIL while it
-    # runs, so a thread pool gives real parallelism. One worker per core.
+    # runs, so worker threads give real parallelism. One worker per core.
     workers = min(total, os.cpu_count() or 1) or 1
 
-    # stdout is shared across workers: serialize every write under one lock and
-    # bump the shared progress counter inside the same critical section so the
-    # [done/total] count stays monotonic and lines never interleave.
-    print_lock = threading.Lock()
-    done = 0
+    # Producer/consumer with two queues. The main thread fills `work` with every
+    # file plus one None sentinel per worker (so each worker is guaranteed a
+    # stop signal and none can hang waiting on an empty queue), then becomes the
+    # SOLE writer to stdout, draining exactly `total` completions off `results`.
+    # Workers only run clang-format and report the finished file back — no
+    # shared stdout, so progress lines can never interleave.
+    work: "queue.Queue" = queue.Queue()
+    results: "queue.Queue" = queue.Queue()
+    for f in files:
+        work.put(f)
+    for _ in range(workers):
+        work.put(None)
 
-    def format_one(f) -> None:
-        nonlocal done
-        run([binary, "--style=file", "-i", str(f)])
+    def worker() -> None:
+        while True:
+            f = work.get()
+            if f is None:  # sentinel: no more files for this worker
+                return
+            run([binary, "--style=file", "-i", str(f)])
+            results.put(f)
+
+    threads = [threading.Thread(target=worker, name=f"fmt-{i}", daemon=True)
+               for i in range(workers)]
+    for t in threads:
+        t.start()
+
+    # One progress line per completed file, in completion order. The loop ends
+    # after exactly `total` results, so it can never block past the last file.
+    for done in range(1, total + 1):
+        f = results.get()
         try:
             display = Path(f).relative_to(REPO_ROOT)
         except ValueError:
             display = f
-        with print_lock:
-            done += 1
-            progress = f"[{done}/{total}] {display}"
-            if is_tty:
-                # Overwrite the same line; \033[K clears to EOL so a shorter
-                # path doesn't leave tail characters from a longer previous one.
-                sys.stdout.write(f"\r\033[K{progress}")
-                sys.stdout.flush()
-            else:
-                print(progress)
+        progress = f"[{done}/{total}] {display}"
+        if is_tty:
+            # Overwrite the same line; \033[K clears to EOL so a shorter path
+            # doesn't leave tail characters from a longer previous one.
+            sys.stdout.write(f"\r\033[K{progress}")
+            sys.stdout.flush()
+        else:
+            print(progress)
 
-    with ThreadPoolExecutor(max_workers=workers) as pool:
-        # Drain the iterator so any worker exception propagates here.
-        for _ in pool.map(format_one, files):
-            pass
+    for t in threads:
+        t.join()
 
     if is_tty and total:
         sys.stdout.write("\r\033[K")  # drop the progress line before the summary
         sys.stdout.flush()
-    ok(f"reformatted {len(files)} file(s) in place with {workers} worker(s)")
+    ok(f"reformatted {total} file(s) in place with {workers} worker(s)")
 
     if (REPO_ROOT / ".git").exists():
         proc = run(["git", "-C", str(REPO_ROOT), "diff", "--name-only"])
