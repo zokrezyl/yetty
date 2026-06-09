@@ -117,28 +117,11 @@ static const char UA_DEFAULT_CSS[] =
     "[aria-hidden=\"true\"] { display: none !important; }\n"
     "[hidden] { display: none !important; }\n"
     "[role=\"presentation\"] { display: none !important; }\n"
-    /* Wikipedia float helpers. The real Wikipedia stylesheet bundles
-     * these in /w/load.php?modules=...; if we couldn't fetch it (no
-     * network, file:// rendering) we still want figures and infoboxes
-     * to land in roughly the right place. Wikipedia's Parsoid emits
-     * <figure typeof="mw:File/Thumb"> for every article image; the
-     * stylesheet floats those right by default and only changes side
-     * when an explicit `.mw-halign-left` is present. We replicate the
-     * default-right behaviour so reading Wikipedia offline still
-     * produces a paragraph-with-sidebar layout instead of a wall of
-     * full-width images. */
-    "figure[typeof~=\"mw:File/Thumb\"], figure[typeof~=\"mw:File/Frame\"],"
-    " .mw-default-size, .thumb"
-    " { float: right; margin: 0 0 0.5em 0.8em; }\n"
-    ".mw-halign-right, .mw-floatright, .floatright, .thumb.tright,"
-    " .infobox, table.infobox"
-    " { float: right; margin: 0 0 0.5em 0.8em; }\n"
-    ".mw-halign-left, .mw-floatleft, .floatleft, figure.mw-halign-left,"
-    " figure.mw-default-size.mw-halign-left, .thumb.tleft"
-    " { float: left; margin: 0 0.8em 0.5em 0; }\n"
-    ".mw-halign-center, figure.mw-halign-center,"
-    " figure.mw-default-size.mw-halign-center"
-    " { float: none; margin: 0.5em auto; }\n"
+    /* NOTE: Wikipedia's float helpers used to live here and were injected into
+     * EVERY page — floating any site's generic `.thumb`/`.floatright`/`.infobox`
+     * out of flow (a news card's thumbnail collapsed to 0x0). They now live in
+     * UA_WIKIPEDIA_CSS, applied only to MediaWiki pages (see
+     * yetty_ybrowser_libcss_apply_wikipedia_quirks). */
     /* Wikipedia's hidden navigation: jump links, edit-section markers,
      * collapsed nav modules, sidebar menus, footer, indicators,
      * language-switcher etc. None of these contribute article content
@@ -165,6 +148,35 @@ static const char UA_DEFAULT_CSS[] =
      * <header> wrapping the page title is critical content though, so
      * we only hide <nav> by default — NOT <header>. */
     "nav { display: none !important; }\n";
+
+/* Wikipedia/MediaWiki float helpers — applied ONLY to MediaWiki pages (see
+ * yetty_ybrowser_libcss_apply_wikipedia_quirks, gated on `mw-` class markers).
+ * These use generic class names (`.thumb`, `.floatright`, `.infobox`) that
+ * collide with other sites, so they must never be global. MediaWiki ships them
+ * in /w/load.php; offline / CSS-less we approximate the default-right float so
+ * articles get a paragraph-with-sidebar layout instead of full-width images. */
+static const char UA_WIKIPEDIA_CSS[] =
+    "figure[typeof~=\"mw:File/Thumb\"], figure[typeof~=\"mw:File/Frame\"],"
+    " .mw-default-size, .thumb, .thumb.tright"
+    " { float: right; margin: 0 0 0.5em 0.8em; }\n"
+    ".mw-halign-right, .mw-floatright, .floatright, .infobox, table.infobox"
+    " { float: right; margin: 0 0 0.5em 0.8em; }\n"
+    ".mw-halign-left, .mw-floatleft, .floatleft, figure.mw-halign-left,"
+    " figure.mw-default-size.mw-halign-left, .thumb.tleft"
+    " { float: left; margin: 0 0.8em 0.5em 0; }\n"
+    ".mw-halign-center, figure.mw-halign-center,"
+    " figure.mw-default-size.mw-halign-center"
+    " { float: none; margin: 0.5em auto; }\n";
+
+int yetty_ybrowser_libcss_apply_wikipedia_quirks(struct yetty_ylexbor *r)
+{
+    if (r == NULL || r->libcss == NULL || r->wiki_quirks_applied) {
+        return 0;
+    }
+    r->wiki_quirks_applied = 1;
+    return yetty_ybrowser_libcss_add_sheet(r, UA_WIKIPEDIA_CSS, sizeof(UA_WIKIPEDIA_CSS) - 1,
+                                           CSS_ORIGIN_USER);
+}
 
 /* ===========================================================================
  * Select-handler callbacks. `pw` is `struct yetty_ylexbor *r`; `node` is

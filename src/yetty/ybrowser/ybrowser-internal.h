@@ -321,6 +321,7 @@ struct yetty_ylexbor_box_vec {
  * include into every .c that just touches the box / layout state. */
 struct JSRuntime;
 struct JSContext;
+struct yetty_yplatform_yworkpool;
 
 /* Opaque to non-web TUs. Definition + management lives in
  * ylexbor-js-web.c. */
@@ -407,6 +408,11 @@ struct yetty_ylexbor {
     int grid_class_count;
     int grid_class_cap;
 
+    /* Set once the MediaWiki float-helper stylesheet has been injected for a
+     * MediaWiki page (see yetty_ybrowser_libcss_apply_wikipedia_quirks). Those
+     * helpers use generic class names and so must NOT apply to other sites. */
+    int wiki_quirks_applied;
+
     /* Per-glyph advance as a fraction of font-size, used by the naive
      * text-width estimate that drives line wrap AND the x-advance between
      * styled inline fragments on a line. It MUST match the advance of the
@@ -437,6 +443,23 @@ struct yetty_ylexbor {
 	 * The pixel buffer is malloc'd and freed at destroy time. */
     struct yetty_ylexbor_img_cache_entry *img_cache;
     int img_cache_count, img_cache_cap;
+
+    /* Async image fetching. When `img_pool` is set, yetty_ylexbor_start_image_fetch
+	 * submits each pending <img> to the worker pool (parallel fetch+decode on
+	 * background threads) instead of blocking the caller. `on_resource_ready`
+	 * is invoked on the loop thread when a fetch lands so the host repaints.
+	 * `img_jobs_in_flight`, `destroy_pending`, `fetch_generation` are touched
+	 * ONLY on the loop thread (submit + done + load_html + destroy), so no
+	 * locking is needed. `fetch_generation` is bumped on document replace so a
+	 * late job from a previous page is discarded. `destroy_pending` defers the
+	 * real teardown until the last in-flight job's done() runs — a job's
+	 * done() must never touch a freed engine. */
+    struct yetty_yplatform_yworkpool *img_pool;
+    void (*on_resource_ready)(void *user);
+    void *resource_ready_user;
+    int img_jobs_in_flight;
+    int destroy_pending;
+    uint64_t fetch_generation;
 };
 
 struct yetty_ylexbor_img_cache_entry {
@@ -444,6 +467,7 @@ struct yetty_ylexbor_img_cache_entry {
     uint32_t *pixels; /* RGBA8 row-major; owned */
     int w, h;         /* source pixel dims */
     int failed;       /* fetch/decode failed — don't retry */
+    int loading;      /* an async fetch job is in flight for this url */
 };
 
 /* Defined in ylexbor-paint.c so the fetch/decode plumbing lives next
@@ -457,6 +481,13 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(struct
  * placeholder and the actual URL lives in `data-src`/`data-original`/
  * `srcset`. Caller frees the returned absolute URL with free(). */
 char *yetty_ylexbor_img_pick_url(struct yetty_ylexbor *r, lxb_dom_element_t *el);
+
+/* yetty_ylexbor_prof / prof_now_ms are declared in the public header (used by
+ * the host tool too). */
+
+/* Real engine teardown (see yetty_ylexbor_destroy). Called either directly or,
+ * when async fetches are outstanding, deferred to the last job's done(). */
+struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *r);
 
 /* ===========================================================================
  * box generation (ylexbor-box.c) — DOM + computed style → box vector.

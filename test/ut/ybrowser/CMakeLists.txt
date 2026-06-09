@@ -10,6 +10,10 @@ enable_testing()
 
 set(YBROWSER_TEST_SHIM_SOURCES
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
+    # ybrowser's async image fetch references the worker pool; it isn't its own
+    # library (consumers compile the source directly, as yrich does), so pull it
+    # in here. Its only deps — thread primitives — live in yetty_yplatform_core.
+    ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
 )
 
 add_executable(ybrowser-layout-test

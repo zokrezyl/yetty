@@ -32,6 +32,7 @@
 #endif
 
 #include <yetty/ycore/util.h>
+#include <yetty/yplatform/yworkpool.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ysdf/funcs.gen.h>
@@ -531,6 +532,197 @@ int yetty_ylexbor_fetch_one_pending_image(struct yetty_ylexbor *r)
         return 1;
     }
     return 0;
+}
+
+/* ===========================================================================
+ * Async parallel image fetching (worker pool). Each pending <img> becomes a
+ * job: fetch+decode on a worker thread (the pool runs several at once, sharing
+ * libcurl's HTTP/2 connection pool), then fold the pixels into the cache on the
+ * loop thread and notify the host to repaint. Nothing blocks the UI thread.
+ * ===========================================================================*/
+
+struct ylexbor_img_job {
+    struct yetty_ylexbor *r;
+    uint64_t generation; /* engine fetch_generation at submit; stale if changed */
+    char *url;           /* owned */
+    char *base_url;      /* owned copy — read on the worker thread */
+    /* Filled by run() on the worker thread: */
+    uint32_t *pixels;
+    int w, h;
+    int failed;
+};
+
+/* WORKER THREAD. Touches ONLY the job's own copies — never the engine, which
+ * may be torn down (deferred) before done() runs. */
+static void img_job_run(void *ctx)
+{
+    struct ylexbor_img_job *job = ctx;
+    long status = 0;
+    size_t blen = 0;
+    char *bytes = yetty_ylexbor_http_get_referer(job->url, job->base_url, &blen, &status);
+    if (!bytes || blen == 0 || (status != 0 && status != 200)) {
+        free(bytes);
+        job->failed = 1;
+        return;
+    }
+    uint32_t *pixels = NULL;
+    int w = 0, h = 0;
+    int ok = decode_image((const uint8_t *)bytes, blen, &pixels, &w, &h);
+    free(bytes);
+    if (!ok) {
+        job->failed = 1;
+        return;
+    }
+    job->pixels = pixels;
+    job->w = w;
+    job->h = h;
+}
+
+/* LOOP THREAD. Fold the result into the cache (if still valid) and notify the
+ * host; handle deferred engine teardown. */
+static void img_job_done(void *ctx)
+{
+    struct ylexbor_img_job *job = ctx;
+    struct yetty_ylexbor *r = job->r;
+    r->img_jobs_in_flight--;
+
+    int stale = (job->generation != r->fetch_generation) || r->destroy_pending;
+    if (!stale) {
+        for (int i = 0; i < r->img_cache_count; i++) {
+            if (r->img_cache[i].url && strcmp(r->img_cache[i].url, job->url) == 0) {
+                struct yetty_ylexbor_img_cache_entry *e = &r->img_cache[i];
+                e->loading = 0;
+                if (job->failed || job->pixels == NULL) {
+                    e->failed = 1;
+                } else {
+                    e->pixels = job->pixels;
+                    e->w = job->w;
+                    e->h = job->h;
+                    job->pixels = NULL; /* ownership transferred to the cache */
+                }
+                break;
+            }
+        }
+        if (r->on_resource_ready) {
+            r->on_resource_ready(r->resource_ready_user);
+        }
+    }
+    free(job->pixels); /* non-NULL only when stale / url vanished */
+    free(job->url);
+    free(job->base_url);
+    free(job);
+
+    if (r->img_jobs_in_flight == 0 && !stale) {
+        yetty_ylexbor_prof("    img fetch: all done (last image landed)");
+    }
+
+    if (r->destroy_pending && r->img_jobs_in_flight == 0) {
+        (void)_yetty_ylexbor_destroy_now(r);
+    }
+}
+
+void yetty_ylexbor_set_async_image_fetch(struct yetty_ylexbor *r,
+                                         struct yetty_yplatform_yworkpool *pool,
+                                         void (*on_ready)(void *user), void *user)
+{
+    if (r == NULL) {
+        return;
+    }
+    r->img_pool = pool;
+    r->on_resource_ready = on_ready;
+    r->resource_ready_user = user;
+}
+
+int yetty_ylexbor_images_in_flight(const struct yetty_ylexbor *r)
+{
+    return r ? r->img_jobs_in_flight : 0;
+}
+
+int yetty_ylexbor_start_image_fetch(struct yetty_ylexbor *r)
+{
+    if (r == NULL || r->img_pool == NULL) {
+        return 0;
+    }
+    int submitted = 0;
+    for (uint32_t i = 0; i < r->boxes.size; i++) {
+        struct yetty_ylexbor_box *b = &r->boxes.data[i];
+        if (b->kind != YL_BOX_INLINE_IMAGE || b->element == NULL) {
+            continue;
+        }
+        char *url = yetty_ylexbor_img_pick_url(r, b->element);
+        if (url == NULL) {
+            continue;
+        }
+        if (strncmp(url, "data:", 5) == 0) {
+            free(url); /* inline bytes, decoded during paint */
+            continue;
+        }
+        int seen = 0;
+        for (int k = 0; k < r->img_cache_count; k++) {
+            if (r->img_cache[k].url && strcmp(r->img_cache[k].url, url) == 0) {
+                seen = 1; /* already cached or a job is in flight */
+                break;
+            }
+        }
+        if (seen) {
+            free(url);
+            continue;
+        }
+        /* Reserve a `loading` cache slot so paint draws a placeholder and a
+         * later start_image_fetch doesn't resubmit this url. */
+        if (r->img_cache_count == r->img_cache_cap) {
+            int nc = r->img_cache_cap ? r->img_cache_cap * 2 : 8;
+            struct yetty_ylexbor_img_cache_entry *p = realloc(r->img_cache, (size_t)nc * sizeof(*p));
+            if (!p) {
+                free(url);
+                break;
+            }
+            r->img_cache = p;
+            r->img_cache_cap = nc;
+        }
+        struct yetty_ylexbor_img_cache_entry *e = &r->img_cache[r->img_cache_count];
+        memset(e, 0, sizeof(*e));
+        e->url = strdup(url);
+        if (e->url == NULL) {
+            free(url);
+            break;
+        }
+        e->loading = 1;
+        r->img_cache_count++;
+
+        struct ylexbor_img_job *job = calloc(1, sizeof(*job));
+        if (job == NULL) {
+            free(url);
+            break;
+        }
+        job->r = r;
+        job->generation = r->fetch_generation;
+        job->url = url; /* ownership transferred to the job */
+        job->base_url = r->base_url ? strdup(r->base_url) : NULL;
+
+        struct yetty_yplatform_yworkpool_job wj = {
+            .run = img_job_run,
+            .done = img_job_done,
+            .ctx = job,
+        };
+        struct yetty_ycore_void_result sr = yetty_yplatform_yworkpool_submit(r->img_pool, wj);
+        if (YETTY_IS_ERR(sr)) {
+            yetty_ycore_error_destroy(sr.error);
+            free(job->base_url);
+            free(job->url);
+            free(job);
+            e->loading = 0;
+            e->failed = 1;
+            continue;
+        }
+        r->img_jobs_in_flight++;
+        submitted++;
+    }
+    if (submitted > 0) {
+        yetty_ylexbor_prof("    img fetch: +%d submitted, %d in flight", submitted,
+                           r->img_jobs_in_flight);
+    }
+    return submitted;
 }
 
 /* Pick the best URL out of an `<img>`'s flock of source-ish attributes.

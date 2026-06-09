@@ -386,9 +386,12 @@ char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_
     if (headers) {
         curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
     }
+    double t_req = yetty_ylexbor_prof_now_ms();
     CURLcode rc = curl_easy_perform(c);
     long status = 0;
     curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &status);
+    yetty_ylexbor_prof("    HTTP %.0fms status=%ld bytes=%zu rc=%d %.90s",
+                       yetty_ylexbor_prof_now_ms() - t_req, status, b.size, (int)rc, url);
     if (headers) {
         curl_slist_free_all(headers);
     }
@@ -455,6 +458,8 @@ void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *ref
     if (concurrency > n) {
         concurrency = n;
     }
+    yetty_ylexbor_prof("    http_get_many START n=%d conc=%d", n, concurrency);
+    double t_many = yetty_ylexbor_prof_now_ms();
 
     /* Build the shared header list once — same set used by the
 	 * sequential path. curl_multi shares this slist among handles. */
@@ -573,6 +578,8 @@ void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *ref
     curl_multi_cleanup(mh);
     curl_slist_free_all(headers);
     free(slots);
+    yetty_ylexbor_prof("    http_get_many DONE  %.0f ms (n=%d)",
+                       yetty_ylexbor_prof_now_ms() - t_many, n);
 }
 
 #else /* !YETTY_HAVE_CURL */

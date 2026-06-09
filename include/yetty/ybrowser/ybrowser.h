@@ -146,6 +146,40 @@ void yetty_ylexbor_set_defer_image_fetch(struct yetty_ylexbor *r, int on);
  * without ever blocking for the whole set at once. */
 int yetty_ylexbor_fetch_one_pending_image(struct yetty_ylexbor *r);
 
+struct yetty_yplatform_yworkpool;
+
+/* Enable ASYNC parallel image fetching. `pool` is a worker pool created on the
+ * host's event loop; once set, yetty_ylexbor_start_image_fetch submits each
+ * pending <img> as a background fetch+decode job (parallel, non-blocking)
+ * instead of blocking the caller. `on_ready(user)` is invoked on the loop
+ * thread each time a fetch completes so the host can repaint. Pass pool=NULL to
+ * disable (falls back to the synchronous one-at-a-time path). The pool and
+ * `user` must outlive the engine, OR the engine outlive all in-flight jobs —
+ * the engine defers its own teardown until in-flight jobs drain, so calling
+ * yetty_ylexbor_destroy while fetches are running is safe. */
+void yetty_ylexbor_set_async_image_fetch(struct yetty_ylexbor *r,
+                                         struct yetty_yplatform_yworkpool *pool,
+                                         void (*on_ready)(void *user), void *user);
+
+/* Submit every not-yet-fetched <img> in the laid-out document to the async
+ * pool (parallel fetch + decode). Returns the number of jobs submitted this
+ * call (0 if async isn't enabled or nothing is pending). Safe to call every
+ * frame — already-cached / in-flight images are skipped. */
+int yetty_ylexbor_start_image_fetch(struct yetty_ylexbor *r);
+
+/* Number of async image fetch+decode jobs currently in flight (submitted but
+ * not yet folded in). The host keeps its event loop ticking while this is > 0
+ * so completions repaint promptly instead of waiting for an unrelated wake. */
+int yetty_ylexbor_images_in_flight(const struct yetty_ylexbor *r);
+
+/* Load-timeline profiler. When the YBROWSER_PROFILE env var is set, prof()
+ * prints a timestamped event line to stderr; prof_now_ms() returns the
+ * monotonic clock (ms) used to measure per-step durations. Exposed so the host
+ * tool can profile the pieces outside the engine (HTML fetch, window/GPU
+ * startup, first render). Near-zero overhead (one getenv) when off. */
+void yetty_ylexbor_prof(const char *fmt, ...);
+double yetty_ylexbor_prof_now_ms(void);
+
 /* ===========================================================================
  * Test-only inspection.
  *

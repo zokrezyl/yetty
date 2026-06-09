@@ -40,6 +40,12 @@ struct yetty_ybrowser_libcss {
 int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r);
 void yetty_ybrowser_libcss_destroy(struct yetty_ylexbor *r);
 
+/* Inject the MediaWiki float-helper stylesheet (UA_WIKIPEDIA_CSS). Idempotent
+ * within a document. Call only for MediaWiki pages — these helpers float
+ * generic class names (`.thumb`, `.infobox`) and would wreck other sites.
+ * Returns 0 on success. */
+int yetty_ybrowser_libcss_apply_wikipedia_quirks(struct yetty_ylexbor *r);
+
 /* Parse one CSS source string through libcss and append to the select
  * ctx. origin is CSS_ORIGIN_AUTHOR for everything we see today. Returns
  * 0 on success, -1 on error (caller may still continue — the cascade

@@ -634,6 +634,7 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
         img_w_intr[i] = is_img ? c->w : 0.0f;
         img_h_intr[i] = is_img ? c->h : 0.0f;
     }
+    bool is_auto[YL_FLEX_MAX_CHILDREN] = {false};
     for (uint32_t i = 0; i < n_children; i++) {
         struct yetty_ylexbor_box *c = &r->boxes.data[children[i]];
         float basis;
@@ -655,6 +656,7 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
                 basis = img_main;
             } else {
                 basis = 0.0f;
+                is_auto[i] = true;
                 autobasis_count++;
             }
         }
@@ -677,6 +679,25 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
             main_size[i] = per;
         }
         total_basis = main_budget;
+    }
+
+    /* Mixed sized + auto items with no explicit grow: the auto items share
+     * the leftover space (the dominant "fixed sidebar/thumbnail + flexible
+     * content" pattern — e.g. a news card's fixed thumbnail + flexible text
+     * body). Without this an auto item next to a sized one collapsed to 0.
+     * Skipped when something grows (that path distributes below) or when ALL
+     * items are auto (the even-split fallback above already handled it). */
+    if (autobasis_count > 0 && autobasis_count < (int)n_children && total_grow == 0.0f) {
+        float leftover_auto = main_budget - total_basis;
+        if (leftover_auto > 0.0f) {
+            float per = leftover_auto / (float)autobasis_count;
+            for (uint32_t i = 0; i < n_children; i++) {
+                if (is_auto[i]) {
+                    main_size[i] += per;
+                    total_basis += per;
+                }
+            }
+        }
     }
 
     /* Distribute leftover main-axis space. */

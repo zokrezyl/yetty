@@ -359,6 +359,43 @@ static int is_js_script_type(lxb_dom_element_t *el)
     return 0;
 }
 
+/* True iff `url` points at a well-known analytics / advertising / tracking
+ * script. These never produce visible content, yet a synchronous inline
+ * fetch+eval of one (e.g. googletagmanager's 425 KB gtag.js) blocks first
+ * paint for hundreds of milliseconds. Real browsers load them async, off the
+ * critical path; a viewer can skip them outright with no rendering effect. */
+static int is_tracking_script_url(const char *url)
+{
+    static const char *const needles[] = {
+        "googletagmanager.com",
+        "google-analytics.com",
+        "/gtag/js",
+        "/gtm.js",
+        "/analytics.js",
+        "/ga.js",
+        "doubleclick.net",
+        "googlesyndication.com",
+        "googleadservices.com",
+        "google-analytics",
+        "connect.facebook.net",
+        "/fbevents.js",
+        "scorecardresearch.com",
+        "static.hotjar.com",
+        "cdn.segment.com",
+        "cdn.mxpnl.com",
+        "amplitude.com/libs",
+    };
+    if (!url) {
+        return 0;
+    }
+    for (size_t i = 0; i < sizeof(needles) / sizeof(needles[0]); i++) {
+        if (strstr(url, needles[i]) != NULL) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static void run_scripts_recursive(struct yetty_ylexbor *r, JSContext *ctx, lxb_dom_node_t *node)
 {
     for (lxb_dom_node_t *c = node->first_child; c != NULL; c = c->next) {
@@ -383,6 +420,11 @@ static void run_scripts_recursive(struct yetty_ylexbor *r, JSContext *ctx, lxb_d
                 char *url = yetty_ylexbor_resolve_url(r, href);
                 free(href);
                 if (!url) {
+                    continue;
+                }
+                if (is_tracking_script_url(url)) {
+                    yetty_ylexbor_prof("    skip tracking script %.80s", url);
+                    free(url);
                     continue;
                 }
                 size_t blen = 0;

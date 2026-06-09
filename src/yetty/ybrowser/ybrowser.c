@@ -9,7 +9,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <stdarg.h>
 #include <stdio.h>
+#include <time.h>
 #include <lexbor/css/css.h>
 #include <lexbor/style/style.h>
 #include <lexbor/html/html.h>
@@ -198,11 +200,11 @@ struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_
     return YETTY_OK(yetty_ylexbor_ptr, r);
 }
 
-struct yetty_ycore_void_result yetty_ylexbor_destroy(struct yetty_ylexbor *r)
+/* The real teardown. Split out so the public destroy can DEFER it until any
+ * in-flight async image-fetch jobs drain — their done() callback runs on the
+ * loop thread and must never touch a freed engine. */
+struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *r)
 {
-    if (r == NULL) {
-        return YETTY_OK_VOID();
-    }
     yetty_ylexbor_js_destroy(r);
     yetty_ybrowser_libcss_destroy(r);
     if (r->css_parser) {
@@ -224,6 +226,49 @@ struct yetty_ycore_void_result yetty_ylexbor_destroy(struct yetty_ylexbor *r)
     yetty_ylexbor_css_vars_destroy(r);
     free(r);
     return YETTY_OK_VOID();
+}
+
+/* Load-timeline profiler. When YBROWSER_PROFILE is set in the environment,
+ * print a timestamped line to stderr for each significant load event (phase
+ * boundary, HTTP request, JS fetch). Absolute monotonic milliseconds — read
+ * consecutive lines to see where the wall-clock goes. Thread-safe; a no-op
+ * (just a getenv) when profiling is off. Intentionally getenv-per-call so
+ * there's no file-scope cache variable. */
+double yetty_ylexbor_prof_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1.0e6;
+}
+
+void yetty_ylexbor_prof(const char *fmt, ...)
+{
+    if (getenv("YBROWSER_PROFILE") == NULL) {
+        return;
+    }
+    flockfile(stderr);
+    fprintf(stderr, "[PROF %10.1f] ", yetty_ylexbor_prof_now_ms());
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+    funlockfile(stderr);
+}
+
+struct yetty_ycore_void_result yetty_ylexbor_destroy(struct yetty_ylexbor *r)
+{
+    if (r == NULL) {
+        return YETTY_OK_VOID();
+    }
+    /* Async fetches outstanding: defer the teardown. The last job's done()
+     * (loop thread) will call _yetty_ylexbor_destroy_now once the count hits 0.
+     * The caller must not touch `r` after this returns. */
+    if (r->img_jobs_in_flight > 0) {
+        r->destroy_pending = 1;
+        return YETTY_OK_VOID();
+    }
+    return _yetty_ylexbor_destroy_now(r);
 }
 
 struct yetty_ycore_void_result yetty_ylexbor_set_base_url(struct yetty_ylexbor *r, const char *url)
@@ -490,10 +535,38 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     yetty_ylexbor_grid_classes_free(r);
     r->grid_content_max_px = 0.0f;
     r->content_height = 0;
+    /* Invalidate any in-flight async image jobs from the previous document —
+     * their done() will find a mismatched generation and discard. */
+    r->fetch_generation++;
+
+    yetty_ylexbor_prof("load_html START  html_bytes=%zu", html_len);
+    double t_phase = yetty_ylexbor_prof_now_ms();
 
     lxb_status_t s = lxb_html_document_parse(r->document, (const lxb_char_t *)html, html_len);
     if (s != LXB_STATUS_OK) {
         return YETTY_ERR(yetty_ycore_void, "html_document_parse failed");
+    }
+    yetty_ylexbor_prof("  parse          %.0f ms", yetty_ylexbor_prof_now_ms() - t_phase);
+    t_phase = yetty_ylexbor_prof_now_ms();
+
+    /* MediaWiki pages get a small float-helper stylesheet so offline Wikipedia
+	 * still lays out as paragraph-with-sidebar. Detect by the `mw-` class
+	 * prefix — unique to MediaWiki output. We deliberately do NOT inject these
+	 * generic-class floats (`.thumb`, `.infobox`) into ordinary sites: doing so
+	 * floated e.g. a news card's `.thumb` out of flow. */
+    {
+        int has_mw = 0;
+        if (html_len >= 3) {
+            for (size_t i = 0; i + 3 <= html_len; i++) {
+                if (html[i] == 'm' && html[i + 1] == 'w' && html[i + 2] == '-') {
+                    has_mw = 1;
+                    break;
+                }
+            }
+        }
+        if (has_mw) {
+            (void)yetty_ybrowser_libcss_apply_wikipedia_quirks(r);
+        }
     }
 
     /* Pull every external CSS referenced via <link rel=stylesheet>
@@ -504,9 +577,13 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     struct yetty_ycore_void_result css_res =
         load_external_stylesheets(r, lxb_dom_interface_node(r->document));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, css_res, "load_html: load_external_stylesheets");
+    yetty_ylexbor_prof("  external CSS   %.0f ms", yetty_ylexbor_prof_now_ms() - t_phase);
+    t_phase = yetty_ylexbor_prof_now_ms();
 
     /* Run inline + external <script> blocks. */
     (void)yetty_ylexbor_js_run_inline_scripts(r);
+    yetty_ylexbor_prof("  run scripts    %.0f ms", yetty_ylexbor_prof_now_ms() - t_phase);
+    t_phase = yetty_ylexbor_prof_now_ms();
 
     ydebug("css sheets ext=%d inline=%d failed=%d customs=%d", g_css_loaded, g_css_inline,
            g_css_failed, r->customs.size);
@@ -518,11 +595,16 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     if (YETTY_IS_ERR(br)) {
         return br;
     }
+    yetty_ylexbor_prof("  box-build      %.0f ms (boxes=%u)", yetty_ylexbor_prof_now_ms() - t_phase,
+                       r->boxes.size);
+    t_phase = yetty_ylexbor_prof_now_ms();
 
     struct yetty_ycore_void_result lr = yetty_ylexbor_layout(r);
     if (YETTY_IS_ERR(lr)) {
         return lr;
     }
+    yetty_ylexbor_prof("  layout         %.0f ms", yetty_ylexbor_prof_now_ms() - t_phase);
+    yetty_ylexbor_prof("load_html DONE");
 
     (void)box_vec_reserve; /* used by box-build */
     return YETTY_OK_VOID();
