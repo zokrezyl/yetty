@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>justify-content:space-between pins first/last to edges</title>
+<style>body{margin:0}</style>
+<div style="display:flex;justify-content:space-between;width:600px">
+  <div data-test="a" data-expect="0,*,100,*" style="width:100px;flex:none">a</div>
+  <div data-test="b" data-expect="500,*,100,*" style="width:100px;flex:none">b</div>
+</div>

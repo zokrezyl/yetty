@@ -1792,8 +1792,33 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.PerformanceMeasure= function(){};"
         "globalThis.PerformanceNavigationTiming = function(){};"
         "globalThis.PerformanceResourceTiming   = function(){};"
-        "globalThis.CustomElementRegistry = function(){ const m={}; this.define=(n,c)=>{m[n]=c;}; "
-        "this.get=n=>m[n]; this.whenDefined=()=>Promise.resolve(); this.upgrade=()=>{}; };"
+        /* Custom Elements with a real upgrade reaction: define() splices each
+		 * matching element's prototype onto the class and fires
+		 * connectedCallback — that is what boots web-component-based UIs (e.g.
+		 * GitHub's <react-app>). HTMLElement.prototype is lazily chained to the
+		 * native element prototype so `class X extends HTMLElement` inherits
+		 * appendChild/querySelector/etc.; the element's opaque DOM pointer is
+		 * keyed by class id (unchanged by setPrototypeOf), so native methods
+		 * keep resolving after the upgrade. */
+        "globalThis.CustomElementRegistry = function(){"
+        "  const m={}, defers={}; let chained=false;"
+        "  const chain=()=>{ if(chained)return; chained=true; try{"
+        "    var ep=Object.getPrototypeOf(document.createElement('div'));"
+        "    if(ep && globalThis.HTMLElement && globalThis.HTMLElement.prototype)"
+        "      Object.setPrototypeOf(globalThis.HTMLElement.prototype, ep);"
+        "  }catch(e){} };"
+        "  const upgrade=(el,c)=>{ try{ Object.setPrototypeOf(el,c.prototype);"
+        "    if(typeof el.connectedCallback==='function') el.connectedCallback();"
+        "  }catch(e){ try{console.error('ce upgrade',e&&e.message);}catch(_){}} };"
+        "  this.define=(n,c)=>{ m[n]=c; chain();"
+        "    try{ var els=document.querySelectorAll(n); for(var i=0;i<els.length;i++) upgrade(els[i],c);"
+        "    }catch(e){}"
+        "    if(defers[n]){ defers[n].forEach(r=>r()); delete defers[n]; } };"
+        "  this.get=n=>m[n];"
+        "  this.whenDefined=n=>{ if(m[n])return Promise.resolve(m[n]);"
+        "    return new Promise(res=>{ (defers[n]=defers[n]||[]).push(()=>res(m[n])); }); };"
+        "  this.upgrade=root=>{ for(var n in m){ try{ var els=(root||document).querySelectorAll(n);"
+        "    for(var i=0;i<els.length;i++) upgrade(els[i],m[n]); }catch(e){} } }; };"
         "globalThis.customElements = new globalThis.CustomElementRegistry();"
         "globalThis.Image       = function(){ this.src=''; this.onload=null; this.onerror=null; "
         "this.addEventListener=()=>{}; };"

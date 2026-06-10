@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8>
+<title>max-width clamps a wider declared width</title>
+<style>body{margin:0}</style>
+<div style="width:600px">
+  <div data-test="mw" data-expect="*,*,200,*" style="width:400px;max-width:200px">x</div>
+</div>

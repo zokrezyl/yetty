@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8>
+<title>width:50% resolves against the parent content width</title>
+<style>body{margin:0}</style>
+<div style="width:600px">
+  <div data-test="half" data-expect="*,*,300,*" style="width:50%">x</div>
+</div>

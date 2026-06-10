@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>flex:1 item fills the space left by a fixed item</title>
+<style>body{margin:0}</style>
+<div style="display:flex;width:600px">
+  <div data-test="fixed" data-expect="0,*,200,*" style="width:200px;flex:none">a</div>
+  <div data-test="grow" data-expect="200,*,400,*" style="flex:1">b</div>
+</div>

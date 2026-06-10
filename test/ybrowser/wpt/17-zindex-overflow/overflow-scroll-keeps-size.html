@@ -1,0 +1,5 @@
+<!doctype html><meta charset=utf-8><title>overflow:scroll keeps the declared box size</title>
+<style>body{margin:0}</style>
+<div data-test="box" data-expect="*,*,150,80" style="width:150px;height:80px;overflow:scroll">
+  <div style="height:400px;width:400px">big</div>
+</div>

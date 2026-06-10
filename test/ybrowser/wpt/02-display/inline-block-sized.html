@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>inline-block honours its width and stays in line</title>
+<style>body{margin:0}</style>
+<div style="width:400px">
+  <span data-test="ib" data-expect="0,*,120,*"
+        style="display:inline-block;width:120px;height:20px">x</span>
+</div>

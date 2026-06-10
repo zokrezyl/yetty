@@ -1,0 +1,7 @@
+<!doctype html><meta charset=utf-8>
+<title>grid named-line placement (Chrome-correct geometry; documents the gap until
+named grid placement is implemented — content sits in the 1fr column at x=200,w=800)</title>
+<style>body{margin:0}</style>
+<div style="display:grid;grid-template-columns:[s] 200px [c-start] 1fr [c-end];width:1000px">
+  <div data-test="content" data-expect="200,*,800,*" style="grid-column:c-start">main</div>
+</div>

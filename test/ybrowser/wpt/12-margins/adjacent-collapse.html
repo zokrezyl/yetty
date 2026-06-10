@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>adjacent vertical margins collapse to the larger</title>
+<style>body{margin:0}</style>
+<div style="width:200px">
+  <div style="height:20px;margin-bottom:30px">a</div>
+  <div data-test="b" data-expect="0,50,200,*" style="height:20px;margin-top:20px">b</div>
+</div>

@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>flex-direction:column stacks items, full cross width</title>
+<style>body{margin:0}</style>
+<div style="display:flex;flex-direction:column;width:300px">
+  <div data-test="a" data-expect="0,0,300,40" style="height:40px">a</div>
+  <div data-test="b" data-expect="0,40,300,30" style="height:30px">b</div>
+</div>

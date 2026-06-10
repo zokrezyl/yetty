@@ -1,0 +1,12 @@
+<!doctype html><meta charset=utf-8>
+<title>customElements.whenDefined resolves and the upgraded element mounts content</title>
+<style>body{margin:0}</style>
+<late-el data-test="host" data-expect="0,0,800,30" style="display:block"></late-el>
+<script>
+customElements.whenDefined('late-el').then(()=>{
+  var d=document.createElement('div'); d.setAttribute('style','height:30px');
+  document.querySelector('late-el').appendChild(d);
+});
+class LateEl extends HTMLElement {}
+customElements.define('late-el', LateEl);
+</script>

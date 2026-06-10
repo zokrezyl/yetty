@@ -1,0 +1,12 @@
+<!doctype html><meta charset=utf-8>
+<title>grid with NAMED lines + grid-column placement must NOT collapse the content
+(Wikipedia Vector shell: nested grids place the content column by name; our
+engine can't do named placement, but it must fall back to block — full-width
+content — never collapse to ~min-content)</title>
+<style>body{margin:0}</style>
+<div style="display:grid;grid-template-columns:[s] 200px [c-start] 1fr [c-end];width:1000px">
+  <div data-test="side" style="grid-column:s">nav</div>
+  <div data-test="content" data-expect="*,*,>=700,*" style="grid-column:c-start">
+    main content must stay wide and readable, never a one-word column
+  </div>
+</div>

@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8>
+<title>min-width raises a narrower declared width</title>
+<style>body{margin:0}</style>
+<div style="width:600px">
+  <div data-test="mnw" data-expect="*,*,300,*" style="width:100px;min-width:300px">x</div>
+</div>

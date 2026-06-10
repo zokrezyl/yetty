@@ -1,0 +1,7 @@
+<!doctype html><meta charset=utf-8><title>grid: three tracks px px fr</title>
+<style>body{margin:0}</style>
+<div style="display:grid;grid-template-columns:100px 200px 1fr;width:600px">
+  <div data-test="a" data-expect="0,*,100,*">a</div>
+  <div data-test="b" data-expect="100,*,200,*">b</div>
+  <div data-test="c" data-expect="300,*,300,*">c</div>
+</div>

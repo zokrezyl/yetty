@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>grid: repeat(2, 1fr)</title>
+<style>body{margin:0}</style>
+<div style="display:grid;grid-template-columns:repeat(2, 1fr);width:600px">
+  <div data-test="a" data-expect="0,*,300,*">a</div>
+  <div data-test="b" data-expect="300,*,300,*">b</div>
+</div>
