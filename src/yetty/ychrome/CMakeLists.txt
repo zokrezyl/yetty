@@ -34,6 +34,14 @@ target_link_libraries(yetty_ychrome PUBLIC
     # yfigure carries the producer and is available on the headless cross
     # targets too.
     yetty_yfigure
+    # chrome.c's gesture handlers call the yetty_yplatform_window_manager_*
+    # method stubs (move/resize/iconify/...). Those live in yetty_yplatform_core
+    # (methods.gen.c) and early-return on the NULL window_manager a wire/client
+    # host carries. Declare the dependency explicitly so the static link
+    # resolves on EVERY target: previously it only worked where yui happened to
+    # pull yplatform_core ahead of ychrome, which never happens on the headless
+    # no-GPU guest (yui isn't built), breaking the riscv link.
+    yetty_yplatform_core
 )
 
 # The LOCAL sink composites the caption as a pinned ygrid figure. ygrid is
