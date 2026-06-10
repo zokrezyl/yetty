@@ -156,15 +156,15 @@ def hooks_enabled(schema):
     When enabled the generator emits, at the top of <name>-gen.c:
 
       extern struct yetty_ycore_void_result <name>_hook_instance_create(
-          struct yetty_ydraw_figure *instance,
+          struct yetty_ydraw_composite *instance,
           const void *buffer_data, size_t size);
       extern void <name>_hook_instance_destroy(
-          struct yetty_ydraw_figure *instance);
+          struct yetty_ydraw_composite *instance);
       extern struct yetty_ycore_void_result <name>_hook_instance_update(
-          struct yetty_ydraw_figure *instance,
+          struct yetty_ydraw_composite *instance,
           const void *payload, size_t size);
       extern struct yetty_ycore_void_result <name>_hook_instance_render_pre(
-          struct yetty_ydraw_figure *instance,
+          struct yetty_ydraw_composite *instance,
           struct yetty_ydraw_target *target, float x, float y);
 
     Insertion points:
@@ -678,20 +678,20 @@ def generate_c_source(schema, uniforms, buffers, textures):
 /* Hook surface — see hooks_enabled() in ydraw-gen/generate.py. Implemented
  * in {name}-hooks.c (hand-written). Missing symbols are a link error. */
 extern struct yetty_ycore_void_result {name}_hook_instance_create(
-    struct yetty_ydraw_figure *instance,
+    struct yetty_ydraw_composite *instance,
     const void *buffer_data, size_t size);
 extern void {name}_hook_instance_destroy(
-    struct yetty_ydraw_figure *instance);
+    struct yetty_ydraw_composite *instance);
 extern struct yetty_ycore_void_result {name}_hook_instance_update(
-    struct yetty_ydraw_figure *instance,
+    struct yetty_ydraw_composite *instance,
     const void *payload, size_t size);
 extern struct yetty_ycore_void_result {name}_hook_instance_render_pre(
-    struct yetty_ydraw_figure *instance,
+    struct yetty_ydraw_composite *instance,
     struct yetty_ydraw_target *target, float x, float y);
 
 static struct yetty_ycore_void_result {name}_update_dispatch(
     struct yetty_ydraw_concrete_factory *self,
-    struct yetty_ydraw_figure *instance,
+    struct yetty_ydraw_composite *instance,
     const void *payload, size_t size)
 {{
     (void)self;
@@ -709,7 +709,7 @@ static struct yetty_ycore_void_result {name}_update_dispatch(
             free(instance->resource_set);
             free(instance->buffer_data);
             free(instance);
-            return YETTY_ERR(yetty_ydraw_figure_ptr,
+            return YETTY_ERR(yetty_ydraw_composite_ptr,
                              "{name}: hook_instance_create failed", hcr);
         }}
     }}
@@ -849,7 +849,7 @@ static void {name}_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
 //=============================================================================
 
 static struct yetty_ycore_void_result
-{name}_instance_render(struct yetty_ydraw_figure *self,
+{name}_instance_render(struct yetty_ydraw_composite *self,
                        struct yetty_ydraw_target *target, float x, float y)
 {{
     if (!self || !self->buffer_data || !self->factory)
@@ -1004,27 +1004,27 @@ static WGPURenderPipeline {name}_get_pipeline(struct yetty_ydraw_concrete_factor
     return factory->pipeline ? yetty_yrender_pipeline_get_pipeline(factory->pipeline) : NULL;
 }}
 
-static struct yetty_ydraw_figure_ptr_result
+static struct yetty_ydraw_composite_ptr_result
 {name}_create_instance(struct yetty_ydraw_concrete_factory *self,
                        const void *buffer_data, size_t size, uint32_t rolling_row)
 {{
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite))
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "invalid buffer data");
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite_record))
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "invalid buffer data");
 
     struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
     if (!factory->pipeline)
-        return YETTY_ERR(yetty_ydraw_figure_ptr,
+        return YETTY_ERR(yetty_ydraw_composite_ptr,
                          "{name} factory pipeline not compiled");
 
-    struct yetty_ydraw_figure *instance =
-        calloc(1, sizeof(struct yetty_ydraw_figure));
+    struct yetty_ydraw_composite *instance =
+        calloc(1, sizeof(struct yetty_ydraw_composite));
     if (!instance)
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "allocation failed");
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "allocation failed");
 
     instance->buffer_data = malloc(size);
     if (!instance->buffer_data) {{
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "buffer alloc failed");
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "buffer alloc failed");
     }}
     memcpy(instance->buffer_data, buffer_data, size);
     instance->buffer_size = size;
@@ -1033,7 +1033,7 @@ static struct yetty_ydraw_figure_ptr_result
     instance->rolling_row = rolling_row;
     instance->render = {name}_instance_render;
 
-    struct rectangle_result aabb_res = yetty_ydraw_composite_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_composite_record_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res))
         instance->bounds = aabb_res.value;
 
@@ -1044,7 +1044,7 @@ static struct yetty_ydraw_figure_ptr_result
     if (!instance->resource_set) {{
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "rs alloc failed");
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "rs alloc failed");
     }}
     memcpy(instance->resource_set, &factory->template_rs,
            sizeof(struct yetty_yrender_gpu_resource_set));
@@ -1060,7 +1060,7 @@ static struct yetty_ydraw_figure_ptr_result
 {hooks_create_rollback}free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr,
+        return YETTY_ERR(yetty_ydraw_composite_ptr,
                          "instance binder create failed", br);
     }}
     instance->binder = br.value;
@@ -1072,7 +1072,7 @@ static struct yetty_ydraw_figure_ptr_result
 {hooks_create_rollback}free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr,
+        return YETTY_ERR(yetty_ydraw_composite_ptr,
                          "binder submit failed", sr);
     }}
 
@@ -1082,15 +1082,15 @@ static struct yetty_ydraw_figure_ptr_result
 {hooks_create_rollback}free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr,
+        return YETTY_ERR(yetty_ydraw_composite_ptr,
                          "binder finalize failed", fr);
     }}
 
-    return YETTY_OK(yetty_ydraw_figure_ptr, instance);
+    return YETTY_OK(yetty_ydraw_composite_ptr, instance);
 }}
 
 static void {name}_destroy_instance(struct yetty_ydraw_concrete_factory *self,
-                                    struct yetty_ydraw_figure *instance)
+                                    struct yetty_ydraw_composite *instance)
 {{
     (void)self;
     if (!instance)

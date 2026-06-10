@@ -970,11 +970,11 @@ static struct yetty_ycore_void_result container_process_bytes(struct yetty_yfigu
     struct yetty_yfigure_container *container = container_r.value;
     size_t off = 0;
     while (off < bytes_len) {
-        if (bytes_len - off < sizeof(struct yetty_yfigure_wire_record)) {
+        if (bytes_len - off < sizeof(struct yetty_yfigure_header)) {
             return YETTY_ERR(yetty_ycore_void,
                              "container_process_bytes: trailing junk smaller than header");
         }
-        struct yetty_yfigure_wire_record hdr;
+        struct yetty_yfigure_header hdr;
         memcpy(&hdr, bytes + off, sizeof(hdr));
         off += sizeof(hdr);
         if (hdr.length > bytes_len - off) {
@@ -1214,7 +1214,7 @@ struct yetty_ycore_void_result yetty_yfigure_container_consume_envelope(
         }
     }
     for (;;) {
-        struct yetty_yfigure_wire_record hdr;
+        struct yetty_yfigure_header hdr;
         enum sm_read_status hst = SM_READ_OK;
         struct yetty_ycore_void_result hr = sm_read_exact(sm, &hdr, sizeof(hdr), &hst);
         if (YETTY_IS_ERR(hr)) {

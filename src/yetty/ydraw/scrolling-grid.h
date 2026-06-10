@@ -23,7 +23,7 @@ extern "C" {
 #endif
 
 struct yetty_ydraw_scrolling_grid;
-struct yetty_ydraw_figure;
+struct yetty_ydraw_composite;
 struct yetty_ydraw_cell_source;
 
 /* Result type for the grid pointer. */
@@ -59,7 +59,7 @@ uint32_t yetty_ydraw_scrolling_grid_total_drawable_count(
 uint32_t yetty_ydraw_scrolling_grid_figure_count_in_window(
     const struct yetty_ydraw_scrolling_grid *grid, uint32_t top, uint32_t end);
 
-struct yetty_ydraw_figure *yetty_ydraw_scrolling_grid_figure_in_window(
+struct yetty_ydraw_composite *yetty_ydraw_scrolling_grid_figure_in_window(
     const struct yetty_ydraw_scrolling_grid *grid, uint32_t top, uint32_t end, uint32_t index);
 
 /* Widest cell_count among lines in the visible-window [top, end). Used by
@@ -100,7 +100,7 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_ref(
 /* Attach a composite instance to line `line_idx`. The grid takes
  * ownership (destroys on grid_line_free / grid_clear). */
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_figure(
-    struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx, struct yetty_ydraw_figure *figure);
+    struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx, struct yetty_ydraw_composite *figure);
 
 /* Attach a font cache handle to line `target_row`. If the handle is
  * already attached to some other line, migrate (no refcount change);

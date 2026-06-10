@@ -1016,7 +1016,7 @@ static struct uint32_result add_drawable_internal(
     }
 
     if (yetty_ydraw_is_composite(drawable_type)) {
-        struct yetty_ydraw_figure_ptr_result inst_res =
+        struct yetty_ydraw_composite_ptr_result inst_res =
             yetty_ydraw_composite_factory_create_instance(c->composite_factory, entry->data,
                                                           word_count * sizeof(uint32_t),
                                                           drawable_rolling_row);
@@ -1028,7 +1028,7 @@ static struct uint32_result add_drawable_internal(
         struct yetty_ycore_void_result fr =
             yetty_ydraw_scrolling_grid_push_figure(c->grid, drawable_grid_line, inst_res.value);
         if (YETTY_IS_ERR(fr)) {
-            yetty_ydraw_figure_destroy(inst_res.value);
+            yetty_ydraw_composite_destroy(inst_res.value);
             return YETTY_ERR(uint32, "add_drawable: push_figure", fr);
         }
     }
@@ -1666,7 +1666,7 @@ static uint32_t scrolling_figure_count(const struct yetty_ydraw_canvas *base)
     return yetty_ydraw_scrolling_grid_figure_count_in_window(c->grid, top, end);
 }
 
-static struct yetty_ydraw_figure *scrolling_get_figure(const struct yetty_ydraw_canvas *base,
+static struct yetty_ydraw_composite *scrolling_get_figure(const struct yetty_ydraw_canvas *base,
                                                        uint32_t index)
 {
     if (!base) {

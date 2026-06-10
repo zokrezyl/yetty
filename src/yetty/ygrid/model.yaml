@@ -228,7 +228,7 @@ classes:
         get: false
         set: false
       - name: figure_instances
-        type: "struct yetty_ydraw_figure **"
+        type: "struct yetty_ydraw_composite **"
         get: false
         set: false
       - name: figure_instance_count

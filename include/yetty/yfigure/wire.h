@@ -28,7 +28,7 @@ extern "C" {
 #endif
 
 /* Top-level record header. */
-struct yetty_yfigure_wire_record {
+struct yetty_yfigure_header {
     uint32_t length;
     uint32_t id;
 };

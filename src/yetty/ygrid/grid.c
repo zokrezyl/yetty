@@ -289,7 +289,7 @@ yetty_ygrid_grid {
      * via the factory args bundle). Each instance lives until the
      * next clear() / destroy(). */
     struct yetty_ydraw_composite_factory *composite_factory;
-    struct yetty_ydraw_figure **figure_instances;
+    struct yetty_ydraw_composite **figure_instances;
     uint32_t figure_instance_count;
     uint32_t figure_instance_cap;
 
@@ -1400,15 +1400,15 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
          * instance's own pipeline, not through the unified shader. */
         if (g->figure_instance_count == g->figure_instance_cap) {
             uint32_t cap = g->figure_instance_cap ? g->figure_instance_cap * 2u : 4u;
-            struct yetty_ydraw_figure **grown = (struct yetty_ydraw_figure **)realloc(
-                g->figure_instances, cap * sizeof(struct yetty_ydraw_figure *));
+            struct yetty_ydraw_composite **grown = (struct yetty_ydraw_composite **)realloc(
+                g->figure_instances, cap * sizeof(struct yetty_ydraw_composite *));
             if (!grown) {
                 return YETTY_ERR(yetty_ycore_void, "ygrid: figure_instances oom");
             }
             g->figure_instances = grown;
             g->figure_instance_cap = cap;
         }
-        struct yetty_ydraw_figure_ptr_result ir = yetty_ydraw_composite_factory_create_instance(
+        struct yetty_ydraw_composite_ptr_result ir = yetty_ydraw_composite_factory_create_instance(
             g->composite_factory, hdr, record_len, /*rolling_row=*/0u);
         if (YETTY_IS_ERR(ir)) {
             ydebug("ygrid: composite_factory create_instance failed for type=0x%08x: %s", type,
@@ -1630,7 +1630,7 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
     if (g->figure_instances) {
         for (uint32_t i = 0; i < g->figure_instance_count; i++) {
             if (g->figure_instances[i]) {
-                yetty_ydraw_figure_destroy(g->figure_instances[i]);
+                yetty_ydraw_composite_destroy(g->figure_instances[i]);
             }
         }
         free(g->figure_instances);
@@ -1926,7 +1926,7 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
      * own bounds_x/y within its prim payload is already widget-local,
      * so the on-screen position is figure_rect.min + bounds. */
     for (uint32_t i = 0; i < g->figure_instance_count; i++) {
-        struct yetty_ydraw_figure *inst = g->figure_instances[i];
+        struct yetty_ydraw_composite *inst = g->figure_instances[i];
         if (!inst || !inst->render) {
             continue;
         }
@@ -2092,7 +2092,7 @@ static struct yetty_ycore_void_result ygrid_reset_content(struct yetty_yfigure_f
     g->prim_count = 0;
     for (uint32_t i = 0; i < g->figure_instance_count; i++) {
         if (g->figure_instances[i]) {
-            yetty_ydraw_figure_destroy(g->figure_instances[i]);
+            yetty_ydraw_composite_destroy(g->figure_instances[i]);
             g->figure_instances[i] = NULL;
         }
     }
@@ -2681,7 +2681,7 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry text", hr);
         }
         hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_COMPOSITE_TYPE_BASE,
-                                                    0xFFFFFFFFu, yetty_ydraw_composite_handler);
+                                                    0xFFFFFFFFu, yetty_ydraw_composite_record_handler);
         if (YETTY_IS_ERR(hr)) {
             (void)ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry complex", hr);

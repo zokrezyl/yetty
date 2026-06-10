@@ -13,7 +13,7 @@ extern "C" {
  * client-side wire emitters that don't link Dawn. The full types live in
  * yetty/ydraw-factory/composite-factory.h (server side). */
 struct yetty_ydraw_concrete_factory;
-struct yetty_ydraw_figure;
+struct yetty_ydraw_composite;
 
 #define YETTY_YPLOT_TYPE_ID 0x80000003u
 
@@ -90,7 +90,7 @@ void yetty_yplot_factory_destroy(struct yetty_ydraw_concrete_factory *factory);
 // merged storage region and queues one wgpuQueueWriteBuffer.
 //=============================================================================
 
-struct yetty_ycore_void_result yetty_yplot_update_data_chunk(struct yetty_ydraw_figure *instance,
+struct yetty_ycore_void_result yetty_yplot_update_data_chunk(struct yetty_ydraw_composite *instance,
                                                              uint32_t buffer_index,
                                                              uint32_t sample_offset,
                                                              const float *data, size_t count);

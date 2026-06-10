@@ -29,9 +29,9 @@
 /* yplot-time.c — animates the `time` uniform when the compiled
  * bytecode references LOAD_T. Forward-declared here instead of a
  * header since the only call sites are below in this same TU. */
-struct yetty_ydraw_figure;
-struct yetty_ycore_void_result yetty_yplot_time_attach(struct yetty_ydraw_figure *instance);
-void yetty_yplot_time_detach(struct yetty_ydraw_figure *instance);
+struct yetty_ydraw_composite;
+struct yetty_ycore_void_result yetty_yplot_time_attach(struct yetty_ydraw_composite *instance);
+void yetty_yplot_time_detach(struct yetty_ydraw_composite *instance);
 
 extern const unsigned char gyplot_shaderData[];
 extern const unsigned int gyplot_shaderSize;
@@ -211,7 +211,7 @@ static void yplot_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
 // supplies only the shared pipeline + zoom state.
 //=============================================================================
 
-static struct yetty_ycore_void_result yplot_instance_render(struct yetty_ydraw_figure *self,
+static struct yetty_ycore_void_result yplot_instance_render(struct yetty_ydraw_composite *self,
                                                             struct yetty_ydraw_target *target,
                                                             float x, float y)
 {
@@ -401,30 +401,30 @@ static WGPURenderPipeline yplot_get_pipeline(struct yetty_ydraw_concrete_factory
 
 /* Forward decl — vtable definition lives below, after the instance
  * method bodies; create_instance just needs its address. */
-static const struct yetty_ydraw_figure_ops yplot_figure_ops;
+static const struct yetty_ydraw_composite_ops yplot_figure_ops;
 
-static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
+static struct yetty_ydraw_composite_ptr_result yplot_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite)) {
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "invalid buffer data");
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite_record)) {
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "invalid buffer data");
     }
 
     struct yetty_yplot_factory *factory = yetty_yplot_factory_from_base(self);
     if (!factory->pipeline) {
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "yplot factory pipeline not compiled");
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "yplot factory pipeline not compiled");
     }
 
-    struct yetty_ydraw_figure *instance = calloc(1, sizeof(struct yetty_ydraw_figure));
+    struct yetty_ydraw_composite *instance = calloc(1, sizeof(struct yetty_ydraw_composite));
     if (!instance) {
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "allocation failed");
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "allocation failed");
     }
 
     instance->buffer_data = malloc(size);
     if (!instance->buffer_data) {
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "buffer alloc failed");
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "buffer alloc failed");
     }
     memcpy(instance->buffer_data, buffer_data, size);
     instance->buffer_size = size;
@@ -434,7 +434,7 @@ static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
     instance->render = yplot_instance_render;
     instance->ops = &yplot_figure_ops;
 
-    struct rectangle_result aabb_res = yetty_ydraw_composite_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_composite_record_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res)) {
         instance->bounds = aabb_res.value;
     }
@@ -446,7 +446,7 @@ static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
     if (!instance->resource_set) {
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "rs alloc failed");
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "rs alloc failed");
     }
     memcpy(instance->resource_set, &factory->template_rs,
            sizeof(struct yetty_yrender_gpu_resource_set));
@@ -474,7 +474,7 @@ static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "instance binder create failed", br);
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "instance binder create failed", br);
     }
     instance->binder = br.value;
 
@@ -485,7 +485,7 @@ static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "binder submit failed", sr);
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "binder submit failed", sr);
     }
 
     struct yetty_ycore_void_result fr = instance->binder->ops->finalize(instance->binder);
@@ -494,7 +494,7 @@ static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "binder finalize failed", fr);
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "binder finalize failed", fr);
     }
 
     /* yplot-time.c hooks the instance into the shared animation timer
@@ -509,7 +509,7 @@ static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
         }
     }
 
-    return YETTY_OK(yetty_ydraw_figure_ptr, instance);
+    return YETTY_OK(yetty_ydraw_composite_ptr, instance);
 }
 
 /* CMD_UPDATE payload schema (defined by yplot):
@@ -532,7 +532,7 @@ static struct yetty_ydraw_figure_ptr_result yplot_create_instance(
  *   body[4..7]          = u32 count
  *   body[8..]           = f32 samples[count]
  */
-static struct yetty_ycore_void_result yplot_instance_update(struct yetty_ydraw_figure *instance,
+static struct yetty_ycore_void_result yplot_instance_update(struct yetty_ydraw_composite *instance,
                                                             uint32_t target_field, const void *body,
                                                             size_t body_size)
 {
@@ -554,7 +554,7 @@ static struct yetty_ycore_void_result yplot_instance_update(struct yetty_ydraw_f
                                          samples, count);
 }
 
-static void yplot_instance_destroy(struct yetty_ydraw_figure *instance)
+static void yplot_instance_destroy(struct yetty_ydraw_composite *instance)
 {
     if (!instance) {
         return;
@@ -572,7 +572,7 @@ static void yplot_instance_destroy(struct yetty_ydraw_figure *instance)
 }
 
 /* Vtable installed on every yplot figure_instance at create time. */
-static const struct yetty_ydraw_figure_ops yplot_figure_ops = {
+static const struct yetty_ydraw_composite_ops yplot_figure_ops = {
     .destroy = yplot_instance_destroy,
     .update = yplot_instance_update,
 };
@@ -584,7 +584,7 @@ static const struct yetty_ydraw_figure_ops yplot_figure_ops = {
  * through the old factory path. Will be removed once the factory
  * struct loses those slots. */
 static struct yetty_ycore_void_result yplot_update_instance(
-    struct yetty_ydraw_concrete_factory *self, struct yetty_ydraw_figure *instance,
+    struct yetty_ydraw_concrete_factory *self, struct yetty_ydraw_composite *instance,
     const void *payload, size_t size)
 {
     (void)self;
@@ -596,7 +596,7 @@ static struct yetty_ycore_void_result yplot_update_instance(
 }
 
 static void yplot_destroy_instance(struct yetty_ydraw_concrete_factory *self,
-                                   struct yetty_ydraw_figure *instance)
+                                   struct yetty_ydraw_composite *instance)
 {
     (void)self;
     yplot_instance_destroy(instance);
@@ -675,7 +675,7 @@ void yetty_yplot_factory_destroy(struct yetty_ydraw_concrete_factory *self)
 // the binder's write_buffer_chunk op (so no whole-buffer re-upload occurs).
 //=============================================================================
 
-struct yetty_ycore_void_result yetty_yplot_update_data_chunk(struct yetty_ydraw_figure *instance,
+struct yetty_ycore_void_result yetty_yplot_update_data_chunk(struct yetty_ydraw_composite *instance,
                                                              uint32_t buffer_index,
                                                              uint32_t sample_offset,
                                                              const float *data, size_t count)

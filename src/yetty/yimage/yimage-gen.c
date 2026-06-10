@@ -166,7 +166,7 @@ static void yimage_populate_rs(struct yetty_yrender_gpu_resource_set *rs)
 // supplies only the shared pipeline + zoom state.
 //=============================================================================
 
-static struct yetty_ycore_void_result yimage_instance_render(struct yetty_ydraw_figure *self,
+static struct yetty_ycore_void_result yimage_instance_render(struct yetty_ydraw_composite *self,
                                                              struct yetty_ydraw_target *target,
                                                              float x, float y)
 {
@@ -335,7 +335,7 @@ static struct yetty_ycore_void_result yimage_compile_pipeline(
 
 /* Forward decl — vtable definition lives below; create_instance just
  * needs its address. */
-static const struct yetty_ydraw_figure_ops yimage_figure_ops;
+static const struct yetty_ydraw_composite_ops yimage_figure_ops;
 
 static WGPURenderPipeline yimage_get_pipeline(struct yetty_ydraw_concrete_factory *self)
 {
@@ -343,28 +343,28 @@ static WGPURenderPipeline yimage_get_pipeline(struct yetty_ydraw_concrete_factor
     return factory->pipeline ? yetty_yrender_pipeline_get_pipeline(factory->pipeline) : NULL;
 }
 
-static struct yetty_ydraw_figure_ptr_result yimage_create_instance(
+static struct yetty_ydraw_composite_ptr_result yimage_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite)) {
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "invalid buffer data");
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite_record)) {
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "invalid buffer data");
     }
 
     struct yetty_yimage_factory *factory = yetty_yimage_factory_from_base(self);
     if (!factory->pipeline) {
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "yimage factory pipeline not compiled");
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "yimage factory pipeline not compiled");
     }
 
-    struct yetty_ydraw_figure *instance = calloc(1, sizeof(struct yetty_ydraw_figure));
+    struct yetty_ydraw_composite *instance = calloc(1, sizeof(struct yetty_ydraw_composite));
     if (!instance) {
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "allocation failed");
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "allocation failed");
     }
 
     instance->buffer_data = malloc(size);
     if (!instance->buffer_data) {
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "buffer alloc failed");
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "buffer alloc failed");
     }
     memcpy(instance->buffer_data, buffer_data, size);
     instance->buffer_size = size;
@@ -374,7 +374,7 @@ static struct yetty_ydraw_figure_ptr_result yimage_create_instance(
     instance->render = yimage_instance_render;
     instance->ops = &yimage_figure_ops;
 
-    struct rectangle_result aabb_res = yetty_ydraw_composite_aabb(buffer_data);
+    struct rectangle_result aabb_res = yetty_ydraw_composite_record_aabb(buffer_data);
     if (YETTY_IS_OK(aabb_res)) {
         instance->bounds = aabb_res.value;
     }
@@ -386,7 +386,7 @@ static struct yetty_ydraw_figure_ptr_result yimage_create_instance(
     if (!instance->resource_set) {
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "rs alloc failed");
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "rs alloc failed");
     }
     memcpy(instance->resource_set, &factory->template_rs,
            sizeof(struct yetty_yrender_gpu_resource_set));
@@ -423,7 +423,7 @@ static struct yetty_ydraw_figure_ptr_result yimage_create_instance(
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "instance binder create failed", br);
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "instance binder create failed", br);
     }
     instance->binder = br.value;
 
@@ -437,7 +437,7 @@ static struct yetty_ydraw_figure_ptr_result yimage_create_instance(
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "binder submit failed", sr);
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "binder submit failed", sr);
     }
 
     struct yetty_ycore_void_result fr = instance->binder->ops->finalize(instance->binder);
@@ -449,17 +449,17 @@ static struct yetty_ydraw_figure_ptr_result yimage_create_instance(
         free(instance->resource_set);
         free(instance->buffer_data);
         free(instance);
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "binder finalize failed", fr);
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "binder finalize failed", fr);
     }
 
     ydebug("yimage_create_instance: OK %ux%u bounds=(%.0f,%.0f,%.0f,%.0f)",
            instance->resource_set->textures[0].width, instance->resource_set->textures[0].height,
            instance->bounds.min.x, instance->bounds.min.y, instance->bounds.max.x,
            instance->bounds.max.y);
-    return YETTY_OK(yetty_ydraw_figure_ptr, instance);
+    return YETTY_OK(yetty_ydraw_composite_ptr, instance);
 }
 
-static void yimage_instance_destroy(struct yetty_ydraw_figure *instance)
+static void yimage_instance_destroy(struct yetty_ydraw_composite *instance)
 {
     if (!instance) {
         return;
@@ -475,14 +475,14 @@ static void yimage_instance_destroy(struct yetty_ydraw_figure *instance)
 /* yimage's vtable — no update path; the wire never carries CMD_UPDATE
  * for image figures (the widget swaps the whole prim via set_buffer
  * if the image source changes). */
-static const struct yetty_ydraw_figure_ops yimage_figure_ops = {
+static const struct yetty_ydraw_composite_ops yimage_figure_ops = {
     .destroy = yimage_instance_destroy,
     .update = NULL,
 };
 
 /* Legacy factory adapter — see yplot / yvideo equivalents. */
 static void yimage_destroy_instance(struct yetty_ydraw_concrete_factory *self,
-                                    struct yetty_ydraw_figure *instance)
+                                    struct yetty_ydraw_composite *instance)
 {
     (void)self;
     yimage_instance_destroy(instance);

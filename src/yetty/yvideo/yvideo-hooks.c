@@ -21,7 +21,7 @@
  *     CMD_UPDATE envelopes)
  *
  * Subscription model:
- *   yetty_ydraw_figure embeds a yetty_yevent_event_listener.
+ *   yetty_ydraw_composite embeds a yetty_yevent_event_listener.
  *   instance_create registers it on a libuv timer at the source's fps;
  *   the handler advances the decoder, writes RGBA into a per-instance
  *   scratch, marks the binder's texture dirty, calls request_render,
@@ -175,7 +175,7 @@ struct yvideo_factory_state {
     int period_ms;
 };
 
-static struct yvideo_instance_data *yvideo_state(struct yetty_ydraw_figure *self)
+static struct yvideo_instance_data *yvideo_state(struct yetty_ydraw_composite *self)
 {
     return (struct yvideo_instance_data *)self->instance_data;
 }
@@ -591,8 +591,8 @@ static struct yetty_ycore_int_result yvideo_on_tick(struct yetty_yevent_event_li
                                                     const struct yetty_yui_event *event)
 {
     (void)event;
-    struct yetty_ydraw_figure *instance =
-        container_of(listener, struct yetty_ydraw_figure, listener);
+    struct yetty_ydraw_composite *instance =
+        container_of(listener, struct yetty_ydraw_composite, listener);
     struct yvideo_instance_data *st = yvideo_state(instance);
     if (!st || !instance->factory || !instance->factory->event_loop) {
         return YETTY_OK(yetty_ycore_int, 0);
@@ -848,7 +848,7 @@ static void yvideo_do_set_loop(struct yvideo_instance_data *st, bool loop)
  * Hook implementations.
  *-------------------------------------------------------------------------*/
 
-struct yetty_ycore_void_result yvideo_hook_instance_create(struct yetty_ydraw_figure *instance,
+struct yetty_ycore_void_result yvideo_hook_instance_create(struct yetty_ydraw_composite *instance,
                                                            const void *buffer_data, size_t size)
 {
     (void)size;
@@ -1027,7 +1027,7 @@ struct yetty_ycore_void_result yvideo_hook_instance_create(struct yetty_ydraw_fi
 }
 
 YETTY_EXTERNAL_CALLBACK
-void yvideo_hook_instance_destroy(struct yetty_ydraw_figure *instance)
+void yvideo_hook_instance_destroy(struct yetty_ydraw_composite *instance)
 {
     /* Generated hook contract (yvideo-gen.c) declares this destroy hook as
      * void — there is nowhere to propagate, so the best-effort teardown
@@ -1045,7 +1045,7 @@ void yvideo_hook_instance_destroy(struct yetty_ydraw_figure *instance)
     instance->listener.handler = NULL;
 }
 
-struct yetty_ycore_void_result yvideo_hook_instance_update(struct yetty_ydraw_figure *instance,
+struct yetty_ycore_void_result yvideo_hook_instance_update(struct yetty_ydraw_composite *instance,
                                                            const void *payload, size_t size)
 {
     if (!instance) {
@@ -1144,7 +1144,7 @@ struct yetty_ycore_void_result yvideo_hook_instance_update(struct yetty_ydraw_fi
     }
 }
 
-struct yetty_ycore_void_result yvideo_hook_instance_render_pre(struct yetty_ydraw_figure *instance,
+struct yetty_ycore_void_result yvideo_hook_instance_render_pre(struct yetty_ydraw_composite *instance,
                                                                struct yetty_ydraw_target *target,
                                                                float x, float y)
 {

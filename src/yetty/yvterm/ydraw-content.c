@@ -775,7 +775,7 @@ static int ydraw_content_is_dirty(const struct yetty_yrender_terminal_layer *sel
     }
     uint32_t count = layer->canvas->ops->figure_count(layer->canvas);
     for (uint32_t i = 0; i < count; i++) {
-        struct yetty_ydraw_figure *inst = layer->canvas->ops->get_figure(layer->canvas, i);
+        struct yetty_ydraw_composite *inst = layer->canvas->ops->get_figure(layer->canvas, i);
         if (inst && inst->dirty) {
             return 1;
         }
@@ -982,7 +982,7 @@ static struct yetty_ycore_int_result ydraw_content_render(struct yetty_yrender_t
     struct yetty_ycore_pixel_size cell_size = layer->canvas->ops->get_cell_size(layer->canvas);
 
     for (uint32_t i = 0; i < count; i++) {
-        struct yetty_ydraw_figure *inst = layer->canvas->ops->get_figure(layer->canvas, i);
+        struct yetty_ydraw_composite *inst = layer->canvas->ops->get_figure(layer->canvas, i);
         if (!inst) {
             return YETTY_ERR(yetty_ycore_int,
                              "ydraw_content_render: get_figure returned NULL within figure_count");
