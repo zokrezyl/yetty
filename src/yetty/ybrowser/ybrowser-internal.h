@@ -184,6 +184,11 @@ struct yetty_ylexbor_box {
     float flex_grow;
     float flex_basis_px;
 
+    /* Flex-container `flex-wrap`. 0 = nowrap (default, single line);
+	 * 1 = wrap (items overflowing the main axis move to the next flex
+	 * line). Only acted on for FLEX_ROW. */
+    uint8_t flex_wrap;
+
     /* Flex-container properties (meaningful when this box has
 	 * layout_mode == YL_LAYOUT_FLEX_ROW/COLUMN). Values are the
 	 * libcss CSS_JUSTIFY_CONTENT_* / CSS_ALIGN_ITEMS_* enums (zero =
@@ -199,6 +204,21 @@ struct yetty_ylexbor_box {
     uint8_t grid_ntracks;
     float grid_col_gap;
     float grid_row_gap;
+
+    /* `table-layout: fixed` on a TABLE box. When set and the table has a
+		 * definite width, columns are sized equally (content-blind) instead of
+		 * the default content-aware auto layout. */
+    uint8_t table_fixed;
+
+    /* Named-line grid placement. On a GRID container, `grid_line_spec` points
+		 * (into the text arena) at the raw grid-template-columns value when it
+		 * carries `[line-name]`s and every child uses `grid-column:<name>` — the
+		 * trigger for explicit named placement (vs. the default row-major
+		 * auto-flow). On a grid ITEM, `grid_col_name` is the arena-stored
+		 * `grid-column` start line name. Both NULL otherwise; arena-owned, so
+		 * freed with the document. */
+    const char *grid_line_spec;
+    const char *grid_col_name;
 
     /* Float / clear. float_side: 0=none, 1=left, 2=right.
 	 * clear_side: 0=none, 1=left, 2=right, 3=both. Boxes with
@@ -569,6 +589,17 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
  * class. */
 int yetty_ylexbor_grid_parse_inline(const char *style, size_t len, struct yl_grid_track *out,
                                     int maxn, float *col_gap, float *row_gap);
+
+/* Variant that ALSO accepts named-line templates (`[name] 200px [c-start] 1fr`)
+ * and returns the grid-template-columns value substring (out_value/_len) for
+ * later `grid-column:<name>` resolution. Used on the explicit named path. */
+int yetty_ylexbor_grid_parse_inline_named(const char *style, size_t len, struct yl_grid_track *out,
+                                          int maxn, float *col_gap, float *row_gap,
+                                          const char **out_value, size_t *out_value_len);
+
+/* Resolve a grid line name to its line index (== start track for a start-only
+ * `grid-column:<name>`) within a grid-template-columns value. -1 if absent. */
+int yetty_ylexbor_grid_resolve_line(const char *value, size_t n, const char *name, size_t name_len);
 
 /* Column gap (px) from an inline `style` attribute (`gap`/`column-gap`), or -1
  * if absent. For flex/grid containers whose gap is set inline. */

@@ -38,7 +38,7 @@ YBROWSER = os.environ.get(
 WIDTH = os.environ.get("WPT_WIDTH", "800")
 TOL = 1.5
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
+ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 
 
 def dump(path):

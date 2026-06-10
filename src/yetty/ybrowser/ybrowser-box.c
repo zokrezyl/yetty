@@ -372,6 +372,31 @@ static int inline_buf_append(struct yl_inline_buf *b, const char *s, size_t n)
     return 0;
 }
 
+/* Force a hard line break (`<br>`) into the inline buffer. A plain
+ * inline_buf_append("\n") would be collapsed to a single space under the
+ * default white-space handling; the wrap pass only breaks a line on an
+ * explicit '\n', so push the byte verbatim. Marks last_was_space so a
+ * collapsible space immediately after the break is dropped (CSS collapses
+ * whitespace around a forced break). */
+static int inline_buf_force_break(struct yl_inline_buf *b)
+{
+    if (b->len + 2 > b->cap) {
+        size_t nc = b->cap ? b->cap * 2 : 256;
+        while (nc < b->len + 2) {
+            nc *= 2;
+        }
+        char *p = realloc(b->buf, nc);
+        if (p == NULL) {
+            return -1;
+        }
+        b->buf = p;
+        b->cap = nc;
+    }
+    b->buf[b->len++] = '\n';
+    b->last_was_space = 1;
+    return 0;
+}
+
 /* ===========================================================================
  * DOM walker — recursive
  * ===========================================================================*/
@@ -583,8 +608,143 @@ static const char *find_inline_decl(const lxb_char_t *style, size_t len, const c
     return NULL;
 }
 
-/* Forward decl — read_computed_style is defined further down. */
-static int read_computed_style(lxb_dom_element_t *el, char **out_data, size_t *out_len);
+/* Parse one CSS <length> token (px/em/rem, or a bare 0) into pixels.
+ * `font_size` scales em/rem. Returns true on success. Percent and other
+ * units are rejected (the flex-basis percent path stays on the libcss
+ * value). */
+static bool flex_parse_len_px(const char *tok, size_t len, float font_size, float *out_px)
+{
+    if (len == 0) {
+        return false;
+    }
+    char *endp = NULL;
+    char buf[32];
+    size_t n = len < sizeof(buf) - 1 ? len : sizeof(buf) - 1;
+    memcpy(buf, tok, n);
+    buf[n] = '\0';
+    float value = strtof(buf, &endp);
+    if (endp == buf) {
+        return false;
+    }
+    while (*endp == ' ' || *endp == '\t') {
+        endp++;
+    }
+    if (*endp == '\0' || strncasecmp(endp, "px", 2) == 0) {
+        *out_px = value;
+        return true;
+    }
+    if (strncasecmp(endp, "rem", 3) == 0 || strncasecmp(endp, "em", 2) == 0) {
+        *out_px = value * font_size;
+        return true;
+    }
+    return false;
+}
+
+/* Parse the inline `flex` shorthand (e.g. `flex:0 0 150px`, `flex:1`,
+ * `flex:none`, `flex:auto`) from a style attribute. libcss in this tree does
+ * not expand the shorthand into flex-grow/flex-basis longhands, so authored
+ * inline `flex:` was silently ignored — items fell back to the auto-basis
+ * even-split and ignored their requested size. On a hit, writes grow + basis
+ * (basis encoding shared with css_width: >0 px, 0 = auto/0, the caller decides)
+ * and returns true; `*out_basis_auto` distinguishes `flex:none/auto` (basis
+ * keeps the item's own width) from a definite `0` basis. */
+static bool parse_inline_flex(const lxb_char_t *style, size_t slen, float font_size,
+                              float *out_grow, float *out_basis_px, bool *out_basis_auto)
+{
+    size_t vlen = 0;
+    const char *value = find_inline_decl(style, slen, "flex", 4, &vlen);
+    if (value == NULL) {
+        return false;
+    }
+    /* Single-keyword forms. */
+    if (vlen == 4 && strncasecmp(value, "none", 4) == 0) {
+        *out_grow = 0.0f;
+        *out_basis_px = 0.0f;
+        *out_basis_auto = true; /* keep the item's own width/content size */
+        return true;
+    }
+    if (vlen == 4 && strncasecmp(value, "auto", 4) == 0) {
+        *out_grow = 1.0f;
+        *out_basis_px = 0.0f;
+        *out_basis_auto = true;
+        return true;
+    }
+    /* Tokenize on whitespace. A unitless number is grow (1st) / shrink (2nd,
+     * ignored — we don't model shrink ratios); a length/`auto` is the basis. */
+    float grow = 0.0f;
+    bool grow_seen = false;
+    float basis_px = 0.0f;
+    bool basis_auto = true; /* CSS default flex basis for a bare number is 0,
+                             * but with no explicit length we let the item's
+                             * width drive — overridden below on a length hit */
+    bool basis_set = false;
+    int unitless_seen = 0;
+    size_t i = 0;
+    while (i < vlen) {
+        while (i < vlen && (value[i] == ' ' || value[i] == '\t')) {
+            i++;
+        }
+        size_t t0 = i;
+        while (i < vlen && value[i] != ' ' && value[i] != '\t') {
+            i++;
+        }
+        size_t tlen = i - t0;
+        if (tlen == 0) {
+            break;
+        }
+        const char *tok = value + t0;
+        if (tlen == 4 && strncasecmp(tok, "auto", 4) == 0) {
+            basis_auto = true;
+            basis_set = true;
+            continue;
+        }
+        float px;
+        bool is_len = flex_parse_len_px(tok, tlen, font_size, &px);
+        /* A token with a unit (or that didn't fully consume as a bare number)
+         * is the basis; a bare unitless number is grow/shrink. */
+        bool has_unit = false;
+        for (size_t k = 0; k < tlen; k++) {
+            char ch = tok[k];
+            if ((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || ch == '%') {
+                has_unit = true;
+                break;
+            }
+        }
+        if (has_unit) {
+            if (is_len) {
+                basis_px = px;
+                basis_auto = false;
+                basis_set = true;
+            }
+        } else {
+            char nbuf[32];
+            size_t nn = tlen < sizeof(nbuf) - 1 ? tlen : sizeof(nbuf) - 1;
+            memcpy(nbuf, tok, nn);
+            nbuf[nn] = '\0';
+            float num = strtof(nbuf, NULL);
+            if (unitless_seen == 0) {
+                grow = num;
+                grow_seen = true;
+            }
+            /* second unitless = shrink (not modelled); ignore */
+            unitless_seen++;
+            /* A bare `flex:<number>` means basis 0% — definite 0, item grows
+             * from zero. Only when NO explicit basis length follows. */
+            if (!basis_set) {
+                basis_px = 0.0f;
+                basis_auto = false;
+            }
+        }
+    }
+    if (!grow_seen && !basis_set) {
+        return false;
+    }
+    *out_grow = grow;
+    *out_basis_px = basis_px;
+    *out_basis_auto = basis_auto;
+    return true;
+}
+
 
 /* `display: none` check — the cheap path for hiding entire subtrees.
  * Returns 1 if the element should be entirely skipped at box-build. */
@@ -593,19 +753,13 @@ static int is_display_none(lxb_dom_element_t *el)
     if (!el) {
         return 0;
     }
-    /* Computed style first — covers stylesheet rules. */
-    char *cstyle = NULL;
-    size_t cstyle_len = 0;
-    if (read_computed_style(el, &cstyle, &cstyle_len)) {
-        size_t vlen = 0;
-        const char *d =
-            find_inline_decl((const lxb_char_t *)cstyle, cstyle_len, "display", 7, &vlen);
-        int hidden = d && vlen >= 4 && strncasecmp(d, "none", 4) == 0;
-        free(cstyle);
-        if (hidden) {
-            return 1;
-        }
-    }
+    /* NOTE: stylesheet-driven `display:none` is decided by the libcss pass in
+	 * walk() (which evaluates media queries correctly). We deliberately do NOT
+	 * consult lexbor's computed style here — its cascade applies `@media print`
+	 * (and other non-screen) rules to the screen render, which hid CNN's whole
+	 * <body> (the page ships `@media print{…}` + complex `body:not(...)`
+	 * rules). Only the unconditional inline-style + `hidden` attribute are
+	 * cheap, media-independent skips. */
     /* Inline style. */
     size_t slen = 0;
     const lxb_char_t *style =
@@ -629,27 +783,6 @@ static int is_display_none(lxb_dom_element_t *el)
 /* Pull the *computed* CSS for `el` (cascade result of all matching
  * stylesheet rules + inline style) as a serialized declaration list.
  * Caller frees `*out_data` via free(). Returns 1 on success. */
-static int read_computed_style(lxb_dom_element_t *el, char **out_data, size_t *out_len)
-{
-    lexbor_str_t str = {0};
-    lxb_status_t s = lxb_dom_element_style_serialize_str(el, &str, LXB_DOM_ELEMENT_STYLE_OPT_UNDEF);
-    if (s != LXB_STATUS_OK || str.data == NULL || str.length == 0) {
-        return 0;
-    }
-    /* str.data is allocated in the doc's text mraw — copy it out
-	 * so we can free it on the boundary. The buffer lives until
-	 * document destroy otherwise, which is fine for our walker but
-	 * fragile. Cheap copy keeps things obvious. */
-    char *copy = malloc(str.length + 1);
-    if (!copy) {
-        return 0;
-    }
-    memcpy(copy, str.data, str.length);
-    copy[str.length] = '\0';
-    *out_data = copy;
-    *out_len = str.length;
-    return 1;
-}
 
 static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
                                            const struct yl_style_state *parent_style,
@@ -822,6 +955,22 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
             case CSS_DISPLAY_FLEX:
                 effective_disp = YL_DISP_BLOCK;
                 break;
+            case CSS_DISPLAY_INLINE_BLOCK: {
+                /* Promote an inline-block to a block box only when it carries
+				 * an explicit width or height — it's being used as a sized box,
+				 * which block layout approximates (left-aligned at the given
+				 * size). Content-sized inline-blocks (Wikipedia citation
+				 * badges / year-pills / sidebar tags) stay inline so they don't
+				 * each seize their own line and scatter. */
+                size_t ibs_len = 0;
+                const lxb_char_t *ibs =
+                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"style", 5, &ibs_len);
+                if (ibs != NULL && (find_inline_decl(ibs, ibs_len, "width", 5, NULL) != NULL ||
+                                    find_inline_decl(ibs, ibs_len, "height", 6, NULL) != NULL)) {
+                    effective_disp = YL_DISP_BLOCK;
+                }
+                break;
+            }
             /* CSS_DISPLAY_NONE handled above. INLINE_BLOCK,
 			 * INLINE_TABLE, INLINE_FLEX, GRID, RUN_IN, … — let
 			 * the tag default decide. */
@@ -1063,6 +1212,15 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         }
                     } else if (disp == CSS_DISPLAY_TABLE || disp == CSS_DISPLAY_INLINE_TABLE) {
                         b->layout_mode = YL_LAYOUT_TABLE;
+                        /* `table-layout: fixed` — no libcss bridge; read it
+						 * from the inline style. Drives equal column widths in
+						 * layout_table. */
+                        size_t tllen = 0;
+                        const char *tl = find_inline_decl(istyle, istyle ? istylen : 0,
+                                                          "table-layout", 12, &tllen);
+                        if (tl != NULL && tllen >= 5 && strncasecmp(tl, "fixed", 5) == 0) {
+                            b->table_fixed = 1;
+                        }
                     } else if (disp == CSS_DISPLAY_GRID || disp == CSS_DISPLAY_INLINE_GRID) {
                         /* No real grid track layout. The dominant visual
 						 * effect of the modern content-column grid idiom
@@ -1119,6 +1277,61 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                     b->grid_ntracks = (uint8_t)ntracks;
                                     b->grid_col_gap = col_gap;
                                     b->grid_row_gap = row_gap;
+                                } else {
+                                    /* Named-line placement path. The plain
+									 * parse rejects `[name]` templates; retry
+									 * allowing them, but only commit to a grid
+									 * when the template really has named lines AND
+									 * every element child carries an inline
+									 * `grid-column:<name>` (otherwise auto-flow
+									 * would mis-place unplaced items — keep block
+									 * flow, which is what protects Wikipedia's
+									 * Vector shell). */
+                                    struct yl_grid_track ntk[YL_GRID_MAX_TRACKS] = {0};
+                                    float ncg = 0.0f, nrg = 0.0f;
+                                    const char *gval = NULL;
+                                    size_t gval_len = 0;
+                                    int nt = yetty_ylexbor_grid_parse_inline_named(
+                                        (const char *)istyle, istyle_len, ntk, YL_GRID_MAX_TRACKS,
+                                        &ncg, &nrg, &gval, &gval_len);
+                                    if (nt >= 2 && nt <= YL_GRID_MAX_TRACKS && gval != NULL &&
+                                        memchr(gval, '[', gval_len) != NULL) {
+                                        bool all_named = true;
+                                        int nkids = 0;
+                                        for (lxb_dom_node_t *kn =
+                                                 lxb_dom_interface_node(el)->first_child;
+                                             kn != NULL; kn = kn->next) {
+                                            if (kn->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+                                                continue;
+                                            }
+                                            nkids++;
+                                            size_t kslen = 0;
+                                            const lxb_char_t *ks = lxb_dom_element_get_attribute(
+                                                lxb_dom_interface_element(kn),
+                                                (const lxb_char_t *)"style", 5, &kslen);
+                                            if (ks == NULL ||
+                                                find_inline_decl(ks, kslen, "grid-column", 11,
+                                                                 NULL) == NULL) {
+                                                all_named = false;
+                                                break;
+                                            }
+                                        }
+                                        if (all_named && nkids > 0) {
+                                            b->layout_mode = YL_LAYOUT_GRID;
+                                            memcpy(b->grid_tracks, ntk, sizeof(b->grid_tracks));
+                                            b->grid_ntracks = (uint8_t)nt;
+                                            b->grid_col_gap = ncg;
+                                            b->grid_row_gap = nrg;
+                                            char *tmp = malloc(gval_len + 1);
+                                            if (tmp != NULL) {
+                                                memcpy(tmp, gval, gval_len);
+                                                tmp[gval_len] = '\0';
+                                                b->grid_line_spec =
+                                                    yetty_ylexbor_arena_dup(r, tmp, gval_len + 1);
+                                                free(tmp);
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1145,6 +1358,57 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         b->flex_basis_px = fb_auto ? 0.0f : fb_px;
                     } else {
                         b->flex_basis_px = 0.0f;
+                    }
+                    /* Inline `flex` shorthand — libcss here doesn't expand it
+					 * into longhands, so parse it ourselves and let it win over
+					 * the longhand reads above. */
+                    {
+                        float sh_grow = 0.0f;
+                        float sh_basis = 0.0f;
+                        bool sh_basis_auto = false;
+                        if (parse_inline_flex(istyle, istyle ? istylen : 0, s.font_size, &sh_grow,
+                                              &sh_basis, &sh_basis_auto)) {
+                            b->flex_grow = sh_grow;
+                            b->flex_basis_px = sh_basis_auto ? 0.0f : sh_basis;
+                        }
+                    }
+                    /* Inline `flex-wrap` (no libcss bridge). `wrap` /
+					 * `wrap-reverse` both enable wrapping; `nowrap` (default)
+					 * leaves it single-line. */
+                    {
+                        size_t fwlen = 0;
+                        const char *fw =
+                            find_inline_decl(istyle, istyle ? istylen : 0, "flex-wrap", 9, &fwlen);
+                        if (fw != NULL && fwlen >= 4 && strncasecmp(fw, "wrap", 4) == 0) {
+                            b->flex_wrap = 1;
+                        }
+                    }
+                    /* `grid-column: <line-name>` — the START line name for named
+					 * grid placement. Only the leading token (before any `/`) is
+					 * captured, and only when it's a name (not a numeric line
+					 * index, which we don't model). Consumed by layout_grid when
+					 * the parent is a named grid. */
+                    {
+                        size_t gc_len = 0;
+                        const char *gc = find_inline_decl(istyle, istyle ? istylen : 0,
+                                                          "grid-column", 11, &gc_len);
+                        if (gc != NULL && gc_len > 0) {
+                            size_t nm = 0;
+                            while (nm < gc_len && gc[nm] != '/' && gc[nm] != ' ' && gc[nm] != '\t') {
+                                nm++;
+                            }
+                            char first = gc[0];
+                            bool numeric = (first >= '0' && first <= '9') || first == '-';
+                            if (nm > 0 && !numeric) {
+                                char *tmp = malloc(nm + 1);
+                                if (tmp != NULL) {
+                                    memcpy(tmp, gc, nm);
+                                    tmp[nm] = '\0';
+                                    b->grid_col_name = yetty_ylexbor_arena_dup(r, tmp, nm + 1);
+                                    free(tmp);
+                                }
+                            }
+                        }
                     }
                     /* Float side from the cascade. The layout pass pulls
 				 * floated blocks out of normal flow and narrows the
@@ -1439,6 +1703,13 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 			 * `width` / `height` HTML attributes overriding when
 			 * present. The placeholder fallback (grey box) kicks
 			 * in if the fetch or decode failed. */
+            if (child->local_name == LXB_TAG_BR) {
+                /* <br>: a forced line break. Inject a hard newline into the
+				 * parent block's inline buffer (the wrap pass breaks on '\n')
+				 * and skip recursion — <br> has no inline content of its own. */
+                inline_buf_force_break(inline_collect);
+                continue;
+            }
             if (child->local_name == LXB_TAG_IMG) {
                 struct yetty_ycore_void_result flush_res =
                     flush_inline(r, parent_style, parent_idx, inline_collect);
@@ -1586,7 +1857,17 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 			 * (`.gPFEn{color:#1f1f1f}`, `text-decoration:none`). The block
 			 * branch already does this; mirror it here so inline runs inherit
 			 * the right color/weight/decoration before we recurse. */
-            if (r->libcss) {
+            /* Restricted to CLICKABLE inline elements (the seg-boundary set
+				 * below). Reading per-element style on every <span> would
+				 * re-split a run into many segments — a Wikipedia `[N]` citation
+				 * `<a><span>[</span>12<span>]</span></a>` fragmented 3 ways.
+				 * Non-clickable inlines inherit the run style. */
+            int inl_clickable =
+                (child->local_name == LXB_TAG_A || child->local_name == LXB_TAG_AREA ||
+                 child->local_name == LXB_TAG_BUTTON || child->local_name == LXB_TAG_INPUT ||
+                 child->local_name == LXB_TAG_LABEL || child->local_name == LXB_TAG_SELECT ||
+                 child->local_name == LXB_TAG_SUMMARY);
+            if (r->libcss && inl_clickable) {
                 size_t inl_istylen = 0;
                 const lxb_char_t *inl_istyle =
                     lxb_dom_element_get_attribute(el, (const lxb_char_t *)"style", 5, &inl_istylen);
@@ -1594,23 +1875,13 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     r, el, (const char *)inl_istyle, inl_istyle ? inl_istylen : 0);
                 if (inl_cs) {
                     struct yetty_ylexbor_color inl_color;
-                    int inl_weight;
-                    bool inl_italic;
-                    float inl_px;
+                    /* Only colour + text-decoration are read for inline
+					 * elements. Reading per-element font-size/weight here split
+					 * runs into extra style segments (a Wikipedia `[1]`
+					 * citation fragmented 3 ways); bold/italic already come from
+					 * the tag-default table, and font-size from the block path. */
                     if (yetty_ybrowser_libcss_color(inl_cs, &inl_color)) {
                         s.fg = inl_color;
-                    }
-                    if (yetty_ybrowser_libcss_font_weight(inl_cs, &inl_weight)) {
-                        s.font_weight = inl_weight;
-                    }
-                    if (yetty_ybrowser_libcss_font_italic(inl_cs, &inl_italic)) {
-                        s.font_italic = inl_italic;
-                    }
-                    if (yetty_ybrowser_libcss_font_size(
-                            r, inl_cs,
-                            parent_style ? parent_style->font_size : r->default_font_size,
-                            &inl_px)) {
-                        s.font_size = inl_px;
                     }
                     unsigned inl_dec = (unsigned)yetty_ybrowser_libcss_text_decoration(inl_cs);
                     if (inl_dec & CSS_TEXT_DECORATION_NONE) {

@@ -52,24 +52,47 @@
  * this minimal JS surface — spewing that straight to stderr would clutter
  * the operator's terminal in standalone, and corrupt the OSC stream when
  * the engine runs under `yetty -e` (stderr → PTY slave). */
+static void console_append(char *buf, size_t cap, size_t *off, const char *s)
+{
+    if (!s || *off >= cap - 1) {
+        return;
+    }
+    size_t room = cap - 1 - *off;
+    size_t sl = strlen(s);
+    size_t cp = sl < room ? sl : room;
+    memcpy(buf + *off, s, cp);
+    *off += cp;
+}
+
 static void console_print(JSContext *ctx, const char *level, int argc, JSValueConst *argv)
 {
-    char buf[1024];
+    char buf[4096];
     size_t off = 0;
     for (int i = 0; i < argc && off < sizeof(buf) - 1; i++) {
         const char *s = JS_ToCString(ctx, argv[i]);
         if (!s) {
             continue;
         }
-        if (i > 0 && off < sizeof(buf) - 1) {
-            buf[off++] = ' ';
+        if (i > 0) {
+            console_append(buf, sizeof(buf), &off, " ");
         }
-        size_t room = sizeof(buf) - 1 - off;
-        size_t sl = strlen(s);
-        size_t cp = sl < room ? sl : room;
-        memcpy(buf + off, s, cp);
-        off += cp;
+        console_append(buf, sizeof(buf), &off, s);
         JS_FreeCString(ctx, s);
+        /* For Error-like args, append the stack so a caught exception logged
+		 * by a framework (e.g. MediaWiki ResourceLoader) reveals where it
+		 * actually threw, not just its message. */
+        if (JS_IsObject(argv[i])) {
+            JSValue stk = JS_GetPropertyStr(ctx, argv[i], "stack");
+            if (JS_IsString(stk)) {
+                const char *ss = JS_ToCString(ctx, stk);
+                if (ss) {
+                    console_append(buf, sizeof(buf), &off, " | STACK ");
+                    console_append(buf, sizeof(buf), &off, ss);
+                    JS_FreeCString(ctx, ss);
+                }
+            }
+            JS_FreeValue(ctx, stk);
+        }
     }
     buf[off] = '\0';
     ydebug("[js:%s] %s", level, buf);

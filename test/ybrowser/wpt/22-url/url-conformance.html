@@ -1,0 +1,52 @@
+<!doctype html><meta charset=utf-8>
+<title>globalThis.URL passes web2017-polyfills' feature gate and parses real URLs.
+A non-parsing URL stub made Wikipedia's web2017-polyfills install its own wrapper over
+our URL, then throw "TypeError: not a function" inside tidy_instance() during
+ext.visualEditor.desktopArticleTarget.init — freezing the page. If URL regresses to a
+stub, this host box stays 0px tall instead of 40px and the test fails immediately.</title>
+<style>body{margin:0}</style>
+<div data-test="host" data-expect="0,0,800,40" style="display:block"></div>
+<script>
+function ok() {
+  // 1) The EXACT feature gate web2017-polyfills uses to decide whether to install
+  //    its own URL polyfill. If our native URL passes, the polyfill returns early
+  //    and never wraps us (which is what avoids the tidy_instance crash).
+  var nativeURL = new URL('http://example.com');
+  if (!('searchParams' in nativeURL)) return false;
+  var url = new URL('http://example.com');
+  url.search = 'a=1&b=2';
+  if (url.href !== 'http://example.com/?a=1&b=2') return false;
+  url.search = '';
+  if (url.href !== 'http://example.com/') return false;
+
+  // 2) Real parsing must actually work (not just satisfy the gate).
+  var u = new URL('https://en.wikipedia.org/wiki/Cat?x=1#sec');
+  if (u.protocol !== 'https:') return false;
+  if (u.hostname !== 'en.wikipedia.org') return false;
+  if (u.pathname !== '/wiki/Cat') return false;
+  if (u.search !== '?x=1') return false;
+  if (u.hash !== '#sec') return false;
+  if (u.origin !== 'https://en.wikipedia.org') return false;
+  if (u.searchParams.get('x') !== '1') return false;
+
+  // 3) Base resolution + live searchParams mutation (used heavily by mw.Uri / VE).
+  if (new URL('/wiki/Dog', 'https://en.wikipedia.org/wiki/Cat').href
+      !== 'https://en.wikipedia.org/wiki/Dog') return false;
+  if (new URL('Dog', 'https://en.wikipedia.org/wiki/Cat').href
+      !== 'https://en.wikipedia.org/wiki/Dog') return false;
+  var m = new URL('https://x.org/p?a=1');
+  m.searchParams.set('a', '9');
+  m.searchParams.append('b', '2');
+  if (m.href !== 'https://x.org/p?a=9&b=2') return false;
+
+  return true;
+}
+
+var pass = false;
+try { pass = ok(); } catch (e) { pass = false; }
+if (pass) {
+  var d = document.createElement('div');
+  d.setAttribute('style', 'height:40px');
+  document.querySelector('div[data-test="host"]').appendChild(d);
+}
+</script>

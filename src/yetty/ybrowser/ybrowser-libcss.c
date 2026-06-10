@@ -106,7 +106,7 @@ static const char UA_DEFAULT_CSS[] =
     "h6 { display: block; font-size: 0.67em; font-weight: bold; margin: 2.33em 0; }\n"
     "strong, b { font-weight: bold; }\n"
     "em, i, cite, dfn { font-style: italic; }\n"
-    "a { color: #00e; }\n"
+    "a { color: #00e; text-decoration: underline; }\n"
     "hr { display: block; margin: 0.5em auto; border-top: 1px solid #888; }\n"
     /* Only the HTML `hidden` attribute hides an element visually. NOTE:
      * `aria-hidden="true"` and `role="presentation"` are ACCESSIBILITY hints

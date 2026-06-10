@@ -810,7 +810,8 @@ static int grid_parse_one_track(const char *s, size_t n, struct yl_grid_track *o
 }
 
 /* Parse a full grid-template-columns value into tracks. Expands repeat(). */
-static int grid_parse_tracks(const char *v, size_t n, struct yl_grid_track *out, int maxn)
+static int grid_parse_tracks_ex(const char *v, size_t n, struct yl_grid_track *out, int maxn,
+                                int allow_named)
 {
     /* Named grid lines (`[name]`) imply named-line / `grid-column:<name>`
 	 * placement, which we don't model — auto-flowing the children would
@@ -818,7 +819,7 @@ static int grid_parse_tracks(const char *v, size_t n, struct yl_grid_track *out,
 	 * content (Wikipedia's Vector shell nests such grids). Bail so the
 	 * container falls back to block flow, where the content keeps full width
 	 * and stays readable instead of wrapping one word per line. */
-    if (memchr(v, '[', n) != NULL) {
+    if (!allow_named && memchr(v, '[', n) != NULL) {
         return 0;
     }
     int count = 0;
@@ -829,6 +830,17 @@ static int grid_parse_tracks(const char *v, size_t n, struct yl_grid_track *out,
         }
         if (i >= n) {
             break;
+        }
+        /* Skip a `[line-name ...]` token — it sits between tracks and does not
+		 * consume a column. */
+        if (v[i] == '[') {
+            while (i < n && v[i] != ']') {
+                i++;
+            }
+            if (i < n) {
+                i++; /* past ']' */
+            }
+            continue;
         }
         if (i + 7 <= n && strncmp(v + i, "repeat(", 7) == 0) {
             i += 7;
@@ -889,6 +901,72 @@ static int grid_parse_tracks(const char *v, size_t n, struct yl_grid_track *out,
         }
     }
     return count;
+}
+
+/* Default track parse: reject named-line templates (the conservative path used
+ * by the generic class/inline grid detection). */
+static int grid_parse_tracks(const char *v, size_t n, struct yl_grid_track *out, int maxn)
+{
+    return grid_parse_tracks_ex(v, n, out, maxn, /*allow_named=*/0);
+}
+
+/* Resolve a grid line name to its line index within a grid-template-columns
+ * value. Line index N sits before track N (so for a start-only
+ * `grid-column:<name>` placement it is also the START TRACK index). Walks the
+ * value counting tracks; each `[name ...]` token's names map to the current
+ * track count. Returns the line index, or -1 if the name isn't found. */
+int yetty_ylexbor_grid_resolve_line(const char *value, size_t n, const char *name, size_t name_len)
+{
+    if (value == NULL || name == NULL || name_len == 0) {
+        return -1;
+    }
+    int line = 0; /* tracks seen so far == current line index */
+    size_t i = 0;
+    while (i < n) {
+        while (i < n && (value[i] == ' ' || value[i] == '\t' || value[i] == ',')) {
+            i++;
+        }
+        if (i >= n) {
+            break;
+        }
+        if (value[i] == '[') {
+            /* One or more whitespace-separated names for the current line. */
+            i++;
+            while (i < n && value[i] != ']') {
+                while (i < n && (value[i] == ' ' || value[i] == '\t')) {
+                    i++;
+                }
+                size_t t0 = i;
+                while (i < n && value[i] != ' ' && value[i] != '\t' && value[i] != ']') {
+                    i++;
+                }
+                size_t tlen = i - t0;
+                if (tlen == name_len && strncmp(value + t0, name, name_len) == 0) {
+                    return line;
+                }
+            }
+            if (i < n) {
+                i++; /* past ']' */
+            }
+            continue;
+        }
+        /* A track token (incl. repeat()/minmax()/func) — consume to the next
+		 * top-level whitespace/comma and count it as one line advance. NB: a
+		 * repeat(N, ...) counts as one here, which is fine for the single-name
+		 * placements we resolve (named grids that also use repeat are rejected
+		 * earlier). */
+        int depth = 0;
+        while (i < n && (depth > 0 || (value[i] != ' ' && value[i] != ',' && value[i] != '\t'))) {
+            if (value[i] == '(') {
+                depth++;
+            } else if (value[i] == ')') {
+                depth--;
+            }
+            i++;
+        }
+        line++;
+    }
+    return -1;
 }
 
 /* Read a px length declaration `prop:Npx` inside [block, block+blen). Returns
@@ -1094,6 +1172,73 @@ int yetty_ylexbor_grid_parse_inline(const char *style, size_t len, struct yl_gri
             value_end++;
         }
         int ntracks = grid_parse_tracks(style + value_start, value_end - value_start, out, maxn);
+        if (col_gap) {
+            float g = grid_find_len(style, len, "column-gap", 0);
+            if (g < 0.0f) {
+                g = grid_find_len(style, len, "gap", 0);
+            }
+            if (g > 0.0f) {
+                *col_gap = g;
+            }
+        }
+        if (row_gap) {
+            float g = grid_find_len(style, len, "row-gap", 0);
+            if (g < 0.0f) {
+                g = grid_find_len(style, len, "gap", 0);
+            }
+            if (g > 0.0f) {
+                *row_gap = g;
+            }
+        }
+        return ntracks;
+    }
+    return 0;
+}
+
+/* Like yetty_ylexbor_grid_parse_inline, but ALLOWS named-line templates
+ * (`[name] 200px [c-start] 1fr [c-end]`). On success returns the track count
+ * (named lines skipped) and, via *out_value / *out_value_len, the substring of
+ * `style` holding the grid-template-columns value so the caller can stash it
+ * (arena-dup) for later `grid-column:<name>` line resolution. Used only on the
+ * explicit named-placement path. */
+int yetty_ylexbor_grid_parse_inline_named(const char *style, size_t len, struct yl_grid_track *out,
+                                          int maxn, float *col_gap, float *row_gap,
+                                          const char **out_value, size_t *out_value_len)
+{
+    if (col_gap) {
+        *col_gap = 0.0f;
+    }
+    if (row_gap) {
+        *row_gap = 0.0f;
+    }
+    if (out_value) {
+        *out_value = NULL;
+    }
+    if (out_value_len) {
+        *out_value_len = 0;
+    }
+    if (style == NULL || out == NULL || len < 12) {
+        return 0;
+    }
+    static const char needle[] = "grid-template-columns:";
+    const size_t nlen = sizeof(needle) - 1;
+    for (size_t i = 0; i + nlen <= len; i++) {
+        if (memcmp(style + i, needle, nlen) != 0) {
+            continue;
+        }
+        size_t value_start = i + nlen;
+        size_t value_end = value_start;
+        while (value_end < len && style[value_end] != ';') {
+            value_end++;
+        }
+        int ntracks = grid_parse_tracks_ex(style + value_start, value_end - value_start, out, maxn,
+                                           /*allow_named=*/1);
+        if (out_value) {
+            *out_value = style + value_start;
+        }
+        if (out_value_len) {
+            *out_value_len = value_end - value_start;
+        }
         if (col_gap) {
             float g = grid_find_len(style, len, "column-gap", 0);
             if (g < 0.0f) {

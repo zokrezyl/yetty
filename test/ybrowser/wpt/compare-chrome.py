@@ -18,7 +18,7 @@ import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
+ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 YBROWSER = os.environ.get("YBROWSER", "./build-desktop-ytrace-release/tools/ybrowser/ybrowser")
 URL = sys.argv[1] if len(sys.argv) > 1 else "https://news.google.com/"
 WIDTH = sys.argv[2] if len(sys.argv) > 2 else "1200"

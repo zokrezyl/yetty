@@ -232,6 +232,16 @@ static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx
 		 * it and let the rest of the loop emit the following line. */
         if (cursor < n && text[cursor] == '\n') {
             cursor++;
+            /* A TRAILING '\n' (last byte — produced by a trailing `<br>`,
+			 * "foo<br>" → "foo\n") leaves cursor == n: there is no following
+			 * line, so stop. Without this the fit-loop below runs zero times,
+			 * leaves fit/end at 0, and the `end <= cursor` branch resets cursor
+			 * to 0 — an infinite loop that emits fragments until the process
+			 * OOMs (a <br>-terminated run on Wikipedia drove the box vector past
+			 * 20 GB). */
+            if (cursor >= n) {
+                break;
+            }
         }
 
         /* How many bytes fit in content_w? Stop at the next '\n'
@@ -317,7 +327,10 @@ static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx
 		 * entry too. */
         if (end <= cursor) {
             y += line_height;
-            cursor = end;
+            /* Never let cursor regress (end < cursor) — that re-processes the
+			 * whole string forever. Advance at least one byte so the loop
+			 * always terminates. */
+            cursor = (end > cursor) ? end : cursor + 1;
             continue;
         }
 
@@ -710,6 +723,61 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
         }
     }
 
+    /* flex-wrap: break the row into multiple flex lines. Each item keeps its
+	 * basis main-size; an item that would overflow the current line's main
+	 * extent starts a new line, and lines stack on the cross axis (tallest
+	 * item per line drives that line's height). Per-line grow is not
+	 * distributed — the common wrap idiom uses fixed-size items. Row direction
+	 * only; column wrap is not modelled. */
+    if (self->flex_wrap && !column_dir) {
+        float line_x = content_origin_x;
+        float line_top = content_origin_y;
+        float line_h = 0.0f;
+        bool first_in_line = true;
+        for (uint32_t i = 0; i < n_children; i++) {
+            uint32_t cidx = children[i];
+            struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
+            float item_main = main_size[i];
+            if (!first_in_line &&
+                (line_x - content_origin_x) + item_main > content_width + 0.5f) {
+                line_top += line_h + self->grid_row_gap;
+                line_x = content_origin_x;
+                line_h = 0.0f;
+                first_in_line = true;
+            }
+            c->x = line_x;
+            c->y = line_top;
+            c->w = item_main;
+            c->h = 0;
+            float h = 0.0f;
+            if (c->kind == YL_BOX_BLOCK) {
+                struct float_result wrap_block_res = layout_block(r, cidx, c->x, c->y, c->w);
+                YETTY_RETURN_IF_ERR(float, wrap_block_res, "layout_flex(wrap): block");
+                h = wrap_block_res.value;
+            } else if (c->kind == YL_BOX_INLINE_TEXT) {
+                struct float_result wrap_text_res =
+                    wrap_inline_box(r, cidx, c->x, c->y, c->w, /*text_align=*/0);
+                YETTY_RETURN_IF_ERR(float, wrap_text_res, "layout_flex(wrap): inline");
+                h = wrap_text_res.value;
+            } else if (c->kind == YL_BOX_INLINE_IMAGE) {
+                h = img_h_intr[i] > 0.0f ? img_h_intr[i] : (c->h > 0.0f ? c->h : 100.0f);
+            }
+            c = &r->boxes.data[cidx];
+            if (c->css_height > 0.0f) {
+                h = c->css_height;
+            }
+            c->h = h;
+            if (h > line_h) {
+                line_h = h;
+            }
+            line_x += item_main + flex_gap;
+            first_in_line = false;
+        }
+        float container_h = (line_top + line_h) - origin_y + pad_bottom;
+        flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, container_h);
+        return YETTY_OK(float, container_h);
+    }
+
     /* Distribute leftover main-axis space. */
     float leftover = main_budget - total_basis;
     if (leftover > 0.0f && total_grow > 0.0f) {
@@ -720,6 +788,42 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
             }
         }
         leftover = 0.0f;
+    }
+
+    /* Min-width floor (row only): a flex item may not shrink below its
+	 * `min-width`. Clamp violators up to their min, then reclaim the overflow
+	 * from the still-shrinkable items so the line still fits the container.
+	 * This is the min-violation resolution step of the flex algorithm, done in
+	 * a single pass — enough for the common one-constrained-item layouts. */
+    if (!column_dir) {
+        float deficit = 0.0f;
+        bool min_locked[YL_FLEX_MAX_CHILDREN] = {false};
+        for (uint32_t i = 0; i < n_children; i++) {
+            float mn = r->boxes.data[children[i]].css_min_width;
+            if (mn > 0.0f && main_size[i] < mn) {
+                deficit += mn - main_size[i];
+                main_size[i] = mn;
+                min_locked[i] = true;
+            }
+        }
+        if (deficit > 0.0f) {
+            float pool = 0.0f;
+            for (uint32_t i = 0; i < n_children; i++) {
+                if (!min_locked[i] && main_size[i] > 0.0f) {
+                    pool += main_size[i];
+                }
+            }
+            if (pool > 0.0f) {
+                for (uint32_t i = 0; i < n_children; i++) {
+                    if (!min_locked[i] && main_size[i] > 0.0f) {
+                        main_size[i] -= deficit * (main_size[i] / pool);
+                        if (main_size[i] < 0.0f) {
+                            main_size[i] = 0.0f;
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /* If anything's still left over, distribute via justify-content. */
@@ -1123,7 +1227,14 @@ static struct float_result layout_table(struct yetty_ylexbor *r, uint32_t idx, f
         free(rows.rows);
         return YETTY_OK(float, pad_top + pad_bottom);
     }
-    if (total_max <= content_width || total_max == 0.0f) {
+    if (self->table_fixed && content_width > 0.0f) {
+        /* `table-layout: fixed`: columns share the table's width equally,
+		 * content-blind (the CSS fixed algorithm with no per-column widths
+		 * authored). */
+        for (uint32_t i = 0; i < cols; i++) {
+            col_w[i] = content_width / (float)cols;
+        }
+    } else if (total_max <= content_width || total_max == 0.0f) {
         /* Plenty of slack — give each column exactly its
 		 * max-content. Tables narrower than the container don't
 		 * stretch unless an author asks. */
@@ -1533,7 +1644,7 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
 	 * auto-flow — fall back to block so the content keeps full width. A real
 	 * card grid (text + thumbnail) puts only a leaf-ish image in the narrow
 	 * track, so it is unaffected. */
-    {
+    if (self->grid_line_spec == NULL) {
         float max_track = 0.0f;
         for (int c = 0; c < ncols; c++) {
             if (col_w[c] > max_track) {
@@ -1576,6 +1687,79 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
             }
             probe_col = (probe_col + 1) % ncols;
         }
+    }
+
+    /* Named-line placement. When box-build flagged this container as a named
+	 * grid (`grid_line_spec` set + every child carries `grid-column:<name>`),
+	 * place each child by resolving its line name to a start track rather than
+	 * row-major auto-flow. A start-only `grid-column:<name>` occupies the single
+	 * track that begins at that line; an unresolved name falls back to track 0.
+	 * All children share one row here (the single-row idiom these shells use). */
+    if (self->grid_line_spec != NULL) {
+        size_t spec_len = strlen(self->grid_line_spec);
+        float row_top = content_origin_y;
+        float band_h = 0.0f;
+        for (uint32_t cidx = self->first_child; cidx != 0;
+             cidx = r->boxes.data[cidx].next_sibling) {
+            struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
+            if (c->position == YL_POS_ABSOLUTE || c->position == YL_POS_FIXED ||
+                c->float_side != 0) {
+                continue;
+            }
+            int track = 0;
+            if (c->grid_col_name != NULL) {
+                int line = yetty_ylexbor_grid_resolve_line(self->grid_line_spec, spec_len,
+                                                           c->grid_col_name,
+                                                           strlen(c->grid_col_name));
+                if (line >= 0 && line < ncols) {
+                    track = line;
+                }
+            }
+            float cell_x = col_x[track];
+            float cell_w = col_w[track];
+            resolve_pct_metrics(c, cell_w);
+            float child_h = 0.0f;
+            if (c->kind == YL_BOX_BLOCK) {
+                c->x = cell_x;
+                c->y = row_top;
+                c->w = cell_w;
+                struct float_result gres = layout_block(r, cidx, cell_x, row_top, cell_w);
+                YETTY_RETURN_IF_ERR(float, gres, "layout_grid(named): child block");
+                c = &r->boxes.data[cidx];
+                child_h = (c->css_height > 0.0f) ? c->css_height : gres.value;
+                c->h = child_h;
+            } else if (c->kind == YL_BOX_INLINE_TEXT) {
+                struct float_result gres = wrap_inline_box(r, cidx, cell_x, row_top, cell_w, 0);
+                YETTY_RETURN_IF_ERR(float, gres, "layout_grid(named): child text");
+                c = &r->boxes.data[cidx];
+                c->x = cell_x;
+                c->y = row_top;
+                c->w = cell_w;
+                child_h = gres.value;
+                c->h = child_h;
+            } else if (c->kind == YL_BOX_INLINE_IMAGE) {
+                float img_w = c->w > 0.0f ? c->w : 100.0f;
+                float img_h = c->h > 0.0f ? c->h : 100.0f;
+                if (img_w > cell_w && cell_w > 0.0f) {
+                    img_h *= cell_w / img_w;
+                    img_w = cell_w;
+                }
+                c->x = cell_x;
+                c->y = row_top;
+                c->w = img_w;
+                c->h = img_h;
+                child_h = img_h;
+            }
+            if (child_h > band_h) {
+                band_h = child_h;
+            }
+            apply_transform(r, cidx);
+        }
+        float named_h = (band_h > 0.0f ? (row_top + band_h) : content_origin_y) - origin_y +
+                        pad_bottom;
+        self = &r->boxes.data[idx];
+        flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, named_h);
+        return YETTY_OK(float, named_h);
     }
 
     /* Auto-flow children into cells, row-major. */
@@ -1891,7 +2075,13 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
             if (resolved_min > 0.0f && child_w < resolved_min) {
                 child_w = resolved_min;
             }
-            if (child_w > avail) {
+            /* Clamp to the available rectangle only for AUTO widths. An
+				 * explicit `width: <px>` (or `min-width`) larger than the
+				 * container overflows in real browsers rather than being
+				 * shrunk; clamping it broke e.g. a `width:1000px` grid laid out
+				 * in an 800px viewport (its fr track came out 200px short). */
+            bool width_is_explicit = c->css_width > 0.0f || resolved_min > avail;
+            if (!width_is_explicit && child_w > avail) {
                 child_w = avail;
             }
 
@@ -1950,6 +2140,23 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
 			 * content height wins. */
             if (c->css_height > 0.0f) {
                 child_h = c->css_height;
+            } else if (c->css_height < 0.0f) {
+                /* `height: N%` — resolve against the containing block's
+				 * content-area height, but only when this parent block has a
+				 * definite height; otherwise percentage height is `auto`. */
+                self = &r->boxes.data[idx];
+                float parent_content_h = 0.0f;
+                if (self->css_height > 0.0f) {
+                    parent_content_h =
+                        self->border_box
+                            ? (self->css_height - self->padding_top - self->padding_bottom -
+                               self->border_top - self->border_bottom)
+                            : self->css_height;
+                }
+                if (parent_content_h > 0.0f) {
+                    child_h = parent_content_h * (-c->css_height);
+                }
+                c = &r->boxes.data[cidx];
             }
             c->h = child_h;
             cursor_y += child_h;

@@ -2014,6 +2014,51 @@ static JSValue js_el_firstElementChild_get(JSContext *ctx, JSValueConst this_val
     return JS_NULL;
 }
 
+/* Generic Node tree accessors (return ANY node type — element, text, comment —
+ * via wrap_node_any). Their absence is what crashed jQuery's support detection:
+ * `div.cloneNode(true).cloneNode(true).lastChild.checked` read `.lastChild` as
+ * undefined, then `.checked` threw, aborting the whole jquery module. */
+static JSValue js_el_firstChild_get(JSContext *ctx, JSValueConst this_val)
+{
+    lxb_dom_node_t *n = unwrap_node(this_val);
+    return (n && n->first_child) ? wrap_node_any(ctx, n->first_child) : JS_NULL;
+}
+static JSValue js_el_lastChild_get(JSContext *ctx, JSValueConst this_val)
+{
+    lxb_dom_node_t *n = unwrap_node(this_val);
+    return (n && n->last_child) ? wrap_node_any(ctx, n->last_child) : JS_NULL;
+}
+static JSValue js_el_nextSibling_get(JSContext *ctx, JSValueConst this_val)
+{
+    lxb_dom_node_t *n = unwrap_node(this_val);
+    return (n && n->next) ? wrap_node_any(ctx, n->next) : JS_NULL;
+}
+static JSValue js_el_previousSibling_get(JSContext *ctx, JSValueConst this_val)
+{
+    lxb_dom_node_t *n = unwrap_node(this_val);
+    return (n && n->prev) ? wrap_node_any(ctx, n->prev) : JS_NULL;
+}
+static JSValue js_el_parentNode_get(JSContext *ctx, JSValueConst this_val)
+{
+    lxb_dom_node_t *n = unwrap_node(this_val);
+    return (n && n->parent) ? wrap_node_any(ctx, n->parent) : JS_NULL;
+}
+/* childNodes — a live-ish NodeList approximated by a JS array (has .length and
+ * integer indexing, which is all real code uses). jQuery's parseHTML reads
+ * `body.childNodes.length`. */
+static JSValue js_el_childNodes_get(JSContext *ctx, JSValueConst this_val)
+{
+    JSValue arr = JS_NewArray(ctx);
+    lxb_dom_node_t *n = unwrap_node(this_val);
+    uint32_t i = 0;
+    if (n) {
+        for (lxb_dom_node_t *c = n->first_child; c; c = c->next) {
+            JS_SetPropertyUint32(ctx, arr, i++, wrap_node_any(ctx, c));
+        }
+    }
+    return arr;
+}
+
 static JSValue js_el_nextElementSibling_get(JSContext *ctx, JSValueConst this_val)
 {
     lxb_dom_node_t *n = unwrap_node(this_val);
@@ -3121,14 +3166,57 @@ static JSValue js_el_clientRects_stub(JSContext *ctx, JSValueConst this_val, int
     return JS_NewArray(ctx);
 }
 
-static JSValue js_el_dispatchEvent_stub(JSContext *ctx, JSValueConst this_val, int argc,
-                                        JSValueConst *argv)
+/* Real EventTarget.dispatchEvent: invoke every registered listener whose type
+ * matches the event and whose target is this object (el == NULL means a
+ * document/window listener). Used on Element, Document, and window — sites
+ * dispatch synthetic CustomEvents to drive their own flows (e.g. CNN's
+ * WMUC consent fires "userConsentReady" on document; a missing/stub
+ * dispatchEvent threw "not a function" and aborted the handler). Returns
+ * !event.defaultPrevented. */
+static JSValue js_el_dispatchEvent(JSContext *ctx, JSValueConst this_val, int argc,
+                                   JSValueConst *argv)
 {
-    (void)ctx;
-    (void)this_val;
-    (void)argc;
-    (void)argv;
-    return JS_TRUE;
+    if (argc < 1) {
+        return JS_TRUE;
+    }
+    /* Re-entrancy guard: a handler that synchronously re-dispatches the event
+	 * it is handling would recurse forever and freeze the page. Cap nesting. */
+    static int dispatch_depth = 0;
+    if (dispatch_depth > 32) {
+        return JS_TRUE;
+    }
+    JSValue type_v = JS_GetPropertyStr(ctx, argv[0], "type");
+    const char *type = JS_ToCString(ctx, type_v);
+    JS_FreeValue(ctx, type_v);
+    if (type == NULL) {
+        return JS_TRUE;
+    }
+    dispatch_depth++;
+    lxb_dom_element_t *el = unwrap_element(this_val); /* NULL for document/window */
+    JS_SetPropertyStr(ctx, (JSValue)argv[0], "target", JS_DupValue(ctx, this_val));
+    JS_SetPropertyStr(ctx, (JSValue)argv[0], "currentTarget", JS_DupValue(ctx, this_val));
+    /* Snapshot the count: a handler may addEventListener during dispatch and
+	 * those new listeners must not fire for this same event. */
+    int snapshot = g_listener_count;
+    for (int i = 0; i < snapshot; i++) {
+        if (g_listeners[i].el != el || strcmp(g_listeners[i].type, type) != 0) {
+            continue;
+        }
+        JSValueConst call_args[] = {argv[0]};
+        JSValue ret = JS_Call(ctx, g_listeners[i].handler, this_val, 1, call_args);
+        if (JS_IsException(ret)) {
+            JSValue exc = JS_GetException(ctx);
+            JS_FreeValue(ctx, exc);
+        } else {
+            JS_FreeValue(ctx, ret);
+        }
+    }
+    JS_FreeCString(ctx, type);
+    dispatch_depth--;
+    JSValue dp = JS_GetPropertyStr(ctx, argv[0], "defaultPrevented");
+    int prevented = JS_ToBool(ctx, dp);
+    JS_FreeValue(ctx, dp);
+    return prevented ? JS_FALSE : JS_TRUE;
 }
 
 /* For HTML documents, attribute-manipulation methods must:
@@ -3242,7 +3330,32 @@ static JSValue js_impl_createHTMLDocument(JSContext *ctx, JSValueConst this_val,
     (void)this_val;
     (void)argc;
     (void)argv;
-    return JS_NewObject(ctx);
+    /* Return a doc-like with real body/head/documentElement elements (detached,
+	 * but with working innerHTML + childNodes). jQuery.parseHTML does
+	 * `createHTMLDocument("").body.innerHTML = data` then reads body.childNodes;
+	 * an empty object threw "cannot set property 'innerHTML' of undefined" and
+	 * aborted the whole jquery module. */
+    JSValue obj = JS_NewObject(ctx);
+    struct yetty_ylexbor *r = runtime_ylex(ctx);
+    if (r != NULL && r->document != NULL) {
+        lxb_dom_document_t *doc = lxb_dom_interface_document(r->document);
+        lxb_dom_element_t *html =
+            lxb_dom_document_create_element(doc, (const lxb_char_t *)"html", 4, NULL);
+        lxb_dom_element_t *head =
+            lxb_dom_document_create_element(doc, (const lxb_char_t *)"head", 4, NULL);
+        lxb_dom_element_t *body =
+            lxb_dom_document_create_element(doc, (const lxb_char_t *)"body", 4, NULL);
+        if (html != NULL) {
+            JS_SetPropertyStr(ctx, obj, "documentElement", wrap_element(ctx, html));
+        }
+        if (head != NULL) {
+            JS_SetPropertyStr(ctx, obj, "head", wrap_element(ctx, head));
+        }
+        if (body != NULL) {
+            JS_SetPropertyStr(ctx, obj, "body", wrap_element(ctx, body));
+        }
+    }
+    return obj;
 }
 
 static JSValue js_doc_implementation_get(JSContext *ctx, JSValueConst this_val)
@@ -3273,6 +3386,8 @@ static const JSCFunctionListEntry document_funcs[] = {
     JS_CFUNC_DEF("createDocumentFragment", 0, js_doc_createDocumentFragment),
     JS_CFUNC_DEF("createComment", 1, js_doc_createComment),
     JS_CFUNC_DEF("addEventListener", 2, js_el_addEventListener),
+    JS_CFUNC_DEF("dispatchEvent", 1, js_el_dispatchEvent),
+    JS_CFUNC_DEF("removeEventListener", 2, js_el_undef_stub),
     /* Same node-mutation surface as Element so document.prepend()
 	 * etc. work — github's stylesheet injector calls
 	 * `e.head.prepend(t)` first then falls back to `e.prepend(t)` if
@@ -3332,7 +3447,7 @@ static const JSCFunctionListEntry element_funcs[] = {
     JS_CFUNC_DEF("blur", 0, js_el_undef_stub),
     JS_CFUNC_DEF("click", 0, js_el_undef_stub),
     JS_CFUNC_DEF("normalize", 0, js_el_undef_stub),
-    JS_CFUNC_DEF("dispatchEvent", 1, js_el_dispatchEvent_stub),
+    JS_CFUNC_DEF("dispatchEvent", 1, js_el_dispatchEvent),
     JS_CFUNC_DEF("removeEventListener", 2, js_el_undef_stub),
     JS_CFUNC_DEF("toggleAttribute", 1, js_el_toggleAttr_stub),
     JS_CGETSET_DEF("textContent", js_el_textContent_get, js_el_textContent_set),
@@ -3353,6 +3468,12 @@ static const JSCFunctionListEntry element_funcs[] = {
     JS_CGETSET_DEF("className", js_el_className_get, js_el_className_set),
     JS_CGETSET_DEF("parentElement", js_el_parentElement_get, NULL),
     JS_CGETSET_DEF("firstElementChild", js_el_firstElementChild_get, NULL),
+    JS_CGETSET_DEF("firstChild", js_el_firstChild_get, NULL),
+    JS_CGETSET_DEF("lastChild", js_el_lastChild_get, NULL),
+    JS_CGETSET_DEF("nextSibling", js_el_nextSibling_get, NULL),
+    JS_CGETSET_DEF("previousSibling", js_el_previousSibling_get, NULL),
+    JS_CGETSET_DEF("parentNode", js_el_parentNode_get, NULL),
+    JS_CGETSET_DEF("childNodes", js_el_childNodes_get, NULL),
     JS_CGETSET_DEF("nextElementSibling", js_el_nextElementSibling_get, NULL),
     JS_CGETSET_DEF("children", js_el_children_get, NULL),
     JS_CGETSET_DEF("style", js_el_style_get, NULL),
@@ -3483,11 +3604,14 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
 	 * with target=NULL). */
     JS_SetPropertyStr(ctx, global, "addEventListener",
                       JS_NewCFunction(ctx, js_el_addEventListener, "addEventListener", 2));
-    /* No-op stoppers — full removal would require per-listener IDs. */
+    /* window.dispatchEvent invokes the el==NULL (document/window) listeners,
+	 * same as document — sites fire synthetic events at window. */
+    JS_SetPropertyStr(ctx, global, "dispatchEvent",
+                      JS_NewCFunction(ctx, js_el_dispatchEvent, "dispatchEvent", 1));
+    /* removeEventListener no-op stopper — full removal would need per-listener IDs. */
     const char *noopdef = "(function(){})";
     JSValue noop = JS_Eval(ctx, noopdef, strlen(noopdef), "<noop>", JS_EVAL_TYPE_GLOBAL);
     JS_SetPropertyStr(ctx, global, "removeEventListener", JS_DupValue(ctx, noop));
-    JS_SetPropertyStr(ctx, global, "dispatchEvent", JS_DupValue(ctx, noop));
     JS_FreeValue(ctx, noop);
     JS_FreeValue(ctx, global);
 }
