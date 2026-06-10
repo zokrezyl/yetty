@@ -169,13 +169,12 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: yetty-linux
-        path: |
-          ${{ env.BUILD_DIR }}/yetty
-          ${{ env.BUILD_DIR }}/yettyc
-          ${{ env.BUILD_DIR }}/ycat
-          ${{ env.BUILD_DIR }}/yecho
-          demo/
-        if-no-files-found: warn
+        # Ship the self-contained installer, not the bare yetty binary: it
+        # carries yetty + ygreeter + companion tools + all assets as an
+        # embedded payload and unpacks them on first run. A raw `yetty` has no
+        # assets and no companion tools, so it is useless as a release asset.
+        path: ${{ env.BUILD_DIR }}/tools/yinstall/yinstall
+        if-no-files-found: error
 
   # =============================================================================
   # Linux ASAN Build (AddressSanitizer)
@@ -293,13 +292,12 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: yetty-linux-aarch64
-        path: |
-          ${{ env.BUILD_DIR }}/yetty
-          ${{ env.BUILD_DIR }}/yettyc
-          ${{ env.BUILD_DIR }}/ycat
-          ${{ env.BUILD_DIR }}/yecho
-          demo/
-        if-no-files-found: warn
+        # Ship the self-contained installer, not the bare yetty binary: it
+        # carries yetty + ygreeter + companion tools + all assets as an
+        # embedded payload and unpacks them on first run. A raw `yetty` has no
+        # assets and no companion tools, so it is useless as a release asset.
+        path: ${{ env.BUILD_DIR }}/tools/yinstall/yinstall
+        if-no-files-found: error
 
   # =============================================================================
   # Desktop Build (macOS ARM64)
@@ -351,13 +349,12 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: yetty-macos
-        path: |
-          ${{ env.BUILD_DIR }}/yetty
-          ${{ env.BUILD_DIR }}/yettyc
-          ${{ env.BUILD_DIR }}/ycat
-          ${{ env.BUILD_DIR }}/yecho
-          demo/
-        if-no-files-found: warn
+        # Ship the self-contained installer, not the bare yetty binary: it
+        # carries yetty + ygreeter + companion tools + all assets as an
+        # embedded payload and unpacks them on first run. A raw `yetty` has no
+        # assets and no companion tools, so it is useless as a release asset.
+        path: ${{ env.BUILD_DIR }}/tools/yinstall/yinstall
+        if-no-files-found: error
 
   # =============================================================================
   # Desktop Build (macOS Intel x86_64)
@@ -406,13 +403,12 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: yetty-macos-x86_64
-        path: |
-          ${{ env.BUILD_DIR }}/yetty
-          ${{ env.BUILD_DIR }}/yettyc
-          ${{ env.BUILD_DIR }}/ycat
-          ${{ env.BUILD_DIR }}/yecho
-          demo/
-        if-no-files-found: warn
+        # Ship the self-contained installer, not the bare yetty binary: it
+        # carries yetty + ygreeter + companion tools + all assets as an
+        # embedded payload and unpacks them on first run. A raw `yetty` has no
+        # assets and no companion tools, so it is useless as a release asset.
+        path: ${{ env.BUILD_DIR }}/tools/yinstall/yinstall
+        if-no-files-found: error
 
   # =============================================================================
   # Desktop Build (Windows)

@@ -30,11 +30,29 @@ target_link_libraries(yetty_ychrome PUBLIC
     yetty_ydraw_core
     yetty_ysdf
     yetty_yface
-    # host.c composites the caption as a pinned ygrid figure — framework
-    # figure libs, still not ygui.
-    yetty_ygrid
+    # host.c's WIRE sink emits figure-tree records over a producer (GPU-free);
+    # yfigure carries the producer and is available on the headless cross
+    # targets too.
     yetty_yfigure
+    # chrome.c's gesture handlers call the yetty_yplatform_window_manager_*
+    # method stubs (move/resize/iconify/...). Those live in yetty_yplatform_core
+    # (methods.gen.c) and early-return on the NULL window_manager a wire/client
+    # host carries. Declare the dependency explicitly so the static link
+    # resolves on EVERY target: previously it only worked where yui happened to
+    # pull yplatform_core ahead of ychrome, which never happens on the headless
+    # no-GPU guest (yui isn't built), breaking the riscv link.
+    yetty_yplatform_core
 )
+
+# The LOCAL sink composites the caption as a pinned ygrid figure. ygrid is
+# GPU-backed and not built on the no-WebGPU cross targets (riscv guest), so the
+# local path is compiled in only where ygrid exists. The WIRE sink — all the
+# in-terminal/client chrome an app needs — builds without it, so an app running
+# inside a hosting yetty gets its backdrop + caption even on a headless guest.
+if(YETTY_ENABLE_LIB_WEBGPU)
+    target_link_libraries(yetty_ychrome PUBLIC yetty_ygrid)
+    target_compile_definitions(yetty_ychrome PUBLIC YETTY_YCHROME_HAS_LOCAL)
+endif()
 
 # chrome.c carries C23 `[[clang::annotate(...)]]` attributes.
 if(NOT MSVC)

@@ -60,15 +60,22 @@
 
 #include "embedded-assets.h"
 
+#ifdef YETTY_YGREETER_HAS_CHROME
+/* ychrome headers are GPU-free — the wire/client chrome path emits figure
+ * records the hosting yetty renders, so these compile on every target
+ * (including the no-WebGPU riscv guest). Needed by both standalone and client
+ * mode, hence gated on HAS_CHROME, not HAS_STANDALONE. */
+#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
+#include <yetty/ychrome/host.h>
+#include <yetty/ychrome/methods.h>
+#endif
+
 #ifdef YETTY_YGREETER_HAS_STANDALONE
 /* Headers below pull <yetty/yetty/yetty.h> (or <webgpu/webgpu.h> directly)
  * via their public API surface. Standalone mode needs them; client mode
  * doesn't, and on platforms without WebGPU (riscv64 cross) including
  * them breaks the build. Keep gated. */
 #include <yetty/ydraw-factory/composite-factory.h>
-#include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
-#include <yetty/ychrome/host.h>
-#include <yetty/ychrome/methods.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>
