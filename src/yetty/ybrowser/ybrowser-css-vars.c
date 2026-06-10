@@ -763,9 +763,11 @@ static int grid_parse_one_track(const char *s, size_t n, struct yl_grid_track *o
         out->value = v > 0.0f ? v : 1.0f;
         return 1;
     }
-    if ((n >= 4 && strncmp(s, "auto", 4) == 0) || (n >= 11 && strstr(s, "content") != NULL)) {
-        out->is_fr = 1;
-        out->value = 1.0f; /* approximate intrinsic tracks as 1fr */
+    if ((n == 4 && strncmp(s, "auto", 4) == 0) ||
+        (n >= 11 && (strstr(s, "min-content") != NULL || strstr(s, "max-content") != NULL))) {
+        out->is_fr = 0;
+        out->is_auto = 1; /* sized to the column's max-content at layout time */
+        out->value = 0.0f;
         return 1;
     }
     {
@@ -786,7 +788,9 @@ static int grid_parse_one_track(const char *s, size_t n, struct yl_grid_track *o
             k++;
         }
         size_t unit_len = n - k;
-        int unit_ok = (unit_len == 0) || (unit_len == 2 && strncmp(s + k, "px", 2) == 0) ||
+        int is_pct = (unit_len == 1 && s[k] == '%');
+        int unit_ok = (unit_len == 0) || is_pct ||
+                      (unit_len == 2 && strncmp(s + k, "px", 2) == 0) ||
                       (unit_len == 2 && strncmp(s + k, "em", 2) == 0) ||
                       (unit_len == 3 && strncmp(s + k, "rem", 3) == 0);
         if (!seen_digit || !unit_ok) {
@@ -800,10 +804,12 @@ static int grid_parse_one_track(const char *s, size_t n, struct yl_grid_track *o
         } else if (unit_len == 3 && strncmp(s + k, "rem", 3) == 0) {
             v *= 16.0f;
         }
-        if (v <= 0.0f) {
+        /* Allow 0 (WPT uses `minmax(auto, 0px)` widely); only reject negative. */
+        if (v < 0.0f) {
             return 0;
         }
         out->is_fr = 0;
+        out->is_pct = (uint8_t)(is_pct ? 1 : 0);
         out->value = v;
         return 1;
     }

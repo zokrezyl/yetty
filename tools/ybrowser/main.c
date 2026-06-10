@@ -336,6 +336,10 @@ int main(int argc, char **argv)
      * changes (e.g. floats moving figures to the right rail) can be seen
      * without a GPU window. */
     int dump_boxes = 0;
+    /* --dump-wpt: emit, for every box whose element carries a check-layout-th.js
+     * assertion (data-expected-width/-height/data-offset-x/-y), one TSV line of
+     * actual vs expected geometry, for the upstream-WPT conformance runner. */
+    int dump_wpt = 0;
     /* --dump-geo: emit `dom-path  x  y  w  h` per element box, for matching
      * against Chrome's getBoundingClientRect (geometry diff oracle). */
     int dump_geo = 0;
@@ -354,6 +358,9 @@ int main(int argc, char **argv)
             interactive = 0;
         } else if (!strcmp(a, "--dump-geo")) {
             dump_geo = 1;
+            interactive = 0;
+        } else if (!strcmp(a, "--dump-wpt")) {
+            dump_wpt = 1;
             interactive = 0;
         } else if (!strcmp(a, "--raw")) {
             osc = 0;
@@ -508,6 +515,43 @@ int main(int argc, char **argv)
                 continue;
             }
             printf("%s\t%.1f\t%.1f\t%.1f\t%.1f\n", path, x, y, w, h);
+        }
+        fflush(stdout);
+        yetty_ylexbor_destroy(yl);
+        free(html);
+        return 0;
+    }
+
+    if (dump_wpt) {
+        /* One line per box whose element carries a check-layout-th.js
+         * assertion: `tag ox oy ew eh ax ay aw ah`. The o/e columns are the
+         * data-offset-x, data-offset-y, data-expected-width, data-expected-height
+         * attribute values ("-" if absent); the a columns are ybrowser's actual
+         * document-coord geometry. The runner compares present expectations
+         * against the actuals. */
+        int count = yetty_ylexbor_test_box_count(yl);
+        /* check-layout-th.js's data-offset-x/-y are ABSOLUTE document
+         * coordinates (the harness sums offsetLeft/offsetTop up the offsetParent
+         * chain). ybrowser already applies the UA `body{margin:8px}`, so its
+         * absolute box coords compare directly — no rebasing needed. */
+        printf("#tag\tox\toy\tew\teh\tax\tay\taw\tah\n");
+        for (int bi = 0; bi < count; bi++) {
+            float x = 0, y = 0, w = 0, h = 0;
+            char tag[32] = {0};
+            if (yetty_ylexbor_test_box_at(yl, bi, &x, &y, &w, &h, tag, sizeof(tag)) != 0) {
+                continue;
+            }
+            char ox[32] = {0}, oy[32] = {0}, ew[32] = {0}, eh[32] = {0};
+            (void)yetty_ylexbor_test_box_attr_at(yl, bi, "data-offset-x", ox, sizeof(ox));
+            (void)yetty_ylexbor_test_box_attr_at(yl, bi, "data-offset-y", oy, sizeof(oy));
+            (void)yetty_ylexbor_test_box_attr_at(yl, bi, "data-expected-width", ew, sizeof(ew));
+            (void)yetty_ylexbor_test_box_attr_at(yl, bi, "data-expected-height", eh, sizeof(eh));
+            if (!ox[0] && !oy[0] && !ew[0] && !eh[0]) {
+                continue; /* no assertion on this element */
+            }
+            printf("%s\t%s\t%s\t%s\t%s\t%.1f\t%.1f\t%.1f\t%.1f\n", tag[0] ? tag : "-",
+                   ox[0] ? ox : "-", oy[0] ? oy : "-", ew[0] ? ew : "-", eh[0] ? eh : "-", x, y, w,
+                   h);
         }
         fflush(stdout);
         yetty_ylexbor_destroy(yl);

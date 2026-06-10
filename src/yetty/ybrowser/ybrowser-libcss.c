@@ -1609,6 +1609,41 @@ int yetty_ybrowser_libcss_flex_direction(const css_computed_style *style)
     return css_computed_flex_direction(style);
 }
 
+int yetty_ybrowser_libcss_font_is_ahem(const css_computed_style *style)
+{
+    if (!style) {
+        return 0;
+    }
+    lwc_string **names = NULL;
+    (void)css_computed_font_family(style, &names);
+    if (names != NULL) {
+        for (int i = 0; names[i] != NULL; i++) {
+            const char *d = lwc_string_data(names[i]);
+            size_t l = lwc_string_length(names[i]);
+            if (l == 4 && strncasecmp(d, "ahem", 4) == 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+int yetty_ybrowser_libcss_flex_wrap(const css_computed_style *style)
+{
+    if (!style) {
+        return CSS_FLEX_WRAP_NOWRAP;
+    }
+    return css_computed_flex_wrap(style);
+}
+
+int yetty_ybrowser_libcss_align_content(const css_computed_style *style)
+{
+    if (!style) {
+        return 0;
+    }
+    return css_computed_align_content(style);
+}
+
 int yetty_ybrowser_libcss_flex_grow(const css_computed_style *style, float *out)
 {
     if (!style || !out) {
@@ -1617,6 +1652,20 @@ int yetty_ybrowser_libcss_flex_grow(const css_computed_style *style, float *out)
     css_fixed n = 0;
     uint8_t kind = css_computed_flex_grow(style, &n);
     if (kind == CSS_FLEX_GROW_SET) {
+        *out = fixed_to_float(n);
+        return 1;
+    }
+    return 0;
+}
+
+int yetty_ybrowser_libcss_flex_shrink(const css_computed_style *style, float *out)
+{
+    if (!style || !out) {
+        return 0;
+    }
+    css_fixed n = 0;
+    uint8_t kind = css_computed_flex_shrink(style, &n);
+    if (kind == CSS_FLEX_SHRINK_SET) {
         *out = fixed_to_float(n);
         return 1;
     }

@@ -138,6 +138,23 @@ void yetty_ylexbor_set_glyph_advance_ratio(struct yetty_ylexbor *r, float ratio)
  * and re-renders. `data:` URIs are unaffected (decoded inline). */
 void yetty_ylexbor_set_defer_image_fetch(struct yetty_ylexbor *r, int on);
 
+/* Script execution mode. By default yetty_ylexbor_load_html() runs every inline
+ * + external <script> synchronously during the load, so the FIRST paint waits
+ * for all of them (seconds of blank screen on a script-heavy page — 75 chunks
+ * on github). Set `on` to 1 to DEFER: load_html parses HTML, applies CSS, and
+ * lays out WITHOUT running scripts, so the host can paint the initial
+ * HTML+CSS content immediately (progressive rendering, like any browser's
+ * first-contentful-paint). The host then calls
+ * yetty_ylexbor_run_deferred_scripts() once, after that first paint, to run the
+ * scripts and relayout. */
+void yetty_ylexbor_set_defer_scripts(struct yetty_ylexbor *r, int on);
+
+/* Run the scripts that yetty_ylexbor_load_html() skipped under defer-scripts
+ * mode, then re-resolve the box tree + layout from the (now script-mutated)
+ * DOM. Call once after the initial paint. No-op (still relayouts) if defer mode
+ * was off. After it returns the host should repaint. */
+struct yetty_ycore_void_result yetty_ylexbor_run_deferred_scripts(struct yetty_ylexbor *r);
+
 /* Fetch + decode at most ONE <img> whose URL isn't cached yet (the first
  * in document order), blocking only for that single image. Returns 1 if it
  * loaded one (the host should re-render to show it and call again for the
@@ -218,6 +235,14 @@ int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int
  * to "" on any non-success. */
 int yetty_ylexbor_test_box_data_test_at(const struct yetty_ylexbor *r, int index, char *out_buf,
                                         int cap);
+
+/* Test-only: read an arbitrary attribute (`attr`) off the box's element into
+ * out_buf (NUL-terminated, truncated to cap-1). Returns 0 on success, non-zero
+ * for anonymous boxes or a missing attribute. Used by the upstream-WPT runner
+ * to read check-layout-th.js assertions (data-expected-width / -height /
+ * data-offset-x / -y) directly off each box. */
+int yetty_ylexbor_test_box_attr_at(const struct yetty_ylexbor *r, int index, const char *attr,
+                                   char *out_buf, int cap);
 
 /* Test-only: write an nth-of-type DOM path for the box's element into out_buf,
  * e.g. "html:1>body:1>div:2>main:1" (top-down, each segment

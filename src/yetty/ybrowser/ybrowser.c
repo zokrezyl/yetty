@@ -584,8 +584,12 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     yetty_ylexbor_prof("  external CSS   %.0f ms", yetty_ylexbor_prof_now_ms() - t_phase);
     t_phase = yetty_ylexbor_prof_now_ms();
 
-    /* Run inline + external <script> blocks. */
-    (void)yetty_ylexbor_js_run_inline_scripts(r);
+    /* Run inline + external <script> blocks — UNLESS defer-scripts mode is on,
+	 * in which case the host paints the initial HTML/CSS first and calls
+	 * yetty_ylexbor_run_deferred_scripts() afterward (progressive rendering). */
+    if (!r->defer_scripts) {
+        (void)yetty_ylexbor_js_run_inline_scripts(r);
+    }
     yetty_ylexbor_prof("  run scripts    %.0f ms", yetty_ylexbor_prof_now_ms() - t_phase);
     t_phase = yetty_ylexbor_prof_now_ms();
 
@@ -703,6 +707,25 @@ struct yetty_ycore_void_result yetty_ylexbor_relayout(struct yetty_ylexbor *r)
     return yetty_ylexbor_layout(r);
 }
 
+void yetty_ylexbor_set_defer_scripts(struct yetty_ylexbor *r, int on)
+{
+    if (r != NULL) {
+        r->defer_scripts = on ? 1 : 0;
+    }
+}
+
+struct yetty_ycore_void_result yetty_ylexbor_run_deferred_scripts(struct yetty_ylexbor *r)
+{
+    if (r == NULL) {
+        return YETTY_ERR(yetty_ycore_void, "ylexbor_run_deferred_scripts: null");
+    }
+    /* Run the <script> blocks load_html skipped, then rebuild the box tree +
+	 * layout from the (now script-mutated) DOM so the next paint shows the
+	 * scripted result. */
+    (void)yetty_ylexbor_js_run_inline_scripts(r);
+    return yetty_ylexbor_relayout(r);
+}
+
 /* Make box_vec_reserve visible to box-build. Static-but-shared via
  * attribute would be cleaner; this single-TU project uses a header
  * shim. */
@@ -793,6 +816,32 @@ int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int
             text_out[n] = '\0';
         }
     }
+    return 0;
+}
+
+int yetty_ylexbor_test_box_attr_at(const struct yetty_ylexbor *r, int index, const char *attr,
+                                   char *out_buf, int cap)
+{
+    if (out_buf && cap > 0) {
+        out_buf[0] = '\0';
+    }
+    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size || out_buf == NULL || cap <= 0 ||
+        attr == NULL) {
+        return -1;
+    }
+    const struct yetty_ylexbor_box *b = &r->boxes.data[index];
+    if (b->element == NULL) {
+        return -1;
+    }
+    size_t vlen = 0;
+    const lxb_char_t *val =
+        lxb_dom_element_get_attribute(b->element, (const lxb_char_t *)attr, strlen(attr), &vlen);
+    if (val == NULL) {
+        return -1;
+    }
+    int n = vlen < (size_t)(cap - 1) ? (int)vlen : cap - 1;
+    memcpy(out_buf, val, (size_t)n);
+    out_buf[n] = '\0';
     return 0;
 }
 

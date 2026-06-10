@@ -59,9 +59,16 @@ enum yetty_ylexbor_layout_mode {
 struct yl_grid_track {
     float value;
     uint8_t is_fr;
+    uint8_t is_pct;  /* value is a percent (0..100) of the grid content width,
+		              * resolved to px at layout time. */
+    uint8_t is_auto; /* `auto` / min-content / max-content — sized to the
+		              * max-content of the items placed in this column. */
 };
 
-#define YL_GRID_MAX_TRACKS 8
+/* 16 covers the 12-column grids real design systems use (github's Primer
+ * Brand: `grid-template-columns: repeat(12, minmax(0,1fr))` with items placed
+ * via `grid-column: span N`). */
+#define YL_GRID_MAX_TRACKS 16
 
 /* A class-scoped grid template parsed from the author CSS
  * (`.cls{display:grid;grid-template-columns:…;column-gap:…}`). Looked up by
@@ -142,6 +149,12 @@ struct yetty_ylexbor_box {
     int font_weight; /* CSS weight; 400 = normal, 700 = bold */
     bool font_italic;
 
+    /* Per-box glyph advance as a fraction of font-size, overriding the engine
+		 * default. Set to 1.0 for `font-family: Ahem` (the WPT test font where
+		 * every glyph is exactly 1em wide) so text-dependent geometry is exact.
+		 * 0 = use the engine-global ratio. */
+    float glyph_advance;
+
     /* Computed CSS `line-height` in px. 0 = unset / `normal` — the
      * inline-wrap pass falls back to font_size * 1.25 in that case. A
      * NUMBER value (e.g. line-height: 1.5) is pre-multiplied by font_size
@@ -182,6 +195,10 @@ struct yetty_ylexbor_box {
 	 * explicit px (resolved from libcss). flex_grow = 0 means the
 	 * item doesn't take leftover space. */
     float flex_grow;
+    /* flex-shrink factor. -1 = unset (treated as the CSS initial 1.0 by the
+		 * flex solver); 0 = never shrink (Tailwind `shrink-0`, fixed sidebars);
+		 * >0 = shrink weight when items overflow the main axis. */
+    float flex_shrink;
     float flex_basis_px;
 
     /* Flex-container `flex-wrap`. 0 = nowrap (default, single line);
@@ -196,6 +213,9 @@ struct yetty_ylexbor_box {
 	 * stretch for align). */
     int justify_content;
     int align_items;
+    /* CSS_ALIGN_CONTENT_* — distributes/sizes flex LINES on the cross axis when
+		 * the container wraps. 0 = default (stretch). */
+    int align_content;
 
     /* Grid-container tracks (meaningful when layout_mode == YL_LAYOUT_GRID).
 	 * Parsed from the author CSS's grid-template-columns (libcss exposes none
@@ -219,6 +239,12 @@ struct yetty_ylexbor_box {
 		 * freed with the document. */
     const char *grid_line_spec;
     const char *grid_col_name;
+
+    /* `grid-column: span N` (or `auto / span N`) on a grid ITEM — the number of
+		 * columns it occupies when auto-flowed into a grid container. 0/1 = a
+		 * single column (default). github's 12-col layout places every card with
+		 * one of these spans. */
+    uint8_t grid_col_span;
 
     /* Float / clear. float_side: 0=none, 1=left, 2=right.
 	 * clear_side: 0=none, 1=left, 2=right, 3=both. Boxes with
@@ -417,6 +443,12 @@ struct yetty_ylexbor {
      * fills in progressively while staying responsive. `data:` URIs still
      * decode inline. Default 0 — one-shot callers keep synchronous fetch. */
     int defer_image_fetch;
+    /* When set, yetty_ylexbor_load_html does NOT run <script> blocks — it
+	 * parses + applies CSS + lays out only, so the host can paint the initial
+	 * HTML/CSS content immediately. The host then calls
+	 * yetty_ylexbor_run_deferred_scripts() once after that first paint. Drives
+	 * progressive rendering in the interactive UI. */
+    int defer_scripts;
     int dom_dirty;      /* JS mutated the DOM — host should
 	                            * relayout. */
 

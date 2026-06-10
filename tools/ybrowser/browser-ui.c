@@ -155,6 +155,11 @@ struct tab {
     size_t n_fwd, cap_fwd;
     float rendered_w; /* embed/image width last laid out at */
     int needs_render; /* re-render the active content next tick */
+    /* Progressive rendering: load_html parsed + laid out the page WITHOUT
+	 * running its <script> blocks (defer-scripts mode), so the first paint
+	 * shows HTML+CSS immediately. Set after such a load; pump_active runs the
+	 * deferred scripts once the first paint has happened, then repaints. */
+    int scripts_pending;
     uint64_t dl_hash; /* hash of the last draw list we shipped */
     size_t dl_size;   /* size of the last draw list we shipped */
 };
@@ -611,6 +616,11 @@ static int tab_ensure_engine(struct app *a, struct tab *t)
      * image HTTP. Render text + placeholders immediately; the per-frame
      * pump streams images in one at a time (see pump_active). */
     yetty_ylexbor_set_defer_image_fetch(t->engine, 1);
+    /* Progressive rendering: don't run <script> blocks during load_html — paint
+	 * the initial HTML+CSS first, then run scripts on a later pump tick and
+	 * repaint. Without this the first frame waits for every external script (on
+	 * github, ~75 brotli chunks → seconds of blank window). */
+    yetty_ylexbor_set_defer_scripts(t->engine, 1);
     /* Standalone: hand the engine the worker pool so images fetch+decode in
 	 * parallel on background threads and stream in as they land. */
     if (a->img_pool) {
@@ -652,6 +662,9 @@ static void tab_set_document(struct app *a, struct tab *t, const char *data, siz
             err_ok(yetty_ylexbor_set_base_url(t->engine, base_url));
         }
         err_ok(yetty_ylexbor_load_html(t->engine, data, len));
+        /* Scripts were deferred (see tab_ensure_engine) — the first paint shows
+		 * HTML+CSS; pump_active runs the scripts once that paint has landed. */
+        t->scripts_pending = 1;
     } else {
         /* IMAGE/SVG: keep the raw bytes; the renderer consumes them. */
         t->raw = malloc(len ? len : 1);
@@ -1020,6 +1033,18 @@ static int pump_active(struct app *a)
     struct tab *t = &a->tabs[a->active];
     int wait_ms = 100;
     if (t->engine) {
+        /* Progressive rendering: scripts were deferred so the initial HTML+CSS
+		 * could paint immediately. Once that first paint has landed
+		 * (rendered_w > 0), run them now, then repaint with the scripted result.
+		 * Done before the timer pump so any timers the scripts schedule are
+		 * picked up the same tick. */
+        if (t->scripts_pending && t->rendered_w > 0.0f) {
+            t->scripts_pending = 0;
+            err_ok(yetty_ylexbor_run_deferred_scripts(t->engine));
+            t->needs_render = 1;
+            a->pending_render = 1;
+            wait_ms = 0;
+        }
         int next = yetty_ylexbor_pump_timers(t->engine);
         if (next >= 0) {
             wait_ms = next < 100 ? next : 100;

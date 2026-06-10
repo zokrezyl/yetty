@@ -1,0 +1,10 @@
+<!doctype html><meta charset=utf-8>
+<title>flex-shrink: when items overflow the main axis they shrink to fit. A w-full content
+column (basis = full width) shrinks to make room for a fixed-width shrink-0 sidebar, instead
+of taking the whole row and collapsing the sidebar to 0 (the content+rail idiom on real sites).</title>
+<style>body{margin:0} .row{display:flex;width:1000px}
+.content{width:100%} .side{width:300px;flex-shrink:0}</style>
+<div class="row">
+  <div class="content" data-test="content" data-expect="0,*,700,*">main</div>
+  <div class="side" data-test="side" data-expect="700,*,300,*">rail</div>
+</div>

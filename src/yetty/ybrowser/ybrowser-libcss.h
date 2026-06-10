@@ -135,9 +135,19 @@ int yetty_ybrowser_libcss_text_align(const css_computed_style *style);
 
 /* Flex direction: returns CSS_FLEX_DIRECTION_* (ROW/COLUMN/...). */
 int yetty_ybrowser_libcss_flex_direction(const css_computed_style *style);
+/* 1 if the computed font-family is the WPT test font `Ahem` (every glyph is
+ * exactly 1em wide — lets text measurement be pixel-exact). */
+int yetty_ybrowser_libcss_font_is_ahem(const css_computed_style *style);
+/* Flex wrap: CSS_FLEX_WRAP_* (NOWRAP/WRAP/WRAP_REVERSE). Read from the cascade
+ * so stylesheet `flex-wrap:wrap` (not just inline) is honored. */
+int yetty_ybrowser_libcss_flex_wrap(const css_computed_style *style);
+/* Align-content: CSS_ALIGN_CONTENT_* (STRETCH/FLEX_START/CENTER/...). */
+int yetty_ybrowser_libcss_align_content(const css_computed_style *style);
 
 /* Flex item / container properties. */
 int yetty_ybrowser_libcss_flex_grow(const css_computed_style *style, float *out);
+/* flex-shrink factor (initial 1). Returns 1 + *out when set. */
+int yetty_ybrowser_libcss_flex_shrink(const css_computed_style *style, float *out);
 /* Returns 1 + writes *out_px if basis is a length; out_auto=true if basis
  * is `auto` (or `content` — we collapse them). 0 = not set / inherit. */
 int yetty_ybrowser_libcss_flex_basis(struct yetty_ylexbor *r, const css_computed_style *style,

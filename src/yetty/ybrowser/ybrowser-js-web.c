@@ -1783,6 +1783,15 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.HTMLElement = function(){"
         "  if(globalThis.__ceStack.length) return globalThis.__ceStack.pop();"
         "  try{ return document.createElement('div'); }catch(e){ return this; } };"
+        /* No-op custom-element lifecycle callbacks on the base prototype. Web
+		 * components routinely call `super.connectedCallback()` (babel emits
+		 * `_get(_getPrototypeOf(C.prototype),'connectedCallback',this).call(this)`);
+		 * with no base callback that resolves to `undefined.call` →
+		 * "cannot read property 'call' of undefined" (github's <tool-tip>). */
+        "globalThis.HTMLElement.prototype.connectedCallback = function(){};"
+        "globalThis.HTMLElement.prototype.disconnectedCallback = function(){};"
+        "globalThis.HTMLElement.prototype.adoptedCallback = function(){};"
+        "globalThis.HTMLElement.prototype.attributeChangedCallback = function(){};"
         "globalThis.Element     = function(){};"
         "globalThis.Node        = function(){};"
         "globalThis.Document    = function(){};"

@@ -179,8 +179,13 @@ static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx
         segs_count = 1;
     }
 
-    /* Pre-compute per-glyph width once — naive uniform for now. */
-    float per_glyph = font_size * yetty_ylexbor_glyph_advance_ratio(r);
+    /* Per-glyph advance: a box that set its own ratio (Ahem = exactly 1.0)
+	 * wins; otherwise the engine-global estimate. Snapshot the ratio now — it's
+	 * also passed to every naive_text_width below — because `b` is invalidated
+	 * once emit_fragment grows the box vector. */
+    float advance_ratio = b->glyph_advance > 0.0f ? b->glyph_advance
+                                                  : yetty_ylexbor_glyph_advance_ratio(r);
+    float per_glyph = font_size * advance_ratio;
     if (per_glyph < 1.0f) {
         per_glyph = 1.0f;
     }
@@ -198,8 +203,14 @@ static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx
 	 * flex items inside flex items at narrow viewports, etc.) can still
 	 * end up here with ridiculous content_w. */
     float wrap_w = content_w;
+    /* Only floor the wrap width for GENUINELY tiny containers (fewer than ~2
+	 * glyphs), where wrapping would otherwise scatter one glyph per line. A
+	 * container that legitimately fits >= 2 glyphs keeps its real width — the
+	 * old unconditional `per_glyph * 8` floor scaled with font-size, so a 300px
+	 * box in a 100px font (e.g. WPT's Ahem tests, where each glyph is exactly
+	 * 1em) got a 800px floor and never wrapped. */
     float min_wrap_w = per_glyph * 8.0f; /* roughly one short word */
-    if (wrap_w < min_wrap_w) {
+    if (content_w < per_glyph * 2.0f && wrap_w < min_wrap_w) {
         wrap_w = min_wrap_w;
     }
 
@@ -350,8 +361,8 @@ static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx
 		 * block. Narrow centered text (table cells, narrow flex
 		 * items, real captions on sized figures) still centers
 		 * correctly. */
-        float line_w = yetty_ylexbor_naive_text_width(text + cursor, end - cursor, font_size,
-                                                      yetty_ylexbor_glyph_advance_ratio(r));
+        float line_w =
+            yetty_ylexbor_naive_text_width(text + cursor, end - cursor, font_size, advance_ratio);
         float line_origin_x = origin_x;
         int effective_align = text_align;
         if ((effective_align == 1 || effective_align == 2) && wrap_w > 400.0f) {
@@ -430,8 +441,8 @@ static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx
                     break;
                 }
             }
-            float frag_w = yetty_ylexbor_naive_text_width(text + s0, s1 - s0, font_size,
-                                                          yetty_ylexbor_glyph_advance_ratio(r));
+            float frag_w =
+                yetty_ylexbor_naive_text_width(text + s0, s1 - s0, font_size, advance_ratio);
             /* When justify is on, this fragment's effective render
 			 * width grows by word_spacing per space — bump frag_w so
 			 * the next fragment in the same line starts where the
@@ -656,6 +667,15 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
         bool is_img = (c->kind == YL_BOX_INLINE_IMAGE);
         img_w_intr[i] = is_img ? c->w : 0.0f;
         img_h_intr[i] = is_img ? c->h : 0.0f;
+        /* A flex image must never be WIDER than the container's content box —
+		 * responsive images (max-width:100%) shrink to fit, keeping aspect
+		 * ratio. Without this a 1600px hero image in a 600px flex column
+		 * (github's vertical Stack galleries) overflowed and, stacked 4-high,
+		 * inflated the section to ~5600px (3-4x Chrome). */
+        if (is_img && img_w_intr[i] > content_width && content_width > 0.0f) {
+            img_h_intr[i] *= content_width / img_w_intr[i];
+            img_w_intr[i] = content_width;
+        }
     }
     bool is_auto[YL_FLEX_MAX_CHILDREN] = {false};
     for (uint32_t i = 0; i < n_children; i++) {
@@ -785,6 +805,40 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
             struct yetty_ylexbor_box *c = &r->boxes.data[children[i]];
             if (c->flex_grow > 0.0f) {
                 main_size[i] += leftover * (c->flex_grow / total_grow);
+            }
+        }
+        leftover = 0.0f;
+    }
+
+    /* flex-shrink: items overflow the main axis (total basis > budget) — shrink
+	 * each by its `flex-shrink × basis` share of the overflow so they fit. This
+	 * is what lets a `w-full` content column make room for a fixed-width sidebar
+	 * (Tailwind `flex lg:flex-row` content+rail) instead of taking the whole row
+	 * and collapsing the sidebar to 0. `shrink-0` (flex_shrink==0) items keep
+	 * their size; unset (-1) defaults to the CSS initial 1. Only when the
+	 * container has a DEFINITE main size — an auto-height flex COLUMN has
+	 * main_budget==0 and grows to fit its content, so it must never shrink (that
+	 * collapsed every column item to 0). */
+    if (leftover < 0.0f && main_budget > 0.0f) {
+        float overflow = -leftover;
+        float total_scaled = 0.0f;
+        for (uint32_t i = 0; i < n_children; i++) {
+            float sh = r->boxes.data[children[i]].flex_shrink;
+            if (sh < 0.0f) {
+                sh = 1.0f;
+            }
+            total_scaled += sh * main_size[i];
+        }
+        if (total_scaled > 0.0f) {
+            for (uint32_t i = 0; i < n_children; i++) {
+                float sh = r->boxes.data[children[i]].flex_shrink;
+                if (sh < 0.0f) {
+                    sh = 1.0f;
+                }
+                main_size[i] -= overflow * (sh * main_size[i]) / total_scaled;
+                if (main_size[i] < 0.0f) {
+                    main_size[i] = 0.0f;
+                }
             }
         }
         leftover = 0.0f;
@@ -1093,8 +1147,9 @@ static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_i
          cidx = r->boxes.data[cidx].next_sibling) {
         struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
         if (c->kind == YL_BOX_INLINE_TEXT) {
-            sum += yetty_ylexbor_naive_text_width(c->text, c->text_len, c->font_size,
-                                                  yetty_ylexbor_glyph_advance_ratio(r));
+            float adv =
+                c->glyph_advance > 0.0f ? c->glyph_advance : yetty_ylexbor_glyph_advance_ratio(r);
+            sum += yetty_ylexbor_naive_text_width(c->text, c->text_len, c->font_size, adv);
         } else if (c->kind == YL_BOX_INLINE_IMAGE) {
             if (c->w > 0 && c->w > sum) {
                 sum = c->w;
@@ -1609,12 +1664,63 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
     float col_gap = self->grid_col_gap;
     float row_gap = self->grid_row_gap > 0.0f ? self->grid_row_gap : 0.0f;
 
-    /* Resolve column widths: fixed px tracks keep their size; fr tracks share
-     * the leftover after fixed tracks + inter-column gaps. */
+    /* `auto` / min-content / max-content tracks size to the max-content of the
+	 * items placed in them. Pre-pass: simulate row-major placement (honoring
+	 * spans) and measure each single-span item's intrinsic content width into
+	 * its column. */
+    float auto_w[YL_GRID_MAX_TRACKS] = {0};
+    bool any_auto = false;
+    for (int c = 0; c < ncols; c++) {
+        if (self->grid_tracks[c].is_auto) {
+            any_auto = true;
+        }
+    }
+    if (any_auto) {
+        int acol = 0;
+        for (uint32_t cc = self->first_child; cc != 0; cc = r->boxes.data[cc].next_sibling) {
+            struct yetty_ylexbor_box *ch = &r->boxes.data[cc];
+            if (ch->position == YL_POS_ABSOLUTE || ch->position == YL_POS_FIXED ||
+                ch->float_side != 0) {
+                continue;
+            }
+            int sp = ch->grid_col_span > 0 ? ch->grid_col_span : 1;
+            if (sp > ncols) {
+                sp = ncols;
+            }
+            if (acol + sp > ncols) {
+                acol = 0;
+            }
+            if (sp == 1 && self->grid_tracks[acol].is_auto) {
+                float iw;
+                if (ch->css_width > 0.0f) {
+                    iw = ch->css_width;
+                } else {
+                    int budget = YL_CELL_MEASURE_BUDGET;
+                    iw = measure_cell_content_width(r, cc, &budget) + ch->padding_left +
+                         ch->padding_right + ch->border_left + ch->border_right;
+                    if (ch->kind == YL_BOX_INLINE_IMAGE && ch->w > 0.0f) {
+                        iw = ch->w;
+                    }
+                }
+                if (iw > auto_w[acol]) {
+                    auto_w[acol] = iw;
+                }
+            }
+            acol += sp;
+        }
+    }
+
+    /* Resolve column widths: fixed px tracks keep their size; auto tracks take
+     * their measured content size; fr tracks share the leftover after fixed +
+     * auto tracks + inter-column gaps. */
     float fixed_sum = 0.0f, fr_sum = 0.0f;
     for (int c = 0; c < ncols; c++) {
         if (self->grid_tracks[c].is_fr) {
             fr_sum += self->grid_tracks[c].value;
+        } else if (self->grid_tracks[c].is_auto) {
+            fixed_sum += auto_w[c];
+        } else if (self->grid_tracks[c].is_pct) {
+            fixed_sum += self->grid_tracks[c].value * 0.01f * content_width;
         } else {
             fixed_sum += self->grid_tracks[c].value;
         }
@@ -1629,8 +1735,15 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
     float col_x[YL_GRID_MAX_TRACKS];
     float cursor_x = content_origin_x;
     for (int c = 0; c < ncols; c++) {
-        col_w[c] = self->grid_tracks[c].is_fr ? self->grid_tracks[c].value * fr_unit
-                                              : self->grid_tracks[c].value;
+        if (self->grid_tracks[c].is_fr) {
+            col_w[c] = self->grid_tracks[c].value * fr_unit;
+        } else if (self->grid_tracks[c].is_auto) {
+            col_w[c] = auto_w[c];
+        } else if (self->grid_tracks[c].is_pct) {
+            col_w[c] = self->grid_tracks[c].value * 0.01f * content_width;
+        } else {
+            col_w[c] = self->grid_tracks[c].value;
+        }
         col_x[c] = cursor_x;
         cursor_x += col_w[c] + col_gap;
     }
@@ -1772,13 +1885,25 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         if (c->position == YL_POS_ABSOLUTE || c->position == YL_POS_FIXED || c->float_side != 0) {
             continue;
         }
-        if (col >= ncols) {
+        /* Column span: the item occupies `span` consecutive columns (github's
+		 * 12-col cards: `grid-column: span N`). Clamp to the track count. */
+        int span = c->grid_col_span > 0 ? c->grid_col_span : 1;
+        if (span > ncols) {
+            span = ncols;
+        }
+        /* Wrap to a new row when this item won't fit in the columns left. */
+        if (col + span > ncols) {
             col = 0;
             row_y += row_h + row_gap;
             row_h = 0.0f;
         }
         float cell_x = col_x[col];
-        float cell_w = col_w[col];
+        /* Width spans `span` tracks plus the inter-track gaps between them. */
+        float cell_w = 0.0f;
+        for (int sc = 0; sc < span && (col + sc) < ncols; sc++) {
+            cell_w += col_w[col + sc];
+        }
+        cell_w += (float)(span - 1) * col_gap;
         resolve_pct_metrics(c, cell_w);
         float child_h = 0.0f;
         if (c->kind == YL_BOX_BLOCK) {
@@ -1817,7 +1942,7 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         }
         apply_transform(r, cidx);
         placed_any = 1;
-        col++;
+        col += span;
     }
 
     float block_height = (placed_any ? (row_y + row_h) : content_origin_y) - origin_y + pad_bottom;

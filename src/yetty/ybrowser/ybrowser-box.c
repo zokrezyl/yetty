@@ -184,6 +184,8 @@ struct yl_style_state {
     float line_height_factor;
     int font_weight;
     bool font_italic;
+    float glyph_advance; /* per-font advance override (1.0 for Ahem); 0 = global.
+	                      * Inherited so flushed inline-text boxes pick it up. */
     bool underline;    /* true inside <a> (and any other inline element
 	                  * whose default_for() flags underline=1) */
     bool line_through; /* `text-decoration: line-through` from CSS */
@@ -372,6 +374,57 @@ static int inline_buf_append(struct yl_inline_buf *b, const char *s, size_t n)
     return 0;
 }
 
+/* Resolve a grid-column span from an element's class list for responsive
+ * design-system grids that encode the span IN the class name — Primer Brand
+ * (github) is the dominant case: `Grid__column--medium-span-7`,
+ * `Grid__column--large-span-12`, or a bare `...span-6...`. The breakpoint
+ * prefix (xsmall/small/medium/large/xlarge) gates which span applies at a given
+ * viewport width; the largest breakpoint whose min-width is <= `viewport_w`
+ * wins (CSS source-order / cascade behaviour for these mobile-first systems).
+ * Returns the effective span (1..maxn), or 0 if the class list encodes none. */
+static int grid_span_from_classes(const char *cls, size_t cls_len, int viewport_w, int maxn)
+{
+    if (cls == NULL || cls_len == 0) {
+        return 0;
+    }
+    /* Mobile-first breakpoint min-widths (Primer Brand). A token with no
+	 * breakpoint prefix is the base (min-width 0). */
+    static const struct {
+        const char *name;
+        int min_width;
+    } breakpoints[] = {
+        {"xsmall", 0}, {"small", 544}, {"medium", 768}, {"large", 1012}, {"xlarge", 1280},
+    };
+    int best_span = 0;
+    int best_min = -1;
+    /* Walk every `span-<N>` occurrence; classify its breakpoint by the token
+	 * immediately preceding `span-` (`--<bp>-span-N`), default base. */
+    for (size_t i = 0; i + 5 <= cls_len; i++) {
+        if (strncmp(cls + i, "span-", 5) != 0) {
+            continue;
+        }
+        int span = atoi(cls + i + 5);
+        if (span < 1 || span > maxn) {
+            continue;
+        }
+        int min_width = 0; /* base / no prefix */
+        for (size_t b = 0; b < sizeof(breakpoints) / sizeof(breakpoints[0]); b++) {
+            size_t nlen = strlen(breakpoints[b].name);
+            /* Match `<bp>-span-` ending exactly at `i` (i.e. `<bp>-` precedes). */
+            if (i >= nlen + 1 && strncmp(cls + i - nlen - 1, breakpoints[b].name, nlen) == 0 &&
+                cls[i - 1] == '-') {
+                min_width = breakpoints[b].min_width;
+                break;
+            }
+        }
+        if (min_width <= viewport_w && min_width > best_min) {
+            best_min = min_width;
+            best_span = span;
+        }
+    }
+    return best_span;
+}
+
 /* Force a hard line break (`<br>`) into the inline buffer. A plain
  * inline_buf_append("\n") would be collapsed to a single space under the
  * default white-space handling; the wrap pass only breaks a line on an
@@ -549,6 +602,7 @@ static void style_to_box(struct yetty_ylexbor_box *b, const struct yl_style_stat
     }
     b->font_weight = s->font_weight;
     b->font_italic = s->font_italic;
+    b->glyph_advance = s->glyph_advance;
     b->fg = s->fg;
 }
 
@@ -1082,6 +1136,14 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         b->font_italic = italic;
                         s.font_italic = italic;
                     }
+                    /* `font-family: Ahem` (the WPT test font) — every glyph is
+					 * exactly 1em wide, so use advance ratio 1.0 for exact text
+					 * geometry. Inherited via the style state so the flushed
+					 * inline-text boxes measure with it too. */
+                    if (yetty_ybrowser_libcss_font_is_ahem(cs)) {
+                        s.glyph_advance = 1.0f;
+                    }
+                    b->glyph_advance = s.glyph_advance;
                     b->border_box = yetty_ybrowser_libcss_box_sizing(cs) != 0;
                     float lh_px = 0.0f;
                     float lh_factor = 0.0f;
@@ -1194,6 +1256,14 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                              : YL_LAYOUT_FLEX_ROW;
                         b->justify_content = yetty_ybrowser_libcss_justify_content(cs);
                         b->align_items = yetty_ybrowser_libcss_align_items(cs);
+                        /* flex-wrap + align-content from the CASCADE (stylesheet),
+						 * not just inline — WPT tests and real sites set these via
+						 * classes. */
+                        int fw = yetty_ybrowser_libcss_flex_wrap(cs);
+                        if (fw == CSS_FLEX_WRAP_WRAP || fw == CSS_FLEX_WRAP_WRAP_REVERSE) {
+                            b->flex_wrap = 1;
+                        }
+                        b->align_content = yetty_ybrowser_libcss_align_content(cs);
                         /* Flex `gap` (stored in grid_col_gap — a box is flex OR
 						 * grid, never both). libcss in this tree models only the
 						 * legacy multicol column-gap, so read the modern `gap`/
@@ -1250,7 +1320,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                             if (cls_attr && cls_len > 0) {
                                 const struct yl_grid_class *gt = yetty_ylexbor_grid_class_lookup(
                                     r, (const char *)cls_attr, cls_len);
-                                if (gt && gt->ntracks >= 2 && gt->ntracks <= 4) {
+                                if (gt && gt->ntracks >= 1 && gt->ntracks <= YL_GRID_MAX_TRACKS) {
                                     b->layout_mode = YL_LAYOUT_GRID;
                                     memcpy(b->grid_tracks, gt->tracks, sizeof(b->grid_tracks));
                                     b->grid_ntracks = gt->ntracks;
@@ -1271,7 +1341,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                 int ntracks = yetty_ylexbor_grid_parse_inline(
                                     (const char *)istyle, istyle_len, tracks, YL_GRID_MAX_TRACKS,
                                     &col_gap, &row_gap);
-                                if (ntracks >= 2 && ntracks <= 4) {
+                                if (ntracks >= 1 && ntracks <= YL_GRID_MAX_TRACKS) {
                                     b->layout_mode = YL_LAYOUT_GRID;
                                     memcpy(b->grid_tracks, tracks, sizeof(b->grid_tracks));
                                     b->grid_ntracks = (uint8_t)ntracks;
@@ -1347,6 +1417,14 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     if (yetty_ybrowser_libcss_flex_grow(cs, &fg)) {
                         b->flex_grow = fg;
                     }
+                    /* flex-shrink: -1 sentinel = unset (solver uses the CSS
+					 * initial 1.0); a definite value (incl. 0 = `shrink-0`) is
+					 * stored as-is so fixed sidebars don't collapse. */
+                    b->flex_shrink = -1.0f;
+                    float fsh = 0;
+                    if (yetty_ybrowser_libcss_flex_shrink(cs, &fsh)) {
+                        b->flex_shrink = fsh;
+                    }
                     float fb_px = 0;
                     bool fb_auto = false;
                     if (yetty_ybrowser_libcss_flex_basis(r, cs, s.font_size, pct_basis, &fb_px,
@@ -1393,13 +1471,36 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         const char *gc = find_inline_decl(istyle, istyle ? istylen : 0,
                                                           "grid-column", 11, &gc_len);
                         if (gc != NULL && gc_len > 0) {
+                            /* `span N` (in `span N` or `auto / span N`) — the item
+							 * occupies N columns when auto-flowed. github's whole
+							 * 12-col layout places cards this way. */
+                            const char *sp = NULL;
+                            for (size_t k = 0; k + 4 <= gc_len; k++) {
+                                if (strncasecmp(gc + k, "span", 4) == 0) {
+                                    sp = gc + k + 4;
+                                    break;
+                                }
+                            }
+                            if (sp != NULL) {
+                                while (sp < gc + gc_len && (*sp == ' ' || *sp == '\t')) {
+                                    sp++;
+                                }
+                                int span = atoi(sp);
+                                if (span >= 1 && span <= YL_GRID_MAX_TRACKS) {
+                                    b->grid_col_span = (uint8_t)span;
+                                }
+                            }
+                            /* A leading line NAME (not a number / `span` / `auto`)
+							 * — for named-line placement. */
                             size_t nm = 0;
                             while (nm < gc_len && gc[nm] != '/' && gc[nm] != ' ' && gc[nm] != '\t') {
                                 nm++;
                             }
                             char first = gc[0];
                             bool numeric = (first >= '0' && first <= '9') || first == '-';
-                            if (nm > 0 && !numeric) {
+                            bool is_span = (nm == 4 && strncasecmp(gc, "span", 4) == 0);
+                            bool is_auto = (nm == 4 && strncasecmp(gc, "auto", 4) == 0);
+                            if (nm > 0 && !numeric && !is_span && !is_auto) {
                                 char *tmp = malloc(nm + 1);
                                 if (tmp != NULL) {
                                     memcpy(tmp, gc, nm);
@@ -1407,6 +1508,23 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                     b->grid_col_name = yetty_ylexbor_arena_dup(r, tmp, nm + 1);
                                     free(tmp);
                                 }
+                            }
+                        }
+                    }
+                    /* No inline span? Responsive design systems (github's Primer
+					 * Brand) encode the grid-column span in the CLASS name
+					 * (`Grid__column--medium-span-7`); resolve it for the current
+					 * viewport width. Without this every card in github's 12-col
+					 * grid defaults to one column and the sections stack. */
+                    if (b->grid_col_span == 0) {
+                        size_t cls_len2 = 0;
+                        const lxb_char_t *cls2 = lxb_dom_element_get_attribute(
+                            el, (const lxb_char_t *)"class", 5, &cls_len2);
+                        if (cls2 != NULL && cls_len2 > 0) {
+                            int span = grid_span_from_classes((const char *)cls2, cls_len2,
+                                                              r->viewport_w, YL_GRID_MAX_TRACKS);
+                            if (span >= 1) {
+                                b->grid_col_span = (uint8_t)span;
                             }
                         }
                     }

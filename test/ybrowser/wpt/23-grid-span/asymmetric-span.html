@@ -1,0 +1,8 @@
+<!doctype html><meta charset=utf-8>
+<title>Asymmetric spans in a 12-col grid: a span-8 main + span-4 sidebar (the
+"content + rail" idiom) → 800px and 400px side by side.</title>
+<style>body{margin:0}</style>
+<div style="display:grid;grid-template-columns:repeat(12,minmax(0,1fr));width:1200px">
+  <div data-test="main" data-expect="0,*,800,*"   style="grid-column:span 8">main</div>
+  <div data-test="rail" data-expect="800,*,400,*" style="grid-column:span 4">rail</div>
+</div>
