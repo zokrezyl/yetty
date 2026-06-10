@@ -1007,62 +1007,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
     }
 
     ydebug("paint total boxes=%u", r->boxes.size);
-
-    /* Stacking order: positioned (absolute/fixed) subtrees must paint ABOVE
-	 * in-flow content, not in document order. Otherwise a position:fixed
-	 * header declared early in the DOM (e.g. Google News' top bar) is
-	 * overpainted by the in-flow cards that come after it and disappears.
-	 * Tag each box's stacking layer (0 = in-flow, 1 = inside an absolute or
-	 * fixed subtree); emit layer 0 first, then layer 1. `z` keeps climbing
-	 * across both passes, so layer 1 lands on top. parent index is always
-	 * lower than child index (box-build is DFS pre-order), so one forward
-	 * sweep propagates the flag from each positioned root down its subtree. */
-    uint8_t *paint_layer = calloc(r->boxes.size ? r->boxes.size : 1, 1);
-    if (paint_layer) {
-        uint32_t *parent_of = malloc((r->boxes.size ? r->boxes.size : 1) * sizeof(uint32_t));
-        if (!parent_of) {
-            free(paint_layer);
-            paint_layer = NULL; /* OOM — fall back to single-pass document order */
-        } else {
-            for (uint32_t i = 0; i < r->boxes.size; i++) {
-                parent_of[i] = UINT32_MAX;
-            }
-            for (uint32_t i = 0; i < r->boxes.size; i++) {
-                if (r->boxes.data[i].child_count == 0) {
-                    continue;
-                }
-                uint32_t c = r->boxes.data[i].first_child;
-                for (;;) {
-                    if (c < r->boxes.size) {
-                        parent_of[c] = i;
-                    } else {
-                        break;
-                    }
-                    uint32_t ns = r->boxes.data[c].next_sibling;
-                    if (ns == 0 || ns >= r->boxes.size) {
-                        break;
-                    }
-                    c = ns;
-                }
-            }
-            for (uint32_t i = 0; i < r->boxes.size; i++) {
-                uint8_t pos = r->boxes.data[i].position;
-                if (pos == YL_POS_ABSOLUTE || pos == YL_POS_FIXED) {
-                    paint_layer[i] = 1;
-                } else if (parent_of[i] != UINT32_MAX && paint_layer[parent_of[i]]) {
-                    paint_layer[i] = 1;
-                }
-            }
-            free(parent_of);
-        }
-    }
-
-    int paint_passes = paint_layer ? 2 : 1;
-    for (int pass = 0; pass < paint_passes; pass++) {
     for (uint32_t i = 0; i < r->boxes.size; i++) {
-        if (paint_layer && paint_layer[i] != pass) {
-            continue;
-        }
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
         /* A box with h=0 but a visible border is normal — that's
 		 * how `<hr>` renders (border-top: 1px on a content-less
@@ -1322,8 +1267,6 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
         }
         }
     }
-    } /* pass loop */
-    free(paint_layer);
 
     /* Publish the scene rectangle. Use viewport_w as a floor for X so
 	 * a page with no full-width background still produces a sensible

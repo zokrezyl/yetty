@@ -336,6 +336,9 @@ int main(int argc, char **argv)
      * changes (e.g. floats moving figures to the right rail) can be seen
      * without a GPU window. */
     int dump_boxes = 0;
+    /* --dump-geo: emit `dom-path  x  y  w  h` per element box, for matching
+     * against Chrome's getBoundingClientRect (geometry diff oracle). */
+    int dump_geo = 0;
     /* Standalone-only: hide the browser chrome (tab strip + address bar) so
      * the window is just the page, and record the GPU output to an mp4 via
      * the core (yframework/yvnc) recorder. */
@@ -348,6 +351,9 @@ int main(int argc, char **argv)
             osc = 1;
         } else if (!strcmp(a, "--dump-boxes")) {
             dump_boxes = 1;
+            interactive = 0;
+        } else if (!strcmp(a, "--dump-geo")) {
+            dump_geo = 1;
             interactive = 0;
         } else if (!strcmp(a, "--raw")) {
             osc = 0;
@@ -482,6 +488,31 @@ int main(int argc, char **argv)
     }
     if (yetty_ylexbor_dom_dirty(yl)) {
         (void)yetty_ylexbor_relayout(yl);
+    }
+
+    if (dump_geo) {
+        /* `dom-path  x  y  w  h` for every element box, for the Chrome
+         * geometry-diff oracle (matches Chrome's getBoundingClientRect by
+         * identical nth-of-type DOM path). Anonymous/text boxes have no
+         * element and are skipped. The LAST box for a given path wins in the
+         * consumer (deepest layout pass), matching Chrome's single rect. */
+        int count = yetty_ylexbor_test_box_count(yl);
+        for (int bi = 0; bi < count; bi++) {
+            char path[512] = {0};
+            if (yetty_ylexbor_test_box_path_at(yl, bi, path, (int)sizeof(path)) != 0 || !path[0]) {
+                continue;
+            }
+            float x = 0, y = 0, w = 0, h = 0;
+            char tag[32] = {0};
+            if (yetty_ylexbor_test_box_at(yl, bi, &x, &y, &w, &h, tag, sizeof(tag)) != 0) {
+                continue;
+            }
+            printf("%s\t%.1f\t%.1f\t%.1f\t%.1f\n", path, x, y, w, h);
+        }
+        fflush(stdout);
+        yetty_ylexbor_destroy(yl);
+        free(html);
+        return 0;
     }
 
     if (dump_boxes) {

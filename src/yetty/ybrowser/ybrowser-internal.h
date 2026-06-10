@@ -563,6 +563,17 @@ void yetty_ylexbor_css_scan_grid_content_width(struct yetty_ylexbor *r, const ch
 void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *css_source,
                                            size_t len);
 
+/* Parse `grid-template-columns` (+ gaps) from an inline `style` attribute
+ * string into `out` (up to maxn tracks). Returns the track count, 0 if absent.
+ * For grids declared directly on an element rather than via a stylesheet
+ * class. */
+int yetty_ylexbor_grid_parse_inline(const char *style, size_t len, struct yl_grid_track *out,
+                                    int maxn, float *col_gap, float *row_gap);
+
+/* Column gap (px) from an inline `style` attribute (`gap`/`column-gap`), or -1
+ * if absent. For flex/grid containers whose gap is set inline. */
+float yetty_ylexbor_css_inline_gap(const char *style, size_t len);
+
 /* Free r->grid_classes and each owned class name. Called on document replace. */
 void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r);
 

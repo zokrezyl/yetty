@@ -1716,12 +1716,18 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         }
         if (s->render_target->ops->is_busy && s->render_target->ops->is_busy(s->render_target)) {
             /* GPU still presenting the previous frame. on_render_async already
-             * cleared render_pending, so returning here would DROP this render
-             * with nothing to re-arm it — fine when more input events follow,
-             * fatal for an async image completion that has no follow-up event
-             * (the page would freeze with stale pixels until an unrelated wake).
-             * Re-request so we retry on the next loop iteration. */
-            sa_request_render(s);
+             * cleared render_pending, so returning here drops this render. That
+             * is fine for input/scroll-driven renders — the next event (or the
+             * framework-dirty re-arm below) retries them — and re-arming on
+             * EVERY busy frame storms render requests during heavy scrolling,
+             * starving input handling. Only re-arm for an async IMAGE repaint,
+             * which has no follow-up event and would otherwise freeze with
+             * stale pixels until an unrelated wake. */
+            struct tab *active_tab = &s->app.tabs[s->app.active];
+            if (s->app.img_dirty ||
+                (active_tab->engine && yetty_ylexbor_images_in_flight(active_tab->engine) > 0)) {
+                sa_request_render(s);
+            }
             return YETTY_OK(yetty_ycore_int, 1);
         }
         /* Per-frame browser work: pump JS timers, re-render the active

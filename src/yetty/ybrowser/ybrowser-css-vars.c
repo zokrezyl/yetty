@@ -769,9 +769,37 @@ static int grid_parse_one_track(const char *s, size_t n, struct yl_grid_track *o
         return 1;
     }
     {
+        /* Clean `<number>[px|em|rem]` only. atof() silently swallows garbage
+		 * (`calc(...)`, `var(...)`, leftover named-line tokens), which let a
+		 * mis-parsed sidebar track masquerade as a tiny ~16px column and
+		 * collapsed the content auto-flowed into it (Wikipedia). Validate the
+		 * whole token; reject anything else so the grid falls back to block. */
+        size_t k = 0;
+        int seen_digit = 0;
+        while (k < n && (s[k] == '+' || s[k] == '-')) {
+            k++;
+        }
+        while (k < n && ((s[k] >= '0' && s[k] <= '9') || s[k] == '.')) {
+            if (s[k] >= '0' && s[k] <= '9') {
+                seen_digit = 1;
+            }
+            k++;
+        }
+        size_t unit_len = n - k;
+        int unit_ok = (unit_len == 0) || (unit_len == 2 && strncmp(s + k, "px", 2) == 0) ||
+                      (unit_len == 2 && strncmp(s + k, "em", 2) == 0) ||
+                      (unit_len == 3 && strncmp(s + k, "rem", 3) == 0);
+        if (!seen_digit || !unit_ok) {
+            return 0;
+        }
         char buf[32];
         grid_tok_copy(s, n, buf, sizeof(buf));
         float v = (float)atof(buf);
+        if (unit_len == 2 && strncmp(s + k, "em", 2) == 0) {
+            v *= 16.0f;
+        } else if (unit_len == 3 && strncmp(s + k, "rem", 3) == 0) {
+            v *= 16.0f;
+        }
         if (v <= 0.0f) {
             return 0;
         }
@@ -784,6 +812,15 @@ static int grid_parse_one_track(const char *s, size_t n, struct yl_grid_track *o
 /* Parse a full grid-template-columns value into tracks. Expands repeat(). */
 static int grid_parse_tracks(const char *v, size_t n, struct yl_grid_track *out, int maxn)
 {
+    /* Named grid lines (`[name]`) imply named-line / `grid-column:<name>`
+	 * placement, which we don't model — auto-flowing the children would
+	 * mis-place them into the wrong (often near-zero) track and collapse the
+	 * content (Wikipedia's Vector shell nests such grids). Bail so the
+	 * container falls back to block flow, where the content keeps full width
+	 * and stays readable instead of wrapping one word per line. */
+    if (memchr(v, '[', n) != NULL) {
+        return 0;
+    }
     int count = 0;
     size_t i = 0;
     while (i < n && count < maxn) {
@@ -839,7 +876,14 @@ static int grid_parse_tracks(const char *v, size_t n, struct yl_grid_track *out,
                 i++;
             }
             struct yl_grid_track t = {0};
-            if (grid_parse_one_track(v + tstart, i - tstart, &t) && count < maxn) {
+            if (!grid_parse_one_track(v + tstart, i - tstart, &t)) {
+                /* A track we can't cleanly resolve means the template is more
+				 * complex than our simple model (calc/var/named/intrinsic).
+				 * Reject the whole grid so it falls back to readable block
+				 * flow rather than placing children into bogus tracks. */
+                return 0;
+            }
+            if (count < maxn) {
                 out[count++] = t;
             }
         }
@@ -1018,6 +1062,78 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
         entry->row_gap = row_gap > 0.0f ? row_gap : 0.0f;
         r->grid_class_count++;
     }
+}
+
+/* Parse a `grid-template-columns` declaration out of an inline `style`
+ * attribute into `out` (up to maxn tracks); also reads the column/row gap
+ * (`column-gap`/`row-gap`/`gap`). Returns the track count (0 if none). Lets
+ * box-build treat `style="display:grid;grid-template-columns:200px 1fr"` as a
+ * real grid — the class scanner only sees author-stylesheet rules, not inline
+ * styles. */
+int yetty_ylexbor_grid_parse_inline(const char *style, size_t len, struct yl_grid_track *out,
+                                    int maxn, float *col_gap, float *row_gap)
+{
+    if (col_gap) {
+        *col_gap = 0.0f;
+    }
+    if (row_gap) {
+        *row_gap = 0.0f;
+    }
+    if (style == NULL || out == NULL || len < 12) {
+        return 0;
+    }
+    static const char needle[] = "grid-template-columns:";
+    const size_t nlen = sizeof(needle) - 1;
+    for (size_t i = 0; i + nlen <= len; i++) {
+        if (memcmp(style + i, needle, nlen) != 0) {
+            continue;
+        }
+        size_t value_start = i + nlen;
+        size_t value_end = value_start;
+        while (value_end < len && style[value_end] != ';') {
+            value_end++;
+        }
+        int ntracks = grid_parse_tracks(style + value_start, value_end - value_start, out, maxn);
+        if (col_gap) {
+            float g = grid_find_len(style, len, "column-gap", 0);
+            if (g < 0.0f) {
+                g = grid_find_len(style, len, "gap", 0);
+            }
+            if (g > 0.0f) {
+                *col_gap = g;
+            }
+        }
+        if (row_gap) {
+            float g = grid_find_len(style, len, "row-gap", 0);
+            if (g < 0.0f) {
+                g = grid_find_len(style, len, "gap", 0);
+            }
+            if (g > 0.0f) {
+                *row_gap = g;
+            }
+        }
+        return ntracks;
+    }
+    return 0;
+}
+
+/* Column gap (px) declared in an inline `style` attribute via `gap`,
+ * `column-gap`, or `grid-column-gap`. Returns -1 when none is present. Used
+ * for flex/grid containers whose gap is set inline (libcss in this tree only
+ * models the legacy multicol column-gap, not the modern `gap` shorthand). */
+float yetty_ylexbor_css_inline_gap(const char *style, size_t len)
+{
+    if (style == NULL || len == 0) {
+        return -1.0f;
+    }
+    float g = grid_find_len(style, len, "column-gap", 0);
+    if (g < 0.0f) {
+        g = grid_find_len(style, len, "gap", 0);
+    }
+    if (g < 0.0f) {
+        g = grid_find_len(style, len, "grid-column-gap", 0);
+    }
+    return g;
 }
 
 void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)

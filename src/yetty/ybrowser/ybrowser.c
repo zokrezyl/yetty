@@ -821,6 +821,54 @@ int yetty_ylexbor_test_box_data_test_at(const struct yetty_ylexbor *r, int index
     return 0;
 }
 
+int yetty_ylexbor_test_box_path_at(const struct yetty_ylexbor *r, int index, char *out_buf, int cap)
+{
+    if (out_buf && cap > 0) {
+        out_buf[0] = '\0';
+    }
+    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size || out_buf == NULL || cap <= 0) {
+        return -1;
+    }
+    const struct yetty_ylexbor_box *b = &r->boxes.data[index];
+    if (b->element == NULL) {
+        return -1;
+    }
+    /* Collect "tag:nth" segments deepest-first, then join top-down. */
+    char segs[64][48];
+    int nseg = 0;
+    lxb_dom_node_t *node = lxb_dom_interface_node(b->element);
+    while (node != NULL && node->type == LXB_DOM_NODE_TYPE_ELEMENT && nseg < 64) {
+        lxb_dom_element_t *el = lxb_dom_interface_element(node);
+        size_t nlen = 0;
+        const unsigned char *nm = lxb_dom_element_local_name(el, &nlen);
+        int nth = 1;
+        for (lxb_dom_node_t *p = node->prev; p != NULL; p = p->prev) {
+            if (p->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+                continue;
+            }
+            size_t plen = 0;
+            const unsigned char *pnm =
+                lxb_dom_element_local_name(lxb_dom_interface_element(p), &plen);
+            if (plen == nlen && nm != NULL && pnm != NULL && memcmp(nm, pnm, nlen) == 0) {
+                nth++;
+            }
+        }
+        snprintf(segs[nseg], sizeof(segs[0]), "%.*s:%d", (int)nlen,
+                 nm != NULL ? (const char *)nm : "x", nth);
+        nseg++;
+        node = node->parent;
+    }
+    int pos = 0;
+    for (int i = nseg - 1; i >= 0; i--) {
+        int written = snprintf(out_buf + pos, (size_t)(cap - pos), "%s%s", pos > 0 ? ">" : "", segs[i]);
+        if (written < 0 || written >= cap - pos) {
+            break;
+        }
+        pos += written;
+    }
+    return 0;
+}
+
 char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y)
 {
     if (r == NULL) {

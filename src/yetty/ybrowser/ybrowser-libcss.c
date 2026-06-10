@@ -167,7 +167,14 @@ static const char UA_WIKIPEDIA_CSS[] =
     " { float: left; margin: 0 0.8em 0.5em 0; }\n"
     ".mw-halign-center, figure.mw-halign-center,"
     " figure.mw-default-size.mw-halign-center"
-    " { float: none; margin: 0.5em auto; }\n";
+    " { float: none; margin: 0.5em auto; }\n"
+    /* MediaWiki leans on `aria-hidden`/`role=presentation` to hide nav,
+	 * jump-links, and edit-section markers. Globally honouring those as
+	 * display:none is WRONG (they are accessibility hints, not visual ones —
+	 * it hid Google News' article-image figures), so the generic UA sheet no
+	 * longer does it. Re-apply it HERE, scoped to MediaWiki pages, where the
+	 * junk genuinely relies on it. */
+    "[aria-hidden=\"true\"], [role=\"presentation\"] { display: none !important; }\n";
 
 int yetty_ybrowser_libcss_apply_wikipedia_quirks(struct yetty_ylexbor *r)
 {

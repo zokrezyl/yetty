@@ -600,12 +600,22 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
         return YETTY_OK(float, pad_top + pad_bottom);
     }
 
+    /* Flex `gap` between items (stored in grid_col_gap by box-build). It
+	 * consumes main-axis space before items are sized, so subtract the total
+	 * inter-item gap from the budget; the placement loop re-inserts it. */
+    float flex_gap = self->grid_col_gap > 0.0f ? self->grid_col_gap : 0.0f;
+    float total_flex_gap = n_children > 1 ? (float)(n_children - 1) * flex_gap : 0.0f;
+
     /* Main-axis budget. */
     float main_budget;
     if (column_dir) {
         main_budget = css_h > 0 ? css_h : 0;
     } else {
         main_budget = content_width;
+    }
+    main_budget -= total_flex_gap;
+    if (main_budget < 0.0f) {
+        main_budget = 0.0f;
     }
 
     /* Resolve each child's hypothetical main-axis size. Encoding
@@ -797,7 +807,7 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
         }
         natural_h[i] = c->h;
         natural_w[i] = c->w;
-        cursor += main_size[i] + gap;
+        cursor += main_size[i] + gap + flex_gap;
     }
 
     /* Cross-axis: tallest item dictates row height (or container's
@@ -1514,6 +1524,60 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         cursor_x += col_w[c] + col_gap;
     }
 
+    /* Named-placement guard. We only model row-major auto-flow; sites whose
+	 * grid places the content by name/area (Wikipedia's Vector shell:
+	 * sidebar | content | toc) would have their content auto-flowed into the
+	 * narrow sidebar track and collapsed. Detect it: simulate the row-major
+	 * walk and, if a content-bearing child (>=3 of its own children) lands in
+	 * a track far narrower than the widest one, the grid isn't really
+	 * auto-flow — fall back to block so the content keeps full width. A real
+	 * card grid (text + thumbnail) puts only a leaf-ish image in the narrow
+	 * track, so it is unaffected. */
+    {
+        float max_track = 0.0f;
+        for (int c = 0; c < ncols; c++) {
+            if (col_w[c] > max_track) {
+                max_track = col_w[c];
+            }
+        }
+        int probe_col = 0;
+        for (uint32_t cc = self->first_child; cc != 0; cc = r->boxes.data[cc].next_sibling) {
+            const struct yetty_ylexbor_box *ch = &r->boxes.data[cc];
+            if (ch->position == YL_POS_ABSOLUTE || ch->position == YL_POS_FIXED ||
+                ch->float_side != 0) {
+                continue;
+            }
+            int narrow = (col_w[probe_col] < 0.45f * max_track && col_w[probe_col] < 400.0f);
+            if (narrow) {
+                /* Count this child's descendants (capped). A page's content
+				 * column has a large subtree; a card's thumbnail in a narrow
+				 * track is a small leaf-ish image. >25 descendants in a narrow
+				 * track = misplaced content → fall back to block. */
+                int desc = 0;
+                uint32_t stack[64];
+                int sp = 0;
+                if (ch->child_count > 0) {
+                    stack[sp++] = ch->first_child;
+                }
+                while (sp > 0 && desc < 40) {
+                    uint32_t node = stack[--sp];
+                    while (node != 0 && desc < 40) {
+                        desc++;
+                        if (r->boxes.data[node].child_count > 0 && sp < 64) {
+                            stack[sp++] = r->boxes.data[node].first_child;
+                        }
+                        node = r->boxes.data[node].next_sibling;
+                    }
+                }
+                if (desc > 25) {
+                    r->boxes.data[idx].layout_mode = YL_LAYOUT_BLOCK;
+                    return layout_block(r, idx, origin_x, origin_y, content_w);
+                }
+            }
+            probe_col = (probe_col + 1) % ncols;
+        }
+    }
+
     /* Auto-flow children into cells, row-major. */
     float row_y = content_origin_y;
     float row_h = 0.0f;
@@ -1983,6 +2047,18 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
             cb_y = origin_y + self->border_top;
             cb_w = content_w;
             cb_h = block_height - self->border_top - self->border_bottom;
+            /* An explicit height defines the containing block even when no
+			 * in-flow child contributed height — e.g. a sized
+			 * position:relative box holding only an absolutely-positioned
+			 * overlay, whose bottom/right insets resolve against it. */
+            if (self->css_height > 0.0f) {
+                float pad_box_h =
+                    self->border_box ? (self->css_height - self->border_top - self->border_bottom)
+                                     : (self->css_height + self->padding_top + self->padding_bottom);
+                if (pad_box_h > cb_h) {
+                    cb_h = pad_box_h;
+                }
+            }
             if (cb_h < 0.0f) {
                 cb_h = 0.0f;
             }

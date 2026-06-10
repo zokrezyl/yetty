@@ -219,6 +219,15 @@ int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int
 int yetty_ylexbor_test_box_data_test_at(const struct yetty_ylexbor *r, int index, char *out_buf,
                                         int cap);
 
+/* Test-only: write an nth-of-type DOM path for the box's element into out_buf,
+ * e.g. "html:1>body:1>div:2>main:1" (top-down, each segment
+ * lowercase-tag ":" 1-based index among same-tag element siblings). Returns 0
+ * on success, non-zero for anonymous/text boxes (no element). Used by the
+ * Chrome geometry oracle to match ybrowser boxes to Chrome's
+ * getBoundingClientRect by identical DOM path. */
+int yetty_ylexbor_test_box_path_at(const struct yetty_ylexbor *r, int index, char *out_buf,
+                                   int cap);
+
 #ifdef __cplusplus
 }
 #endif

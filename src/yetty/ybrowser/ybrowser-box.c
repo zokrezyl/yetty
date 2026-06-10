@@ -1045,6 +1045,22 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                              : YL_LAYOUT_FLEX_ROW;
                         b->justify_content = yetty_ybrowser_libcss_justify_content(cs);
                         b->align_items = yetty_ybrowser_libcss_align_items(cs);
+                        /* Flex `gap` (stored in grid_col_gap — a box is flex OR
+						 * grid, never both). libcss in this tree models only the
+						 * legacy multicol column-gap, so read the modern `gap`/
+						 * `column-gap` shorthand from the inline style. */
+                        {
+                            size_t gs_len = 0;
+                            const lxb_char_t *gs = lxb_dom_element_get_attribute(
+                                el, (const lxb_char_t *)"style", 5, &gs_len);
+                            if (gs && gs_len > 0) {
+                                float gap =
+                                    yetty_ylexbor_css_inline_gap((const char *)gs, gs_len);
+                                if (gap > 0.0f) {
+                                    b->grid_col_gap = gap;
+                                }
+                            }
+                        }
                     } else if (disp == CSS_DISPLAY_TABLE || disp == CSS_DISPLAY_INLINE_TABLE) {
                         b->layout_mode = YL_LAYOUT_TABLE;
                     } else if (disp == CSS_DISPLAY_GRID || disp == CSS_DISPLAY_INLINE_GRID) {
@@ -1082,6 +1098,27 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                     b->grid_ntracks = gt->ntracks;
                                     b->grid_col_gap = gt->col_gap;
                                     b->grid_row_gap = gt->row_gap;
+                                }
+                            }
+                        }
+                        /* Grid declared directly on the element's inline style
+						 * (the class scanner only sees stylesheet rules). */
+                        if (b->layout_mode != YL_LAYOUT_GRID) {
+                            size_t istyle_len = 0;
+                            const lxb_char_t *istyle = lxb_dom_element_get_attribute(
+                                el, (const lxb_char_t *)"style", 5, &istyle_len);
+                            if (istyle && istyle_len > 0) {
+                                struct yl_grid_track tracks[YL_GRID_MAX_TRACKS] = {0};
+                                float col_gap = 0.0f, row_gap = 0.0f;
+                                int ntracks = yetty_ylexbor_grid_parse_inline(
+                                    (const char *)istyle, istyle_len, tracks, YL_GRID_MAX_TRACKS,
+                                    &col_gap, &row_gap);
+                                if (ntracks >= 2 && ntracks <= 4) {
+                                    b->layout_mode = YL_LAYOUT_GRID;
+                                    memcpy(b->grid_tracks, tracks, sizeof(b->grid_tracks));
+                                    b->grid_ntracks = (uint8_t)ntracks;
+                                    b->grid_col_gap = col_gap;
+                                    b->grid_row_gap = row_gap;
                                 }
                             }
                         }
@@ -1543,6 +1580,58 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 			 * Inline non-clickable spans don't have listeners to
 			 * fire on click; losing per-span granularity costs us
 			 * nothing. */
+            /* Author CSS on an inline element must override the tag-default
+			 * text style — otherwise every <a> paints the UA blue + underline
+			 * even when the site sets e.g. a dark, un-underlined headline link
+			 * (`.gPFEn{color:#1f1f1f}`, `text-decoration:none`). The block
+			 * branch already does this; mirror it here so inline runs inherit
+			 * the right color/weight/decoration before we recurse. */
+            if (r->libcss) {
+                size_t inl_istylen = 0;
+                const lxb_char_t *inl_istyle =
+                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"style", 5, &inl_istylen);
+                css_computed_style *inl_cs = yetty_ybrowser_libcss_select(
+                    r, el, (const char *)inl_istyle, inl_istyle ? inl_istylen : 0);
+                if (inl_cs) {
+                    struct yetty_ylexbor_color inl_color;
+                    int inl_weight;
+                    bool inl_italic;
+                    float inl_px;
+                    if (yetty_ybrowser_libcss_color(inl_cs, &inl_color)) {
+                        s.fg = inl_color;
+                    }
+                    if (yetty_ybrowser_libcss_font_weight(inl_cs, &inl_weight)) {
+                        s.font_weight = inl_weight;
+                    }
+                    if (yetty_ybrowser_libcss_font_italic(inl_cs, &inl_italic)) {
+                        s.font_italic = inl_italic;
+                    }
+                    if (yetty_ybrowser_libcss_font_size(
+                            r, inl_cs,
+                            parent_style ? parent_style->font_size : r->default_font_size,
+                            &inl_px)) {
+                        s.font_size = inl_px;
+                    }
+                    unsigned inl_dec = (unsigned)yetty_ybrowser_libcss_text_decoration(inl_cs);
+                    if (inl_dec & CSS_TEXT_DECORATION_NONE) {
+                        s.underline = false;
+                        s.line_through = false;
+                        s.overline = false;
+                    } else {
+                        if (inl_dec & CSS_TEXT_DECORATION_UNDERLINE) {
+                            s.underline = true;
+                        }
+                        if (inl_dec & CSS_TEXT_DECORATION_LINE_THROUGH) {
+                            s.line_through = true;
+                        }
+                        if (inl_dec & CSS_TEXT_DECORATION_OVERLINE) {
+                            s.overline = true;
+                        }
+                    }
+                    yetty_ybrowser_libcss_release(inl_cs);
+                }
+            }
+
             switch (child->local_name) {
             case LXB_TAG_A:
             case LXB_TAG_AREA:
