@@ -51,7 +51,7 @@ YETTY_YRESULT_DECLARE(yetty_ychrome_host_ptr, struct yetty_ychrome_host *);
  * object (yframework->window_manager); pass NULL to render the bar without live
  * OS-window control (e.g. in-terminal). All pointers are borrowed. */
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
-    struct yetty_yfigure_container *container, struct yetty_yfont_font *font,
+    struct yetty_yclass_object *container_obj, struct yetty_yfont_font *font,
     const struct yetty_context *ctx, struct yetty_yclass_object *window_manager, float width,
     float height, float caption_height, float edge_size, unsigned int flags);
 

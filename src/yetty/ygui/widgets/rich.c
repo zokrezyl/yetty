@@ -9,10 +9,21 @@
  */
 
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * rich.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_rich_data_ptr, struct yetty_ygui_rich *);
+struct yetty_yclass_ptr_result yetty_ygui_rich_class_get(void);
+struct yetty_ygui_rich_data_ptr_result yetty_ygui_rich_data(struct yetty_ygui_object *obj);
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/rich.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -30,7 +41,7 @@ struct rich_line {
 };
 
 struct [[clang::annotate("class@ygui:rich")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-rich_data {
+yetty_ygui_rich {
     struct rich_line *lines;
     int n_lines;
     int cap;
@@ -48,7 +59,7 @@ static struct yetty_ycore_void_result rich_constructor(struct yetty_yclass_ctx *
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "rich_constructor: data_get");
-    struct rich_data *d = d_dr.value;
+    struct yetty_ygui_rich *d = d_dr.value;
     d->lines = NULL;
     d->n_lines = 0;
     d->cap = 0;
@@ -75,7 +86,7 @@ static struct yetty_ycore_void_result rich_destructor(struct yetty_yclass_ctx *y
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "rich_destructor: data_get");
-    struct rich_data *d = d_dr.value;
+    struct yetty_ygui_rich *d = d_dr.value;
     for (int i = 0; i < d->n_lines; ++i) {
         free_line(&d->lines[i]);
     }
@@ -98,7 +109,7 @@ static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_ctx *yclass
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "rich_paint: data_get");
-    struct rich_data *d = d_dr.value;
+    struct yetty_ygui_rich *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
@@ -142,7 +153,7 @@ static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_ctx *yclass
     return YETTY_OK_VOID();
 }
 
-static int lines_grow(struct rich_data *d, int need)
+static int lines_grow(struct yetty_ygui_rich *d, int need)
 {
     if (need <= d->cap) {
         return 1;
@@ -193,7 +204,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_ygui_object *o
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_rich_clear: data_get");
-    struct rich_data *d = d_dr.value;
+    struct yetty_ygui_rich *d = d_dr.value;
     for (int i = 0; i < d->n_lines; ++i) {
         free_line(&d->lines[i]);
     }
@@ -210,7 +221,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_ygui_object
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_rich_add_line: data_get");
-    struct rich_data *d = d_dr.value;
+    struct yetty_ygui_rich *d = d_dr.value;
     if (!lines_grow(d, d->n_lines + 1)) {
         return YETTY_ERR(yetty_ycore_void, "rich_add_line: realloc");
     }
@@ -232,7 +243,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_ygui_object
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_rich_add_span: data_get");
-    struct rich_data *d = d_dr.value;
+    struct yetty_ygui_rich *d = d_dr.value;
     if (d->n_lines == 0) {
         struct yetty_ycore_void_result lr = yetty_ygui_rich_add_line(obj);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "rich_add_span: implicit line");

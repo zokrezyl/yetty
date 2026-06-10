@@ -33,6 +33,8 @@
 
 #include "internal.h"
 
+#include <yetty/ygui/widget.h>
+
 #include <stddef.h>
 #include <stdlib.h>
 

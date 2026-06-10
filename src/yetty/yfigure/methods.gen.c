@@ -1,5 +1,7 @@
 /* GENERATED — do not edit. */
 #include "yetty/yfigure/methods.gen.h"
+#include "yetty/yfigure/container.h"
+#include "yetty/yfigure/figure.h"
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h> /* container_of */

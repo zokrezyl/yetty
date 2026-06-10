@@ -12,13 +12,25 @@
  * set_source — to avoid making the figure recompile every frame.
  */
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * yshadertoy.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_yshadertoy_data_ptr, struct yetty_ygui_yshadertoy *);
+struct yetty_yclass_ptr_result yetty_ygui_yshadertoy_class_get(void);
+struct yetty_ygui_yshadertoy_data_ptr_result yetty_ygui_yshadertoy_data(
+    struct yetty_ygui_object *obj);
 #include <yetty/yfigure/wire.h>
-#include <yetty/ygui/widgets/yshadertoy.h>
 #include <stdlib.h>
 #include <string.h>
 
 struct [[clang::annotate("class@ygui:yshadertoy")]] [[clang::annotate("parent@ygui:widget")]]
-yshadertoy_data {
+yetty_ygui_yshadertoy {
     char *src;
     size_t len;
     int dirty; /* source changed since last ship → re-emit body */
@@ -36,7 +48,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yshadertoy: super");
     struct yetty_ygui_yshadertoy_data_ptr_result d_r = yetty_ygui_yshadertoy_data(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "ctor: data");
-    struct yshadertoy_data *d = d_r.value;
+    struct yetty_ygui_yshadertoy *d = d_r.value;
     d->src = NULL;
     d->len = 0;
     d->dirty = 0;
@@ -51,7 +63,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ygui_yshadertoy_data_ptr_result d_r = yetty_ygui_yshadertoy_data(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "dtor: data");
-    struct yshadertoy_data *d = d_r.value;
+    struct yetty_ygui_yshadertoy *d = d_r.value;
     free(d->src);
     return yetty_ygui_super_void(obj, yetty_ygui_yshadertoy_class_get().value,
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
@@ -79,7 +91,7 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_ctx *yclass_
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ygui_yshadertoy_data_ptr_result d_r = yetty_ygui_yshadertoy_data(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "emit_body: data");
-    struct yshadertoy_data *d = d_r.value;
+    struct yetty_ygui_yshadertoy *d = d_r.value;
     /* Ship the WGSL only when it changed — the figure recompiles on
      * receipt, so re-sending every frame would thrash the pipeline. The
      * figure runs its own animation timer once it has a shader. */
@@ -105,7 +117,7 @@ struct yetty_ycore_void_result yetty_ygui_yshadertoy_set_source(struct yetty_ygu
     }
     struct yetty_ygui_yshadertoy_data_ptr_result d_r = yetty_ygui_yshadertoy_data(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "yetty_ygui_yshadertoy_set_source: data");
-    struct yshadertoy_data *d = d_r.value;
+    struct yetty_ygui_yshadertoy *d = d_r.value;
     free(d->src);
     d->src = NULL;
     d->len = 0;

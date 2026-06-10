@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_progress_class_get(void);
 
 struct yetty_ygui_object;
-struct progress_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_progress_data_ptr, struct progress_data *);
+struct yetty_ygui_progress;
+YETTY_YRESULT_DECLARE(yetty_ygui_progress_data_ptr, struct yetty_ygui_progress *);
 struct yetty_ygui_progress_data_ptr_result yetty_ygui_progress_data(struct yetty_ygui_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_progress_create(struct yetty_yclass_ctx *ctx);

@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_panel_class_get(void);
 
 struct yetty_ygui_object;
-struct panel_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_panel_data_ptr, struct panel_data *);
+struct yetty_ygui_panel;
+YETTY_YRESULT_DECLARE(yetty_ygui_panel_data_ptr, struct yetty_ygui_panel *);
 struct yetty_ygui_panel_data_ptr_result yetty_ygui_panel_data(struct yetty_ygui_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_panel_create(struct yetty_yclass_ctx *ctx);

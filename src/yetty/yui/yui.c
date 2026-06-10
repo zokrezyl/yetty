@@ -74,7 +74,7 @@ struct yetty_yui {
     /* yui's own root container — owns the per-widget ygrid figures that
      * ygui's wire emission creates via process_records. Renders LAST in
      * the frame so the chrome sits above terminal panes painted earlier. */
-    struct yetty_yfigure_container *root_container;
+    struct yetty_yclass_object *root_container_obj;
     /* The same container's yclass object — handed to the ygui framework
      * via set_container_obj so framework_emit ships records straight in. */
     struct yetty_yclass_object *container_obj;
@@ -737,10 +737,10 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             return YETTY_ERR(yetty_yui_ptr, "yui_create: root_container", obj_res);
         }
         yui->container_obj = obj_res.value;
-        yui->root_container = yetty_yfigure_container_from(obj_res.value);
-        yetty_yfigure_container_set_context(yui->root_container, context);
-        yetty_yfigure_container_set_registry(yui->root_container, yui->figure_registry);
-        yetty_yfigure_container_set_rect(yui->root_container, root_rect);
+        yui->root_container_obj = obj_res.value;
+        yetty_yfigure_container_set_context(yui->root_container_obj, context);
+        yetty_yfigure_container_set_registry(yui->root_container_obj, yui->figure_registry);
+        yetty_yfigure_container_set_rect(yui->root_container_obj, root_rect);
     }
 
     /* Producer engine (new framework). No output pty — the envelope is
@@ -797,7 +797,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
          * consume (client-first). Best-effort, like the titlebar above. */
         if (context->runtime && context->runtime->window_manager) {
             struct yetty_ychrome_host_ptr_result ch = yetty_ychrome_host_create(
-                yui->root_container, yui->font, context, context->runtime->window_manager,
+                yui->root_container_obj, yui->font, context, context->runtime->window_manager,
                 (float)surface_w, (float)surface_h, TITLEBAR_STRIP_H, 8.0f, YETTY_YCHROME_FLAG_ALL);
             if (YETTY_IS_OK(ch)) {
                 yui->chrome = ch.value;
@@ -949,15 +949,16 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
     }
     yetty_yui_config_dialog_destroy(yui->config_dialog);
     yui->config_dialog = NULL;
-    if (yui->root_container) {
-        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(yui->root_container);
+    if (yui->root_container_obj) {
+        struct yetty_yfigure_figure *rf =
+            yetty_yfigure_container_as_figure(yui->root_container_obj);
         struct yetty_ycore_void_result r =
             yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
         if (!YETTY_IS_OK(r)) {
             ywarn("yui_destroy: root_container destroy: %s", r.error.msg);
             yetty_ycore_error_destroy(r.error);
         }
-        yui->root_container = NULL;
+        yui->root_container_obj = NULL;
     }
     if (yui->figure_registry) {
         yetty_ycore_error_destroy_safe(yetty_yfigure_registry_destroy(yui->figure_registry));
@@ -1382,7 +1383,7 @@ static struct yetty_ycore_void_result yui_debug_windows_sync(struct yetty_yui *y
 struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
                                                 struct yetty_ydraw_target *target)
 {
-    if (!yui || !yui->root_container || !target) {
+    if (!yui || !yui->root_container_obj || !target) {
         return YETTY_OK_VOID();
     }
 
@@ -1408,7 +1409,8 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
     }
 
     {
-        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(yui->root_container);
+        struct yetty_yfigure_figure *rf =
+            yetty_yfigure_container_as_figure(yui->root_container_obj);
         struct yetty_ycore_void_result rr =
             yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yui root_container render");
@@ -2601,7 +2603,7 @@ void yetty_yui_set_split_callback(struct yetty_yui *yui, yetty_yui_split_cb cb, 
 struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t surface_w,
                                                 uint32_t surface_h)
 {
-    if (!yui || !yui->root_container) {
+    if (!yui || !yui->root_container_obj) {
         return YETTY_OK_VOID();
     }
     if (surface_w == 0 || surface_h == 0) {
@@ -2623,7 +2625,7 @@ struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t 
             yetty_ygui_framework_set_viewport(yui->engine, (float)surface_w / yui->content_scale,
                                               (float)surface_h / yui->content_scale));
     }
-    struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(yui->root_container);
+    struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(yui->root_container_obj);
     {
         struct yetty_ycore_void_result drop_r =
             yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf)-1,

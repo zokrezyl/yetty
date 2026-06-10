@@ -33,7 +33,7 @@ struct yetty_yclass_ptr_result yetty_ygui_yrich_view_class_get(void)
     static const struct yetty_yclass_descriptor desc = {
         .name = "yetty_ygui_yrich_view",
         .type = YETTY_YCLASS_TYPE_REGULAR,
-        .data_size = sizeof(struct yrich_view_data),
+        .data_size = sizeof(struct yetty_ygui_yrich_view),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_ygui", "constructor", (yetty_yclass_method_id_t)yetty_ygui_constructor,
@@ -82,5 +82,6 @@ struct yetty_ygui_yrich_view_data_ptr_result yetty_ygui_yrich_view_data(
         return YETTY_ERR(yetty_ygui_yrich_view_data_ptr, "yetty_ygui_yrich_view_data",
                          data_slice_r);
     }
-    return YETTY_OK(yetty_ygui_yrich_view_data_ptr, (struct yrich_view_data *)data_slice_r.value);
+    return YETTY_OK(yetty_ygui_yrich_view_data_ptr,
+                    (struct yetty_ygui_yrich_view *)data_slice_r.value);
 }

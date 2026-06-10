@@ -31,7 +31,7 @@ struct yetty_yclass_ptr_result yetty_ymusic_music_class_get(void)
     static const struct yetty_yclass_descriptor desc = {
         .name = "yetty_ymusic_music",
         .type = YETTY_YCLASS_TYPE_REGULAR,
-        .data_size = sizeof(struct music_data),
+        .data_size = sizeof(struct yetty_ymusic_music),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_ymusic", "configure", (yetty_yclass_method_id_t)yetty_ymusic_configure,
@@ -59,4 +59,18 @@ struct yetty_yclass_ptr_result yetty_ymusic_music_class_get(void)
     }
     cls = register_class_r.value;
     return register_class_r;
+}
+
+struct yetty_ymusic_music_ptr_result yetty_ymusic_music_from(struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_ptr_result class_r = yetty_ymusic_music_class_get();
+    if (YETTY_IS_ERR(class_r)) {
+        return YETTY_ERR(yetty_ymusic_music_ptr, "yetty_ymusic_music_from: class accessor",
+                         class_r);
+    }
+    struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
+    if (YETTY_IS_ERR(slice_r)) {
+        return YETTY_ERR(yetty_ymusic_music_ptr, "yetty_ymusic_music_from: object_data", slice_r);
+    }
+    return YETTY_OK(yetty_ymusic_music_ptr, (struct yetty_ymusic_music *)slice_r.value);
 }

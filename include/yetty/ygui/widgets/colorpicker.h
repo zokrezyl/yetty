@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_colorpicker_class_get(void);
 
 struct yetty_ygui_object;
-struct cp_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_colorpicker_data_ptr, struct cp_data *);
+struct yetty_ygui_colorpicker;
+YETTY_YRESULT_DECLARE(yetty_ygui_colorpicker_data_ptr, struct yetty_ygui_colorpicker *);
 struct yetty_ygui_colorpicker_data_ptr_result yetty_ygui_colorpicker_data(
     struct yetty_ygui_object *obj);
 

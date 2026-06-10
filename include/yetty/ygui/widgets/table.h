@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_table_class_get(void);
 
 struct yetty_ygui_object;
-struct table_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_table_data_ptr, struct table_data *);
+struct yetty_ygui_table;
+YETTY_YRESULT_DECLARE(yetty_ygui_table_data_ptr, struct yetty_ygui_table *);
 struct yetty_ygui_table_data_ptr_result yetty_ygui_table_data(struct yetty_ygui_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_table_create(struct yetty_yclass_ctx *ctx);

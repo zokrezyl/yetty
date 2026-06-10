@@ -19,9 +19,8 @@ struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_yfigure_figure;
-YETTY_YRESULT_DECLARE(yetty_yfigure_figure_data_ptr, struct yetty_yfigure_figure *);
-struct yetty_yfigure_figure_data_ptr_result yetty_yfigure_figure_data_get(
-    struct yetty_yclass_object *obj);
+YETTY_YRESULT_DECLARE(yetty_yfigure_figure_ptr, struct yetty_yfigure_figure *);
+struct yetty_yfigure_figure_ptr_result yetty_yfigure_figure_from(struct yetty_yclass_object *obj);
 struct rectangle_result yetty_yfigure_figure_rect_get(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yfigure_figure_rect_set(struct yetty_yclass_object *obj,
                                                              struct yetty_ycore_rectangle value);
@@ -53,8 +52,5 @@ struct yetty_ycore_void_result yetty_yfigure_set_content_size(struct yetty_yclas
 struct yetty_yclass_object_ptr_result yetty_yfigure_figure_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_yfigure_register(void);
-
-struct yetty_ydraw_target;
-struct yetty_ywire_wire_statemachine;
 
 #endif

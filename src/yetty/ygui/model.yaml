@@ -127,7 +127,7 @@ classes:
     source_file: src/yetty/ygui/mixins/clickable.c
     parent: null
     mixins: []
-    data: struct clickable_data
+    data: struct yetty_ygui_clickable
     data_fields:
       - name: pressed
         type: int
@@ -163,7 +163,7 @@ classes:
     source_file: src/yetty/ygui/mixins/draggable.c
     parent: null
     mixins: []
-    data: struct draggable_data
+    data: struct yetty_ygui_draggable
     data_fields:
       - name: dragging
         type: int
@@ -204,7 +204,7 @@ classes:
       domain: ygui
       name: widget
     mixins: []
-    data: struct primitive_widget_data
+    data: struct yetty_ygui_primitive_widget
     data_fields:
       - name: unused
         type: char
@@ -221,7 +221,7 @@ classes:
     source_file: src/yetty/ygui/widget.c
     parent: null
     mixins: []
-    data: struct yetty_ygui_widget_data
+    data: struct yetty_ygui_widget
     data_fields:
       - name: rect
         type: struct yetty_ycore_rectangle
@@ -276,7 +276,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct bc_data
+    data: struct yetty_ygui_breadcrumbs
     data_fields:
       - name: items
         type: "char **"
@@ -311,7 +311,7 @@ classes:
     mixins:
       - domain: ygui
         name: clickable
-    data: struct button_data
+    data: struct yetty_ygui_button
     data_fields:
       - name: label
         type: "char *"
@@ -342,7 +342,7 @@ classes:
     mixins:
       - domain: ygui
         name: clickable
-    data: struct checkbox_data
+    data: struct yetty_ygui_checkbox
     data_fields:
       - name: label
         type: "char *"
@@ -373,7 +373,7 @@ classes:
     mixins:
       - domain: ygui
         name: clickable
-    data: struct chip_data
+    data: struct yetty_ygui_chip
     data_fields:
       - name: label
         type: "char *"
@@ -402,7 +402,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct cb_data
+    data: struct yetty_ygui_choicebox
     data_fields:
       - name: rows
         type: "struct cb_row *"
@@ -438,7 +438,7 @@ classes:
       domain: ygui
       name: vbox
     mixins: []
-    data: struct ch_data
+    data: struct yetty_ygui_collapsing_header
     data_fields:
       - name: title
         type: "char *"
@@ -474,7 +474,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct cp_data
+    data: struct yetty_ygui_colorpicker
     data_fields:
       - name: color
         type: uint32_t
@@ -498,7 +498,7 @@ classes:
     mixins:
       - domain: ygui
         name: clickable
-    data: struct combo_data
+    data: struct yetty_ygui_combobox
     data_fields:
       - name: text
         type: "char *"
@@ -527,7 +527,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct dp_data
+    data: struct yetty_ygui_datepicker
     data_fields:
       - name: shown_year
         type: int
@@ -568,7 +568,7 @@ classes:
       domain: ygui
       name: vbox
     mixins: []
-    data: struct dialog_data
+    data: struct yetty_ygui_dialog
     data_fields:
       - name: title
         type: "char *"
@@ -599,7 +599,7 @@ classes:
     mixins:
       - domain: ygui
         name: clickable
-    data: struct dropdown_data
+    data: struct yetty_ygui_dropdown
     data_fields:
       - name: options
         type: "char **"
@@ -640,7 +640,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct fp_data
+    data: struct yetty_ygui_filepicker
     data_fields:
       - name: cwd
         type: "char *"
@@ -698,7 +698,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct hbox_data
+    data: struct yetty_ygui_hbox
     data_fields:
       - name: _empty
         type: char
@@ -717,7 +717,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct label_data
+    data: struct yetty_ygui_label
     data_fields:
       - name: text
         type: "char *"
@@ -750,7 +750,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct list_data
+    data: struct yetty_ygui_list
     data_fields:
       - name: rows
         type: "char **"
@@ -790,7 +790,7 @@ classes:
       domain: ygui
       name: hbox
     mixins: []
-    data: struct menubar_data
+    data: struct yetty_ygui_menubar
     data_fields:
       - name: _empty
         type: char
@@ -809,7 +809,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct panel_data
+    data: struct yetty_ygui_panel
     data_fields:
       - name: bg
         type: struct yetty_ycore_rgba
@@ -839,7 +839,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct popup_menu_data
+    data: struct yetty_ygui_popup_menu
     data_fields:
       - name: items
         type: "struct menu_item *"
@@ -898,7 +898,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct progress_data
+    data: struct yetty_ygui_progress
     data_fields:
       - name: value
         type: float
@@ -926,7 +926,7 @@ classes:
     mixins:
       - domain: ygui
         name: clickable
-    data: struct radio_data
+    data: struct yetty_ygui_radio
     data_fields:
       - name: label
         type: "char *"
@@ -955,7 +955,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct rich_data
+    data: struct yetty_ygui_rich
     data_fields:
       - name: lines
         type: "struct rich_line *"
@@ -990,7 +990,7 @@ classes:
     mixins:
       - domain: ygui
         name: draggable
-    data: struct scrollarea_data
+    data: struct yetty_ygui_scrollarea
     data_fields:
       - name: offset
         type: float
@@ -1025,7 +1025,7 @@ classes:
     mixins:
       - domain: ygui
         name: clickable
-    data: struct sel_data
+    data: struct yetty_ygui_selectable
     data_fields:
       - name: text
         type: "char *"
@@ -1054,7 +1054,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct separator_data
+    data: struct yetty_ygui_separator
     data_fields:
       - name: _empty
         type: char
@@ -1073,7 +1073,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct slider_data
+    data: struct yetty_ygui_slider
     data_fields:
       - name: min_val
         type: float
@@ -1109,7 +1109,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct spinner_data
+    data: struct yetty_ygui_spinner
     data_fields:
       - name: value
         type: float
@@ -1146,7 +1146,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct splitter_data
+    data: struct yetty_ygui_splitter
     data_fields:
       - name: axis_plus1
         type: int
@@ -1183,7 +1183,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct statusbar_data
+    data: struct yetty_ygui_statusbar
     data_fields:
       - name: left
         type: "char *"
@@ -1212,7 +1212,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct stepper_data
+    data: struct yetty_ygui_stepper
     data_fields:
       - name: labels
         type: "char **"
@@ -1249,7 +1249,7 @@ classes:
       domain: ygui
       name: hbox
     mixins: []
-    data: struct tabbar_data
+    data: struct yetty_ygui_tabbar
     data_fields:
       - name: active_index
         type: int
@@ -1297,7 +1297,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct table_data
+    data: struct yetty_ygui_table
     data_fields:
       - name: headers
         type: "char **"
@@ -1338,7 +1338,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct textarea_data
+    data: struct yetty_ygui_textarea
     data_fields:
       - name: text
         type: "char *"
@@ -1365,7 +1365,7 @@ classes:
     mixins:
       - domain: ygui
         name: clickable
-    data: struct textinput_data
+    data: struct yetty_ygui_textinput
     data_fields:
       - name: text
         type: "char *"
@@ -1412,7 +1412,7 @@ classes:
     mixins:
       - domain: ygui
         name: clickable
-    data: struct toggle_data
+    data: struct yetty_ygui_toggle
     data_fields:
       - name: label
         type: "char *"
@@ -1441,7 +1441,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct tooltip_data
+    data: struct yetty_ygui_tooltip
     data_fields:
       - name: text
         type: "char *"
@@ -1466,7 +1466,7 @@ classes:
       domain: ygui
       name: vbox
     mixins: []
-    data: struct tn_data
+    data: struct yetty_ygui_tree_node
     data_fields:
       - name: label
         type: "char *"
@@ -1506,7 +1506,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct vbox_data
+    data: struct yetty_ygui_vbox
     data_fields:
       - name: _empty
         type: char
@@ -1525,7 +1525,7 @@ classes:
       domain: ygui
       name: vbox
     mixins: []
-    data: struct window_data
+    data: struct yetty_ygui_window
     data_fields:
       - name: title
         type: "char *"
@@ -1591,7 +1591,7 @@ classes:
       domain: ygui
       name: ydraw_embed
     mixins: []
-    data: struct ybrowser_data
+    data: struct yetty_ygui_ybrowser
     data_fields:
       - name: html
         type: "char *"
@@ -1628,7 +1628,7 @@ classes:
       domain: ygui
       name: ydraw_embed
     mixins: []
-    data: struct ydiagram_data
+    data: struct yetty_ygui_ydiagram
     data_fields:
       - name: source
         type: "char *"
@@ -1654,7 +1654,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct embed_data
+    data: struct yetty_ygui_ydraw_embed
     data_fields:
       - name: buf
         type: "struct yetty_ydraw_drawable_list *"
@@ -1679,7 +1679,7 @@ classes:
       domain: ygui
       name: widget
     mixins: []
-    data: struct yimage_data
+    data: struct yetty_ygui_yimage
     data_fields:
       - name: bytes
         type: "uint8_t *"
@@ -1711,7 +1711,7 @@ classes:
       domain: ygui
       name: ydraw_embed
     mixins: []
-    data: struct yjungle_data
+    data: struct yetty_ygui_yjungle
     data_fields:
       - name: jungle
         type: "struct yetty_yjungle *"
@@ -1748,7 +1748,7 @@ classes:
       domain: ygui
       name: ydraw_embed
     mixins: []
-    data: struct ymarkdown_data
+    data: struct yetty_ygui_ymarkdown
     data_fields:
       - name: source
         type: "char *"
@@ -1785,7 +1785,7 @@ classes:
       domain: ygui
       name: ydraw_embed
     mixins: []
-    data: struct ymaze_data
+    data: struct yetty_ygui_ymaze
     data_fields:
       - name: maze
         type: "struct yetty_ymaze *"
@@ -1822,7 +1822,7 @@ classes:
       domain: ygui
       name: vbox
     mixins: []
-    data: struct node_data
+    data: struct yetty_ygui_ynode
     data_fields:
       - name: title
         type: "char *"
@@ -1916,7 +1916,7 @@ classes:
       domain: ygui
       name: primitive_widget
     mixins: []
-    data: struct nodes_data
+    data: struct yetty_ygui_ynodes
     data_fields:
       - name: pan_x
         type: float
@@ -2045,7 +2045,7 @@ classes:
       domain: ygui
       name: ydraw_embed
     mixins: []
-    data: struct ypdf_data
+    data: struct yetty_ygui_ypdf
     data_fields:
       - name: unused
         type: char
@@ -2061,7 +2061,7 @@ classes:
       domain: ygui
       name: widget
     mixins: []
-    data: struct yplot_data
+    data: struct yetty_ygui_yplot
     data_fields:
       - name: source
         type: "char *"
@@ -2109,7 +2109,7 @@ classes:
       domain: ygui
       name: ydraw_embed
     mixins: []
-    data: struct yrich_view_data
+    data: struct yetty_ygui_yrich_view
     data_fields:
       - name: doc
         type: "struct yetty_yrich_document *"
@@ -2159,7 +2159,7 @@ classes:
       domain: ygui
       name: widget
     mixins: []
-    data: struct yshadertoy_data
+    data: struct yetty_ygui_yshadertoy
     data_fields:
       - name: src
         type: "char *"
@@ -2195,7 +2195,7 @@ classes:
       domain: ygui
       name: widget
     mixins: []
-    data: struct yvideo_data
+    data: struct yetty_ygui_yvideo
     data_fields:
       - name: bytes
         type: "uint8_t *"
@@ -2227,7 +2227,7 @@ classes:
       domain: ygui
       name: ydraw_embed
     mixins: []
-    data: struct yzoo_data
+    data: struct yetty_ygui_yzoo
     data_fields:
       - name: zoo
         type: "struct yetty_yzoo *"
@@ -2287,8 +2287,7 @@ exposed:
       - name: y
         type: "float *"
   - source_file: src/yetty/ygui/mixins/draggable.c
-    verbatim: "struct yetty_ygui_object;
-typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_ygui_object *obj,
+    verbatim: "typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_ygui_object *obj,
                                                              float dx, float dy, void *userdata);"
   - source_file: src/yetty/ygui/mixins/draggable.c
     name: yetty_ygui_draggable_on_drag_set

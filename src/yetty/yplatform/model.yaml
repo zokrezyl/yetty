@@ -139,7 +139,7 @@ classes:
     source_file: src/yetty/yplatform/window-manager.c
     parent: null
     mixins: []
-    data: struct window_manager_data
+    data: struct yetty_yplatform_window_manager
     data_fields:
       - name: window
         type: "GLFWwindow *"

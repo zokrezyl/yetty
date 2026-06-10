@@ -1,8 +1,19 @@
 /* ygui-radio.c — single radio button. */
 #include "paint-helpers.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * radio.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_radio_data_ptr, struct yetty_ygui_radio *);
+struct yetty_yclass_ptr_result yetty_ygui_radio_class_get(void);
+struct yetty_ygui_radio_data_ptr_result yetty_ygui_radio_data(struct yetty_ygui_object *obj);
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/radio.h>
 #include <stdlib.h>
 
 #define COLOR_OUTER 0xFF474A36u
@@ -11,7 +22,7 @@
 #define COLOR_TEXT 0xFFE4E5E0u
 
 struct [[clang::annotate("class@ygui:radio")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]] radio_data {
+    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]] yetty_ygui_radio {
     char *label;
     int selected;
 };
@@ -25,7 +36,7 @@ static struct yetty_ycore_void_result on_click(struct yetty_yclass_ctx *yclass_c
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_radio_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "on_click: data_get");
-    struct radio_data *d = d_dr.value;
+    struct yetty_ygui_radio *d = d_dr.value;
     d->selected = 1;
     struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
@@ -47,7 +58,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_radio_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
-    struct radio_data *d = d_dr.value;
+    struct yetty_ygui_radio *d = d_dr.value;
     d->label = NULL;
     d->selected = 0;
     return yetty_ygui_clickable_on_click_set(obj, on_click, NULL);
@@ -62,7 +73,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_radio_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
-    struct radio_data *d = d_dr.value;
+    struct yetty_ygui_radio *d = d_dr.value;
     free(d->label);
     return yetty_ygui_super_void(obj, yetty_ygui_radio_class_get().value,
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
@@ -81,7 +92,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_radio_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
-    struct radio_data *d = d_dr.value;
+    struct yetty_ygui_radio *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float h = r.max.y - r.min.y;
     float cy = r.min.y + h * 0.5f;
@@ -119,7 +130,7 @@ struct yetty_ycore_void_result yetty_ygui_radio_set_label(struct yetty_ygui_obje
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_radio_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_radio_set_label: data_get");
-    struct radio_data *d = d_dr.value;
+    struct yetty_ygui_radio *d = d_dr.value;
     free(d->label);
     d->label = NULL;
     if (label) {
@@ -142,7 +153,7 @@ struct yetty_ycore_void_result yetty_ygui_radio_set_selected(struct yetty_ygui_o
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_radio_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_radio_set_selected: data_get");
-    struct radio_data *d = d_dr.value;
+    struct yetty_ygui_radio *d = d_dr.value;
     d->selected = s ? 1 : 0;
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -156,7 +167,7 @@ struct yetty_ycore_int_result yetty_ygui_radio_is_selected(const struct yetty_yg
     struct yetty_ygui_void_ptr_result data_result = yetty_ygui_data_get_result(
         (struct yetty_ygui_object *)obj, yetty_ygui_radio_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, data_result, "yetty_ygui_radio_is_selected: data_get");
-    return YETTY_OK(yetty_ycore_int, ((struct radio_data *)data_result.value)->selected);
+    return YETTY_OK(yetty_ycore_int, ((struct yetty_ygui_radio *)data_result.value)->selected);
 }
 
 #include "radio.gen.c"

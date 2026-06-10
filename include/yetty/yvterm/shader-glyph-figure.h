@@ -14,6 +14,15 @@
 
 struct yetty_yclass_ptr_result yetty_yvterm_shader_glyph_class_get(void);
 
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
+struct yetty_yvterm_shader_glyph;
+YETTY_YRESULT_DECLARE(yetty_yvterm_shader_glyph_ptr, struct yetty_yvterm_shader_glyph *);
+struct yetty_yvterm_shader_glyph_ptr_result yetty_yvterm_shader_glyph_from(
+    struct yetty_yclass_object *obj);
+
 struct yetty_yclass_object_ptr_result yetty_yvterm_shader_glyph_create(
     struct yetty_yclass_ctx *ctx);
 
@@ -89,10 +98,10 @@ static inline uint32_t yetty_shader_glyph_codepoint_from_id(uint32_t glyph_index
     return YETTY_SHADER_GLYPH_PUA_BASE + yetty_shader_glyph_local_id(glyph_index);
 }
 
-struct yetty_yvterm_shader_glyph_figure;
+struct yetty_yvterm_shader_glyph;
 
-YETTY_YRESULT_DECLARE(yetty_yvterm_shader_glyph_figure_ptr,
-                      struct yetty_yvterm_shader_glyph_figure *);
+/* yetty_yvterm_shader_glyph_ptr is generated (the `_from` downcast in the
+ * generated header). */
 
 /* Create the shader-glyph figure.
  *
@@ -100,27 +109,33 @@ YETTY_YRESULT_DECLARE(yetty_yvterm_shader_glyph_figure_ptr,
  * figure. `rect` is the figure's absolute pixel space within its parent
  * container; for the terminal's root container this is (0,0)-(cols*cw,
  * rows*ch). `request_render_fn` is invoked from the anim timer thread
- * to nudge the event loop. */
-struct yetty_yvterm_shader_glyph_figure_ptr_result yetty_yvterm_shader_glyph_figure_create(
+ * to nudge the event loop. Returns the yclass object handle; route it through
+ * the helpers below for add_child / resize / zoom.
+ *
+ * Named `_figure_create` rather than `_create` so it does not collide with the
+ * yclass auto-emitted `yetty_yvterm_shader_glyph_create(struct yetty_yclass_ctx
+ * *)` constructor stub. */
+struct yetty_yclass_object_ptr_result yetty_yvterm_shader_glyph_figure_create(
     struct yetty_ycore_rectangle rect, uint32_t cols, uint32_t rows, float cell_width,
     float cell_height, struct yetty_yrender_terminal_layer *text_layer,
     const struct yetty_context *context, yetty_yterminal_request_render_fn request_render_fn,
     void *request_render_userdata);
 
-/* Upcast. Stable pointer. */
-struct yetty_yfigure_figure *yetty_yvterm_shader_glyph_figure_as_figure(
-    struct yetty_yvterm_shader_glyph_figure *figure);
+/* Upcast the shader-glyph object to the figure base. Stable pointer. */
+struct yetty_yfigure_figure *yetty_yvterm_shader_glyph_as_figure(struct yetty_yclass_object *obj);
 
 /* Push a new grid + cell size after a terminal resize. The figure
- * updates uniforms and its own rect to (0,0)-(cols*cw, rows*ch). */
-struct yetty_ycore_void_result yetty_yvterm_shader_glyph_figure_resize(
-    struct yetty_yvterm_shader_glyph_figure *figure, struct yetty_ycore_grid_size grid_size,
+ * updates uniforms and its own rect to (0,0)-(cols*cw, rows*ch). Takes the
+ * shader-glyph object. */
+struct yetty_ycore_void_result yetty_yvterm_shader_glyph_resize(
+    struct yetty_yclass_object *obj, struct yetty_ycore_grid_size grid_size,
     struct yetty_ycore_pixel_size cell_size);
 
 /* Apply visual (shader-level) zoom. Mirrors the layer op of the same
- * name — terminal broadcasts ZOOM_VISUAL_APPLY events here. */
-struct yetty_ycore_void_result yetty_yvterm_shader_glyph_figure_set_visual_zoom(
-    struct yetty_yvterm_shader_glyph_figure *figure, float scale, float offset_x, float offset_y);
+ * name — terminal broadcasts ZOOM_VISUAL_APPLY events here. Takes the
+ * shader-glyph object. */
+struct yetty_ycore_void_result yetty_yvterm_shader_glyph_set_visual_zoom(
+    struct yetty_yclass_object *obj, float scale, float offset_x, float offset_y);
 
 #ifdef __cplusplus
 }

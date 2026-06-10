@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_collapsing_header_class_get(void);
 
 struct yetty_ygui_object;
-struct ch_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_collapsing_header_data_ptr, struct ch_data *);
+struct yetty_ygui_collapsing_header;
+YETTY_YRESULT_DECLARE(yetty_ygui_collapsing_header_data_ptr, struct yetty_ygui_collapsing_header *);
 struct yetty_ygui_collapsing_header_data_ptr_result yetty_ygui_collapsing_header_data(
     struct yetty_ygui_object *obj);
 

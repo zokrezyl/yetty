@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_popup_menu_class_get(void);
 
 struct yetty_ygui_object;
-struct popup_menu_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_popup_menu_data_ptr, struct popup_menu_data *);
+struct yetty_ygui_popup_menu;
+YETTY_YRESULT_DECLARE(yetty_ygui_popup_menu_data_ptr, struct yetty_ygui_popup_menu *);
 struct yetty_ygui_popup_menu_data_ptr_result yetty_ygui_popup_menu_data(
     struct yetty_ygui_object *obj);
 

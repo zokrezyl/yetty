@@ -13,16 +13,27 @@
  */
 
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * tooltip.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_tooltip_data_ptr, struct yetty_ygui_tooltip *);
+struct yetty_yclass_ptr_result yetty_ygui_tooltip_class_get(void);
+struct yetty_ygui_tooltip_data_ptr_result yetty_ygui_tooltip_data(struct yetty_ygui_object *obj);
 
 #include <yetty/ygui/primitive-widget.h>
 
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ygui/widgets/tooltip.h>
 #include <stdlib.h>
 #include <string.h>
 
 struct [[clang::annotate("class@ygui:tooltip")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-tooltip_data {
+yetty_ygui_tooltip {
     char *text;
 };
 
@@ -42,7 +53,7 @@ static struct yetty_ycore_void_result tooltip_constructor(struct yetty_yclass_ct
     struct yetty_ygui_void_ptr_result td_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_tooltip_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "tooltip_constructor: data_get");
-    struct tooltip_data *td = td_dr.value;
+    struct yetty_ygui_tooltip *td = td_dr.value;
     td->text = NULL;
     return YETTY_OK_VOID();
 }
@@ -56,7 +67,7 @@ static struct yetty_ycore_void_result tooltip_destructor(struct yetty_yclass_ctx
     struct yetty_ygui_void_ptr_result td_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_tooltip_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "tooltip_destructor: data_get");
-    struct tooltip_data *td = td_dr.value;
+    struct yetty_ygui_tooltip *td = td_dr.value;
     free(td->text);
     td->text = NULL;
     return yetty_ygui_super_void(obj, yetty_ygui_tooltip_class_get().value,
@@ -76,7 +87,7 @@ static struct yetty_ycore_void_result tooltip_paint(struct yetty_yclass_ctx *ycl
     struct yetty_ygui_void_ptr_result td_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_tooltip_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "tooltip_paint: data_get");
-    struct tooltip_data *td = td_dr.value;
+    struct yetty_ygui_tooltip *td = td_dr.value;
     if (!td->text || td->text[0] == '\0') {
         return YETTY_OK_VOID();
     }
@@ -103,7 +114,7 @@ struct yetty_ycore_void_result yetty_ygui_tooltip_set_text(struct yetty_ygui_obj
     struct yetty_ygui_void_ptr_result td_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_tooltip_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "yetty_ygui_tooltip_set_text: data_get");
-    struct tooltip_data *td = td_dr.value;
+    struct yetty_ygui_tooltip *td = td_dr.value;
     free(td->text);
     if (!text) {
         td->text = NULL;
@@ -128,7 +139,7 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_tooltip_get_text(
     struct yetty_ygui_void_ptr_result td_dr = yetty_ygui_data_get_result(
         (struct yetty_ygui_object *)obj, yetty_ygui_tooltip_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, td_dr, "yetty_ygui_tooltip_get_text: data_get");
-    struct tooltip_data *td = td_dr.value;
+    struct yetty_ygui_tooltip *td = td_dr.value;
     return YETTY_OK(yetty_ycore_const_char_ptr, td->text);
 }
 

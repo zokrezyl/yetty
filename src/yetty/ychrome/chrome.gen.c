@@ -31,7 +31,7 @@ struct yetty_yclass_ptr_result yetty_ychrome_chrome_class_get(void)
     static const struct yetty_yclass_descriptor desc = {
         .name = "yetty_ychrome_chrome",
         .type = YETTY_YCLASS_TYPE_REGULAR,
-        .data_size = sizeof(struct chrome_data),
+        .data_size = sizeof(struct yetty_ychrome_chrome),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_ychrome", "configure", (yetty_yclass_method_id_t)yetty_ychrome_configure,
@@ -57,4 +57,19 @@ struct yetty_yclass_ptr_result yetty_ychrome_chrome_class_get(void)
     }
     cls = register_class_r.value;
     return register_class_r;
+}
+
+struct yetty_ychrome_chrome_ptr_result yetty_ychrome_chrome_from(struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_ptr_result class_r = yetty_ychrome_chrome_class_get();
+    if (YETTY_IS_ERR(class_r)) {
+        return YETTY_ERR(yetty_ychrome_chrome_ptr, "yetty_ychrome_chrome_from: class accessor",
+                         class_r);
+    }
+    struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
+    if (YETTY_IS_ERR(slice_r)) {
+        return YETTY_ERR(yetty_ychrome_chrome_ptr, "yetty_ychrome_chrome_from: object_data",
+                         slice_r);
+    }
+    return YETTY_OK(yetty_ychrome_chrome_ptr, (struct yetty_ychrome_chrome *)slice_r.value);
 }

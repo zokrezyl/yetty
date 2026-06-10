@@ -19,9 +19,16 @@
  *         yetty_yview_set_content(NULL, obj, drawables);
  *         yetty_yview_scroll_to / _scroll_by / _set_rect / _set_content_size;
  *         yetty_yview_destroy(NULL, obj);   // clears the surface + frees
+ *
+ * This TU deliberately does NOT include its own generated header
+ * `yetty/yview/view.h` — that header is a downstream artifact for other
+ * modules. The foundational types this TU and the appended view.gen.c need
+ * (yclass identity, Result, rectangle) are pulled in directly here, and this
+ * TU declares its own `yetty_yview_view_ptr_result` (after the class struct).
  */
 #include <yetty/yclass/class.h>
-#include <yetty/yview/view.h>
+#include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
 
 #include <yetty/yface/yface.h>
 #include <yetty/ydraw-core/drawable-list.h>
@@ -37,7 +44,7 @@
  * scrollable kind. */
 #define YVIEW_DEFAULT_KIND ((uint32_t)YETTY_YFIGURE_KIND_YGRID)
 
-struct [[clang::annotate("class@yview:view")]] view_data {
+struct [[clang::annotate("class@yview:view")]] yetty_yview_view {
     int fd;
     uint32_t child_id;
     uint32_t kind;
@@ -51,7 +58,19 @@ struct [[clang::annotate("class@yview:view")]] view_data {
     float scroll_y;
 };
 
-/* Resolve the object's view_data slice, preserving the class_get / object_data
+/* Result wrapper for the view handle. Declared here (not pulled from view.h,
+ * which this TU does not include) so the appended view.gen.c — which defines
+ * yetty_yview_view_from() returning it — has the type in scope. The public
+ * view.h publishes the identical declaration for other modules. */
+YETTY_YRESULT_DECLARE(yetty_yview_view_ptr, struct yetty_yview_view *);
+
+/* Defined in the appended view.gen.c (foot of this TU). Forward-declared here
+ * because this TU does not include its own generated header — the class
+ * accessor and the obj→body downcast are used by view_from_obj below. */
+struct yetty_yclass_ptr_result yetty_yview_view_class_get(void);
+struct yetty_yview_view_ptr_result yetty_yview_view_from(struct yetty_yclass_object *obj);
+
+/* Resolve the object's yetty_yview_view slice, preserving the class_get / object_data
  * error chain (returned as a void-ptr result; callers cast .value). */
 static struct yetty_yclass_void_ptr_result view_from_obj(struct yetty_yclass_object *obj)
 {
@@ -63,7 +82,7 @@ static struct yetty_yclass_void_ptr_result view_from_obj(struct yetty_yclass_obj
 }
 
 /* Ship a built record stream as one YCOMPOSITOR_BIN envelope. */
-static struct yetty_ycore_void_result view_emit_records(struct view_data *view,
+static struct yetty_ycore_void_result view_emit_records(struct yetty_yview_view *view,
                                                         struct yetty_ydraw_drawable_list *records)
 {
     const uint8_t *body = (const uint8_t *)yetty_ydraw_drawable_list_data(records);
@@ -155,7 +174,7 @@ static struct yetty_ycore_void_result view_configure(struct yetty_yclass_ctx *ct
     (void)ctx;
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview configure: object");
-    struct view_data *view = (struct view_data *)view_r.value;
+    struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
     view->fd = fd;
     view->child_id = child_id ? child_id : 1u;
     view->kind = kind ? kind : YVIEW_DEFAULT_KIND;
@@ -172,8 +191,8 @@ static struct yetty_ycore_void_result view_configure(struct yetty_yclass_ctx *ct
  * content prim stream, then a content-size record) and ship it. The caller
  * sets view->content_w/h first. Shared by set_content (external drawable list)
  * and set_text (internally built list). */
-static struct yetty_ycore_void_result view_ship(struct view_data *view, const void *content_data,
-                                                size_t content_size)
+static struct yetty_ycore_void_result view_ship(struct yetty_yview_view *view,
+                                                const void *content_data, size_t content_size)
 {
     struct yetty_ydraw_drawable_list_result env_r =
         yetty_ydraw_drawable_list_config_buffer_create(NULL);
@@ -241,7 +260,7 @@ static struct yetty_ycore_void_result view_set_content(
     (void)ctx;
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview set_content: object");
-    struct view_data *view = (struct view_data *)view_r.value;
+    struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
     if (!content) {
         return YETTY_ERR(yetty_ycore_void, "yview set_content: NULL content");
     }
@@ -311,7 +330,7 @@ static struct yetty_ycore_void_result view_set_text(struct yetty_yclass_ctx *ctx
     (void)ctx;
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview set_text: object");
-    struct view_data *view = (struct view_data *)view_r.value;
+    struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
     if (!text) {
         return YETTY_ERR(yetty_ycore_void, "yview set_text: NULL text");
     }
@@ -372,7 +391,7 @@ static struct yetty_ycore_void_result view_set_plot(struct yetty_yclass_ctx *ctx
     (void)ctx;
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview set_plot: object");
-    struct view_data *view = (struct view_data *)view_r.value;
+    struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
     if (!expr) {
         return YETTY_ERR(yetty_ycore_void, "yview set_plot: NULL expr");
     }
@@ -419,7 +438,7 @@ static struct yetty_ycore_void_result view_set_content_size(struct yetty_yclass_
     (void)ctx;
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview set_content_size: object");
-    struct view_data *view = (struct view_data *)view_r.value;
+    struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
     view->content_w = content_w > 0.0f ? content_w : 0.0f;
     view->content_h = content_h > 0.0f ? content_h : 0.0f;
 
@@ -448,7 +467,7 @@ static struct yetty_ycore_void_result view_scroll_to(struct yetty_yclass_ctx *ct
     (void)ctx;
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview scroll_to: object");
-    struct view_data *view = (struct view_data *)view_r.value;
+    struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
     float viewport_w = view->rect.max.x - view->rect.min.x;
     float viewport_h = view->rect.max.y - view->rect.min.y;
     view->scroll_x = view->content_w > 0.0f ? clamp_scroll(scroll_x, view->content_w, viewport_w)
@@ -480,7 +499,7 @@ static struct yetty_ycore_void_result view_scroll_by(struct yetty_yclass_ctx *ct
 {
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview scroll_by: object");
-    struct view_data *view = (struct view_data *)view_r.value;
+    struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
     struct yetty_ycore_void_result r =
         view_scroll_to(ctx, obj, view->scroll_x + delta_x, view->scroll_y + delta_y);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yview scroll_by");
@@ -495,7 +514,7 @@ static struct yetty_ycore_void_result view_set_rect(struct yetty_yclass_ctx *ctx
     (void)ctx;
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview set_rect: object");
-    struct view_data *view = (struct view_data *)view_r.value;
+    struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
     view->rect = (struct yetty_ycore_rectangle){.min = {.x = min_x, .y = min_y},
                                                 .max = {.x = max_x, .y = max_y}};
 
@@ -524,7 +543,8 @@ static struct yetty_ycore_void_result view_destroy(struct yetty_yclass_ctx *ctx,
     /* Best-effort teardown: even if the slice can't be resolved we still free
      * the object. Stash (not swallow) any resolve error as the first error. */
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
-    struct view_data *view = YETTY_IS_OK(view_r) ? (struct view_data *)view_r.value : NULL;
+    struct yetty_yview_view *view =
+        YETTY_IS_OK(view_r) ? (struct yetty_yview_view *)view_r.value : NULL;
     struct yetty_ycore_void_result result =
         YETTY_IS_ERR(view_r) ? YETTY_ERR(yetty_ycore_void, "yview destroy: object", view_r)
                              : YETTY_OK_VOID();

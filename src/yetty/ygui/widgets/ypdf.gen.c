@@ -15,7 +15,7 @@ struct yetty_yclass_ptr_result yetty_ygui_ypdf_class_get(void)
     static const struct yetty_yclass_descriptor desc = {
         .name = "yetty_ygui_ypdf",
         .type = YETTY_YCLASS_TYPE_REGULAR,
-        .data_size = sizeof(struct ypdf_data),
+        .data_size = sizeof(struct yetty_ygui_ypdf),
     };
     struct yetty_yclass_ptr_result parent_class_r = yetty_ygui_ydraw_embed_class_get();
     if (YETTY_IS_ERR(parent_class_r)) {
@@ -46,5 +46,5 @@ struct yetty_ygui_ypdf_data_ptr_result yetty_ygui_ypdf_data(struct yetty_ygui_ob
     if (YETTY_IS_ERR(data_slice_r)) {
         return YETTY_ERR(yetty_ygui_ypdf_data_ptr, "yetty_ygui_ypdf_data", data_slice_r);
     }
-    return YETTY_OK(yetty_ygui_ypdf_data_ptr, (struct ypdf_data *)data_slice_r.value);
+    return YETTY_OK(yetty_ygui_ypdf_data_ptr, (struct yetty_ygui_ypdf *)data_slice_r.value);
 }

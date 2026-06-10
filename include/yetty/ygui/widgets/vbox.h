@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_vbox_class_get(void);
 
 struct yetty_ygui_object;
-struct vbox_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_vbox_data_ptr, struct vbox_data *);
+struct yetty_ygui_vbox;
+YETTY_YRESULT_DECLARE(yetty_ygui_vbox_data_ptr, struct yetty_ygui_vbox *);
 struct yetty_ygui_vbox_data_ptr_result yetty_ygui_vbox_data(struct yetty_ygui_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_vbox_create(struct yetty_yclass_ctx *ctx);

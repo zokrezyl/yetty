@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_yrich_view_class_get(void);
 
 struct yetty_ygui_object;
-struct yrich_view_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_yrich_view_data_ptr, struct yrich_view_data *);
+struct yetty_ygui_yrich_view;
+YETTY_YRESULT_DECLARE(yetty_ygui_yrich_view_data_ptr, struct yetty_ygui_yrich_view *);
 struct yetty_ygui_yrich_view_data_ptr_result yetty_ygui_yrich_view_data(
     struct yetty_ygui_object *obj);
 

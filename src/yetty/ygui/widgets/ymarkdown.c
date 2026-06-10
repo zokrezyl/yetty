@@ -5,16 +5,28 @@
  * once the current rect is settled. A cached (w, h) gates re-render
  * so a stationary widget pays the markdown cost only once. */
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * ymarkdown.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_ymarkdown_data_ptr, struct yetty_ygui_ymarkdown *);
+struct yetty_yclass_ptr_result yetty_ygui_ymarkdown_class_get(void);
+struct yetty_ygui_ymarkdown_data_ptr_result yetty_ygui_ymarkdown_data(
+    struct yetty_ygui_object *obj);
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
-#include <yetty/ygui/widgets/ymarkdown.h>
 #include <yetty/ymarkdown/ymarkdown.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 struct [[clang::annotate("class@ygui:ymarkdown")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
-ymarkdown_data {
+yetty_ygui_ymarkdown {
     char *source;
     size_t source_len;
     float rendered_w;
@@ -34,7 +46,7 @@ static struct yetty_ycore_void_result ymd_constructor(struct yetty_yclass_ctx *y
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ymarkdown_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymd_constructor: data_get");
-    struct ymarkdown_data *d = d_dr.value;
+    struct yetty_ygui_ymarkdown *d = d_dr.value;
     d->source = NULL;
     d->source_len = 0;
     d->rendered_w = 0.0f;
@@ -51,7 +63,7 @@ static struct yetty_ycore_void_result ymd_destructor(struct yetty_yclass_ctx *yc
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ymarkdown_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymd_destructor: data_get");
-    struct ymarkdown_data *d = d_dr.value;
+    struct yetty_ygui_ymarkdown *d = d_dr.value;
     free(d->source);
     d->source = NULL;
     return yetty_ygui_super_void(obj, yetty_ygui_ymarkdown_class_get().value,
@@ -67,7 +79,7 @@ static struct yetty_ycore_void_result ymd_render(struct yetty_yclass_ctx *yclass
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ymarkdown_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymd_render: data_get");
-    struct ymarkdown_data *d = d_dr.value;
+    struct yetty_ygui_ymarkdown *d = d_dr.value;
     if (!d->source || d->source_len == 0) {
         return YETTY_OK_VOID();
     }
@@ -100,7 +112,7 @@ static struct yetty_ycore_void_result ymd_emit_body(struct yetty_yclass_ctx *ycl
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ymarkdown_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymd_emit_body: data_get");
-    struct ymarkdown_data *d = d_dr.value;
+    struct yetty_ygui_ymarkdown *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
@@ -135,7 +147,7 @@ struct yetty_ycore_void_result yetty_ygui_ymarkdown_set_source(struct yetty_ygui
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ymarkdown_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_ymarkdown_set_source: data_get");
-    struct ymarkdown_data *d = d_dr.value;
+    struct yetty_ygui_ymarkdown *d = d_dr.value;
     char *buf = malloc(len);
     if (len > 0 && !buf) {
         return YETTY_ERR(yetty_ycore_void, "ymarkdown_set_source: malloc");

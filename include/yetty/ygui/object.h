@@ -87,9 +87,13 @@ int yetty_ygui_object_is_dirty(const struct yetty_ygui_object *obj);
 int yetty_ygui_object_is_hovered(const struct yetty_ygui_object *obj);
 
 /* `yetty_ygui_constructor` / `yetty_ygui_destructor` public stubs are
- * emitted by yclass codegen from the override annotations in
- * widget.c; pull them in via the module-wide methods.h. */
-#include <yetty/ygui/widget.h>
+ * emitted by yclass codegen from the override annotations in widget.c;
+ * they live in the module-wide methods.gen.h. This header deliberately
+ * does NOT pull in <yetty/ygui/widget.h>: object.h is included (via
+ * internal.h) by widget.c itself, and a class TU must not transitively
+ * see its own generated header. Widgets needing the base-widget API
+ * include <yetty/ygui/widget.h> directly. */
+#include <yetty/ygui/methods.gen.h>
 
 /*-----------------------------------------------------------------------------
  * Super invokers — one per Result type.

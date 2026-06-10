@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_rich_class_get(void);
 
 struct yetty_ygui_object;
-struct rich_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_rich_data_ptr, struct rich_data *);
+struct yetty_ygui_rich;
+YETTY_YRESULT_DECLARE(yetty_ygui_rich_data_ptr, struct yetty_ygui_rich *);
 struct yetty_ygui_rich_data_ptr_result yetty_ygui_rich_data(struct yetty_ygui_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_rich_create(struct yetty_yclass_ctx *ctx);

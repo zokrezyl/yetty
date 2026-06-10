@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_dialog_class_get(void);
 
 struct yetty_ygui_object;
-struct dialog_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_dialog_data_ptr, struct dialog_data *);
+struct yetty_ygui_dialog;
+YETTY_YRESULT_DECLARE(yetty_ygui_dialog_data_ptr, struct yetty_ygui_dialog *);
 struct yetty_ygui_dialog_data_ptr_result yetty_ygui_dialog_data(struct yetty_ygui_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_dialog_create(struct yetty_yclass_ctx *ctx);

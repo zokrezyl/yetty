@@ -21,7 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_clickable_mixin_get(void)
     static const struct yetty_yclass_descriptor desc = {
         .name = "yetty_ygui_clickable",
         .type = YETTY_YCLASS_TYPE_MIXIN,
-        .data_size = sizeof(struct clickable_data),
+        .data_size = sizeof(struct yetty_ygui_clickable),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_ygui", "widget_on_press", (yetty_yclass_method_id_t)yetty_ygui_widget_on_press,
@@ -53,5 +53,6 @@ struct yetty_ygui_clickable_data_ptr_result yetty_ygui_clickable_data(struct yet
     if (YETTY_IS_ERR(data_slice_r)) {
         return YETTY_ERR(yetty_ygui_clickable_data_ptr, "yetty_ygui_clickable_data", data_slice_r);
     }
-    return YETTY_OK(yetty_ygui_clickable_data_ptr, (struct clickable_data *)data_slice_r.value);
+    return YETTY_OK(yetty_ygui_clickable_data_ptr,
+                    (struct yetty_ygui_clickable *)data_slice_r.value);
 }

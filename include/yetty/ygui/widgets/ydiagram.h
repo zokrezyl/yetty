@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_ydiagram_class_get(void);
 
 struct yetty_ygui_object;
-struct ydiagram_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_ydiagram_data_ptr, struct ydiagram_data *);
+struct yetty_ygui_ydiagram;
+YETTY_YRESULT_DECLARE(yetty_ygui_ydiagram_data_ptr, struct yetty_ygui_ydiagram *);
 struct yetty_ygui_ydiagram_data_ptr_result yetty_ygui_ydiagram_data(struct yetty_ygui_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_ydiagram_create(struct yetty_yclass_ctx *ctx);

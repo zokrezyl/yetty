@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_selectable_class_get(void);
 
 struct yetty_ygui_object;
-struct sel_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_selectable_data_ptr, struct sel_data *);
+struct yetty_ygui_selectable;
+YETTY_YRESULT_DECLARE(yetty_ygui_selectable_data_ptr, struct yetty_ygui_selectable *);
 struct yetty_ygui_selectable_data_ptr_result yetty_ygui_selectable_data(
     struct yetty_ygui_object *obj);
 

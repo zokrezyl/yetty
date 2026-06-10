@@ -11,10 +11,22 @@
  * overflow. The thumb sits at the gutter and tracks the offset.
  */
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * scrollarea.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_scrollarea_data_ptr, struct yetty_ygui_scrollarea *);
+struct yetty_yclass_ptr_result yetty_ygui_scrollarea_class_get(void);
+struct yetty_ygui_scrollarea_data_ptr_result yetty_ygui_scrollarea_data(
+    struct yetty_ygui_object *obj);
 #include "paint-helpers.h"
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygui/mixins/draggable.h>
-#include <yetty/ygui/widgets/scrollarea.h>
 #include <yetty/ygui/widgets/vbox.h>
 
 #define COLOR_TRACK 0xFF1F1A14u
@@ -23,7 +35,7 @@
 #define SCROLLBAR_MIN_THUMB 24.0f
 
 struct [[clang::annotate("class@ygui:scrollarea")]] [[clang::annotate(
-    "parent@ygui:vbox")]] [[clang::annotate("uses@ygui:draggable")]] scrollarea_data {
+    "parent@ygui:vbox")]] [[clang::annotate("uses@ygui:draggable")]] yetty_ygui_scrollarea {
     float offset;       /* scroll position in px (0 = top) */
     float max_offset;   /* content_h - viewport_h, clamped >= 0 (cached) */
     float thumb_travel; /* track_h - thumb_h, clamped >= 0 (cached) */
@@ -37,7 +49,8 @@ static struct yetty_yclass_ptr_result scrollarea_class(void)
 /* Apply a clamped offset: store it, push it to the base scroll offset (so
  * the layout slides the children), and request a frame. */
 static struct yetty_ycore_void_result scrollarea_set_offset(struct yetty_ygui_object *obj,
-                                                            struct scrollarea_data *d, float off)
+                                                            struct yetty_ygui_scrollarea *d,
+                                                            float off)
 {
     if (off < 0.0f) {
         off = 0.0f;
@@ -62,7 +75,7 @@ static struct yetty_ycore_void_result scrollarea_on_drag(struct yetty_ygui_objec
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_result, "scrollarea_on_drag: class");
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, class_result.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "scrollarea_on_drag: data_get");
-    struct scrollarea_data *d = d_dr.value;
+    struct yetty_ygui_scrollarea *d = d_dr.value;
     if (d->max_offset <= 0.0f || d->thumb_travel <= 0.0f) {
         return YETTY_OK_VOID();
     }
@@ -90,7 +103,7 @@ static struct yetty_ycore_int_result on_scroll(struct yetty_yclass_ctx *yclass_c
     YETTY_RETURN_IF_ERR(yetty_ycore_int, class_result, "on_scroll: class");
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, class_result.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_scroll: data_get");
-    struct scrollarea_data *d = d_dr.value;
+    struct yetty_ygui_scrollarea *d = d_dr.value;
     if (d->max_offset <= 0.0f) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
@@ -139,7 +152,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_result, "paint: class");
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, class_result.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
-    struct scrollarea_data *d = d_dr.value;
+    struct yetty_ygui_scrollarea *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {

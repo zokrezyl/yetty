@@ -29,6 +29,7 @@ Usage:
     LOOP_RENDER=stream ./cc_loop.py    # live plain text, no ycat (default)
     LOOP_RENDER=ycat   ./cc_loop.py    # blank while writing, figure at the end
     LOOP_RENDER=snap   ./cc_loop.py    # live draft text, erased + redrawn as a figure
+    LOOP_RENDER=window ./cc_loop.py    # live text + latest answer in a floating window
     SHOW_THINKING=1    ./cc_loop.py    # show dim thinking text
     LOOP_FOLD_LINES=20 ./cc_loop.py    # tool-output preview cap (default 8)
 
@@ -49,6 +50,8 @@ import threading
 import unicodedata
 import uuid
 
+import ywin  # sibling module: floating compositor windows via the yview FFI
+
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
@@ -60,7 +63,7 @@ ALLOWED_TOOLS = [
 ]
 PERMISSION_MODE = os.environ.get("LOOP_PERMISSION_MODE", "auto")
 MODEL = os.environ.get("LOOP_MODEL")  # None -> CLI default
-RENDER_MODE = os.environ.get("LOOP_RENDER", "stream")  # "stream" | "ycat" | "snap"
+RENDER_MODE = os.environ.get("LOOP_RENDER", "stream")  # stream | ycat | snap | window
 SHOW_THINKING = os.environ.get("SHOW_THINKING", "") not in ("", "0", "no")
 YCAT = os.environ.get("YCAT_BIN", "ycat")
 FOLD_LINES = int(os.environ.get("LOOP_FOLD_LINES", "8"))  # tool-output preview cap
@@ -295,11 +298,34 @@ def render_hook_event(event: dict) -> None:
     sys.stdout.flush()
 
 
+# Lazily-created floating window for `window` render mode. A 3-state holder:
+# None  = not tried yet, False = tried and unavailable (don't retry every turn),
+# Window = live. The window persists across turns; set_text updates it in place.
+_WINDOW: "ywin.Window | bool | None" = None
+
+
+def get_window() -> "ywin.Window | None":
+    """Return the shared floating window, creating it on first use. Returns None
+    (once, with a notice) if the yview FFI library isn't available, so the loop
+    degrades to its inline text without spamming the failure."""
+    global _WINDOW
+    if _WINDOW is None:
+        _WINDOW = ywin.Window.create() or False
+        if _WINDOW is False:
+            sys.stdout.write(
+                f"{MUTED}⚠ window mode: libyetty_ffi.so not found "
+                f"(build it with `make build-desktop-ffi-release`, or set "
+                f"YETTY_FFI_LIB); falling back to inline text.{RESET}\n"
+            )
+            sys.stdout.flush()
+    return _WINDOW or None
+
+
 class TurnRenderer:
     """Renders one assistant turn from the streamed events."""
 
     # Modes that stream raw text live before any final render.
-    LIVE_MODES = ("stream", "snap")
+    LIVE_MODES = ("stream", "snap", "window")
 
     def __init__(self):
         self.text_parts: list[str] = []
@@ -364,6 +390,18 @@ class TurnRenderer:
             if full.strip():
                 sys.stdout.write(f"{MINT}{BOLD}claude{RESET}\n")
                 render_markdown_figure(full)
+            return
+        if RENDER_MODE == "window":
+            # Live text already streamed inline (window is in LIVE_MODES); now
+            # mirror the final answer into the floating panel over the buffer.
+            if self.in_text:
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+            window = get_window()
+            if window and full.strip():
+                if not window.set_text(full):
+                    sys.stdout.write(f"{RED}⚠ window emit failed{RESET}\n")
+                    sys.stdout.flush()
             return
         # stream
         if self.in_text:

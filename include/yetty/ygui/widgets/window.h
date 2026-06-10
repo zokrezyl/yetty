@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_window_class_get(void);
 
 struct yetty_ygui_object;
-struct window_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_window_data_ptr, struct window_data *);
+struct yetty_ygui_window;
+YETTY_YRESULT_DECLARE(yetty_ygui_window_data_ptr, struct yetty_ygui_window *);
 struct yetty_ygui_window_data_ptr_result yetty_ygui_window_data(struct yetty_ygui_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_window_create(struct yetty_yclass_ctx *ctx);

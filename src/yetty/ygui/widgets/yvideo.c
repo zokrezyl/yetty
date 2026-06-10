@@ -1,15 +1,26 @@
 /* ygui-yvideo.c — same shape as yimage, figure_kind = YVIDEO. */
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * yvideo.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_yvideo_data_ptr, struct yetty_ygui_yvideo *);
+struct yetty_yclass_ptr_result yetty_ygui_yvideo_class_get(void);
+struct yetty_ygui_yvideo_data_ptr_result yetty_ygui_yvideo_data(struct yetty_ygui_object *obj);
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfigure/wire.h>
-#include <yetty/ygui/widgets/yvideo.h>
 #include <yetty/yvideo/yvideo-mp4.h>
 #include <stdlib.h>
 #include <string.h>
 
 struct [[clang::annotate("class@ygui:yvideo")]] [[clang::annotate("parent@ygui:widget")]]
-yvideo_data {
+yetty_ygui_yvideo {
     uint8_t *bytes;
     size_t len;
 };
@@ -26,7 +37,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yvideo_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
-    struct yvideo_data *d = d_dr.value;
+    struct yetty_ygui_yvideo *d = d_dr.value;
     d->bytes = NULL;
     d->len = 0;
     return YETTY_OK_VOID();
@@ -41,7 +52,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yvideo_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
-    struct yvideo_data *d = d_dr.value;
+    struct yetty_ygui_yvideo *d = d_dr.value;
     free(d->bytes);
     return yetty_ygui_super_void(obj, yetty_ygui_yvideo_class_get().value,
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
@@ -69,7 +80,7 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_ctx *yclass_
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yvideo_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "emit_body: data_get");
-    struct yvideo_data *d = d_dr.value;
+    struct yetty_ygui_yvideo *d = d_dr.value;
     if (!d->bytes || d->len == 0) {
         return YETTY_OK_VOID();
     }
@@ -152,7 +163,7 @@ struct yetty_ycore_void_result yetty_ygui_yvideo_set_bytes(struct yetty_ygui_obj
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yvideo_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_yvideo_set_bytes: data_get");
-    struct yvideo_data *d = d_dr.value;
+    struct yetty_ygui_yvideo *d = d_dr.value;
     free(d->bytes);
     d->bytes = NULL;
     d->len = 0;

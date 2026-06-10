@@ -18,15 +18,29 @@
  * The codegen-generated accessor for the base class
  * (`yetty_yfigure_figure_class_get`) is included from `figure.gen.c`
  * at the foot.
+ *
+ * This TU deliberately does NOT include its own public header
+ * `yetty/yfigure/figure.h` — that header is a generated artifact for
+ * *other* modules. The foundational types the base impls and the
+ * appended `figure.gen.c` need (yclass identity, Result, rectangle) are
+ * pulled in directly here, and this TU declares its own
+ * `yetty_yfigure_figure_ptr_result` below (the same one figure.h
+ * publishes for consumers).
  */
-#include <yetty/yfigure/figure.h>
 
-/* Slot-signature tags used by the base impls below. Exposed so the generated
- * figure.h forward-declares them at file scope — without it, the first mention
- * inside a base impl's parameter list would create a distinct prototype-scope
- * tag that mismatches the slot's `_fn` typedef. */
-struct [[clang::annotate("expose")]] yetty_ydraw_target;
-struct [[clang::annotate("expose")]] yetty_ywire_wire_statemachine;
+#include <yetty/yclass/class.h>
+#include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
+
+/* File-scope forward decls for the types the base impls below take by pointer
+ * (default_render's target, default_process_input's statemachine). Needed at
+ * file scope so the impl parameter lists refer to these tags rather than
+ * minting distinct prototype-scope tags that would mismatch the slot `_fn`
+ * typedefs. NOT `expose`d: figure.h's own prototypes never mention these types
+ * (render/process_input are declared from container.c into container.h), so
+ * emitting them into figure.h would be dead forward-decls. */
+struct yetty_ydraw_target;
+struct yetty_ywire_wire_statemachine;
 
 /* ---- figure base-class method slots -------------------------------------
  * The figure base defines the polymorphic figure slots; concrete kinds
@@ -181,5 +195,12 @@ struct [[clang::annotate("class@yfigure:figure")]] yetty_yfigure_figure {
     [[clang::annotate("property")]] int dirty;
     [[clang::annotate("property")]] int absolute_coords;
 };
+
+/* Result wrapper for the figure-base handle. Declared here (not pulled
+ * from figure.h, which this TU does not include) so the appended
+ * figure.gen.c — which defines yetty_yfigure_figure_from() and the
+ * property accessors returning it — has the type in scope. The public
+ * figure.h publishes the identical declaration for other modules. */
+YETTY_YRESULT_DECLARE(yetty_yfigure_figure_ptr, struct yetty_yfigure_figure *);
 
 #include "figure.gen.c"

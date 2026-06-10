@@ -7,12 +7,23 @@
  * a flex-grow body vbox inside).
  */
 #include "paint-helpers.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * window.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_window_data_ptr, struct yetty_ygui_window *);
+struct yetty_yclass_ptr_result yetty_ygui_window_class_get(void);
+struct yetty_ygui_window_data_ptr_result yetty_ygui_window_data(struct yetty_ygui_object *obj);
 #include <yetty/ygui/event.h>
 #include <yetty/ygui/framework.h>
 #include <yetty/ygui/object.h>
 #include <yetty/ygui/widgets/popup_menu.h>
 #include <yetty/ygui/widgets/vbox.h>
-#include <yetty/ygui/widgets/window.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -30,7 +41,7 @@
 #define WIN_CLOSE 0xFFA8A79Fu    /* BRAND_TEXT_SECONDARY */
 
 struct [[clang::annotate("class@ygui:window")]] [[clang::annotate("parent@ygui:vbox")]]
-window_data {
+yetty_ygui_window {
     char *title;
     struct yetty_ygui_object *body; /* auto-allocated child, owned by tree */
     struct yetty_ygui_object *menu; /* borrowed, opened by the hamburger */
@@ -50,7 +61,7 @@ window_data {
 
 /* X position of the close-button box (or -1 when the window isn't
  * closable). */
-static float window_close_x(const struct window_data *d, struct yetty_ycore_rectangle r)
+static float window_close_x(const struct yetty_ygui_window *d, struct yetty_ycore_rectangle r)
 {
     if (!d->closable) {
         return -1.0f;
@@ -60,7 +71,7 @@ static float window_close_x(const struct window_data *d, struct yetty_ycore_rect
 
 /* X position of the hamburger box (or -1 when no menu). Sits left of the
  * close button when both are present. */
-static float window_hamburger_x(const struct window_data *d, struct yetty_ycore_rectangle r)
+static float window_hamburger_x(const struct yetty_ygui_window *d, struct yetty_ycore_rectangle r)
 {
     if (!d->menu) {
         return -1.0f;
@@ -114,7 +125,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "window: super");
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, window_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
-    struct window_data *d = d_dr.value;
+    struct yetty_ygui_window *d = d_dr.value;
     d->title = NULL;
     d->body = NULL;
     d->menu = NULL;
@@ -146,7 +157,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, window_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
-    struct window_data *d = d_dr.value;
+    struct yetty_ygui_window *d = d_dr.value;
     free(d->title);
     return yetty_ygui_super_void(obj, window_class(),
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
@@ -164,7 +175,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     }
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, window_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
-    struct window_data *d = d_dr.value;
+    struct yetty_ygui_window *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0.0f || h <= 0.0f) {
@@ -219,7 +230,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, window_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_press: data_get");
-    struct window_data *d = d_dr.value;
+    struct yetty_ygui_window *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float by = r.min.y + (WINDOW_TITLE_H - WINDOW_BTN) * 0.5f;
 
@@ -270,7 +281,7 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, window_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_motion: data_get");
-    struct window_data *d = d_dr.value;
+    struct yetty_ygui_window *d = d_dr.value;
     if (!d->dragging) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
@@ -305,7 +316,7 @@ static struct yetty_ycore_int_result on_release(struct yetty_yclass_ctx *yclass_
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, window_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_release: data_get");
-    struct window_data *d = d_dr.value;
+    struct yetty_ygui_window *d = d_dr.value;
     d->dragging = 0;
     return YETTY_OK(yetty_ycore_int, 1);
 }
@@ -316,7 +327,7 @@ struct yetty_ygui_object *yetty_ygui_window_body(struct yetty_ygui_object *obj)
     if (!obj) {
         return NULL;
     }
-    return ((struct window_data *)yetty_ygui_data_get(obj, window_class()))->body;
+    return ((struct yetty_ygui_window *)yetty_ygui_data_get(obj, window_class()))->body;
 }
 
 [[clang::annotate("expose")]]
@@ -328,7 +339,7 @@ struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_ygui_obj
     }
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, window_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_window_set_title: data_get");
-    struct window_data *d = d_dr.value;
+    struct yetty_ygui_window *d = d_dr.value;
     free(d->title);
     d->title = NULL;
     if (title) {
@@ -351,7 +362,7 @@ struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_ygui_obje
     }
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, window_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_window_set_menu: data_get");
-    struct window_data *d = d_dr.value;
+    struct yetty_ygui_window *d = d_dr.value;
     d->menu = menu;
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -365,7 +376,7 @@ struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_ygui_
     }
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, window_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_window_set_closable: data_get");
-    struct window_data *d = d_dr.value;
+    struct yetty_ygui_window *d = d_dr.value;
     d->closable = closable ? 1 : 0;
     return yetty_ygui_object_set_dirty(obj);
 }

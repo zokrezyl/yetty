@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_slider_class_get(void);
 
 struct yetty_ygui_object;
-struct slider_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_slider_data_ptr, struct slider_data *);
+struct yetty_ygui_slider;
+YETTY_YRESULT_DECLARE(yetty_ygui_slider_data_ptr, struct yetty_ygui_slider *);
 struct yetty_ygui_slider_data_ptr_result yetty_ygui_slider_data(struct yetty_ygui_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_slider_create(struct yetty_yclass_ctx *ctx);

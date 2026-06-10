@@ -85,7 +85,7 @@ classes:
     source_file: src/yetty/ychrome/chrome.c
     parent: null
     mixins: []
-    data: struct chrome_data
+    data: struct yetty_ychrome_chrome
     data_fields:
       - name: window_manager
         type: "struct yetty_yclass_object *"

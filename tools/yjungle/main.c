@@ -43,7 +43,7 @@ struct yjungle_app {
     struct yetty_context ctx;
     struct yetty_yframework *yrt;
     struct yetty_ydraw_target *target;
-    struct yetty_yfigure_container *root;
+    struct yetty_yclass_object *root;
     struct yetty_ygrid_grid *grid;
     struct yetty_yjungle *jungle;
     struct yetty_ydraw_drawable_list *buf;
@@ -103,8 +103,7 @@ static struct yetty_ycore_void_result render_jungle(struct yjungle_app *app)
     struct yetty_ycore_void_result pr = push_buffer_to_grid(app->grid, app->buf);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "render_jungle: push to grid");
 
-    struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
+    yetty_yfigure_figure_dirty_set(app->root, 1);
     return YETTY_OK_VOID();
 }
 
@@ -236,7 +235,7 @@ static struct yetty_ycore_void_result yjungle_worker(struct yetty_yinit_runtime 
     struct yetty_yclass_ctx yclass_ctx = {0};
     struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "root container create failed");
-    app->root = yetty_yfigure_container_from(obj_res.value);
+    app->root = obj_res.value;
     yetty_yfigure_container_set_context(app->root, &app->ctx);
     yetty_yfigure_container_set_rect(app->root, root_rect);
 
@@ -297,18 +296,16 @@ static struct yetty_ycore_void_result yjungle_worker(struct yetty_yinit_runtime 
             yetty_ycore_error_destroy(mrr.error);
         }
 
-        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
         struct yetty_ydraw_target *target = app->target;
         struct yetty_ycore_void_result cl = target->ops->clear(target);
         if (YETTY_IS_ERR(cl)) {
             yetty_ycore_error_destroy(cl.error);
         }
-        struct yetty_ycore_void_result rrr =
-            yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
+        struct yetty_ycore_void_result rrr = yetty_yfigure_render(NULL, app->root, target);
         if (YETTY_IS_ERR(rrr)) {
             yetty_ycore_error_destroy(rrr.error);
         } else {
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 0);
+            yetty_yfigure_figure_dirty_set(app->root, 0);
         }
         struct yetty_ycore_void_result pp = target->ops->present(target);
         if (YETTY_IS_ERR(pp)) {
@@ -317,9 +314,7 @@ static struct yetty_ycore_void_result yjungle_worker(struct yetty_yinit_runtime 
     }
 
     {
-        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
-        struct yetty_ycore_void_result dr =
-            yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
+        struct yetty_ycore_void_result dr = yetty_yfigure_destroy(NULL, app->root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "root destroy");
     }
     if (app->chrome) {

@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_textinput_class_get(void);
 
 struct yetty_ygui_object;
-struct textinput_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_textinput_data_ptr, struct textinput_data *);
+struct yetty_ygui_textinput;
+YETTY_YRESULT_DECLARE(yetty_ygui_textinput_data_ptr, struct yetty_ygui_textinput *);
 struct yetty_ygui_textinput_data_ptr_result yetty_ygui_textinput_data(
     struct yetty_ygui_object *obj);
 

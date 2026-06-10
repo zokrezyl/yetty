@@ -19,11 +19,19 @@
  * Input is the Brendan Gregg / stackcollapse "folded" format: one
  * `frame1;frame2;frame3 <count>` line per collapsed stack.
  */
+/* This TU deliberately does NOT include its own generated public header
+ * `yetty/yflame/flame.h` — that header is a downstream artifact for other
+ * modules. The foundational types this TU and the appended flame.gen.c need
+ * (yclass identity, Result, basic C types) are pulled in directly here, and
+ * this TU declares its own `yetty_yflame_flame_ptr_result` below (the same
+ * one flame.h publishes for consumers). The public flags / hit-test sentinels
+ * are defined unconditionally (and re-emitted into flame.h via the
+ * `#ifdef YCLASS_CODEGEN` verbatim block at the foot of the include list). */
 #include <yetty/yclass/class.h>
-#include <yetty/yflame/flame.h>
+#include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
 
 #include <yetty/yface/yface.h>
-#include <yetty/ycore/types.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
@@ -33,6 +41,14 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Public flags. */
+#define YETTY_YFLAME_FLAG_LABELS 0x1u /* draw truncated frame-name labels */
+#define YETTY_YFLAME_FLAG_ICICLE 0x2u /* root at top, growing down (vs flame: bottom-up) */
+/* hit_test returns these (in place of a node id) when a navigation button is
+ * under the point: the caller should focus the parent / reset to root. */
+#define YETTY_YFLAME_HIT_UP (-2)
+#define YETTY_YFLAME_HIT_ROOT (-3)
 
 #ifdef YCLASS_CODEGEN
 /* render() returns struct yetty_ydraw_drawable_list_result by value, so the
@@ -86,7 +102,7 @@ struct yflame_frame {
  * Class data
  *===========================================================================*/
 
-struct [[clang::annotate("class@yflame:flame")]] flame_data {
+struct [[clang::annotate("class@yflame:flame")]] yetty_yflame_flame {
     /* Render configuration. */
     float width;
     float frame_height;
@@ -106,6 +122,20 @@ struct [[clang::annotate("class@yflame:flame")]] flame_data {
     uint32_t max_depth;
     float total_height;
 };
+
+/* Result wrapper for the flame handle. Declared here (not pulled from
+ * flame.h, which this TU does not include) so the appended flame.gen.c —
+ * which defines yetty_yflame_flame_from() returning it — has the type in
+ * scope. The public flame.h publishes the identical declaration for other
+ * modules. */
+YETTY_YRESULT_DECLARE(yetty_yflame_flame_ptr, struct yetty_yflame_flame *);
+
+/* Defined in the appended flame.gen.c (foot of this TU). Forward-declared
+ * here because this TU does not include its own generated header — the class
+ * accessor and the obj→body downcast are used by the helpers and the slots
+ * below. */
+struct yetty_yclass_ptr_result yetty_yflame_flame_class_get(void);
+struct yetty_yflame_flame_ptr_result yetty_yflame_flame_from(struct yetty_yclass_object *obj);
 
 static struct yetty_yclass_void_ptr_result flame_from_obj(struct yetty_yclass_object *obj)
 {
@@ -306,7 +336,7 @@ static void layout(struct yflame_frame *node, float x_start, float x_end, uint32
     }
 }
 
-static struct yflame_frame *flame_focus_node(struct flame_data *flame)
+static struct yflame_frame *flame_focus_node(struct yetty_yflame_flame *flame)
 {
     int32_t id = flame->focus_id;
     if (id < 0 || (uint32_t)id >= flame->node_count) {
@@ -316,7 +346,7 @@ static struct yflame_frame *flame_focus_node(struct flame_data *flame)
 }
 
 /* Re-lay out the focus subtree against the current width; update height. */
-static struct yflame_frame *flame_relayout(struct flame_data *flame)
+static struct yflame_frame *flame_relayout(struct yetty_yflame_flame *flame)
 {
     struct yflame_frame *focus = flame_focus_node(flame);
     if (!focus) {
@@ -393,9 +423,9 @@ static size_t utf8_clamp(const char *text, size_t len)
 
 static struct yetty_ycore_void_result emit(struct yetty_ydraw_drawable_list *buf,
                                            const struct yflame_frame *node,
-                                           const struct flame_data *flame, float frame_height,
-                                           float min_width, int icicle, int labels,
-                                           int32_t highlight_id, uint32_t *z)
+                                           const struct yetty_yflame_flame *flame,
+                                           float frame_height, float min_width, int icicle,
+                                           int labels, int32_t highlight_id, uint32_t *z)
 {
     float box_width = node->x_end - node->x_start;
     if (box_width >= min_width) {
@@ -564,7 +594,7 @@ static struct yetty_ycore_void_result flame_configure(struct yetty_yclass_ctx *c
     (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame configure: from_obj");
-    struct flame_data *flame = flame_r.value;
+    struct yetty_yflame_flame *flame = flame_r.value;
     flame->width = width;
     flame->frame_height = frame_height;
     flame->min_width = min_width;
@@ -582,7 +612,7 @@ static struct yetty_ycore_void_result flame_parse(struct yetty_yclass_ctx *ctx,
     (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame parse: from_obj");
-    struct flame_data *flame = flame_r.value;
+    struct yetty_yflame_flame *flame = flame_r.value;
     if (!input && len > 0) {
         return YETTY_ERR(yetty_ycore_void, "yflame parse: NULL input");
     }
@@ -635,7 +665,7 @@ static struct yetty_ydraw_drawable_list_result flame_render(struct yetty_yclass_
     (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, flame_r, "yflame render: from_obj");
-    struct flame_data *flame = flame_r.value;
+    struct yetty_yflame_flame *flame = flame_r.value;
     if (!flame->root) {
         return YETTY_ERR(yetty_ydraw_drawable_list, "yflame render: nothing parsed");
     }
@@ -696,7 +726,7 @@ static struct yetty_ycore_int_result flame_hit_test(struct yetty_yclass_ctx *ctx
     (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, flame_r, "yflame hit_test: from_obj");
-    struct flame_data *flame = flame_r.value;
+    struct yetty_yflame_flame *flame = flame_r.value;
     if (!flame->root) {
         return YETTY_ERR(yetty_ycore_int, "yflame hit_test: nothing parsed");
     }
@@ -737,7 +767,7 @@ static struct yetty_ycore_void_result flame_focus(struct yetty_yclass_ctx *ctx,
     (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame focus: from_obj");
-    struct flame_data *flame = flame_r.value;
+    struct yetty_yflame_flame *flame = flame_r.value;
     ydebug("yflame focus: %d -> %d (node_count=%u)", flame->focus_id, node_id, flame->node_count);
     if (node_id >= 0 && (uint32_t)node_id < flame->node_count) {
         flame->focus_id = node_id;
@@ -754,7 +784,7 @@ static struct yetty_ycore_void_result flame_focus_parent(struct yetty_yclass_ctx
     (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame focus_parent: from_obj");
-    struct flame_data *flame = flame_r.value;
+    struct yetty_yflame_flame *flame = flame_r.value;
     struct yflame_frame *node = flame_focus_node(flame);
     ydebug("yflame focus_parent: focus_id=%d node=%s parent=%s", flame->focus_id,
            node ? node->name : "(null)", (node && node->parent) ? node->parent->name : "(none)");
@@ -772,7 +802,7 @@ static struct yetty_ycore_void_result flame_reset(struct yetty_yclass_ctx *ctx,
     (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame reset: from_obj");
-    struct flame_data *flame = flame_r.value;
+    struct yetty_yflame_flame *flame = flame_r.value;
     flame->focus_id = 0;
     return YETTY_OK_VOID();
 }
@@ -787,7 +817,7 @@ static struct yetty_ycore_void_result flame_set_highlight(struct yetty_yclass_ct
     (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame set_highlight: from_obj");
-    struct flame_data *flame = flame_r.value;
+    struct yetty_yflame_flame *flame = flame_r.value;
     flame->highlight_id = (node_id >= 0 && (uint32_t)node_id < flame->node_count) ? node_id : -1;
     return YETTY_OK_VOID();
 }
@@ -802,7 +832,7 @@ static struct yetty_ycore_void_result flame_obj_destroy(struct yetty_yclass_ctx 
     if (YETTY_IS_ERR(flame_r)) {
         yetty_ycore_error_destroy(flame_r.error);
     } else {
-        struct flame_data *flame = flame_r.value;
+        struct yetty_yflame_flame *flame = flame_r.value;
         frame_destroy(flame->root);
         free(flame->nodes);
         flame->root = NULL;

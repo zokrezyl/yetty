@@ -56,7 +56,7 @@ struct ycomp_app {
     struct yetty_yframework *yrt;
     struct yetty_ydraw_target *target; /* our own texture target, bypasses
                                          * yframework's x11-tile choice */
-    struct yetty_yfigure_container *root;
+    struct yetty_yclass_object *root;
     struct yetty_ygrid_grid *grid;
     /* Default font loaded once at worker startup and attached to every
      * rebuilt grid at slot 0. Owned here, destroyed in teardown. */
@@ -528,7 +528,7 @@ static struct yetty_ycore_void_result ycomp_worker(struct yetty_yinit_runtime *r
     struct yetty_yclass_ctx yclass_ctx = {0};
     struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "root container create failed");
-    app->root = yetty_yfigure_container_from(obj_res.value);
+    app->root = obj_res.value;
     yetty_yfigure_container_set_context(app->root, &app->ctx);
     /* registry stays NULL — this tool runs without a figure registry. */
     yetty_yfigure_container_set_rect(app->root, root_rect);
@@ -595,9 +595,8 @@ static struct yetty_ycore_void_result ycomp_worker(struct yetty_yinit_runtime *r
         if (rt->instance) {
             wgpuInstanceProcessEvents((WGPUInstance)rt->instance);
         }
-        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
         if (!(needs_render || had_events ||
-              yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rf)-1).value)) {
+              yetty_yfigure_figure_dirty_get(app->root).value)) {
             continue;
         }
 
@@ -607,13 +606,12 @@ static struct yetty_ycore_void_result ycomp_worker(struct yetty_yinit_runtime *r
             yerror("ycompositor: clear failed: %s", cl.error.msg);
             yetty_ycore_error_destroy(cl.error);
         }
-        struct yetty_ycore_void_result rr =
-            yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
+        struct yetty_ycore_void_result rr = yetty_yfigure_render(NULL, app->root, target);
         if (YETTY_IS_ERR(rr)) {
             yerror("ycompositor: root render failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
         } else {
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 0);
+            yetty_yfigure_figure_dirty_set(app->root, 0);
         }
         struct yetty_ycore_void_result pp = target->ops->present(target);
         if (YETTY_IS_ERR(pp)) {
@@ -635,9 +633,7 @@ static struct yetty_ycore_void_result ycomp_worker(struct yetty_yinit_runtime *r
     /* Strict teardown: root container + figures before yframework so any
      * pending GPU work bound to the runtime's device flushes first. */
     {
-        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
-        struct yetty_ycore_void_result dr =
-            yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
+        struct yetty_ycore_void_result dr = yetty_yfigure_destroy(NULL, app->root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "root destroy");
     }
     app->root = NULL;

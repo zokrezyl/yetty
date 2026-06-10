@@ -1498,7 +1498,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 struct standalone {
     struct app app;
     struct yetty_yframework *yframework;
-    struct yetty_yfigure_container *root_container;
+    struct yetty_yclass_object *root_container;
     struct yetty_yfigure_registry *figure_registry;
     struct yetty_ydraw_composite_factory *composite_factory;
     struct yetty_ywire_wire_statemachine *wire_sm;
@@ -1538,9 +1538,8 @@ static void sa_pty_resize_cb(void *userdata, uint32_t cols, uint32_t rows, uint3
         return;
     }
     struct yetty_ycore_rectangle rr = {.min = {0, 0}, .max = {(float)pixel_w, (float)pixel_h}};
-    struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(s->root_container);
-    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf)-1, rr);
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
+    yetty_yfigure_figure_rect_set(s->root_container, rr);
+    yetty_yfigure_figure_dirty_set(s->root_container, 1);
 }
 
 static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_listener *listener,
@@ -1583,13 +1582,12 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
             yetty_ycore_error_destroy(cl.error);
         }
         if (s->root_container) {
-            struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(s->root_container);
             struct yetty_ycore_void_result rr =
-                yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, s->render_target);
+                yetty_yfigure_render(NULL, s->root_container, s->render_target);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
             }
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 0);
+            yetty_yfigure_figure_dirty_set(s->root_container, 0);
         }
         struct yetty_ycore_void_result pp = s->render_target->ops->present(s->render_target);
         if (YETTY_IS_ERR(pp)) {
@@ -1879,7 +1877,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
         struct yetty_yclass_ctx yclass_ctx = {0};
         struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "ybrowser standalone: container_create");
-        s->root_container = yetty_yfigure_container_from(obj_res.value);
+        s->root_container = obj_res.value;
         yetty_yfigure_container_set_context(s->root_container, &ctx);
         yetty_yfigure_container_set_registry(s->root_container, s->figure_registry);
         yetty_yfigure_container_set_rect(s->root_container, root_rect);
@@ -1987,8 +1985,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
         s->chrome = NULL;
     }
     if (s->root_container) {
-        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(s->root_container);
-        err_ok(yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1));
+        err_ok(yetty_yfigure_destroy(NULL, s->root_container));
         s->root_container = NULL;
     }
     if (s->figure_registry) {

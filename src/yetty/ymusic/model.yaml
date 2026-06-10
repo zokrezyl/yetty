@@ -95,7 +95,7 @@ classes:
     source_file: src/yetty/ymusic/music.c
     parent: null
     mixins: []
-    data: struct music_data
+    data: struct yetty_ymusic_music
     data_fields:
       - name: width
         type: float

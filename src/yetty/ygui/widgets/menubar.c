@@ -6,11 +6,22 @@
  */
 
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * menubar.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_menubar_data_ptr, struct yetty_ygui_menubar *);
+struct yetty_yclass_ptr_result yetty_ygui_menubar_class_get(void);
+struct yetty_ygui_menubar_data_ptr_result yetty_ygui_menubar_data(struct yetty_ygui_object *obj);
 
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/widgets/button.h>
 #include <yetty/ygui/widgets/hbox.h>
-#include <yetty/ygui/widgets/menubar.h>
 #include <yetty/ygui/widgets/popup_menu.h>
 
 #include <stdlib.h>
@@ -69,7 +80,7 @@ struct yetty_ycore_void_result yetty_ygui_menubar_add(struct yetty_ygui_object *
 }
 
 struct [[clang::annotate("class@ygui:menubar")]] [[clang::annotate("parent@ygui:hbox")]]
-menubar_data {
+yetty_ygui_menubar {
     char _empty;
 };
 

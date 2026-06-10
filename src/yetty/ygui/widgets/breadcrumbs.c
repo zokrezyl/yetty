@@ -1,14 +1,26 @@
 /* ygui-breadcrumbs.c — "Home › Settings › Network" trail. */
 #include "paint-helpers.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * breadcrumbs.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_breadcrumbs_data_ptr, struct yetty_ygui_breadcrumbs *);
+struct yetty_yclass_ptr_result yetty_ygui_breadcrumbs_class_get(void);
+struct yetty_ygui_breadcrumbs_data_ptr_result yetty_ygui_breadcrumbs_data(
+    struct yetty_ygui_object *obj);
 #include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/breadcrumbs.h>
 #include <stdlib.h>
 
 #define COLOR_TEXT 0xFFE4E5E0u
 #define COLOR_SEP 0xFFA8A79Fu
 
 struct [[clang::annotate("class@ygui:breadcrumbs")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] bc_data {
+    "parent@ygui:primitive_widget")]] yetty_ygui_breadcrumbs {
     char **items;
     int n_items;
     int cap;
@@ -27,7 +39,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_breadcrumbs_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
-    struct bc_data *d = d_dr.value;
+    struct yetty_ygui_breadcrumbs *d = d_dr.value;
     d->items = NULL;
     d->n_items = 0;
     d->cap = 0;
@@ -43,7 +55,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_breadcrumbs_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
-    struct bc_data *d = d_dr.value;
+    struct yetty_ygui_breadcrumbs *d = d_dr.value;
     for (int i = 0; i < d->n_items; i++) {
         free(d->items[i]);
     }
@@ -65,7 +77,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_breadcrumbs_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
-    struct bc_data *d = d_dr.value;
+    struct yetty_ygui_breadcrumbs *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float h = r.max.y - r.min.y;
     if (h <= 0) {
@@ -89,7 +101,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     return YETTY_OK_VOID();
 }
 
-static int grow(struct bc_data *d, int n)
+static int grow(struct yetty_ygui_breadcrumbs *d, int n)
 {
     if (n <= d->cap) {
         return 1;
@@ -117,7 +129,7 @@ struct yetty_ycore_void_result yetty_ygui_breadcrumbs_add(struct yetty_ygui_obje
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_breadcrumbs_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_breadcrumbs_add: data_get");
-    struct bc_data *d = d_dr.value;
+    struct yetty_ygui_breadcrumbs *d = d_dr.value;
     if (!grow(d, d->n_items + 1)) {
         return YETTY_ERR(yetty_ycore_void, "breadcrumbs_add: realloc");
     }
@@ -140,7 +152,7 @@ struct yetty_ycore_void_result yetty_ygui_breadcrumbs_clear(struct yetty_ygui_ob
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_breadcrumbs_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_breadcrumbs_clear: data_get");
-    struct bc_data *d = d_dr.value;
+    struct yetty_ygui_breadcrumbs *d = d_dr.value;
     for (int i = 0; i < d->n_items; i++) {
         free(d->items[i]);
     }

@@ -7,11 +7,23 @@
  */
 
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * textinput.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_textinput_data_ptr, struct yetty_ygui_textinput *);
+struct yetty_yclass_ptr_result yetty_ygui_textinput_class_get(void);
+struct yetty_ygui_textinput_data_ptr_result yetty_ygui_textinput_data(
+    struct yetty_ygui_object *obj);
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/textinput.h>
 #include <yetty/ysdf/funcs.gen.h>
 
 #include <stdlib.h>
@@ -24,7 +36,8 @@
 #define COLOR_PLACEHOLDER 0xFFA8A79Fu
 
 struct [[clang::annotate("class@ygui:textinput")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]] textinput_data {
+    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]]
+yetty_ygui_textinput {
     char *text;
     size_t text_len;
     size_t cap;
@@ -49,7 +62,7 @@ static struct yetty_ycore_void_result on_click_focus(struct yetty_yclass_ctx *yc
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "on_click_focus: data_get");
-    struct textinput_data *d = d_dr.value;
+    struct yetty_ygui_textinput *d = d_dr.value;
     d->focused = 1;
     /* Place the caret at the clicked character. */
     float px = 0.0f, py = 0.0f;
@@ -85,7 +98,7 @@ static struct yetty_ycore_void_result textinput_constructor(struct yetty_yclass_
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "textinput_constructor: data_get");
-    struct textinput_data *d = d_dr.value;
+    struct yetty_ygui_textinput *d = d_dr.value;
     d->text = NULL;
     d->text_len = 0;
     d->cap = 0;
@@ -104,7 +117,7 @@ static struct yetty_ycore_void_result textinput_destructor(struct yetty_yclass_c
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "textinput_destructor: data_get");
-    struct textinput_data *d = d_dr.value;
+    struct yetty_ygui_textinput *d = d_dr.value;
     free(d->text);
     free(d->placeholder);
     d->text = NULL;
@@ -159,7 +172,7 @@ static struct yetty_ycore_void_result textinput_paint(struct yetty_yclass_ctx *y
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "textinput_paint: data_get");
-    struct textinput_data *d = d_dr.value;
+    struct yetty_ygui_textinput *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
@@ -206,7 +219,7 @@ static struct yetty_ycore_void_result textinput_paint(struct yetty_yclass_ctx *y
     return YETTY_OK_VOID();
 }
 
-static int ensure_cap(struct textinput_data *d, size_t need)
+static int ensure_cap(struct yetty_ygui_textinput *d, size_t need)
 {
     if (need <= d->cap) {
         return 1;
@@ -234,7 +247,7 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_text(struct yetty_ygui_o
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_textinput_set_text: data_get");
-    struct textinput_data *d = d_dr.value;
+    struct yetty_ygui_textinput *d = d_dr.value;
     size_t n = text ? strlen(text) : 0;
     if (!ensure_cap(d, n + 1)) {
         return YETTY_ERR(yetty_ycore_void, "textinput_set_text: realloc");
@@ -261,7 +274,7 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_textinput_get_text(
         (struct yetty_ygui_object *)obj, yetty_ygui_textinput_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr,
                         "yetty_ygui_textinput_get_text: data_get");
-    struct textinput_data *d = d_dr.value;
+    struct yetty_ygui_textinput *d = d_dr.value;
     return YETTY_OK(yetty_ycore_const_char_ptr, d->text ? d->text : "");
 }
 
@@ -275,7 +288,7 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_placeholder(struct yetty
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_textinput_set_placeholder: data_get");
-    struct textinput_data *d = d_dr.value;
+    struct yetty_ygui_textinput *d = d_dr.value;
     free(d->placeholder);
     if (!placeholder) {
         d->placeholder = NULL;
@@ -300,7 +313,7 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_focus(struct yetty_ygui_
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_textinput_set_focus: data_get");
-    struct textinput_data *d = d_dr.value;
+    struct yetty_ygui_textinput *d = d_dr.value;
     d->focused = focused ? 1 : 0;
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -316,7 +329,7 @@ struct yetty_ycore_int_result yetty_ygui_textinput_handle_key(struct yetty_ygui_
     YETTY_RETURN_IF_ERR(yetty_ycore_int, class_result, "yetty_ygui_textinput_handle_key: class");
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, class_result.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_textinput_handle_key: data_get");
-    struct textinput_data *d = d_dr.value;
+    struct yetty_ygui_textinput *d = d_dr.value;
     if (!d->focused) {
         return YETTY_OK(yetty_ycore_int, 0);
     }

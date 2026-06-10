@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_chip_class_get(void);
 
 struct yetty_ygui_object;
-struct chip_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_chip_data_ptr, struct chip_data *);
+struct yetty_ygui_chip;
+YETTY_YRESULT_DECLARE(yetty_ygui_chip_data_ptr, struct yetty_ygui_chip *);
 struct yetty_ygui_chip_data_ptr_result yetty_ygui_chip_data(struct yetty_ygui_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_chip_create(struct yetty_yclass_ctx *ctx);

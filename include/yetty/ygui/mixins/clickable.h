@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_clickable_mixin_get(void);
 
 struct yetty_ygui_object;
-struct clickable_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_clickable_data_ptr, struct clickable_data *);
+struct yetty_ygui_clickable;
+YETTY_YRESULT_DECLARE(yetty_ygui_clickable_data_ptr, struct yetty_ygui_clickable *);
 struct yetty_ygui_clickable_data_ptr_result yetty_ygui_clickable_data(
     struct yetty_ygui_object *obj);
 

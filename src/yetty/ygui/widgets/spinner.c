@@ -4,10 +4,21 @@
  * increment. Each click adjusts value by `step` (default 1.0).
  */
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * spinner.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_spinner_data_ptr, struct yetty_ygui_spinner *);
+struct yetty_yclass_ptr_result yetty_ygui_spinner_class_get(void);
+struct yetty_ygui_spinner_data_ptr_result yetty_ygui_spinner_data(struct yetty_ygui_object *obj);
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/spinner.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <stdio.h>
 #include <string.h>
@@ -18,7 +29,7 @@
 #define COLOR_ACC 0xFF92A86Bu
 
 struct [[clang::annotate("class@ygui:spinner")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-spinner_data {
+yetty_ygui_spinner {
     float value, min_v, max_v, step;
 };
 
@@ -43,7 +54,7 @@ static struct yetty_ycore_void_result spinner_constructor(struct yetty_yclass_ct
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_spinner_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "spinner_constructor: data_get");
-    struct spinner_data *d = d_dr.value;
+    struct yetty_ygui_spinner *d = d_dr.value;
     d->value = 0;
     d->min_v = 0;
     d->max_v = 100;
@@ -63,7 +74,7 @@ static struct yetty_ycore_int_result spinner_on_press(struct yetty_yclass_ctx *y
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_spinner_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "spinner_on_press: data_get");
-    struct spinner_data *d = d_dr.value;
+    struct yetty_ygui_spinner *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float third = w / 3.0f;
@@ -142,7 +153,7 @@ static struct yetty_ycore_void_result spinner_paint(struct yetty_yclass_ctx *ycl
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_spinner_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "spinner_paint: data_get");
-    struct spinner_data *d = d_dr.value;
+    struct yetty_ygui_spinner *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {
@@ -179,7 +190,7 @@ struct yetty_ycore_void_result yetty_ygui_spinner_set_value(struct yetty_ygui_ob
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_spinner_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_spinner_set_value: data_get");
-    struct spinner_data *d = d_dr.value;
+    struct yetty_ygui_spinner *d = d_dr.value;
     d->value = v;
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -193,7 +204,7 @@ struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_ygui_ob
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_spinner_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_spinner_set_range: data_get");
-    struct spinner_data *d = d_dr.value;
+    struct yetty_ygui_spinner *d = d_dr.value;
     d->min_v = mn;
     d->max_v = mx;
     d->step = step > 0 ? step : 1;
@@ -208,7 +219,7 @@ struct yetty_ycore_float_result yetty_ygui_spinner_get_value(const struct yetty_
     struct yetty_ygui_void_ptr_result data_result = yetty_ygui_data_get_result(
         (struct yetty_ygui_object *)obj, yetty_ygui_spinner_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_float, data_result, "yetty_ygui_spinner_get_value: data_get");
-    return YETTY_OK(yetty_ycore_float, ((struct spinner_data *)data_result.value)->value);
+    return YETTY_OK(yetty_ycore_float, ((struct yetty_ygui_spinner *)data_result.value)->value);
 }
 
 #include "spinner.gen.c"

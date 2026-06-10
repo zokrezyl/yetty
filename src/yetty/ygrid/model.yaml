@@ -43,10 +43,6 @@ classes:
     mixins: []
     data: struct yetty_ygrid_grid
     data_fields:
-      - name: base
-        type: "struct yetty_yfigure_figure *"
-        get: false
-        set: false
       - name: registry
         type: "struct yetty_ydraw_drawable_list_registry *"
         get: false

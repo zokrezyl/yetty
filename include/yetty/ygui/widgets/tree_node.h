@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_tree_node_class_get(void);
 
 struct yetty_ygui_object;
-struct tn_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_tree_node_data_ptr, struct tn_data *);
+struct yetty_ygui_tree_node;
+YETTY_YRESULT_DECLARE(yetty_ygui_tree_node_data_ptr, struct yetty_ygui_tree_node *);
 struct yetty_ygui_tree_node_data_ptr_result yetty_ygui_tree_node_data(
     struct yetty_ygui_object *obj);
 

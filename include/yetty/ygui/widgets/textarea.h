@@ -15,8 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_textarea_class_get(void);
 
 struct yetty_ygui_object;
-struct textarea_data;
-YETTY_YRESULT_DECLARE(yetty_ygui_textarea_data_ptr, struct textarea_data *);
+struct yetty_ygui_textarea;
+YETTY_YRESULT_DECLARE(yetty_ygui_textarea_data_ptr, struct yetty_ygui_textarea *);
 struct yetty_ygui_textarea_data_ptr_result yetty_ygui_textarea_data(struct yetty_ygui_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_textarea_create(struct yetty_yclass_ctx *ctx);

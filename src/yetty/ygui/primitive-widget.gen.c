@@ -19,7 +19,7 @@ struct yetty_yclass_ptr_result yetty_ygui_primitive_widget_class_get(void)
     static const struct yetty_yclass_descriptor desc = {
         .name = "yetty_ygui_primitive_widget",
         .type = YETTY_YCLASS_TYPE_REGULAR,
-        .data_size = sizeof(struct primitive_widget_data),
+        .data_size = sizeof(struct yetty_ygui_primitive_widget),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_ygui", "widget_emit_body", (yetty_yclass_method_id_t)yetty_ygui_widget_emit_body,
@@ -61,5 +61,5 @@ struct yetty_ygui_primitive_widget_data_ptr_result yetty_ygui_primitive_widget_d
                          data_slice_r);
     }
     return YETTY_OK(yetty_ygui_primitive_widget_data_ptr,
-                    (struct primitive_widget_data *)data_slice_r.value);
+                    (struct yetty_ygui_primitive_widget *)data_slice_r.value);
 }

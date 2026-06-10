@@ -18,11 +18,22 @@
  */
 
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * ynode.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_ynode_data_ptr, struct yetty_ygui_ynode *);
+struct yetty_yclass_ptr_result yetty_ygui_ynode_class_get(void);
+struct yetty_ygui_ynode_data_ptr_result yetty_ygui_ynode_data(struct yetty_ygui_object *obj);
 #include "paint-helpers.h"
 
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/vbox.h>
-#include <yetty/ygui/widgets/ynode.h>
 #include <yetty/ygui/widgets/ynodes.h>
 
 #include <stdlib.h>
@@ -60,7 +71,8 @@ struct ynode_pin {
     uint32_t color;
 };
 
-struct [[clang::annotate("class@ygui:ynode")]] [[clang::annotate("parent@ygui:vbox")]] node_data {
+struct [[clang::annotate("class@ygui:ynode")]] [[clang::annotate("parent@ygui:vbox")]]
+yetty_ygui_ynode {
     char *title;
     float gx, gy; /* graph-space top-left */
     float gw, gh; /* graph-space size */
@@ -82,7 +94,7 @@ static const struct yetty_yclass *ynode_class(void)
     return yetty_ygui_ynode_class_get().value;
 }
 
-static struct node_data *ynode_data(struct yetty_ygui_object *node)
+static struct yetty_ygui_ynode *ynode_data(struct yetty_ygui_object *node)
 {
     return yetty_ygui_data_get(node, ynode_class());
 }
@@ -124,7 +136,7 @@ static struct yetty_ycore_void_result ynode_constructor(struct yetty_yclass_ctx 
         yetty_ygui_super_void(obj, ynode_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ynode_constructor: super");
 
-    struct node_data *d = ynode_data(obj);
+    struct yetty_ygui_ynode *d = ynode_data(obj);
     d->title = NULL;
     d->gx = d->gy = 0.0f;
     d->gw = 180.0f;
@@ -168,7 +180,7 @@ static struct yetty_ycore_void_result ynode_destructor(struct yetty_yclass_ctx *
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct node_data *d = ynode_data(obj);
+    struct yetty_ygui_ynode *d = ynode_data(obj);
 
     /* Drop our links while the parent editor is still reachable (yetty_ygui_del
      * runs destructors before it detaches the object from its parent). */
@@ -195,7 +207,7 @@ static struct yetty_ycore_void_result ynode_destructor(struct yetty_yclass_ctx *
  * Geometry — graph rect ↔ screen layout, pin positions.
  *---------------------------------------------------------------------------*/
 static struct yetty_ycore_void_result ynode_apply_layout(struct yetty_ygui_object *node,
-                                                         struct node_data *d, float pan_x,
+                                                         struct yetty_ygui_ynode *d, float pan_x,
                                                          float pan_y, float zoom)
 {
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(node);
@@ -213,7 +225,7 @@ struct yetty_ycore_void_result yetty_ygui_ynode_reflow(struct yetty_ygui_object 
     if (!node) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_ynode_reflow: NULL node");
     }
-    struct node_data *d = ynode_data(node);
+    struct yetty_ygui_ynode *d = ynode_data(node);
     float pan_x = 0.0f, pan_y = 0.0f, zoom = 1.0f;
     struct yetty_ygui_object *editor = ynode_editor(node);
     if (editor) {
@@ -229,7 +241,7 @@ int yetty_ygui_ynode_pin_pos(const struct yetty_ygui_object *node, int output, i
     if (!node) {
         return 0;
     }
-    struct node_data *d = ynode_data((struct yetty_ygui_object *)node);
+    struct yetty_ygui_ynode *d = ynode_data((struct yetty_ygui_object *)node);
     size_t count = output ? d->out_count : d->in_count;
     if (index < 0 || (size_t)index >= count) {
         return 0;
@@ -258,7 +270,7 @@ int yetty_ygui_ynode_pin_at(const struct yetty_ygui_object *node, float x, float
     if (!node) {
         return 0;
     }
-    struct node_data *d = ynode_data((struct yetty_ygui_object *)node);
+    struct yetty_ygui_ynode *d = ynode_data((struct yetty_ygui_object *)node);
     float zoom = ynode_view_zoom((struct yetty_ygui_object *)node);
     float hit = YNODE_PIN_R * zoom + YNODE_PIN_HIT_SLOP;
     for (int side = 0; side < 2; side++) {
@@ -315,7 +327,7 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_ctx *yclas
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "ynode_paint: NULL ctx");
     }
-    struct node_data *d = ynode_data(obj);
+    struct yetty_ygui_ynode *d = ynode_data(obj);
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0.0f || h <= 0.0f) {
@@ -423,7 +435,7 @@ static struct yetty_ycore_int_result ynode_on_press(struct yetty_yclass_ctx *ycl
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct node_data *d = ynode_data(obj);
+    struct yetty_ygui_ynode *d = ynode_data(obj);
     struct yetty_ygui_object *editor = ynode_editor(obj);
 
     /* A press while the editor's context menu is open just dismisses it. */
@@ -482,7 +494,7 @@ static struct yetty_ycore_int_result ynode_on_motion(struct yetty_yclass_ctx *yc
 {
     (void)yclass_ctx;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct node_data *d = ynode_data(obj);
+    struct yetty_ygui_ynode *d = ynode_data(obj);
     struct yetty_ygui_object *editor = ynode_editor(obj);
 
     if (d->drag_mode == YNODE_DRAG_LINK) {
@@ -570,7 +582,7 @@ static struct yetty_ycore_int_result ynode_on_release(struct yetty_yclass_ctx *y
     (void)yclass_ctx;
     (void)button;
     struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct node_data *d = ynode_data(obj);
+    struct yetty_ygui_ynode *d = ynode_data(obj);
     struct yetty_ygui_object *editor = ynode_editor(obj);
 
     enum ynode_drag_mode mode = d->drag_mode;
@@ -595,7 +607,7 @@ struct yetty_ycore_void_result yetty_ygui_ynode_set_title(struct yetty_ygui_obje
     if (!node) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_ynode_set_title: NULL node");
     }
-    struct node_data *d = ynode_data(node);
+    struct yetty_ygui_ynode *d = ynode_data(node);
     char *copy = NULL;
     if (title) {
         copy = strdup(title);
@@ -615,7 +627,7 @@ struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_pos(struct yetty_ygui_
     if (!node) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_ynode_set_graph_pos: NULL node");
     }
-    struct node_data *d = ynode_data(node);
+    struct yetty_ygui_ynode *d = ynode_data(node);
     d->gx = gx;
     d->gy = gy;
     return yetty_ygui_ynode_reflow(node);
@@ -633,7 +645,7 @@ void yetty_ygui_ynode_graph_pos(const struct yetty_ygui_object *node, float *gx,
         }
         return;
     }
-    struct node_data *d = ynode_data((struct yetty_ygui_object *)node);
+    struct yetty_ygui_ynode *d = ynode_data((struct yetty_ygui_object *)node);
     if (gx) {
         *gx = d->gx;
     }
@@ -649,7 +661,7 @@ struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_size(struct yetty_ygui
     if (!node) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_ynode_set_graph_size: NULL node");
     }
-    struct node_data *d = ynode_data(node);
+    struct yetty_ygui_ynode *d = ynode_data(node);
     d->gw = gw > 1.0f ? gw : 1.0f;
     d->gh = gh > 1.0f ? gh : 1.0f;
     return yetty_ygui_ynode_reflow(node);
@@ -667,7 +679,7 @@ void yetty_ygui_ynode_graph_size(const struct yetty_ygui_object *node, float *gw
         }
         return;
     }
-    struct node_data *d = ynode_data((struct yetty_ygui_object *)node);
+    struct yetty_ygui_ynode *d = ynode_data((struct yetty_ygui_object *)node);
     if (gw) {
         *gw = d->gw;
     }
@@ -682,7 +694,7 @@ static struct uint32_result ynode_add_pin(struct yetty_ygui_object *node, int ou
     if (!node) {
         return YETTY_ERR(uint32, "yetty_ygui_ynode_add_pin: NULL node");
     }
-    struct node_data *d = ynode_data(node);
+    struct yetty_ygui_ynode *d = ynode_data(node);
     struct ynode_pin **arr = output ? &d->outputs : &d->inputs;
     size_t *count = output ? &d->out_count : &d->in_count;
     size_t *cap = output ? &d->out_cap : &d->in_cap;

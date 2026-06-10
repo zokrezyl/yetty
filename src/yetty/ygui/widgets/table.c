@@ -1,7 +1,18 @@
 /* ygui-table.c — fixed-width columns + striped rows. */
 #include "paint-helpers.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * table.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_table_data_ptr, struct yetty_ygui_table *);
+struct yetty_yclass_ptr_result yetty_ygui_table_class_get(void);
+struct yetty_ygui_table_data_ptr_result yetty_ygui_table_data(struct yetty_ygui_object *obj);
 #include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/table.h>
 #include <stdlib.h>
 
 #define COLOR_BG 0xFF14100Bu
@@ -14,7 +25,7 @@
 #define ROW_H 22.0f
 
 struct [[clang::annotate("class@ygui:table")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-table_data {
+yetty_ygui_table {
     char **headers;
     int n_cols;
     char ***rows;
@@ -34,7 +45,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_table_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
-    struct table_data *d = d_dr.value;
+    struct yetty_ygui_table *d = d_dr.value;
     d->headers = NULL;
     d->n_cols = 0;
     d->rows = NULL;
@@ -60,7 +71,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_table_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
-    struct table_data *d = d_dr.value;
+    struct yetty_ygui_table *d = d_dr.value;
     for (int i = 0; i < d->n_cols; i++) {
         free(d->headers[i]);
     }
@@ -86,7 +97,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_table_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
-    struct table_data *d = d_dr.value;
+    struct yetty_ygui_table *d = d_dr.value;
     if (d->n_cols <= 0) {
         return YETTY_OK_VOID();
     }
@@ -140,7 +151,7 @@ struct yetty_ycore_void_result yetty_ygui_table_set_columns(struct yetty_ygui_ob
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_table_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_table_set_columns: data_get");
-    struct table_data *d = d_dr.value;
+    struct yetty_ygui_table *d = d_dr.value;
     for (int i = 0; i < d->n_cols; i++) {
         free(d->headers[i]);
     }
@@ -173,7 +184,7 @@ struct yetty_ycore_void_result yetty_ygui_table_add_row(struct yetty_ygui_object
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_table_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_table_add_row: data_get");
-    struct table_data *d = d_dr.value;
+    struct yetty_ygui_table *d = d_dr.value;
     if (d->n_rows + 1 > d->rows_cap) {
         int c = d->rows_cap ? d->rows_cap * 2 : 8;
         while (c < d->n_rows + 1) {
@@ -216,7 +227,7 @@ struct yetty_ycore_void_result yetty_ygui_table_clear_rows(struct yetty_ygui_obj
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_table_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_table_clear_rows: data_get");
-    struct table_data *d = d_dr.value;
+    struct yetty_ygui_table *d = d_dr.value;
     for (int i = 0; i < d->n_rows; i++) {
         free_row(d->rows[i], d->n_cols);
     }

@@ -23,6 +23,7 @@
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/mixins/draggable.h>
 #include <yetty/ygui/primitive-widget.h>
+#include <yetty/ygui/widget.h>
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
