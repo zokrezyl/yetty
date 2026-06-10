@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8>
+<title>@media print { body { display:none } } must NOT hide content on screen
+(CNN ships print + complex body:not(...) rules; lexbor's cascade mis-applied
+them and dropped the whole body — 3 boxes instead of the page)</title>
+<style>body{margin:0} @media print { body { display:none } *{display:none} }</style>
+<div data-test="content" data-expect="0,0,800,40" style="height:40px">visible on screen</div>

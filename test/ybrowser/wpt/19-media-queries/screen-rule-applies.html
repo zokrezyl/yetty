@@ -1,0 +1,4 @@
+<!doctype html><meta charset=utf-8>
+<title>@media screen rules DO apply</title>
+<style>body{margin:0} @media screen { .w { width: 250px } }</style>
+<div data-test="b" data-expect="*,*,250,*" class="w" style="height:20px">x</div>
