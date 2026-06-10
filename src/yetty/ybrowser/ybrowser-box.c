@@ -408,13 +408,31 @@ static int grid_span_from_classes(const char *cls, size_t cls_len, int viewport_
             continue;
         }
         int min_width = 0; /* base / no prefix */
-        for (size_t b = 0; b < sizeof(breakpoints) / sizeof(breakpoints[0]); b++) {
-            size_t nlen = strlen(breakpoints[b].name);
-            /* Match `<bp>-span-` ending exactly at `i` (i.e. `<bp>-` precedes). */
-            if (i >= nlen + 1 && strncmp(cls + i - nlen - 1, breakpoints[b].name, nlen) == 0 &&
-                cls[i - 1] == '-') {
-                min_width = breakpoints[b].min_width;
-                break;
+        if (i >= 4 && strncmp(cls + i - 4, "col-", 4) == 0) {
+            /* Tailwind `<bp>:col-span-N` — the responsive prefix sits before
+			 * `col-`; an unprefixed `col-span-N` is the base. Tailwind's default
+			 * breakpoint min-widths: sm 640, md 768, lg 1024, xl 1280, 2xl 1536. */
+            if (i >= 7 && strncmp(cls + i - 7, "sm:col-", 7) == 0) {
+                min_width = 640;
+            } else if (i >= 7 && strncmp(cls + i - 7, "md:col-", 7) == 0) {
+                min_width = 768;
+            } else if (i >= 7 && strncmp(cls + i - 7, "lg:col-", 7) == 0) {
+                min_width = 1024;
+            } else if (i >= 7 && strncmp(cls + i - 7, "xl:col-", 7) == 0) {
+                min_width = 1280;
+            } else if (i >= 8 && strncmp(cls + i - 8, "2xl:col-", 8) == 0) {
+                min_width = 1536;
+            }
+        } else {
+            /* Primer Brand `--<bp>-span-N` (github). */
+            for (size_t b = 0; b < sizeof(breakpoints) / sizeof(breakpoints[0]); b++) {
+                size_t nlen = strlen(breakpoints[b].name);
+                /* Match `<bp>-span-` ending exactly at `i` (i.e. `<bp>-` precedes). */
+                if (i >= nlen + 1 && strncmp(cls + i - nlen - 1, breakpoints[b].name, nlen) == 0 &&
+                    cls[i - 1] == '-') {
+                    min_width = breakpoints[b].min_width;
+                    break;
+                }
             }
         }
         if (min_width <= viewport_w && min_width > best_min) {

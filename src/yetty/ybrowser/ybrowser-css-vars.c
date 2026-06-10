@@ -729,6 +729,23 @@ static void grid_tok_copy(const char *s, size_t n, char *buf, size_t bufsz)
     buf[k] = '\0';
 }
 
+/* Copy a CSS class-selector token, dropping backslash escapes so the stored
+ * name matches the element's `class` attribute. Tailwind emits the selector
+ * `.lg\:grid-cols-5` for the class token `lg:grid-cols-5`; the cascade matches
+ * on the unescaped name, so the lookup table must store it unescaped too. */
+static void grid_cls_copy_unescape(const char *s, size_t n, char *buf, size_t bufsz)
+{
+    size_t read = 0;
+    size_t write = 0;
+    while (read < n && write < bufsz - 1) {
+        if (s[read] == '\\' && read + 1 < n) {
+            read++; /* skip the backslash, keep the escaped char literally */
+        }
+        buf[write++] = s[read++];
+    }
+    buf[write] = '\0';
+}
+
 /* Parse one track spec (already isolated): `<n>fr`, `<n>px`/`<n>`,
  * `minmax(a,b)` (uses b), `auto`/`min-content`/`max-content` (≈ 1fr). */
 static int grid_parse_one_track(const char *s, size_t n, struct yl_grid_track *out)
@@ -819,6 +836,15 @@ static int grid_parse_one_track(const char *s, size_t n, struct yl_grid_track *o
 static int grid_parse_tracks_ex(const char *v, size_t n, struct yl_grid_track *out, int maxn,
                                 int allow_named)
 {
+    /* Strip a trailing `!important` (Tailwind emits `…repeat(5,minmax(0,1fr))
+	 * !important` for its grid utilities). The `!` cannot legitimately appear
+	 * inside a track list, so cutting at the first `!` drops the priority
+	 * marker; without this the marker parses as a bogus extra track and the
+	 * whole template is rejected, collapsing the grid to block flow. */
+    const char *bang = memchr(v, '!', n);
+    if (bang != NULL) {
+        n = (size_t)(bang - v);
+    }
     /* Named grid lines (`[name]`) imply named-line / `grid-column:<name>`
 	 * placement, which we don't model — auto-flowing the children would
 	 * mis-place them into the wrong (often near-zero) track and collapse the
@@ -1008,6 +1034,97 @@ static float grid_find_len(const char *block, size_t blen, const char *prop, int
     return -1.0f;
 }
 
+/* Evaluate a single `@media` condition (the text between `@media` and `{`)
+ * against the live viewport width. We model the width-based breakpoint idiom
+ * only (`min-width` / `max-width`, possibly several ANDed, with leading
+ * `screen and`); unknown features are treated as matching so a template is
+ * never wrongly dropped. This exists because the grid-template scanner is a
+ * substring pass with no notion of the cascade — without it, Tailwind's
+ * `xl:grid-cols-2` (inside `@media (min-width:1280px)`) registers and applies
+ * at a 1200px viewport, splitting a single-column block into two columns. */
+static bool grid_media_condition_matches(const char *cond, size_t n, float viewport_w)
+{
+    bool ok = true;
+    size_t i = 0;
+    while (i < n) {
+        if (i + 9 <= n && strncmp(cond + i, "min-width", 9) == 0) {
+            size_t j = i + 9;
+            while (j < n && (cond[j] == ':' || cond[j] == ' ')) {
+                j++;
+            }
+            float v = (float)atof(cond + j);
+            if (viewport_w + 0.5f < v) {
+                ok = false;
+            }
+            i = j;
+        } else if (i + 9 <= n && strncmp(cond + i, "max-width", 9) == 0) {
+            size_t j = i + 9;
+            while (j < n && (cond[j] == ':' || cond[j] == ' ')) {
+                j++;
+            }
+            float v = (float)atof(cond + j);
+            if (viewport_w - 0.5f > v) {
+                ok = false;
+            }
+            i = j;
+        } else {
+            i++;
+        }
+    }
+    return ok;
+}
+
+/* True if byte offset `pos` in `src` is reached through only matching `@media`
+ * blocks (or none). A grid template nested in a non-matching media query must
+ * not be registered. Forward single pass tracking brace nesting and, for each
+ * open media block, whether its condition matches the viewport. */
+static bool grid_media_active_at(const char *src, size_t len, size_t pos, float viewport_w)
+{
+    enum { MEDIA_STACK_MAX = 16 };
+    bool media_match[MEDIA_STACK_MAX];
+    int media_open_brace_depth[MEDIA_STACK_MAX];
+    int media_depth = 0;
+    int brace_depth = 0;
+
+    size_t i = 0;
+    while (i < pos && i < len) {
+        if (src[i] == '@' && i + 6 <= len && strncmp(src + i, "@media", 6) == 0) {
+            size_t cond_start = i + 6;
+            size_t cursor = cond_start;
+            while (cursor < len && src[cursor] != '{') {
+                cursor++;
+            }
+            if (cursor < len) {
+                bool matches =
+                    grid_media_condition_matches(src + cond_start, cursor - cond_start, viewport_w);
+                if (media_depth < MEDIA_STACK_MAX) {
+                    media_match[media_depth] = matches;
+                    media_open_brace_depth[media_depth] = brace_depth;
+                    media_depth++;
+                }
+                brace_depth++; /* the media block's own `{` */
+                i = cursor + 1;
+                continue;
+            }
+        }
+        if (src[i] == '{') {
+            brace_depth++;
+        } else if (src[i] == '}') {
+            brace_depth--;
+            if (media_depth > 0 && brace_depth == media_open_brace_depth[media_depth - 1]) {
+                media_depth--;
+            }
+        }
+        i++;
+    }
+    for (int m = 0; m < media_depth; m++) {
+        if (!media_match[m]) {
+            return false;
+        }
+    }
+    return true;
+}
+
 void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *src, size_t len)
 {
     if (r == NULL || src == NULL || len < 12) {
@@ -1017,6 +1134,12 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
     const size_t nlen = sizeof(needle) - 1;
     for (size_t i = 0; i + nlen < len; i++) {
         if (memcmp(src + i, needle, nlen) != 0) {
+            continue;
+        }
+        /* Skip templates inside a non-matching @media block (e.g. Tailwind's
+         * `xl:` utilities behind `@media (min-width:1280px)` at a narrower
+         * viewport). */
+        if (!grid_media_active_at(src, len, i, (float)r->viewport_w)) {
             continue;
         }
         /* Find the enclosing rule's `{` (scan back) and its selector. */
@@ -1059,9 +1182,18 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
         }
         size_t cls_start = sel_start + 1;
         size_t cls_end = cls_start;
-        while (cls_end < sel_end &&
-               (isalnum((unsigned char)src[cls_end]) || src[cls_end] == '-' || src[cls_end] == '_')) {
-            cls_end++;
+        while (cls_end < sel_end) {
+            unsigned char ch = (unsigned char)src[cls_end];
+            if (ch == '\\' && cls_end + 1 < sel_end) {
+                /* Escaped char in the selector (Tailwind `.lg\:grid-cols-5`).
+                 * Consume the backslash and the char it escapes as part of the
+                 * class name. */
+                cls_end += 2;
+            } else if (isalnum(ch) || ch == '-' || ch == '_') {
+                cls_end++;
+            } else {
+                break;
+            }
         }
         /* Reject compound/descendant selectors (anything after the class). */
         {
@@ -1114,7 +1246,7 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
 
         /* Store (grow the array; skip if this class is already recorded). */
         char cls[64];
-        grid_tok_copy(src + cls_start, cls_end - cls_start, cls, sizeof(cls));
+        grid_cls_copy_unescape(src + cls_start, cls_end - cls_start, cls, sizeof(cls));
         int dup = 0;
         for (int e = 0; e < r->grid_class_count; e++) {
             if (strcmp(r->grid_classes[e].cls, cls) == 0) {

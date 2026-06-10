@@ -142,13 +142,7 @@ static const char UA_DEFAULT_CSS[] =
     " .vector-sticky-pinned-container, .vector-sitenotice-container,"
     " .mw-footer-container, #footer, .vector-pinnable-header,"
     " .skip-link, .visualClear"
-    " { display: none !important; }\n"
-    /* Top-level `<nav>` is almost always boilerplate (site nav,
-     * breadcrumbs, tabs); inline `<nav>` inside an article is rare.
-     * The article
-     * <header> wrapping the page title is critical content though, so
-     * we only hide <nav> by default — NOT <header>. */
-    "nav { display: none !important; }\n";
+    " { display: none !important; }\n";
 
 /* Wikipedia/MediaWiki float helpers — applied ONLY to MediaWiki pages (see
  * yetty_ybrowser_libcss_apply_wikipedia_quirks, gated on `mw-` class markers).
@@ -174,7 +168,14 @@ static const char UA_WIKIPEDIA_CSS[] =
 	 * it hid Google News' article-image figures), so the generic UA sheet no
 	 * longer does it. Re-apply it HERE, scoped to MediaWiki pages, where the
 	 * junk genuinely relies on it. */
-    "[aria-hidden=\"true\"], [role=\"presentation\"] { display: none !important; }\n";
+    "[aria-hidden=\"true\"], [role=\"presentation\"] { display: none !important; }\n"
+    /* Top-level `<nav>` on MediaWiki is boilerplate (site nav, breadcrumbs,
+	 * language switcher, edit tabs) that adds no article content. On a general
+	 * site, by contrast, a `<nav>` IS the primary menu and must render as Chrome
+	 * shows it — so this blanket hide is scoped to MediaWiki pages here rather
+	 * than living in the global UA sheet, where it suppressed every site's main
+	 * navigation. */
+    "nav { display: none !important; }\n";
 
 int yetty_ybrowser_libcss_apply_wikipedia_quirks(struct yetty_ylexbor *r)
 {
@@ -902,7 +903,7 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
         " .mw-page-container-inner > .vector-column-end,"
         " #vector-toc-pinned-container, .vector-toc, .vector-page-tools,"
         " .vector-appearance-landmark, .vector-language-button-container,"
-        " .skip-link, .visualClear, nav"
+        " .skip-link, .visualClear"
         " { display: none !important; }\n"
         /* And re-pin our figure fix at user-origin too in case libcss's
          * compiled-in defaults for <figure> beat the UA origin. */

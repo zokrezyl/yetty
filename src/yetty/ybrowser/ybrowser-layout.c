@@ -45,6 +45,8 @@ static void flex_layout_absolute_children(struct yetty_ylexbor *r, uint32_t idx,
                                           float origin_y, float content_w, float container_h);
 static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
                                        float origin_y, float content_w);
+static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_idx, int *budget);
+#define YL_CELL_MEASURE_BUDGET 256
 
 /* Walk the box subtree rooted at `idx` and return the largest known
  * width of any INLINE_IMAGE descendant. Stops at YL_CELL_MEASURE_BUDGET
@@ -718,10 +720,42 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
 	 * 0 width and content would wrap to one glyph per line. */
     if (autobasis_count == (int)n_children && total_grow == 0.0f && main_budget > 0.0f) {
         float per = main_budget / (float)n_children;
-        for (uint32_t i = 0; i < n_children; i++) {
-            main_size[i] = per;
+        /* Even split assumes every item is content with its 1/n share. For a
+		 * ROW, if any item's max-content is wider than that share, splitting
+		 * evenly would wrap its content (the symptom: a 12-item nav crammed into
+		 * 48px cells with every label wrapped onto three lines). In that case
+		 * the row is content-driven — size each item to its own max-content and
+		 * let justify-content place them (flex-start by default), which is what
+		 * Chrome produces for a content-sized nav/toolbar. When every item fits
+		 * its share, the even split is kept (equal-width header columns that
+		 * authors express via bare flex without basis/grow). */
+        bool content_driven = false;
+        float item_content[YL_FLEX_MAX_CHILDREN];
+        if (!column_dir) {
+            for (uint32_t i = 0; i < n_children; i++) {
+                int measure_budget = YL_CELL_MEASURE_BUDGET;
+                const struct yetty_ylexbor_box *ci = &r->boxes.data[children[i]];
+                item_content[i] = measure_cell_content_width(r, children[i], &measure_budget) +
+                                  ci->padding_left + ci->padding_right;
+                if (item_content[i] > per + 0.5f) {
+                    content_driven = true;
+                }
+            }
         }
-        total_basis = main_budget;
+        if (content_driven) {
+            total_basis = 0.0f;
+            for (uint32_t i = 0; i < n_children; i++) {
+                main_size[i] = item_content[i];
+                is_auto[i] = false;
+                total_basis += item_content[i];
+            }
+            autobasis_count = 0;
+        } else {
+            for (uint32_t i = 0; i < n_children; i++) {
+                main_size[i] = per;
+            }
+            total_basis = main_budget;
+        }
     }
 
     /* Mixed sized + auto items with no explicit grow: the auto items share
@@ -758,6 +792,21 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
             uint32_t cidx = children[i];
             struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
             float item_main = main_size[i];
+            /* An auto-basis item with no resolved main size (no width, no
+			 * flex-basis) takes the full line instead of collapsing to 0 — the
+			 * dominant wrap idiom is a full-width content block sharing the
+			 * container with fixed-size banner/ad slots, and Chrome wraps each
+			 * such block onto its own line. Without this the content block
+			 * (e.g. a news site's article grid) gets width 0 and every card
+			 * piles up at the right edge. */
+            if (item_main <= 0.0f && is_auto[i]) {
+                item_main = content_width;
+            }
+            /* A single item never exceeds the line; clamp so it fits and the
+			 * following item wraps below it. */
+            if (item_main > content_width) {
+                item_main = content_width;
+            }
             if (!first_in_line &&
                 (line_x - content_origin_x) + item_main > content_width + 0.5f) {
                 line_top += line_h + self->grid_row_gap;
