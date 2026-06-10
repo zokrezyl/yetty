@@ -1667,7 +1667,7 @@ static uint32_t scrolling_figure_count(const struct yetty_ydraw_canvas *base)
 }
 
 static struct yetty_ydraw_composite *scrolling_get_figure(const struct yetty_ydraw_canvas *base,
-                                                       uint32_t index)
+                                                          uint32_t index)
 {
     if (!base) {
         return NULL;

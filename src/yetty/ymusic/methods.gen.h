@@ -2,7 +2,7 @@
 #ifndef YETTY_YCLASSGEN_YMUSIC_METHODS_GEN_H
 #define YETTY_YCLASSGEN_YMUSIC_METHODS_GEN_H
 
-#include <yetty/ymusic/methods.h>
+#include "yetty/ymusic/music.h"
 
 typedef struct yetty_ycore_void_result (*yetty_ymusic_configure_fn)(struct yetty_yclass_ctx *,
                                                                     struct yetty_yclass_object *,

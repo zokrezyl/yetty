@@ -19,11 +19,9 @@
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/rpc.h>
 #include <yetty/yfont/font.h>
 #include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
-#include <yetty/ychrome/methods.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>

@@ -1,20 +1,64 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `container` (module: yfigure).
- * Fully generated from the source .c — do not edit. Function
- * and public-type APIs come from `expose` annotations; the
- * forward declarations are derived from the prototype types. */
+ * Fully generated from the source .c — do not edit. This single
+ * header is the source's complete public interface: class
+ * accessors, method stubs, create()/register(), and any
+ * `expose`d API. Public types come from `expose` annotations. */
 #ifndef YETTY_YCLASSGEN_YFIGURE_CONTAINER_H
 #define YETTY_YCLASSGEN_YFIGURE_CONTAINER_H
 
 #include <yetty/yclass/class.h>
-#include <yetty/yfigure/methods.h>
+#include <yetty/yclass/rpc.h>
+#include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
 
 struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void);
+
+struct yetty_ycore_char_ptr_result;
+struct yetty_ycore_void_result;
+struct yetty_ydraw_target;
+struct yetty_yfigure_figure;
+struct yetty_ywire_wire_statemachine;
+
+struct yetty_ycore_void_result yetty_yfigure_destroy(struct yetty_yclass_ctx *ctx,
+                                                     struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yfigure_render(struct yetty_yclass_ctx *ctx,
+                                                    struct yetty_yclass_object *obj,
+                                                    struct yetty_ydraw_target *target);
+struct yetty_ycore_void_result yetty_yfigure_constructor(struct yetty_yclass_ctx *ctx,
+                                                         struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yfigure_add_child(struct yetty_yclass_ctx *ctx,
+                                                       struct yetty_yclass_object *obj,
+                                                       struct yetty_yfigure_figure *child,
+                                                       uint32_t id);
+struct yetty_ycore_void_result yetty_yfigure_remove_child_by_id(struct yetty_yclass_ctx *ctx,
+                                                                struct yetty_yclass_object *obj,
+                                                                uint32_t id);
+struct yetty_ycore_void_result yetty_yfigure_raise_child_by_id(struct yetty_yclass_ctx *ctx,
+                                                               struct yetty_yclass_object *obj,
+                                                               uint32_t id);
+struct yetty_ycore_void_result yetty_yfigure_process_records(struct yetty_yclass_ctx *ctx,
+                                                             struct yetty_yclass_object *obj,
+                                                             struct yetty_ycore_buffer bytes);
+struct yetty_ycore_void_result yetty_yfigure_process_input(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
+    struct yetty_ywire_wire_statemachine *statemachine);
+struct yetty_ycore_void_result yetty_yfigure_process_bytes(struct yetty_yclass_ctx *ctx,
+                                                           struct yetty_yclass_object *obj,
+                                                           const uint8_t *bytes, size_t bytes_len);
+struct yetty_ycore_char_ptr_result yetty_yfigure_dump_state(struct yetty_yclass_ctx *ctx,
+                                                            struct yetty_yclass_object *obj,
+                                                            int indent);
+
+struct yetty_yclass_object_ptr_result yetty_yfigure_container_create(struct yetty_yclass_ctx *ctx);
+
+struct yetty_ycore_void_result yetty_yfigure_register(void);
 
 struct yetty_context;
 struct yetty_ycore_rectangle;
 struct yetty_yfigure_container;
 struct yetty_yfigure_figure;
+struct yetty_yfigure_hit;
 struct yetty_yfigure_registry;
 struct yetty_ywire_wire_statemachine;
 

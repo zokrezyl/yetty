@@ -89,7 +89,7 @@ int yetty_ygui_object_is_hovered(const struct yetty_ygui_object *obj);
 /* `yetty_ygui_constructor` / `yetty_ygui_destructor` public stubs are
  * emitted by yclass codegen from the override annotations in
  * widget.c; pull them in via the module-wide methods.h. */
-#include <yetty/ygui/methods.h>
+#include <yetty/ygui/widget.h>
 
 /*-----------------------------------------------------------------------------
  * Super invokers — one per Result type.

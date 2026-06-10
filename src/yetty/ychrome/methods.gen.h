@@ -2,7 +2,7 @@
 #ifndef YETTY_YCLASSGEN_YCHROME_METHODS_GEN_H
 #define YETTY_YCLASSGEN_YCHROME_METHODS_GEN_H
 
-#include <yetty/ychrome/methods.h>
+#include "yetty/ychrome/chrome.h"
 
 typedef struct yetty_ycore_void_result (*yetty_ychrome_configure_fn)(struct yetty_yclass_ctx *,
                                                                      struct yetty_yclass_object *,

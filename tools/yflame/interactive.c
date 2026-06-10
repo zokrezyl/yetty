@@ -16,9 +16,7 @@
  * raw keystrokes); the figure lifecycle follows tools/yless (yview).
  */
 #include <yetty/yflame/flame.h>
-#include <yetty/yflame/rpc.h>
 #include <yetty/yclass/class.h>
-#include <yetty/yview/rpc.h>  /* yetty_yview_view_create */
 #include <yetty/yview/view.h> /* yetty_yview_configure / _set_content / _set_rect / _destroy */
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/result.h>

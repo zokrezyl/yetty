@@ -2,7 +2,7 @@
 #ifndef YETTY_YCLASSGEN_YPLATFORM_METHODS_GEN_H
 #define YETTY_YCLASSGEN_YPLATFORM_METHODS_GEN_H
 
-#include <yetty/yplatform/methods.h>
+#include "yetty/yplatform/window-manager.h"
 
 typedef struct yetty_ycore_void_result (*yetty_yplatform_window_manager_configure_fn)(
     struct yetty_yclass_ctx *, struct yetty_yclass_object *, void *,

@@ -786,7 +786,8 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_ref(
 }
 
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_figure(
-    struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx, struct yetty_ydraw_composite *figure)
+    struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx,
+    struct yetty_ydraw_composite *figure)
 {
     if (!grid || line_idx >= grid->lines_count) {
         return YETTY_ERR(yetty_ycore_void, "push_figure: line_idx out of range");

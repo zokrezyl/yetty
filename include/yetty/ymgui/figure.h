@@ -1,15 +1,22 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `figure` (module: ymgui).
- * Fully generated from the source .c — do not edit. Function
- * and public-type APIs come from `expose` annotations; the
- * forward declarations are derived from the prototype types. */
+ * Fully generated from the source .c — do not edit. This single
+ * header is the source's complete public interface: class
+ * accessors, method stubs, create()/register(), and any
+ * `expose`d API. Public types come from `expose` annotations. */
 #ifndef YETTY_YCLASSGEN_YMGUI_FIGURE_H
 #define YETTY_YCLASSGEN_YMGUI_FIGURE_H
 
 #include <yetty/yclass/class.h>
-#include <yetty/ymgui/methods.h>
+#include <yetty/yclass/rpc.h>
+#include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
 
 struct yetty_yclass_ptr_result yetty_ymgui_figure_class_get(void);
+
+struct yetty_yclass_object_ptr_result yetty_ymgui_figure_create(struct yetty_yclass_ctx *ctx);
+
+struct yetty_ycore_void_result yetty_ymgui_register(void);
 
 /* Header-destined content for the generated figure.h (skipped by the real build, which takes it from that header). */
 struct yetty_context;

@@ -6,6 +6,7 @@
  * hosting ygrid). Self-dirties after every emit so the framework keeps
  * re-emitting — that animates the critters. */
 #include "../internal.h"
+#include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/ygui/widgets/yzoo.h>
 #include <yetty/yzoo/yzoo.h>

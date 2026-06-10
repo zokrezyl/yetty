@@ -41,7 +41,6 @@
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/producer.h>
-#include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygui/ygui.h>
@@ -67,7 +66,6 @@
  * mode, hence gated on HAS_CHROME, not HAS_STANDALONE. */
 #include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
-#include <yetty/ychrome/methods.h>
 #endif
 
 #ifdef YETTY_YGREETER_HAS_STANDALONE

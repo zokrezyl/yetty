@@ -13,7 +13,6 @@
 #include <yetty/yinit/yinit.h>
 #include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
-#include <yetty/ychrome/methods.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yconfig/config.h>
@@ -25,7 +24,6 @@
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/ydraw-core/drawable-list.h>

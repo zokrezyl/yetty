@@ -16,7 +16,7 @@
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yframework/yframework.h>
-#include <yetty/yplatform/methods.h> /* yetty_yplatform_window_manager_* slots */
+#include <yetty/yplatform/window-manager.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>

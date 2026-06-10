@@ -1482,11 +1482,9 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
-#include <yetty/ychrome/methods.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>

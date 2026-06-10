@@ -1,18 +1,57 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `flame` (module: yflame).
- * Fully generated from the source .c — do not edit. Function
- * and public-type APIs come from `expose` annotations; the
- * forward declarations are derived from the prototype types. */
+ * Fully generated from the source .c — do not edit. This single
+ * header is the source's complete public interface: class
+ * accessors, method stubs, create()/register(), and any
+ * `expose`d API. Public types come from `expose` annotations. */
 #ifndef YETTY_YCLASSGEN_YFLAME_FLAME_H
 #define YETTY_YCLASSGEN_YFLAME_FLAME_H
 
 #include <yetty/yclass/class.h>
-#include <yetty/yflame/methods.h>
+#include <yetty/yclass/rpc.h>
+#include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
 
 struct yetty_yclass_ptr_result yetty_yflame_flame_class_get(void);
 
+struct yetty_ycore_int_result;
+struct yetty_ycore_void_result;
+struct yetty_ydraw_drawable_list_result;
+
+struct yetty_ycore_void_result yetty_yflame_configure(struct yetty_yclass_ctx *ctx,
+                                                      struct yetty_yclass_object *obj, float width,
+                                                      float frame_height, float min_width,
+                                                      uint32_t flags);
+struct yetty_ycore_void_result yetty_yflame_parse(struct yetty_yclass_ctx *ctx,
+                                                  struct yetty_yclass_object *obj,
+                                                  const char *input, size_t len);
+struct yetty_ydraw_drawable_list_result yetty_yflame_render(struct yetty_yclass_ctx *ctx,
+                                                            struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_yflame_hit_test(struct yetty_yclass_ctx *ctx,
+                                                    struct yetty_yclass_object *obj, float x,
+                                                    float y);
+struct yetty_ycore_void_result yetty_yflame_focus(struct yetty_yclass_ctx *ctx,
+                                                  struct yetty_yclass_object *obj, int32_t node_id);
+struct yetty_ycore_void_result yetty_yflame_focus_parent(struct yetty_yclass_ctx *ctx,
+                                                         struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yflame_reset(struct yetty_yclass_ctx *ctx,
+                                                  struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yflame_set_highlight(struct yetty_yclass_ctx *ctx,
+                                                          struct yetty_yclass_object *obj,
+                                                          int32_t node_id);
+struct yetty_ycore_void_result yetty_yflame_destroy(struct yetty_yclass_ctx *ctx,
+                                                    struct yetty_yclass_object *obj);
+
+struct yetty_yclass_object_ptr_result yetty_yflame_flame_create(struct yetty_yclass_ctx *ctx);
+
+struct yetty_ycore_void_result yetty_yflame_register(void);
+
 struct yetty_ydraw_drawable_list;
 
+/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
+ * generated flame.h (and the dispatch TU that includes it) needs the complete
+ * type — pull its defining header into the public header. */
+#include <yetty/ydraw-core/drawable-list.h>
 /* Public flags — copied verbatim into the generated flame.h. */
 #define YETTY_YFLAME_FLAG_LABELS 0x1u /* draw truncated frame-name labels */
 #define YETTY_YFLAME_FLAG_ICICLE 0x2u /* root at top, growing down (vs flame: bottom-up) */

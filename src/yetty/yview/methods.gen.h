@@ -2,7 +2,7 @@
 #ifndef YETTY_YCLASSGEN_YVIEW_METHODS_GEN_H
 #define YETTY_YCLASSGEN_YVIEW_METHODS_GEN_H
 
-#include <yetty/yview/methods.h>
+#include "yetty/yview/view.h"
 
 typedef struct yetty_ycore_void_result (*yetty_yview_configure_fn)(struct yetty_yclass_ctx *,
                                                                    struct yetty_yclass_object *,

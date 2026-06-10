@@ -5,6 +5,7 @@
  * once the current rect is settled. A cached (w, h) gates re-render
  * so a stationary widget pays the markdown cost only once. */
 #include "../internal.h"
+#include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/ygui/widgets/ymarkdown.h>
 #include <yetty/ymarkdown/ymarkdown.h>

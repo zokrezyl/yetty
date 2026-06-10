@@ -29,7 +29,6 @@
 #include "../internal.h"
 
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ygui/widget.h>
 #include <yetty/ygui/widgets/ydiagram.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 

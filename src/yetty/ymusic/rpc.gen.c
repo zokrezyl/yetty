@@ -2,8 +2,6 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
-#include "yetty/ymusic/rpc.h"
-#include "yetty/ymusic/methods.h"
 #include <yetty/yclass/class.h>
 #include "yetty/ymusic/music.h"
 #include <stdbool.h>

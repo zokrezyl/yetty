@@ -2681,7 +2681,8 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry text", hr);
         }
         hr = yetty_ydraw_drawable_list_registry_add(g->registry, YETTY_YDRAW_COMPOSITE_TYPE_BASE,
-                                                    0xFFFFFFFFu, yetty_ydraw_composite_record_handler);
+                                                    0xFFFFFFFFu,
+                                                    yetty_ydraw_composite_record_handler);
         if (YETTY_IS_ERR(hr)) {
             (void)ygrid_destroy(g->base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: registry complex", hr);

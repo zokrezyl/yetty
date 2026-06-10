@@ -20,12 +20,14 @@
  */
 
 #include "internal.h"
+#include <yetty/ygui/mixins/clickable.h>
+#include <yetty/ygui/mixins/draggable.h>
+#include <yetty/ygui/primitive-widget.h>
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/yfigure/container.h>
-#include <yetty/yfigure/methods.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygui/theme.h>
 #include <yetty/yplatform/pty.h>

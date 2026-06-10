@@ -7,6 +7,7 @@
  * after every emit so the framework keeps re-emitting — that animates the
  * growing chain. */
 #include "../internal.h"
+#include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/ygui/widgets/yjungle.h>
 #include <yetty/yjungle/yjungle.h>

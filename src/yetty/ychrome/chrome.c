@@ -43,8 +43,8 @@
 #include <yetty/yclass/class.h>
 #include <yetty/ychrome/chrome.h>
 
-#include <yetty/yevent/event.h>      /* event types + resize-edge / cursor enums */
-#include <yetty/yplatform/methods.h> /* window_manager gesture slots */
+#include <yetty/yevent/event.h> /* event types + resize-edge / cursor enums */
+#include <yetty/yplatform/window-manager.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -59,6 +59,10 @@
 #include <stdint.h>
 
 #ifdef YCLASS_CODEGEN
+/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
+ * generated chrome.h (and the dispatch TU that includes it) needs the complete
+ * type — pull its defining header into the public header. */
+#include <yetty/ydraw-core/drawable-list.h>
 /* Feature flags for configure(). OR them together; FLAG_ALL enables the lot.
  * Copied verbatim into the generated chrome.h. */
 #define YETTY_YCHROME_FLAG_DRAG 0x1u     /* caption drag moves the window      */

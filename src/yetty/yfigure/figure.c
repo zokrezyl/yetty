@@ -21,6 +21,13 @@
  */
 #include <yetty/yfigure/figure.h>
 
+/* Slot-signature tags used by the base impls below. Exposed so the generated
+ * figure.h forward-declares them at file scope — without it, the first mention
+ * inside a base impl's parameter list would create a distinct prototype-scope
+ * tag that mismatches the slot's `_fn` typedef. */
+struct [[clang::annotate("expose")]] yetty_ydraw_target;
+struct [[clang::annotate("expose")]] yetty_ywire_wire_statemachine;
+
 /* ---- figure base-class method slots -------------------------------------
  * The figure base defines the polymorphic figure slots; concrete kinds
  * override them. Every slot takes a non-marshallable pointer (target /

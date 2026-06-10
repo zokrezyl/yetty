@@ -43,6 +43,10 @@
 #include <string.h>
 
 #ifdef YCLASS_CODEGEN
+/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
+ * generated music.h (and the dispatch TU that includes it) needs the complete
+ * type — pull its defining header into the public header. */
+#include <yetty/ydraw-core/drawable-list.h>
 /* Public constants — copied verbatim into the generated music.h. */
 #define YETTY_YMUSIC_NO_ELEMENT (-1) /* hit_test: no element under the point */
 #define YETTY_YMUSIC_FLAG_NONE 0x0u  /* reserved render flags */

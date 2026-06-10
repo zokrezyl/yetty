@@ -1,13 +1,16 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `figure` (module: yfigure).
- * Fully generated from the source .c — do not edit. Function
- * and public-type APIs come from `expose` annotations; the
- * forward declarations are derived from the prototype types. */
+ * Fully generated from the source .c — do not edit. This single
+ * header is the source's complete public interface: class
+ * accessors, method stubs, create()/register(), and any
+ * `expose`d API. Public types come from `expose` annotations. */
 #ifndef YETTY_YCLASSGEN_YFIGURE_FIGURE_H
 #define YETTY_YCLASSGEN_YFIGURE_FIGURE_H
 
 #include <yetty/yclass/class.h>
-#include <yetty/yfigure/methods.h>
+#include <yetty/yclass/rpc.h>
+#include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
 
 struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void);
 
@@ -35,5 +38,23 @@ struct yetty_ycore_int_result yetty_yfigure_figure_absolute_coords_get(
     struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yfigure_figure_absolute_coords_set(
     struct yetty_yclass_object *obj, int value);
+
+struct yetty_ycore_void_result;
+
+struct yetty_ycore_void_result yetty_yfigure_reset_content(struct yetty_yclass_ctx *ctx,
+                                                           struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yfigure_set_scroll(struct yetty_yclass_ctx *ctx,
+                                                        struct yetty_yclass_object *obj,
+                                                        float scroll_x, float scroll_y);
+struct yetty_ycore_void_result yetty_yfigure_set_content_size(struct yetty_yclass_ctx *ctx,
+                                                              struct yetty_yclass_object *obj,
+                                                              float content_w, float content_h);
+
+struct yetty_yclass_object_ptr_result yetty_yfigure_figure_create(struct yetty_yclass_ctx *ctx);
+
+struct yetty_ycore_void_result yetty_yfigure_register(void);
+
+struct yetty_ydraw_target;
+struct yetty_ywire_wire_statemachine;
 
 #endif

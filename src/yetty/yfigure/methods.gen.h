@@ -2,7 +2,8 @@
 #ifndef YETTY_YCLASSGEN_YFIGURE_METHODS_GEN_H
 #define YETTY_YCLASSGEN_YFIGURE_METHODS_GEN_H
 
-#include <yetty/yfigure/methods.h>
+#include "yetty/yfigure/container.h"
+#include "yetty/yfigure/figure.h"
 
 typedef struct yetty_ycore_void_result (*yetty_yfigure_destroy_fn)(struct yetty_yclass_ctx *,
                                                                    struct yetty_yclass_object *);

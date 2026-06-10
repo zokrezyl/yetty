@@ -5,6 +5,7 @@
  * bytes; the next emit triggers a render and feeds the buffer into the
  * ydraw_embed base. Cached (w, h) gates re-renders. */
 #include "../internal.h"
+#include <yetty/ygui/primitive-widget.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/widgets/ybrowser.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>

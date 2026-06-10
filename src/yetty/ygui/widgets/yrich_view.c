@@ -15,6 +15,7 @@
  * cost every frame.
  */
 #include "../internal.h"
+#include <yetty/ygui/primitive-widget.h>
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>

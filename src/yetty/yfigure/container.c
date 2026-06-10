@@ -16,6 +16,13 @@
  * by id (or to the container itself when id=0 = admin/self-target).
  */
 #include <yetty/yclass/class.h>
+/* Own generated header: pulls in this module's public stubs (called below) and
+ * the hit struct. Skipped during codegen's parse pass (YCLASS_CODEGEN defined),
+ * where the hit struct is instead supplied by the codegen block further down —
+ * otherwise the two definitions would collide during parsing. */
+#ifndef YCLASS_CODEGEN
+#include <yetty/yfigure/container.h>
+#endif
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
@@ -34,22 +41,21 @@
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/ywire/wire-statemachine.h>
 
-/* This class's own accessor, defined in the foot-included container.gen.c.
- * Forward-declared here because container.c does NOT include its own
- * generated container.h — the public types it exports below (the hit struct)
- * would otherwise be defined twice in this translation unit. */
-struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void);
-
 /* Hit-test result: the child whose rect contains the cursor, plus the cursor
  * coordinates inside that child's own pixel space (origin = child rect's
  * top-left). figure_id == 0 means "no hit". Iteration is back-to-front, so
- * for overlapping children the BACK-most match wins. Public API — `expose`
- * reproduces this definition into the generated container.h. */
-struct [[clang::annotate("expose")]] yetty_yfigure_hit {
+ * for overlapping children the BACK-most match wins. Public API — authored in
+ * a codegen block (header-destined only). The single real definition lives in
+ * the generated container.h this .c includes at the top; codegen parses the
+ * block but the real build does not compile it, so there is no double
+ * definition. */
+#ifdef YCLASS_CODEGEN
+struct yetty_yfigure_hit {
     uint32_t figure_id;
     float local_x;
     float local_y;
 };
+#endif
 
 /* Visitor for the internal child walk (container_for_each): called once per
  * child in z-order (back-to-front) with its parent-scoped id, figure pointer

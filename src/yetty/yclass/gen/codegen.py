@@ -1158,13 +1158,20 @@ def emit_methods_gen_h(model: dict, module: str, out_path: Path):
     them to type-check the impl pointer when registering it on the
     ops vtable).
 
-    Includes the sibling public methods.h so callers can include just
-    methods.gen.h and get both the typedefs and the declarations
-    they refer to."""
+    Includes every per-source public header in the module so callers can
+    include just methods.gen.h and get both the `_fn` typedefs and the
+    public stub declarations they refer to."""
     guard = f"YETTY_YCLASSGEN_{module.upper()}_METHODS_GEN_H"
     parts = [HEADER]
     parts.append(f"#ifndef {guard}\n#define {guard}\n\n")
-    parts.append(f"#include <yetty/{module}/methods.h>\n\n")
+    seen_headers = []
+    for c in model.get("classes", []):
+        h = class_header_for(c, module)
+        if h not in seen_headers:
+            seen_headers.append(h)
+    for h in seen_headers:
+        parts.append(f'#include "{h}"\n')
+    parts.append("\n")
 
     for m in model["methods"]:
         type_only = ", ".join(a["type"] for a in m["args"])
@@ -1718,6 +1725,47 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             method_decls += "\n\n" + fwd_decls.rstrip()
         if exposed_protos:
             method_decls += "\n\n" + "\n".join(exposed_protos)
+
+        # Public method-dispatch stubs whose owning class is defined in THIS
+        # source. Folded in so the source's single header is its complete
+        # public interface — there is no module-wide methods.h.
+        group_class_names = {c["name"] for c in classes}
+        group_methods = [m for m in model["methods"]
+                         if m.get("owning_class") in group_class_names]
+        stub_struct_names = set()
+        for m in group_methods:
+            stub_struct_names |= struct_names_in(m["return_type"])
+            for a in m["args"]:
+                stub_struct_names |= struct_names_in(a["type"])
+        for known in ("yetty_yclass_ctx", "yetty_yclass_object", "yetty_yclass",
+                      "yetty_ycore_buffer"):
+            stub_struct_names.discard(known)
+        stub_struct_names -= exposed_type_names
+        stub_fwd = "".join(f"struct {n};\n" for n in sorted(stub_struct_names))
+        stub_decls = "".join(
+            f"{result_type(m['return_type'])} {qualified_slot(m)}("
+            + ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
+            + ");\n"
+            for m in group_methods)
+        # create() for each concrete (non-mixin) class in this source, plus
+        # the module's RPC-discovery installer. register() is module-level;
+        # an identical prototype in every source header is legal C and keeps
+        # each header self-sufficient (no module-wide rpc.h).
+        create_decls = "".join(
+            f"struct yetty_yclass_object_ptr_result {qualified_class(c)}_create("
+            f"struct yetty_yclass_ctx *ctx);\n"
+            for c in classes if c.get("type") != "mixin")
+        register_decl = (f"struct yetty_ycore_void_result "
+                         f"yetty_{module}_register(void);\n")
+        rpc_decls = ""
+        if stub_fwd:
+            rpc_decls += "\n\n" + stub_fwd.rstrip()
+        if stub_decls:
+            rpc_decls += "\n\n" + stub_decls.rstrip()
+        if create_decls:
+            rpc_decls += "\n\n" + create_decls.rstrip()
+        rpc_decls += "\n\n" + register_decl.rstrip()
+
         kind = "mixin" if all(c['type'] == "mixin" for c in classes) else "regular class"
         # Class-name list for the file header banner.
         name_list = ", ".join(c["name"] for c in classes)
@@ -1725,13 +1773,16 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             HEADER
             + f"/* Public interface for {kind}(es) `{name_list}` "
             + f"(module: {module}).\n"
-            + " * Fully generated from the source .c — do not edit. Function\n"
-            + " * and public-type APIs come from `expose` annotations; the\n"
-            + " * forward declarations are derived from the prototype types. */\n"
+            + " * Fully generated from the source .c — do not edit. This single\n"
+            + " * header is the source's complete public interface: class\n"
+            + " * accessors, method stubs, create()/register(), and any\n"
+            + " * `expose`d API. Public types come from `expose` annotations. */\n"
             + f"#ifndef {guard}\n#define {guard}\n\n"
             + '#include <yetty/yclass/class.h>\n'
-            + f'#include <yetty/{module}/methods.h>\n\n'
-            + decls + data_decls + property_decls + method_decls + "\n\n"
+            + '#include <yetty/yclass/rpc.h>\n'
+            + '#include <yetty/ycore/result.h>\n'
+            + '#include <yetty/ycore/types.h>\n\n'
+            + decls + data_decls + property_decls + rpc_decls + method_decls + "\n\n"
             + "#endif\n"
         )
         header_path.write_text(body)
@@ -2231,8 +2282,6 @@ def emit_rpc_c(model: dict, module: str, out_path: Path):
              '#include <yetty/yclass/rpc.h>\n',
              '#include <yetty/ycore/result.h>\n',
              '#include <yetty/ytrace/ytrace.h>\n',
-             f'#include "yetty/{module}/rpc.h"\n',
-             f'#include "yetty/{module}/methods.h"\n',
              '#include <yetty/yclass/class.h>\n',
              class_includes,
              '#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n'
@@ -2301,34 +2350,12 @@ def main():
             hdr = hdr_dir / (s.stem + ".h")
             if not hdr.exists():
                 hdr.write_text(placeholder_class_h)
-    # Public placeholders under include/yetty/<module>/.
-    for stub in ("methods.h", "rpc.h"):
-        p = include_module / stub
-        if not p.exists():
-            p.write_text(placeholder_class_h)
     # Internal placeholder under src/yetty/<module>/. The `.gen.h`
     # suffix marks it as codegen-output sitting inside the module's
     # private area (.gen.c files include it for the impl typedefs).
     p_internal = module_src / "methods.gen.h"
     if not p_internal.exists():
         p_internal.write_text(placeholder_class_h)
-
-    # Module-owned types.h carries module-specific YETTY_YRESULT_DECLAREs.
-    # Scaffold an empty (guard-only) one if missing so first-time AST
-    # parsing of the annotated sources resolves the include emitted from
-    # methods.h. Existing user content is never overwritten.
-    types_h = include_module / "types.h"
-    if not types_h.exists():
-        guard = f"YETTY_YCLASSGEN_{module.upper()}_TYPES_H"
-        types_h.write_text(
-            f"/* Module-owned result type declarations.\n"
-            f" * Add YETTY_YRESULT_DECLARE(<id>, <type>) lines here for any\n"
-            f" * struct/scalar return type used by {module}'s yclass methods.\n"
-            f" * Hand-written — codegen will NOT overwrite. */\n"
-            f"#ifndef {guard}\n#define {guard}\n\n"
-            f"#include <yetty/ycore/result.h>\n\n"
-            f"#endif /* {guard} */\n"
-        )
 
     # Clang search path: shared include/, the module's own generated-
     # header dir (include/<module>/), and the module src dir (for
@@ -2338,11 +2365,9 @@ def main():
         validate_method(m)
 
     emit_class_public_headers(model, module, include_module)
-    emit_methods_h(model, module, include_module / "methods.h")
     emit_methods_gen_h(model, module, module_src / "methods.gen.h")
     emit_methods_c(model, module, module_src / "methods.gen.c")
     emit_class_gen_c(model, module, module_src)
-    emit_rpc_h(model, module, include_module / "rpc.h")
     emit_rpc_c(model, module, module_src / "rpc.gen.c")
 
     (module_src / "model.yaml").write_text(yaml_dump(model) + "\n")

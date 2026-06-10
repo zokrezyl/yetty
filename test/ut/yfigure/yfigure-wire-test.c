@@ -31,7 +31,6 @@
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
-#include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 

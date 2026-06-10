@@ -10,7 +10,8 @@
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ydraw/cell-ref-table.h>
-#include <yetty/yfigure/methods.h>
+#include <yetty/yfigure/container.h>
+#include <yetty/yfigure/figure.h>
 #include <yetty/yvterm/ydraw-content.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>

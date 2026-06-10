@@ -2,7 +2,7 @@
 #ifndef YETTY_YCLASSGEN_YFLAME_METHODS_GEN_H
 #define YETTY_YCLASSGEN_YFLAME_METHODS_GEN_H
 
-#include <yetty/yflame/methods.h>
+#include "yetty/yflame/flame.h"
 
 typedef struct yetty_ycore_void_result (*yetty_yflame_configure_fn)(struct yetty_yclass_ctx *,
                                                                     struct yetty_yclass_object *,

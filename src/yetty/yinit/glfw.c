@@ -53,8 +53,7 @@ static void platform_get_x11_handles(GLFWwindow *win, void **disp, unsigned long
 #include <yetty/yconfig/config.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/clipboard-manager.h>
-#include <yetty/yplatform/methods.h> /* window_manager configure/destroy slots */
-#include <yetty/yplatform/rpc.h>     /* yetty_yplatform_window_manager_create / _register */
+#include <yetty/yplatform/window-manager.h>
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/ytrace/ytrace.h>
 

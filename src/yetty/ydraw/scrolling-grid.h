@@ -100,7 +100,8 @@ struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_ref(
 /* Attach a composite instance to line `line_idx`. The grid takes
  * ownership (destroys on grid_line_free / grid_clear). */
 struct yetty_ycore_void_result yetty_ydraw_scrolling_grid_push_figure(
-    struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx, struct yetty_ydraw_composite *figure);
+    struct yetty_ydraw_scrolling_grid *grid, uint32_t line_idx,
+    struct yetty_ydraw_composite *figure);
 
 /* Attach a font cache handle to line `target_row`. If the handle is
  * already attached to some other line, migrate (no refcount change);

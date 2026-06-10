@@ -152,7 +152,7 @@ struct yetty_ydraw_canvas_ops {
     /* Complex drawable access (for atlas rendering). */
     uint32_t (*figure_count)(const struct yetty_ydraw_canvas *canvas);
     struct yetty_ydraw_composite *(*get_figure)(const struct yetty_ydraw_canvas *canvas,
-                                             uint32_t index);
+                                                uint32_t index);
 
     /* Glyph iteration. Does work + invokes the visitor — must surface
      * any internal failure (alloc, decode of evicted lines, ...) via

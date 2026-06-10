@@ -6,6 +6,7 @@
  * hosting ygrid). The widget re-marks itself dirty after every emit so the
  * framework keeps re-emitting — that is what animates the actor. */
 #include "../internal.h"
+#include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/ygui/widgets/ymaze.h>
 #include <yetty/ymaze/ymaze.h>

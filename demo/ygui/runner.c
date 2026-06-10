@@ -27,8 +27,6 @@
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
-#include <yetty/yfigure/methods.h> /* process_bytes / reset_content for the caption figure */
-#include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/yshadertoy/figure.h>
@@ -54,12 +52,10 @@
  * reusable, ygui/yui-independent engine. This is the POC integration other
  * apps copy. */
 #include <yetty/ychrome/chrome.h>
-#include <yetty/ychrome/methods.h>
-#include <yetty/ychrome/rpc.h>
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/widgets/button.h>
 #include <yetty/ygui/widgets/label.h>
-#include <yetty/yplatform/methods.h> /* window_manager iconify/toggle_maximize/request_close */
+#include <yetty/yplatform/window-manager.h>
 
 /* Caption-strip height (px) for chrome-enabled demos. The drawn strip and the
  * engine's drag/double-click zone share this value. */

@@ -75,8 +75,9 @@ struct yetty_ydraw_composite_ops {
      * the rest. NULL on figures that don't accept incremental
      * updates — the scene-canvas drops the wire record silently in
      * that case. */
-    struct yetty_ycore_void_result (*update)(struct yetty_ydraw_composite *self, uint32_t target_field,
-                                             const void *body, size_t body_size);
+    struct yetty_ycore_void_result (*update)(struct yetty_ydraw_composite *self,
+                                             uint32_t target_field, const void *body,
+                                             size_t body_size);
 };
 
 //=============================================================================

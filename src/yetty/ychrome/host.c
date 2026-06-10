@@ -21,12 +21,9 @@
 #include <yetty/ychrome/host.h>
 
 #include <yetty/ychrome/chrome.h>
-#include <yetty/ychrome/methods.h>
-#include <yetty/ychrome/rpc.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/methods.h>
 #include <yetty/yfigure/producer.h>
 #include <yetty/yfigure/wire.h>
 #ifdef YETTY_YCHROME_HAS_LOCAL

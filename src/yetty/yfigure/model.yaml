@@ -288,7 +288,7 @@ classes:
         impl: yetty_yfigure_figure_default_set_content_size
 exposed:
   - source_file: src/yetty/yfigure/container.c
-    type_text: "struct yetty_yfigure_hit {
+    verbatim: "struct yetty_yfigure_hit {
     uint32_t figure_id;
     float local_x;
     float local_y;
@@ -431,6 +431,10 @@ exposed:
         type: float
       - name: y
         type: float
+  - source_file: src/yetty/yfigure/figure.c
+    type_text: struct yetty_ydraw_target;
+  - source_file: src/yetty/yfigure/figure.c
+    type_text: struct yetty_ywire_wire_statemachine;
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result
