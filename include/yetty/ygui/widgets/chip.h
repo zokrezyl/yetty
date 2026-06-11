@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_chip_class_get(void);
 struct yetty_ygui_chip;
 YETTY_YRESULT_DECLARE(yetty_ygui_chip_ptr, struct yetty_ygui_chip *);
 struct yetty_ygui_chip_ptr_result yetty_ygui_chip_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_chip_to(struct yetty_ygui_chip *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_chip_create(struct yetty_yclass_ctx *ctx);
 

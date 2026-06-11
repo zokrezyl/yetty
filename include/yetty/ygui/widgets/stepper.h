@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_stepper_class_get(void);
 struct yetty_ygui_stepper;
 YETTY_YRESULT_DECLARE(yetty_ygui_stepper_ptr, struct yetty_ygui_stepper *);
 struct yetty_ygui_stepper_ptr_result yetty_ygui_stepper_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_stepper_to(struct yetty_ygui_stepper *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_stepper_create(struct yetty_yclass_ctx *ctx);
 

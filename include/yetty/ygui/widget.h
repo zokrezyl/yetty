@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void);
 struct yetty_ygui_widget;
 YETTY_YRESULT_DECLARE(yetty_ygui_widget_ptr, struct yetty_ygui_widget *);
 struct yetty_ygui_widget_ptr_result yetty_ygui_widget_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_widget_to(struct yetty_ygui_widget *data);
 
 struct yetty_ycore_int_result;
 struct yetty_ycore_void_result;

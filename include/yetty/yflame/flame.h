@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_yflame_flame_class_get(void);
 struct yetty_yflame_flame;
 YETTY_YRESULT_DECLARE(yetty_yflame_flame_ptr, struct yetty_yflame_flame *);
 struct yetty_yflame_flame_ptr_result yetty_yflame_flame_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_yflame_flame_to(struct yetty_yflame_flame *data);
 
 struct yetty_ycore_int_result;
 struct yetty_ycore_void_result;

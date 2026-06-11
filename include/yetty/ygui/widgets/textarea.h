@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_textarea_class_get(void);
 struct yetty_ygui_textarea;
 YETTY_YRESULT_DECLARE(yetty_ygui_textarea_ptr, struct yetty_ygui_textarea *);
 struct yetty_ygui_textarea_ptr_result yetty_ygui_textarea_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_textarea_to(struct yetty_ygui_textarea *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_textarea_create(struct yetty_yclass_ctx *ctx);
 

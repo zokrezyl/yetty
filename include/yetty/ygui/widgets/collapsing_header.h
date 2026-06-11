@@ -22,6 +22,8 @@ struct yetty_ygui_collapsing_header;
 YETTY_YRESULT_DECLARE(yetty_ygui_collapsing_header_ptr, struct yetty_ygui_collapsing_header *);
 struct yetty_ygui_collapsing_header_ptr_result yetty_ygui_collapsing_header_from(
     struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_collapsing_header_to(
+    struct yetty_ygui_collapsing_header *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_collapsing_header_create(
     struct yetty_yclass_ctx *ctx);

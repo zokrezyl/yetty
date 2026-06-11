@@ -22,6 +22,8 @@ struct yetty_ygui_primitive_widget;
 YETTY_YRESULT_DECLARE(yetty_ygui_primitive_widget_ptr, struct yetty_ygui_primitive_widget *);
 struct yetty_ygui_primitive_widget_ptr_result yetty_ygui_primitive_widget_from(
     struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_primitive_widget_to(
+    struct yetty_ygui_primitive_widget *data);
 
 struct yetty_ycore_void_result;
 struct yetty_ygui_emit_ctx;

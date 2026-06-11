@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_checkbox_class_get(void);
 struct yetty_ygui_checkbox;
 YETTY_YRESULT_DECLARE(yetty_ygui_checkbox_ptr, struct yetty_ygui_checkbox *);
 struct yetty_ygui_checkbox_ptr_result yetty_ygui_checkbox_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_checkbox_to(struct yetty_ygui_checkbox *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_checkbox_create(struct yetty_yclass_ctx *ctx);
 

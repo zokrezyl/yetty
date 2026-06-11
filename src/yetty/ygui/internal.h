@@ -141,14 +141,13 @@ struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void);
 
 /* Reach the widget-tree slice of any ygui object. widget is the root class
  * of every ygui widget; its data slice (struct yetty_ygui_widget, whose
- * first member is the tree) is resolved through the yclass runtime — the
- * runtime lays slices out direct-parent-first, so the widget slice is NOT
- * at a fixed offset for multi-level hierarchies. The widget class accessor
- * caches its pointer, so this stays cheap on the hot path. Takes a const
- * object and returns a mutable tree pointer: slice access is const-agnostic
- * here (as value getters are), so const getters and mutating setters share
- * this one accessor. The resolve only fails on a non-widget object — a
- * programmer error that faults at the returned NULL. */
+ * first member is the tree) is resolved through the yclass runtime — a
+ * cached class-pointer lookup plus an offset-table lookup, correct no
+ * matter how the runtime orders slices. Takes a const object and returns a
+ * mutable tree pointer: slice access is const-agnostic here (as value
+ * getters are), so const getters and mutating setters share this one
+ * accessor. The resolve only fails on a non-widget object — a programmer
+ * error that faults at the returned NULL. */
 static inline struct yetty_ygui_tree *ygui_tree(const struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_void_ptr_result slice = yetty_yclass_object_data(

@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_yplot_class_get(void);
 struct yetty_ygui_yplot;
 YETTY_YRESULT_DECLARE(yetty_ygui_yplot_ptr, struct yetty_ygui_yplot *);
 struct yetty_ygui_yplot_ptr_result yetty_ygui_yplot_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_yplot_to(struct yetty_ygui_yplot *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_yplot_create(struct yetty_yclass_ctx *ctx);
 

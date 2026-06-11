@@ -22,6 +22,7 @@ struct yetty_yfigure_container;
 YETTY_YRESULT_DECLARE(yetty_yfigure_container_ptr, struct yetty_yfigure_container *);
 struct yetty_yfigure_container_ptr_result yetty_yfigure_container_from(
     struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_yfigure_container_to(struct yetty_yfigure_container *data);
 
 struct yetty_ycore_char_ptr_result;
 struct yetty_ycore_void_result;

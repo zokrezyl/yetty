@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_yrdawn_figure_class_get(void);
 struct yetty_yrdawn_figure;
 YETTY_YRESULT_DECLARE(yetty_yrdawn_figure_ptr, struct yetty_yrdawn_figure *);
 struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_yrdawn_figure_to(struct yetty_yrdawn_figure *data);
 
 struct yetty_yclass_object_ptr_result yetty_yrdawn_figure_create(struct yetty_yclass_ctx *ctx);
 

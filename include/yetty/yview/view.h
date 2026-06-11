@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_yview_view_class_get(void);
 struct yetty_yview_view;
 YETTY_YRESULT_DECLARE(yetty_yview_view_ptr, struct yetty_yview_view *);
 struct yetty_yview_view_ptr_result yetty_yview_view_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_yview_view_to(struct yetty_yview_view *data);
 
 struct yetty_ycore_void_result;
 struct yetty_ydraw_drawable_list;

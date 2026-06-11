@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_button_class_get(void);
 struct yetty_ygui_button;
 YETTY_YRESULT_DECLARE(yetty_ygui_button_ptr, struct yetty_ygui_button *);
 struct yetty_ygui_button_ptr_result yetty_ygui_button_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_button_to(struct yetty_ygui_button *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_button_create(struct yetty_yclass_ctx *ctx);
 

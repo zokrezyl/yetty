@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_ynodes_class_get(void);
 struct yetty_ygui_ynodes;
 YETTY_YRESULT_DECLARE(yetty_ygui_ynodes_ptr, struct yetty_ygui_ynodes *);
 struct yetty_ygui_ynodes_ptr_result yetty_ygui_ynodes_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_ynodes_to(struct yetty_ygui_ynodes *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_ynodes_create(struct yetty_yclass_ctx *ctx);
 

@@ -243,6 +243,7 @@ static const struct yetty_yclass_descriptor header_desc = {
     .name = "yetty_ygui_tabbar_header",
     .type = YETTY_YCLASS_TYPE_REGULAR,
     .data_size = sizeof(struct header_data),
+    .data_align = _Alignof(struct header_data),
 };
 
 struct yetty_yclass_ptr_result header_class_get(void)

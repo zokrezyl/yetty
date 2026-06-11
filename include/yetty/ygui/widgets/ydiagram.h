@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_ydiagram_class_get(void);
 struct yetty_ygui_ydiagram;
 YETTY_YRESULT_DECLARE(yetty_ygui_ydiagram_ptr, struct yetty_ygui_ydiagram *);
 struct yetty_ygui_ydiagram_ptr_result yetty_ygui_ydiagram_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_ydiagram_to(struct yetty_ygui_ydiagram *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_ydiagram_create(struct yetty_yclass_ctx *ctx);
 

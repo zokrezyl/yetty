@@ -67,6 +67,14 @@ struct yetty_yclass_descriptor {
     const char *name; /* qualified, e.g. "yetty_yvehicle_sportscar" */
     enum yetty_yclass_type type;
     size_t data_size;
+    /* Alignment requirement of this class's data struct (_Alignof). The
+     * registrar rounds each slice's offset up to this before placing it,
+     * so a slice whose struct needs >pointer alignment stays ABI-valid
+     * regardless of the sizes of the slices before it. 0 means "unknown"
+     * — the registrar falls back to max_align_t (always safe, never
+     * under-aligned). Codegen emits _Alignof(<data struct>); hand-written
+     * descriptors should do the same. */
+    size_t data_align;
 };
 
 struct yetty_yclass_op {

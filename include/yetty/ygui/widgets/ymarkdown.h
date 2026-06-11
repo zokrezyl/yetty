@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_ymarkdown_class_get(void);
 struct yetty_ygui_ymarkdown;
 YETTY_YRESULT_DECLARE(yetty_ygui_ymarkdown_ptr, struct yetty_ygui_ymarkdown *);
 struct yetty_ygui_ymarkdown_ptr_result yetty_ygui_ymarkdown_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_ymarkdown_to(struct yetty_ygui_ymarkdown *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_ymarkdown_create(struct yetty_yclass_ctx *ctx);
 

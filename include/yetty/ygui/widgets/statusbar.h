@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_statusbar_class_get(void);
 struct yetty_ygui_statusbar;
 YETTY_YRESULT_DECLARE(yetty_ygui_statusbar_ptr, struct yetty_ygui_statusbar *);
 struct yetty_ygui_statusbar_ptr_result yetty_ygui_statusbar_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_statusbar_to(struct yetty_ygui_statusbar *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_statusbar_create(struct yetty_yclass_ctx *ctx);
 

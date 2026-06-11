@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_yimage_class_get(void);
 struct yetty_ygui_yimage;
 YETTY_YRESULT_DECLARE(yetty_ygui_yimage_ptr, struct yetty_ygui_yimage *);
 struct yetty_ygui_yimage_ptr_result yetty_ygui_yimage_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_yimage_to(struct yetty_ygui_yimage *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_yimage_create(struct yetty_yclass_ctx *ctx);
 

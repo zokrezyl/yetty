@@ -22,6 +22,8 @@ struct yetty_yplatform_window_manager;
 YETTY_YRESULT_DECLARE(yetty_yplatform_window_manager_ptr, struct yetty_yplatform_window_manager *);
 struct yetty_yplatform_window_manager_ptr_result yetty_yplatform_window_manager_from(
     struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_yplatform_window_manager_to(
+    struct yetty_yplatform_window_manager *data);
 
 struct yetty_ycore_void_result;
 struct yetty_ycore_xthread_event_pipe;

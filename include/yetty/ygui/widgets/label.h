@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_label_class_get(void);
 struct yetty_ygui_label;
 YETTY_YRESULT_DECLARE(yetty_ygui_label_ptr, struct yetty_ygui_label *);
 struct yetty_ygui_label_ptr_result yetty_ygui_label_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_label_to(struct yetty_ygui_label *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_label_create(struct yetty_yclass_ctx *ctx);
 

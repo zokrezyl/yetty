@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygrid_grid_class_get(void);
 struct yetty_ygrid_grid;
 YETTY_YRESULT_DECLARE(yetty_ygrid_grid_ptr, struct yetty_ygrid_grid *);
 struct yetty_ygrid_grid_ptr_result yetty_ygrid_grid_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygrid_grid_to(struct yetty_ygrid_grid *data);
 
 struct yetty_ycore_void_result;
 

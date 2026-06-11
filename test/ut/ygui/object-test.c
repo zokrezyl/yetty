@@ -61,6 +61,7 @@ static const struct yetty_yclass_descriptor probe_a_desc = {
     .name = "probe_a",
     .type = YETTY_YCLASS_TYPE_REGULAR,
     .data_size = sizeof(struct probe_a_data),
+    .data_align = _Alignof(struct probe_a_data),
 };
 
 static const struct yetty_yclass *probe_a_class_get(void)
@@ -127,6 +128,7 @@ static const struct yetty_yclass_descriptor probe_b_desc = {
     .name = "probe_b",
     .type = YETTY_YCLASS_TYPE_REGULAR,
     .data_size = sizeof(struct probe_b_data),
+    .data_align = _Alignof(struct probe_b_data),
 };
 
 static const struct yetty_yclass *probe_b_class_get(void)

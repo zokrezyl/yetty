@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_ypdf_class_get(void);
 struct yetty_ygui_ypdf;
 YETTY_YRESULT_DECLARE(yetty_ygui_ypdf_ptr, struct yetty_ygui_ypdf *);
 struct yetty_ygui_ypdf_ptr_result yetty_ygui_ypdf_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_ypdf_to(struct yetty_ygui_ypdf *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_ypdf_create(struct yetty_yclass_ctx *ctx);
 

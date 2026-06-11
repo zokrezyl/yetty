@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_datepicker_class_get(void);
 struct yetty_ygui_datepicker;
 YETTY_YRESULT_DECLARE(yetty_ygui_datepicker_ptr, struct yetty_ygui_datepicker *);
 struct yetty_ygui_datepicker_ptr_result yetty_ygui_datepicker_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_datepicker_to(struct yetty_ygui_datepicker *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_datepicker_create(struct yetty_yclass_ctx *ctx);
 

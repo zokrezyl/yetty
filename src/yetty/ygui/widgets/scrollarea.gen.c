@@ -25,6 +25,7 @@ struct yetty_yclass_ptr_result yetty_ygui_scrollarea_class_get(void)
         .name = "yetty_ygui_scrollarea",
         .type = YETTY_YCLASS_TYPE_REGULAR,
         .data_size = sizeof(struct yetty_ygui_scrollarea),
+        .data_align = _Alignof(struct yetty_ygui_scrollarea),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_ygui", "widget_on_scroll", (yetty_yclass_method_id_t)yetty_ygui_widget_on_scroll,
@@ -75,4 +76,23 @@ struct yetty_ygui_scrollarea_ptr_result yetty_ygui_scrollarea_from(struct yetty_
                          slice_r);
     }
     return YETTY_OK(yetty_ygui_scrollarea_ptr, (struct yetty_ygui_scrollarea *)slice_r.value);
+}
+
+struct yetty_yclass_object *yetty_ygui_scrollarea_to(struct yetty_ygui_scrollarea *data)
+{
+    if (!data) {
+        return NULL;
+    }
+    struct yetty_yclass_ptr_result class_r = yetty_ygui_scrollarea_class_get();
+    if (YETTY_IS_ERR(class_r)) {
+        yetty_ycore_error_destroy(class_r.error);
+        return NULL;
+    }
+    struct yetty_ycore_size_result offset_r =
+        yetty_yclass_object_data_offset(class_r.value, class_r.value);
+    if (YETTY_IS_ERR(offset_r)) {
+        yetty_ycore_error_destroy(offset_r.error);
+        return NULL;
+    }
+    return (struct yetty_yclass_object *)((char *)data - offset_r.value);
 }

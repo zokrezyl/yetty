@@ -25,6 +25,7 @@ struct yetty_yclass_ptr_result yetty_ygui_draggable_mixin_get(void)
         .name = "yetty_ygui_draggable",
         .type = YETTY_YCLASS_TYPE_MIXIN,
         .data_size = sizeof(struct yetty_ygui_draggable),
+        .data_align = _Alignof(struct yetty_ygui_draggable),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_ygui", "widget_on_press", (yetty_yclass_method_id_t)yetty_ygui_widget_on_press,

@@ -1580,6 +1580,32 @@ def emit_class_accessor(cls: dict) -> str:
             f"    return YETTY_OK({data_ptr_rid}, ({data} *)slice_r.value);\n"
             f"}}\n"
         ]
+        # Inverse of `_from`: recover the owning yclass object from a pointer
+        # to this class's data slice. Only meaningful for regular classes —
+        # their slice offset is invariant across leaves under the root-down
+        # layout (the offset depends only on ancestors). A mixin's slice
+        # offset varies per using class, so there is no single offset to
+        # subtract; `_to` would be ill-defined and is not emitted.
+        if cls.get("type") != "mixin":
+            parts.append(
+                f"\nstruct yetty_yclass_object *{qcls}_to({data} *data)\n"
+                f"{{\n"
+                f"    if (!data)\n"
+                f"        return NULL;\n"
+                f"    struct yetty_yclass_ptr_result class_r = {accessor}();\n"
+                f"    if (YETTY_IS_ERR(class_r)) {{\n"
+                f"        yetty_ycore_error_destroy(class_r.error);\n"
+                f"        return NULL;\n"
+                f"    }}\n"
+                f"    struct yetty_ycore_size_result offset_r =\n"
+                f"        yetty_yclass_object_data_offset(class_r.value, class_r.value);\n"
+                f"    if (YETTY_IS_ERR(offset_r)) {{\n"
+                f"        yetty_ycore_error_destroy(offset_r.error);\n"
+                f"        return NULL;\n"
+                f"    }}\n"
+                f"    return (struct yetty_yclass_object *)((char *)data - offset_r.value);\n"
+                f"}}\n"
+            )
         for field in property_fields:
             fname = field["name"]
             ftype = field["type"]
@@ -1621,6 +1647,7 @@ struct yetty_yclass_ptr_result {accessor}(void)
         .name = "{qname}",
         .type = {type_const},
         .data_size = sizeof({data}),
+        .data_align = _Alignof({data}),
     }};
 {ops_decl}\
 {parent_block}\
@@ -1707,6 +1734,12 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
                 f"YETTY_YRESULT_DECLARE({rid}, {c['data']} *);",
                 f"struct {rid}_result {q}_from(struct yetty_yclass_object *obj);",
             ]
+            # Inverse accessor — recover the owning object from a data-slice
+            # pointer. Regular classes only (a mixin slice has no invariant
+            # offset); see the matching guard in emit_class_accessor.
+            if c.get("type") != "mixin":
+                lines.append(
+                    f"struct yetty_yclass_object *{q}_to({c['data']} *data);")
             for field in pfields:
                 base = f"{q}_{field['name']}"
                 if field.get("get"):

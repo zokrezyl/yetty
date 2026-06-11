@@ -60,6 +60,7 @@ struct yetty_yclass_ptr_result yetty_yplatform_window_manager_class_get(void)
         .name = "yetty_yplatform_window_manager",
         .type = YETTY_YCLASS_TYPE_REGULAR,
         .data_size = sizeof(struct yetty_yplatform_window_manager),
+        .data_align = _Alignof(struct yetty_yplatform_window_manager),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_yplatform", "window_manager_configure",
@@ -124,4 +125,24 @@ struct yetty_yplatform_window_manager_ptr_result yetty_yplatform_window_manager_
     }
     return YETTY_OK(yetty_yplatform_window_manager_ptr,
                     (struct yetty_yplatform_window_manager *)slice_r.value);
+}
+
+struct yetty_yclass_object *yetty_yplatform_window_manager_to(
+    struct yetty_yplatform_window_manager *data)
+{
+    if (!data) {
+        return NULL;
+    }
+    struct yetty_yclass_ptr_result class_r = yetty_yplatform_window_manager_class_get();
+    if (YETTY_IS_ERR(class_r)) {
+        yetty_ycore_error_destroy(class_r.error);
+        return NULL;
+    }
+    struct yetty_ycore_size_result offset_r =
+        yetty_yclass_object_data_offset(class_r.value, class_r.value);
+    if (YETTY_IS_ERR(offset_r)) {
+        yetty_ycore_error_destroy(offset_r.error);
+        return NULL;
+    }
+    return (struct yetty_yclass_object *)((char *)data - offset_r.value);
 }

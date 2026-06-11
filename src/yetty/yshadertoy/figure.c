@@ -121,6 +121,7 @@ YETTY_YRESULT_DECLARE(yetty_yshadertoy_figure_ptr, struct yetty_yshadertoy_figur
 struct yetty_yclass_ptr_result yetty_yshadertoy_figure_class_get(void);
 struct yetty_yshadertoy_figure_ptr_result yetty_yshadertoy_figure_from(
     struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_yshadertoy_figure_to(struct yetty_yshadertoy_figure *data);
 
 /* This kind's own data slice (its fields sit after the figure
  * base slice in the shared yclass object). */
@@ -142,13 +143,15 @@ static struct yetty_yclass_void_ptr_result yshadertoy_figure_from_obj(
 static struct yetty_yclass_object_ptr_result yshadertoy_obj_from_body(
     struct yetty_yshadertoy_figure *f)
 {
-    struct yetty_yclass_ptr_result class_r = yetty_yshadertoy_figure_class_get();
-    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, class_r, "yshadertoy_obj_from_body: class");
-    struct yetty_ycore_size_result offset_r =
-        yetty_yclass_object_data_offset(class_r.value, class_r.value);
-    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, offset_r, "yshadertoy_obj_from_body: data_offset");
-    struct yetty_yclass_object *obj =
-        (struct yetty_yclass_object *)((char *)f - offset_r.value) - 1;
+    /* Recover the owning object from this body slice via the generated
+     * inverse accessor. data-slice offsets are relative to the object
+     * header, so `_to` is a single `(char *)data - offset` — no extra
+     * header step (the previous hand-rolled `- 1` double-counted the
+     * header and returned obj - sizeof(yclass_object), a bogus pointer). */
+    struct yetty_yclass_object *obj = yetty_yshadertoy_figure_to(f);
+    if (!obj) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "yshadertoy_obj_from_body: figure_to failed");
+    }
     return YETTY_OK(yetty_yclass_object_ptr, obj);
 }
 

@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_spinner_class_get(void);
 struct yetty_ygui_spinner;
 YETTY_YRESULT_DECLARE(yetty_ygui_spinner_ptr, struct yetty_ygui_spinner *);
 struct yetty_ygui_spinner_ptr_result yetty_ygui_spinner_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_spinner_to(struct yetty_ygui_spinner *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_spinner_create(struct yetty_yclass_ctx *ctx);
 
