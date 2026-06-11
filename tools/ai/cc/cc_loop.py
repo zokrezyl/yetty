@@ -264,9 +264,25 @@ def render_tool_call(name: str, tool_input: dict) -> None:
     sys.stdout.flush()
 
 
-# Matches the sentinel the yetty MCP server emits under YETTY_MCP_VIA_PARENT:
-# the loop is the single PTY writer, so it renders the envelope itself.
+# Matches the sentinels the yetty MCP server emits under YETTY_MCP_VIA_PARENT:
+# the loop is the single PTY writer, so it renders the envelope itself. The
+# FILE form carries a temp-file path holding the raw envelope bytes (large
+# envelopes — music scores embed font glyphs — must not travel through the
+# tool result, where they blow the agent's token cap). The inline-base64
+# form is the legacy variant, still accepted from older servers.
+FIGURE_FILE_RE = re.compile(r"<<CCLOOP_FIGURE_FILE (\S+) CCLOOP_FIGURE_FILE>>")
 FIGURE_RE = re.compile(r"<<CCLOOP_FIGURE ([A-Za-z0-9+/=]+) CCLOOP_FIGURE>>")
+
+
+def read_figure_file(path: str) -> bytes | None:
+    """Read and unlink a figure spool file. None when unreadable."""
+    try:
+        with open(path, "rb") as spool:
+            data = spool.read()
+        os.unlink(path)
+        return data or None
+    except OSError:
+        return None
 
 
 def write_figure_bytes(data: bytes) -> None:
@@ -279,11 +295,19 @@ def write_figure_bytes(data: bytes) -> None:
 
 def render_tool_result(content, is_error: bool, tool_name: str | None) -> None:
     raw = tool_result_text(content)
-    match = FIGURE_RE.search(raw)
-    if match and not is_error:
+    figure_bytes: bytes | None = None
+    if not is_error:
+        file_match = FIGURE_FILE_RE.search(raw)
+        if file_match:
+            figure_bytes = read_figure_file(file_match.group(1))
+        else:
+            inline_match = FIGURE_RE.search(raw)
+            if inline_match:
+                figure_bytes = base64.b64decode(inline_match.group(1))
+    if figure_bytes:
         sys.stdout.write(f"  {MINT}✓{RESET} {MUTED}{tool_name or 'figure'}{RESET}\n")
         sys.stdout.flush()
-        write_figure_bytes(base64.b64decode(match.group(1)))
+        write_figure_bytes(figure_bytes)
         return
     text = fold(raw)
     if not text.strip():

@@ -9,7 +9,8 @@ yetty-mcp — let an AI agent draw rich content into a yetty terminal.
 How it works
 ------------
 yetty renders rich figures (markdown, mermaid diagrams, images, SVG, PDF,
-syntax-highlighted code) when a program prints an OSC envelope
+LilyPond music scores, syntax-highlighted code) when a program prints an
+OSC envelope
 
     ESC ] 600001 ; <base64 args> ; <base64 body> ESC \\
 
@@ -36,11 +37,11 @@ Register with an MCP client, e.g. Claude Code `.mcp.json`:
 
 from __future__ import annotations
 
-import base64
 import os
 import shutil
 import struct
 import subprocess
+import tempfile
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -97,21 +98,30 @@ def _write_to_terminal(data: bytes) -> int:
         os.close(fd)
 
 
-# Sentinel wrapping a base64 OSC envelope returned to a parent process. When
+# Sentinel handing an OSC envelope to a parent process. When
 # YETTY_MCP_VIA_PARENT is set (e.g. a custom loop that owns the terminal and
 # serializes its own output), we do NOT write to /dev/tty — a second concurrent
-# writer corrupts large envelopes. Instead the parent scans the tool result for
-# this marker and renders the bytes itself, as the sole writer of the PTY.
-_FIGURE_OPEN = "<<CCLOOP_FIGURE "
-_FIGURE_CLOSE = " CCLOOP_FIGURE>>"
+# writer corrupts large envelopes. Instead the envelope bytes go to a temp
+# FILE and the tool result carries only its path; the parent scans for the
+# marker, writes the bytes itself as the sole PTY writer, and unlinks the
+# file. (An older inline-base64 variant, <<CCLOOP_FIGURE b64 CCLOOP_FIGURE>>,
+# pushed the whole envelope through the tool result — that blew the agent's
+# tool-result token cap for large figures, e.g. music scores embedding font
+# glyphs, and wasted model context for small ones. Parents still accept it.)
+_FIGURE_FILE_OPEN = "<<CCLOOP_FIGURE_FILE "
+_FIGURE_FILE_CLOSE = " CCLOOP_FIGURE_FILE>>"
 
 
 def _emit_figure(data: bytes, label: str) -> str:
     """Either write the envelope to the terminal, or hand it back to a parent
     loop via the result sentinel, depending on YETTY_MCP_VIA_PARENT."""
     if os.environ.get("YETTY_MCP_VIA_PARENT"):
-        encoded = base64.b64encode(data).decode("ascii")
-        return f"{_FIGURE_OPEN}{encoded}{_FIGURE_CLOSE} drew {label}"
+        with tempfile.NamedTemporaryFile(
+            prefix="yetty-figure-", suffix=".bin", delete=False
+        ) as spool:
+            spool.write(data)
+            spool_path = spool.name
+        return f"{_FIGURE_FILE_OPEN}{spool_path}{_FIGURE_FILE_CLOSE} drew {label}"
     written = _write_to_terminal(data)
     return f"Drew {label} to the terminal ({written} bytes)."
 
@@ -235,8 +245,32 @@ def draw_diagram(mermaid: str) -> str:
 def draw_svg(svg: str) -> str:
     """Render an SVG document (shapes, paths, text, gradients) as a figure.
     Pass the full <svg>…</svg> markup. Use this for custom vector graphics
-    the agent composes itself."""
+    the agent composes itself. Do NOT hand-draw music notation with SVG —
+    use draw_music with LilyPond source instead; it produces properly
+    engraved scores."""
     return _draw_via_ycat(["-c", "svg", "-"], svg.encode(), "SVG")
+
+
+@mcp.tool()
+def draw_music(lilypond: str) -> str:
+    """Engrave music notation from LilyPond source and render it as a figure
+    in the yetty terminal — staff, clefs, noteheads, beams, rests and
+    accidentals typeset with the Emmentaler music font. ALWAYS use this
+    (never draw_svg) when the user wants sheet music, a melody, a scale,
+    a riff, or any musical notation.
+
+    Pass standard LilyPond (a pragmatic subset is supported), e.g.:
+
+        \\version "2.24.0"
+        \\relative c' { \\clef treble \\time 3/4 c4 d e f g a b c }
+
+    Notes use pitch letters a..g with is/es accidentals, ' / , octave marks
+    and duration suffixes (c4 = quarter, d8 = eighth, dots allowed); r4 is a
+    rest, <c e g>4 a chord, | a bar check. Parsed commands: \\clef, \\time
+    N/D, \\key <pitch> \\major|\\minor, \\relative [<pitch>]. Wrapping such
+    as \\version, \\header, \\score, \\new Staff and braces is tolerated and
+    skipped. Long scores wrap into systems at the terminal width."""
+    return _draw_via_ycat(["-c", "music", "-"], lilypond.encode(), "music score")
 
 
 @mcp.tool()
@@ -252,15 +286,32 @@ def draw_plot(
 ) -> str:
     """Render a function/signal plot as a figure in the yetty terminal, using
     the standalone `yplot` engine. Use this to visualise math functions,
-    sampled data buffers, and multi-curve dashboards inline at the cursor.
+    sampled data buffers, multi-curve dashboards, and 2D field heatmaps
+    inline at the cursor.
 
     `expression` is a yplot-language source string. It supports several layers,
     all separable by `;`:
 
     • Single function — the variable is `x`:
         sin(x)
-      Operators + - * / and functions sin cos exp abs sqrt etc.; constants
-      `pi`, `tau`, `e`. An unnamed expression auto-names to `plot1`.
+      Operators + - * / % and constants `pi`, `tau`, `e`. An unnamed
+      expression auto-names to `plot1`. Built-in functions:
+        trig:        sin cos tan asin acos atan atan2(y,x) sinc
+        hyperbolic:  sinh cosh tanh asinh acosh atanh
+        exp/log:     exp exp2 log log2 pow(b,e) sqrt rsqrt
+        rounding:    floor ceil round trunc fract sign abs mod(a,b)
+        clamping:    min max clamp(x,lo,hi) saturate mix(a,b,t)
+                     step(edge,x) smoothstep(edge0,edge1,x)
+        statistics:  erf erfc
+        angles:      radians degrees
+        stochastic:  rand(x) — deterministic white noise in [0,1);
+                     noise(x) — smooth value noise; rand2(x,y) noise2(x,y)
+                     for 2D fields.
+
+    • Comparisons & piecewise functions — lt/gt/le/ge/eq/ne(a,b) return
+      1.0 or 0.0; select(falseVal, trueVal, cond) picks branchlessly:
+        piecewise=select(x*x, sin(4*x), ge(x,0))
+      Together they build gates, domain guards, and piecewise curves.
 
     • Multiple named functions (each drawn as its own curve):
         f=sin(x); g=cos(x)
@@ -285,6 +336,16 @@ def draw_plot(
     • Animation — referencing `time` in an expression auto-subscribes the plot
       to the animation timer, producing a live-updating figure:
         wave=buffer; @wave.size=4; @wave.values=0,1,0,-1; live=wave(x)*sin(time*2)
+
+    • 2D heatmaps — an expression that references `y` is a field f(x,y) and
+      renders as a colormapped heatmap (perceptually uniform viridis)
+      instead of a line curve:
+        field=sin(x)*cos(y)
+        rings=sin(sqrt(x*x+y*y)*3)
+      The field value is mapped from [-1, 1] to the colormap — scale the
+      expression (or wrap it in tanh) to fit that range. xrange/yrange (or
+      inline x=A..B; y=A..B) set both domains; square width/height pixels
+      keep the aspect true.
 
     Args:
         expression: the yplot source (may contain many `;`-separated parts).
@@ -319,8 +380,10 @@ def draw_plot(
 @mcp.tool()
 def show_file(path: str, kind: str = "") -> str:
     """Display a file as a rich figure in the terminal: images (PNG/JPG/GIF),
-    PDFs, SVGs, Markdown, or source code. Auto-detects by extension; pass
-    `kind` to force a handler: one of markdown, pdf, image, svg, mermaid, text."""
+    PDFs, SVGs, Markdown, LilyPond music scores (.ly — engraved with the
+    Emmentaler font), or source code. Auto-detects by extension; pass `kind`
+    to force a handler: one of markdown, pdf, image, svg, mermaid, music
+    (alias: lilypond), text."""
     p = Path(path).expanduser()
     if not p.is_file():
         raise RuntimeError(f"file not found: {p}")
