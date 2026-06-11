@@ -106,39 +106,23 @@ static const char UA_DEFAULT_CSS[] =
     "h6 { display: block; font-size: 0.67em; font-weight: bold; margin: 2.33em 0; }\n"
     "strong, b { font-weight: bold; }\n"
     "em, i, cite, dfn { font-style: italic; }\n"
-    "a { color: #00e; }\n"
+    "a { color: #00e; text-decoration: underline; }\n"
     "hr { display: block; margin: 0.5em auto; border-top: 1px solid #888; }\n"
-    /* Accessibility / boilerplate — elements explicitly marked
-     * off-screen or decorative MUST NOT render. Wikipedia and most
-     * large sites leak nav/menu/jump-link junk through these attributes
-     * when their main stylesheet doesn't apply. `!important` so we beat
-     * the loaded author CSS (which often overrides these for sighted
-     * users via positional tricks we don't implement). */
-    "[aria-hidden=\"true\"] { display: none !important; }\n"
+    /* Only the HTML `hidden` attribute hides an element visually. NOTE:
+     * `aria-hidden="true"` and `role="presentation"` are ACCESSIBILITY hints
+     * — they remove an element from the a11y tree but DO NOT affect visual
+     * rendering (Chrome paints them normally). Mapping them to display:none
+     * wrongly drops visible content: e.g. Google News marks each story's
+     * thumbnail figure `aria-hidden="true" role="presentation"` (the headline
+     * conveys it to screen readers) yet still shows the image. Site-specific
+     * hidden-nav junk is handled by explicit selectors below, not by abusing
+     * these attributes. */
     "[hidden] { display: none !important; }\n"
-    "[role=\"presentation\"] { display: none !important; }\n"
-    /* Wikipedia float helpers. The real Wikipedia stylesheet bundles
-     * these in /w/load.php?modules=...; if we couldn't fetch it (no
-     * network, file:// rendering) we still want figures and infoboxes
-     * to land in roughly the right place. Wikipedia's Parsoid emits
-     * <figure typeof="mw:File/Thumb"> for every article image; the
-     * stylesheet floats those right by default and only changes side
-     * when an explicit `.mw-halign-left` is present. We replicate the
-     * default-right behaviour so reading Wikipedia offline still
-     * produces a paragraph-with-sidebar layout instead of a wall of
-     * full-width images. */
-    "figure[typeof~=\"mw:File/Thumb\"], figure[typeof~=\"mw:File/Frame\"],"
-    " .mw-default-size, .thumb"
-    " { float: right; margin: 0 0 0.5em 0.8em; }\n"
-    ".mw-halign-right, .mw-floatright, .floatright, .thumb.tright,"
-    " .infobox, table.infobox"
-    " { float: right; margin: 0 0 0.5em 0.8em; }\n"
-    ".mw-halign-left, .mw-floatleft, .floatleft, figure.mw-halign-left,"
-    " figure.mw-default-size.mw-halign-left, .thumb.tleft"
-    " { float: left; margin: 0 0.8em 0.5em 0; }\n"
-    ".mw-halign-center, figure.mw-halign-center,"
-    " figure.mw-default-size.mw-halign-center"
-    " { float: none; margin: 0.5em auto; }\n"
+    /* NOTE: Wikipedia's float helpers used to live here and were injected into
+     * EVERY page — floating any site's generic `.thumb`/`.floatright`/`.infobox`
+     * out of flow (a news card's thumbnail collapsed to 0x0). They now live in
+     * UA_WIKIPEDIA_CSS, applied only to MediaWiki pages (see
+     * yetty_ybrowser_libcss_apply_wikipedia_quirks). */
     /* Wikipedia's hidden navigation: jump links, edit-section markers,
      * collapsed nav modules, sidebar menus, footer, indicators,
      * language-switcher etc. None of these contribute article content
@@ -158,13 +142,50 @@ static const char UA_DEFAULT_CSS[] =
     " .vector-sticky-pinned-container, .vector-sitenotice-container,"
     " .mw-footer-container, #footer, .vector-pinnable-header,"
     " .skip-link, .visualClear"
-    " { display: none !important; }\n"
-    /* Top-level `<nav>` is almost always boilerplate (site nav,
-     * breadcrumbs, tabs); inline `<nav>` inside an article is rare.
-     * The article
-     * <header> wrapping the page title is critical content though, so
-     * we only hide <nav> by default — NOT <header>. */
+    " { display: none !important; }\n";
+
+/* Wikipedia/MediaWiki float helpers — applied ONLY to MediaWiki pages (see
+ * yetty_ybrowser_libcss_apply_wikipedia_quirks, gated on `mw-` class markers).
+ * These use generic class names (`.thumb`, `.floatright`, `.infobox`) that
+ * collide with other sites, so they must never be global. MediaWiki ships them
+ * in /w/load.php; offline / CSS-less we approximate the default-right float so
+ * articles get a paragraph-with-sidebar layout instead of full-width images. */
+static const char UA_WIKIPEDIA_CSS[] =
+    "figure[typeof~=\"mw:File/Thumb\"], figure[typeof~=\"mw:File/Frame\"],"
+    " .mw-default-size, .thumb, .thumb.tright"
+    " { float: right; margin: 0 0 0.5em 0.8em; }\n"
+    ".mw-halign-right, .mw-floatright, .floatright, .infobox, table.infobox"
+    " { float: right; margin: 0 0 0.5em 0.8em; }\n"
+    ".mw-halign-left, .mw-floatleft, .floatleft, figure.mw-halign-left,"
+    " figure.mw-default-size.mw-halign-left, .thumb.tleft"
+    " { float: left; margin: 0 0.8em 0.5em 0; }\n"
+    ".mw-halign-center, figure.mw-halign-center,"
+    " figure.mw-default-size.mw-halign-center"
+    " { float: none; margin: 0.5em auto; }\n"
+    /* MediaWiki leans on `aria-hidden`/`role=presentation` to hide nav,
+	 * jump-links, and edit-section markers. Globally honouring those as
+	 * display:none is WRONG (they are accessibility hints, not visual ones —
+	 * it hid Google News' article-image figures), so the generic UA sheet no
+	 * longer does it. Re-apply it HERE, scoped to MediaWiki pages, where the
+	 * junk genuinely relies on it. */
+    "[aria-hidden=\"true\"], [role=\"presentation\"] { display: none !important; }\n"
+    /* Top-level `<nav>` on MediaWiki is boilerplate (site nav, breadcrumbs,
+	 * language switcher, edit tabs) that adds no article content. On a general
+	 * site, by contrast, a `<nav>` IS the primary menu and must render as Chrome
+	 * shows it — so this blanket hide is scoped to MediaWiki pages here rather
+	 * than living in the global UA sheet, where it suppressed every site's main
+	 * navigation. */
     "nav { display: none !important; }\n";
+
+int yetty_ybrowser_libcss_apply_wikipedia_quirks(struct yetty_ylexbor *r)
+{
+    if (r == NULL || r->libcss == NULL || r->wiki_quirks_applied) {
+        return 0;
+    }
+    r->wiki_quirks_applied = 1;
+    return yetty_ybrowser_libcss_add_sheet(r, UA_WIKIPEDIA_CSS, sizeof(UA_WIKIPEDIA_CSS) - 1,
+                                           CSS_ORIGIN_USER);
+}
 
 /* ===========================================================================
  * Select-handler callbacks. `pw` is `struct yetty_ylexbor *r`; `node` is
@@ -871,7 +892,7 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
      * <h1>. The header element with that class IS the page title
      * region we want to render. */
     static const char NAV_HIDE_CSS[] =
-        "[aria-hidden=\"true\"], [hidden], [role=\"presentation\"],"
+        "[hidden],"
         " .mw-jump-link, .mw-editsection, .navbox, .navbar, .vector-menu,"
         " .vector-header, .vector-page-toolbar,"
         " .vector-sticky-header, .vector-sticky-pinned-container,"
@@ -882,7 +903,7 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
         " .mw-page-container-inner > .vector-column-end,"
         " #vector-toc-pinned-container, .vector-toc, .vector-page-tools,"
         " .vector-appearance-landmark, .vector-language-button-container,"
-        " .skip-link, .visualClear, nav"
+        " .skip-link, .visualClear"
         " { display: none !important; }\n"
         /* And re-pin our figure fix at user-origin too in case libcss's
          * compiled-in defaults for <figure> beat the UA origin. */
@@ -1077,7 +1098,40 @@ static float resolve_length_to_px(struct yetty_ylexbor *r, const css_computed_st
     if (unit == CSS_UNIT_EX) {
         return fixed_to_float(length) * font_size * 0.5f;
     }
-    /* vh/vw/etc. — approximate */
+    if (unit == CSS_UNIT_CH) {
+        /* Advance of the '0' glyph. We have no real metrics; approximate
+         * as half the font size (same shortcut as ex). */
+        return fixed_to_float(length) * font_size * 0.5f;
+    }
+    if (unit == CSS_UNIT_Q) {
+        /* 1Q = 1/40 cm. */
+        return fixed_to_float(length) * (96.0f / 2.54f) / 40.0f;
+    }
+    if (unit == CSS_UNIT_LH) {
+        /* Relative to the line box; we don't resolve line-height here, so
+         * approximate with the default normal line box (1.25 * font). */
+        return fixed_to_float(length) * font_size * 1.25f;
+    }
+    /* Viewport-percentage units, resolved against the live viewport.
+     * Horizontal writing mode is assumed, so the inline axis (vi) maps to
+     * the viewport width and the block axis (vb) to the height. */
+    float viewport_w = r ? (float)r->viewport_w : 0.0f;
+    float viewport_h = r ? (float)r->viewport_h : 0.0f;
+    if (unit == CSS_UNIT_VW || unit == CSS_UNIT_VI) {
+        return fixed_to_float(length) * viewport_w / 100.0f;
+    }
+    if (unit == CSS_UNIT_VH || unit == CSS_UNIT_VB) {
+        return fixed_to_float(length) * viewport_h / 100.0f;
+    }
+    if (unit == CSS_UNIT_VMIN) {
+        float side = viewport_w < viewport_h ? viewport_w : viewport_h;
+        return fixed_to_float(length) * side / 100.0f;
+    }
+    if (unit == CSS_UNIT_VMAX) {
+        float side = viewport_w > viewport_h ? viewport_w : viewport_h;
+        return fixed_to_float(length) * side / 100.0f;
+    }
+    /* Unknown / angular / time units — return the raw magnitude. */
     return fixed_to_float(length);
 }
 
@@ -1199,14 +1253,25 @@ int yetty_ybrowser_libcss_min_width(struct yetty_ylexbor *r, const css_computed_
     return len_or_pct_property(k, l, u, CSS_MIN_WIDTH_SET, r, style, font_size, pct_basis, out_px);
 }
 
+/* Margin / padding percentages resolve against the containing block's
+ * content WIDTH, which the box pass doesn't know yet. So when the value
+ * is a percent we return the ratio (e.g. 0.10 for 10%) in *out_px and set
+ * *out_pct = true; the layout pass multiplies by the parent content width
+ * and clears the flag. Non-percent values round-trip as resolved px with
+ * *out_pct = false. `pct_basis` is therefore unused for percents now and
+ * only feeds em/viewport resolution for the non-percent path. */
 int yetty_ybrowser_libcss_margin(struct yetty_ylexbor *r, const css_computed_style *style, int side,
-                                 float font_size, float pct_basis, float *out_px, bool *out_auto)
+                                 float font_size, float pct_basis, float *out_px, bool *out_auto,
+                                 bool *out_pct)
 {
     if (!style) {
         return 0;
     }
     if (out_auto) {
         *out_auto = false;
+    }
+    if (out_pct) {
+        *out_pct = false;
     }
     css_fixed l = 0;
     css_unit u = CSS_UNIT_PX;
@@ -1234,17 +1299,28 @@ int yetty_ybrowser_libcss_margin(struct yetty_ylexbor *r, const css_computed_sty
         return 1;
     }
     if (kind == CSS_MARGIN_SET) {
-        *out_px = resolve_length_to_px(r, style, l, u, font_size, pct_basis);
+        if (u == CSS_UNIT_PCT) {
+            *out_px = fixed_to_float(l) / 100.0f;
+            if (out_pct) {
+                *out_pct = true;
+            }
+        } else {
+            *out_px = resolve_length_to_px(r, style, l, u, font_size, pct_basis);
+        }
         return 1;
     }
     return 0;
 }
 
 int yetty_ybrowser_libcss_padding(struct yetty_ylexbor *r, const css_computed_style *style,
-                                  int side, float font_size, float pct_basis, float *out_px)
+                                  int side, float font_size, float pct_basis, float *out_px,
+                                  bool *out_pct)
 {
     if (!style) {
         return 0;
+    }
+    if (out_pct) {
+        *out_pct = false;
     }
     css_fixed l = 0;
     css_unit u = CSS_UNIT_PX;
@@ -1266,7 +1342,55 @@ int yetty_ybrowser_libcss_padding(struct yetty_ylexbor *r, const css_computed_st
         return 0;
     }
     if (kind == CSS_PADDING_SET) {
-        *out_px = resolve_length_to_px(r, style, l, u, font_size, pct_basis);
+        if (u == CSS_UNIT_PCT) {
+            *out_px = fixed_to_float(l) / 100.0f;
+            if (out_pct) {
+                *out_pct = true;
+            }
+        } else {
+            *out_px = resolve_length_to_px(r, style, l, u, font_size, pct_basis);
+        }
+        return 1;
+    }
+    return 0;
+}
+
+/* box-sizing: returns 1 for border-box, 0 for content-box (the CSS
+ * initial) / inherit. */
+int yetty_ybrowser_libcss_box_sizing(const css_computed_style *style)
+{
+    if (!style) {
+        return 0;
+    }
+    return css_computed_box_sizing(style) == CSS_BOX_SIZING_BORDER_BOX ? 1 : 0;
+}
+
+/* line-height: returns 1 when the cascade has a concrete value, 0 for
+ * `normal` / inherit (caller keeps its default line box).
+ *
+ * A unitless NUMBER (e.g. line-height: 1.5) inherits as the *factor*, to
+ * be multiplied by each element's own font-size — so it is returned in
+ * *out_factor with *out_px = 0. A length / percentage resolves to a used
+ * px value that inherits as-is — returned in *out_px with *out_factor = 0.
+ * Keeping the two cases distinct is what lets an inherited `body { line-
+ * height: 1.33 }` scale correctly on a larger-font descendant like <h1>. */
+int yetty_ybrowser_libcss_line_height(struct yetty_ylexbor *r, const css_computed_style *style,
+                                      float font_size, float *out_px, float *out_factor)
+{
+    *out_px = 0.0f;
+    *out_factor = 0.0f;
+    if (!style) {
+        return 0;
+    }
+    css_fixed l = 0;
+    css_unit u = CSS_UNIT_PX;
+    uint8_t kind = css_computed_line_height(style, &l, &u);
+    if (kind == CSS_LINE_HEIGHT_NUMBER) {
+        *out_factor = fixed_to_float(l);
+        return 1;
+    }
+    if (kind == CSS_LINE_HEIGHT_DIMENSION) {
+        *out_px = resolve_length_to_px(r, style, l, u, font_size, font_size);
         return 1;
     }
     return 0;
@@ -1486,6 +1610,41 @@ int yetty_ybrowser_libcss_flex_direction(const css_computed_style *style)
     return css_computed_flex_direction(style);
 }
 
+int yetty_ybrowser_libcss_font_is_ahem(const css_computed_style *style)
+{
+    if (!style) {
+        return 0;
+    }
+    lwc_string **names = NULL;
+    (void)css_computed_font_family(style, &names);
+    if (names != NULL) {
+        for (int i = 0; names[i] != NULL; i++) {
+            const char *d = lwc_string_data(names[i]);
+            size_t l = lwc_string_length(names[i]);
+            if (l == 4 && strncasecmp(d, "ahem", 4) == 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+int yetty_ybrowser_libcss_flex_wrap(const css_computed_style *style)
+{
+    if (!style) {
+        return CSS_FLEX_WRAP_NOWRAP;
+    }
+    return css_computed_flex_wrap(style);
+}
+
+int yetty_ybrowser_libcss_align_content(const css_computed_style *style)
+{
+    if (!style) {
+        return 0;
+    }
+    return css_computed_align_content(style);
+}
+
 int yetty_ybrowser_libcss_flex_grow(const css_computed_style *style, float *out)
 {
     if (!style || !out) {
@@ -1494,6 +1653,20 @@ int yetty_ybrowser_libcss_flex_grow(const css_computed_style *style, float *out)
     css_fixed n = 0;
     uint8_t kind = css_computed_flex_grow(style, &n);
     if (kind == CSS_FLEX_GROW_SET) {
+        *out = fixed_to_float(n);
+        return 1;
+    }
+    return 0;
+}
+
+int yetty_ybrowser_libcss_flex_shrink(const css_computed_style *style, float *out)
+{
+    if (!style || !out) {
+        return 0;
+    }
+    css_fixed n = 0;
+    uint8_t kind = css_computed_flex_shrink(style, &n);
+    if (kind == CSS_FLEX_SHRINK_SET) {
         *out = fixed_to_float(n);
         return 1;
     }
@@ -1563,6 +1736,57 @@ int yetty_ybrowser_libcss_clear(const css_computed_style *style)
         return CSS_CLEAR_NONE;
     }
     return css_computed_clear(style);
+}
+
+int yetty_ybrowser_libcss_position(const css_computed_style *style)
+{
+    if (!style) {
+        return CSS_POSITION_STATIC;
+    }
+    return css_computed_position(style);
+}
+
+int yetty_ybrowser_libcss_inset(struct yetty_ylexbor *r, const css_computed_style *style, int side,
+                                float font_size, float pct_basis, float *out_value)
+{
+    if (!style || !out_value) {
+        return 0;
+    }
+    css_fixed length = 0;
+    css_unit unit = CSS_UNIT_PX;
+    uint8_t kind = 0;
+    int set_value = 0;
+    /* Bind the accessor's return before reading length/unit — the same
+     * unsequenced-evaluation hazard the width/height bridges document. */
+    switch (side) {
+    case 0:
+        kind = css_computed_top(style, &length, &unit);
+        set_value = CSS_TOP_SET;
+        break;
+    case 1:
+        kind = css_computed_right(style, &length, &unit);
+        set_value = CSS_RIGHT_SET;
+        break;
+    case 2:
+        kind = css_computed_bottom(style, &length, &unit);
+        set_value = CSS_BOTTOM_SET;
+        break;
+    case 3:
+        kind = css_computed_left(style, &length, &unit);
+        set_value = CSS_LEFT_SET;
+        break;
+    default:
+        return 0;
+    }
+    if (kind != set_value) {
+        return 0; /* auto / inherit-default → not specified */
+    }
+    if (unit == CSS_UNIT_PCT) {
+        *out_value = fixed_to_float(length) / 100.0f;
+        return 2;
+    }
+    *out_value = resolve_length_to_px(r, style, length, unit, font_size, pct_basis);
+    return 1;
 }
 
 int yetty_ybrowser_libcss_white_space(const css_computed_style *style)

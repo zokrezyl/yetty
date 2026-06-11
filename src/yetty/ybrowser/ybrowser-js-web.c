@@ -143,10 +143,24 @@ struct fetch_buf {
     size_t size, cap;
 };
 
+/* Hard ceiling on a single fetched response. Without it, an endpoint that
+ * streams without end (SSE / long-poll / analytics beacon) or ships a
+ * gzip decompression bomb (curl auto-inflates under ACCEPT_ENCODING) drives
+ * the doubling buffer below to many GB — a real CNN/github load grew it past
+ * 25 GB and OOM-killed the process. 64 MiB is far above any HTML / CSS / JS /
+ * image a page legitimately serves, so this only ever trips on a runaway. */
+#define FETCH_MAX_RESPONSE (64u * 1024u * 1024u)
+
 static size_t fetch_write_cb(char *p, size_t sz, size_t n, void *ud)
 {
     struct fetch_buf *b = ud;
     size_t add = sz * n;
+    /* Abort the transfer once the cap is exceeded. Returning a short count
+	 * makes curl fail the easy handle with CURLE_WRITE_ERROR; the caller
+	 * treats it as a failed fetch and moves on. */
+    if (b->size + add > FETCH_MAX_RESPONSE) {
+        return 0;
+    }
     if (b->size + add + 1 > b->cap) {
         size_t nc = b->cap ? b->cap * 2 : 16384;
         while (nc < b->size + add + 1) {
@@ -386,9 +400,12 @@ char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_
     if (headers) {
         curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
     }
+    double t_req = yetty_ylexbor_prof_now_ms();
     CURLcode rc = curl_easy_perform(c);
     long status = 0;
     curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &status);
+    yetty_ylexbor_prof("    HTTP %.0fms status=%ld bytes=%zu rc=%d %.90s",
+                       yetty_ylexbor_prof_now_ms() - t_req, status, b.size, (int)rc, url);
     if (headers) {
         curl_slist_free_all(headers);
     }
@@ -455,6 +472,8 @@ void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *ref
     if (concurrency > n) {
         concurrency = n;
     }
+    yetty_ylexbor_prof("    http_get_many START n=%d conc=%d", n, concurrency);
+    double t_many = yetty_ylexbor_prof_now_ms();
 
     /* Build the shared header list once — same set used by the
 	 * sequential path. curl_multi shares this slist among handles. */
@@ -573,6 +592,8 @@ void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *ref
     curl_multi_cleanup(mh);
     curl_slist_free_all(headers);
     free(slots);
+    yetty_ylexbor_prof("    http_get_many DONE  %.0f ms (n=%d)",
+                       yetty_ylexbor_prof_now_ms() - t_many, n);
 }
 
 #else /* !YETTY_HAVE_CURL */
@@ -1512,17 +1533,233 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "String.fromCharCode((t>>8)&0xff); if (d>=0) out += String.fromCharCode(t&0xff); } return "
         "out; };"
         "globalThis.structuredClone = v => JSON.parse(JSON.stringify(v));"
-        "globalThis.URL = function(u, base){ this.href = u; this.origin=''; this.protocol=''; "
-        "this.host=''; this.hostname=''; this.pathname=''; this.search=''; this.hash=''; "
-        "this.searchParams = new URLSearchParams(''); this.toString=()=>this.href; };"
-        "globalThis.URLSearchParams = function(s){ const map = {}; if(typeof s === 'string'){ s = "
-        "s.replace(/^[?]/,''); s.split('&').forEach(p=>{ if(!p) return; const [k,v=''] = "
-        "p.split('='); map[decodeURIComponent(k)] = decodeURIComponent(v); }); }"
-        "  this.get = k => map[k]||null; this.set=(k,v)=>{map[k]=v;}; this.has=k=>k in map; "
-        "this.delete=k=>{delete map[k];}; "
-        "this.toString=()=>Object.entries(map).map(([k,v])=>encodeURIComponent(k)+'='+"
-        "encodeURIComponent(v)).join('&'); this.entries=function*(){for(const k in "
-        "map)yield[k,map[k]];}; this.forEach=fn=>{for(const k in map)fn(map[k],k);}; };"
+        /* Conformant-enough URL + URLSearchParams. A non-parsing stub here made
+         * Wikipedia's web2017-polyfills detect the native URL as broken, install
+         * its own wrapper over our stub, then throw "not a function" inside its
+         * tidy_instance() when our href getter returned a non-string. Passing the
+         * polyfill's feature gate (search setter recomputes a normalized href)
+         * makes it skip installation and use ours directly. Validated standalone. */
+        "(function (G) {\n"
+        "var SPECIAL = { 'http:': 80, 'https:': 443, 'ws:': 80, 'wss:': 443, 'ftp:': 21 };\n"
+        "// Built from a backslash-free string so it embeds as a plain C string literal\n"
+        "// with no escaping. '/' is not special in a regex, so it stays unescaped; we\n"
+        "// use [0-9] for digits and [?] for a literal '?'.\n"
+        "var URL_RE = new "
+        "RegExp('^([a-zA-Z][a-zA-Z0-9+.-]*:)?(//(?:([^:@/?#]*)(?::([^@/?#]*))?@)?([^:/"
+        "?#]*)(?::([0-9]*))?)?([^?#]*)([?][^#]*)?(#.*)?$');\n"
+        "function removeDotSegments(path) {\n"
+        "if (!path || path.indexOf('.') < 0) return path;\n"
+        "var input = path.split('/');\n"
+        "var out = [];\n"
+        "for (var i = 0; i < input.length; i++) {\n"
+        "var seg = input[i];\n"
+        "if (seg === '.') { if (i === input.length - 1) out.push(''); continue; }\n"
+        "if (seg === '..') {\n"
+        "if (out.length > 1) out.pop();\n"
+        "if (i === input.length - 1) out.push('');\n"
+        "continue;\n"
+        "}\n"
+        "out.push(seg);\n"
+        "}\n"
+        "return out.join('/');\n"
+        "}\n"
+        "G.URLSearchParams = function (init) {\n"
+        "var pairs = [];\n"
+        "var self = this;\n"
+        "this._url = null;\n"
+        "function setFromString(s) {\n"
+        "pairs.length = 0;\n"
+        "s = String(s == null ? '' : s);\n"
+        "if (s.charAt(0) === '?') s = s.slice(1);\n"
+        "if (!s) return;\n"
+        "s.split('&').forEach(function (p) {\n"
+        "if (!p) return;\n"
+        "var i = p.indexOf('=');\n"
+        "var k = i < 0 ? p : p.slice(0, i);\n"
+        "var v = i < 0 ? '' : p.slice(i + 1);\n"
+        "pairs.push([\n"
+        "decodeURIComponent(k.split('+').join(' ')),\n"
+        "decodeURIComponent(v.split('+').join(' '))\n"
+        "]);\n"
+        "});\n"
+        "}\n"
+        "this._setFromString = setFromString;\n"
+        "if (typeof init === 'string') {\n"
+        "setFromString(init);\n"
+        "} else if (init && typeof init === 'object') {\n"
+        "if (Array.isArray(init)) {\n"
+        "init.forEach(function (e) { pairs.push([String(e[0]), String(e[1])]); });\n"
+        "} else if (typeof init.forEach === 'function') {\n"
+        "init.forEach(function (v, k) { pairs.push([String(k), String(v)]); });\n"
+        "} else {\n"
+        "for (var k in init) {\n"
+        "if (Object.prototype.hasOwnProperty.call(init, k)) pairs.push([k, String(init[k])]);\n"
+        "}\n"
+        "}\n"
+        "}\n"
+        "function sync() { if (self._url) self._url._setSearchFromParams(self.toString()); }\n"
+        "this.get = function (k) { for (var i = 0; i < pairs.length; i++) if (pairs[i][0] === k) "
+        "return pairs[i][1]; return null; };\n"
+        "this.getAll = function (k) { var r = []; for (var i = 0; i < pairs.length; i++) if "
+        "(pairs[i][0] === k) r.push(pairs[i][1]); return r; };\n"
+        "this.has = function (k) { for (var i = 0; i < pairs.length; i++) if (pairs[i][0] === k) "
+        "return true; return false; };\n"
+        "this.set = function (k, v) {\n"
+        "v = String(v); var done = false;\n"
+        "for (var i = 0; i < pairs.length; i++) {\n"
+        "if (pairs[i][0] === k) { if (!done) { pairs[i][1] = v; done = true; } else { "
+        "pairs.splice(i, 1); i--; } }\n"
+        "}\n"
+        "if (!done) pairs.push([k, v]); sync();\n"
+        "};\n"
+        "this.append = function (k, v) { pairs.push([k, String(v)]); sync(); };\n"
+        "this.delete = function (k) { for (var i = 0; i < pairs.length; i++) { if (pairs[i][0] === "
+        "k) { pairs.splice(i, 1); i--; } } sync(); };\n"
+        "this.forEach = function (fn, thisArg) { for (var i = 0; i < pairs.length; i++) "
+        "fn.call(thisArg, pairs[i][1], pairs[i][0], self); };\n"
+        "this.keys = function* () { for (var i = 0; i < pairs.length; i++) yield pairs[i][0]; };\n"
+        "this.values = function* () { for (var i = 0; i < pairs.length; i++) yield pairs[i][1]; "
+        "};\n"
+        "this.entries = function* () { for (var i = 0; i < pairs.length; i++) yield [pairs[i][0], "
+        "pairs[i][1]]; };\n"
+        "this[Symbol.iterator] = this.entries;\n"
+        "this.sort = function () { pairs.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > "
+        "b[0] ? 1 : 0; }); sync(); };\n"
+        "this.toString = function () {\n"
+        "return pairs.map(function (p) {\n"
+        "return encodeURIComponent(p[0]) + '=' + encodeURIComponent(p[1]);\n"
+        "}).join('&');\n"
+        "};\n"
+        "};\n"
+        "G.URL = function (url, base) {\n"
+        "var self = this;\n"
+        "var P = { protocol: '', username: '', password: '', hostname: '', port: '', pathname: '', "
+        "search: '', hash: '', authority: false };\n"
+        "var spObj = null;\n"
+        "function isSpecial() { return Object.prototype.hasOwnProperty.call(SPECIAL, P.protocol); "
+        "}\n"
+        "function applyMatch(m, intoPath) {\n"
+        "P.protocol = (m[1] || '').toLowerCase();\n"
+        "P.authority = m[2] != null;\n"
+        "P.username = m[3] || '';\n"
+        "P.password = m[4] || '';\n"
+        "P.hostname = (m[5] || '').toLowerCase();\n"
+        "P.port = m[6] || '';\n"
+        "if (intoPath !== false) {\n"
+        "P.pathname = m[7] || '';\n"
+        "P.search = m[8] || '';\n"
+        "P.hash = m[9] || '';\n"
+        "}\n"
+        "}\n"
+        "function normalize() {\n"
+        "if (P.authority && P.pathname === '' && isSpecial()) P.pathname = '/';\n"
+        "if (P.authority) P.pathname = removeDotSegments(P.pathname);\n"
+        "if (P.port && SPECIAL[P.protocol] === parseInt(P.port, 10)) P.port = '';\n"
+        "}\n"
+        "function parseAbsolute(input) {\n"
+        "input = String(input).trim();\n"
+        "var m = URL_RE.exec(input);\n"
+        "if (!m || !m[1]) throw new TypeError('Invalid URL: ' + input);\n"
+        "applyMatch(m, true);\n"
+        "normalize();\n"
+        "}\n"
+        "function parseWithBase(input, baseStr) {\n"
+        "input = String(input).trim();\n"
+        "var m = URL_RE.exec(input);\n"
+        "if (m && m[1]) { applyMatch(m, true); normalize(); return; }\n"
+        "var b = new G.URL(baseStr);\n"
+        "P.protocol = b.protocol;\n"
+        "P.authority = true;\n"
+        "P.username = ''; P.password = '';\n"
+        "P.hostname = b.hostname; P.port = b.port;\n"
+        "if (input === '') {\n"
+        "P.pathname = b.pathname; P.search = b.search; P.hash = b.hash;\n"
+        "} else if (input.slice(0, 2) === '//') {\n"
+        "var ma = URL_RE.exec(P.protocol + input); applyMatch(ma, true); normalize(); return;\n"
+        "} else if (input[0] === '/') {\n"
+        "var ms = URL_RE.exec(input); P.pathname = ms[7] || '/'; P.search = ms[8] || ''; P.hash = "
+        "ms[9] || '';\n"
+        "} else if (input[0] === '?') {\n"
+        "P.pathname = b.pathname; P.search = input; P.hash = '';\n"
+        "} else if (input[0] === '#') {\n"
+        "P.pathname = b.pathname; P.search = b.search; P.hash = input;\n"
+        "} else {\n"
+        "var basedir = b.pathname.slice(0, b.pathname.lastIndexOf('/') + 1) || '/';\n"
+        "var mr = URL_RE.exec(input);\n"
+        "P.pathname = removeDotSegments(basedir + (mr[7] || '')); P.search = mr[8] || ''; P.hash = "
+        "mr[9] || '';\n"
+        "}\n"
+        "normalize();\n"
+        "}\n"
+        "function recompose() {\n"
+        "var s = '';\n"
+        "if (P.protocol) s += P.protocol;\n"
+        "if (P.authority || P.hostname !== '') {\n"
+        "s += '//';\n"
+        "if (P.username) { s += P.username; if (P.password) s += ':' + P.password; s += '@'; }\n"
+        "s += P.hostname;\n"
+        "if (P.port) s += ':' + P.port;\n"
+        "}\n"
+        "s += P.pathname; s += P.search; s += P.hash;\n"
+        "return s;\n"
+        "}\n"
+        "if (base !== undefined && base !== null && base !== '') parseWithBase(url, base);\n"
+        "else parseAbsolute(url);\n"
+        "this._setSearchFromParams = function (str) { P.search = str ? '?' + str : ''; };\n"
+        "Object.defineProperties(this, {\n"
+        "href: {\n"
+        "get: function () { return recompose(); },\n"
+        "set: function (v) { parseAbsolute(v); spObj = null; }, enumerable: true, configurable: "
+        "true\n"
+        "},\n"
+        "protocol: {\n"
+        "get: function () { return P.protocol; },\n"
+        "set: function (v) { v = String(v); if (v && v.slice(-1) !== ':') v += ':'; P.protocol = "
+        "v.toLowerCase(); }, enumerable: true, configurable: true\n"
+        "},\n"
+        "username: { get: function () { return P.username; }, set: function (v) { P.username = "
+        "String(v); }, enumerable: true, configurable: true },\n"
+        "password: { get: function () { return P.password; }, set: function (v) { P.password = "
+        "String(v); }, enumerable: true, configurable: true },\n"
+        "host: {\n"
+        "get: function () { return P.hostname + (P.port ? ':' + P.port : ''); },\n"
+        "set: function (v) { var mm = URL_RE.exec('//' + v); P.hostname = (mm[5] || "
+        "'').toLowerCase(); P.port = mm[6] || ''; P.authority = true; }, enumerable: true, "
+        "configurable: true\n"
+        "},\n"
+        "hostname: { get: function () { return P.hostname; }, set: function (v) { P.hostname = "
+        "String(v).toLowerCase(); P.authority = true; }, enumerable: true, configurable: true },\n"
+        "port: { get: function () { return P.port; }, set: function (v) { P.port = String(v); }, "
+        "enumerable: true, configurable: true },\n"
+        "pathname: {\n"
+        "get: function () { return P.pathname; },\n"
+        "set: function (v) { v = String(v); if (v && v[0] !== '/' && P.authority) v = '/' + v; "
+        "P.pathname = v; }, enumerable: true, configurable: true\n"
+        "},\n"
+        "search: {\n"
+        "get: function () { return P.search; },\n"
+        "set: function (v) { v = String(v); if (v && v[0] !== '?') v = '?' + v; if (v === '?') v = "
+        "''; P.search = v; if (spObj) spObj._setFromString(v); }, enumerable: true, configurable: "
+        "true\n"
+        "},\n"
+        "hash: {\n"
+        "get: function () { return P.hash; },\n"
+        "set: function (v) { v = String(v); if (v && v[0] !== '#') v = '#' + v; if (v === '#') v = "
+        "''; P.hash = v; }, enumerable: true, configurable: true\n"
+        "},\n"
+        "origin: {\n"
+        "get: function () { if (isSpecial() && P.hostname) return P.protocol + '//' + P.hostname + "
+        "(P.port ? ':' + P.port : ''); return 'null'; }, enumerable: true, configurable: true\n"
+        "},\n"
+        "searchParams: {\n"
+        "get: function () { if (!spObj) { spObj = new G.URLSearchParams(P.search); spObj._url = "
+        "self; } return spObj; }, enumerable: true, configurable: true\n"
+        "}\n"
+        "});\n"
+        "this.toString = function () { return recompose(); };\n"
+        "this.toJSON = function () { return recompose(); };\n"
+        "};\n"
+        "})(globalThis);\n"
         "globalThis.Event = function(t, init){ this.type=t; this.bubbles=!!(init&&init.bubbles); "
         "this.cancelable=!!(init&&init.cancelable); this.defaultPrevented=false; "
         "this.preventDefault=()=>{this.defaultPrevented=true;}; this.stopPropagation=()=>{}; "
@@ -1565,7 +1802,25 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "for (const fn of a.slice()) try { fn.call(this, e); } catch(_) {} return !(e && "
         "e.defaultPrevented); };"
         "};"
-        "globalThis.HTMLElement = function(){};"
+        /* HTMLElement base for `class X extends HTMLElement`. During a custom-
+		 * element upgrade the registry pushes the element being upgraded onto
+		 * __ceStack; super() returns it so the subclass constructor (and its
+		 * private #fields) brand the EXISTING element — skipping the
+		 * constructor is what threw "invalid brand on object". A bare
+		 * `new X()` (empty stack) makes a detached <div>. */
+        "globalThis.__ceStack = [];"
+        "globalThis.HTMLElement = function(){"
+        "  if(globalThis.__ceStack.length) return globalThis.__ceStack.pop();"
+        "  try{ return document.createElement('div'); }catch(e){ return this; } };"
+        /* No-op custom-element lifecycle callbacks on the base prototype. Web
+		 * components routinely call `super.connectedCallback()` (babel emits
+		 * `_get(_getPrototypeOf(C.prototype),'connectedCallback',this).call(this)`);
+		 * with no base callback that resolves to `undefined.call` →
+		 * "cannot read property 'call' of undefined" (github's <tool-tip>). */
+        "globalThis.HTMLElement.prototype.connectedCallback = function(){};"
+        "globalThis.HTMLElement.prototype.disconnectedCallback = function(){};"
+        "globalThis.HTMLElement.prototype.adoptedCallback = function(){};"
+        "globalThis.HTMLElement.prototype.attributeChangedCallback = function(){};"
         "globalThis.Element     = function(){};"
         "globalThis.Node        = function(){};"
         "globalThis.Document    = function(){};"
@@ -1785,8 +2040,43 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "globalThis.PerformanceMeasure= function(){};"
         "globalThis.PerformanceNavigationTiming = function(){};"
         "globalThis.PerformanceResourceTiming   = function(){};"
-        "globalThis.CustomElementRegistry = function(){ const m={}; this.define=(n,c)=>{m[n]=c;}; "
-        "this.get=n=>m[n]; this.whenDefined=()=>Promise.resolve(); this.upgrade=()=>{}; };"
+        /* Custom Elements with a real upgrade reaction: define() splices each
+		 * matching element's prototype onto the class and fires
+		 * connectedCallback — that is what boots web-component-based UIs (e.g.
+		 * GitHub's <react-app>). HTMLElement.prototype is lazily chained to the
+		 * native element prototype so `class X extends HTMLElement` inherits
+		 * appendChild/querySelector/etc.; the element's opaque DOM pointer is
+		 * keyed by class id (unchanged by setPrototypeOf), so native methods
+		 * keep resolving after the upgrade. */
+        "globalThis.CustomElementRegistry = function(){"
+        "  const m={}, defers={}; let chained=false;"
+        "  const chain=()=>{ if(chained)return; chained=true; try{"
+        "    var ep=Object.getPrototypeOf(document.createElement('div'));"
+        "    if(ep && globalThis.HTMLElement && globalThis.HTMLElement.prototype)"
+        "      Object.setPrototypeOf(globalThis.HTMLElement.prototype, ep);"
+        "  }catch(e){} };"
+        "  const upgrade=(el,c)=>{ try{ if(el.__ceUpgraded)return; el.__ceUpgraded=true;"
+        "    Object.setPrototypeOf(el,c.prototype);"
+        /* Run the real constructor with `el` as `this` (brands private fields)
+		 * via the construction stack; super() returns `el`. */
+        "    globalThis.__ceStack.push(el);"
+        "    try{ Reflect.construct(c,[],c); }"
+        "    finally{ if(globalThis.__ceStack[globalThis.__ceStack.length-1]===el)"
+        "             globalThis.__ceStack.pop(); }"
+        "    if(typeof el.connectedCallback==='function') el.connectedCallback();"
+        "  }catch(e){ try{console.error('ce upgrade <'+(el&&el.tagName)+'>',"
+        "    e&&e.message, '|', (e&&e.stack||'').split('\\n').slice(0,3).join(' <- "
+        "'));}catch(_){}} };"
+        "  this.define=(n,c)=>{ m[n]=c; chain();"
+        "    try{ var els=document.querySelectorAll(n); for(var i=0;i<els.length;i++) "
+        "upgrade(els[i],c);"
+        "    }catch(e){}"
+        "    if(defers[n]){ defers[n].forEach(r=>r()); delete defers[n]; } };"
+        "  this.get=n=>m[n];"
+        "  this.whenDefined=n=>{ if(m[n])return Promise.resolve(m[n]);"
+        "    return new Promise(res=>{ (defers[n]=defers[n]||[]).push(()=>res(m[n])); }); };"
+        "  this.upgrade=root=>{ for(var n in m){ try{ var els=(root||document).querySelectorAll(n);"
+        "    for(var i=0;i<els.length;i++) upgrade(els[i],m[n]); }catch(e){} } }; };"
         "globalThis.customElements = new globalThis.CustomElementRegistry();"
         "globalThis.Image       = function(){ this.src=''; this.onload=null; this.onerror=null; "
         "this.addEventListener=()=>{}; };"

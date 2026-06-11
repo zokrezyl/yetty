@@ -66,6 +66,23 @@ if(TARGET turbojpeg-static)
     message(STATUS "yetty_ybrowser: libjpeg-turbo enabled")
 endif()
 
+# libwebp — from the host via pkg-config (same source netsurf.cmake uses).
+# Optional: when absent, WebP images fall back to a placeholder. Needed for
+# modern sites (e.g. Google News serves every article thumbnail as WebP and
+# ignores the Accept header, so content-negotiation can't dodge it).
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(YBROWSER_LIBWEBP QUIET libwebp)
+    if(YBROWSER_LIBWEBP_FOUND)
+        target_link_libraries(yetty_ybrowser PUBLIC ${YBROWSER_LIBWEBP_LIBRARIES})
+        target_include_directories(yetty_ybrowser PRIVATE ${YBROWSER_LIBWEBP_INCLUDE_DIRS})
+        target_compile_definitions(yetty_ybrowser PRIVATE YETTY_HAVE_LIBWEBP=1)
+        message(STATUS "yetty_ybrowser: libwebp enabled (${YBROWSER_LIBWEBP_VERSION})")
+    else()
+        message(STATUS "yetty_ybrowser: libwebp not found — WebP images render as placeholders")
+    endif()
+endif()
+
 if(TARGET qjs)
     target_link_libraries(yetty_ybrowser PUBLIC qjs)
     target_compile_definitions(yetty_ybrowser PRIVATE YETTY_HAVE_QUICKJS=1)

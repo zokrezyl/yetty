@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>position:relative shifts by top/left, keeps flow size</title>
+<style>body{margin:0}</style>
+<div style="width:400px">
+  <div data-test="rel" data-expect="30,10,400,*"
+       style="position:relative;left:30px;top:10px;height:20px">r</div>
+</div>

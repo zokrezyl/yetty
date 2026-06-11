@@ -44,6 +44,7 @@
 #include <yetty/yimage/yimage.h>
 #include <yetty/ysvg/ysvg.h>
 #include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/yworkpool.h>
 #include <yetty/yterminal/client-input.h>
 #include <yetty/yterminal/dcs-codes.h>
 #include <yetty/ytrace/ytrace.h>
@@ -118,6 +119,13 @@ enum content_kind {
 #define CACHE_MAX_ENTRY (16u * 1024u * 1024u) /* don't cache > 16 MB items */
 #define CACHE_MAX_TOTAL (64u * 1024u * 1024u)
 
+/* Coalesce window for async image arrivals. A page streaming many images
+ * lands one completion per loop tick; repainting on each would re-run a full
+ * relayout + repaint + GPU re-upload per image (O(N^2) — seconds of stall on
+ * a slow connection). Instead we repaint at most once per this window while
+ * images keep arriving, then once more when the last one lands. */
+#define IMG_RENDER_DEBOUNCE_MS 120.0
+
 struct cache_entry {
     char *url;
     uint8_t *data;
@@ -147,6 +155,11 @@ struct tab {
     size_t n_fwd, cap_fwd;
     float rendered_w; /* embed/image width last laid out at */
     int needs_render; /* re-render the active content next tick */
+    /* Progressive rendering: load_html parsed + laid out the page WITHOUT
+	 * running its <script> blocks (defer-scripts mode), so the first paint
+	 * shows HTML+CSS immediately. Set after such a load; pump_active runs the
+	 * deferred scripts once the first paint has happened, then repaints. */
+    int scripts_pending;
     uint64_t dl_hash; /* hash of the last draw list we shipped */
     size_t dl_size;   /* size of the last draw list we shipped */
 };
@@ -160,6 +173,11 @@ struct app {
     struct yetty_ygui_object *page;    /* ydraw_embed (HTML/SVG) — shared */
     struct yetty_ygui_object *image;   /* yimage widget (raster) — shared */
     int showing_image;                 /* which content widget is visible */
+
+    /* `--no-ui`: hide the tab strip + toolbar so only the page content is
+	 * rendered (the whole window is the page). Useful for clean recordings /
+	 * screenshots of just the rendered page. */
+    int no_ui;
 
     struct tab tabs[MAX_TABS];
     int n_tabs;
@@ -177,6 +195,22 @@ struct app {
     /* Standalone (own-window) mode only — set so the quit shortcut can stop
 	 * the GPU event loop. NULL in the in-yetty client loop. */
     struct yetty_yevent_event_loop *event_loop;
+
+    /* Worker pool for parallel async image fetch+decode (standalone only). The
+	 * engine submits each <img> to it; completions post back to the loop and
+	 * trigger a repaint. NULL in the in-yetty client (falls back to the
+	 * synchronous one-image-per-frame path). */
+    struct yetty_yplatform_yworkpool *img_pool;
+
+    /* Profiling: number of full render passes since start (each relayouts +
+	 * re-ships the whole drawable list to the GPU). */
+    int render_count;
+
+    /* Async-image repaint coalescing (standalone img_pool path). on_img_ready
+	 * sets img_dirty; pump_active turns it into at most one repaint per
+	 * IMG_RENDER_DEBOUNCE_MS window (img_last_render_ms = last such repaint). */
+    int img_dirty;
+    double img_last_render_ms;
 };
 
 static inline void err_ok(struct yetty_ycore_void_result r)
@@ -500,7 +534,10 @@ static uint8_t *cache_fetch(struct url_cache *c, const char *url, size_t *out_le
     }
     size_t len = 0;
     char *eff = NULL;
+    double t_fetch = yetty_ylexbor_prof_now_ms();
     char *raw = ybrowser_slurp_file(url, &len, &eff);
+    yetty_ylexbor_prof("HTML fetch     %.0f ms  bytes=%zu  %.80s",
+                       yetty_ylexbor_prof_now_ms() - t_fetch, len, url);
     if (!raw) {
         free(eff);
         return NULL;
@@ -543,6 +580,22 @@ static enum content_kind detect_kind(const uint8_t *d, size_t n)
 /* ===========================================================================
  * Engine + document.
  * ===========================================================================*/
+
+/* Loop-thread callback the engine fires when an async image fetch lands.
+ * Do NOT force a repaint here: a page streaming many images would trigger one
+ * full relayout + repaint + GPU re-upload per image (O(N^2) — seconds of
+ * stall on a slow connection). Just flag that pixels are waiting and wake the
+ * loop; pump_active() coalesces these into at most one repaint per debounce
+ * window (see IMG_RENDER_DEBOUNCE_MS). */
+static void on_img_ready(void *user)
+{
+    struct app *a = user;
+    a->img_dirty = 1;
+    if (a->event_loop && a->event_loop->ops->request_render) {
+        a->event_loop->ops->request_render(a->event_loop);
+    }
+}
+
 static int tab_ensure_engine(struct app *a, struct tab *t)
 {
     if (t->engine) {
@@ -559,6 +612,26 @@ static int tab_ensure_engine(struct app *a, struct tab *t)
         return -1;
     }
     t->engine = r.value;
+    /* Interactive UI: never let the paint pass block the event loop on
+     * image HTTP. Render text + placeholders immediately; the per-frame
+     * pump streams images in one at a time (see pump_active). */
+    yetty_ylexbor_set_defer_image_fetch(t->engine, 1);
+    /* Progressive rendering: don't run <script> blocks during load_html — paint
+	 * the initial HTML+CSS first, then run scripts on a later pump tick and
+	 * repaint. Without this the first frame waits for every external script (on
+	 * github, ~75 brotli chunks → seconds of blank window). */
+    yetty_ylexbor_set_defer_scripts(t->engine, 1);
+    /* Standalone: hand the engine the worker pool so images fetch+decode in
+	 * parallel on background threads and stream in as they land. */
+    if (a->img_pool) {
+        yetty_ylexbor_set_async_image_fetch(t->engine, a->img_pool, on_img_ready, a);
+    }
+    /* We render with a monospace MSDF font (DejaVu Sans Mono, advance
+	 * 1233/2048 ≈ 0.602 em). Tell the engine so its line-wrap and
+	 * inline-fragment positioning use the same advance the canvas does —
+	 * required for per-element styled runs (colored links, bold/italic) to
+	 * line up instead of drifting. */
+    yetty_ylexbor_set_glyph_advance_ratio(t->engine, 0.602f);
     t->rendered_w = 0.0f;
     return 0;
 }
@@ -578,10 +651,20 @@ static void tab_set_document(struct app *a, struct tab *t, const char *data, siz
         if (tab_ensure_engine(a, t) < 0) {
             return;
         }
-        err_ok(yetty_ylexbor_load_html(t->engine, data, len));
+        /* Set the base URL BEFORE load_html. load_html fetches external
+		 * <link rel=stylesheet> and <script src> during parse, and those
+		 * URLs are almost always root- or path-relative (e.g. Wikipedia's
+		 * /w/load.php skin CSS). Without the base set first they can't be
+		 * resolved, so the page renders with only its inline <style> —
+		 * which is why interactive mode looked far more broken than the
+		 * one-shot path that already ordered these correctly. */
         if (base_url) {
             err_ok(yetty_ylexbor_set_base_url(t->engine, base_url));
         }
+        err_ok(yetty_ylexbor_load_html(t->engine, data, len));
+        /* Scripts were deferred (see tab_ensure_engine) — the first paint shows
+		 * HTML+CSS; pump_active runs the scripts once that paint has landed. */
+        t->scripts_pending = 1;
     } else {
         /* IMAGE/SVG: keep the raw bytes; the renderer consumes them. */
         t->raw = malloc(len ? len : 1);
@@ -930,10 +1013,17 @@ static void page_click(struct app *a, float x, float y)
  * changed. */
 static void render_pass(struct app *a)
 {
+    double t_render = yetty_ylexbor_prof_now_ms();
     struct yetty_ycore_rectangle root_rect = {{0.0f, 0.0f}, {a->viewport_w, a->viewport_h}};
     err_ok(yetty_ygui_layout_compute(a->root, root_rect));
     render_active(a);
     a->pending_render = 0;
+    /* Each render relayouts the page and re-ships the WHOLE drawable list to
+     * the GPU. A flood of these (one per image as it streams in) is a prime
+     * suspect for "slow load". `render_count` is app state, not a global. */
+    a->render_count++;
+    yetty_ylexbor_prof("  render_pass #%d  %.0f ms", a->render_count,
+                       yetty_ylexbor_prof_now_ms() - t_render);
 }
 
 /* Pump the active tab's JS timers; flag a re-render if the DOM changed.
@@ -943,6 +1033,18 @@ static int pump_active(struct app *a)
     struct tab *t = &a->tabs[a->active];
     int wait_ms = 100;
     if (t->engine) {
+        /* Progressive rendering: scripts were deferred so the initial HTML+CSS
+		 * could paint immediately. Once that first paint has landed
+		 * (rendered_w > 0), run them now, then repaint with the scripted result.
+		 * Done before the timer pump so any timers the scripts schedule are
+		 * picked up the same tick. */
+        if (t->scripts_pending && t->rendered_w > 0.0f) {
+            t->scripts_pending = 0;
+            err_ok(yetty_ylexbor_run_deferred_scripts(t->engine));
+            t->needs_render = 1;
+            a->pending_render = 1;
+            wait_ms = 0;
+        }
         int next = yetty_ylexbor_pump_timers(t->engine);
         if (next >= 0) {
             wait_ms = next < 100 ? next : 100;
@@ -950,6 +1052,40 @@ static int pump_active(struct app *a)
         if (yetty_ylexbor_dom_dirty(t->engine)) {
             t->needs_render = 1;
             a->pending_render = 1;
+        }
+        if (a->img_pool) {
+            /* Async path: submit every pending <img> to the worker pool — they
+             * fetch + decode in parallel on background threads (sharing
+             * libcurl's HTTP/2 connection pool) and stream in via on_img_ready.
+             * Nothing blocks the loop; already-loading/cached images are
+             * skipped, so calling it each pump is cheap and idempotent. */
+            (void)yetty_ylexbor_start_image_fetch(t->engine);
+            /* Coalesce the resulting repaints: render at most once per window
+             * while images keep landing, instead of once per image. */
+            if (a->img_dirty) {
+                double now = yetty_ylexbor_prof_now_ms();
+                if (now - a->img_last_render_ms >= IMG_RENDER_DEBOUNCE_MS) {
+                    t->needs_render = 1;
+                    a->pending_render = 1;
+                    a->img_dirty = 0;
+                    a->img_last_render_ms = now;
+                }
+            }
+            /* While fetches are still in flight, keep the loop ticking by
+             * asking for a zero wait. The standalone handler re-arms a RENDER
+             * event whenever pump returns 0, and select() in the in-yetty loop
+             * won't block — so a completion that lands on a busy GPU frame (and
+             * gets dropped by the is_busy guard) is retried next tick instead
+             * of stalling until an unrelated event wakes the loop. */
+            if (yetty_ylexbor_images_in_flight(t->engine) > 0 || a->img_dirty) {
+                wait_ms = 0;
+            }
+        } else if (yetty_ylexbor_fetch_one_pending_image(t->engine)) {
+            /* In-yetty client (no pool): stream one image per pump, blocking
+             * only for that single image. */
+            t->needs_render = 1;
+            a->pending_render = 1;
+            wait_ms = 0;
         }
     }
     return wait_ms;
@@ -1084,6 +1220,16 @@ static int build_ui(struct app *a)
     err_ok(
         yetty_ygui_object_subscribe(a->tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, on_tab_changed, a));
 
+    /* --no-ui: collapse the tab strip to zero height and hide it. The widget
+	 * stays created so tab bookkeeping elsewhere keeps working; it just takes
+	 * no space and never paints. */
+    if (a->no_ui) {
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(a->tabbar);
+        l.height = 0.0f;
+        err_ok(yetty_ygui_widget_layout_set(a->tabbar, &l));
+        err_ok(yetty_ygui_widget_set_visible(a->tabbar, 0));
+    }
+
     /* Toolbar: nav buttons + address bar. */
     struct yetty_ygui_object_ptr_result br =
         yetty_ygui_add(yetty_ygui_hbox_class_get().value, a->root);
@@ -1103,6 +1249,16 @@ static int build_ui(struct app *a)
         err_ok(yetty_ygui_widget_layout_set(toolbar, &l));
     }
     err_ok(yetty_ygui_widget_set_bg_color(toolbar, BR_TOOLBAR));
+
+    /* --no-ui: collapse + hide the address/nav toolbar too. */
+    if (a->no_ui) {
+        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(toolbar);
+        l.height = 0.0f;
+        l.padding_top = 0.0f;
+        l.padding_bottom = 0.0f;
+        err_ok(yetty_ygui_widget_layout_set(toolbar, &l));
+        err_ok(yetty_ygui_widget_set_visible(toolbar, 0));
+    }
 
     add_nav_button(toolbar, "<", 40.0f, on_back_click, a);
     add_nav_button(toolbar, ">", 40.0f, on_fwd_click, a);
@@ -1495,6 +1651,8 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #include <yetty/yrender/render-target.h>
 #include <yetty/ywire/wire-statemachine.h>
 
+#include <pthread.h>
+
 struct standalone {
     struct app app;
     struct yetty_yframework *yframework;
@@ -1510,7 +1668,29 @@ struct standalone {
     struct yetty_yevent_event_listener listener;
     struct yetty_ydraw_target *render_target;
     const char *initial_url;
+
+    /* Initial-page prefetch. Started on a background thread at sa_worker
+     * entry so the HTML download overlaps the GPU/font/UI setup that follows,
+     * then joined and folded into the page cache just before the first tab
+     * opens — turning open_first_tab's fetch into a cache hit. */
+    pthread_t prefetch_thread;
+    int prefetch_started;
+    char *prefetch_url;  /* normalized URL the thread fetched (owned) */
+    char *prefetch_data; /* fetched bytes (owned); NULL on failure */
+    size_t prefetch_len;
+    char *prefetch_eff; /* effective URL after redirects (owned) */
 };
+
+/* Background thread body: download the initial page while the main thread
+ * sets up the GPU device, fonts, and UI. Touches only this standalone's own
+ * prefetch_* fields; the main thread reads them only after pthread_join. */
+static void *sa_prefetch_main(void *arg)
+{
+    struct standalone *s = arg;
+    s->prefetch_data =
+        ybrowser_slurp_file(s->prefetch_url, &s->prefetch_len, &s->prefetch_eff);
+    return NULL;
+}
 
 static size_t utf8_encode(uint32_t cp, char *out);
 static const char *encode_special_key(uint32_t key, char *scratch, size_t scratch_n,
@@ -1560,11 +1740,24 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
             return YETTY_OK(yetty_ycore_int, 0);
         }
         if (s->render_target->ops->is_busy && s->render_target->ops->is_busy(s->render_target)) {
+            /* GPU still presenting the previous frame. on_render_async already
+             * cleared render_pending, so returning here drops this render. That
+             * is fine for input/scroll-driven renders — the next event (or the
+             * framework-dirty re-arm below) retries them — and re-arming on
+             * EVERY busy frame storms render requests during heavy scrolling,
+             * starving input handling. Only re-arm for an async IMAGE repaint,
+             * which has no follow-up event and would otherwise freeze with
+             * stale pixels until an unrelated wake. */
+            struct tab *active_tab = &s->app.tabs[s->app.active];
+            if (s->app.img_dirty ||
+                (active_tab->engine && yetty_ylexbor_images_in_flight(active_tab->engine) > 0)) {
+                sa_request_render(s);
+            }
             return YETTY_OK(yetty_ycore_int, 1);
         }
         /* Per-frame browser work: pump JS timers, re-render the active
 		 * tab into the embed when needed. */
-        pump_active(&s->app);
+        int pump_wait = pump_active(&s->app);
         if (s->app.pending_render || s->app.tabs[s->app.active].needs_render) {
             render_pass(&s->app);
         }
@@ -1593,8 +1786,10 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         if (YETTY_IS_ERR(pp)) {
             yetty_ycore_error_destroy(pp.error);
         }
-        /* Keep ticking while the framework is dirty (JS timers/animation). */
-        if (yetty_ygui_framework_is_dirty(s->app.fw)) {
+        /* Keep ticking while the framework is dirty (JS timers/animation),
+			 * or while there are still deferred images to stream in
+			 * (pump_active returns 0 when it just fetched one). */
+        if (yetty_ygui_framework_is_dirty(s->app.fw) || pump_wait == 0) {
             sa_request_render(s);
         }
         return YETTY_OK(yetty_ycore_int, 1);
@@ -1808,11 +2003,31 @@ static const char *encode_special_key(uint32_t key, char *scratch, size_t scratc
 static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, void *user)
 {
     struct standalone *s = (struct standalone *)user;
+    yetty_ylexbor_prof("sa_worker START (GPU/window already up via yinit)");
 
+    /* Start the initial-page download now, on a background thread, so its
+     * network latency overlaps the GPU/font/UI setup below instead of
+     * stalling first paint after setup finishes. Joined before open_first_tab. */
+    s->prefetch_started = 0;
+    if (s->initial_url && s->initial_url[0]) {
+        s->prefetch_url = normalize_url(s->initial_url);
+        if (s->prefetch_url &&
+            pthread_create(&s->prefetch_thread, NULL, sa_prefetch_main, s) == 0) {
+            s->prefetch_started = 1;
+            yetty_ylexbor_prof("prefetch START (bg thread) %.80s", s->prefetch_url);
+        } else {
+            free(s->prefetch_url);
+            s->prefetch_url = NULL;
+        }
+    }
+
+    double t_fw = yetty_ylexbor_prof_now_ms();
     struct yetty_yframework_ptr_result frr = yetty_yframework_create(rt);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, frr, "ybrowser standalone: yframework_create");
     s->yframework = frr.value;
     s->render_target = s->yframework->render_target;
+    yetty_ylexbor_prof("yframework_create %.0f ms (GPU device/queue/allocator/targets)",
+                       yetty_ylexbor_prof_now_ms() - t_fw);
 
     /* MSDF font for the receiver-side ygrid. */
     {
@@ -1922,6 +2137,17 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "ybrowser standalone: framework_create");
         s->app.fw = fr.value;
         s->app.event_loop = s->yframework->event_loop;
+        /* Worker pool for parallel image fetch+decode (8 concurrent). Created
+         * on the loop thread; destroyed before the tabs/engines at teardown. */
+        {
+            struct yetty_yplatform_yworkpool_ptr_result pr =
+                yetty_yplatform_yworkpool_create(s->app.event_loop, "ybrowser-img", 8);
+            if (YETTY_IS_OK(pr)) {
+                s->app.img_pool = pr.value;
+            } else {
+                yetty_ycore_error_destroy(pr.error);
+            }
+        }
         s->app.viewport_w = (float)rt->surface_width;
         s->app.viewport_h = (float)rt->surface_height;
         err_ok(yetty_ygui_framework_set_viewport(s->app.fw, (float)rt->surface_width,
@@ -1932,6 +2158,25 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
     if (build_ui(&s->app) < 0) {
         return YETTY_ERR(yetty_ycore_void, "ybrowser standalone: build_ui");
     }
+    /* Fold the prefetched page into the cache so open_first_tab's fetch is a
+     * cache hit — the download already happened, in parallel with setup. */
+    if (s->prefetch_started) {
+        pthread_join(s->prefetch_thread, NULL);
+        s->prefetch_started = 0;
+        if (s->prefetch_data) {
+            cache_store(&s->app.cache, s->prefetch_url, (const uint8_t *)s->prefetch_data,
+                        s->prefetch_len, s->prefetch_eff);
+            yetty_ylexbor_prof("prefetch DONE  bytes=%zu (folded into cache)", s->prefetch_len);
+        }
+        free(s->prefetch_data);
+        s->prefetch_data = NULL;
+        free(s->prefetch_eff);
+        s->prefetch_eff = NULL;
+        free(s->prefetch_url);
+        s->prefetch_url = NULL;
+    }
+
+    yetty_ylexbor_prof("UI ready — open first tab (triggers fetch + load_html)");
     open_first_tab(&s->app, s->initial_url);
 
     /* Producer writes wake the loop so emitted frames get rendered. */
@@ -1958,7 +2203,15 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
         yetty_ycore_error_destroy(run_res.error);
     }
 
-    /* Teardown. */
+    /* Teardown. Destroy the image pool FIRST: it joins the worker threads
+     * (no fetch is mid-flight afterward), and any completed-job done()
+     * callbacks already queued on the loop run during loop teardown against
+     * still-live engines (which defer their own free until in-flight hits 0),
+     * so there's no use-after-free. */
+    if (s->app.img_pool) {
+        yetty_yplatform_yworkpool_destroy(s->app.img_pool);
+        s->app.img_pool = NULL;
+    }
     for (int i = 0; i < s->app.n_tabs; i++) {
         tab_free(&s->app.tabs[i]);
     }
@@ -2007,7 +2260,8 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
     return YETTY_OK_VOID();
 }
 
-int ybrowser_ui_run_standalone(const char *initial_url, float font_size, int argc, char **argv)
+int ybrowser_ui_run_standalone(const char *initial_url, float font_size, int no_ui, int argc,
+                               char **argv)
 {
     ytrace_init();
     /* Standalone runs in its own terminal, so surface page JS console
@@ -2016,8 +2270,10 @@ int ybrowser_ui_run_standalone(const char *initial_url, float font_size, int arg
     struct standalone s = {0};
     s.app.running = 1;
     s.app.font_size = font_size > 0.0f ? font_size : 16.0f;
+    s.app.no_ui = no_ui;
     s.initial_url = initial_url;
     struct yetty_yinit_app_config cfg = {.extract_assets_fn = yetty_platform_extract_assets};
+    yetty_ylexbor_prof("=== standalone entry (yinit: window+surface+GPU adapter next) ===");
     struct yetty_ycore_int_result run_result = yetty_yinit_run(argc, argv, &cfg, sa_worker, &s);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "ybrowser: run", run_result.error);

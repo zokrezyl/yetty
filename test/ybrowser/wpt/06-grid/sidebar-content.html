@@ -1,0 +1,7 @@
+<!doctype html><meta charset=utf-8>
+<title>grid: fixed sidebar + flexible content fills the row (Wikipedia/Vector shell)</title>
+<style>body{margin:0}</style>
+<div style="display:grid;grid-template-columns:160px 1fr">
+  <div data-test="side" data-expect="0,*,160,*">nav</div>
+  <div data-test="main" data-expect="160,*,640,*">main content column should fill the rest</div>
+</div>

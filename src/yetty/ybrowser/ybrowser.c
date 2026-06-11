@@ -9,7 +9,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <stdarg.h>
 #include <stdio.h>
+#include <time.h>
 #include <lexbor/css/css.h>
 #include <lexbor/style/style.h>
 #include <lexbor/html/html.h>
@@ -116,7 +118,16 @@ static void arena_reset(struct yetty_ylexbor *r)
  * Good enough for the same MVP layout shape ynetsurf uses.
  * ===========================================================================*/
 
-float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size)
+float yetty_ylexbor_glyph_advance_ratio(const struct yetty_ylexbor *r)
+{
+    if (r != NULL && r->glyph_advance_ratio > 0.0f) {
+        return r->glyph_advance_ratio;
+    }
+    return 0.55f;
+}
+
+float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size,
+                                     float advance_ratio)
 {
     int n = 0;
     for (size_t i = 0; i < len;) {
@@ -134,7 +145,10 @@ float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size)
         }
         n++;
     }
-    float per_glyph = font_size * 0.55f;
+    if (advance_ratio <= 0.0f) {
+        advance_ratio = 0.55f;
+    }
+    float per_glyph = font_size * advance_ratio;
     if (per_glyph < 1.0f) {
         per_glyph = 1.0f;
     }
@@ -187,11 +201,11 @@ struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_
     return YETTY_OK(yetty_ylexbor_ptr, r);
 }
 
-struct yetty_ycore_void_result yetty_ylexbor_destroy(struct yetty_ylexbor *r)
+/* The real teardown. Split out so the public destroy can DEFER it until any
+ * in-flight async image-fetch jobs drain — their done() callback runs on the
+ * loop thread and must never touch a freed engine. */
+struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *r)
 {
-    if (r == NULL) {
-        return YETTY_OK_VOID();
-    }
     yetty_ylexbor_js_destroy(r);
     yetty_ybrowser_libcss_destroy(r);
     if (r->css_parser) {
@@ -202,6 +216,7 @@ struct yetty_ycore_void_result yetty_ylexbor_destroy(struct yetty_ylexbor *r)
     }
     box_vec_destroy(&r->boxes);
     arena_reset(r);
+    yetty_ylexbor_grid_classes_free(r);
     free(r->text_chunks);
     free(r->base_url);
     for (int i = 0; i < r->img_cache_count; i++) {
@@ -214,6 +229,49 @@ struct yetty_ycore_void_result yetty_ylexbor_destroy(struct yetty_ylexbor *r)
     return YETTY_OK_VOID();
 }
 
+/* Load-timeline profiler. When YBROWSER_PROFILE is set in the environment,
+ * print a timestamped line to stderr for each significant load event (phase
+ * boundary, HTTP request, JS fetch). Absolute monotonic milliseconds — read
+ * consecutive lines to see where the wall-clock goes. Thread-safe; a no-op
+ * (just a getenv) when profiling is off. Intentionally getenv-per-call so
+ * there's no file-scope cache variable. */
+double yetty_ylexbor_prof_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1.0e6;
+}
+
+void yetty_ylexbor_prof(const char *fmt, ...)
+{
+    if (getenv("YBROWSER_PROFILE") == NULL) {
+        return;
+    }
+    flockfile(stderr);
+    fprintf(stderr, "[PROF %10.1f] ", yetty_ylexbor_prof_now_ms());
+    va_list ap;
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+    fputc('\n', stderr);
+    funlockfile(stderr);
+}
+
+struct yetty_ycore_void_result yetty_ylexbor_destroy(struct yetty_ylexbor *r)
+{
+    if (r == NULL) {
+        return YETTY_OK_VOID();
+    }
+    /* Async fetches outstanding: defer the teardown. The last job's done()
+     * (loop thread) will call _yetty_ylexbor_destroy_now once the count hits 0.
+     * The caller must not touch `r` after this returns. */
+    if (r->img_jobs_in_flight > 0) {
+        r->destroy_pending = 1;
+        return YETTY_OK_VOID();
+    }
+    return _yetty_ylexbor_destroy_now(r);
+}
+
 struct yetty_ycore_void_result yetty_ylexbor_set_base_url(struct yetty_ylexbor *r, const char *url)
 {
     if (r == NULL) {
@@ -222,6 +280,13 @@ struct yetty_ycore_void_result yetty_ylexbor_set_base_url(struct yetty_ylexbor *
     free(r->base_url);
     r->base_url = url ? strdup(url) : NULL;
     return YETTY_OK_VOID();
+}
+
+void yetty_ylexbor_set_glyph_advance_ratio(struct yetty_ylexbor *r, float ratio)
+{
+    if (r != NULL) {
+        r->glyph_advance_ratio = ratio;
+    }
 }
 
 int yetty_ylexbor_pump_timers(struct yetty_ylexbor *r)
@@ -468,11 +533,45 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     /* Replace the document — fresh parser state, drop any prior boxes. */
     box_vec_clear(&r->boxes);
     arena_reset(r);
+    yetty_ylexbor_grid_classes_free(r);
+    r->grid_content_max_px = 0.0f;
     r->content_height = 0;
+    /* Invalidate any in-flight async image jobs from the previous document —
+     * their done() will find a mismatched generation and discard. */
+    r->fetch_generation++;
+
+    yetty_ylexbor_prof("load_html START  html_bytes=%zu", html_len);
+    double t_phase = yetty_ylexbor_prof_now_ms();
+
+    /* New DOM coming — drop the cached document class set so the custom-
+     * property scanner rebuilds it from this document. */
+    yetty_ylexbor_css_vars_reset_doc_classes(r);
 
     lxb_status_t s = lxb_html_document_parse(r->document, (const lxb_char_t *)html, html_len);
     if (s != LXB_STATUS_OK) {
         return YETTY_ERR(yetty_ycore_void, "html_document_parse failed");
+    }
+    yetty_ylexbor_prof("  parse          %.0f ms", yetty_ylexbor_prof_now_ms() - t_phase);
+    t_phase = yetty_ylexbor_prof_now_ms();
+
+    /* MediaWiki pages get a small float-helper stylesheet so offline Wikipedia
+	 * still lays out as paragraph-with-sidebar. Detect by the `mw-` class
+	 * prefix — unique to MediaWiki output. We deliberately do NOT inject these
+	 * generic-class floats (`.thumb`, `.infobox`) into ordinary sites: doing so
+	 * floated e.g. a news card's `.thumb` out of flow. */
+    {
+        int has_mw = 0;
+        if (html_len >= 3) {
+            for (size_t i = 0; i + 3 <= html_len; i++) {
+                if (html[i] == 'm' && html[i + 1] == 'w' && html[i + 2] == '-') {
+                    has_mw = 1;
+                    break;
+                }
+            }
+        }
+        if (has_mw) {
+            (void)yetty_ybrowser_libcss_apply_wikipedia_quirks(r);
+        }
     }
 
     /* Pull every external CSS referenced via <link rel=stylesheet>
@@ -483,9 +582,17 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     struct yetty_ycore_void_result css_res =
         load_external_stylesheets(r, lxb_dom_interface_node(r->document));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, css_res, "load_html: load_external_stylesheets");
+    yetty_ylexbor_prof("  external CSS   %.0f ms", yetty_ylexbor_prof_now_ms() - t_phase);
+    t_phase = yetty_ylexbor_prof_now_ms();
 
-    /* Run inline + external <script> blocks. */
-    (void)yetty_ylexbor_js_run_inline_scripts(r);
+    /* Run inline + external <script> blocks — UNLESS defer-scripts mode is on,
+	 * in which case the host paints the initial HTML/CSS first and calls
+	 * yetty_ylexbor_run_deferred_scripts() afterward (progressive rendering). */
+    if (!r->defer_scripts) {
+        (void)yetty_ylexbor_js_run_inline_scripts(r);
+    }
+    yetty_ylexbor_prof("  run scripts    %.0f ms", yetty_ylexbor_prof_now_ms() - t_phase);
+    t_phase = yetty_ylexbor_prof_now_ms();
 
     ydebug("css sheets ext=%d inline=%d failed=%d customs=%d", g_css_loaded, g_css_inline,
            g_css_failed, r->customs.size);
@@ -497,11 +604,16 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     if (YETTY_IS_ERR(br)) {
         return br;
     }
+    yetty_ylexbor_prof("  box-build      %.0f ms (boxes=%u)", yetty_ylexbor_prof_now_ms() - t_phase,
+                       r->boxes.size);
+    t_phase = yetty_ylexbor_prof_now_ms();
 
     struct yetty_ycore_void_result lr = yetty_ylexbor_layout(r);
     if (YETTY_IS_ERR(lr)) {
         return lr;
     }
+    yetty_ylexbor_prof("  layout         %.0f ms", yetty_ylexbor_prof_now_ms() - t_phase);
+    yetty_ylexbor_prof("load_html DONE");
 
     (void)box_vec_reserve; /* used by box-build */
     return YETTY_OK_VOID();
@@ -517,6 +629,11 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css(struct yetty_ylexbor *r, co
     /* Pre-scan for `:root { --x: y; }` etc. before lexbor parses,
 	 * so var() lookups see the latest definitions. */
     yetty_ylexbor_css_vars_scan(r, css, css_len);
+    /* Also note any grid content-column cap (minmax(0, Nrem)) — applied as
+     * a max-width on display:grid containers since we don't lay out grid
+     * tracks. */
+    yetty_ylexbor_css_scan_grid_content_width(r, css, css_len);
+    yetty_ylexbor_css_scan_grid_templates(r, css, css_len);
 
     /* Also push the same CSS through libcss so its cascade sees it. */
     (void)yetty_ybrowser_libcss_add_sheet(r, css, css_len, CSS_ORIGIN_AUTHOR);
@@ -589,6 +706,25 @@ struct yetty_ycore_void_result yetty_ylexbor_relayout(struct yetty_ylexbor *r)
         return br;
     }
     return yetty_ylexbor_layout(r);
+}
+
+void yetty_ylexbor_set_defer_scripts(struct yetty_ylexbor *r, int on)
+{
+    if (r != NULL) {
+        r->defer_scripts = on ? 1 : 0;
+    }
+}
+
+struct yetty_ycore_void_result yetty_ylexbor_run_deferred_scripts(struct yetty_ylexbor *r)
+{
+    if (r == NULL) {
+        return YETTY_ERR(yetty_ycore_void, "ylexbor_run_deferred_scripts: null");
+    }
+    /* Run the <script> blocks load_html skipped, then rebuild the box tree +
+	 * layout from the (now script-mutated) DOM so the next paint shows the
+	 * scripted result. */
+    (void)yetty_ylexbor_js_run_inline_scripts(r);
+    return yetty_ylexbor_relayout(r);
 }
 
 /* Make box_vec_reserve visible to box-build. Static-but-shared via
@@ -680,6 +816,106 @@ int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int
             memcpy(text_out, b->marker_text, (size_t)n);
             text_out[n] = '\0';
         }
+    }
+    return 0;
+}
+
+int yetty_ylexbor_test_box_attr_at(const struct yetty_ylexbor *r, int index, const char *attr,
+                                   char *out_buf, int cap)
+{
+    if (out_buf && cap > 0) {
+        out_buf[0] = '\0';
+    }
+    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size || out_buf == NULL || cap <= 0 ||
+        attr == NULL) {
+        return -1;
+    }
+    const struct yetty_ylexbor_box *b = &r->boxes.data[index];
+    if (b->element == NULL) {
+        return -1;
+    }
+    size_t vlen = 0;
+    const lxb_char_t *val =
+        lxb_dom_element_get_attribute(b->element, (const lxb_char_t *)attr, strlen(attr), &vlen);
+    if (val == NULL) {
+        return -1;
+    }
+    int n = vlen < (size_t)(cap - 1) ? (int)vlen : cap - 1;
+    memcpy(out_buf, val, (size_t)n);
+    out_buf[n] = '\0';
+    return 0;
+}
+
+int yetty_ylexbor_test_box_data_test_at(const struct yetty_ylexbor *r, int index, char *out_buf,
+                                        int cap)
+{
+    if (out_buf && cap > 0) {
+        out_buf[0] = '\0';
+    }
+    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size || out_buf == NULL || cap <= 0) {
+        return -1;
+    }
+    const struct yetty_ylexbor_box *b = &r->boxes.data[index];
+    if (b->element == NULL) {
+        return -1;
+    }
+    size_t vlen = 0;
+    const lxb_char_t *val =
+        lxb_dom_element_get_attribute(b->element, (const lxb_char_t *)"data-test", 9, &vlen);
+    if (val == NULL || vlen == 0) {
+        return -1;
+    }
+    int n = vlen < (size_t)(cap - 1) ? (int)vlen : cap - 1;
+    memcpy(out_buf, val, (size_t)n);
+    out_buf[n] = '\0';
+    return 0;
+}
+
+int yetty_ylexbor_test_box_path_at(const struct yetty_ylexbor *r, int index, char *out_buf, int cap)
+{
+    if (out_buf && cap > 0) {
+        out_buf[0] = '\0';
+    }
+    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size || out_buf == NULL || cap <= 0) {
+        return -1;
+    }
+    const struct yetty_ylexbor_box *b = &r->boxes.data[index];
+    if (b->element == NULL) {
+        return -1;
+    }
+    /* Collect "tag:nth" segments deepest-first, then join top-down. */
+    char segs[64][48];
+    int nseg = 0;
+    lxb_dom_node_t *node = lxb_dom_interface_node(b->element);
+    while (node != NULL && node->type == LXB_DOM_NODE_TYPE_ELEMENT && nseg < 64) {
+        lxb_dom_element_t *el = lxb_dom_interface_element(node);
+        size_t nlen = 0;
+        const unsigned char *nm = lxb_dom_element_local_name(el, &nlen);
+        int nth = 1;
+        for (lxb_dom_node_t *p = node->prev; p != NULL; p = p->prev) {
+            if (p->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+                continue;
+            }
+            size_t plen = 0;
+            const unsigned char *pnm =
+                lxb_dom_element_local_name(lxb_dom_interface_element(p), &plen);
+            if (plen == nlen && nm != NULL && pnm != NULL && memcmp(nm, pnm, nlen) == 0) {
+                nth++;
+            }
+        }
+        snprintf(segs[nseg], sizeof(segs[0]), "%.*s:%d", (int)nlen,
+                 nm != NULL ? (const char *)nm : "x", nth);
+        nseg++;
+        node = node->parent;
+    }
+    int pos = 0;
+    for (int i = nseg - 1; i >= 0; i--) {
+        int written =
+            snprintf(out_buf + pos, (size_t)(cap - pos), "%s%s", pos > 0 ? ">" : "", segs[i]);
+        if (written < 0 || written >= cap - pos) {
+            break;
+        }
+        pos += written;
     }
     return 0;
 }

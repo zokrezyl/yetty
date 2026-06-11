@@ -1,0 +1,22 @@
+<!doctype html><meta charset=utf-8>
+<title>document.implementation.createHTMLDocument("").body exists and parses innerHTML
+(jQuery support-detection does `createHTMLDocument("").body.innerHTML = "<form></form><form></form>"`
+then reads body.childNodes.length; an empty object threw "cannot set property 'innerHTML' of
+undefined" and aborted the whole jquery module, freezing Wikipedia)</title>
+<style>body{margin:0}</style>
+<div data-test="host" data-expect="0,0,800,40" style="display:block"></div>
+<script>
+var ok = false;
+try {
+  var body = document.implementation.createHTMLDocument("").body;
+  body.innerHTML = "<form></form><form></form>";
+  ok = (body.childNodes.length === 2);
+} catch (e) {
+  ok = false;
+}
+if (ok) {
+  var d = document.createElement('div');
+  d.setAttribute('style', 'height:40px');
+  document.querySelector('div[data-test="host"]').appendChild(d);
+}
+</script>

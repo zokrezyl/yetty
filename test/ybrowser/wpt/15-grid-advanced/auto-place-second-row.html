@@ -1,0 +1,7 @@
+<!doctype html><meta charset=utf-8><title>grid auto-placement wraps to the next row</title>
+<style>body{margin:0}</style>
+<div style="display:grid;grid-template-columns:1fr 1fr;width:600px">
+  <div data-test="a" data-expect="0,0,300,*" style="height:20px">a</div>
+  <div data-test="b" data-expect="300,0,300,*" style="height:20px">b</div>
+  <div data-test="c" data-expect="0,20,300,*" style="height:20px">c</div>
+</div>

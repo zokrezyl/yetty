@@ -1,0 +1,11 @@
+<!doctype html><meta charset=utf-8>
+<title>window.dispatchEvent invokes window addEventListener handlers</title>
+<style>body{margin:0}</style>
+<div data-test="host" data-expect="0,0,800,25" style="display:block"></div>
+<script>
+window.addEventListener('ping', function(){
+  var d=document.createElement('div'); d.setAttribute('style','height:25px');
+  document.querySelector('div[data-test="host"]').appendChild(d);
+});
+window.dispatchEvent(new CustomEvent('ping',{}));
+</script>

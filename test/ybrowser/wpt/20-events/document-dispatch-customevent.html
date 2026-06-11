@@ -1,0 +1,14 @@
+<!doctype html><meta charset=utf-8>
+<title>document.dispatchEvent invokes addEventListener handlers with CustomEvent detail
+(CNN's WMUC consent fires userConsentReady/aceStringChanged on document; a missing
+document.dispatchEvent threw "not a function")</title>
+<style>body{margin:0}</style>
+<div data-test="host" data-expect="0,0,800,40" style="display:block"></div>
+<script>
+document.addEventListener('userConsentReady', function(e){
+  if(!e || !e.detail || e.detail.ok!==1) return;
+  var d=document.createElement('div'); d.setAttribute('style','height:40px');
+  document.querySelector('div[data-test="host"]').appendChild(d);
+});
+document.dispatchEvent(new CustomEvent('userConsentReady', {bubbles:false, detail:{ok:1}}));
+</script>

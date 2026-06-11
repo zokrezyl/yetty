@@ -96,6 +96,14 @@ struct yetty_yrender_target_ops {
 struct yetty_ydraw_target {
     const struct yetty_yrender_target_ops *ops;
     struct yetty_yrender_viewport viewport;
+
+    /* Optional clip rectangle (framebuffer pixels) a compositor sets before
+	 * rendering a figure instance that opens its own render pass — e.g. an
+	 * <img> inside a scrolling ygrid. Such figures scissor to their own
+	 * viewport, so without this they bleed past the scroll area (images
+	 * drawn over the tab bar). When `clip.w > 0`, a figure intersects its
+	 * scissor with this rect. `clip.w <= 0` means "no clip". */
+    struct yetty_yrender_viewport clip;
 };
 
 /*=============================================================================

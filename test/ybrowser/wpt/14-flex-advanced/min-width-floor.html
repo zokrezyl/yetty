@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>flex item respects min-width when shrinking</title>
+<style>body{margin:0}</style>
+<div style="display:flex;width:300px">
+  <div data-test="a" data-expect="0,*,200,*" style="flex:1;min-width:200px">a</div>
+  <div data-test="b" data-expect="200,*,100,*" style="flex:1">b</div>
+</div>

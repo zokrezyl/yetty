@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8>
+<title>a single flex:1 child fills the whole container (the github/wikipedia case)</title>
+<style>body{margin:0}</style>
+<div style="display:flex;width:800px">
+  <div data-test="only" data-expect="0,*,800,*" style="flex:1">content column that should be full width</div>
+</div>

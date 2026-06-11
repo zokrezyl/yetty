@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>position:absolute resolves against the positioned ancestor</title>
+<style>body{margin:0}</style>
+<div style="position:relative;width:400px;height:300px">
+  <div data-test="abs" data-expect="20,40,100,*"
+       style="position:absolute;left:20px;top:40px;width:100px;height:50px">a</div>
+</div>

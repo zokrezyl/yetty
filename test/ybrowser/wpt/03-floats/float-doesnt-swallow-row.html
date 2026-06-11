@@ -1,0 +1,7 @@
+<!doctype html><meta charset=utf-8>
+<title>an auto-width float must NOT consume the whole row, starving in-flow content</title>
+<style>body{margin:0}</style>
+<div style="width:600px">
+  <div style="float:left">tiny</div>
+  <div data-test="flow" data-expect="*,*,*,*">in-flow paragraph that needs real width to wrap</div>
+</div>

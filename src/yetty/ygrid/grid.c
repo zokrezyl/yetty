@@ -1994,17 +1994,46 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
     wgpuCommandBufferRelease(cb);
     wgpuCommandEncoderRelease(enc);
 
-    /* Complex-prim pass — each instance has its own pipeline. Anchor at
-     * the figure's rect origin (rect.min.x, rect.min.y); the instance's
-     * own bounds_x/y within its prim payload is already widget-local,
-     * so the on-screen position is figure_rect.min + bounds. */
+    /* Complex-prim pass — each instance has its own pipeline. How its
+     * on-screen origin is derived MUST mirror the SDF pass above, which
+     * differs by coordinate mode:
+     *
+     *   - absolute (ygui chrome): the SDF pass maps prim coords onto the
+     *     FULL target with no base_rect offset, and scale_record_coords has
+     *     scaled those coords to framebuffer pixels by content_scale. A
+     *     composite instance's bounds are already absolute screen coords
+     *     (e.g. ydraw_embed translates a page's prims by the widget rect),
+     *     but composites are skipped by scale_record_coords — so anchor at
+     *     bounds * content_scale, NOT base_rect.min + bounds. Adding
+     *     base_rect.min here double-counts the figure origin and paints the
+     *     image base_rect.min too low (the "<img> rendered ~80px below its
+     *     laid-out box" bug).
+     *
+     *   - local (compositor groups): prim coords are widget-local, so the
+     *     on-screen position is the figure rect origin + the local bounds.
+     *
+     * Each figure opens its OWN render pass and scissors to the full target,
+     * so the grid's scissor above does not constrain it. Publish this grid's
+     * clamped scissor rect on the target as `clip` so figures (yimage, …)
+     * intersect it — otherwise a scrolled <img> draws over the tab bar. */
+    target->clip.x = sx0;
+    target->clip.y = sy0;
+    target->clip.w = sx1 - sx0;
+    target->clip.h = sy1 - sy0;
     for (uint32_t i = 0; i < g->figure_instance_count; i++) {
         struct yetty_ydraw_composite *inst = g->figure_instances[i];
         if (!inst || !inst->render) {
             continue;
         }
-        float sx = base_rect.min.x + inst->bounds.min.x;
-        float sy = base_rect.min.y + inst->bounds.min.y;
+        float sx, sy;
+        if (g->absolute_coords) {
+            float coord_scale = g->content_scale > 0.0f ? g->content_scale : 1.0f;
+            sx = inst->bounds.min.x * coord_scale;
+            sy = inst->bounds.min.y * coord_scale;
+        } else {
+            sx = base_rect.min.x + inst->bounds.min.x;
+            sy = base_rect.min.y + inst->bounds.min.y;
+        }
         struct yetty_ycore_void_result fr = inst->render(inst, target, sx, sy);
         if (YETTY_IS_ERR(fr)) {
             ydebug("ygrid_render: figure instance render failed: %s", fr.error.msg);
@@ -2012,6 +2041,10 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
         }
         inst->dirty = 0;
     }
+    /* Done with the figure pass — drop the clip so unrelated render paths
+     * sharing this target are not constrained by it. */
+    target->clip.w = 0;
+    target->clip.h = 0;
 
     {
         struct yetty_ycore_void_result set_dirty_r =

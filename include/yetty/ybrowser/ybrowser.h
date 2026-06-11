@@ -120,6 +120,83 @@ void *yetty_ylexbor_curl_share(void);
  * none). The host calls this from its event loop. */
 int yetty_ylexbor_pump_timers(struct yetty_ylexbor *r);
 
+/* Set the per-glyph advance (fraction of font-size) the layout uses to
+ * estimate text width and to position styled inline fragments on a line.
+ * It must match the advance of the font the host renders with, or colored
+ * link / bold / italic runs drift out of alignment. An interactive host
+ * rendering with a monospace MSDF font passes that font's advance (~0.6);
+ * pass 0 to keep the 0.55 default. */
+void yetty_ylexbor_set_glyph_advance_ratio(struct yetty_ylexbor *r, float ratio);
+
+/* Image loading mode. By default _render() fetches every <img> URL over
+ * the network synchronously inside the paint pass — fine for a one-shot
+ * render, but it blocks the caller's thread for as long as the HTTP takes
+ * (seconds on an image-heavy page), which freezes an interactive host's
+ * event loop. Set `on` to 1 to defer: paint draws placeholders for images
+ * that aren't cached yet and returns immediately; the host then loads
+ * images off the critical path with yetty_ylexbor_fetch_one_pending_image
+ * and re-renders. `data:` URIs are unaffected (decoded inline). */
+void yetty_ylexbor_set_defer_image_fetch(struct yetty_ylexbor *r, int on);
+
+/* Script execution mode. By default yetty_ylexbor_load_html() runs every inline
+ * + external <script> synchronously during the load, so the FIRST paint waits
+ * for all of them (seconds of blank screen on a script-heavy page — 75 chunks
+ * on github). Set `on` to 1 to DEFER: load_html parses HTML, applies CSS, and
+ * lays out WITHOUT running scripts, so the host can paint the initial
+ * HTML+CSS content immediately (progressive rendering, like any browser's
+ * first-contentful-paint). The host then calls
+ * yetty_ylexbor_run_deferred_scripts() once, after that first paint, to run the
+ * scripts and relayout. */
+void yetty_ylexbor_set_defer_scripts(struct yetty_ylexbor *r, int on);
+
+/* Run the scripts that yetty_ylexbor_load_html() skipped under defer-scripts
+ * mode, then re-resolve the box tree + layout from the (now script-mutated)
+ * DOM. Call once after the initial paint. No-op (still relayouts) if defer mode
+ * was off. After it returns the host should repaint. */
+struct yetty_ycore_void_result yetty_ylexbor_run_deferred_scripts(struct yetty_ylexbor *r);
+
+/* Fetch + decode at most ONE <img> whose URL isn't cached yet (the first
+ * in document order), blocking only for that single image. Returns 1 if it
+ * loaded one (the host should re-render to show it and call again for the
+ * next), 0 when no images are pending. Only meaningful with defer mode on;
+ * call it once per frame from the host loop to stream a page's images in
+ * without ever blocking for the whole set at once. */
+int yetty_ylexbor_fetch_one_pending_image(struct yetty_ylexbor *r);
+
+struct yetty_yplatform_yworkpool;
+
+/* Enable ASYNC parallel image fetching. `pool` is a worker pool created on the
+ * host's event loop; once set, yetty_ylexbor_start_image_fetch submits each
+ * pending <img> as a background fetch+decode job (parallel, non-blocking)
+ * instead of blocking the caller. `on_ready(user)` is invoked on the loop
+ * thread each time a fetch completes so the host can repaint. Pass pool=NULL to
+ * disable (falls back to the synchronous one-at-a-time path). The pool and
+ * `user` must outlive the engine, OR the engine outlive all in-flight jobs —
+ * the engine defers its own teardown until in-flight jobs drain, so calling
+ * yetty_ylexbor_destroy while fetches are running is safe. */
+void yetty_ylexbor_set_async_image_fetch(struct yetty_ylexbor *r,
+                                         struct yetty_yplatform_yworkpool *pool,
+                                         void (*on_ready)(void *user), void *user);
+
+/* Submit every not-yet-fetched <img> in the laid-out document to the async
+ * pool (parallel fetch + decode). Returns the number of jobs submitted this
+ * call (0 if async isn't enabled or nothing is pending). Safe to call every
+ * frame — already-cached / in-flight images are skipped. */
+int yetty_ylexbor_start_image_fetch(struct yetty_ylexbor *r);
+
+/* Number of async image fetch+decode jobs currently in flight (submitted but
+ * not yet folded in). The host keeps its event loop ticking while this is > 0
+ * so completions repaint promptly instead of waiting for an unrelated wake. */
+int yetty_ylexbor_images_in_flight(const struct yetty_ylexbor *r);
+
+/* Load-timeline profiler. When the YBROWSER_PROFILE env var is set, prof()
+ * prints a timestamped event line to stderr; prof_now_ms() returns the
+ * monotonic clock (ms) used to measure per-step durations. Exposed so the host
+ * tool can profile the pieces outside the engine (HTML fetch, window/GPU
+ * startup, first render). Near-zero overhead (one getenv) when off. */
+void yetty_ylexbor_prof(const char *fmt, ...);
+double yetty_ylexbor_prof_now_ms(void);
+
 /* ===========================================================================
  * Test-only inspection.
  *
@@ -149,6 +226,32 @@ int yetty_ylexbor_test_box_at(const struct yetty_ylexbor *r, int index, float *x
 int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int *kind_out,
                                    int *font_weight_out, int *italic_out, int *underline_out,
                                    char *text_out, int text_cap);
+
+/* Test-only: fetch the box's `data-test` attribute (used by the Chrome
+ * geometry oracle to key boxes by a stable name independent of DOM order).
+ * Writes the NUL-terminated attribute value into out_buf (truncated to
+ * cap-1) and returns 0 on success; returns non-zero if the index is out of
+ * range or the box's element has no `data-test` attribute. out_buf is set
+ * to "" on any non-success. */
+int yetty_ylexbor_test_box_data_test_at(const struct yetty_ylexbor *r, int index, char *out_buf,
+                                        int cap);
+
+/* Test-only: read an arbitrary attribute (`attr`) off the box's element into
+ * out_buf (NUL-terminated, truncated to cap-1). Returns 0 on success, non-zero
+ * for anonymous boxes or a missing attribute. Used by the upstream-WPT runner
+ * to read check-layout-th.js assertions (data-expected-width / -height /
+ * data-offset-x / -y) directly off each box. */
+int yetty_ylexbor_test_box_attr_at(const struct yetty_ylexbor *r, int index, const char *attr,
+                                   char *out_buf, int cap);
+
+/* Test-only: write an nth-of-type DOM path for the box's element into out_buf,
+ * e.g. "html:1>body:1>div:2>main:1" (top-down, each segment
+ * lowercase-tag ":" 1-based index among same-tag element siblings). Returns 0
+ * on success, non-zero for anonymous/text boxes (no element). Used by the
+ * Chrome geometry oracle to match ybrowser boxes to Chrome's
+ * getBoundingClientRect by identical DOM path. */
+int yetty_ylexbor_test_box_path_at(const struct yetty_ylexbor *r, int index, char *out_buf,
+                                   int cap);
 
 #ifdef __cplusplus
 }

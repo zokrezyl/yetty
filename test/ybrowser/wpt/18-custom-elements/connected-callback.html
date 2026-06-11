@@ -1,0 +1,16 @@
+<!doctype html><meta charset=utf-8>
+<title>customElements.define upgrades existing elements + fires connectedCallback,
+which mutates the DOM; the host element grows to contain the injected content
+(the boot mechanism for web-component UIs e.g. GitHub's react-app)</title>
+<style>body{margin:0}</style>
+<my-widget data-test="widget" data-expect="0,0,800,40" style="display:block"></my-widget>
+<script>
+class MyWidget extends HTMLElement {
+  connectedCallback(){
+    var d = document.createElement('div');
+    d.setAttribute('style','height:40px');
+    this.appendChild(d);
+  }
+}
+customElements.define('my-widget', MyWidget);
+</script>

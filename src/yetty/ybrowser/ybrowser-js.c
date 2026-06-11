@@ -52,24 +52,47 @@
  * this minimal JS surface — spewing that straight to stderr would clutter
  * the operator's terminal in standalone, and corrupt the OSC stream when
  * the engine runs under `yetty -e` (stderr → PTY slave). */
+static void console_append(char *buf, size_t cap, size_t *off, const char *s)
+{
+    if (!s || *off >= cap - 1) {
+        return;
+    }
+    size_t room = cap - 1 - *off;
+    size_t sl = strlen(s);
+    size_t cp = sl < room ? sl : room;
+    memcpy(buf + *off, s, cp);
+    *off += cp;
+}
+
 static void console_print(JSContext *ctx, const char *level, int argc, JSValueConst *argv)
 {
-    char buf[1024];
+    char buf[4096];
     size_t off = 0;
     for (int i = 0; i < argc && off < sizeof(buf) - 1; i++) {
         const char *s = JS_ToCString(ctx, argv[i]);
         if (!s) {
             continue;
         }
-        if (i > 0 && off < sizeof(buf) - 1) {
-            buf[off++] = ' ';
+        if (i > 0) {
+            console_append(buf, sizeof(buf), &off, " ");
         }
-        size_t room = sizeof(buf) - 1 - off;
-        size_t sl = strlen(s);
-        size_t cp = sl < room ? sl : room;
-        memcpy(buf + off, s, cp);
-        off += cp;
+        console_append(buf, sizeof(buf), &off, s);
         JS_FreeCString(ctx, s);
+        /* For Error-like args, append the stack so a caught exception logged
+		 * by a framework (e.g. MediaWiki ResourceLoader) reveals where it
+		 * actually threw, not just its message. */
+        if (JS_IsObject(argv[i])) {
+            JSValue stk = JS_GetPropertyStr(ctx, argv[i], "stack");
+            if (JS_IsString(stk)) {
+                const char *ss = JS_ToCString(ctx, stk);
+                if (ss) {
+                    console_append(buf, sizeof(buf), &off, " | STACK ");
+                    console_append(buf, sizeof(buf), &off, ss);
+                    JS_FreeCString(ctx, ss);
+                }
+            }
+            JS_FreeValue(ctx, stk);
+        }
     }
     buf[off] = '\0';
     ydebug("[js:%s] %s", level, buf);
@@ -359,6 +382,43 @@ static int is_js_script_type(lxb_dom_element_t *el)
     return 0;
 }
 
+/* True iff `url` points at a well-known analytics / advertising / tracking
+ * script. These never produce visible content, yet a synchronous inline
+ * fetch+eval of one (e.g. googletagmanager's 425 KB gtag.js) blocks first
+ * paint for hundreds of milliseconds. Real browsers load them async, off the
+ * critical path; a viewer can skip them outright with no rendering effect. */
+static int is_tracking_script_url(const char *url)
+{
+    static const char *const needles[] = {
+        "googletagmanager.com",
+        "google-analytics.com",
+        "/gtag/js",
+        "/gtm.js",
+        "/analytics.js",
+        "/ga.js",
+        "doubleclick.net",
+        "googlesyndication.com",
+        "googleadservices.com",
+        "google-analytics",
+        "connect.facebook.net",
+        "/fbevents.js",
+        "scorecardresearch.com",
+        "static.hotjar.com",
+        "cdn.segment.com",
+        "cdn.mxpnl.com",
+        "amplitude.com/libs",
+    };
+    if (!url) {
+        return 0;
+    }
+    for (size_t i = 0; i < sizeof(needles) / sizeof(needles[0]); i++) {
+        if (strstr(url, needles[i]) != NULL) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 static void run_scripts_recursive(struct yetty_ylexbor *r, JSContext *ctx, lxb_dom_node_t *node)
 {
     for (lxb_dom_node_t *c = node->first_child; c != NULL; c = c->next) {
@@ -383,6 +443,11 @@ static void run_scripts_recursive(struct yetty_ylexbor *r, JSContext *ctx, lxb_d
                 char *url = yetty_ylexbor_resolve_url(r, href);
                 free(href);
                 if (!url) {
+                    continue;
+                }
+                if (is_tracking_script_url(url)) {
+                    yetty_ylexbor_prof("    skip tracking script %.80s", url);
+                    free(url);
                     continue;
                 }
                 size_t blen = 0;

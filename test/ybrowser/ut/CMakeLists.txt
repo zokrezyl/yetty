@@ -10,6 +10,10 @@ enable_testing()
 
 set(YBROWSER_TEST_SHIM_SOURCES
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
+    # ybrowser's async image fetch references the worker pool; it isn't its own
+    # library (consumers compile the source directly, as yrich does), so pull it
+    # in here. Its only deps — thread primitives — live in yetty_yplatform_core.
+    ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
 )
 
 add_executable(ybrowser-layout-test
@@ -57,4 +61,37 @@ target_include_directories(ybrowser-inline-test PRIVATE
 target_link_libraries(ybrowser-inline-test PRIVATE
     yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core m)
 add_test(NAME ybrowser_inline COMMAND ybrowser-inline-test)
+
+# ybrowser-paint-test — pins the serialized ydraw drawable list ybrowser
+# emits (image bounds, text-decoration rects) with no Chrome and no GPU.
+add_executable(ybrowser-paint-test
+    ybrowser-paint-test.c
+    ${YBROWSER_TEST_SHIM_SOURCES}
+)
+target_include_directories(ybrowser-paint-test PRIVATE
+    ${YETTY_ROOT}/include
+    ${YETTY_ROOT}/src
+)
+target_link_libraries(ybrowser-paint-test PRIVATE
+    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core m)
+add_test(NAME ybrowser_paint COMMAND ybrowser-paint-test)
+
+# Headless render-sanity smoke test — drives the ybrowser CLI fully headless
+# (no DISPLAY, no GPU) over a handful of real sites and asserts the laid-out
+# box count stays above a per-site floor. This is the standing net for the two
+# classes of regression that made real pages unusable: a content column
+# COLLAPSING to ~min-content (Wikipedia <main> → 15px), and a runaway
+# allocation OOMing the process (an unbounded inline-wrap loop on a trailing
+# <br>, or an uncapped brotli response buffer). It hits the network, so it
+# carries the "network" label (exclude with `ctest -LE network`) and a
+# generous timeout.
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME ybrowser_render
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../render/run.py)
+    set_tests_properties(ybrowser_render PROPERTIES
+        ENVIRONMENT "YBROWSER=$<TARGET_FILE:ybrowser>"
+        LABELS "network"
+        TIMEOUT 120)
+endif()
 

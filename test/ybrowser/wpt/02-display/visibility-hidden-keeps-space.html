@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>visibility:hidden keeps the box and its space</title>
+<style>body{margin:0}</style>
+<div style="width:400px">
+  <div data-test="hid" data-expect="0,0,400,30" style="visibility:hidden;height:30px">x</div>
+  <div data-test="below" data-expect="0,30,400,*" style="height:10px">y</div>
+</div>

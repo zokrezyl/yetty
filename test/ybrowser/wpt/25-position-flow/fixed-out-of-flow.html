@@ -1,0 +1,12 @@
+<!doctype html><meta charset=utf-8>
+<title>position:fixed from a stylesheet class (under a matching @media) takes the element
+out of normal flow — the in-flow sibling after it must NOT be pushed down. This is the
+mechanism that should hide github's nav mega-menu dropdowns (position:fixed;visibility:hidden)
+instead of dumping them as a wall of links at the bottom of the page.</title>
+<style>
+body{margin:0}
+@media(min-width:800px){ .dd{position:fixed;top:0;left:0;width:200px} }
+</style>
+<div data-test="flow1" style="height:40px">flow1</div>
+<div class="dd"><div style="height:300px">hidden dropdown panel</div></div>
+<div data-test="flow2" data-expect="0,40,*,40" style="height:40px">flow2</div>

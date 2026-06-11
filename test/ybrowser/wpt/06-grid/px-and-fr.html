@@ -1,0 +1,6 @@
+<!doctype html><meta charset=utf-8><title>grid: fixed px track + 1fr track</title>
+<style>body{margin:0}</style>
+<div style="display:grid;grid-template-columns:200px 1fr;width:600px">
+  <div data-test="c1" data-expect="0,*,200,*">a</div>
+  <div data-test="c2" data-expect="200,*,400,*">b</div>
+</div>

@@ -1,0 +1,8 @@
+<!doctype html><meta charset=utf-8>
+<title>nested auto-width blocks fill the padded content area</title>
+<style>body{margin:0}</style>
+<div style="width:500px">
+  <div style="padding:0 10px">
+    <div data-test="deep" data-expect="10,*,480,*">x</div>
+  </div>
+</div>

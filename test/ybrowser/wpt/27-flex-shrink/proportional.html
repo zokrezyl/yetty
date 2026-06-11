@@ -1,0 +1,8 @@
+<!doctype html><meta charset=utf-8>
+<title>flex-shrink proportional: two over-wide items both shrink-1 shrink in proportion to
+their basis. 800+400 in a 600 row → overflow 600 removed weighted by basis (2:1) → 400 + 200.</title>
+<style>body{margin:0} .row{display:flex;width:600px} .a{width:800px} .b{width:400px}</style>
+<div class="row">
+  <div class="a" data-test="a" data-expect="0,*,400,*">a</div>
+  <div class="b" data-test="b" data-expect="400,*,200,*">b</div>
+</div>

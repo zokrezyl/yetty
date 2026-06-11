@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { font-family: monospace; font-size: 16px; margin: 0; padding: 0; box-sizing: border-box; }
+</style>
+</head>
+<body>
+  <!-- Flex row: two fixed-width items sit side by side; the second
+       starts where the first ends (left edge = first item width). -->
+  <div data-test="row" style="display:flex; flex-direction:row; width:600px;">
+    <div data-test="cell_a" style="width:200px; padding:10px; border:2px solid;">A</div>
+    <div data-test="cell_b" style="width:300px;">B</div>
+  </div>
+
+  <pre id="geom" style="display:none"></pre>
+  <script>
+  (function () {
+      var out = {};
+      document.querySelectorAll('[data-test]').forEach(function (el) {
+          var r = el.getBoundingClientRect();
+          out[el.getAttribute('data-test')] = {
+              x: Math.round(r.x * 100) / 100,
+              y: Math.round(r.y * 100) / 100,
+              w: Math.round(r.width * 100) / 100,
+              h: Math.round(r.height * 100) / 100
+          };
+      });
+      // Record the viewport Chrome actually laid out at so the
+      // comparator can replay ybrowser at the same size (vw/vh parity).
+      out['_viewport'] = { w: window.innerWidth, h: window.innerHeight };
+      document.getElementById('geom').textContent = JSON.stringify(out);
+  })();
+  </script>
+</body>
+</html>

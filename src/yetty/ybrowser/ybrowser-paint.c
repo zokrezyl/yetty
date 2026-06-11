@@ -30,8 +30,12 @@
 #if YETTY_HAVE_TURBOJPEG
 #include <turbojpeg.h>
 #endif
+#if YETTY_HAVE_LIBWEBP
+#include <webp/decode.h>
+#endif
 
 #include <yetty/ycore/util.h>
+#include <yetty/yplatform/yworkpool.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ysdf/funcs.gen.h>
@@ -293,11 +297,56 @@ static int decode_svg_placeholder(const uint8_t *bytes, size_t len, uint32_t **o
     return 1;
 }
 
+#if YETTY_HAVE_LIBWEBP
+/* Decode a WebP (lossy VP8 / lossless VP8L) byte stream into RGBA8 via
+ * libwebp. Allocates *out_pixels (caller frees with free()). Returns 1 on
+ * success, 0 on failure. WebP is now the default image format across the
+ * modern web — Google News serves every article thumbnail as WebP and
+ * ignores the Accept header, so without this path those images can only
+ * render as placeholders. */
+static int decode_webp(const uint8_t *bytes, size_t len, uint32_t **out_pixels, int *out_w,
+                       int *out_h)
+{
+    int width = 0, height = 0;
+    if (!WebPGetInfo(bytes, len, &width, &height) || width <= 0 || height <= 0) {
+        return 0;
+    }
+    /* libwebp writes bytes in R,G,B,A memory order — identical to the
+	 * libpng/turbojpeg paths above, so the packed uint32 layout matches. */
+    uint8_t *rgba = WebPDecodeRGBA(bytes, len, &width, &height);
+    if (!rgba) {
+        return 0;
+    }
+    size_t pixel_count = (size_t)width * (size_t)height;
+    uint32_t *pixels = malloc(pixel_count * sizeof(uint32_t));
+    if (!pixels) {
+        WebPFree(rgba);
+        return 0;
+    }
+    memcpy(pixels, rgba, pixel_count * sizeof(uint32_t));
+    WebPFree(rgba);
+    *out_pixels = pixels;
+    *out_w = width;
+    *out_h = height;
+    return 1;
+}
+#endif
+
 /* Identify image format by magic bytes and dispatch to the right
  * decoder. Returns 1 on success. */
 static int decode_image(const uint8_t *bytes, size_t len, uint32_t **out_pixels, int *out_w,
                         int *out_h)
 {
+    /* WebP: "RIFF"<u32 size>"WEBP". Check before the generic stb fallback,
+	 * which cannot decode it. */
+    if (len >= 12 && memcmp(bytes, "RIFF", 4) == 0 && memcmp(bytes + 8, "WEBP", 4) == 0) {
+#if YETTY_HAVE_LIBWEBP
+        if (decode_webp(bytes, len, out_pixels, out_w, out_h)) {
+            return 1;
+        }
+#endif
+        return decode_other(bytes, len, out_pixels, out_w, out_h);
+    }
     if (len >= 8 && bytes[0] == 0x89 && bytes[1] == 'P' && bytes[2] == 'N' && bytes[3] == 'G' &&
         bytes[4] == 0x0D && bytes[5] == 0x0A && bytes[6] == 0x1A && bytes[7] == 0x0A) {
 #if YETTY_HAVE_LIBPNG
@@ -397,6 +446,13 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(struct
             return &r->img_cache[i];
         }
     }
+    /* Defer mode: never hit the network from the paint thread. Leave the
+     * URL pending (no cache entry) so the host can load it later via
+     * yetty_ylexbor_fetch_one_pending_image. `data:` URIs carry their
+     * bytes inline, so decode those regardless. */
+    if (r->defer_image_fetch && strncmp(url, "data:", 5) != 0) {
+        return NULL;
+    }
     if (r->img_cache_count == r->img_cache_cap) {
         int nc = r->img_cache_cap ? r->img_cache_cap * 2 : 8;
         struct yetty_ylexbor_img_cache_entry *p = realloc(r->img_cache, (size_t)nc * sizeof(*p));
@@ -474,6 +530,248 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(struct
     e->w = w;
     e->h = h;
     return e;
+}
+
+void yetty_ylexbor_set_defer_image_fetch(struct yetty_ylexbor *r, int on)
+{
+    if (r) {
+        r->defer_image_fetch = on ? 1 : 0;
+    }
+}
+
+int yetty_ylexbor_fetch_one_pending_image(struct yetty_ylexbor *r)
+{
+    if (r == NULL) {
+        return 0;
+    }
+    for (uint32_t i = 0; i < r->boxes.size; i++) {
+        struct yetty_ylexbor_box *b = &r->boxes.data[i];
+        if (b->kind != YL_BOX_INLINE_IMAGE || b->element == NULL) {
+            continue;
+        }
+        char *url = yetty_ylexbor_img_pick_url(r, b->element);
+        if (url == NULL) {
+            continue;
+        }
+        if (strncmp(url, "data:", 5) == 0) {
+            free(url); /* inline bytes — no network, handled during paint */
+            continue;
+        }
+        int cached = 0;
+        for (int k = 0; k < r->img_cache_count; k++) {
+            if (r->img_cache[k].url && strcmp(r->img_cache[k].url, url) == 0) {
+                cached = 1;
+                break;
+            }
+        }
+        if (cached) {
+            free(url);
+            continue;
+        }
+        /* Fetch exactly this one, bypassing defer so get_or_load does the
+         * network + decode + cache-insert. Restore defer afterwards so the
+         * next paint stays placeholder-only for the remaining pending
+         * images. */
+        int saved = r->defer_image_fetch;
+        r->defer_image_fetch = 0;
+        (void)yetty_ylexbor_img_cache_get_or_load(r, url);
+        r->defer_image_fetch = saved;
+        free(url);
+        return 1;
+    }
+    return 0;
+}
+
+/* ===========================================================================
+ * Async parallel image fetching (worker pool). Each pending <img> becomes a
+ * job: fetch+decode on a worker thread (the pool runs several at once, sharing
+ * libcurl's HTTP/2 connection pool), then fold the pixels into the cache on the
+ * loop thread and notify the host to repaint. Nothing blocks the UI thread.
+ * ===========================================================================*/
+
+struct ylexbor_img_job {
+    struct yetty_ylexbor *r;
+    uint64_t generation; /* engine fetch_generation at submit; stale if changed */
+    char *url;           /* owned */
+    char *base_url;      /* owned copy — read on the worker thread */
+    /* Filled by run() on the worker thread: */
+    uint32_t *pixels;
+    int w, h;
+    int failed;
+};
+
+/* WORKER THREAD. Touches ONLY the job's own copies — never the engine, which
+ * may be torn down (deferred) before done() runs. */
+static void img_job_run(void *ctx)
+{
+    struct ylexbor_img_job *job = ctx;
+    long status = 0;
+    size_t blen = 0;
+    char *bytes = yetty_ylexbor_http_get_referer(job->url, job->base_url, &blen, &status);
+    if (!bytes || blen == 0 || (status != 0 && status != 200)) {
+        free(bytes);
+        job->failed = 1;
+        return;
+    }
+    uint32_t *pixels = NULL;
+    int w = 0, h = 0;
+    int ok = decode_image((const uint8_t *)bytes, blen, &pixels, &w, &h);
+    free(bytes);
+    if (!ok) {
+        job->failed = 1;
+        return;
+    }
+    job->pixels = pixels;
+    job->w = w;
+    job->h = h;
+}
+
+/* LOOP THREAD. Fold the result into the cache (if still valid) and notify the
+ * host; handle deferred engine teardown. */
+static void img_job_done(void *ctx)
+{
+    struct ylexbor_img_job *job = ctx;
+    struct yetty_ylexbor *r = job->r;
+    r->img_jobs_in_flight--;
+
+    int stale = (job->generation != r->fetch_generation) || r->destroy_pending;
+    if (!stale) {
+        for (int i = 0; i < r->img_cache_count; i++) {
+            if (r->img_cache[i].url && strcmp(r->img_cache[i].url, job->url) == 0) {
+                struct yetty_ylexbor_img_cache_entry *e = &r->img_cache[i];
+                e->loading = 0;
+                if (job->failed || job->pixels == NULL) {
+                    e->failed = 1;
+                } else {
+                    e->pixels = job->pixels;
+                    e->w = job->w;
+                    e->h = job->h;
+                    job->pixels = NULL; /* ownership transferred to the cache */
+                }
+                break;
+            }
+        }
+        if (r->on_resource_ready) {
+            r->on_resource_ready(r->resource_ready_user);
+        }
+    }
+    free(job->pixels); /* non-NULL only when stale / url vanished */
+    free(job->url);
+    free(job->base_url);
+    free(job);
+
+    if (r->img_jobs_in_flight == 0 && !stale) {
+        yetty_ylexbor_prof("    img fetch: all done (last image landed)");
+    }
+
+    if (r->destroy_pending && r->img_jobs_in_flight == 0) {
+        (void)_yetty_ylexbor_destroy_now(r);
+    }
+}
+
+void yetty_ylexbor_set_async_image_fetch(struct yetty_ylexbor *r,
+                                         struct yetty_yplatform_yworkpool *pool,
+                                         void (*on_ready)(void *user), void *user)
+{
+    if (r == NULL) {
+        return;
+    }
+    r->img_pool = pool;
+    r->on_resource_ready = on_ready;
+    r->resource_ready_user = user;
+}
+
+int yetty_ylexbor_images_in_flight(const struct yetty_ylexbor *r)
+{
+    return r ? r->img_jobs_in_flight : 0;
+}
+
+int yetty_ylexbor_start_image_fetch(struct yetty_ylexbor *r)
+{
+    if (r == NULL || r->img_pool == NULL) {
+        return 0;
+    }
+    int submitted = 0;
+    for (uint32_t i = 0; i < r->boxes.size; i++) {
+        struct yetty_ylexbor_box *b = &r->boxes.data[i];
+        if (b->kind != YL_BOX_INLINE_IMAGE || b->element == NULL) {
+            continue;
+        }
+        char *url = yetty_ylexbor_img_pick_url(r, b->element);
+        if (url == NULL) {
+            continue;
+        }
+        if (strncmp(url, "data:", 5) == 0) {
+            free(url); /* inline bytes, decoded during paint */
+            continue;
+        }
+        int seen = 0;
+        for (int k = 0; k < r->img_cache_count; k++) {
+            if (r->img_cache[k].url && strcmp(r->img_cache[k].url, url) == 0) {
+                seen = 1; /* already cached or a job is in flight */
+                break;
+            }
+        }
+        if (seen) {
+            free(url);
+            continue;
+        }
+        /* Reserve a `loading` cache slot so paint draws a placeholder and a
+         * later start_image_fetch doesn't resubmit this url. */
+        if (r->img_cache_count == r->img_cache_cap) {
+            int nc = r->img_cache_cap ? r->img_cache_cap * 2 : 8;
+            struct yetty_ylexbor_img_cache_entry *p =
+                realloc(r->img_cache, (size_t)nc * sizeof(*p));
+            if (!p) {
+                free(url);
+                break;
+            }
+            r->img_cache = p;
+            r->img_cache_cap = nc;
+        }
+        struct yetty_ylexbor_img_cache_entry *e = &r->img_cache[r->img_cache_count];
+        memset(e, 0, sizeof(*e));
+        e->url = strdup(url);
+        if (e->url == NULL) {
+            free(url);
+            break;
+        }
+        e->loading = 1;
+        r->img_cache_count++;
+
+        struct ylexbor_img_job *job = calloc(1, sizeof(*job));
+        if (job == NULL) {
+            free(url);
+            break;
+        }
+        job->r = r;
+        job->generation = r->fetch_generation;
+        job->url = url; /* ownership transferred to the job */
+        job->base_url = r->base_url ? strdup(r->base_url) : NULL;
+
+        struct yetty_yplatform_yworkpool_job wj = {
+            .run = img_job_run,
+            .done = img_job_done,
+            .ctx = job,
+        };
+        struct yetty_ycore_void_result sr = yetty_yplatform_yworkpool_submit(r->img_pool, wj);
+        if (YETTY_IS_ERR(sr)) {
+            yetty_ycore_error_destroy(sr.error);
+            free(job->base_url);
+            free(job->url);
+            free(job);
+            e->loading = 0;
+            e->failed = 1;
+            continue;
+        }
+        r->img_jobs_in_flight++;
+        submitted++;
+    }
+    if (submitted > 0) {
+        yetty_ylexbor_prof("    img fetch: +%d submitted, %d in flight", submitted,
+                           r->img_jobs_in_flight);
+    }
+    return submitted;
 }
 
 /* Pick the best URL out of an `<img>`'s flock of source-ish attributes.
@@ -600,7 +898,10 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
 	 * origin × multiplexed streams — closer to what Chrome does.
 	 * Skips URLs already in the cache (re-paints) and `data:` URIs
 	 * (handled inline by img_cache_get_or_load). */
-    {
+    /* Skipped in defer mode — an interactive host streams images in one
+     * at a time off the render thread, so this batch fetch must never
+     * block the paint pass. */
+    if (!r->defer_image_fetch) {
         uint32_t img_count = 0;
         for (uint32_t i = 0; i < r->boxes.size; i++) {
             if (r->boxes.data[i].kind == YL_BOX_INLINE_IMAGE) {
@@ -911,20 +1212,57 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
             (void)yetty_ydraw_drawable_list_add_text(buf, b->x, baseline_y, &txt, b->font_size,
                                                      pack_rgba(b->fg), z++, /*font_id=*/-1,
                                                      /*rotation=*/0.0f);
-            if (b->underline && b->w > 0) {
+            /* Text decorations are thin SDF rects spanning the run width,
+			 * each at a different vertical band relative to the text box:
+			 *   underline    — just below the baseline,
+			 *   line-through — through the x-height midline,
+			 *   overline     — above the cap line.
+			 * State is threaded through layout per inline fragment; emit a
+			 * rect for whichever flags are set. */
+            if ((b->underline || b->line_through || b->overline) && b->w > 0) {
                 float thickness = b->font_size * 0.06f;
                 if (thickness < 1.0f) {
                     thickness = 1.0f;
                 }
-                float underline_y = baseline_y + b->font_size * 0.12f;
-                struct yetty_ysdf_box ubx = {
-                    .center_x = b->x + b->w * 0.5f,
-                    .center_y = underline_y + thickness * 0.5f,
-                    .half_width = b->w * 0.5f,
-                    .half_height = thickness * 0.5f,
-                };
-                (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg), 0, 0,
-                                                                &ubx);
+                const float half_w = b->w * 0.5f;
+                const float center_x = b->x + half_w;
+                const float half_t = thickness * 0.5f;
+                if (b->underline) {
+                    float underline_y = baseline_y + b->font_size * 0.12f;
+                    struct yetty_ysdf_box ubx = {
+                        .center_x = center_x,
+                        .center_y = underline_y + half_t,
+                        .half_width = half_w,
+                        .half_height = half_t,
+                    };
+                    (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg),
+                                                                    0, 0, &ubx);
+                }
+                if (b->line_through) {
+                    /* Strike through the visual middle of the glyphs (≈ half
+					 * the cap height above the baseline). */
+                    float strike_y = baseline_y - b->font_size * 0.28f;
+                    struct yetty_ysdf_box sbx = {
+                        .center_x = center_x,
+                        .center_y = strike_y,
+                        .half_width = half_w,
+                        .half_height = half_t,
+                    };
+                    (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg),
+                                                                    0, 0, &sbx);
+                }
+                if (b->overline) {
+                    /* Above the cap line, near the top of the line box. */
+                    float overline_y = b->y + b->font_size * 0.08f;
+                    struct yetty_ysdf_box obx = {
+                        .center_x = center_x,
+                        .center_y = overline_y + half_t,
+                        .half_width = half_w,
+                        .half_height = half_t,
+                    };
+                    (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg),
+                                                                    0, 0, &obx);
+                }
             }
             break;
         }

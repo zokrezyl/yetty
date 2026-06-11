@@ -1,0 +1,9 @@
+<!doctype html><meta charset=utf-8>
+<title>An oversized image in a flex column caps to the container content width and scales
+its height (responsive max-width:100%). github's vertical Stack galleries put 1600px hero
+images in ~600px columns; un-capped they overflowed and stacked to 3-4x the correct height.
+A 1600x800 image in a 300px flex column → 300x150.</title>
+<style>body{margin:0}</style>
+<div style="display:flex;flex-direction:column;width:300px">
+  <img data-test="img" data-expect="0,0,300,150" width="1600" height="800" src="x.png">
+</div>

@@ -1,0 +1,9 @@
+<!doctype html><meta charset=utf-8>
+<title>12-column grid with grid-column:span placement (github's Primer Brand layout:
+grid-template-columns:repeat(12,minmax(0,1fr)); cards span N columns). Two span-6 cards
+sit side-by-side at x=0 and x=600 in a 1200px grid.</title>
+<style>body{margin:0}</style>
+<div style="display:grid;grid-template-columns:repeat(12,minmax(0,1fr));width:1200px">
+  <div data-test="a" data-expect="0,*,600,*"   style="grid-column:span 6">a</div>
+  <div data-test="b" data-expect="600,*,600,*" style="grid-column:span 6">b</div>
+</div>
