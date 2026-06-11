@@ -14,33 +14,36 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_ynode_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_ynode;
-YETTY_YRESULT_DECLARE(yetty_ygui_ynode_data_ptr, struct yetty_ygui_ynode *);
-struct yetty_ygui_ynode_data_ptr_result yetty_ygui_ynode_data(struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_ynode_ptr, struct yetty_ygui_ynode *);
+struct yetty_ygui_ynode_ptr_result yetty_ygui_ynode_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_ynode_to(struct yetty_ygui_ynode *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_ynode_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ygui_object;
-
-struct yetty_ycore_void_result yetty_ygui_ynode_reflow(struct yetty_ygui_object *node);
-int yetty_ygui_ynode_pin_pos(const struct yetty_ygui_object *node, int output, int index, float *x,
-                             float *y);
-int yetty_ygui_ynode_pin_at(const struct yetty_ygui_object *node, float x, float y, int *output,
+struct yetty_ycore_void_result yetty_ygui_ynode_reflow(struct yetty_yclass_object *node);
+int yetty_ygui_ynode_pin_pos(const struct yetty_yclass_object *node, int output, int index,
+                             float *x, float *y);
+int yetty_ygui_ynode_pin_at(const struct yetty_yclass_object *node, float x, float y, int *output,
                             int *index);
-struct yetty_ycore_void_result yetty_ygui_ynode_set_title(struct yetty_ygui_object *node,
+struct yetty_ycore_void_result yetty_ygui_ynode_set_title(struct yetty_yclass_object *node,
                                                           const char *title);
-struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_pos(struct yetty_ygui_object *node,
+struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_pos(struct yetty_yclass_object *node,
                                                               float gx, float gy);
-void yetty_ygui_ynode_graph_pos(const struct yetty_ygui_object *node, float *gx, float *gy);
-struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_size(struct yetty_ygui_object *node,
+void yetty_ygui_ynode_graph_pos(const struct yetty_yclass_object *node, float *gx, float *gy);
+struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_size(struct yetty_yclass_object *node,
                                                                float gw, float gh);
-void yetty_ygui_ynode_graph_size(const struct yetty_ygui_object *node, float *gw, float *gh);
-struct uint32_result yetty_ygui_ynode_add_input(struct yetty_ygui_object *node, const char *name);
-struct uint32_result yetty_ygui_ynode_add_output(struct yetty_ygui_object *node, const char *name);
-int yetty_ygui_ynode_input_count(const struct yetty_ygui_object *node);
-int yetty_ygui_ynode_output_count(const struct yetty_ygui_object *node);
+void yetty_ygui_ynode_graph_size(const struct yetty_yclass_object *node, float *gw, float *gh);
+struct uint32_result yetty_ygui_ynode_add_input(struct yetty_yclass_object *node, const char *name);
+struct uint32_result yetty_ygui_ynode_add_output(struct yetty_yclass_object *node,
+                                                 const char *name);
+int yetty_ygui_ynode_input_count(const struct yetty_yclass_object *node);
+int yetty_ygui_ynode_output_count(const struct yetty_yclass_object *node);
 
 #endif

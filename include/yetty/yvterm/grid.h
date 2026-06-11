@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_yvterm_grid_class_get(void);
 struct yetty_yvterm_grid;
 YETTY_YRESULT_DECLARE(yetty_yvterm_grid_ptr, struct yetty_yvterm_grid *);
 struct yetty_yvterm_grid_ptr_result yetty_yvterm_grid_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_yvterm_grid_to(struct yetty_yvterm_grid *data);
 
 struct yetty_yclass_object_ptr_result yetty_yvterm_grid_create(struct yetty_yclass_ctx *ctx);
 

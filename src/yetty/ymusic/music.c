@@ -1293,7 +1293,7 @@ static struct yetty_ycore_void_result music_load_font(struct yetty_ymusic_music 
 
 /* configure: set system width, staff-space (line gap) in px and render flags.
  * 0 selects the default for each. Call after create(), before render(). */
-[[clang::annotate("override@ymusic:music:configure")]] [[clang::annotate("local@ymusic:configure")]]
+[[clang::annotate("virtual@ymusic:music:configure")]] [[clang::annotate("local@ymusic:configure")]]
 static struct yetty_ycore_void_result music_configure(struct yetty_yclass_ctx *ctx,
                                                       struct yetty_yclass_object *obj, float width,
                                                       float staff_space, uint32_t flags)
@@ -1311,7 +1311,7 @@ static struct yetty_ycore_void_result music_configure(struct yetty_yclass_ctx *c
 /* set_font_path: point the renderer at the Emmentaler (or any SMuFL) OTF/TTF on
  * disk. The bytes are loaded lazily on the first render and shipped via the
  * drawable list's FONT primitive (the receiver compiles the MSDF atlas). */
-[[clang::annotate("override@ymusic:music:set_font_path")]] [[clang::annotate(
+[[clang::annotate("virtual@ymusic:music:set_font_path")]] [[clang::annotate(
     "local@ymusic:set_font_path")]]
 static struct yetty_ycore_void_result music_set_font_path(struct yetty_yclass_ctx *ctx,
                                                           struct yetty_yclass_object *obj,
@@ -1337,7 +1337,7 @@ static struct yetty_ycore_void_result music_set_font_path(struct yetty_yclass_ct
 
 /* parse: ingest LilyPond-subset text and build the score model. Resets the model
  * and clears any selection. */
-[[clang::annotate("override@ymusic:music:parse")]] [[clang::annotate("local@ymusic:parse")]]
+[[clang::annotate("virtual@ymusic:music:parse")]] [[clang::annotate("local@ymusic:parse")]]
 static struct yetty_ycore_void_result music_parse(struct yetty_yclass_ctx *ctx,
                                                   struct yetty_yclass_object *obj,
                                                   const char *input, size_t len)
@@ -1488,7 +1488,7 @@ static struct yetty_ycore_void_result emit_system_prefix(struct yetty_ydraw_draw
 
 /* render: lay out the score and emit it as a fresh ydraw drawable list (caller
  * owns it). Pointer return -> local-only. */
-[[clang::annotate("override@ymusic:music:render")]] [[clang::annotate("local@ymusic:render")]]
+[[clang::annotate("virtual@ymusic:music:render")]] [[clang::annotate("local@ymusic:render")]]
 static struct yetty_ydraw_drawable_list_result music_render(struct yetty_yclass_ctx *ctx,
                                                             struct yetty_yclass_object *obj)
 {
@@ -1632,7 +1632,7 @@ static struct yetty_ydraw_drawable_list_result music_render(struct yetty_yclass_
 
 /* hit_test: id of the element whose column + system band contains content
  * (x,y), or YETTY_YMUSIC_NO_ELEMENT. Requires a prior render() for the layout. */
-[[clang::annotate("override@ymusic:music:hit_test")]] [[clang::annotate("local@ymusic:hit_test")]]
+[[clang::annotate("virtual@ymusic:music:hit_test")]] [[clang::annotate("local@ymusic:hit_test")]]
 static struct yetty_ycore_int_result music_hit_test(struct yetty_yclass_ctx *ctx,
                                                     struct yetty_yclass_object *obj, float x,
                                                     float y)
@@ -1660,7 +1660,7 @@ static struct yetty_ycore_int_result music_hit_test(struct yetty_yclass_ctx *ctx
 }
 
 /* set_highlight: mark an element as selected (-1 clears) for the next render. */
-[[clang::annotate("override@ymusic:music:set_highlight")]] [[clang::annotate(
+[[clang::annotate("virtual@ymusic:music:set_highlight")]] [[clang::annotate(
     "local@ymusic:set_highlight")]]
 static struct yetty_ycore_void_result music_set_highlight(struct yetty_yclass_ctx *ctx,
                                                           struct yetty_yclass_object *obj,
@@ -1676,7 +1676,7 @@ static struct yetty_ycore_void_result music_set_highlight(struct yetty_yclass_ct
 }
 
 /* destroy: free the score model, the font bytes and the object. */
-[[clang::annotate("override@ymusic:music:destroy")]] [[clang::annotate("local@ymusic:destroy")]]
+[[clang::annotate("virtual@ymusic:music:destroy")]] [[clang::annotate("local@ymusic:destroy")]]
 static struct yetty_ycore_void_result music_obj_destroy(struct yetty_yclass_ctx *ctx,
                                                         struct yetty_yclass_object *obj)
 {

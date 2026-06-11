@@ -24,7 +24,7 @@
 #include <yetty/yshadertoy/demo-shaders.h>
 
 /* Single demo instance — the tab handler reaches the shader widget here. */
-static struct yetty_ygui_object *g_shader_widget;
+static struct yetty_yclass_object *g_shader_widget;
 
 static void apply_shader(int idx)
 {
@@ -52,13 +52,13 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *ctx
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
 
     /* Vertical stack: tabbar on top, shader fills the rest. */
-    struct yetty_ygui_object_ptr_result vr =
-        yetty_ygui_add(yetty_ygui_vbox_class_get().value, root);
+    struct yetty_yclass_object_ptr_result vr =
+        yetty_ygui_widget_add(root, yetty_ygui_vbox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, vr, "vbox");
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(vr.value);
@@ -69,8 +69,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     }
 
     /* Tabbar — one tab per shader. */
-    struct yetty_ygui_object_ptr_result tr =
-        yetty_ygui_add(yetty_ygui_tabbar_class_get().value, vr.value);
+    struct yetty_yclass_object_ptr_result tr =
+        yetty_ygui_widget_add(vr.value, yetty_ygui_tabbar_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "tabbar");
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(tr.value);
@@ -79,14 +79,14 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "tabbar layout");
     }
     for (int i = 0; i < yetty_yshadertoy_demo_shader_count; i++) {
-        struct yetty_ygui_object_ptr_result hr =
+        struct yetty_yclass_object_ptr_result hr =
             yetty_ygui_tabbar_add_tab(tr.value, yetty_yshadertoy_demo_shaders[i].label);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "tabbar add_tab");
     }
 
     /* Shader widget — fills the remaining space. */
-    struct yetty_ygui_object_ptr_result sr =
-        yetty_ygui_add(yetty_ygui_yshadertoy_class_get().value, vr.value);
+    struct yetty_yclass_object_ptr_result sr =
+        yetty_ygui_widget_add(vr.value, yetty_ygui_yshadertoy_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yshadertoy");
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(sr.value);

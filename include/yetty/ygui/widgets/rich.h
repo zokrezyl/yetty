@@ -14,20 +14,22 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_rich_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_rich;
-YETTY_YRESULT_DECLARE(yetty_ygui_rich_data_ptr, struct yetty_ygui_rich *);
-struct yetty_ygui_rich_data_ptr_result yetty_ygui_rich_data(struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_rich_ptr, struct yetty_ygui_rich *);
+struct yetty_ygui_rich_ptr_result yetty_ygui_rich_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_rich_to(struct yetty_ygui_rich *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_rich_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ygui_object;
-
-struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_ygui_object *obj);
-struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_ygui_object *obj);
-struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_yclass_object *obj,
                                                         const char *text, float font_size,
                                                         uint32_t color_rgba);
 

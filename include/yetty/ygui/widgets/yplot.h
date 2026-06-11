@@ -14,22 +14,25 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_yplot_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_yplot;
-YETTY_YRESULT_DECLARE(yetty_ygui_yplot_data_ptr, struct yetty_ygui_yplot *);
-struct yetty_ygui_yplot_data_ptr_result yetty_ygui_yplot_data(struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_yplot_ptr, struct yetty_ygui_yplot *);
+struct yetty_ygui_yplot_ptr_result yetty_ygui_yplot_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_yplot_to(struct yetty_ygui_yplot *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_yplot_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ygui_object;
 struct yetty_ygui_yplot_config;
 struct yetty_yplot_buffer_input;
 
 #include <stddef.h>
 #include <stdint.h>
-struct yetty_ygui_object;
+struct yetty_yclass_object;
 struct yetty_ygui_yplot_config {
     float x_min;
     float x_max;
@@ -38,12 +41,12 @@ struct yetty_ygui_yplot_config {
     uint32_t flags;
 };
 struct yetty_yplot_buffer_input;
-struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_yclass_object *obj,
                                                            const char *source);
 struct yetty_ycore_void_result yetty_ygui_yplot_set_config(
-    struct yetty_ygui_object *obj, const struct yetty_ygui_yplot_config *cfg);
+    struct yetty_yclass_object *obj, const struct yetty_ygui_yplot_config *cfg);
 struct yetty_ycore_void_result yetty_ygui_yplot_set_buffers(
-    struct yetty_ygui_object *obj, const char *source, size_t source_len,
+    struct yetty_yclass_object *obj, const char *source, size_t source_len,
     const struct yetty_yplot_buffer_input *buffers, size_t buffer_count,
     const struct yetty_ygui_yplot_config *config);
 

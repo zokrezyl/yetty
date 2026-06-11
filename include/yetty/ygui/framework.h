@@ -34,7 +34,7 @@ struct yetty_yclass_object;
 struct yetty_yclass_rpc_session;
 struct yetty_ygui_theme;
 struct yetty_yconfig_config;
-struct yetty_ygui_object;
+struct yetty_yclass_object;
 struct yetty_ygui_framework;
 
 YETTY_YRESULT_DECLARE(yetty_ygui_framework_ptr, struct yetty_ygui_framework *);
@@ -125,10 +125,10 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_scroll(
 /*-----------------------------------------------------------------------------
  * Root + viewport.
  *---------------------------------------------------------------------------*/
-struct yetty_ygui_object *yetty_ygui_framework_root(struct yetty_ygui_framework *framework);
+struct yetty_yclass_object *yetty_ygui_framework_root(struct yetty_ygui_framework *framework);
 
 struct yetty_ycore_void_result yetty_ygui_framework_set_root(struct yetty_ygui_framework *framework,
-                                                             struct yetty_ygui_object *root);
+                                                             struct yetty_yclass_object *root);
 
 struct yetty_ycore_void_result yetty_ygui_framework_set_viewport(
     struct yetty_ygui_framework *framework, float width_px, float height_px);
@@ -171,9 +171,9 @@ int yetty_ygui_framework_has_pressed_widget(const struct yetty_ygui_framework *f
  * hit under the pointer on the last motion event, or NULL. Hosts use
  * these to drive cursor-shape decisions (e.g. resize cursor over a
  * splitter). Both are borrowed — do not destroy. */
-struct yetty_ygui_object *yetty_ygui_framework_pressed_widget(
+struct yetty_yclass_object *yetty_ygui_framework_pressed_widget(
     struct yetty_ygui_framework *framework);
-struct yetty_ygui_object *yetty_ygui_framework_hovered_widget(
+struct yetty_yclass_object *yetty_ygui_framework_hovered_widget(
     struct yetty_ygui_framework *framework);
 
 /* Transient notification ("toast"). The new toolkit has no overlay

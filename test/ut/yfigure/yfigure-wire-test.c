@@ -168,6 +168,7 @@ static struct yetty_yclass_ptr_result test_leaf_class_get(void)
         .name = "test_leaf",
         .type = YETTY_YCLASS_TYPE_REGULAR,
         .data_size = sizeof(struct test_leaf),
+        .data_align = _Alignof(struct test_leaf),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_yfigure", "render", (yetty_yclass_method_id_t)yetty_yfigure_render,

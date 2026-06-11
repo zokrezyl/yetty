@@ -44,11 +44,11 @@ static struct yetty_ycore_int_result probe_a_on_press(struct yetty_yclass_ctx *_
                                                       float y, int button)
 {
     (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;
     (void)x;
     (void)y;
     (void)button;
-    struct probe_a_data *d = yetty_ygui_data_get(obj, probe_a_class_get());
+    struct probe_a_data *d = yetty_yclass_object_data(obj, probe_a_class_get()).value;
     d->press_count++;
     return YETTY_OK(yetty_ycore_int, 1);
 }
@@ -61,6 +61,7 @@ static const struct yetty_yclass_descriptor probe_a_desc = {
     .name = "probe_a",
     .type = YETTY_YCLASS_TYPE_REGULAR,
     .data_size = sizeof(struct probe_a_data),
+    .data_align = _Alignof(struct probe_a_data),
 };
 
 static const struct yetty_yclass *probe_a_class_get(void)
@@ -93,13 +94,13 @@ static struct yetty_ycore_void_result probe_b_constructor(struct yetty_yclass_ct
                                                           struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, probe_b_class_get(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
     if (YETTY_IS_ERR(sr)) {
         return sr;
     }
-    struct probe_b_data *d = yetty_ygui_data_get(obj, probe_b_class_get());
+    struct probe_b_data *d = yetty_yclass_object_data(obj, probe_b_class_get()).value;
     d->ctor_marker = 0xCAFE;
     return YETTY_OK_VOID();
 }
@@ -109,10 +110,10 @@ static struct yetty_ycore_int_result probe_b_on_motion(struct yetty_yclass_ctx *
                                                        float y)
 {
     (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;
     (void)x;
     (void)y;
-    struct probe_b_data *d = yetty_ygui_data_get(obj, probe_b_class_get());
+    struct probe_b_data *d = yetty_yclass_object_data(obj, probe_b_class_get()).value;
     d->motion_count++;
     return YETTY_OK(yetty_ycore_int, 1);
 }
@@ -127,6 +128,7 @@ static const struct yetty_yclass_descriptor probe_b_desc = {
     .name = "probe_b",
     .type = YETTY_YCLASS_TYPE_REGULAR,
     .data_size = sizeof(struct probe_b_data),
+    .data_align = _Alignof(struct probe_b_data),
 };
 
 static const struct yetty_yclass *probe_b_class_get(void)
@@ -162,9 +164,9 @@ static void test_class_registration(void)
 
 static void test_instance_alloc_and_dispatch(void)
 {
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(probe_a_class_get(), NULL);
+    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_new(probe_a_class_get());
     assert(YETTY_IS_OK(r));
-    struct yetty_ygui_object *obj = r.value;
+    struct yetty_yclass_object *obj = r.value;
 
     /* Base widget class data slice should be present and zero-initialised. */
     struct yetty_ycore_rectangle rect = yetty_ygui_widget_rect(obj);
@@ -175,7 +177,7 @@ static void test_instance_alloc_and_dispatch(void)
         yetty_ygui_widget_on_press(NULL, (struct yetty_yclass_object *)obj, 1.0f, 2.0f, 0);
     assert(YETTY_IS_OK(pr));
     assert(pr.value == 1);
-    struct probe_a_data *ad = yetty_ygui_data_get(obj, probe_a_class_get());
+    struct probe_a_data *ad = yetty_yclass_object_data(obj, probe_a_class_get()).value;
     assert(ad->press_count == 1);
 
     /* Dispatch on_motion → falls through to base widget default (return 0). */
@@ -185,19 +187,19 @@ static void test_instance_alloc_and_dispatch(void)
     assert(mr.value == 0);
 
     /* Clean up. */
-    struct yetty_ycore_void_result dr = yetty_ygui_del(obj);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_destroy(obj);
     assert(YETTY_IS_OK(dr));
 }
 
 static void test_subclass_dispatch_and_super(void)
 {
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(probe_b_class_get(), NULL);
+    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_new(probe_b_class_get());
     assert(YETTY_IS_OK(r));
-    struct yetty_ygui_object *obj = r.value;
+    struct yetty_yclass_object *obj = r.value;
 
     /* Constructor chained: probe_b's ctor sets marker, base widget's
      * ctor initialised the layout struct. */
-    struct probe_b_data *bd = yetty_ygui_data_get(obj, probe_b_class_get());
+    struct probe_b_data *bd = yetty_yclass_object_data(obj, probe_b_class_get()).value;
     assert(bd->ctor_marker == 0xCAFE);
     const struct yetty_ygui_layout *lay = yetty_ygui_widget_layout_get(obj);
     assert(lay != NULL);
@@ -215,10 +217,10 @@ static void test_subclass_dispatch_and_super(void)
         yetty_ygui_widget_on_press(NULL, (struct yetty_yclass_object *)obj, 0, 0, 0);
     assert(YETTY_IS_OK(pr));
     assert(pr.value == 1);
-    struct probe_a_data *ad = yetty_ygui_data_get(obj, probe_a_class_get());
+    struct probe_a_data *ad = yetty_yclass_object_data(obj, probe_a_class_get()).value;
     assert(ad->press_count == 1);
 
-    yetty_ygui_del(obj);
+    yetty_ygui_widget_destroy(obj);
 }
 
 static void test_tooltip_pilot(void)
@@ -226,9 +228,9 @@ static void test_tooltip_pilot(void)
     const struct yetty_yclass *cls = yetty_ygui_tooltip_class_get().value;
     assert(cls != NULL);
 
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls, NULL);
+    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_new(cls);
     assert(YETTY_IS_OK(r));
-    struct yetty_ygui_object *obj = r.value;
+    struct yetty_yclass_object *obj = r.value;
 
     /* Default label is NULL. */
     struct yetty_ycore_const_char_ptr_result text_default = yetty_ygui_tooltip_get_text(obj);
@@ -240,7 +242,7 @@ static void test_tooltip_pilot(void)
     struct yetty_ycore_const_char_ptr_result text_after = yetty_ygui_tooltip_get_text(obj);
     assert(YETTY_IS_OK(text_after));
     assert(strcmp(text_after.value, "hello") == 0);
-    assert(yetty_ygui_object_is_dirty(obj));
+    assert(yetty_ygui_widget_is_dirty(obj));
 
     /* Position the widget so paint emits a TEXT_DRAWABLE_LIST at a known coord. */
     struct yetty_ycore_rectangle wr = {{10.0f, 20.0f}, {200.0f, 60.0f}};
@@ -268,7 +270,7 @@ static void test_tooltip_pilot(void)
     assert(prims_size >= 8);
     assert(prims[0] == 0x40000002u);
     yetty_ydraw_drawable_list_destroy(dlr.value);
-    yetty_ygui_del(obj);
+    yetty_ygui_widget_destroy(obj);
 }
 
 int main(void)

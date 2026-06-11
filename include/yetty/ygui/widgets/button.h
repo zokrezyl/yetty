@@ -14,22 +14,24 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_button_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_button;
-YETTY_YRESULT_DECLARE(yetty_ygui_button_data_ptr, struct yetty_ygui_button *);
-struct yetty_ygui_button_data_ptr_result yetty_ygui_button_data(struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_button_ptr, struct yetty_ygui_button *);
+struct yetty_ygui_button_ptr_result yetty_ygui_button_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_button_to(struct yetty_ygui_button *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_button_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ygui_object;
-
-struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_yclass_object *obj,
                                                            const char *label);
-struct yetty_ycore_void_result yetty_ygui_button_set_chrome_icon(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_button_set_chrome_icon(struct yetty_yclass_object *obj,
                                                                  int kind);
 struct yetty_ycore_const_char_ptr_result yetty_ygui_button_get_label(
-    const struct yetty_ygui_object *obj);
+    const struct yetty_yclass_object *obj);
 
 #endif

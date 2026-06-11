@@ -1,7 +1,47 @@
 /* GENERATED — do not edit. */
-#include "yetty/ymusic/methods.gen.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
+#include <stddef.h> /* NULL, size_t */
+
+struct yetty_ycore_int_result;
+struct yetty_ycore_void_result;
+struct yetty_ydraw_drawable_list_result;
+struct yetty_ycore_void_result yetty_ymusic_configure(struct yetty_yclass_ctx *ctx,
+                                                      struct yetty_yclass_object *obj, float width,
+                                                      float staff_space, uint32_t flags);
+struct yetty_ycore_void_result yetty_ymusic_set_font_path(struct yetty_yclass_ctx *ctx,
+                                                          struct yetty_yclass_object *obj,
+                                                          const char *path);
+struct yetty_ycore_void_result yetty_ymusic_parse(struct yetty_yclass_ctx *ctx,
+                                                  struct yetty_yclass_object *obj,
+                                                  const char *input, size_t len);
+struct yetty_ydraw_drawable_list_result yetty_ymusic_render(struct yetty_yclass_ctx *ctx,
+                                                            struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_ymusic_hit_test(struct yetty_yclass_ctx *ctx,
+                                                    struct yetty_yclass_object *obj, float x,
+                                                    float y);
+struct yetty_ycore_void_result yetty_ymusic_set_highlight(struct yetty_yclass_ctx *ctx,
+                                                          struct yetty_yclass_object *obj,
+                                                          int32_t element_id);
+struct yetty_ycore_void_result yetty_ymusic_destroy(struct yetty_yclass_ctx *ctx,
+                                                    struct yetty_yclass_object *obj);
+typedef struct yetty_ycore_void_result (*yetty_ymusic_configure_fn)(struct yetty_yclass_ctx *,
+                                                                    struct yetty_yclass_object *,
+                                                                    float, float, uint32_t);
+typedef struct yetty_ycore_void_result (*yetty_ymusic_set_font_path_fn)(
+    struct yetty_yclass_ctx *, struct yetty_yclass_object *, const char *);
+typedef struct yetty_ycore_void_result (*yetty_ymusic_parse_fn)(struct yetty_yclass_ctx *,
+                                                                struct yetty_yclass_object *,
+                                                                const char *, size_t);
+typedef struct yetty_ydraw_drawable_list_result (*yetty_ymusic_render_fn)(
+    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+typedef struct yetty_ycore_int_result (*yetty_ymusic_hit_test_fn)(struct yetty_yclass_ctx *,
+                                                                  struct yetty_yclass_object *,
+                                                                  float, float);
+typedef struct yetty_ycore_void_result (*yetty_ymusic_set_highlight_fn)(
+    struct yetty_yclass_ctx *, struct yetty_yclass_object *, int32_t);
+typedef struct yetty_ycore_void_result (*yetty_ymusic_destroy_fn)(struct yetty_yclass_ctx *,
+                                                                  struct yetty_yclass_object *);
 
 [[maybe_unused]]
 static yetty_ymusic_configure_fn yetty_ymusic_music_yetty_ymusic_configure_check = music_configure;
@@ -32,6 +72,7 @@ struct yetty_yclass_ptr_result yetty_ymusic_music_class_get(void)
         .name = "yetty_ymusic_music",
         .type = YETTY_YCLASS_TYPE_REGULAR,
         .data_size = sizeof(struct yetty_ymusic_music),
+        .data_align = _Alignof(struct yetty_ymusic_music),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_ymusic", "configure", (yetty_yclass_method_id_t)yetty_ymusic_configure,
@@ -73,4 +114,23 @@ struct yetty_ymusic_music_ptr_result yetty_ymusic_music_from(struct yetty_yclass
         return YETTY_ERR(yetty_ymusic_music_ptr, "yetty_ymusic_music_from: object_data", slice_r);
     }
     return YETTY_OK(yetty_ymusic_music_ptr, (struct yetty_ymusic_music *)slice_r.value);
+}
+
+struct yetty_yclass_object *yetty_ymusic_music_to(struct yetty_ymusic_music *data)
+{
+    if (!data) {
+        return NULL;
+    }
+    struct yetty_yclass_ptr_result class_r = yetty_ymusic_music_class_get();
+    if (YETTY_IS_ERR(class_r)) {
+        yetty_ycore_error_destroy(class_r.error);
+        return NULL;
+    }
+    struct yetty_ycore_size_result offset_r =
+        yetty_yclass_object_data_offset(class_r.value, class_r.value);
+    if (YETTY_IS_ERR(offset_r)) {
+        yetty_ycore_error_destroy(offset_r.error);
+        return NULL;
+    }
+    return (struct yetty_yclass_object *)((char *)data - offset_r.value);
 }

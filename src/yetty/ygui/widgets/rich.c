@@ -18,9 +18,9 @@
  * rich.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_rich_data_ptr, struct yetty_ygui_rich *);
+YETTY_YRESULT_DECLARE(yetty_ygui_rich_ptr, struct yetty_ygui_rich *);
 struct yetty_yclass_ptr_result yetty_ygui_rich_class_get(void);
-struct yetty_ygui_rich_data_ptr_result yetty_ygui_rich_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_rich_ptr_result yetty_ygui_rich_from(struct yetty_yclass_object *obj);
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
@@ -52,12 +52,11 @@ static struct yetty_ycore_void_result rich_constructor(struct yetty_yclass_ctx *
                                                        struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_rich_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "rich_constructor: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
+    struct yetty_ygui_rich_ptr_result d_dr = yetty_ygui_rich_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "rich_constructor: data_get");
     struct yetty_ygui_rich *d = d_dr.value;
     d->lines = NULL;
@@ -82,9 +81,8 @@ static struct yetty_ycore_void_result rich_destructor(struct yetty_yclass_ctx *y
                                                       struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
+    struct yetty_ygui_rich_ptr_result d_dr = yetty_ygui_rich_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "rich_destructor: data_get");
     struct yetty_ygui_rich *d = d_dr.value;
     for (int i = 0; i < d->n_lines; ++i) {
@@ -102,12 +100,11 @@ static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_ctx *yclass
                                                  struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "rich_paint: NULL ctx");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
+    struct yetty_ygui_rich_ptr_result d_dr = yetty_ygui_rich_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "rich_paint: data_get");
     struct yetty_ygui_rich *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -196,30 +193,28 @@ static int spans_grow(struct rich_line *l, int need)
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_ygui_object *obj)
+struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "rich_clear: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
+    struct yetty_ygui_rich_ptr_result d_dr = yetty_ygui_rich_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_rich_clear: data_get");
     struct yetty_ygui_rich *d = d_dr.value;
     for (int i = 0; i < d->n_lines; ++i) {
         free_line(&d->lines[i]);
     }
     d->n_lines = 0;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_ygui_object *obj)
+struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "rich_add_line: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
+    struct yetty_ygui_rich_ptr_result d_dr = yetty_ygui_rich_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_rich_add_line: data_get");
     struct yetty_ygui_rich *d = d_dr.value;
     if (!lines_grow(d, d->n_lines + 1)) {
@@ -229,19 +224,18 @@ struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_ygui_object
     d->lines[d->n_lines].n_spans = 0;
     d->lines[d->n_lines].cap = 0;
     d->n_lines++;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_yclass_object *obj,
                                                         const char *text, float font_size,
                                                         uint32_t color_rgba)
 {
     if (!obj || !text) {
         return YETTY_ERR(yetty_ycore_void, "rich_add_span: NULL arg");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
+    struct yetty_ygui_rich_ptr_result d_dr = yetty_ygui_rich_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_rich_add_span: data_get");
     struct yetty_ygui_rich *d = d_dr.value;
     if (d->n_lines == 0) {
@@ -262,7 +256,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_ygui_object
     line->spans[line->n_spans].font_size = font_size > 0.0f ? font_size : 14.0f;
     line->spans[line->n_spans].color = color_rgba;
     line->n_spans++;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "rich.gen.c"

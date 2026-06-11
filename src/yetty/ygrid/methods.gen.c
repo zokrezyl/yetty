@@ -1,5 +1,4 @@
 /* GENERATED — do not edit. */
-#include "yetty/ygrid/methods.gen.h"
 #include "yetty/ygrid/grid.h"
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>

@@ -24,10 +24,9 @@
  * yrich_view.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_yrich_view_data_ptr, struct yetty_ygui_yrich_view *);
+YETTY_YRESULT_DECLARE(yetty_ygui_yrich_view_ptr, struct yetty_ygui_yrich_view *);
 struct yetty_yclass_ptr_result yetty_ygui_yrich_view_class_get(void);
-struct yetty_ygui_yrich_view_data_ptr_result yetty_ygui_yrich_view_data(
-    struct yetty_ygui_object *obj);
+struct yetty_ygui_yrich_view_ptr_result yetty_ygui_yrich_view_from(struct yetty_yclass_object *obj);
 #include <yetty/ygui/primitive-widget.h>
 
 #include <yetty/ydraw-core/cmds.h>
@@ -79,11 +78,11 @@ static struct yetty_ycore_void_result yrich_view_ctor(struct yetty_yclass_ctx *y
                                                       struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yrich_view_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yrich_view_ctor: super");
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, yrich_view_class());
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yrich_view_ctor: data_get");
     struct yetty_ygui_yrich_view *d = d_dr.value;
     d->doc = NULL;
@@ -99,8 +98,8 @@ static struct yetty_ycore_void_result yrich_view_dtor(struct yetty_yclass_ctx *y
                                                       struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, yrich_view_class());
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yrich_view_dtor: data_get");
     struct yetty_ygui_yrich_view *d = d_dr.value;
     if (d->own && d->doc) {
@@ -167,9 +166,9 @@ static void yrich_view_retint_text(struct yetty_ydraw_drawable_list *buf, uint32
 
 /* Theme text / page colours, falling back to the brand defaults when the
  * widget is not yet attached to an engine. */
-static void yrich_view_theme_colors(struct yetty_ygui_object *obj, uint32_t *text, uint32_t *page)
+static void yrich_view_theme_colors(struct yetty_yclass_object *obj, uint32_t *text, uint32_t *page)
 {
-    struct yetty_ygui_framework *engine = yetty_ygui_object_framework(obj);
+    struct yetty_ygui_framework *engine = yetty_ygui_widget_framework(obj);
     if (engine) {
         struct yetty_ygui_theme *theme = yetty_ygui_framework_theme(engine);
         if (theme) {
@@ -179,10 +178,10 @@ static void yrich_view_theme_colors(struct yetty_ygui_object *obj, uint32_t *tex
     }
 }
 
-static struct yetty_ycore_void_result yrich_view_render(struct yetty_ygui_object *obj, float w,
+static struct yetty_ycore_void_result yrich_view_render(struct yetty_yclass_object *obj, float w,
                                                         float h)
 {
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, yrich_view_class());
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yrich_view_render: data_get");
     struct yetty_ygui_yrich_view *d = d_dr.value;
     if (!d->doc || w <= 0.0f || h <= 0.0f) {
@@ -225,8 +224,8 @@ static struct yetty_ycore_void_result yrich_view_emit_body(struct yetty_yclass_c
                                                            struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, yrich_view_class());
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yrich_view_emit_body: data_get");
     struct yetty_ygui_yrich_view *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -255,7 +254,7 @@ static struct yetty_ycore_void_result yrich_view_emit_body(struct yetty_yclass_c
 }
 
 /* Map an absolute viewport point to document content coords. */
-static void to_doc_coords(struct yetty_ygui_object *obj, float x, float y, float *dx, float *dy)
+static void to_doc_coords(struct yetty_yclass_object *obj, float x, float y, float *dx, float *dy)
 {
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     *dx = x - r.min.x;
@@ -268,8 +267,8 @@ static struct yetty_ycore_int_result yrich_view_on_press(struct yetty_yclass_ctx
                                                          float x, float y, int button)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, yrich_view_class());
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yrich_view_on_press: data_get");
     struct yetty_ygui_yrich_view *d = d_dr.value;
     if (!d->doc) {
@@ -280,7 +279,7 @@ static struct yetty_ycore_int_result yrich_view_on_press(struct yetty_yclass_ctx
     struct yetty_yrich_input_mods mods = {0};
     yetty_yrich_document_on_mouse_down(d->doc, dx, dy, (uint32_t)button, mods);
     d->pressed = 1;
-    struct yetty_ycore_void_result result_263 = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result result_263 = yetty_ygui_widget_set_dirty(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, result_263, "yrich_view_on_press");
     return YETTY_OK(yetty_ycore_int, 1);
 }
@@ -291,8 +290,8 @@ static struct yetty_ycore_int_result yrich_view_on_release(struct yetty_yclass_c
                                                            float x, float y, int button)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, yrich_view_class());
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yrich_view_on_release: data_get");
     struct yetty_ygui_yrich_view *d = d_dr.value;
     if (!d->doc) {
@@ -303,7 +302,7 @@ static struct yetty_ycore_int_result yrich_view_on_release(struct yetty_yclass_c
     struct yetty_yrich_input_mods mods = {0};
     yetty_yrich_document_on_mouse_up(d->doc, dx, dy, (uint32_t)button, mods);
     d->pressed = 0;
-    struct yetty_ycore_void_result result_285 = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result result_285 = yetty_ygui_widget_set_dirty(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, result_285, "yrich_view_on_release");
     return YETTY_OK(yetty_ycore_int, 1);
 }
@@ -314,8 +313,8 @@ static struct yetty_ycore_int_result yrich_view_on_motion(struct yetty_yclass_ct
                                                           float x, float y)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, yrich_view_class());
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yrich_view_on_motion: data_get");
     struct yetty_ygui_yrich_view *d = d_dr.value;
     if (!d->doc || !d->pressed) {
@@ -325,7 +324,7 @@ static struct yetty_ycore_int_result yrich_view_on_motion(struct yetty_yclass_ct
     to_doc_coords(obj, x, y, &dx, &dy);
     struct yetty_yrich_input_mods mods = {0};
     yetty_yrich_document_on_mouse_drag(d->doc, dx, dy, 0, mods);
-    struct yetty_ycore_void_result result_306 = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result result_306 = yetty_ygui_widget_set_dirty(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, result_306, "yrich_view_on_motion");
     return YETTY_OK(yetty_ycore_int, 1);
 }
@@ -334,14 +333,14 @@ static struct yetty_ycore_int_result yrich_view_on_motion(struct yetty_yclass_ct
  * Public API — model attachment + host-driven keyboard forwarding.
  *---------------------------------------------------------------------------*/
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_yclass_object *obj,
                                                                   struct yetty_yrich_document *doc,
                                                                   int own)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yrich_view_set_document: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, yrich_view_class());
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_yrich_view_set_document: data_get");
     struct yetty_ygui_yrich_view *d = d_dr.value;
     if (d->own && d->doc && d->doc != doc) {
@@ -355,46 +354,46 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_y
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cb, "yrich_view_set_document: clear buffer");
     d->rendered_w = 0.0f;
     d->rendered_h = 0.0f;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 /* Force a re-render at the next emit even when neither the rect nor the
  * document's own dirty flag changed — used after a host action (toolbar
  * button, programmatic edit) mutates the document. */
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_yrich_view_invalidate(struct yetty_ygui_object *obj)
+struct yetty_ycore_void_result yetty_ygui_yrich_view_invalidate(struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yrich_view_invalidate: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, yrich_view_class());
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_yrich_view_invalidate: data_get");
     struct yetty_ygui_yrich_view *d = d_dr.value;
     d->rendered_w = 0.0f;
     d->rendered_h = 0.0f;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
-struct yetty_yrich_document *yetty_ygui_yrich_view_document(const struct yetty_ygui_object *obj)
+struct yetty_yrich_document *yetty_ygui_yrich_view_document(const struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return NULL;
     }
     struct yetty_ygui_yrich_view *d =
-        yetty_ygui_data_get((struct yetty_ygui_object *)obj, yrich_view_class());
+        yetty_yclass_object_data((struct yetty_yclass_object *)obj, yrich_view_class()).value;
     return d->doc;
 }
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_yrich_view_content_size(
-    const struct yetty_ygui_object *obj, float *w, float *h)
+    const struct yetty_yclass_object *obj, float *w, float *h)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yrich_view_content_size: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result((struct yetty_ygui_object *)obj, yrich_view_class());
+    struct yetty_yclass_void_ptr_result d_dr =
+        yetty_yclass_object_data((struct yetty_yclass_object *)obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_yrich_view_content_size: data_get");
     struct yetty_ygui_yrich_view *d = d_dr.value;
     if (w) {
@@ -407,14 +406,14 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_content_size(
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_yclass_object *obj,
                                                               uint32_t key,
                                                               struct yetty_yrich_input_mods mods)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yrich_view_feed_key: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, yrich_view_class());
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_yrich_view_feed_key: data_get");
     struct yetty_ygui_yrich_view *d = d_dr.value;
     if (!d->doc) {
@@ -422,24 +421,24 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_ygui_
     }
     struct yetty_ycore_void_result kr = yetty_yrich_document_on_key_down(d->doc, key, mods);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, kr, "yrich_view_feed_key");
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_yclass_object *obj,
                                                                const char *text, size_t len)
 {
     if (!obj || !text) {
         return YETTY_ERR(yetty_ycore_void, "yrich_view_feed_text: NULL arg");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, yrich_view_class());
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_yrich_view_feed_text: data_get");
     struct yetty_ygui_yrich_view *d = d_dr.value;
     if (!d->doc) {
         return YETTY_OK_VOID();
     }
     yetty_yrich_document_on_text_input(d->doc, text, len);
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "yrich_view.gen.c"

@@ -14,20 +14,22 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_ydiagram_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_ydiagram;
-YETTY_YRESULT_DECLARE(yetty_ygui_ydiagram_data_ptr, struct yetty_ygui_ydiagram *);
-struct yetty_ygui_ydiagram_data_ptr_result yetty_ygui_ydiagram_data(struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_ydiagram_ptr, struct yetty_ygui_ydiagram *);
+struct yetty_ygui_ydiagram_ptr_result yetty_ygui_ydiagram_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_ydiagram_to(struct yetty_ygui_ydiagram *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_ydiagram_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ygui_object;
-
-struct yetty_ycore_void_result yetty_ygui_ydiagram_set_source(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_ydiagram_set_source(struct yetty_yclass_object *obj,
                                                               const char *source);
 struct yetty_ycore_const_char_ptr_result yetty_ygui_ydiagram_get_source(
-    const struct yetty_ygui_object *obj);
+    const struct yetty_yclass_object *obj);
 
 #endif

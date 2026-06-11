@@ -8,9 +8,9 @@
  * ypdf.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_ypdf_data_ptr, struct yetty_ygui_ypdf *);
+YETTY_YRESULT_DECLARE(yetty_ygui_ypdf_ptr, struct yetty_ygui_ypdf *);
 struct yetty_yclass_ptr_result yetty_ygui_ypdf_class_get(void);
-struct yetty_ygui_ypdf_data_ptr_result yetty_ygui_ypdf_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_ypdf_ptr_result yetty_ygui_ypdf_from(struct yetty_yclass_object *obj);
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #if YETTY_YGUI_HAVE_YPDF
@@ -26,7 +26,7 @@ yetty_ygui_ypdf {
 };
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_yclass_object *obj,
                                                         const char *path)
 {
     if (!obj || !path) {

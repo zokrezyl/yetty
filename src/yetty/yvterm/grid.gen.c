@@ -1,9 +1,8 @@
 /* GENERATED — do not edit. */
 #include "yetty/yfigure/figure.h"
-#include "yetty/yfigure/methods.gen.h"
-#include "yetty/yvterm/methods.gen.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
+#include <stddef.h> /* NULL, size_t */
 
 [[maybe_unused]]
 static yetty_yfigure_render_fn yetty_yvterm_grid_yetty_yfigure_render_check =
@@ -24,6 +23,7 @@ struct yetty_yclass_ptr_result yetty_yvterm_grid_class_get(void)
         .name = "yetty_yvterm_grid",
         .type = YETTY_YCLASS_TYPE_REGULAR,
         .data_size = sizeof(struct yetty_yvterm_grid),
+        .data_align = _Alignof(struct yetty_yvterm_grid),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_yfigure", "render", (yetty_yclass_method_id_t)yetty_yfigure_render,
@@ -60,4 +60,23 @@ struct yetty_yvterm_grid_ptr_result yetty_yvterm_grid_from(struct yetty_yclass_o
         return YETTY_ERR(yetty_yvterm_grid_ptr, "yetty_yvterm_grid_from: object_data", slice_r);
     }
     return YETTY_OK(yetty_yvterm_grid_ptr, (struct yetty_yvterm_grid *)slice_r.value);
+}
+
+struct yetty_yclass_object *yetty_yvterm_grid_to(struct yetty_yvterm_grid *data)
+{
+    if (!data) {
+        return NULL;
+    }
+    struct yetty_yclass_ptr_result class_r = yetty_yvterm_grid_class_get();
+    if (YETTY_IS_ERR(class_r)) {
+        yetty_ycore_error_destroy(class_r.error);
+        return NULL;
+    }
+    struct yetty_ycore_size_result offset_r =
+        yetty_yclass_object_data_offset(class_r.value, class_r.value);
+    if (YETTY_IS_ERR(offset_r)) {
+        yetty_ycore_error_destroy(offset_r.error);
+        return NULL;
+    }
+    return (struct yetty_yclass_object *)((char *)data - offset_r.value);
 }

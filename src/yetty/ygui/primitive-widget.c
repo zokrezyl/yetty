@@ -52,10 +52,10 @@ yetty_ygui_primitive_widget {
  * downcast/accessor the appended primitive-widget.gen.c defines.
  * Declared here (not pulled from primitive-widget.h, which this TU does
  * not include) so the foot include has them in scope. */
-YETTY_YRESULT_DECLARE(yetty_ygui_primitive_widget_data_ptr, struct yetty_ygui_primitive_widget *);
+YETTY_YRESULT_DECLARE(yetty_ygui_primitive_widget_ptr, struct yetty_ygui_primitive_widget *);
 struct yetty_yclass_ptr_result yetty_ygui_primitive_widget_class_get(void);
-struct yetty_ygui_primitive_widget_data_ptr_result yetty_ygui_primitive_widget_data(
-    struct yetty_ygui_object *obj);
+struct yetty_ygui_primitive_widget_ptr_result yetty_ygui_primitive_widget_from(
+    struct yetty_yclass_object *obj);
 
 [[clang::annotate("override@ygui:primitive_widget:widget_emit_body")]]
 static struct yetty_ycore_void_result primitive_emit_body(struct yetty_yclass_ctx *yclass_ctx,
@@ -63,7 +63,7 @@ static struct yetty_ycore_void_result primitive_emit_body(struct yetty_yclass_ct
                                                           struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     /* Optional background fill (set via yetty_ygui_widget_set_bg_color),
      * painted under the widget's own paint. Skipped when transparent so
      * widgets that never set a bg are unchanged. */

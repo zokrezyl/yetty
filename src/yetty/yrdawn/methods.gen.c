@@ -1,5 +1,4 @@
 /* GENERATED — do not edit. */
-#include "yetty/yrdawn/methods.gen.h"
 #include "yetty/yrdawn/figure.h"
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>

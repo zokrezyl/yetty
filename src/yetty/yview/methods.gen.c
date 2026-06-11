@@ -1,5 +1,4 @@
 /* GENERATED — do not edit. */
-#include "yetty/yview/methods.gen.h"
 #include "yetty/yview/view.h"
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>

@@ -262,11 +262,11 @@ static int proc_cmp_cpu_desc(const void *a, const void *b)
 
 struct app_state {
     struct yetty_ygui_framework *engine;
-    struct yetty_ygui_object *root;
-    struct yetty_ygui_object *header;
-    struct yetty_ygui_object *cpu_bars[MAX_CORES + 1];
-    struct yetty_ygui_object *cpu_labels[MAX_CORES + 1];
-    struct yetty_ygui_object *table;
+    struct yetty_yclass_object *root;
+    struct yetty_yclass_object *header;
+    struct yetty_yclass_object *cpu_bars[MAX_CORES + 1];
+    struct yetty_yclass_object *cpu_labels[MAX_CORES + 1];
+    struct yetty_yclass_object *table;
     int running;
 
     struct cpu_state cpu_st;
@@ -307,7 +307,7 @@ static uint32_t core_accent(int core)
 
 /* Add `cls` under `parent`, position + size it absolutely, return it
  * (or NULL). Absolute placement mirrors ytop's hand-laid-out UI. */
-static struct yetty_ygui_object *ytop_place(struct app_state *s,
+static struct yetty_yclass_object *ytop_place(struct app_state *s,
                                             struct yetty_yclass_ptr_result cls_r, float x, float y,
                                             float w, float h)
 {
@@ -315,7 +315,7 @@ static struct yetty_ygui_object *ytop_place(struct app_state *s,
         yetty_ycore_error_destroy(cls_r.error);
         return NULL;
     }
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls_r.value, s->root);
+    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_add(s->root, cls_r.value);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return NULL;
@@ -350,7 +350,7 @@ static void build_ui(struct app_state *s, int n_cores)
         char lbl_text[16];
         snprintf(lbl_text, sizeof(lbl_text), "cpu%d", i - 1);
 
-        struct yetty_ygui_object *core_lbl =
+        struct yetty_yclass_object *core_lbl =
             ytop_place(s, yetty_ygui_label_class_get(), x, y + 4.0f, 48.0f, 18.0f);
         if (core_lbl) {
             yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(core_lbl, lbl_text));
@@ -691,8 +691,8 @@ int main(int argc, char **argv)
 
     /* Root + widget tree (absolutely positioned, mirroring ytop's
      * hand-laid-out chrome). */
-    struct yetty_ygui_object_ptr_result rr =
-        yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
+    struct yetty_yclass_object_ptr_result rr =
+        yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
     if (YETTY_IS_OK(rr)) {
         s->root = rr.value;
         yetty_ycore_error_destroy_safe(yetty_ygui_framework_set_root(s->engine, s->root));

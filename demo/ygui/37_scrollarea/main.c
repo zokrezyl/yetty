@@ -42,7 +42,7 @@
 /* Outer scene containers, toggled in/out of view as tabs change. The
  * demo is a single instance, so file-static state is fine here. */
 static struct {
-    struct yetty_ygui_object *scenes[8];
+    struct yetty_yclass_object *scenes[8];
     int count;
 } g;
 
@@ -55,14 +55,14 @@ static inline void err_ok(struct yetty_ycore_void_result r)
 
 /* Instantiate `cls` under `parent`, swallowing (and freeing) any error so
  * the build keeps going — a demo wants best-effort, not abort-on-first. */
-static struct yetty_ygui_object *add_obj(struct yetty_ygui_object *parent,
+static struct yetty_yclass_object *add_obj(struct yetty_yclass_object *parent,
                                          struct yetty_yclass_ptr_result cls)
 {
     if (YETTY_IS_ERR(cls)) {
         yetty_ycore_error_destroy(cls.error);
         return NULL;
     }
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls.value, parent);
+    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_add(parent, cls.value);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return NULL;
@@ -71,7 +71,7 @@ static struct yetty_ygui_object *add_obj(struct yetty_ygui_object *parent,
 }
 
 /* Author width/height; pass a negative value to leave that axis unset. */
-static void set_size(struct yetty_ygui_object *o, float w, float h)
+static void set_size(struct yetty_yclass_object *o, float w, float h)
 {
     if (!o) {
         return;
@@ -86,7 +86,7 @@ static void set_size(struct yetty_ygui_object *o, float w, float h)
     err_ok(yetty_ygui_widget_layout_set(o, &l));
 }
 
-static void set_grow(struct yetty_ygui_object *o, float grow)
+static void set_grow(struct yetty_yclass_object *o, float grow)
 {
     if (!o) {
         return;
@@ -96,7 +96,7 @@ static void set_grow(struct yetty_ygui_object *o, float grow)
     err_ok(yetty_ygui_widget_layout_set(o, &l));
 }
 
-static void set_gap(struct yetty_ygui_object *o, float gap)
+static void set_gap(struct yetty_yclass_object *o, float gap)
 {
     if (!o) {
         return;
@@ -136,23 +136,23 @@ static struct yetty_ycore_void_result on_tab_changed(struct yetty_yclass_ctx *ct
 /* Begin a scene: an outer column holding a one-line description above a
  * flex-filling scrollarea. Registers the outer column for tab toggling
  * and returns the scrollarea for the caller to populate. */
-static struct yetty_ygui_object *begin_scene(struct yetty_ygui_object *content, const char *desc)
+static struct yetty_yclass_object *begin_scene(struct yetty_yclass_object *content, const char *desc)
 {
-    struct yetty_ygui_object *scene = add_obj(content, yetty_ygui_vbox_class_get());
+    struct yetty_yclass_object *scene = add_obj(content, yetty_ygui_vbox_class_get());
     if (!scene) {
         return NULL;
     }
     set_grow(scene, 1.0f);
     set_gap(scene, 6.0f);
 
-    struct yetty_ygui_object *label = add_obj(scene, yetty_ygui_label_class_get());
+    struct yetty_yclass_object *label = add_obj(scene, yetty_ygui_label_class_get());
     if (label) {
         err_ok(yetty_ygui_label_set_text(label, desc));
         err_ok(yetty_ygui_label_set_font_size(label, 13.0f));
         set_size(label, -1.0f, 22.0f);
     }
 
-    struct yetty_ygui_object *scroll = add_obj(scene, yetty_ygui_scrollarea_class_get());
+    struct yetty_yclass_object *scroll = add_obj(scene, yetty_ygui_scrollarea_class_get());
     if (scroll) {
         set_grow(scroll, 1.0f);
     }
@@ -162,9 +162,9 @@ static struct yetty_ygui_object *begin_scene(struct yetty_ygui_object *content, 
     return scroll;
 }
 
-static void add_label_row(struct yetty_ygui_object *scroll, const char *text)
+static void add_label_row(struct yetty_yclass_object *scroll, const char *text)
 {
-    struct yetty_ygui_object *row = add_obj(scroll, yetty_ygui_label_class_get());
+    struct yetty_yclass_object *row = add_obj(scroll, yetty_ygui_label_class_get());
     if (!row) {
         return;
     }
@@ -172,9 +172,9 @@ static void add_label_row(struct yetty_ygui_object *scroll, const char *text)
     set_size(row, -1.0f, 24.0f);
 }
 
-static void add_button_row(struct yetty_ygui_object *scroll, const char *text)
+static void add_button_row(struct yetty_yclass_object *scroll, const char *text)
 {
-    struct yetty_ygui_object *row = add_obj(scroll, yetty_ygui_button_class_get());
+    struct yetty_yclass_object *row = add_obj(scroll, yetty_ygui_button_class_get());
     if (!row) {
         return;
     }
@@ -182,9 +182,9 @@ static void add_button_row(struct yetty_ygui_object *scroll, const char *text)
     set_size(row, -1.0f, 28.0f);
 }
 
-static void add_checkbox_row(struct yetty_ygui_object *scroll, const char *text)
+static void add_checkbox_row(struct yetty_yclass_object *scroll, const char *text)
 {
-    struct yetty_ygui_object *row = add_obj(scroll, yetty_ygui_checkbox_class_get());
+    struct yetty_yclass_object *row = add_obj(scroll, yetty_ygui_checkbox_class_get());
     if (!row) {
         return;
     }
@@ -193,14 +193,14 @@ static void add_checkbox_row(struct yetty_ygui_object *scroll, const char *text)
 }
 
 /* Scene 1 — a tall multi-line styled text block inside the scrollarea. */
-static void build_text_scene(struct yetty_ygui_object *content)
+static void build_text_scene(struct yetty_yclass_object *content)
 {
-    struct yetty_ygui_object *scroll =
+    struct yetty_yclass_object *scroll =
         begin_scene(content, "Multi-line text — drag to page through paragraphs");
     if (!scroll) {
         return;
     }
-    struct yetty_ygui_object *rich = add_obj(scroll, yetty_ygui_rich_class_get());
+    struct yetty_yclass_object *rich = add_obj(scroll, yetty_ygui_rich_class_get());
     if (!rich) {
         return;
     }
@@ -221,9 +221,9 @@ static void build_text_scene(struct yetty_ygui_object *content)
 }
 
 /* Scene 2 — a settings-style group of widgets that overruns its area. */
-static void build_group_scene(struct yetty_ygui_object *content)
+static void build_group_scene(struct yetty_yclass_object *content)
 {
-    struct yetty_ygui_object *scroll =
+    struct yetty_yclass_object *scroll =
         begin_scene(content, "Widget group — scroll to reach controls; buttons stay clickable");
     if (!scroll) {
         return;
@@ -231,7 +231,7 @@ static void build_group_scene(struct yetty_ygui_object *content)
     const char *sections[] = {"Appearance", "Network", "Privacy", "Advanced", "About"};
     char buf[48];
     for (size_t s = 0; s < sizeof(sections) / sizeof(sections[0]); s++) {
-        struct yetty_ygui_object *heading = add_obj(scroll, yetty_ygui_label_class_get());
+        struct yetty_yclass_object *heading = add_obj(scroll, yetty_ygui_label_class_get());
         if (heading) {
             err_ok(yetty_ygui_label_set_text(heading, sections[s]));
             err_ok(yetty_ygui_label_set_font_size(heading, 15.0f));
@@ -247,9 +247,9 @@ static void build_group_scene(struct yetty_ygui_object *content)
 }
 
 /* Scene 3 — a long flat list: short thumb, full-track travel. */
-static void build_list_scene(struct yetty_ygui_object *content)
+static void build_list_scene(struct yetty_yclass_object *content)
 {
-    struct yetty_ygui_object *scroll =
+    struct yetty_yclass_object *scroll =
         begin_scene(content, "Long list — 60 rows; short thumb travels the whole track");
     if (!scroll) {
         return;
@@ -262,9 +262,9 @@ static void build_list_scene(struct yetty_ygui_object *content)
 }
 
 /* Scene 4 — content that fits: full-height thumb, nothing scrolls. */
-static void build_fits_scene(struct yetty_ygui_object *content)
+static void build_fits_scene(struct yetty_yclass_object *content)
 {
-    struct yetty_ygui_object *scroll =
+    struct yetty_yclass_object *scroll =
         begin_scene(content, "Fits — content shorter than the viewport, thumb fills the track");
     if (!scroll) {
         return;
@@ -280,9 +280,9 @@ static void build_fits_scene(struct yetty_ygui_object *content)
  * (fixed height inside the outer) scrolls its own content; the inner box
  * (fixed height inside the middle) scrolls too. Each is its own ygrid
  * figure and clips to the intersection of its ancestors' boxes. */
-static void build_nested_scene(struct yetty_ygui_object *content)
+static void build_nested_scene(struct yetty_yclass_object *content)
 {
-    struct yetty_ygui_object *outer =
+    struct yetty_yclass_object *outer =
         begin_scene(content, "Nested x3 — outer scrolls; the middle and inner boxes scroll too");
     if (!outer) {
         return;
@@ -292,14 +292,14 @@ static void build_nested_scene(struct yetty_ygui_object *content)
         snprintf(buf, sizeof(buf), "Outer row %02d", i);
         add_label_row(outer, buf);
     }
-    struct yetty_ygui_object *middle = add_obj(outer, yetty_ygui_scrollarea_class_get());
+    struct yetty_yclass_object *middle = add_obj(outer, yetty_ygui_scrollarea_class_get());
     if (middle) {
         set_size(middle, -1.0f, 320.0f); /* fixed box inside the outer */
         for (int i = 1; i <= 5; i++) {
             snprintf(buf, sizeof(buf), "Middle row %02d", i);
             add_label_row(middle, buf);
         }
-        struct yetty_ygui_object *inner = add_obj(middle, yetty_ygui_scrollarea_class_get());
+        struct yetty_yclass_object *inner = add_obj(middle, yetty_ygui_scrollarea_class_get());
         if (inner) {
             set_size(inner, -1.0f, 140.0f); /* fixed box inside the middle */
             for (int i = 1; i <= 30; i++) {
@@ -319,7 +319,7 @@ static void build_nested_scene(struct yetty_ygui_object *content)
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
     {
@@ -330,7 +330,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_widget_layout_set(root, &l));
     }
 
-    struct yetty_ygui_object *tabbar = add_obj(root, yetty_ygui_tabbar_class_get());
+    struct yetty_yclass_object *tabbar = add_obj(root, yetty_ygui_tabbar_class_get());
     if (tabbar) {
         set_size(tabbar, -1.0f, 36.0f);
         /* add_tab returns the header widget in a result; the demo doesn't
@@ -338,14 +338,14 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         const char *labels[] = {"Multi-line text", "Widget group", "Long list", "Fits",
                                 "Nested x3"};
         for (size_t i = 0; i < sizeof(labels) / sizeof(labels[0]); i++) {
-            struct yetty_ygui_object_ptr_result t = yetty_ygui_tabbar_add_tab(tabbar, labels[i]);
+            struct yetty_yclass_object_ptr_result t = yetty_ygui_tabbar_add_tab(tabbar, labels[i]);
             if (YETTY_IS_ERR(t)) {
                 yetty_ycore_error_destroy(t.error);
             }
         }
     }
 
-    struct yetty_ygui_object *content = add_obj(root, yetty_ygui_vbox_class_get());
+    struct yetty_yclass_object *content = add_obj(root, yetty_ygui_vbox_class_get());
     if (!content) {
         return YETTY_ERR(yetty_ycore_void, "scrollarea demo: content container");
     }

@@ -12,9 +12,9 @@
  * progress.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_progress_data_ptr, struct yetty_ygui_progress *);
+YETTY_YRESULT_DECLARE(yetty_ygui_progress_ptr, struct yetty_ygui_progress *);
 struct yetty_yclass_ptr_result yetty_ygui_progress_class_get(void);
-struct yetty_ygui_progress_data_ptr_result yetty_ygui_progress_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_progress_ptr_result yetty_ygui_progress_from(struct yetty_yclass_object *obj);
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
@@ -36,13 +36,12 @@ static struct yetty_ycore_void_result progress_constructor(struct yetty_yclass_c
                                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_progress_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "progress_constructor: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_progress_class_get().value);
+    struct yetty_ygui_progress_ptr_result d_dr = yetty_ygui_progress_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "progress_constructor: data_get");
     struct yetty_ygui_progress *d = d_dr.value;
     d->value = 0.0f;
@@ -83,12 +82,11 @@ static struct yetty_ycore_void_result progress_paint(struct yetty_yclass_ctx *yc
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "progress_paint: NULL ctx");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_progress_class_get().value);
+    struct yetty_ygui_progress_ptr_result d_dr = yetty_ygui_progress_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "progress_paint: data_get");
     struct yetty_ygui_progress *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -111,7 +109,7 @@ static struct yetty_ycore_void_result progress_paint(struct yetty_yclass_ctx *yc
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_yclass_object *obj,
                                                              float value)
 {
     if (!obj) {
@@ -123,40 +121,38 @@ struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_ygui_o
     if (value > 1.0f) {
         value = 1.0f;
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_progress_class_get().value);
+    struct yetty_ygui_progress_ptr_result d_dr = yetty_ygui_progress_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_progress_set_value: data_get");
     struct yetty_ygui_progress *d = d_dr.value;
     d->value = value;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_float_result yetty_ygui_progress_get_value(const struct yetty_ygui_object *obj)
+struct yetty_ycore_float_result yetty_ygui_progress_get_value(const struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_OK(yetty_ycore_float, 0.0f);
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
-        (struct yetty_ygui_object *)obj, yetty_ygui_progress_class_get().value);
+    struct yetty_ygui_progress_ptr_result d_dr =
+        yetty_ygui_progress_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_float, d_dr, "yetty_ygui_progress_get_value: data_get");
     struct yetty_ygui_progress *d = d_dr.value;
     return YETTY_OK(yetty_ycore_float, d->value);
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_progress_set_accent(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_progress_set_accent(struct yetty_yclass_object *obj,
                                                               uint32_t color)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "progress_set_accent: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_progress_class_get().value);
+    struct yetty_ygui_progress_ptr_result d_dr = yetty_ygui_progress_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_progress_set_accent: data_get");
     struct yetty_ygui_progress *d = d_dr.value;
     d->accent = color;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "progress.gen.c"

@@ -14,21 +14,24 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_progress_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_progress;
-YETTY_YRESULT_DECLARE(yetty_ygui_progress_data_ptr, struct yetty_ygui_progress *);
-struct yetty_ygui_progress_data_ptr_result yetty_ygui_progress_data(struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_progress_ptr, struct yetty_ygui_progress *);
+struct yetty_ygui_progress_ptr_result yetty_ygui_progress_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_progress_to(struct yetty_ygui_progress *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_progress_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ygui_object;
-
-struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_yclass_object *obj,
                                                              float value);
-struct yetty_ycore_float_result yetty_ygui_progress_get_value(const struct yetty_ygui_object *obj);
-struct yetty_ycore_void_result yetty_ygui_progress_set_accent(struct yetty_ygui_object *obj,
+struct yetty_ycore_float_result yetty_ygui_progress_get_value(
+    const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_progress_set_accent(struct yetty_yclass_object *obj,
                                                               uint32_t color);
 
 #endif

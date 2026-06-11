@@ -21,15 +21,15 @@ static inline void err_ok(struct yetty_ycore_void_result r)
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
     {
-        struct yetty_ygui_object_ptr_result lr =
-            yetty_ygui_add(yetty_ygui_label_class_get().value, root);
+        struct yetty_yclass_object_ptr_result lr =
+            yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "label");
         err_ok(yetty_ygui_label_set_text(lr.value, "Click any button"));
-        struct yetty_ygui_object *w = lr.value;
+        struct yetty_yclass_object *w = lr.value;
         {
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
             l.height = 24;
@@ -37,13 +37,13 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         }
     }
     for (int i = 0; i < 3; ++i) {
-        struct yetty_ygui_object_ptr_result br =
-            yetty_ygui_add(yetty_ygui_button_class_get().value, root);
+        struct yetty_yclass_object_ptr_result br =
+            yetty_ygui_widget_add(root, yetty_ygui_button_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "button");
         char buf[16];
         snprintf(buf, sizeof(buf), "Button %d", i + 1);
         err_ok(yetty_ygui_button_set_label(br.value, buf));
-        struct yetty_ygui_object *w = br.value;
+        struct yetty_yclass_object *w = br.value;
         {
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
             l.height = 40;

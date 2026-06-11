@@ -1,5 +1,4 @@
 /* GENERATED — do not edit. */
-#include "yetty/ymgui/methods.gen.h"
 #include "yetty/ymgui/figure.h"
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>

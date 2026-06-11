@@ -1,8 +1,8 @@
 /* GENERATED — do not edit. */
-#include "yetty/ygui/methods.gen.h"
 #include "yetty/ygui/widgets/ydraw_embed.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
+#include <stddef.h> /* NULL, size_t */
 
 struct yetty_yclass_ptr_result yetty_ygui_ypdf_class_get(void)
 {
@@ -16,6 +16,7 @@ struct yetty_yclass_ptr_result yetty_ygui_ypdf_class_get(void)
         .name = "yetty_ygui_ypdf",
         .type = YETTY_YCLASS_TYPE_REGULAR,
         .data_size = sizeof(struct yetty_ygui_ypdf),
+        .data_align = _Alignof(struct yetty_ygui_ypdf),
     };
     struct yetty_yclass_ptr_result parent_class_r = yetty_ygui_ydraw_embed_class_get();
     if (YETTY_IS_ERR(parent_class_r)) {
@@ -34,17 +35,34 @@ struct yetty_yclass_ptr_result yetty_ygui_ypdf_class_get(void)
     return register_class_r;
 }
 
-struct yetty_ygui_ypdf_data_ptr_result yetty_ygui_ypdf_data(struct yetty_ygui_object *obj)
+struct yetty_ygui_ypdf_ptr_result yetty_ygui_ypdf_from(struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_ptr_result class_r = yetty_ygui_ypdf_class_get();
     if (YETTY_IS_ERR(class_r)) {
-        yerror("yetty_ygui_ypdf_data: class accessor failed: %s", class_r.error.msg);
-        return YETTY_ERR(yetty_ygui_ypdf_data_ptr, "yetty_ygui_ypdf_data: class accessor failed",
-                         class_r);
+        return YETTY_ERR(yetty_ygui_ypdf_ptr, "yetty_ygui_ypdf_from: class accessor", class_r);
     }
-    struct yetty_ygui_void_ptr_result data_slice_r = yetty_ygui_data_get_result(obj, class_r.value);
-    if (YETTY_IS_ERR(data_slice_r)) {
-        return YETTY_ERR(yetty_ygui_ypdf_data_ptr, "yetty_ygui_ypdf_data", data_slice_r);
+    struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
+    if (YETTY_IS_ERR(slice_r)) {
+        return YETTY_ERR(yetty_ygui_ypdf_ptr, "yetty_ygui_ypdf_from: object_data", slice_r);
     }
-    return YETTY_OK(yetty_ygui_ypdf_data_ptr, (struct yetty_ygui_ypdf *)data_slice_r.value);
+    return YETTY_OK(yetty_ygui_ypdf_ptr, (struct yetty_ygui_ypdf *)slice_r.value);
+}
+
+struct yetty_yclass_object *yetty_ygui_ypdf_to(struct yetty_ygui_ypdf *data)
+{
+    if (!data) {
+        return NULL;
+    }
+    struct yetty_yclass_ptr_result class_r = yetty_ygui_ypdf_class_get();
+    if (YETTY_IS_ERR(class_r)) {
+        yetty_ycore_error_destroy(class_r.error);
+        return NULL;
+    }
+    struct yetty_ycore_size_result offset_r =
+        yetty_yclass_object_data_offset(class_r.value, class_r.value);
+    if (YETTY_IS_ERR(offset_r)) {
+        yetty_ycore_error_destroy(offset_r.error);
+        return NULL;
+    }
+    return (struct yetty_yclass_object *)((char *)data - offset_r.value);
 }

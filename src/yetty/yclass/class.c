@@ -17,6 +17,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -35,6 +36,19 @@ static inline _Bool size_add_check(size_t a, size_t b, size_t *out)
     return 0;
 }
 
+/* Round `offset` up to the next multiple of `align` (a power of two),
+ * writing the result to `*out`. Returns true on overflow without
+ * writing. */
+static inline _Bool align_up_check(size_t offset, size_t align, size_t *out)
+{
+    size_t remainder = offset & (align - 1);
+    if (remainder == 0) {
+        *out = offset;
+        return 0;
+    }
+    return size_add_check(offset, align - remainder, out);
+}
+
 struct yetty_yclass {
     const struct yetty_yclass_descriptor *desc;
     const struct yetty_yclass *parent;
@@ -51,6 +65,15 @@ struct yetty_yclass {
     } dispatch_by_domain[YETTY_YCLASS_METHOD_SLOT_MAX_DOMAINS];
 
     size_t instance_size;
+    /* Offset of THIS class's own data slice within any instance. Because
+     * the layout is root-down, a regular class's slice offset depends only
+     * on its ancestors, so it is the same in every object that contains it
+     * (this class as leaf, or as any ancestor of a deeper leaf). Cached
+     * here at registration so object_data / _from / _to are O(1) pointer
+     * arithmetic — no data_slices scan. SIZE_MAX for mixins, whose offset
+     * is NOT invariant (a mixin sits at a different place in each class
+     * that `uses@` it), so those still resolve through data_slices. */
+    size_t own_offset;
     struct data_slice {
         const struct yetty_yclass *cls;
         size_t offset;
@@ -471,6 +494,49 @@ static struct yetty_ycore_void_result class_add_data_slice(struct yetty_yclass *
     return YETTY_OK_VOID();
 }
 
+/* Alignment a class's data slice must start on. _Alignof is always a
+ * power of two. A descriptor that predates the data_align field (or a
+ * hand-written one that omits it) reports 0; fall back to max_align_t,
+ * which is never under-aligned for any standard object type. */
+static inline size_t slice_align_of(const struct yetty_yclass *cls)
+{
+    size_t align = cls->desc->data_align;
+    return align ? align : _Alignof(max_align_t);
+}
+
+/* Place one inheritance level — `level`'s own data slice followed by its
+ * mixin slices — into `cls`'s slice table, advancing `*offset` past each.
+ * Every slice is first aligned up to its struct's required alignment, so
+ * the layout stays ABI-valid no matter what precedes it. Used once per
+ * ancestor (root → direct parent) and once for the leaf (`level == cls`),
+ * which is why mixins come from `level` rather than the registration
+ * argument. */
+static struct yetty_ycore_void_result class_add_level(struct yetty_yclass *cls,
+                                                      const struct yetty_yclass *level,
+                                                      size_t *offset)
+{
+    if (align_up_check(*offset, slice_align_of(level), offset)) {
+        return YETTY_ERR(yetty_ycore_void, "class_add_level: data slice align overflow");
+    }
+    struct yetty_ycore_void_result so = class_add_data_slice(cls, level, *offset);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, so, "class_add_level: add data slice");
+    if (size_add_check(*offset, level->desc->data_size, offset)) {
+        return YETTY_ERR(yetty_ycore_void, "class_add_level: data size overflow");
+    }
+    for (size_t m = 0; m < level->mixin_count; ++m) {
+        const struct yetty_yclass *mixin = level->mixins[m];
+        if (align_up_check(*offset, slice_align_of(mixin), offset)) {
+            return YETTY_ERR(yetty_ycore_void, "class_add_level: mixin slice align overflow");
+        }
+        so = class_add_data_slice(cls, mixin, *offset);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, so, "class_add_level: add mixin slice");
+        if (size_add_check(*offset, mixin->desc->data_size, offset)) {
+            return YETTY_ERR(yetty_ycore_void, "class_add_level: mixin data size overflow");
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
 struct yetty_yclass_ptr_result yetty_yclass_register(
     const struct yetty_yclass_descriptor *desc, const struct yetty_yclass_op *ops, size_t ops_count,
     const struct yetty_yclass *parent, const struct yetty_yclass *const *mixins, size_t mixin_count)
@@ -518,59 +584,59 @@ struct yetty_yclass_ptr_result yetty_yclass_register(
         cls->mixin_count = mixin_count;
     }
 
-    /* Sum the per-frame data sizes (parent chain + their mixins + own
-     * data + own mixins) into instance_size. Each += is overflow-
-     * checked so a pathological data_size doesn't wrap and produce a
-     * too-small object_alloc later. */
+    /* Lay out the per-instance data slices ROOT-DOWN, matching the
+     * documented layout (header, then root data + root mixins, …, direct
+     * parent data + its mixins, then leaf data + leaf mixins). Building
+     * root-down — rather than walking parent->parent from the immediate
+     * parent — makes a class's slice offset depend only on its ancestors,
+     * never on which leaf the object actually is. That invariant is what
+     * lets the same `(leaf, target)` offset be cached and lets the inverse
+     * `_to(data)` accessor recover the object pointer. Each level aligns
+     * its slices; every += is overflow-checked so a pathological size or
+     * alignment can't wrap and under-size the later object_alloc. */
     size_t offset = sizeof(struct yetty_yclass_object);
+
+    /* Collect the parent chain (direct parent → root) so it can be
+     * replayed root → direct parent. The depth bound also rejects an
+     * accidental inheritance cycle rather than scribbling off the stack. */
+    const struct yetty_yclass *ancestors[64];
+    size_t ancestor_count = 0;
     for (const struct yetty_yclass *p = parent; p != NULL; p = p->parent) {
-        struct yetty_ycore_void_result so = class_add_data_slice(cls, p, offset);
-        if (YETTY_IS_ERR(so)) {
+        if (ancestor_count >= sizeof(ancestors) / sizeof(ancestors[0])) {
             class_destroy(cls);
-            return YETTY_ERR(yetty_yclass_ptr, "class_register: add parent data slice failed", so);
+            return YETTY_ERR(yetty_yclass_ptr, "class_register: inheritance chain too deep");
         }
-        if (size_add_check(offset, p->desc->data_size, &offset)) {
+        ancestors[ancestor_count++] = p;
+    }
+    for (size_t i = ancestor_count; i > 0; --i) {
+        struct yetty_ycore_void_result lr = class_add_level(cls, ancestors[i - 1], &offset);
+        if (YETTY_IS_ERR(lr)) {
             class_destroy(cls);
-            return YETTY_ERR(yetty_yclass_ptr,
-                             "class_register: instance_size overflow (parent data)");
-        }
-        for (size_t m = 0; m < p->mixin_count; ++m) {
-            so = class_add_data_slice(cls, p->mixins[m], offset);
-            if (YETTY_IS_ERR(so)) {
-                class_destroy(cls);
-                return YETTY_ERR(yetty_yclass_ptr,
-                                 "class_register: add parent mixin data slice failed", so);
-            }
-            if (size_add_check(offset, p->mixins[m]->desc->data_size, &offset)) {
-                class_destroy(cls);
-                return YETTY_ERR(yetty_yclass_ptr,
-                                 "class_register: instance_size overflow (parent mixin)");
-            }
+            return YETTY_ERR(yetty_yclass_ptr, "class_register: lay out ancestor slices", lr);
         }
     }
-    struct yetty_ycore_void_result so = class_add_data_slice(cls, cls, offset);
-    if (YETTY_IS_ERR(so)) {
+    /* Leaf level: own data + own mixins (cls->mixins set above). */
+    struct yetty_ycore_void_result lr = class_add_level(cls, cls, &offset);
+    if (YETTY_IS_ERR(lr)) {
         class_destroy(cls);
-        return YETTY_ERR(yetty_yclass_ptr, "class_register: add own data slice failed", so);
-    }
-    if (size_add_check(offset, desc->data_size, &offset)) {
-        class_destroy(cls);
-        return YETTY_ERR(yetty_yclass_ptr, "class_register: instance_size overflow (own data)");
-    }
-    for (size_t m = 0; m < mixin_count; ++m) {
-        so = class_add_data_slice(cls, mixins[m], offset);
-        if (YETTY_IS_ERR(so)) {
-            class_destroy(cls);
-            return YETTY_ERR(yetty_yclass_ptr, "class_register: add own mixin data slice failed",
-                             so);
-        }
-        if (size_add_check(offset, mixins[m]->desc->data_size, &offset)) {
-            class_destroy(cls);
-            return YETTY_ERR(yetty_yclass_ptr,
-                             "class_register: instance_size overflow (own mixin)");
-        }
+        return YETTY_ERR(yetty_yclass_ptr, "class_register: lay out leaf slices", lr);
     }
     cls->instance_size = offset;
+
+    /* Cache this class's own-slice offset for O(1) lookup. Regular classes
+     * have a leaf-invariant offset (root-down layout); a mixin's offset
+     * varies per host, so leave it SIZE_MAX and let it resolve through
+     * data_slices. The own slice is the data_slices entry whose cls is
+     * this class (added by the leaf level above). */
+    cls->own_offset = SIZE_MAX;
+    if (desc->type != YETTY_YCLASS_TYPE_MIXIN) {
+        for (size_t i = 0; i < cls->data_slice_count; ++i) {
+            if (cls->data_slices[i].cls == cls) {
+                cls->own_offset = cls->data_slices[i].offset;
+                break;
+            }
+        }
+    }
 
     if (parent) {
         struct yetty_ycore_void_result inh = class_inherit_dispatch(cls, parent);
@@ -802,28 +868,37 @@ struct yetty_ycore_void_result yetty_yclass_object_free(struct yetty_yclass_obje
     return YETTY_OK_VOID();
 }
 
-static size_t class_data_offset(const struct yetty_yclass *leaf, const struct yetty_yclass *target)
+static struct yetty_ycore_size_result class_data_offset(const struct yetty_yclass *leaf,
+                                                        const struct yetty_yclass *target)
 {
-    if (!leaf || !target) {
-        return SIZE_MAX;
+    if (!target) {
+        return YETTY_ERR(yetty_ycore_size, "class_data_offset: NULL target class");
+    }
+    /* Fast path: a regular class's own-slice offset is leaf-invariant under
+     * the root-down layout, so it was cached at registration. One shot — no
+     * scan, and `leaf` isn't even needed. */
+    if (target->own_offset != SIZE_MAX) {
+        return YETTY_OK(yetty_ycore_size, target->own_offset);
+    }
+    /* Slow path: a mixin sits at a host-specific offset, so it must be
+     * located within this leaf's own slice table. */
+    if (!leaf) {
+        return YETTY_ERR(yetty_ycore_size, "class_data_offset: NULL leaf class");
     }
     for (size_t i = 0; i < leaf->data_slice_count; ++i) {
         if (leaf->data_slices[i].cls == target) {
-            return leaf->data_slices[i].offset;
+            return YETTY_OK(yetty_ycore_size, leaf->data_slices[i].offset);
         }
     }
-    return SIZE_MAX;
+    return YETTY_ERR(yetty_ycore_size, "class_data_offset: target class not in leaf's chain");
 }
 
 struct yetty_ycore_size_result yetty_yclass_object_data_offset(const struct yetty_yclass *leaf,
                                                                const struct yetty_yclass *cls)
 {
-    size_t offset = class_data_offset(leaf, cls);
-    if (offset == SIZE_MAX) {
-        return YETTY_ERR(yetty_ycore_size,
-                         "yclass_object_data_offset: class not in leaf object's chain");
-    }
-    return YETTY_OK(yetty_ycore_size, offset);
+    struct yetty_ycore_size_result offset_r = class_data_offset(leaf, cls);
+    YETTY_RETURN_IF_ERR(yetty_ycore_size, offset_r, "yclass_object_data_offset");
+    return offset_r;
 }
 struct yetty_yclass_void_ptr_result yetty_yclass_object_data(struct yetty_yclass_object *obj,
                                                              const struct yetty_yclass *cls)
@@ -834,10 +909,11 @@ struct yetty_yclass_void_ptr_result yetty_yclass_object_data(struct yetty_yclass
     if (!cls) {
         return YETTY_ERR(yetty_yclass_void_ptr, "yclass_object_data: NULL class");
     }
-    size_t offset = class_data_offset(obj->klass, cls);
-    if (offset == SIZE_MAX) {
-        return YETTY_ERR(yetty_yclass_void_ptr, "yclass_object_data: class not in object's chain");
+    struct yetty_ycore_size_result offset_r = class_data_offset(obj->klass, cls);
+    if (YETTY_IS_ERR(offset_r)) {
+        return YETTY_ERR(yetty_yclass_void_ptr, "yclass_object_data: class_data_offset", offset_r);
     }
+    size_t offset = offset_r.value;
     if (offset > obj->klass->instance_size ||
         cls->desc->data_size > obj->klass->instance_size - offset) {
         return YETTY_ERR(yetty_yclass_void_ptr, "yclass_object_data: data slice outside object");

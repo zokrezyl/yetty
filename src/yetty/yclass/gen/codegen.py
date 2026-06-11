@@ -633,6 +633,14 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     methods: dict = {}
     classes: dict = {}
     local_slots: set = set()
+    # Slots INTRODUCED via virtual@ in this module (their declaring class is
+    # the authoritative owner). Every same-module slot must appear here —
+    # see the post-parse enforcement below.
+    virtual_slots: set = set()
+    # slot -> (class, impl-fn) of its virtual@ introduction, to reject a
+    # SECOND virtual@ for the same slot (a slot must be introduced exactly
+    # once; a subclass re-introducing it instead of overriding is a bug).
+    virtual_owner: dict = {}
     exposed: list = []
     # Type registries for `types:` harvesting — every named struct/enum
     # definition seen across the parsed TUs, keyed by tag.
@@ -741,6 +749,54 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                             # module's wire contract.
                             continue
                         local_slots.add(slot_name)
+                        continue
+                    if role == "virtual":
+                        # `virtual@<DOMAIN>:<CLASS>:<SLOT>` — INTRODUCE a virtual
+                        # method. The annotated function is its default impl,
+                        # and <CLASS> OWNS the slot (its stub + `_fn` typedef are
+                        # emitted into <CLASS>'s header; every subclass reaches
+                        # them through the parent header it includes). This is
+                        # the only annotation that *creates* a slot — `override@`
+                        # merely supplies another class's impl for it.
+                        require_segments(role, args, 3, "virtual@<DOMAIN>:<CLASS>:<SLOT>")
+                        impl_dom, cls, slot = args
+                        if impl_dom != module:
+                            continue
+                        slot_dom = impl_dom
+                        # Reject a duplicate introduction. A given (class, fn)
+                        # may be re-seen across TUs (header inclusion) — that's
+                        # the same annotation and fine; a DIFFERENT class or fn
+                        # declaring the same slot virtual@ is two introductions,
+                        # which is the bug we must catch.
+                        prev = virtual_owner.get(slot)
+                        if prev is not None and prev != (cls, decl["name"]):
+                            sys.stderr.write(
+                                f"error: module '{module}': slot '{slot}' is "
+                                f"introduced with virtual@ more than once — by "
+                                f"'{prev[0]}' ({prev[1]}) and '{cls}' "
+                                f"({decl['name']}). A virtual method must be "
+                                f"declared exactly once (by the base class that "
+                                f"owns it); every other class must use "
+                                f"override@{module}:<class>:{slot}.\n")
+                            sys.exit(1)
+                        virtual_owner[slot] = (cls, decl["name"])
+                        b = bucket(cls)
+                        b["ops"].append({
+                            "slot": slot,
+                            "slot_domain": slot_dom,
+                            "impl": decl["name"],
+                        })
+                        # Authoritative owner. Overwrite any provisional entry an
+                        # earlier override@ created so owning_class is the
+                        # introducer regardless of source-processing order.
+                        qt = decl.get("type", {}).get("qualType", "")
+                        methods[slot] = {
+                            "slot": slot, "domain": slot_dom,
+                            "owning_class": cls,
+                            "return_type": _parse_return_type(qt),
+                            "args": _fn_args(decl),
+                        }
+                        virtual_slots.add(slot)
                         continue
                     if role == "override":
                         # Two shapes accepted:
@@ -873,6 +929,22 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
             f"error: local@{module}:<slot> annotations name slots with no "
             f"impl in this module: {dangling}. Each local-marked slot must "
             f"have at least one override@ in the same module.\n")
+        sys.exit(1)
+    # Every slot owned by THIS module must be INTRODUCED exactly once with
+    # virtual@. A slot that only ever appears in override@ has no declared
+    # owner — its header home would be guessed from processing order, and a
+    # typo'd slot name would silently create a phantom slot. Reject it: this
+    # is the codegen-time analog of C++ refusing `override` on a non-virtual
+    # method. The base class that declares the method must use virtual@.
+    missing_virtual = sorted(m["slot"] for m in methods.values()
+                             if m["slot"] not in virtual_slots)
+    if missing_virtual:
+        sys.stderr.write(
+            f"error: module '{module}': slot(s) {missing_virtual} are implemented/"
+            f"overridden but never INTRODUCED with "
+            f"virtual@{module}:<class>:<slot>. Declare each one once (with its "
+            f"default impl) in its base class using virtual@; override@ may only "
+            f"supply an impl for an already-declared virtual slot.\n")
         sys.exit(1)
     model = {
         "methods": list(methods.values()),
@@ -1415,16 +1487,15 @@ def emit_dispatch_body(m: dict) -> str:
 
 
 def emit_methods_c(model: dict, module: str, out_path: Path):
-    # methods.gen.h carries the `_fn` typedefs the dispatch body casts to
-    # plus the stub prototypes, but it deliberately does NOT pull in the
-    # per-class public headers (see emit_methods_gen_h). This TU DEFINES
-    # the stubs, so it needs the complete `_ptr_result` types those
-    # headers own — and as a standalone .gen.c (never `#include`d into a
-    # hand-written .c) it can include every class header without risking a
-    # redefinition against a .c's manual declaration. Absolute paths
-    # (resolved via `-Isrc`) so the includes work from subdirs too.
-    parts = [HEADER,
-             f'#include "yetty/{module}/methods.gen.h"\n']
+    # This TU DEFINES every public slot stub and casts the resolved impl to
+    # the slot's `<slot>_fn`. It is a STANDALONE .gen.c — never `#include`d
+    # into a hand-written .c — so it can pull in every per-class header
+    # without the "redefine an expose'd struct" hazard that the *appended*
+    # <stem>.gen.c has. And it needs them: the `<slot>_fn` typedefs it casts
+    # to, plus the COMPLETE result types its stubs return by value (some are
+    # foreign, e.g. a ydraw result), live in (or are reachable through) those
+    # headers. There is no module-wide methods header anymore.
+    parts = [HEADER]
     seen_headers = []
     for c in model.get("classes", []):
         h = class_header_for(c, module)
@@ -1433,12 +1504,12 @@ def emit_methods_c(model: dict, module: str, out_path: Path):
     for h in seen_headers:
         parts.append(f'#include "{h}"\n')
     parts += ['#include <yetty/yclass/rpc.h>\n',
-             '#include <yetty/ycore/result.h>\n',
-             '#include <yetty/ycore/types.h>  /* container_of */\n',
-             '#include <yetty/ytrace/ytrace.h>\n',
-             '#include <stdint.h>\n'
-             '#include <stdlib.h>  /* malloc/free for buffer-arg marshalling */\n'
-             '#include <string.h>\n\n']
+              '#include <yetty/ycore/result.h>\n',
+              '#include <yetty/ycore/types.h>  /* container_of */\n',
+              '#include <yetty/ytrace/ytrace.h>\n',
+              '#include <stdint.h>\n'
+              '#include <stdlib.h>  /* malloc/free for buffer-arg marshalling */\n'
+              '#include <string.h>\n\n']
     for m in model["methods"]:
         params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
         rt = result_type(m["return_type"])
@@ -1456,16 +1527,15 @@ def emit_class_accessor(cls: dict) -> str:
     type_const = "YETTY_YCLASS_TYPE_MIXIN" if is_mixin else "YETTY_YCLASS_TYPE_REGULAR"
 
     # Compile-time signature check: assigning each override impl to a
-    # variable of the slot's function-pointer typedef forces the C
-    # compiler to verify return type + parameter types match. Mismatch
-    # ⇒ compile error at this line, well before the impl_t cast in the
-    # ops table erases types. Works for both same-domain and cross-
-    # domain overrides — the typedef lives in <slot_domain>/methods.h
-    # which the .gen.c already includes.
+    # variable of the slot's function-pointer typedef forces the compiler
+    # to verify return + parameter types. The `<slot>_fn` typedefs these
+    # use are emitted at the head of this same .gen.c (emit_class_gen_c) for
+    # same-module slots, and come from an included parent/foreign header for
+    # cross-module overrides — so the check needs no module-wide header.
     #
     # The check variable name MUST include slot_domain — a class that
-    # overrides the same local slot name from two different domains
-    # would otherwise collide on the static variable name.
+    # overrides the same local slot name from two different domains would
+    # otherwise collide on the static variable name.
     qcls = qualified_class(cls)
     typecheck_lines = [
         f"[[maybe_unused]]\n"
@@ -1552,34 +1622,6 @@ def emit_class_accessor(cls: dict) -> str:
         mixin_arg = "NULL"
         mixin_count = "0"
 
-    # ygui widget/mixin classes carry their per-instance state as a data
-    # slice inside the shared yetty_ygui_object block; the runtime resolves
-    # the slice offset from the class. Emit a typed accessor so a method
-    # never hand-writes `data_get(obj, X_class_get().value)` + a cast: the
-    # generator already knows both the class accessor and the concrete data
-    # struct. The accessor is file-local (the data struct is file-local) and
-    # returns a Result — a wrong-class obj or unregistered class surfaces as
-    # an error instead of a NULL deref. Only ygui uses the data-slice object
-    # model; yfigure/yterm/... place their body at obj+1 and are excluded.
-    data_accessor_block = ""
-    if cls["domain"] == "ygui" and cls.get("data"):
-        result_id = f"{qcls}_data_ptr"
-        data_accessor_block = (
-            f"\nstruct {result_id}_result {qcls}_data(struct yetty_ygui_object *obj)\n"
-            f"{{\n"
-            f"    struct yetty_yclass_ptr_result class_r = {accessor}();\n"
-            f"    if (YETTY_IS_ERR(class_r)) {{\n"
-            f'        yerror("{qcls}_data: class accessor failed: %s", class_r.error.msg);\n'
-            f'        return YETTY_ERR({result_id}, "{qcls}_data: class accessor failed", class_r);\n'
-            f"    }}\n"
-            f"    struct yetty_ygui_void_ptr_result data_slice_r =\n"
-            f"        yetty_ygui_data_get_result(obj, class_r.value);\n"
-            f"    if (YETTY_IS_ERR(data_slice_r))\n"
-            f'        return YETTY_ERR({result_id}, "{qcls}_data", data_slice_r);\n'
-            f"    return YETTY_OK({result_id}, ({data} *)data_slice_r.value);\n"
-            f"}}\n"
-        )
-
     # `property`-annotated members → standardized data handle + per-member
     # getters/setters, all keyed on the yclass object. The data struct stays
     # private to the owning .c; every other class reaches members only through
@@ -1587,15 +1629,13 @@ def emit_class_accessor(cls: dict) -> str:
     # so this works for any class whose body is a yclass data slice.
     property_block = ""
     property_fields = [f for f in cls.get("data_fields", []) if f.get("get") or f.get("set")]
-    # Every regular class with a data slice gets the obj->typed-slice accessor
-    # `<class>_from` (the downcast built on yetty_yclass_object_data — it
-    # returns a Result because the object may not be of this class). Per-field
-    # getters/setters are added only for `property`-annotated members.
-    # ygui is excluded: its objects use a custom fat header (struct
-    # yetty_ygui_object), so yetty_yclass_object_data would miscompute the
-    # slice — ygui keeps its own `_data` family until #313 collapses that
-    # header onto yetty_yclass_object.
-    if cls.get("data") and cls.get("type") != "mixin" and cls["domain"] != "ygui":
+    # Every class or mixin with a data slice gets the obj->typed-slice
+    # accessor `<class>_from` (the downcast built on yetty_yclass_object_data
+    # — it returns a Result because the object may not carry this slice).
+    # Mixins are downcastable the same way: their slice is resolved from the
+    # object's class chain. Per-field getters/setters are added only for
+    # `property`-annotated members.
+    if cls.get("data"):
         data_ptr_rid = f"{qcls}_ptr"
         parts = [
             f"\nstruct {data_ptr_rid}_result {qcls}_from(struct yetty_yclass_object *obj)\n"
@@ -1610,6 +1650,32 @@ def emit_class_accessor(cls: dict) -> str:
             f"    return YETTY_OK({data_ptr_rid}, ({data} *)slice_r.value);\n"
             f"}}\n"
         ]
+        # Inverse of `_from`: recover the owning yclass object from a pointer
+        # to this class's data slice. Only meaningful for regular classes —
+        # their slice offset is invariant across leaves under the root-down
+        # layout (the offset depends only on ancestors). A mixin's slice
+        # offset varies per using class, so there is no single offset to
+        # subtract; `_to` would be ill-defined and is not emitted.
+        if cls.get("type") != "mixin":
+            parts.append(
+                f"\nstruct yetty_yclass_object *{qcls}_to({data} *data)\n"
+                f"{{\n"
+                f"    if (!data)\n"
+                f"        return NULL;\n"
+                f"    struct yetty_yclass_ptr_result class_r = {accessor}();\n"
+                f"    if (YETTY_IS_ERR(class_r)) {{\n"
+                f"        yetty_ycore_error_destroy(class_r.error);\n"
+                f"        return NULL;\n"
+                f"    }}\n"
+                f"    struct yetty_ycore_size_result offset_r =\n"
+                f"        yetty_yclass_object_data_offset(class_r.value, class_r.value);\n"
+                f"    if (YETTY_IS_ERR(offset_r)) {{\n"
+                f"        yetty_ycore_error_destroy(offset_r.error);\n"
+                f"        return NULL;\n"
+                f"    }}\n"
+                f"    return (struct yetty_yclass_object *)((char *)data - offset_r.value);\n"
+                f"}}\n"
+            )
         for field in property_fields:
             fname = field["name"]
             ftype = field["type"]
@@ -1651,6 +1717,7 @@ struct yetty_yclass_ptr_result {accessor}(void)
         .name = "{qname}",
         .type = {type_const},
         .data_size = sizeof({data}),
+        .data_align = _Alignof({data}),
     }};
 {ops_decl}\
 {parent_block}\
@@ -1665,7 +1732,7 @@ struct yetty_yclass_ptr_result {accessor}(void)
     cls = register_class_r.value;
     return register_class_r;
 }}
-{data_accessor_block}{property_block}"""
+{property_block}"""
 
 
 
@@ -1716,39 +1783,14 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             f"(void);"
             for c in classes
         )
-        # ygui classes carry per-instance state as a data slice inside the
-        # shared object block. Declare a typed accessor (defined in the
-        # matching .gen.c) so widget methods never hand-write
-        # `data_get(obj, X_class_get().value)` + a cast. Declared here in the
-        # top-included header so calls above the bottom `#include "X.gen.c"`
-        # resolve — same shape as the class accessor. The data struct is
-        # file-local, so forward-declare its tag (the result holds a pointer).
-        data_decls = ""
-        if module == "ygui":
-            blocks = []
-            for c in classes:
-                if not c.get("data"):
-                    continue
-                q = qualified_class(c)
-                rid = f"{q}_data_ptr"
-                blocks.append(
-                    f"{c['data']};\n"
-                    f"YETTY_YRESULT_DECLARE({rid}, {c['data']} *);\n"
-                    f"struct {rid}_result {q}_data(struct yetty_ygui_object *obj);"
-                )
-            if blocks:
-                data_decls = ("\n\nstruct yetty_ygui_object;\n"
-                              + "\n\n".join(blocks))
         # `property`-annotated members → opaque data-block handle + per-member
         # getters/setters, keyed on the yclass object. The struct body never
         # leaves its owning .c; only a forward decl + the accessors cross here.
+        data_decls = ""
         property_decls = ""
         prop_blocks = []
         for c in classes:
-            # ygui has its own `_data` family over yetty_ygui_object (see #313);
-            # the general `_from` would miscompute on ygui's fat header, so it
-            # is excluded until that header is collapsed onto yetty_yclass_object.
-            if c.get("type") == "mixin" or not c.get("data") or module == "ygui":
+            if not c.get("data"):
                 continue
             pfields = [f for f in c.get("data_fields", []) if f.get("get") or f.get("set")]
             q = qualified_class(c)
@@ -1762,6 +1804,12 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
                 f"YETTY_YRESULT_DECLARE({rid}, {c['data']} *);",
                 f"struct {rid}_result {q}_from(struct yetty_yclass_object *obj);",
             ]
+            # Inverse accessor — recover the owning object from a data-slice
+            # pointer. Regular classes only (a mixin slice has no invariant
+            # offset); see the matching guard in emit_class_accessor.
+            if c.get("type") != "mixin":
+                lines.append(
+                    f"struct yetty_yclass_object *{q}_to({c['data']} *data);")
             for field in pfields:
                 base = f"{q}_{field['name']}"
                 if field.get("get"):
@@ -1834,6 +1882,14 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             + ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
             + ");\n"
             for m in group_methods)
+        # Slot function-pointer typedefs — a subclass that overrides one of
+        # these slots includes this header and needs `<slot>_fn` to type-check
+        # its impl. Public, alongside the stubs (replaces the old methods.gen.h).
+        stub_typedefs = "".join(
+            f"typedef {result_type(m['return_type'])} (*{qualified_slot(m)}_fn)("
+            + ", ".join(a["type"] for a in m["args"])
+            + ");\n"
+            for m in group_methods)
         # create() for each concrete (non-mixin) class in this source, plus
         # the module's RPC-discovery installer. register() is module-level;
         # an identical prototype in every source header is legal C and keeps
@@ -1849,6 +1905,8 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             rpc_decls += "\n\n" + stub_fwd.rstrip()
         if stub_decls:
             rpc_decls += "\n\n" + stub_decls.rstrip()
+        if stub_typedefs:
+            rpc_decls += "\n\n" + stub_typedefs.rstrip()
         if create_decls:
             rpc_decls += "\n\n" + create_decls.rstrip()
         rpc_decls += "\n\n" + register_decl.rstrip()
@@ -1910,16 +1968,12 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
         src_path_p = Path(src_path)
         inc_path = src_path_p.with_name(src_path_p.stem + ".gen.c")
 
-        # Collect headers needed for this .gen.c: each class's own
-        # header + the (possibly cross-domain) parent + mixin headers
-        # + this module's internal methods.gen.h (carries the `_fn`
-        # typedefs the impl-pointer static checks use) + the same
-        # internal methods.gen.h for every foreign slot domain (cross-
-        # module override). methods.gen.h transitively pulls in its
-        # sibling public methods.h so the function declarations the
-        # impl is built from are also in scope.
+        # Collect headers needed for this .gen.c: the (possibly cross-domain)
+        # parent + mixin headers, which carry the parent/foreign slot stubs +
+        # `_fn` typedefs an override references. Same-module slot stubs +
+        # typedefs are emitted locally below (slot_block) — there is no
+        # module-wide methods header.
         needed = set()
-        needed.add(f"yetty/{module}/methods.gen.h")
         for c in classes:
             # NOT the class's own header: this .gen.c is `#include`d at the
             # foot of the hand-written .c, which already provides the class's
@@ -1936,10 +1990,6 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
                 needed.add(_class_header_lookup(model, p, fallback_dom=p['domain']))
             for mx in c.get("mixins", []):
                 needed.add(_class_header_lookup(model, mx, fallback_dom=mx['domain']))
-            for op in c.get("ops", []):
-                sd = op.get("slot_domain", c["domain"])
-                if sd != c["domain"]:
-                    needed.add(f"yetty/{sd}/methods.gen.h")
         include_block = "".join(f'#include "{h}"\n' for h in sorted(needed))
         # The accessor body emits ydebug() and YETTY_OK / YETTY_ERR
         # which expand to ycore + ytrace primitives. Pull those in
@@ -1950,9 +2000,53 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
         include_block += (
             '#include <yetty/ycore/result.h>\n'
             '#include <yetty/ytrace/ytrace.h>\n'
+            '#include <stddef.h>  /* NULL, size_t */\n'
         )
 
-        body = HEADER + include_block + "\n" \
+        # Same-module slot stubs this .gen.c's ops reference, emitted locally:
+        # the bare stub prototype (the ops-table method-id sentinel) + the
+        # `<slot>_fn` typedef (the impl-pointer signature check). The old
+        # module-wide methods.gen.h carried these; now each .gen.c declares
+        # only what it overrides. Function + typedef declarations are
+        # duplicate-safe, so re-declaring what the public <stem>.h also
+        # publishes is fine. Cross-module slots come from the parent/mixin
+        # headers included above.
+        method_by_slot = {(m["domain"], m["slot"]): m for m in model.get("methods", [])}
+        slot_keys = []
+        for c in classes:
+            for op in c.get("ops", []):
+                key = (op["slot_domain"], op["slot"])
+                if op["slot_domain"] == module and key not in slot_keys:
+                    slot_keys.append(key)
+        proto_structs = set()
+        proto_lines = []
+        typedef_lines = []
+        for key in slot_keys:
+            m = method_by_slot.get(key)
+            if not m:
+                continue
+            proto_structs |= struct_names_in(m["return_type"])
+            proto_structs.add(f"{result_type_id(m['return_type'])}_result")
+            for a in m["args"]:
+                proto_structs |= struct_names_in(a["type"])
+            params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
+            type_only = ", ".join(a["type"] for a in m["args"])
+            rt = result_type(m["return_type"])
+            proto_lines.append(f"{rt} {qualified_slot(m)}({params});")
+            typedef_lines.append(f"typedef {rt} (*{qualified_slot(m)}_fn)({type_only});")
+        for known in ("yetty_yclass_ctx", "yetty_yclass_object", "yetty_yclass",
+                      "yetty_ycore_buffer"):
+            proto_structs.discard(known)
+        slot_block = ""
+        if proto_lines:
+            slot_block = (
+                "".join(f"struct {s};\n" for s in sorted(proto_structs))
+                + "".join(line + "\n" for line in proto_lines)
+                + "".join(line + "\n" for line in typedef_lines)
+                + "\n"
+            )
+
+        body = HEADER + include_block + "\n" + slot_block \
              + "\n".join(emit_class_accessor(c) for c in classes)
         inc_path.write_text(body)
 
@@ -2437,12 +2531,11 @@ def main():
             hdr = hdr_dir / (s.stem + ".h")
             if not hdr.exists():
                 hdr.write_text(placeholder_class_h)
-    # Internal placeholder under src/yetty/<module>/. The `.gen.h`
-    # suffix marks it as codegen-output sitting inside the module's
-    # private area (.gen.c files include it for the impl typedefs).
-    p_internal = module_src / "methods.gen.h"
-    if not p_internal.exists():
-        p_internal.write_text(placeholder_class_h)
+    # Remove stale module-wide method headers — slot stubs + `_fn` typedefs
+    # now live in each source's own <stem>.h (and inline in methods.gen.c).
+    for stale in (module_src / "methods.gen.h", include_module / "methods.h"):
+        if stale.exists():
+            stale.unlink()
 
     # Clang search path: shared include/, the module's own generated-
     # header dir (include/<module>/), and the module src dir (for
@@ -2462,7 +2555,6 @@ def main():
         validate_method(m)
 
     emit_class_public_headers(model, module, include_module)
-    emit_methods_gen_h(model, module, module_src / "methods.gen.h")
     emit_methods_c(model, module, module_src / "methods.gen.c")
     emit_class_gen_c(model, module, module_src)
     emit_rpc_c(model, module, module_src / "rpc.gen.c")

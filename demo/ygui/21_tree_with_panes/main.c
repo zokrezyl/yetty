@@ -21,7 +21,7 @@ static inline void err_ok(struct yetty_ycore_void_result r)
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
     {
@@ -29,8 +29,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         l.direction = YETTY_YGUI_FLEX_ROW;
         err_ok(yetty_ygui_widget_layout_set(root, &l));
     }
-    struct yetty_ygui_object_ptr_result tr =
-        yetty_ygui_add(yetty_ygui_tree_node_class_get().value, root);
+    struct yetty_yclass_object_ptr_result tr =
+        yetty_ygui_widget_add(root, yetty_ygui_tree_node_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "tree");
     err_ok(yetty_ygui_tree_node_set_label(tr.value, "files/"));
     err_ok(yetty_ygui_tree_node_set_open(tr.value, 1));
@@ -39,16 +39,16 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         l.width = 220;
         err_ok(yetty_ygui_widget_layout_set(tr.value, &l));
     }
-    struct yetty_ygui_object_ptr_result sp =
-        yetty_ygui_add(yetty_ygui_splitter_class_get().value, root);
+    struct yetty_yclass_object_ptr_result sp =
+        yetty_ygui_widget_add(root, yetty_ygui_splitter_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sp, "splitter");
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(sp.value);
         l.width = 4;
         err_ok(yetty_ygui_widget_layout_set(sp.value, &l));
     }
-    struct yetty_ygui_object_ptr_result body =
-        yetty_ygui_add(yetty_ygui_panel_class_get().value, root);
+    struct yetty_yclass_object_ptr_result body =
+        yetty_ygui_widget_add(root, yetty_ygui_panel_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, body, "body");
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(body.value);
     l.flex_grow = 1.0f;

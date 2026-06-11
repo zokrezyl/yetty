@@ -14,23 +14,26 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_dropdown_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_dropdown;
-YETTY_YRESULT_DECLARE(yetty_ygui_dropdown_data_ptr, struct yetty_ygui_dropdown *);
-struct yetty_ygui_dropdown_data_ptr_result yetty_ygui_dropdown_data(struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_dropdown_ptr, struct yetty_ygui_dropdown *);
+struct yetty_ygui_dropdown_ptr_result yetty_ygui_dropdown_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_dropdown_to(struct yetty_ygui_dropdown *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_dropdown_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ygui_object;
-
-struct yetty_ycore_void_result yetty_ygui_dropdown_add_option(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_dropdown_add_option(struct yetty_yclass_object *obj,
                                                               const char *label);
-struct yetty_ycore_void_result yetty_ygui_dropdown_set_selected(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_dropdown_set_selected(struct yetty_yclass_object *obj,
                                                                 int index);
-struct yetty_ycore_int_result yetty_ygui_dropdown_get_selected(const struct yetty_ygui_object *obj);
-struct yetty_ycore_void_result yetty_ygui_dropdown_set_menu(struct yetty_ygui_object *obj,
-                                                            struct yetty_ygui_object *menu);
+struct yetty_ycore_int_result yetty_ygui_dropdown_get_selected(
+    const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_dropdown_set_menu(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *menu);
 
 #endif

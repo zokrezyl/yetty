@@ -14,20 +14,22 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_breadcrumbs_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_breadcrumbs;
-YETTY_YRESULT_DECLARE(yetty_ygui_breadcrumbs_data_ptr, struct yetty_ygui_breadcrumbs *);
-struct yetty_ygui_breadcrumbs_data_ptr_result yetty_ygui_breadcrumbs_data(
-    struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_breadcrumbs_ptr, struct yetty_ygui_breadcrumbs *);
+struct yetty_ygui_breadcrumbs_ptr_result yetty_ygui_breadcrumbs_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_breadcrumbs_to(struct yetty_ygui_breadcrumbs *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_breadcrumbs_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ygui_object;
-
-struct yetty_ycore_void_result yetty_ygui_breadcrumbs_add(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_breadcrumbs_add(struct yetty_yclass_object *obj,
                                                           const char *text);
-struct yetty_ycore_void_result yetty_ygui_breadcrumbs_clear(struct yetty_ygui_object *obj);
+struct yetty_ycore_void_result yetty_ygui_breadcrumbs_clear(struct yetty_yclass_object *obj);
 
 #endif

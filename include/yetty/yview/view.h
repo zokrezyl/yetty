@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_yview_view_class_get(void);
 struct yetty_yview_view;
 YETTY_YRESULT_DECLARE(yetty_yview_view_ptr, struct yetty_yview_view *);
 struct yetty_yview_view_ptr_result yetty_yview_view_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_yview_view_to(struct yetty_yview_view *data);
 
 struct yetty_ycore_void_result;
 struct yetty_ydraw_drawable_list;
@@ -54,6 +55,35 @@ struct yetty_ycore_void_result yetty_yview_set_rect(struct yetty_yclass_ctx *ctx
                                                     float min_y, float max_x, float max_y);
 struct yetty_ycore_void_result yetty_yview_destroy(struct yetty_yclass_ctx *ctx,
                                                    struct yetty_yclass_object *obj);
+
+typedef struct yetty_ycore_void_result (*yetty_yview_configure_fn)(struct yetty_yclass_ctx *,
+                                                                   struct yetty_yclass_object *,
+                                                                   int, uint32_t, uint32_t,
+                                                                   uint32_t, float, float, float,
+                                                                   float);
+typedef struct yetty_ycore_void_result (*yetty_yview_set_content_fn)(
+    struct yetty_yclass_ctx *, struct yetty_yclass_object *,
+    const struct yetty_ydraw_drawable_list *);
+typedef struct yetty_ycore_void_result (*yetty_yview_set_text_fn)(struct yetty_yclass_ctx *,
+                                                                  struct yetty_yclass_object *,
+                                                                  const char *, float);
+typedef struct yetty_ycore_void_result (*yetty_yview_set_plot_fn)(struct yetty_yclass_ctx *,
+                                                                  struct yetty_yclass_object *,
+                                                                  const char *, float, float, float,
+                                                                  float);
+typedef struct yetty_ycore_void_result (*yetty_yview_set_content_size_fn)(
+    struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float);
+typedef struct yetty_ycore_void_result (*yetty_yview_scroll_to_fn)(struct yetty_yclass_ctx *,
+                                                                   struct yetty_yclass_object *,
+                                                                   float, float);
+typedef struct yetty_ycore_void_result (*yetty_yview_scroll_by_fn)(struct yetty_yclass_ctx *,
+                                                                   struct yetty_yclass_object *,
+                                                                   float, float);
+typedef struct yetty_ycore_void_result (*yetty_yview_set_rect_fn)(struct yetty_yclass_ctx *,
+                                                                  struct yetty_yclass_object *,
+                                                                  float, float, float, float);
+typedef struct yetty_ycore_void_result (*yetty_yview_destroy_fn)(struct yetty_yclass_ctx *,
+                                                                 struct yetty_yclass_object *);
 
 struct yetty_yclass_object_ptr_result yetty_yview_view_create(struct yetty_yclass_ctx *ctx);
 

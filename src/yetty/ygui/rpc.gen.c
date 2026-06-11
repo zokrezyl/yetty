@@ -79,7 +79,7 @@ static size_t yetty_ygui_widget_on_press_skel(const void *body, size_t body_len,
  * packed attribute. */
 #pragma pack(push, 1)
     struct {
-        uint64_t yclass_obj_handle;
+        uint64_t obj_handle;
         float x;
         float y;
         int button;
@@ -94,21 +94,21 @@ static size_t yetty_ygui_widget_on_press_skel(const void *body, size_t body_len,
     }
     memcpy(&wire_args, body, sizeof(wire_args));
     struct yetty_yclass_ctx local_ctx = {0};
-    struct yetty_yclass_void_ptr_result yclass_obj_resolve_r =
-        yetty_yclass_rpc_handle_resolve(wire_args.yclass_obj_handle);
-    if (YETTY_IS_ERR(yclass_obj_resolve_r)) {
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_ygui_widget_on_press: handle_resolve",
-                                yclass_obj_resolve_r.error);
-        yetty_ycore_error_destroy(yclass_obj_resolve_r.error);
+                                obj_resolve_r.error);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_ycore_int_result call_r = yetty_ygui_widget_on_press(
-        &local_ctx, (struct yetty_yclass_object *)yclass_obj_resolve_r.value, wire_args.x,
-        wire_args.y, wire_args.button);
+    struct yetty_ycore_int_result call_r =
+        yetty_ygui_widget_on_press(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value,
+                                   wire_args.x, wire_args.y, wire_args.button);
     if (resp_max < 1) {
         return 0;
     }
@@ -139,7 +139,7 @@ static size_t yetty_ygui_widget_on_release_skel(const void *body, size_t body_le
  * packed attribute. */
 #pragma pack(push, 1)
     struct {
-        uint64_t yclass_obj_handle;
+        uint64_t obj_handle;
         float x;
         float y;
         int button;
@@ -154,21 +154,21 @@ static size_t yetty_ygui_widget_on_release_skel(const void *body, size_t body_le
     }
     memcpy(&wire_args, body, sizeof(wire_args));
     struct yetty_yclass_ctx local_ctx = {0};
-    struct yetty_yclass_void_ptr_result yclass_obj_resolve_r =
-        yetty_yclass_rpc_handle_resolve(wire_args.yclass_obj_handle);
-    if (YETTY_IS_ERR(yclass_obj_resolve_r)) {
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_ygui_widget_on_release: handle_resolve",
-                                yclass_obj_resolve_r.error);
-        yetty_ycore_error_destroy(yclass_obj_resolve_r.error);
+                                obj_resolve_r.error);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_ycore_int_result call_r = yetty_ygui_widget_on_release(
-        &local_ctx, (struct yetty_yclass_object *)yclass_obj_resolve_r.value, wire_args.x,
-        wire_args.y, wire_args.button);
+    struct yetty_ycore_int_result call_r =
+        yetty_ygui_widget_on_release(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value,
+                                     wire_args.x, wire_args.y, wire_args.button);
     if (resp_max < 1) {
         return 0;
     }
@@ -199,7 +199,7 @@ static size_t yetty_ygui_widget_on_motion_skel(const void *body, size_t body_len
  * packed attribute. */
 #pragma pack(push, 1)
     struct {
-        uint64_t yclass_obj_handle;
+        uint64_t obj_handle;
         float x;
         float y;
     } wire_args;
@@ -213,12 +213,12 @@ static size_t yetty_ygui_widget_on_motion_skel(const void *body, size_t body_len
     }
     memcpy(&wire_args, body, sizeof(wire_args));
     struct yetty_yclass_ctx local_ctx = {0};
-    struct yetty_yclass_void_ptr_result yclass_obj_resolve_r =
-        yetty_yclass_rpc_handle_resolve(wire_args.yclass_obj_handle);
-    if (YETTY_IS_ERR(yclass_obj_resolve_r)) {
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_ygui_widget_on_motion: handle_resolve",
-                                yclass_obj_resolve_r.error);
-        yetty_ycore_error_destroy(yclass_obj_resolve_r.error);
+                                obj_resolve_r.error);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
             return 0;
         }
@@ -226,8 +226,7 @@ static size_t yetty_ygui_widget_on_motion_skel(const void *body, size_t body_len
         return 1;
     }
     struct yetty_ycore_int_result call_r = yetty_ygui_widget_on_motion(
-        &local_ctx, (struct yetty_yclass_object *)yclass_obj_resolve_r.value, wire_args.x,
-        wire_args.y);
+        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x, wire_args.y);
     if (resp_max < 1) {
         return 0;
     }

@@ -585,7 +585,7 @@ static int button_hit(float x, float y)
 
 /* configure: set graph width, row height, min visible box width, and flags.
  * 0 selects the default for each. Call after create(), before parse(). */
-[[clang::annotate("override@yflame:flame:configure")]] [[clang::annotate("local@yflame:configure")]]
+[[clang::annotate("virtual@yflame:flame:configure")]] [[clang::annotate("local@yflame:configure")]]
 static struct yetty_ycore_void_result flame_configure(struct yetty_yclass_ctx *ctx,
                                                       struct yetty_yclass_object *obj, float width,
                                                       float frame_height, float min_width,
@@ -604,7 +604,7 @@ static struct yetty_ycore_void_result flame_configure(struct yetty_yclass_ctx *c
 
 /* parse: ingest folded-stack text, build the call tree, index it. Resets focus
  * to the root and clears any hover highlight. */
-[[clang::annotate("override@yflame:flame:parse")]] [[clang::annotate("local@yflame:parse")]]
+[[clang::annotate("virtual@yflame:flame:parse")]] [[clang::annotate("local@yflame:parse")]]
 static struct yetty_ycore_void_result flame_parse(struct yetty_yclass_ctx *ctx,
                                                   struct yetty_yclass_object *obj,
                                                   const char *input, size_t len)
@@ -658,7 +658,7 @@ static struct yetty_ycore_void_result flame_parse(struct yetty_yclass_ctx *ctx,
 
 /* render: lay out the focus subtree and emit it as a fresh ydraw drawable list
  * (caller owns it). Pointer return -> local-only. */
-[[clang::annotate("override@yflame:flame:render")]] [[clang::annotate("local@yflame:render")]]
+[[clang::annotate("virtual@yflame:flame:render")]] [[clang::annotate("local@yflame:render")]]
 static struct yetty_ydraw_drawable_list_result flame_render(struct yetty_yclass_ctx *ctx,
                                                             struct yetty_yclass_object *obj)
 {
@@ -718,7 +718,7 @@ static struct yetty_ydraw_drawable_list_result flame_render(struct yetty_yclass_
 
 /* hit_test: id of the frame at content-coordinate (x,y) in the current focus
  * layout, or -1 if none. */
-[[clang::annotate("override@yflame:flame:hit_test")]] [[clang::annotate("local@yflame:hit_test")]]
+[[clang::annotate("virtual@yflame:flame:hit_test")]] [[clang::annotate("local@yflame:hit_test")]]
 static struct yetty_ycore_int_result flame_hit_test(struct yetty_yclass_ctx *ctx,
                                                     struct yetty_yclass_object *obj, float x,
                                                     float y)
@@ -760,7 +760,7 @@ static struct yetty_ycore_int_result flame_hit_test(struct yetty_yclass_ctx *ctx
 }
 
 /* focus: zoom so the given node fills the full width (its subtree is shown). */
-[[clang::annotate("override@yflame:flame:focus")]] [[clang::annotate("local@yflame:focus")]]
+[[clang::annotate("virtual@yflame:flame:focus")]] [[clang::annotate("local@yflame:focus")]]
 static struct yetty_ycore_void_result flame_focus(struct yetty_yclass_ctx *ctx,
                                                   struct yetty_yclass_object *obj, int32_t node_id)
 {
@@ -776,7 +776,7 @@ static struct yetty_ycore_void_result flame_focus(struct yetty_yclass_ctx *ctx,
 }
 
 /* focus_parent: zoom out one level (focus the current node's parent). */
-[[clang::annotate("override@yflame:flame:focus_parent")]] [[clang::annotate(
+[[clang::annotate("virtual@yflame:flame:focus_parent")]] [[clang::annotate(
     "local@yflame:focus_parent")]]
 static struct yetty_ycore_void_result flame_focus_parent(struct yetty_yclass_ctx *ctx,
                                                          struct yetty_yclass_object *obj)
@@ -795,7 +795,7 @@ static struct yetty_ycore_void_result flame_focus_parent(struct yetty_yclass_ctx
 }
 
 /* reset: zoom back out to the whole graph (root). */
-[[clang::annotate("override@yflame:flame:reset")]] [[clang::annotate("local@yflame:reset")]]
+[[clang::annotate("virtual@yflame:flame:reset")]] [[clang::annotate("local@yflame:reset")]]
 static struct yetty_ycore_void_result flame_reset(struct yetty_yclass_ctx *ctx,
                                                   struct yetty_yclass_object *obj)
 {
@@ -808,7 +808,7 @@ static struct yetty_ycore_void_result flame_reset(struct yetty_yclass_ctx *ctx,
 }
 
 /* set_highlight: mark a node as hovered (-1 clears) for the next render. */
-[[clang::annotate("override@yflame:flame:set_highlight")]] [[clang::annotate(
+[[clang::annotate("virtual@yflame:flame:set_highlight")]] [[clang::annotate(
     "local@yflame:set_highlight")]]
 static struct yetty_ycore_void_result flame_set_highlight(struct yetty_yclass_ctx *ctx,
                                                           struct yetty_yclass_object *obj,
@@ -823,7 +823,7 @@ static struct yetty_ycore_void_result flame_set_highlight(struct yetty_yclass_ct
 }
 
 /* destroy: free the tree, the node index, and the object. */
-[[clang::annotate("override@yflame:flame:destroy")]] [[clang::annotate("local@yflame:destroy")]]
+[[clang::annotate("virtual@yflame:flame:destroy")]] [[clang::annotate("local@yflame:destroy")]]
 static struct yetty_ycore_void_result flame_obj_destroy(struct yetty_yclass_ctx *ctx,
                                                         struct yetty_yclass_object *obj)
 {

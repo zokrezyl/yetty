@@ -25,7 +25,7 @@ extern "C" {
 
 struct yetty_yui_debug_window;
 struct yetty_ygui_framework;
-struct yetty_ygui_object;
+struct yetty_yclass_object;
 struct yetty_ywire_stats_snapshot;
 
 YETTY_YRESULT_DECLARE(yetty_yui_debug_window_ptr, struct yetty_yui_debug_window *);

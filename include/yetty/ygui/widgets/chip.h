@@ -14,19 +14,21 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_chip_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_chip;
-YETTY_YRESULT_DECLARE(yetty_ygui_chip_data_ptr, struct yetty_ygui_chip *);
-struct yetty_ygui_chip_data_ptr_result yetty_ygui_chip_data(struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_chip_ptr, struct yetty_ygui_chip *);
+struct yetty_ygui_chip_ptr_result yetty_ygui_chip_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_chip_to(struct yetty_ygui_chip *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_chip_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ygui_object;
-
-struct yetty_ycore_void_result yetty_ygui_chip_set_label(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_chip_set_label(struct yetty_yclass_object *obj,
                                                          const char *label);
-struct yetty_ycore_void_result yetty_ygui_chip_set_closable(struct yetty_ygui_object *obj, int c);
+struct yetty_ycore_void_result yetty_ygui_chip_set_closable(struct yetty_yclass_object *obj, int c);
 
 #endif

@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void);
 struct yetty_yfigure_figure;
 YETTY_YRESULT_DECLARE(yetty_yfigure_figure_ptr, struct yetty_yfigure_figure *);
 struct yetty_yfigure_figure_ptr_result yetty_yfigure_figure_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_yfigure_figure_to(struct yetty_yfigure_figure *data);
 struct rectangle_result yetty_yfigure_figure_rect_get(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yfigure_figure_rect_set(struct yetty_yclass_object *obj,
                                                              struct yetty_ycore_rectangle value);
@@ -38,8 +39,25 @@ struct yetty_ycore_int_result yetty_yfigure_figure_absolute_coords_get(
 struct yetty_ycore_void_result yetty_yfigure_figure_absolute_coords_set(
     struct yetty_yclass_object *obj, int value);
 
+struct yetty_ycore_char_ptr_result;
 struct yetty_ycore_void_result;
+struct yetty_ydraw_target;
+struct yetty_ywire_wire_statemachine;
 
+struct yetty_ycore_void_result yetty_yfigure_destroy(struct yetty_yclass_ctx *ctx,
+                                                     struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yfigure_render(struct yetty_yclass_ctx *ctx,
+                                                    struct yetty_yclass_object *obj,
+                                                    struct yetty_ydraw_target *target);
+struct yetty_ycore_void_result yetty_yfigure_process_input(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
+    struct yetty_ywire_wire_statemachine *statemachine);
+struct yetty_ycore_void_result yetty_yfigure_process_bytes(struct yetty_yclass_ctx *ctx,
+                                                           struct yetty_yclass_object *obj,
+                                                           const uint8_t *bytes, size_t bytes_len);
+struct yetty_ycore_char_ptr_result yetty_yfigure_dump_state(struct yetty_yclass_ctx *ctx,
+                                                            struct yetty_yclass_object *obj,
+                                                            int indent);
 struct yetty_ycore_void_result yetty_yfigure_reset_content(struct yetty_yclass_ctx *ctx,
                                                            struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yfigure_set_scroll(struct yetty_yclass_ctx *ctx,
@@ -48,6 +66,26 @@ struct yetty_ycore_void_result yetty_yfigure_set_scroll(struct yetty_yclass_ctx 
 struct yetty_ycore_void_result yetty_yfigure_set_content_size(struct yetty_yclass_ctx *ctx,
                                                               struct yetty_yclass_object *obj,
                                                               float content_w, float content_h);
+
+typedef struct yetty_ycore_void_result (*yetty_yfigure_destroy_fn)(struct yetty_yclass_ctx *,
+                                                                   struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_render_fn)(struct yetty_yclass_ctx *,
+                                                                  struct yetty_yclass_object *,
+                                                                  struct yetty_ydraw_target *);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_process_input_fn)(
+    struct yetty_yclass_ctx *, struct yetty_yclass_object *,
+    struct yetty_ywire_wire_statemachine *);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_process_bytes_fn)(
+    struct yetty_yclass_ctx *, struct yetty_yclass_object *, const uint8_t *, size_t);
+typedef struct yetty_ycore_char_ptr_result (*yetty_yfigure_dump_state_fn)(
+    struct yetty_yclass_ctx *, struct yetty_yclass_object *, int);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_reset_content_fn)(
+    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_set_scroll_fn)(struct yetty_yclass_ctx *,
+                                                                      struct yetty_yclass_object *,
+                                                                      float, float);
+typedef struct yetty_ycore_void_result (*yetty_yfigure_set_content_size_fn)(
+    struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float);
 
 struct yetty_yclass_object_ptr_result yetty_yfigure_figure_create(struct yetty_yclass_ctx *ctx);
 

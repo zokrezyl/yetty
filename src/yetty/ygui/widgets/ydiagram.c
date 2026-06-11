@@ -36,9 +36,9 @@
  * ydiagram.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_ydiagram_data_ptr, struct yetty_ygui_ydiagram *);
+YETTY_YRESULT_DECLARE(yetty_ygui_ydiagram_ptr, struct yetty_ygui_ydiagram *);
 struct yetty_yclass_ptr_result yetty_ygui_ydiagram_class_get(void);
-struct yetty_ygui_ydiagram_data_ptr_result yetty_ygui_ydiagram_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_ydiagram_ptr_result yetty_ygui_ydiagram_from(struct yetty_yclass_object *obj);
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
@@ -61,13 +61,12 @@ static struct yetty_ycore_void_result ydiagram_constructor(struct yetty_yclass_c
                                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_ydiagram_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ydiagram_constructor: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_ydiagram_class_get().value);
+    struct yetty_ygui_ydiagram_ptr_result d_dr = yetty_ygui_ydiagram_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ydiagram_constructor: data_get");
     struct yetty_ygui_ydiagram *d = d_dr.value;
     d->source = NULL;
@@ -80,9 +79,8 @@ static struct yetty_ycore_void_result ydiagram_destructor(struct yetty_yclass_ct
                                                           struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_ydiagram_class_get().value);
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
+    struct yetty_ygui_ydiagram_ptr_result d_dr = yetty_ygui_ydiagram_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ydiagram_destructor: data_get");
     struct yetty_ygui_ydiagram *d = d_dr.value;
     free(d->source);
@@ -93,14 +91,13 @@ static struct yetty_ycore_void_result ydiagram_destructor(struct yetty_yclass_ct
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_ydiagram_set_source(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_ydiagram_set_source(struct yetty_yclass_object *obj,
                                                               const char *source)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "ydiagram_set_source: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_ydiagram_class_get().value);
+    struct yetty_ygui_ydiagram_ptr_result d_dr = yetty_ygui_ydiagram_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_ydiagram_set_source: data_get");
     struct yetty_ygui_ydiagram *d = d_dr.value;
 
@@ -166,14 +163,14 @@ struct yetty_ycore_void_result yetty_ygui_ydiagram_set_source(struct yetty_ygui_
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_const_char_ptr_result yetty_ygui_ydiagram_get_source(
-    const struct yetty_ygui_object *obj)
+    const struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_const_char_ptr,
                          "yetty_ygui_ydiagram_get_source: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
-        (struct yetty_ygui_object *)obj, yetty_ygui_ydiagram_class_get().value);
+    struct yetty_ygui_ydiagram_ptr_result d_dr =
+        yetty_ygui_ydiagram_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr,
                         "yetty_ygui_ydiagram_get_source: data_get");
     struct yetty_ygui_ydiagram *d = d_dr.value;

@@ -166,12 +166,12 @@ struct tab {
 
 struct app {
     struct yetty_ygui_framework *fw;
-    struct yetty_ygui_object *root;
-    struct yetty_ygui_object *tabbar;
-    struct yetty_ygui_object *address; /* textinput */
-    struct yetty_ygui_object *scroll;  /* scrollarea */
-    struct yetty_ygui_object *page;    /* ydraw_embed (HTML/SVG) — shared */
-    struct yetty_ygui_object *image;   /* yimage widget (raster) — shared */
+    struct yetty_yclass_object *root;
+    struct yetty_yclass_object *tabbar;
+    struct yetty_yclass_object *address; /* textinput */
+    struct yetty_yclass_object *scroll;  /* scrollarea */
+    struct yetty_yclass_object *page;    /* ydraw_embed (HTML/SVG) — shared */
+    struct yetty_yclass_object *image;   /* yimage widget (raster) — shared */
     int showing_image;                 /* which content widget is visible */
 
     /* `--no-ui`: hide the tab strip + toolbar so only the page content is
@@ -814,7 +814,7 @@ static void ui_new_tab(struct app *a)
     }
     int idx = a->n_tabs;
     memset(&a->tabs[idx], 0, sizeof(a->tabs[idx]));
-    struct yetty_ygui_object_ptr_result hr = yetty_ygui_tabbar_add_tab(a->tabbar, "New Tab");
+    struct yetty_yclass_object_ptr_result hr = yetty_ygui_tabbar_add_tab(a->tabbar, "New Tab");
     if (YETTY_IS_ERR(hr)) {
         yetty_ycore_error_destroy(hr.error);
         return;
@@ -886,12 +886,12 @@ static struct yetty_ycore_void_result on_reload_click(struct yetty_yclass_ctx *c
     return YETTY_OK_VOID();
 }
 
-static void on_new_tab_cb(struct yetty_ygui_object *tb, void *ud)
+static void on_new_tab_cb(struct yetty_yclass_object *tb, void *ud)
 {
     (void)tb;
     ui_new_tab((struct app *)ud);
 }
-static void on_close_cb(struct yetty_ygui_object *tb, int idx, void *ud)
+static void on_close_cb(struct yetty_yclass_object *tb, int idx, void *ud)
 {
     (void)tb;
     ui_close_tab((struct app *)ud, idx);
@@ -1164,11 +1164,11 @@ static void on_raw(void *user, const char *bytes, size_t n)
 /* ===========================================================================
  * UI construction + render pipeline.
  * ===========================================================================*/
-static struct yetty_ygui_object *add_nav_button(struct yetty_ygui_object *parent, const char *label,
+static struct yetty_yclass_object *add_nav_button(struct yetty_yclass_object *parent, const char *label,
                                                 float w, yetty_ygui_click_cb cb, void *ud)
 {
-    struct yetty_ygui_object_ptr_result r =
-        yetty_ygui_add(yetty_ygui_button_class_get().value, parent);
+    struct yetty_yclass_object_ptr_result r =
+        yetty_ygui_widget_add(parent, yetty_ygui_button_class_get().value);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return NULL;
@@ -1187,8 +1187,8 @@ static struct yetty_ygui_object *add_nav_button(struct yetty_ygui_object *parent
 
 static int build_ui(struct app *a)
 {
-    struct yetty_ygui_object_ptr_result rr =
-        yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
+    struct yetty_yclass_object_ptr_result rr =
+        yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
     if (YETTY_IS_ERR(rr)) {
         yetty_ycore_error_destroy(rr.error);
         return -1;
@@ -1198,8 +1198,8 @@ static int build_ui(struct app *a)
     err_ok(yetty_ygui_framework_set_root(a->fw, a->root));
 
     /* Tab strip. */
-    struct yetty_ygui_object_ptr_result tr =
-        yetty_ygui_add(yetty_ygui_tabbar_class_get().value, a->root);
+    struct yetty_yclass_object_ptr_result tr =
+        yetty_ygui_widget_add(a->root, yetty_ygui_tabbar_class_get().value);
     if (YETTY_IS_ERR(tr)) {
         yetty_ycore_error_destroy(tr.error);
         return -1;
@@ -1231,13 +1231,13 @@ static int build_ui(struct app *a)
     }
 
     /* Toolbar: nav buttons + address bar. */
-    struct yetty_ygui_object_ptr_result br =
-        yetty_ygui_add(yetty_ygui_hbox_class_get().value, a->root);
+    struct yetty_yclass_object_ptr_result br =
+        yetty_ygui_widget_add(a->root, yetty_ygui_hbox_class_get().value);
     if (YETTY_IS_ERR(br)) {
         yetty_ycore_error_destroy(br.error);
         return -1;
     }
-    struct yetty_ygui_object *toolbar = br.value;
+    struct yetty_yclass_object *toolbar = br.value;
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(toolbar);
         l.height = 44.0f;
@@ -1264,8 +1264,8 @@ static int build_ui(struct app *a)
     add_nav_button(toolbar, ">", 40.0f, on_fwd_click, a);
     add_nav_button(toolbar, "Reload", 72.0f, on_reload_click, a);
 
-    struct yetty_ygui_object_ptr_result ar =
-        yetty_ygui_add(yetty_ygui_textinput_class_get().value, toolbar);
+    struct yetty_yclass_object_ptr_result ar =
+        yetty_ygui_widget_add(toolbar, yetty_ygui_textinput_class_get().value);
     if (YETTY_IS_ERR(ar)) {
         yetty_ycore_error_destroy(ar.error);
         return -1;
@@ -1279,8 +1279,8 @@ static int build_ui(struct app *a)
     }
 
     /* Scrollable page area. */
-    struct yetty_ygui_object_ptr_result sr =
-        yetty_ygui_add(yetty_ygui_scrollarea_class_get().value, a->root);
+    struct yetty_yclass_object_ptr_result sr =
+        yetty_ygui_widget_add(a->root, yetty_ygui_scrollarea_class_get().value);
     if (YETTY_IS_ERR(sr)) {
         yetty_ycore_error_destroy(sr.error);
         return -1;
@@ -1292,8 +1292,8 @@ static int build_ui(struct app *a)
         err_ok(yetty_ygui_widget_layout_set(a->scroll, &l));
     }
 
-    struct yetty_ygui_object_ptr_result pr =
-        yetty_ygui_add(yetty_ygui_ydraw_embed_class_get().value, a->scroll);
+    struct yetty_yclass_object_ptr_result pr =
+        yetty_ygui_widget_add(a->scroll, yetty_ygui_ydraw_embed_class_get().value);
     if (YETTY_IS_ERR(pr)) {
         yetty_ycore_error_destroy(pr.error);
         return -1;
@@ -1304,8 +1304,8 @@ static int build_ui(struct app *a)
 	 * — a yimage prim can't be painted by the ydraw_embed, and nesting the
 	 * figure inside the scrollarea doesn't composite. So it's a sibling of
 	 * the scrollarea; exactly one of {scrollarea, image} is visible. */
-    struct yetty_ygui_object_ptr_result ir =
-        yetty_ygui_add(yetty_ygui_yimage_class_get().value, a->root);
+    struct yetty_yclass_object_ptr_result ir =
+        yetty_ygui_widget_add(a->root, yetty_ygui_yimage_class_get().value);
     if (YETTY_IS_ERR(ir)) {
         yetty_ycore_error_destroy(ir.error);
         return -1;
@@ -1319,7 +1319,7 @@ static int build_ui(struct app *a)
 /* Set the shared content widget's height (drives the scrollarea's scroll
  * range); width stays unset so the vbox stretch keeps it as wide as the
  * scrollarea (and the page follows pane resizes). */
-static void set_content_height(struct app *a, struct yetty_ygui_object *w, int height_px)
+static void set_content_height(struct app *a, struct yetty_yclass_object *w, int height_px)
 {
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
     l.width = -1.0f;
@@ -1455,7 +1455,7 @@ static void render_active(struct app *a)
 /* Create the first tab and load `initial_url` (or the start page). */
 static void open_first_tab(struct app *a, const char *initial_url)
 {
-    struct yetty_ygui_object_ptr_result hr = yetty_ygui_tabbar_add_tab(a->tabbar, "New Tab");
+    struct yetty_yclass_object_ptr_result hr = yetty_ygui_tabbar_add_tab(a->tabbar, "New Tab");
     if (YETTY_IS_OK(hr)) {
         a->n_tabs = 1;
         a->active = 0;

@@ -1,8 +1,24 @@
 /* GENERATED — do not edit. */
-#include "yetty/ygui/methods.gen.h"
 #include "yetty/ygui/widgets/ydraw_embed.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
+#include <stddef.h> /* NULL, size_t */
+
+struct yetty_ycore_void_result;
+struct yetty_ygui_emit_ctx;
+struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_ctx *ctx,
+                                                      struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_ctx *ctx,
+                                                     struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_ctx *ctx,
+                                                           struct yetty_yclass_object *obj,
+                                                           struct yetty_ygui_emit_ctx *emit_ctx);
+typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_ctx *,
+                                                                    struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_yclass_ctx *,
+                                                                   struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(
+    struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 
 [[maybe_unused]]
 static yetty_ygui_constructor_fn yetty_ygui_ymaze_yetty_ygui_constructor_check = ymz_constructor;
@@ -24,6 +40,7 @@ struct yetty_yclass_ptr_result yetty_ygui_ymaze_class_get(void)
         .name = "yetty_ygui_ymaze",
         .type = YETTY_YCLASS_TYPE_REGULAR,
         .data_size = sizeof(struct yetty_ygui_ymaze),
+        .data_align = _Alignof(struct yetty_ygui_ymaze),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_ygui", "constructor", (yetty_yclass_method_id_t)yetty_ygui_constructor,
@@ -50,17 +67,34 @@ struct yetty_yclass_ptr_result yetty_ygui_ymaze_class_get(void)
     return register_class_r;
 }
 
-struct yetty_ygui_ymaze_data_ptr_result yetty_ygui_ymaze_data(struct yetty_ygui_object *obj)
+struct yetty_ygui_ymaze_ptr_result yetty_ygui_ymaze_from(struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_ptr_result class_r = yetty_ygui_ymaze_class_get();
     if (YETTY_IS_ERR(class_r)) {
-        yerror("yetty_ygui_ymaze_data: class accessor failed: %s", class_r.error.msg);
-        return YETTY_ERR(yetty_ygui_ymaze_data_ptr, "yetty_ygui_ymaze_data: class accessor failed",
-                         class_r);
+        return YETTY_ERR(yetty_ygui_ymaze_ptr, "yetty_ygui_ymaze_from: class accessor", class_r);
     }
-    struct yetty_ygui_void_ptr_result data_slice_r = yetty_ygui_data_get_result(obj, class_r.value);
-    if (YETTY_IS_ERR(data_slice_r)) {
-        return YETTY_ERR(yetty_ygui_ymaze_data_ptr, "yetty_ygui_ymaze_data", data_slice_r);
+    struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
+    if (YETTY_IS_ERR(slice_r)) {
+        return YETTY_ERR(yetty_ygui_ymaze_ptr, "yetty_ygui_ymaze_from: object_data", slice_r);
     }
-    return YETTY_OK(yetty_ygui_ymaze_data_ptr, (struct yetty_ygui_ymaze *)data_slice_r.value);
+    return YETTY_OK(yetty_ygui_ymaze_ptr, (struct yetty_ygui_ymaze *)slice_r.value);
+}
+
+struct yetty_yclass_object *yetty_ygui_ymaze_to(struct yetty_ygui_ymaze *data)
+{
+    if (!data) {
+        return NULL;
+    }
+    struct yetty_yclass_ptr_result class_r = yetty_ygui_ymaze_class_get();
+    if (YETTY_IS_ERR(class_r)) {
+        yetty_ycore_error_destroy(class_r.error);
+        return NULL;
+    }
+    struct yetty_ycore_size_result offset_r =
+        yetty_yclass_object_data_offset(class_r.value, class_r.value);
+    if (YETTY_IS_ERR(offset_r)) {
+        yetty_ycore_error_destroy(offset_r.error);
+        return NULL;
+    }
+    return (struct yetty_yclass_object *)((char *)data - offset_r.value);
 }

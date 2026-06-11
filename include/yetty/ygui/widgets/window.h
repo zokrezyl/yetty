@@ -14,23 +14,25 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_window_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_window;
-YETTY_YRESULT_DECLARE(yetty_ygui_window_data_ptr, struct yetty_ygui_window *);
-struct yetty_ygui_window_data_ptr_result yetty_ygui_window_data(struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_window_ptr, struct yetty_ygui_window *);
+struct yetty_ygui_window_ptr_result yetty_ygui_window_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_window_to(struct yetty_ygui_window *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_window_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ygui_object;
-
-struct yetty_ygui_object *yetty_ygui_window_body(struct yetty_ygui_object *obj);
-struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_ygui_object *obj,
+struct yetty_yclass_object *yetty_ygui_window_body(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_yclass_object *obj,
                                                            const char *title);
-struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_ygui_object *obj,
-                                                          struct yetty_ygui_object *menu);
-struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_yclass_object *obj,
+                                                          struct yetty_yclass_object *menu);
+struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_yclass_object *obj,
                                                               int closable);
 
 #endif

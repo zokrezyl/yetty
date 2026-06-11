@@ -1,5 +1,4 @@
 /* GENERATED — do not edit. */
-#include "yetty/yflame/methods.gen.h"
 #include "yetty/yflame/flame.h"
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>

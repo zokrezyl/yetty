@@ -102,12 +102,12 @@ struct yaudio_app {
     struct yetty_yevent_event_listener listener;
 
     struct yetty_yui *yui;
-    struct yetty_ygui_object *plot_widget; /* energy envelope (dBFS) */
-    struct yetty_ygui_object *wave_widget; /* raw waveform of zoomed window */
-    struct yetty_ygui_object *plots_vbox;  /* flex column holding both plots + label */
-    struct yetty_ygui_object *prev_btn;
-    struct yetty_ygui_object *next_btn;
-    struct yetty_ygui_object *status_label;
+    struct yetty_yclass_object *plot_widget; /* energy envelope (dBFS) */
+    struct yetty_yclass_object *wave_widget; /* raw waveform of zoomed window */
+    struct yetty_yclass_object *plots_vbox;  /* flex column holding both plots + label */
+    struct yetty_yclass_object *prev_btn;
+    struct yetty_yclass_object *next_btn;
+    struct yetty_yclass_object *status_label;
 
     /* Scratch buffers for the waveform widget.
      *
@@ -172,8 +172,8 @@ struct yaudio_app {
     double last_posted_progress;   /* worker-local: throttles RENDER posts */
 
     /* Loading-screen widgets, hidden once the real plot UI is built. */
-    struct yetty_ygui_object *load_bar;
-    struct yetty_ygui_object *load_label;
+    struct yetty_yclass_object *load_bar;
+    struct yetty_yclass_object *load_label;
     int ui_built; /* real plot UI constructed yet? */
 };
 
@@ -607,7 +607,7 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
         yerror("yaudio: yui engine is NULL — yui allocation failed");
         return;
     }
-    struct yetty_ygui_object *root = yetty_ygui_framework_root(engine);
+    struct yetty_yclass_object *root = yetty_ygui_framework_root(engine);
     if (!root) {
         yerror("yaudio: yui engine has no root");
         return;
@@ -635,10 +635,10 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
     /* Flex-column container hosting the two plots + the status label.
      * Absolutely positioned over the workspace area (below yui's
      * titlebar, above its statusbar + the button strip). */
-    struct yetty_ygui_object *col = NULL;
+    struct yetty_yclass_object *col = NULL;
     {
-        struct yetty_ygui_object_ptr_result cr =
-            yetty_ygui_add(yetty_ygui_vbox_class_get().value, root);
+        struct yetty_yclass_object_ptr_result cr =
+            yetty_ygui_widget_add(root, yetty_ygui_vbox_class_get().value);
         if (YETTY_IS_OK(cr)) {
             col = cr.value;
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
@@ -662,8 +662,8 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
         .color = 0,
     };
     if (col) {
-        struct yetty_ygui_object_ptr_result pr =
-            yetty_ygui_add(yetty_ygui_yplot_class_get().value, col);
+        struct yetty_yclass_object_ptr_result pr =
+            yetty_ygui_widget_add(col, yetty_ygui_yplot_class_get().value);
         if (YETTY_IS_OK(pr)) {
             app->plot_widget = pr.value;
             yetty_ycore_error_destroy_safe(
@@ -679,8 +679,8 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
     /* Status label — between the two plots, inside the same vbox so it
      * gets the same gap treatment automatically. */
     if (col) {
-        struct yetty_ygui_object_ptr_result lr =
-            yetty_ygui_add(yetty_ygui_label_class_get().value, col);
+        struct yetty_yclass_object_ptr_result lr =
+            yetty_ygui_widget_add(col, yetty_ygui_label_class_get().value);
         if (YETTY_IS_OK(lr)) {
             app->status_label = lr.value;
             yetty_ycore_error_destroy_safe(
@@ -709,8 +709,8 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
         .color = 0xFFE0E5E4u,
     };
     if (col) {
-        struct yetty_ygui_object_ptr_result wr =
-            yetty_ygui_add(yetty_ygui_yplot_class_get().value, col);
+        struct yetty_yclass_object_ptr_result wr =
+            yetty_ygui_widget_add(col, yetty_ygui_yplot_class_get().value);
         if (YETTY_IS_OK(wr)) {
             app->wave_widget = wr.value;
             yetty_ycore_error_destroy_safe(
@@ -728,8 +728,8 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
     float btn_h = 36.0f;
     float btn_y = H - sb_h - btn_strip_h + 6.0f;
     {
-        struct yetty_ygui_object_ptr_result br =
-            yetty_ygui_add(yetty_ygui_button_class_get().value, root);
+        struct yetty_yclass_object_ptr_result br =
+            yetty_ygui_widget_add(root, yetty_ygui_button_class_get().value);
         if (YETTY_IS_OK(br)) {
             app->prev_btn = br.value;
             yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(app->prev_btn, "◀ Prev"));
@@ -743,8 +743,8 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
         }
     }
     {
-        struct yetty_ygui_object_ptr_result br =
-            yetty_ygui_add(yetty_ygui_button_class_get().value, root);
+        struct yetty_yclass_object_ptr_result br =
+            yetty_ygui_widget_add(root, yetty_ygui_button_class_get().value);
         if (YETTY_IS_OK(br)) {
             app->next_btn = br.value;
             yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(app->next_btn, "Next ▶"));
@@ -763,10 +763,10 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
      * gestures handled in on_wheel() and the MOUSE_DRAG path. */
     {
         float help_x = 16.0f + 2.0f * btn_w + 12.0f + 24.0f; /* past Next button + gap */
-        struct yetty_ygui_object_ptr_result hr =
-            yetty_ygui_add(yetty_ygui_label_class_get().value, root);
+        struct yetty_yclass_object_ptr_result hr =
+            yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
         if (YETTY_IS_OK(hr)) {
-            struct yetty_ygui_object *help = hr.value;
+            struct yetty_yclass_object *help = hr.value;
             yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(
                 help, "◀ ▶ / ←→: prev·next interval    Drag: pan    Wheel: scroll    "
                       "Ctrl+Wheel: amplitude    Ctrl+Shift+Wheel: time zoom"));
@@ -802,7 +802,7 @@ static void build_loading_ui(struct yaudio_app *app, struct yetty_yinit_runtime 
         yerror("yaudio: yui engine is NULL — yui allocation failed");
         return;
     }
-    struct yetty_ygui_object *root = yetty_ygui_framework_root(engine);
+    struct yetty_yclass_object *root = yetty_ygui_framework_root(engine);
     if (!root) {
         yerror("yaudio: yui engine has no root");
         return;
@@ -818,8 +818,8 @@ static void build_loading_ui(struct yaudio_app *app, struct yetty_yinit_runtime 
     float cy = H * 0.5f;
 
     {
-        struct yetty_ygui_object_ptr_result lr =
-            yetty_ygui_add(yetty_ygui_label_class_get().value, root);
+        struct yetty_yclass_object_ptr_result lr =
+            yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
         if (YETTY_IS_OK(lr)) {
             app->load_label = lr.value;
             yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(app->load_label, "Loading…"));
@@ -832,8 +832,8 @@ static void build_loading_ui(struct yaudio_app *app, struct yetty_yinit_runtime 
         }
     }
     {
-        struct yetty_ygui_object_ptr_result pr =
-            yetty_ygui_add(yetty_ygui_progress_class_get().value, root);
+        struct yetty_yclass_object_ptr_result pr =
+            yetty_ygui_widget_add(root, yetty_ygui_progress_class_get().value);
         if (YETTY_IS_OK(pr)) {
             app->load_bar = pr.value;
             yetty_ycore_error_destroy_safe(yetty_ygui_progress_set_value(app->load_bar, 0.0f));

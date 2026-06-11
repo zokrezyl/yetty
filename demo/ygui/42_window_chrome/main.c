@@ -26,19 +26,19 @@
 #include <yetty/ygui/widgets/label.h>
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
 
-    struct yetty_ygui_object_ptr_result label_r =
-        yetty_ygui_add(yetty_ygui_label_class_get().value, root);
+    struct yetty_yclass_object_ptr_result label_r =
+        yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, label_r, "42_window_chrome: label add");
     struct yetty_ycore_void_result label_text = yetty_ygui_label_set_text(
         label_r.value, "Window-chrome POC — the strip above is a real OS-window handle.");
     YETTY_RETURN_IF_ERR(yetty_ycore_void, label_text, "42_window_chrome: label text");
 
-    struct yetty_ygui_object_ptr_result button_r =
-        yetty_ygui_add(yetty_ygui_button_class_get().value, root);
+    struct yetty_yclass_object_ptr_result button_r =
+        yetty_ygui_widget_add(root, yetty_ygui_button_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, button_r, "42_window_chrome: button add");
     struct yetty_ycore_void_result button_label =
         yetty_ygui_button_set_label(button_r.value, "A normal ygui button — still clickable");

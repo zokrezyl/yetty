@@ -79,7 +79,7 @@ struct demo_runner {
     demo_build_fn build;
 
     struct yetty_ygui_framework *engine;
-    struct yetty_ygui_object *root;
+    struct yetty_yclass_object *root;
 
     struct yetty_yframework *yframework;
     struct yetty_yplatform_memory_pty_pair pty_pair;
@@ -129,7 +129,7 @@ struct yetty_ygui_framework *demo_runner_engine(struct demo_runner *r)
     return r ? r->engine : NULL;
 }
 
-struct yetty_ygui_object *demo_runner_root(struct demo_runner *r)
+struct yetty_yclass_object *demo_runner_root(struct demo_runner *r)
 {
     return r ? r->root : NULL;
 }
@@ -649,10 +649,10 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
      * a column layout. Demos receive the body panel as their `root`
      * argument, so they get a styled, padded canvas instead of a bare
      * window with a black void below their widgets. */
-    struct yetty_ygui_object *body = NULL;
+    struct yetty_yclass_object *body = NULL;
     {
-        struct yetty_ygui_object_ptr_result rr =
-            yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
+        struct yetty_yclass_object_ptr_result rr =
+            yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "demo_runner: root add");
         r->root = rr.value;
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(r->root);
@@ -666,8 +666,8 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
          * ydraw and composited as a pinned ygrid figure (runner_chrome_caption_*
          * below), so it stays independent of ygui. */
 
-        struct yetty_ygui_object_ptr_result br =
-            yetty_ygui_add(yetty_ygui_panel_class_get().value, r->root);
+        struct yetty_yclass_object_ptr_result br =
+            yetty_ygui_widget_add(r->root, yetty_ygui_panel_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "demo_runner: body add");
         body = br.value;
         /* Panel defaults to ROW direction; flip to COLUMN so demos can
@@ -1316,10 +1316,10 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
     /* Same two-level root the standalone path uses: outer vbox owning
      * the viewport, inner body panel with the brand background and
      * column-direction layout. */
-    struct yetty_ygui_object *body = NULL;
+    struct yetty_yclass_object *body = NULL;
     {
-        struct yetty_ygui_object_ptr_result rr =
-            yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
+        struct yetty_yclass_object_ptr_result rr =
+            yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
         if (YETTY_IS_ERR(rr)) {
             yetty_ycore_error_print(stderr, "demo_runner client: root add", rr.error);
             yetty_ycore_error_destroy(rr.error);
@@ -1344,8 +1344,8 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
          * compositor via OSC, not a local container, so the chrome caption
          * figure isn't composited here yet — the in-terminal window manager will
          * own that path. Standalone mode shows the full chrome. */
-        struct yetty_ygui_object_ptr_result br =
-            yetty_ygui_add(yetty_ygui_panel_class_get().value, r.root);
+        struct yetty_yclass_object_ptr_result br =
+            yetty_ygui_widget_add(r.root, yetty_ygui_panel_class_get().value);
         if (YETTY_IS_ERR(br)) {
             yetty_ycore_error_print(stderr, "demo_runner client: body add", br.error);
             yetty_ycore_error_destroy(br.error);

@@ -15,9 +15,9 @@
  * ymaze.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_ymaze_data_ptr, struct yetty_ygui_ymaze *);
+YETTY_YRESULT_DECLARE(yetty_ygui_ymaze_ptr, struct yetty_ygui_ymaze *);
 struct yetty_yclass_ptr_result yetty_ygui_ymaze_class_get(void);
-struct yetty_ygui_ymaze_data_ptr_result yetty_ygui_ymaze_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_ymaze_ptr_result yetty_ygui_ymaze_from(struct yetty_yclass_object *obj);
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/ymaze/ymaze.h>
@@ -37,12 +37,11 @@ static struct yetty_ycore_void_result ymz_constructor(struct yetty_yclass_ctx *y
                                                       struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_ymaze_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ymaze_ctor: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_ymaze_class_get().value);
+    struct yetty_ygui_ymaze_ptr_result d_dr = yetty_ygui_ymaze_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymz_constructor: data_get");
     struct yetty_ygui_ymaze *d = d_dr.value;
 
@@ -61,9 +60,8 @@ static struct yetty_ycore_void_result ymz_destructor(struct yetty_yclass_ctx *yc
                                                      struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_ymaze_class_get().value);
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
+    struct yetty_ygui_ymaze_ptr_result d_dr = yetty_ygui_ymaze_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymz_destructor: data_get");
     struct yetty_ygui_ymaze *d = d_dr.value;
     yetty_ymaze_destroy(d->maze);
@@ -78,9 +76,8 @@ static struct yetty_ycore_void_result ymz_emit_body(struct yetty_yclass_ctx *ycl
                                                     struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_ymaze_class_get().value);
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
+    struct yetty_ygui_ymaze_ptr_result d_dr = yetty_ygui_ymaze_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymz_emit_body: data_get");
     struct yetty_ygui_ymaze *d = d_dr.value;
 
@@ -112,7 +109,7 @@ static struct yetty_ycore_void_result ymz_emit_body(struct yetty_yclass_ctx *ycl
         struct yetty_ycore_void_result sb = yetty_ygui_ydraw_embed_set_buffer(obj, br.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sb, "ymaze_emit_body: set_buffer");
         /* Keep the frame pump alive — the maze is animated. */
-        (void)yetty_ygui_object_set_dirty(obj);
+        (void)yetty_ygui_widget_set_dirty(obj);
     }
 
     /* Forward to super's emit_body (ydraw_embed paints the buffer). */

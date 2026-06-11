@@ -12,10 +12,9 @@
  * separator.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_separator_data_ptr, struct yetty_ygui_separator *);
+YETTY_YRESULT_DECLARE(yetty_ygui_separator_ptr, struct yetty_ygui_separator *);
 struct yetty_yclass_ptr_result yetty_ygui_separator_class_get(void);
-struct yetty_ygui_separator_data_ptr_result yetty_ygui_separator_data(
-    struct yetty_ygui_object *obj);
+struct yetty_ygui_separator_ptr_result yetty_ygui_separator_from(struct yetty_yclass_object *obj);
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
@@ -29,7 +28,7 @@ static struct yetty_ycore_void_result separator_paint(struct yetty_yclass_ctx *y
                                                       struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "separator_paint: NULL ctx");
     }

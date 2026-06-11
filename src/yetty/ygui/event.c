@@ -10,10 +10,11 @@
  */
 
 #include "internal.h"
+#include <yetty/ygui/widget.h>
 
 #include <stdlib.h>
 
-struct yetty_ycore_void_result yetty_ygui_object_subscribe(struct yetty_ygui_object *target,
+struct yetty_ycore_void_result yetty_ygui_object_subscribe(struct yetty_yclass_object *target,
                                                            enum yetty_ygui_event_type type,
                                                            yetty_ygui_event_cb cb, void *userdata)
 {
@@ -27,12 +28,12 @@ struct yetty_ycore_void_result yetty_ygui_object_subscribe(struct yetty_ygui_obj
     sub->type = type;
     sub->cb = cb;
     sub->userdata = userdata;
-    sub->next = target->subscriptions;
-    target->subscriptions = sub;
+    sub->next = yetty_ygui_widget_subscriptions(target);
+    yetty_ygui_widget_set_subscriptions(target, sub);
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ygui_object_emit(struct yetty_ygui_object *source,
+struct yetty_ycore_void_result yetty_ygui_object_emit(struct yetty_yclass_object *source,
                                                       const struct yetty_ygui_event *event)
 {
     if (!source || !event) {
@@ -42,7 +43,8 @@ struct yetty_ycore_void_result yetty_ygui_object_emit(struct yetty_ygui_object *
      * "subscribe to events on a target", so emit fires on the source
      * itself (i.e., subscriptions live on the emitter today; the
      * full target/source split lands when bubbling is added). */
-    for (struct yetty_ygui_event_subscription *s = source->subscriptions; s; s = s->next) {
+    for (struct yetty_ygui_event_subscription *s = yetty_ygui_widget_subscriptions(source); s;
+         s = s->next) {
         if (s->type != event->type) {
             continue;
         }
