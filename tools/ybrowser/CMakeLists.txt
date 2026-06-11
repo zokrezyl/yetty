@@ -28,7 +28,7 @@ target_include_directories(ybrowser PRIVATE
 find_package(Threads REQUIRED)
 
 target_link_libraries(ybrowser PRIVATE
-    ygui
+    yetty_ygui
     yetty_ybrowser
     yetty_ysvg
     yetty_yimage_core

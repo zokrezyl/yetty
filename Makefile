@@ -223,7 +223,12 @@ build-desktop-ytrace-release: ## Build desktop ytrace release (daily driver)
 
 .PHONY: config-desktop-ffi-release
 config-desktop-ffi-release: ## Configure the PIC FFI build tree (libyetty_ffi.so)
-	PATH="$(SYSTEM_PATH)" $(CMAKE) -B $(BUILD_DIR_DESKTOP_FFI_RELEASE) $(CMAKE_GENERATOR) $(CMAKE_RELEASE) $(CMAKE_LOGLEVEL_YTRACE) $(CMAKE_DESKTOP_COMPILER) $(CMAKE_COMPILER_LAUNCHER) -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DYETTY_BUILD_FFI_SHARED=ON
+	# The FFI .so is a PIC shared object. The ypdf / ybrowser / ydiagram widget
+	# backends drag in non-PIC system static libs (fontconfig, lexbor, …) that
+	# cannot be linked into a shared object, so those features are forced OFF
+	# here. The widget sources still compile (their class accessors resolve);
+	# only the heavy non-PIC backend archives are dropped.
+	PATH="$(SYSTEM_PATH)" $(CMAKE) -B $(BUILD_DIR_DESKTOP_FFI_RELEASE) $(CMAKE_GENERATOR) $(CMAKE_RELEASE) $(CMAKE_LOGLEVEL_YTRACE) $(CMAKE_DESKTOP_COMPILER) $(CMAKE_COMPILER_LAUNCHER) -DCMAKE_POSITION_INDEPENDENT_CODE=ON -DYETTY_BUILD_FFI_SHARED=ON -DYETTY_ENABLE_FEATURE_YPDF=OFF -DYETTY_ENABLE_FEATURE_YBROWSER=OFF -DYETTY_ENABLE_FEATURE_YDIAGRAM=OFF
 
 .PHONY: build-desktop-ffi-release
 build-desktop-ffi-release: ## Build libyetty_ffi.so (PIC double-build; static app build untouched)

@@ -73,7 +73,7 @@ target_compile_definitions(demo_ygui_runner PUBLIC
 # propagate these to consumers but also use them to compile their own
 # sources — exactly what we need for runner.c + the platform .c files.
 target_link_libraries(demo_ygui_runner PUBLIC
-    ygui
+    yetty_ygui
     yetty_ywire
     yetty_yfigure
     yetty_ygrid
@@ -115,7 +115,7 @@ function(demo_ygui_add name)
         YETTY_USE_FORKPTY=1
     )
     target_link_libraries(${target} PRIVATE
-        ygui
+        yetty_ygui
         yetty_ywire
         yetty_yfigure
         yetty_ygrid

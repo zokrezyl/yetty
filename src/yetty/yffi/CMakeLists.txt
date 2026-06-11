@@ -26,11 +26,24 @@ find_package(Threads REQUIRED)
 # their bindings are validated.
 target_link_libraries(yetty_ffi PRIVATE
     -Wl,--whole-archive
+    yetty_yfigure
+    yetty_ygrid
+    yetty_ygui
+    yetty_ymgui
+    yetty_yrdawn
+    yetty_yshadertoy
     yetty_yview
+    yetty_yvterm
     -Wl,--no-whole-archive
     yetty_yplatform_core
+    yetty_ydraw     # full ydraw (cell-ref-table, …), referenced by yvterm
+    uv_a            # ygui framework is libuv-driven
     Threads::Threads
 )
+
+# Fail the link on any unresolved symbol so a missing transitive module shows
+# up here at build time, not as a dlopen error in the bindings.
+target_link_options(yetty_ffi PRIVATE -Wl,--no-undefined)
 
 set_target_properties(yetty_ffi PROPERTIES
     OUTPUT_NAME yetty_ffi

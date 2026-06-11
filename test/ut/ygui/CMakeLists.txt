@@ -23,7 +23,7 @@ target_include_directories(ygui-object-test PRIVATE
 )
 
 target_link_libraries(ygui-object-test PRIVATE
-    ygui
+    yetty_ygui
     yetty_ycore
     yetty_ydraw_core
     m
@@ -42,7 +42,7 @@ target_include_directories(ygui-layout-test PRIVATE
 )
 
 target_link_libraries(ygui-layout-test PRIVATE
-    ygui
+    yetty_ygui
     yetty_ycore
     yetty_ydraw_core
     m
@@ -61,7 +61,7 @@ target_include_directories(ygui-figure-test PRIVATE
 )
 
 target_link_libraries(ygui-figure-test PRIVATE
-    ygui
+    yetty_ygui
     yetty_ycore
     yetty_yplatform_core
     yetty_yface
