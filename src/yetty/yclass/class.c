@@ -494,14 +494,26 @@ static struct yetty_ycore_void_result class_add_data_slice(struct yetty_yclass *
     return YETTY_OK_VOID();
 }
 
+/* Greatest scalar alignment on the target — the portable stand-in for
+ * <stddef.h>'s max_align_t, which MSVC's CRT does not declare in C mode.
+ * _Alignof this union is the max of every fundamental object type's
+ * alignment, so nothing standard is ever under-aligned against it. */
+union yetty_yclass_max_align {
+    long long integer;
+    long double real;
+    void *pointer;
+    void (*function_pointer)(void);
+};
+
 /* Alignment a class's data slice must start on. _Alignof is always a
  * power of two. A descriptor that predates the data_align field (or a
- * hand-written one that omits it) reports 0; fall back to max_align_t,
- * which is never under-aligned for any standard object type. */
+ * hand-written one that omits it) reports 0; fall back to the greatest
+ * fundamental alignment, which is never under-aligned for any standard
+ * object type. */
 static inline size_t slice_align_of(const struct yetty_yclass *cls)
 {
     size_t align = cls->desc->data_align;
-    return align ? align : _Alignof(max_align_t);
+    return align ? align : _Alignof(union yetty_yclass_max_align);
 }
 
 /* Place one inheritance level — `level`'s own data slice followed by its

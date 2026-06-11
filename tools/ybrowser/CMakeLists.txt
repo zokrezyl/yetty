@@ -18,6 +18,13 @@ add_executable(ybrowser
     main.c
     browser-ui.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
+    # yetty_ybrowser (linked below, every mode) calls
+    # yetty_yplatform_yworkpool_submit from ybrowser-paint.c to decode images
+    # off-thread, so this binary must always provide the workpool impl — not
+    # just in the Linux standalone path. It only uses the cross-platform thread
+    # abstraction (resolved transitively through yetty_ygui → yetty_yplatform_core),
+    # so it builds on macOS / Windows too.
+    ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
 )
 
 target_include_directories(ybrowser PRIVATE
@@ -59,7 +66,6 @@ if(YBROWSER_STANDALONE)
         ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
-        ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
         ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c

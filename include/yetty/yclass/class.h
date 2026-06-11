@@ -71,9 +71,9 @@ struct yetty_yclass_descriptor {
      * registrar rounds each slice's offset up to this before placing it,
      * so a slice whose struct needs >pointer alignment stays ABI-valid
      * regardless of the sizes of the slices before it. 0 means "unknown"
-     * — the registrar falls back to max_align_t (always safe, never
-     * under-aligned). Codegen emits _Alignof(<data struct>); hand-written
-     * descriptors should do the same. */
+     * — the registrar falls back to the greatest fundamental alignment
+     * (always safe, never under-aligned). Codegen emits _Alignof(<data
+     * struct>); hand-written descriptors should do the same. */
     size_t data_align;
 };
 
