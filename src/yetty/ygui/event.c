@@ -10,6 +10,7 @@
  */
 
 #include "internal.h"
+#include <yetty/ygui/widget.h>
 
 #include <stdlib.h>
 
@@ -27,8 +28,8 @@ struct yetty_ycore_void_result yetty_ygui_object_subscribe(struct yetty_yclass_o
     sub->type = type;
     sub->cb = cb;
     sub->userdata = userdata;
-    sub->next = ygui_tree(target)->subscriptions;
-    ygui_tree(target)->subscriptions = sub;
+    sub->next = yetty_ygui_widget_subscriptions(target);
+    yetty_ygui_widget_set_subscriptions(target, sub);
     return YETTY_OK_VOID();
 }
 
@@ -42,7 +43,7 @@ struct yetty_ycore_void_result yetty_ygui_object_emit(struct yetty_yclass_object
      * "subscribe to events on a target", so emit fires on the source
      * itself (i.e., subscriptions live on the emitter today; the
      * full target/source split lands when bubbling is added). */
-    for (struct yetty_ygui_event_subscription *s = ygui_tree(source)->subscriptions; s;
+    for (struct yetty_ygui_event_subscription *s = yetty_ygui_widget_subscriptions(source); s;
          s = s->next) {
         if (s->type != event->type) {
             continue;

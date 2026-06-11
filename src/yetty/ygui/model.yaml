@@ -223,10 +223,6 @@ classes:
     mixins: []
     data: struct yetty_ygui_widget
     data_fields:
-      - name: tree
-        type: struct yetty_ygui_tree
-        get: false
-        set: false
       - name: rect
         type: struct yetty_ycore_rectangle
         get: false
@@ -241,6 +237,50 @@ classes:
         set: false
       - name: scroll_main
         type: float
+        get: false
+        set: false
+      - name: parent
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: first_child
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: next_sibling
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: id
+        type: uint32_t
+        get: false
+        set: false
+      - name: figure_kind
+        type: uint32_t
+        get: false
+        set: false
+      - name: figure_z
+        type: int32_t
+        get: false
+        set: false
+      - name: floating
+        type: int
+        get: false
+        set: false
+      - name: dirty
+        type: int
+        get: false
+        set: false
+      - name: hovered
+        type: int
+        get: false
+        set: false
+      - name: framework
+        type: "struct yetty_ygui_framework *"
+        get: false
+        set: false
+      - name: subscriptions
+        type: "struct yetty_ygui_event_subscription *"
         get: false
         set: false
     ops:
@@ -4188,31 +4228,6 @@ types:
         type: float
       - name: hidden
         type: int
-  - name: yetty_ygui_tree
-    kind: struct
-    fields:
-      - name: parent
-        type: "struct yetty_yclass_object *"
-      - name: first_child
-        type: "struct yetty_yclass_object *"
-      - name: next_sibling
-        type: "struct yetty_yclass_object *"
-      - name: id
-        type: uint32_t
-      - name: figure_kind
-        type: uint32_t
-      - name: figure_z
-        type: int32_t
-      - name: floating
-        type: int
-      - name: dirty
-        type: int
-      - name: hovered
-        type: int
-      - name: framework
-        type: "struct yetty_ygui_framework *"
-      - name: subscriptions
-        type: "struct yetty_ygui_event_subscription *"
   - name: yetty_ygui_yplot_config
     kind: struct
     fields:

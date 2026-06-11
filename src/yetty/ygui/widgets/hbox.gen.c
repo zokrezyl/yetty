@@ -2,6 +2,7 @@
 #include "yetty/ygui/primitive-widget.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
+#include <stddef.h> /* NULL, size_t */
 
 struct yetty_ycore_void_result;
 struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_ctx *ctx,

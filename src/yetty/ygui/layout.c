@@ -82,8 +82,8 @@ static void measure_size(struct yetty_yclass_object *node, float *out_w, float *
         float main_sum = 0.0f;
         float cross_max = 0.0f;
         int n = 0;
-        for (struct yetty_yclass_object *c = ygui_tree(node)->first_child; c;
-             c = ygui_tree(c)->next_sibling) {
+        for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(node); c;
+             c = yetty_ygui_widget_next_sibling(c)) {
             const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
             if (cl->hidden || cl->absolute) {
                 continue;
@@ -185,8 +185,8 @@ static struct flex_summary summarize_children(struct yetty_yclass_object *parent
                                               const struct yetty_ygui_layout *parent_layout)
 {
     struct flex_summary s = {0};
-    for (struct yetty_yclass_object *c = ygui_tree(parent)->first_child; c;
-         c = ygui_tree(c)->next_sibling) {
+    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(parent); c;
+         c = yetty_ygui_widget_next_sibling(c)) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
         if (cl->hidden) {
             continue; /* folded-away subtree consumes no space */
@@ -210,7 +210,7 @@ static struct yetty_ycore_void_result layout_node(struct yetty_yclass_object *no
     struct yetty_ycore_void_result sr = yetty_ygui_widget_set_rect(node, rect);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "layout_node: set_rect");
 
-    if (!ygui_tree(node)->first_child) {
+    if (!yetty_ygui_widget_first_child(node)) {
         return YETTY_OK_VOID();
     }
 
@@ -269,8 +269,8 @@ static struct yetty_ycore_void_result layout_node(struct yetty_yclass_object *no
     }
 
     struct yetty_ycore_void_result loop_r = YETTY_OK_VOID();
-    for (struct yetty_yclass_object *c = ygui_tree(node)->first_child; c;
-         c = ygui_tree(c)->next_sibling) {
+    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(node); c;
+         c = yetty_ygui_widget_next_sibling(c)) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
         if (cl->hidden) {
             continue; /* folded away — no rect, no recurse */
@@ -349,8 +349,8 @@ static struct yetty_ycore_void_result layout_node(struct yetty_yclass_object *no
      * content-box origin. 0 for non-scrolling nodes. */
     idx = 0;
     float cursor_main = main_offset - yetty_ygui_widget_scroll_main_get(node);
-    for (struct yetty_yclass_object *c = ygui_tree(node)->first_child; c && idx < placed_count;
-         c = ygui_tree(c)->next_sibling) {
+    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(node);
+         c && idx < placed_count; c = yetty_ygui_widget_next_sibling(c)) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
         if (cl->hidden) {
             continue; /* skipped in the sizing pass — no idx consumed */

@@ -637,6 +637,10 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     # the authoritative owner). Every same-module slot must appear here —
     # see the post-parse enforcement below.
     virtual_slots: set = set()
+    # slot -> (class, impl-fn) of its virtual@ introduction, to reject a
+    # SECOND virtual@ for the same slot (a slot must be introduced exactly
+    # once; a subclass re-introducing it instead of overriding is a bug).
+    virtual_owner: dict = {}
     exposed: list = []
     # Type registries for `types:` harvesting — every named struct/enum
     # definition seen across the parsed TUs, keyed by tag.
@@ -759,6 +763,23 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                         if impl_dom != module:
                             continue
                         slot_dom = impl_dom
+                        # Reject a duplicate introduction. A given (class, fn)
+                        # may be re-seen across TUs (header inclusion) — that's
+                        # the same annotation and fine; a DIFFERENT class or fn
+                        # declaring the same slot virtual@ is two introductions,
+                        # which is the bug we must catch.
+                        prev = virtual_owner.get(slot)
+                        if prev is not None and prev != (cls, decl["name"]):
+                            sys.stderr.write(
+                                f"error: module '{module}': slot '{slot}' is "
+                                f"introduced with virtual@ more than once — by "
+                                f"'{prev[0]}' ({prev[1]}) and '{cls}' "
+                                f"({decl['name']}). A virtual method must be "
+                                f"declared exactly once (by the base class that "
+                                f"owns it); every other class must use "
+                                f"override@{module}:<class>:{slot}.\n")
+                            sys.exit(1)
+                        virtual_owner[slot] = (cls, decl["name"])
                         b = bucket(cls)
                         b["ops"].append({
                             "slot": slot,
@@ -1979,6 +2000,7 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
         include_block += (
             '#include <yetty/ycore/result.h>\n'
             '#include <yetty/ytrace/ytrace.h>\n'
+            '#include <stddef.h>  /* NULL, size_t */\n'
         )
 
         # Same-module slot stubs this .gen.c's ops reference, emitted locally:

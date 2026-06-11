@@ -1,6 +1,7 @@
 /* GENERATED — do not edit. */
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
+#include <stddef.h> /* NULL, size_t */
 
 struct yetty_ycore_void_result;
 struct yetty_ycore_xthread_event_pipe;

@@ -2,6 +2,7 @@
 #include "yetty/yfigure/figure.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
+#include <stddef.h> /* NULL, size_t */
 
 [[maybe_unused]]
 static yetty_yfigure_render_fn yetty_yvterm_grid_yetty_yfigure_render_check =

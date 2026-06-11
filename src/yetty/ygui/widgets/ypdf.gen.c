@@ -2,6 +2,7 @@
 #include "yetty/ygui/widgets/ydraw_embed.h"
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
+#include <stddef.h> /* NULL, size_t */
 
 struct yetty_yclass_ptr_result yetty_ygui_ypdf_class_get(void)
 {

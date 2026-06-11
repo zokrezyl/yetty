@@ -85,11 +85,6 @@ struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void);
  *=========================================================================*/
 
 struct [[clang::annotate("class@ygui:widget")]] yetty_ygui_widget {
-    /* Widget tree + per-widget framework state. MUST be the first member:
-     * widget is the root class of every ygui object, so this slice sits
-     * directly after the object header and ygui_tree() reaches `tree` at a
-     * fixed offset on any ygui object. */
-    struct yetty_ygui_tree tree;
     struct yetty_ycore_rectangle rect;
     struct yetty_ygui_layout layout;
     /* Optional background fill (packed 0xAABBGGRR). 0 = transparent, so
@@ -101,6 +96,38 @@ struct [[clang::annotate("class@ygui:widget")]] yetty_ygui_widget {
      * by scrollarea (a ygrid figure) to slide its content; the figure's
      * GPU scissor clips the overflow. 0 for every other widget. */
     float scroll_main;
+
+    /* ---- Widget tree + per-widget framework state (flat members of the
+     * widget base data; reached by other ygui .c through the accessors
+     * below, never poked directly). ---- */
+
+    struct yetty_yclass_object *parent;
+    /* Sibling links inside parent's first_child list. */
+    struct yetty_yclass_object *first_child;
+    struct yetty_yclass_object *next_sibling;
+    /* Wire id allocated by the framework at construction. 0 = unassigned. */
+    uint32_t id;
+    /* Figure-boundary marker. When non-zero this widget is emitted as its
+     * OWN receiver-side child figure of this kind (a separate yfigure
+     * container child) instead of inlining its prims into the shared chrome
+     * ygrid. 0 = inline (the default). Set via yetty_ygui_widget_make_figure. */
+    uint32_t figure_kind;
+    /* Stacking order for this widget's figure (only meaningful when
+     * figure_kind != 0). Emitted as SET_CHILD_Z. */
+    int32_t figure_z;
+    /* Floating overlay (dialog / debug window): a press inside it moves it to
+     * the end of its parent's child list (paints last, wins hit-test). */
+    int floating;
+    /* Dirty flag — content changed without geometry move. */
+    int dirty;
+    /* Hover state — set by the framework's pointer-tracking pass when this is
+     * the deepest hit; cleared when the mouse leaves. */
+    int hovered;
+    /* framework that owns this widget tree. Stored only on the root; children
+     * resolve via parent walk through yetty_ygui_widget_framework. */
+    struct yetty_ygui_framework *framework;
+    /* Event subscriptions — singly-linked list, freed at object destroy. */
+    struct yetty_ygui_event_subscription *subscriptions;
 };
 
 /* The codegen accessor/downcast defined in the appended widget.gen.c,
@@ -122,6 +149,16 @@ struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_ctx *ct
 /* Defined lower in this file (the widget tree/lifecycle block), but the
  * geometry setters above it mark the widget dirty — forward-declare. */
 struct yetty_ycore_void_result yetty_ygui_widget_set_dirty(struct yetty_yclass_object *obj);
+
+/* Reach this object's widget base-data slice (the flat tree/framework
+ * fields live here). widget.c has the struct, so it touches fields directly
+ * through this helper; other ygui .c go through the exposed accessor
+ * functions below. By the time any of this runs the object is a widget, so
+ * the downcast always succeeds. */
+static struct yetty_ygui_widget *wdata(const struct yetty_yclass_object *obj)
+{
+    return yetty_ygui_widget_from((struct yetty_yclass_object *)obj).value;
+}
 
 /* Convenience accessor — every internal helper that needs the widget
  * class pointer goes through this. By the time any widget method runs,
@@ -315,7 +352,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_rect(struct yetty_yclass_ob
     if (wd->rect.min.x != rect.min.x || wd->rect.min.y != rect.min.y ||
         wd->rect.max.x != rect.max.x || wd->rect.max.y != rect.max.y) {
         wd->rect = rect;
-        ygui_tree(obj)->dirty = 1;
+        wdata(obj)->dirty = 1;
     }
     return YETTY_OK_VOID();
 }
@@ -331,7 +368,7 @@ struct yetty_ycore_rectangle yetty_ygui_widget_rect(const struct yetty_yclass_ob
 }
 
 /* Main-axis scroll offset (internal — read by the layout pass to slide a
- * scrolling container's children). Sets ygui_tree(obj)->dirty but not engine dirty;
+ * scrolling container's children). Sets wdata(obj)->dirty but not engine dirty;
  * the scroller requests the repaint via yetty_ygui_widget_set_dirty. */
 struct yetty_ycore_void_result yetty_ygui_widget_scroll_main_set(struct yetty_yclass_object *obj,
                                                                  float offset)
@@ -344,7 +381,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_scroll_main_set(struct yetty_yc
     struct yetty_ygui_widget *wd = wd_dr.value;
     if (wd->scroll_main != offset) {
         wd->scroll_main = offset;
-        ygui_tree(obj)->dirty = 1;
+        wdata(obj)->dirty = 1;
     }
     return YETTY_OK_VOID();
 }
@@ -368,7 +405,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_layout_set(struct yetty_yclass_
     YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_dr, "yetty_ygui_widget_layout_set: data_get");
     struct yetty_ygui_widget *wd = wd_dr.value;
     wd->layout = *layout;
-    ygui_tree(obj)->dirty = 1;
+    wdata(obj)->dirty = 1;
     return YETTY_OK_VOID();
 }
 
@@ -438,8 +475,8 @@ struct yetty_ycore_void_result yetty_ygui_widget_make_figure(struct yetty_yclass
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_make_figure: NULL obj");
     }
-    ygui_tree(obj)->figure_kind = kind;
-    ygui_tree(obj)->figure_z = z;
+    wdata(obj)->figure_kind = kind;
+    wdata(obj)->figure_z = z;
     return yetty_ygui_widget_set_dirty(obj);
 }
 
@@ -449,8 +486,8 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_figure_z(struct yetty_yclas
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_figure_z: NULL obj");
     }
-    if (ygui_tree(obj)->figure_z != z) {
-        ygui_tree(obj)->figure_z = z;
+    if (wdata(obj)->figure_z != z) {
+        wdata(obj)->figure_z = z;
         return yetty_ygui_widget_set_dirty(obj);
     }
     return YETTY_OK_VOID();
@@ -462,23 +499,23 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_floating(struct yetty_yclas
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_floating: NULL obj");
     }
-    ygui_tree(obj)->floating = floating ? 1 : 0;
+    wdata(obj)->floating = floating ? 1 : 0;
     return YETTY_OK_VOID();
 }
 
 int yetty_ygui_widget_is_floating(const struct yetty_yclass_object *obj)
 {
-    return obj ? ygui_tree(obj)->floating : 0;
+    return obj ? wdata(obj)->floating : 0;
 }
 
 uint32_t yetty_ygui_widget_figure_kind(const struct yetty_yclass_object *obj)
 {
-    return obj ? ygui_tree(obj)->figure_kind : 0;
+    return obj ? wdata(obj)->figure_kind : 0;
 }
 
 int32_t yetty_ygui_widget_figure_z(const struct yetty_yclass_object *obj)
 {
-    return obj ? ygui_tree(obj)->figure_z : 0;
+    return obj ? wdata(obj)->figure_z : 0;
 }
 
 struct yetty_ycore_void_result yetty_ygui_widget_set_bg_color(struct yetty_yclass_object *obj,
@@ -649,7 +686,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_apply_css(struct yetty_yclass_o
  * codegen into the generated widget.h. There is no separate "object" layer:
  * the yclass core owns identity/dispatch/allocation; this owns the widget
  * tree + per-widget framework state (in the yetty_ygui_tree base slice,
- * reached with ygui_tree()).
+ * reached with wdata()).
  *=========================================================================*/
 
 [[clang::annotate("expose")]]
@@ -724,29 +761,29 @@ const struct yetty_yclass *yetty_ygui_class_expect(struct yetty_yclass_ptr_resul
 [[clang::annotate("expose")]]
 struct yetty_yclass_object *yetty_ygui_widget_parent(struct yetty_yclass_object *obj)
 {
-    return obj ? ygui_tree(obj)->parent : NULL;
+    return obj ? wdata(obj)->parent : NULL;
 }
 
 [[clang::annotate("expose")]]
 struct yetty_yclass_object *yetty_ygui_widget_first_child(struct yetty_yclass_object *obj)
 {
-    return obj ? ygui_tree(obj)->first_child : NULL;
+    return obj ? wdata(obj)->first_child : NULL;
 }
 
 [[clang::annotate("expose")]]
 struct yetty_yclass_object *yetty_ygui_widget_next_sibling(struct yetty_yclass_object *obj)
 {
-    return obj ? ygui_tree(obj)->next_sibling : NULL;
+    return obj ? wdata(obj)->next_sibling : NULL;
 }
 
 [[clang::annotate("expose")]]
 struct yetty_ygui_framework *yetty_ygui_widget_framework(struct yetty_yclass_object *obj)
 {
     while (obj) {
-        if (ygui_tree(obj)->framework) {
-            return ygui_tree(obj)->framework;
+        if (wdata(obj)->framework) {
+            return wdata(obj)->framework;
         }
-        obj = ygui_tree(obj)->parent;
+        obj = wdata(obj)->parent;
     }
     return NULL;
 }
@@ -754,7 +791,7 @@ struct yetty_ygui_framework *yetty_ygui_widget_framework(struct yetty_yclass_obj
 [[clang::annotate("expose")]]
 uint32_t yetty_ygui_widget_id(const struct yetty_yclass_object *obj)
 {
-    return obj ? ygui_tree(obj)->id : 0;
+    return obj ? wdata(obj)->id : 0;
 }
 
 [[clang::annotate("expose")]]
@@ -763,7 +800,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_dirty(struct yetty_yclass_o
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_dirty: NULL obj");
     }
-    ygui_tree(obj)->dirty = 1;
+    wdata(obj)->dirty = 1;
     struct yetty_ygui_framework *framework = yetty_ygui_widget_framework(obj);
     if (framework) {
         yetty_ygui_framework_mark_dirty(framework);
@@ -774,13 +811,78 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_dirty(struct yetty_yclass_o
 [[clang::annotate("expose")]]
 int yetty_ygui_widget_is_dirty(const struct yetty_yclass_object *obj)
 {
-    return obj && ygui_tree(obj)->dirty;
+    return obj && wdata(obj)->dirty;
 }
 
 [[clang::annotate("expose")]]
 int yetty_ygui_widget_is_hovered(const struct yetty_yclass_object *obj)
 {
-    return obj && ygui_tree(obj)->hovered;
+    return obj && wdata(obj)->hovered;
+}
+
+/*---------------------------------------------------------------------------
+ * Framework-internal mutators of the widget base slice. These are NOT part
+ * of the public widget API (no expose annotation) — they are declared in
+ * internal.h and used only by framework.c / event.c, which own the tree and
+ * dirty/hover bookkeeping. The public mutator yetty_ygui_widget_set_dirty
+ * (above) additionally marks the framework dirty; the raw setter here does
+ * not, so framework.c can manage the framework dirty bit itself.
+ *-------------------------------------------------------------------------*/
+
+struct yetty_ycore_void_result yetty_ygui_widget_set_framework(
+    struct yetty_yclass_object *obj, struct yetty_ygui_framework *framework)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_framework: NULL obj");
+    }
+    wdata(obj)->framework = framework;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ygui_widget_set_id(struct yetty_yclass_object *obj,
+                                                        uint32_t id)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_id: NULL obj");
+    }
+    wdata(obj)->id = id;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ygui_widget_set_hovered(struct yetty_yclass_object *obj,
+                                                             int hovered)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_hovered: NULL obj");
+    }
+    wdata(obj)->hovered = hovered ? 1 : 0;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ygui_widget_set_dirty_flag(struct yetty_yclass_object *obj,
+                                                                int dirty)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_dirty_flag: NULL obj");
+    }
+    wdata(obj)->dirty = dirty ? 1 : 0;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ygui_event_subscription *yetty_ygui_widget_subscriptions(
+    struct yetty_yclass_object *obj)
+{
+    return obj ? wdata(obj)->subscriptions : NULL;
+}
+
+struct yetty_ycore_void_result yetty_ygui_widget_set_subscriptions(
+    struct yetty_yclass_object *obj, struct yetty_ygui_event_subscription *subscriptions)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_subscriptions: NULL obj");
+    }
+    wdata(obj)->subscriptions = subscriptions;
+    return YETTY_OK_VOID();
 }
 
 /*---------------------------------------------------------------------------
@@ -789,37 +891,37 @@ int yetty_ygui_widget_is_hovered(const struct yetty_yclass_object *obj)
 
 static void widget_unlink_from_parent(struct yetty_yclass_object *obj)
 {
-    struct yetty_yclass_object *p = ygui_tree(obj)->parent;
+    struct yetty_yclass_object *p = wdata(obj)->parent;
     if (!p) {
         return;
     }
-    struct yetty_yclass_object **slot = &ygui_tree(p)->first_child;
+    struct yetty_yclass_object **slot = &wdata(p)->first_child;
     while (*slot && *slot != obj) {
-        slot = &ygui_tree(*slot)->next_sibling;
+        slot = &wdata(*slot)->next_sibling;
     }
     if (*slot == obj) {
-        *slot = ygui_tree(obj)->next_sibling;
+        *slot = wdata(obj)->next_sibling;
     }
-    ygui_tree(obj)->next_sibling = NULL;
-    ygui_tree(obj)->parent = NULL;
+    wdata(obj)->next_sibling = NULL;
+    wdata(obj)->parent = NULL;
 }
 
 static void widget_link_to_parent(struct yetty_yclass_object *obj,
                                   struct yetty_yclass_object *parent)
 {
-    ygui_tree(obj)->parent = parent;
+    wdata(obj)->parent = parent;
     if (!parent) {
         return;
     }
-    if (!ygui_tree(parent)->first_child) {
-        ygui_tree(parent)->first_child = obj;
+    if (!wdata(parent)->first_child) {
+        wdata(parent)->first_child = obj;
         return;
     }
-    struct yetty_yclass_object *t = ygui_tree(parent)->first_child;
-    while (ygui_tree(t)->next_sibling) {
-        t = ygui_tree(t)->next_sibling;
+    struct yetty_yclass_object *t = wdata(parent)->first_child;
+    while (wdata(t)->next_sibling) {
+        t = wdata(t)->next_sibling;
     }
-    ygui_tree(t)->next_sibling = obj;
+    wdata(t)->next_sibling = obj;
 }
 
 /* Instantiate a widget of `cls` and, if `parent` is non-NULL, link it as
@@ -861,15 +963,15 @@ static struct yetty_yclass_object_ptr_result widget_instantiate(const struct yet
             free(obj);
             return YETTY_ERR(yetty_yclass_object_ptr, "widget_instantiate: id alloc failed", idr);
         }
-        ygui_tree(obj)->id = idr.value;
+        wdata(obj)->id = idr.value;
     }
 
     struct yetty_ycore_void_result cr =
         yetty_ygui_constructor(NULL, (struct yetty_yclass_object *)obj);
     if (YETTY_IS_ERR(cr)) {
-        if (framework && ygui_tree(obj)->id) {
+        if (framework && wdata(obj)->id) {
             struct yetty_ycore_void_result fr =
-                yetty_ygui_framework_free_id(framework, ygui_tree(obj)->id);
+                yetty_ygui_framework_free_id(framework, wdata(obj)->id);
             if (YETTY_IS_ERR(fr)) {
                 yetty_ycore_error_destroy(fr.error);
             }
@@ -907,28 +1009,27 @@ struct yetty_ycore_void_result yetty_ygui_widget_destroy(struct yetty_yclass_obj
     if (!obj) {
         return YETTY_OK_VOID();
     }
-    while (ygui_tree(obj)->first_child) {
-        struct yetty_ycore_void_result cr = yetty_ygui_widget_destroy(ygui_tree(obj)->first_child);
+    while (wdata(obj)->first_child) {
+        struct yetty_ycore_void_result cr = yetty_ygui_widget_destroy(wdata(obj)->first_child);
         if (YETTY_IS_ERR(cr)) {
             yetty_ycore_error_destroy(cr.error);
         }
     }
-    struct yetty_ygui_event_subscription *sub = ygui_tree(obj)->subscriptions;
+    struct yetty_ygui_event_subscription *sub = wdata(obj)->subscriptions;
     while (sub) {
         struct yetty_ygui_event_subscription *next = sub->next;
         free(sub);
         sub = next;
     }
-    ygui_tree(obj)->subscriptions = NULL;
+    wdata(obj)->subscriptions = NULL;
     struct yetty_ycore_void_result dr =
         yetty_ygui_destructor(NULL, (struct yetty_yclass_object *)obj);
     if (YETTY_IS_ERR(dr)) {
         yetty_ycore_error_destroy(dr.error);
     }
     struct yetty_ygui_framework *framework = yetty_ygui_widget_framework(obj);
-    if (framework && ygui_tree(obj)->id != 0) {
-        struct yetty_ycore_void_result fr =
-            yetty_ygui_framework_free_id(framework, ygui_tree(obj)->id);
+    if (framework && wdata(obj)->id != 0) {
+        struct yetty_ycore_void_result fr = yetty_ygui_framework_free_id(framework, wdata(obj)->id);
         if (YETTY_IS_ERR(fr)) {
             yetty_ycore_error_destroy(fr.error);
         }
@@ -950,7 +1051,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_raise(struct yetty_yclass_objec
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_raise: NULL obj");
     }
-    if (!ygui_tree(obj)->parent) {
+    if (!wdata(obj)->parent) {
         /* No parent: nothing to reorder. Not an error. */
         return YETTY_OK_VOID();
     }
@@ -958,7 +1059,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_raise(struct yetty_yclass_objec
      * hit-test (last-match-wins) prefers this widget over earlier
      * siblings it overlaps. The render side is ordered by figure z
      * separately; raising bumps both so they agree. */
-    struct yetty_yclass_object *parent = ygui_tree(obj)->parent;
+    struct yetty_yclass_object *parent = wdata(obj)->parent;
     widget_unlink_from_parent(obj);
     widget_link_to_parent(obj, parent);
     return YETTY_OK_VOID();

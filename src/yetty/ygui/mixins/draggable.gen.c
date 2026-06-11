@@ -1,6 +1,7 @@
 /* GENERATED — do not edit. */
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
+#include <stddef.h> /* NULL, size_t */
 
 struct yetty_ycore_int_result;
 struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_ctx *ctx,

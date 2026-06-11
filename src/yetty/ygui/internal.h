@@ -62,8 +62,8 @@ struct yetty_yclass_impl_t_result yetty_ygui_dispatch_lookup_super(
  * walks, instance allocation (yetty_yclass_object_alloc) and data-slice
  * resolution (yetty_yclass_object_data) all go through the yclass runtime.
  * ygui objects ARE plain `struct yetty_yclass_object`s; the widget tree and
- * per-widget framework state live in the base-class data slice (struct
- * yetty_ygui_tree, embedded at the head of struct yetty_ygui_widget).
+ * per-widget framework state are flat members of the base-class data slice
+ * (struct yetty_ygui_widget, defined in widget.c).
  *=========================================================================*/
 
 /*===========================================================================
@@ -79,84 +79,28 @@ struct yetty_ygui_event_subscription {
 
 struct yetty_ygui_framework;
 
-/* Widget tree + per-widget framework state. Lives at the head of the
- * `class@ygui:widget` base-class data slice (struct yetty_ygui_widget).
- * widget is the root class of every ygui object, so every object carries
- * this slice; ygui_tree() below resolves it through the yclass runtime so
- * the generic framework code (layout, emit, hit-test) can traverse the tree
- * without each call site repeating the resolve. Tree links are typed as the
- * plain yclass object — every ygui object is one. */
-struct yetty_ygui_tree {
-    struct yetty_yclass_object *parent;
-
-    /* Sibling links inside parent's first_child list. */
-    struct yetty_yclass_object *first_child;
-    struct yetty_yclass_object *next_sibling;
-
-    /* Wire id allocated by the framework at construction. 0 = unassigned. */
-    uint32_t id;
-
-    /* Figure-boundary marker. When non-zero this widget is emitted as
-     * its OWN receiver-side child figure of this kind (a separate
-     * yfigure container child), instead of inlining its prims into the
-     * shared chrome ygrid. The whole subtree paints into that figure's
-     * own draw list, giving the window an independent z + damage region.
-     * 0 = inline (the default — most widgets). Floating windows / menus
-     * set this via yetty_ygui_widget_make_figure. */
-    uint32_t figure_kind;
-    /* Stacking order for this widget's figure (only meaningful when
-     * figure_kind != 0). Emitted as SET_CHILD_Z; the receiver sorts
-     * sibling figures by it. */
-    int32_t figure_z;
-
-    /* Floating overlay (dialog / debug window). A press anywhere inside
-     * a floating widget moves it to the end of its parent's child list,
-     * so it both paints last (front, within the shared chrome ygrid) and
-     * wins the hit-test against overlapping siblings — i.e. click-to-
-     * front. No figures needed; it's pure sibling reordering. */
-    int floating;
-
-    /* Dirty flag — content changed without geometry move. */
-    int dirty;
-
-    /* Hover state — set by the framework's pointer-tracking pass when
-     * this widget is the deepest hit; cleared when the mouse leaves.
-     * Widgets read it via yetty_ygui_widget_is_hovered() to paint a
-     * hover variant. */
-    int hovered;
-
-    /* framework that owns this widget tree. Stored only on the root; child
-     * widgets resolve via parent walk through yetty_ygui_widget_framework. */
-    struct yetty_ygui_framework *framework;
-
-    /* Event subscriptions — singly-linked list, freed at object destroy. */
-    struct yetty_ygui_event_subscription *subscriptions;
-};
-
-/* The base widget class accessor (defined in the generated widget.gen.c).
- * Forward-declared here — internal.h must not pull in widget.h (the widget
- * TU's own generated header) — so ygui_tree() can resolve the widget slice. */
-struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void);
-
-/* Reach the widget-tree slice of any ygui object. widget is the root class
- * of every ygui widget; its data slice (struct yetty_ygui_widget, whose
- * first member is the tree) is resolved through the yclass runtime — a
- * cached class-pointer lookup plus an offset-table lookup, correct no
- * matter how the runtime orders slices. Takes a const object and returns a
- * mutable tree pointer: slice access is const-agnostic here (as value
- * getters are), so const getters and mutating setters share this one
- * accessor. The resolve only fails on a non-widget object — a programmer
- * error that faults at the returned NULL. */
-static inline struct yetty_ygui_tree *ygui_tree(const struct yetty_yclass_object *obj)
-{
-    struct yetty_yclass_void_ptr_result slice = yetty_yclass_object_data(
-        (struct yetty_yclass_object *)obj, yetty_ygui_widget_class_get().value);
-    if (YETTY_IS_ERR(slice)) {
-        yetty_ycore_error_destroy(slice.error);
-        return NULL;
-    }
-    return (struct yetty_ygui_tree *)slice.value;
-}
+/* Framework-internal mutators of the widget base data slice (struct
+ * yetty_ygui_widget, defined in widget.c). The widget tree links and the
+ * per-widget framework / dirty / hover state are flat members of that slice.
+ * Public read accessors (yetty_ygui_widget_parent / _first_child /
+ * _next_sibling / _id / _framework / _is_dirty / _is_hovered) are published
+ * in <yetty/ygui/widget.h>; these write-side helpers stay module-private —
+ * only framework.c (tree + dirty/hover bookkeeping) and event.c (subscription
+ * list) touch them. Defined in widget.c, which owns the struct. The raw
+ * _set_dirty_flag does NOT mark the framework dirty (unlike the public
+ * yetty_ygui_widget_set_dirty), so framework.c manages that bit itself. */
+struct yetty_ycore_void_result yetty_ygui_widget_set_framework(
+    struct yetty_yclass_object *obj, struct yetty_ygui_framework *framework);
+struct yetty_ycore_void_result yetty_ygui_widget_set_id(struct yetty_yclass_object *obj,
+                                                        uint32_t id);
+struct yetty_ycore_void_result yetty_ygui_widget_set_hovered(struct yetty_yclass_object *obj,
+                                                             int hovered);
+struct yetty_ycore_void_result yetty_ygui_widget_set_dirty_flag(struct yetty_yclass_object *obj,
+                                                                int dirty);
+struct yetty_ygui_event_subscription *yetty_ygui_widget_subscriptions(
+    struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_widget_set_subscriptions(
+    struct yetty_yclass_object *obj, struct yetty_ygui_event_subscription *subscriptions);
 
 /*===========================================================================
  * framework.
