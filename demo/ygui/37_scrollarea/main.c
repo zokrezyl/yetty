@@ -359,7 +359,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 
     show_scene(0);
     if (tabbar) {
-        err_ok(yetty_ygui_object_subscribe(tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, on_tab_changed,
+        err_ok(yetty_ygui_widget_subscribe(tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, on_tab_changed,
                                            NULL));
         err_ok(yetty_ygui_tabbar_set_active(tabbar, 0));
     }

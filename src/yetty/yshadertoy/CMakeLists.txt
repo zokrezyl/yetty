@@ -21,7 +21,7 @@ add_library(yetty_yshadertoy STATIC
 target_include_directories(yetty_yshadertoy PUBLIC
     ${YETTY_ROOT}/include
 )
-# Internal yclass codegen headers (methods.gen.h) sit under src/.
+# Codegen-emitted internal sources (*.gen.c) sit under src/.
 target_include_directories(yetty_yshadertoy PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_yshadertoy PUBLIC

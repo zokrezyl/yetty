@@ -100,7 +100,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     /* Switch the shader source whenever the active tab changes, and seed
      * with the first shader. */
     struct yetty_ycore_void_result subr =
-        yetty_ygui_object_subscribe(tr.value, YETTY_YGUI_EVENT_VALUE_CHANGED, on_tab_change, NULL);
+        yetty_ygui_widget_subscribe(tr.value, YETTY_YGUI_EVENT_VALUE_CHANGED, on_tab_change, NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, subr, "tabbar subscribe");
     apply_shader(0);
     return YETTY_OK_VOID();

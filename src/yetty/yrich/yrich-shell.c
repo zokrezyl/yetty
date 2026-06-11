@@ -64,7 +64,7 @@ static struct yetty_yclass_object_ptr_result add_button(struct yetty_yclass_obje
     YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, lr, "add_button: label");
     if (cb) {
         struct yetty_ycore_void_result sr =
-            yetty_ygui_object_subscribe(br.value, YETTY_YGUI_EVENT_CLICK, cb, userdata);
+            yetty_ygui_widget_subscribe(br.value, YETTY_YGUI_EVENT_CLICK, cb, userdata);
         YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, sr, "add_button: subscribe");
     }
     return br;

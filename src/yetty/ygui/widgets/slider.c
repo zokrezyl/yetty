@@ -182,7 +182,7 @@ static struct yetty_ycore_int_result slider_on_press(struct yetty_yclass_ctx *yc
     ev.type = YETTY_YGUI_EVENT_VALUE_CHANGED;
     ev.source = obj;
     ev.x = d->value;
-    struct yetty_ycore_void_result er = yetty_ygui_object_emit(obj, &ev);
+    struct yetty_ycore_void_result er = yetty_ygui_widget_emit(obj, &ev);
     if (YETTY_IS_ERR(er)) {
         return YETTY_ERR(yetty_ycore_int, "slider_on_press: emit", er);
     }

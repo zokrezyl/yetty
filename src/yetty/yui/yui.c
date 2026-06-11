@@ -2027,7 +2027,7 @@ static struct yetty_ycore_void_result yui_titlebar_build(struct yetty_yui *yui)
          * control (3 × 46 px). */
         l.padding_right = 3.0f * 46.0f;
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(yui->titlebar_tabbar, &l));
-        yetty_ycore_error_destroy_safe(yetty_ygui_object_subscribe(
+        yetty_ycore_error_destroy_safe(yetty_ygui_widget_subscribe(
             yui->titlebar_tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, yui_titlebar_on_tab_change, yui));
         yetty_ycore_error_destroy_safe(
             yetty_ygui_tabbar_set_on_close(yui->titlebar_tabbar, yui_titlebar_on_tab_close, yui));

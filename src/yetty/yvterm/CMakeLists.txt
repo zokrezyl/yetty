@@ -24,7 +24,7 @@ target_include_directories(yetty_yvterm BEFORE PUBLIC
 target_include_directories(yetty_yvterm PUBLIC
     ${YETTY_ROOT}/include
 )
-# Internal yclass codegen headers (methods.gen.h) sit under src/.
+# Codegen-emitted internal sources (*.gen.c) sit under src/.
 target_include_directories(yetty_yvterm PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_yvterm

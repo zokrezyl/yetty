@@ -12,9 +12,11 @@ touch another.
 Reads annotated .c sources, builds the in-memory model, emits:
 
   Public (under <include_base>/<module>/):
-    <class>.h          — accessor decl, includes sibling methods.h.
+    <class>.h          — accessor decl + the public stubs and `<slot>_fn`
+                         typedefs for the slots this class introduces.
                          GENERATED (replaces any hand-written class header).
-    methods.h      — every public stub in this module.
+                         A subclass includes its parent's <stem>.h for the
+                         inherited slots; there is no module-wide methods.h.
     rpc.h          — every <class>_create() in this module.
 
   Internal (under <module_src_dir>/):
@@ -211,10 +213,9 @@ def ast_dump(path: Path, include_dirs: list) -> dict:
     # is the parse tree (Decl + annotation nodes), not a clean
     # syntax-check. ygui's annotated sources reference codegen-emitted
     # public-stub symbols (yetty_ygui_widget_paint, yetty_ygui_constructor,
-    # etc.) that won't exist until methods.h has been written, and
-    # the placeholder methods.h is intentionally empty. We let
-    # clang emit "undeclared identifier" errors but still produce JSON
-    # AST as long as the file parses syntactically.
+    # etc.) that won't exist until the generated per-class <stem>.h files
+    # have been written. We let clang emit "undeclared identifier" errors
+    # but still produce JSON AST as long as the file parses syntactically.
     # -DYCLASS_CODEGEN: header-destined content (types, typedefs, enums,
     # vtable structs, result-decls, forward-decls, includes) is written in
     # the .c inside `#ifdef YCLASS_CODEGEN` blocks. Defining it here makes
@@ -964,11 +965,12 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
 
 
 # Signature validation for cross-domain (and same-domain) overrides is
-# done in *C*, not here. Each public stub gets a per-slot function-
-# pointer typedef in methods.h (see emit_methods_h). Each override
-# emits a file-scope `static <slot>_fn _check_… = <impl>;` line in
-# the class's .gen.c (see emit_class_accessor). If the impl signature
-# doesn't match the slot's, the C compiler errors at the assignment.
+# done in *C*, not here. Each slot gets a per-slot function-pointer
+# typedef (`<slot>_fn`) emitted into the introducing class's public
+# `<stem>.h`. Each override emits a file-scope
+# `static <slot>_fn _check_… = <impl>;` line in the class's .gen.c
+# (see emit_class_accessor). If the impl signature doesn't match the
+# slot's, the C compiler errors at the assignment.
 
 
 # ============== yaml writer (informational dump) ========================
@@ -1187,136 +1189,6 @@ def args_struct_body(args: list, indent: str) -> str:
     if not args:
         return f"{indent}char _empty;\n"
     return "".join(f"{indent}{wire_type(a['type'])} {wire_name(a)};\n" for a in args)
-
-
-# ---------------- methods.h (public) ------------------------------------
-
-def emit_methods_h(model: dict, module: str, out_path: Path):
-    """Public method-declaration header. Lives at
-    include/yetty/<module>/methods.h (clean name, no .gen.h — it's a
-    public-API header, callers don't care that codegen produced it).
-    Per-class public headers in the same directory `#include
-    "methods.h"` (sibling) so a caller that includes a class header
-    gets the module's full method API.
-
-    Contains ONLY public function declarations — the actual stubs
-    users call (`yetty_yfigure_add_child(ctx, obj, …)`). The
-    `_fn` impl-side typedefs are an internal codegen detail used
-    only by the .gen.c override registrations, so they live in
-    src/yetty/<module>/methods.gen.h (see emit_methods_gen_h).
-
-    Pulls the module-owned <module>/types.h ahead of any stub decl so
-    YETTY_YRESULT_DECLARE for module-specific return types is in scope
-    when the generated `struct <id>_result` references it. Modules
-    that have no custom result types still get an (empty / guard-only)
-    types.h scaffolded by main()."""
-    guard = f"YETTY_YCLASSGEN_{module.upper()}_METHODS_H"
-    parts = [HEADER]
-    parts.append(f"#ifndef {guard}\n#define {guard}\n\n")
-    parts.append('#include <yetty/yclass/class.h>\n')
-    # ycore/types.h carries the buffer struct codegen recognises as a
-    # blob arg. Public-stub signatures use it by value, so the full
-    # definition must be in scope — a forward-decl isn't enough.
-    parts.append('#include <yetty/ycore/types.h>\n')
-    parts.append(f'#include "yetty/{module}/types.h"\n\n')
-
-    structs = set()
-    for m in model["methods"]:
-        structs |= struct_names_in(m["return_type"])
-        for a in m["args"]:
-            structs |= struct_names_in(a["type"])
-    # Already declared by the includes above — don't double-up with a
-    # redundant forward-decl.
-    for known in ("yetty_yclass_ctx", "yetty_yclass_object", "yetty_yclass",
-                  "yetty_ycore_buffer"):
-        structs.discard(known)
-    for s in sorted(structs):
-        parts.append(f"struct {s};\n")
-    parts.append("\n")
-
-    for m in model["methods"]:
-        params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
-        rt = result_type(m["return_type"])
-        # Public-stub declaration only. The matching `<slot>_fn`
-        # typedef is internal and lives in the sibling methods.gen.h
-        # under src/yetty/<module>/.
-        parts.append(f"{rt} {qualified_slot(m)}({params});\n")
-
-    parts.append("\n#endif\n")
-    out_path.write_text("".join(parts))
-
-
-# ---------------- methods.gen.h (internal) ------------------------------
-
-def emit_methods_gen_h(model: dict, module: str, out_path: Path):
-    """Internal companion header. Lives at src/yetty/<module>/methods.gen.h
-    — keeps the `.gen.h` suffix because it's NOT part of the public API
-    surface; the `_fn` impl typedefs are useful only inside the module
-    (.gen.c files use them to type-check the impl pointer when registering
-    it on the ops vtable, and methods.gen.c casts the dispatch target to
-    them).
-
-    SELF-CONTAINED ON PURPOSE — it must NOT `#include` the per-class
-    public headers (`<class>.h`). This file is pulled into every
-    hand-written `<stem>.c`'s translation unit (the `<stem>.gen.c`
-    appended at the foot of the .c includes it). A migrated `<stem>.c`
-    declares its OWN `YETTY_YRESULT_DECLARE(<class>_ptr, …)`; the per-class
-    public header owns the matching definition, so importing that header
-    here would land a SECOND definition of `struct <class>_ptr_result` in
-    the same TU — a redefinition error. Instead we bring in only the
-    foundational types, forward-declare every struct named in a method
-    signature (pointers and result wrappers alike — a forward decl
-    coexists with the .c's later full definition), and emit the public
-    stub prototypes ourselves from the model. The ops tables only take a
-    stub's address as a method-id sentinel, so an incomplete result type
-    in those prototypes is fine; methods.gen.c, which actually defines the
-    stubs, pulls the per-class headers directly for the complete types."""
-    guard = f"YETTY_YCLASSGEN_{module.upper()}_METHODS_GEN_H"
-    parts = [HEADER]
-    parts.append(f"#ifndef {guard}\n#define {guard}\n\n")
-    parts.append('#include <yetty/yclass/class.h>\n')
-    # ycore/types.h carries the buffer struct codegen recognises as a blob
-    # arg; public-stub signatures use it by value, so its full definition
-    # must be in scope (a forward-decl isn't enough). No module-local
-    # types.h here: it is not always scaffolded, and the prototypes only
-    # need (incomplete) forward-decls of their result wrappers, emitted
-    # below.
-    parts.append('#include <yetty/ycore/result.h>\n')
-    parts.append('#include <yetty/ycore/types.h>\n\n')
-
-    structs = set()
-    for m in model["methods"]:
-        structs |= struct_names_in(m["return_type"])
-        # The wrapped result struct (e.g. yetty_yfigure_figure_ptr_result)
-        # is named indirectly via result_type_id — add it explicitly so the
-        # prototypes reference a declared (if incomplete) tag.
-        structs.add(f"{result_type_id(m['return_type'])}_result")
-        for a in m["args"]:
-            structs |= struct_names_in(a["type"])
-    # Already pulled in fully by the includes above — don't double up with a
-    # redundant forward-decl (harmless, but noisy).
-    for known in ("yetty_yclass_ctx", "yetty_yclass_object", "yetty_yclass",
-                  "yetty_ycore_buffer"):
-        structs.discard(known)
-    for s in sorted(structs):
-        parts.append(f"struct {s};\n")
-    parts.append("\n")
-
-    # Public stub prototypes — the per-class .gen.c ops tables reference
-    # these by name as method-id sentinels.
-    for m in model["methods"]:
-        params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
-        rt = result_type(m["return_type"])
-        parts.append(f"{rt} {qualified_slot(m)}({params});\n")
-    parts.append("\n")
-
-    for m in model["methods"]:
-        type_only = ", ".join(a["type"] for a in m["args"])
-        rt = result_type(m["return_type"])
-        parts.append(f"typedef {rt} (*{qualified_slot(m)}_fn)({type_only});\n")
-
-    parts.append("\n#endif\n")
-    out_path.write_text("".join(parts))
 
 
 # ---------------- methods.gen.c — unified public stub --------------------

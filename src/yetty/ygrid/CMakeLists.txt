@@ -7,9 +7,9 @@ add_library(yetty_ygrid STATIC
 target_include_directories(yetty_ygrid PUBLIC
     ${YETTY_ROOT}/include
 )
-# Internal codegen headers (methods.gen.h) sit under src/yetty/ygrid/.
-# PRIVATE so the path does not leak to consumers — they go through
-# the public include/yetty/ygrid/methods.h.
+# Codegen-emitted internal sources (*.gen.c) sit under src/yetty/ygrid/.
+# PRIVATE so the path does not leak to consumers — the public API is the per-class
+# headers under include/yetty/ygrid/.
 target_include_directories(yetty_ygrid PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_ygrid PUBLIC

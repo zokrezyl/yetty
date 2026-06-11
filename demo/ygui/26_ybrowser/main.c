@@ -316,7 +316,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     }
 
     /* Switch documents when the active tab changes. */
-    err_ok(yetty_ygui_object_subscribe(tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, on_tab_change,
+    err_ok(yetty_ygui_widget_subscribe(tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, on_tab_change,
                                        browser));
 
     /* Show the first page initially. */

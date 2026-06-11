@@ -15,7 +15,7 @@ add_library(yetty_yflame STATIC
 target_include_directories(yetty_yflame PUBLIC
     ${YETTY_ROOT}/include
 )
-# Internal codegen headers (methods.gen.h) live under src/yetty/yflame/.
+# Codegen-emitted internal sources (*.gen.c) live under src/yetty/yflame/.
 target_include_directories(yetty_yflame PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_yflame PUBLIC

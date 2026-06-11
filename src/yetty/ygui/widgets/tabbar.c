@@ -767,7 +767,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_yclass_
     ev.type = YETTY_YGUI_EVENT_VALUE_CHANGED;
     ev.source = tabbar;
     ev.i0 = index;
-    return yetty_ygui_object_emit(tabbar, &ev);
+    return yetty_ygui_widget_emit(tabbar, &ev);
 }
 
 [[clang::annotate("expose")]]

@@ -60,7 +60,7 @@ static struct yetty_ycore_void_result on_click_toggle(struct yetty_yclass_ctx *y
     ev.type = YETTY_YGUI_EVENT_VALUE_CHANGED;
     ev.source = obj;
     ev.i0 = d->checked;
-    return yetty_ygui_object_emit(obj, &ev);
+    return yetty_ygui_widget_emit(obj, &ev);
 }
 
 [[clang::annotate("override@ygui:checkbox:constructor")]]

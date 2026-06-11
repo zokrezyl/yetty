@@ -67,7 +67,7 @@ static struct yetty_ycore_void_result on_pick_item(struct yetty_yclass_ctx *ycla
     ev.type = YETTY_YGUI_EVENT_VALUE_CHANGED;
     ev.source = dd;
     ev.i0 = item;
-    return yetty_ygui_object_emit(dd, &ev);
+    return yetty_ygui_widget_emit(dd, &ev);
 }
 
 static struct yetty_ycore_void_result on_click_open(struct yetty_yclass_ctx *yclass_ctx,
