@@ -735,6 +735,97 @@ static struct yetty_ycore_void_result terminal_scrollback_exit(
     return YETTY_OK_VOID();
 }
 
+/*---------------------------------------------------------------------------
+ * Client-input reinject — YETTY_OSC_CS_CLIENT_INPUT_REINJECT.
+ *
+ * A pane-wide input subscriber (client-side focus model: it previews
+ * every forwarded mouse event and hit-tests against its own GUI) ships
+ * the events it did NOT consume back on this code. The terminal applies
+ * the default, unsubscribed behavior — currently the wheel → scrollback
+ * driver; other kinds are accepted and ignored until their defaults
+ * (selection, …) are routed through here too. Reinjected events are
+ * never re-forwarded to the subscriber, so no ping-pong is possible.
+ *---------------------------------------------------------------------------*/
+
+static struct yetty_ycore_void_result terminal_reinject_apply(
+    struct yetty_yterminal_terminal *terminal, const struct yetty_client_input_mouse *msg)
+{
+    switch (msg->kind) {
+    case YETTY_YMGUI_INPUT_MOUSE_WHEEL: {
+        int lines = (int)(msg->wheel_dy * YETTY_YTERMINAL_WHEEL_LINES_PER_TICK);
+        if (lines == 0 && msg->wheel_dy != 0.0f) {
+            lines = (msg->wheel_dy > 0) ? 1 : -1;
+        }
+        if (lines != 0) {
+            struct yetty_ycore_void_result scroll_res = terminal_scrollback_apply(terminal, lines);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, scroll_res,
+                                "terminal_reinject_apply: scrollback_apply");
+        }
+        return YETTY_OK_VOID();
+    }
+    default:
+        /* BUTTON / POS defaults (selection, …) not yet rerouted. */
+        ydebug("terminal: reinject kind=%u ignored", msg->kind);
+        return YETTY_OK_VOID();
+    }
+}
+
+/* Read one reinject envelope off the SM: exactly one
+ * yetty_client_input_mouse, tolerating (and draining) any trailing
+ * bytes a future, larger struct revision might carry. */
+static struct yetty_ycore_void_result terminal_reinject_consume_envelope(
+    struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_client_input_mouse msg;
+    uint8_t *cursor = (uint8_t *)&msg;
+    size_t have = 0;
+    while (have < sizeof(msg)) {
+        struct yetty_ycore_size_result read_res =
+            yetty_ywire_wire_statemachine_read(sm, cursor + have, sizeof(msg) - have);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, read_res, "terminal_reinject: sm read");
+        if (read_res.value == 0) {
+            if (yetty_ywire_wire_statemachine_at_end(sm)) {
+                if (have == 0) {
+                    return YETTY_OK_VOID(); /* empty envelope: nothing to do */
+                }
+                return YETTY_ERR(yetty_ycore_void, "terminal_reinject: short payload at EOE");
+            }
+            yetty_yplatform_coro_yield();
+            continue;
+        }
+        have += read_res.value;
+    }
+    /* Drain any excess to keep the stream aligned. */
+    for (;;) {
+        uint8_t scratch[256];
+        struct yetty_ycore_size_result drain_res =
+            yetty_ywire_wire_statemachine_read(sm, scratch, sizeof(scratch));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, drain_res, "terminal_reinject: sm drain");
+        if (drain_res.value == 0) {
+            if (yetty_ywire_wire_statemachine_at_end(sm)) {
+                break;
+            }
+            yetty_yplatform_coro_yield();
+        }
+    }
+    if (msg.magic != YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
+        return YETTY_ERR(yetty_ycore_void, "terminal_reinject: bad payload magic");
+    }
+    return terminal_reinject_apply(terminal, &msg);
+}
+
+static struct yetty_ycore_void_result terminal_reinject_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_yterminal_terminal *terminal = userdata;
+    for (;;) {
+        struct yetty_ycore_void_result envelope_res =
+            terminal_reinject_consume_envelope(terminal, sm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, envelope_res, "terminal_reinject_process_input");
+        yetty_yplatform_coro_yield();
+    }
+}
+
 /* yetty_yterminal_mouse_sub_fn impl — fired by the text-layer when libvterm
  * flips DEC mode 1500/1501. Latch state on the terminal, and on the
  * rising edge ship the current pane pixel size to the client via
@@ -1361,6 +1452,17 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr,
                         "terminal_create: register compositor for YCOMPOSITOR_BIN");
     ydebug("terminal_create: ycompositor registered for DCS %d", YETTY_DCS_YCOMPOSITOR_BIN);
+
+    /* Client-input reinject — pane-wide subscribers bounce unconsumed
+     * mouse events back here for default handling (wheel → scrollback).
+     * Same DCS transport as every client→server yface emit. */
+    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_DCS,
+                                                YETTY_OSC_CS_CLIENT_INPUT_REINJECT, /*has_args=*/1,
+                                                terminal_reinject_process_input, terminal);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr,
+                        "terminal_create: register client-input reinject");
+    ydebug("terminal_create: client-input reinject registered for DCS %d",
+           YETTY_OSC_CS_CLIENT_INPUT_REINJECT);
 
     /* This process is about to act as a yclass RPC / remote-object
      * server, so bring up the per-module discovery hooks explicitly.

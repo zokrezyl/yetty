@@ -37,6 +37,14 @@ extern "C" {
 /* Client → server: subscribe / update / unsubscribe pane-wide (flags=0). */
 #define YETTY_OSC_CS_CLIENT_INPUT_SUB 610010 /* yetty_client_input_sub, comp=0 */
 
+/* Client → server: bounce an input event back for DEFAULT handling. A
+ * subscriber that previews forwarded events (client-side focus model)
+ * re-ships the ones it did NOT consume on this code; the terminal then
+ * applies its unsubscribed behavior (wheel → scrollback, …) without
+ * re-forwarding the event to the subscriber. Payload:
+ * yetty_client_input_mouse. */
+#define YETTY_OSC_CS_CLIENT_INPUT_REINJECT 610011 /* yetty_client_input_mouse, comp=0 */
+
 /* Server → client, figure-tagged variants. figure_id != 0; (x, y) are
  * card-local pixels. */
 #define YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE 700000  /* yetty_client_input_mouse,  comp=0 */

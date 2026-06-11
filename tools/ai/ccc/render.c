@@ -251,16 +251,17 @@ static int try_render_figure(const char *raw, const char *tool_name)
     return 1;
 }
 
-void ccc_render_tool_result(const struct ccc_renderer *renderer, yyjson_val *content, int is_error,
-                            const char *tool_name)
+struct yetty_ycore_void_result ccc_render_tool_result(const struct ccc_renderer *renderer,
+                                                      yyjson_val *content, int is_error,
+                                                      const char *tool_name)
 {
     char *raw = tool_result_text(content);
     if (!raw) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "ccc_render_tool_result: tool_result_text alloc");
     }
     if (!is_error && try_render_figure(raw, tool_name)) {
         free(raw);
-        return;
+        return YETTY_OK_VOID();
     }
 
     /* Trim trailing newlines; empty result becomes a placeholder. */
@@ -310,6 +311,7 @@ void ccc_render_tool_result(const struct ccc_renderer *renderer, yyjson_val *con
     }
     fflush(stdout);
     free(raw);
+    return YETTY_OK_VOID();
 }
 
 void ccc_render_hook(yyjson_val *event)
