@@ -12,9 +12,9 @@ struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_ctx *ct
 struct yetty_ycore_void_result yetty_ygui_widget_emit_container(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
     struct yetty_ygui_emit_ctx *emit_ctx);
-struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_ctx *yclass_ctx,
-                                                           struct yetty_yclass_object *yclass_obj,
-                                                           struct yetty_ygui_emit_ctx *ctx);
+struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_ctx *ctx,
+                                                           struct yetty_yclass_object *obj,
+                                                           struct yetty_ygui_emit_ctx *emit_ctx);
 typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_ctx *,
                                                                     struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_yclass_ctx *,

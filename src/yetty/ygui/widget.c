@@ -157,7 +157,7 @@ static struct yetty_yclass_object *self_of(struct yetty_yclass_object *obj)
     return (struct yetty_yclass_object *)obj;
 }
 
-[[clang::annotate("override@ygui:widget:constructor")]]
+[[clang::annotate("virtual@ygui:widget:constructor")]]
 static struct yetty_ycore_void_result widget_default_constructor(struct yetty_yclass_ctx *ctx,
                                                                  struct yetty_yclass_object *obj)
 {
@@ -174,7 +174,7 @@ static struct yetty_ycore_void_result widget_default_constructor(struct yetty_yc
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:widget:destructor")]]
+[[clang::annotate("virtual@ygui:widget:destructor")]]
 static struct yetty_ycore_void_result widget_default_destructor(struct yetty_yclass_ctx *ctx,
                                                                 struct yetty_yclass_object *obj)
 {
@@ -183,7 +183,7 @@ static struct yetty_ycore_void_result widget_default_destructor(struct yetty_ycl
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:widget:widget_on_press")]]
+[[clang::annotate("virtual@ygui:widget:widget_on_press")]]
 static struct yetty_ycore_int_result widget_default_on_press(struct yetty_yclass_ctx *ctx,
                                                              struct yetty_yclass_object *obj,
                                                              float x, float y, int button)
@@ -196,7 +196,7 @@ static struct yetty_ycore_int_result widget_default_on_press(struct yetty_yclass
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
-[[clang::annotate("override@ygui:widget:widget_on_release")]]
+[[clang::annotate("virtual@ygui:widget:widget_on_release")]]
 static struct yetty_ycore_int_result widget_default_on_release(struct yetty_yclass_ctx *ctx,
                                                                struct yetty_yclass_object *obj,
                                                                float x, float y, int button)
@@ -209,7 +209,7 @@ static struct yetty_ycore_int_result widget_default_on_release(struct yetty_ycla
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
-[[clang::annotate("override@ygui:widget:widget_on_motion")]]
+[[clang::annotate("virtual@ygui:widget:widget_on_motion")]]
 static struct yetty_ycore_int_result widget_default_on_motion(struct yetty_yclass_ctx *ctx,
                                                               struct yetty_yclass_object *obj,
                                                               float x, float y)
@@ -224,7 +224,7 @@ static struct yetty_ycore_int_result widget_default_on_motion(struct yetty_yclas
 /* Wheel / trackpad scroll. (dx, dy) are the deltas at (x, y). Default:
  * not handled (0), so the framework keeps bubbling to an ancestor that
  * scrolls. Scrollable widgets (scrollarea, filepicker) override this. */
-[[clang::annotate("override@ygui:widget:widget_on_scroll")]]
+[[clang::annotate("virtual@ygui:widget:widget_on_scroll")]]
 static struct yetty_ycore_int_result widget_default_on_scroll(struct yetty_yclass_ctx *ctx,
                                                               struct yetty_yclass_object *obj,
                                                               float x, float y, float dx, float dy)
@@ -238,7 +238,7 @@ static struct yetty_ycore_int_result widget_default_on_scroll(struct yetty_yclas
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
-[[clang::annotate("override@ygui:widget:widget_paint")]] [[clang::annotate(
+[[clang::annotate("virtual@ygui:widget:widget_paint")]] [[clang::annotate(
     "local@ygui:widget_paint")]]
 static struct yetty_ycore_void_result widget_default_paint(struct yetty_yclass_ctx *ctx,
                                                            struct yetty_yclass_object *obj,
@@ -250,7 +250,7 @@ static struct yetty_ycore_void_result widget_default_paint(struct yetty_yclass_c
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:widget:widget_emit_container")]] [[clang::annotate(
+[[clang::annotate("virtual@ygui:widget:widget_emit_container")]] [[clang::annotate(
     "local@ygui:widget_emit_container")]]
 static struct yetty_ycore_void_result widget_default_emit_container(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
@@ -262,7 +262,7 @@ static struct yetty_ycore_void_result widget_default_emit_container(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:widget:widget_emit_body")]] [[clang::annotate(
+[[clang::annotate("virtual@ygui:widget:widget_emit_body")]] [[clang::annotate(
     "local@ygui:widget_emit_body")]]
 static struct yetty_ycore_void_result widget_default_emit_body(struct yetty_yclass_ctx *ctx,
                                                                struct yetty_yclass_object *obj,

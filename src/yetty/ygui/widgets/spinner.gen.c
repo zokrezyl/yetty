@@ -8,9 +8,9 @@ struct yetty_ycore_void_result;
 struct yetty_ygui_emit_ctx;
 struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_ctx *ctx,
                                                       struct yetty_yclass_object *obj);
-struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_ctx *yclass_ctx,
-                                                         struct yetty_yclass_object *yclass_obj,
-                                                         float x, float y, int button);
+struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_ctx *ctx,
+                                                         struct yetty_yclass_object *obj, float x,
+                                                         float y, int button);
 struct yetty_ycore_void_result yetty_ygui_widget_paint(struct yetty_yclass_ctx *ctx,
                                                        struct yetty_yclass_object *obj,
                                                        struct yetty_ygui_emit_ctx *emit_ctx);

@@ -1,12 +1,12 @@
 methods:
   - slot: widget_on_press
     domain: ygui
-    owning_class: clickable
+    owning_class: widget
     return_type: struct yetty_ycore_int_result
     args:
-      - name: yclass_ctx
+      - name: ctx
         type: "struct yetty_yclass_ctx *"
-      - name: yclass_obj
+      - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
         type: float
@@ -17,12 +17,12 @@ methods:
     local: false
   - slot: widget_on_release
     domain: ygui
-    owning_class: clickable
+    owning_class: widget
     return_type: struct yetty_ycore_int_result
     args:
-      - name: yclass_ctx
+      - name: ctx
         type: "struct yetty_yclass_ctx *"
-      - name: yclass_obj
+      - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
         type: float
@@ -33,12 +33,12 @@ methods:
     local: false
   - slot: widget_on_motion
     domain: ygui
-    owning_class: draggable
+    owning_class: widget
     return_type: struct yetty_ycore_int_result
     args:
-      - name: yclass_ctx
+      - name: ctx
         type: "struct yetty_yclass_ctx *"
-      - name: yclass_obj
+      - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
         type: float
@@ -47,14 +47,14 @@ methods:
     local: false
   - slot: widget_emit_body
     domain: ygui
-    owning_class: primitive_widget
+    owning_class: widget
     return_type: struct yetty_ycore_void_result
     args:
-      - name: yclass_ctx
-        type: "struct yetty_yclass_ctx *"
-      - name: yclass_obj
-        type: "struct yetty_yclass_object *"
       - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: emit_ctx
         type: "struct yetty_ygui_emit_ctx *"
     local: true
   - slot: constructor

@@ -164,7 +164,7 @@ static float clamp_scroll(float offset, float content, float viewport)
 
 /* configure: set the output fd, figure id/kind, opaque background, and rect.
  * Call once after create(), before set_content(). */
-[[clang::annotate("override@yview:view:configure")]] [[clang::annotate("local@yview:configure")]]
+[[clang::annotate("virtual@yview:view:configure")]] [[clang::annotate("local@yview:configure")]]
 static struct yetty_ycore_void_result view_configure(struct yetty_yclass_ctx *ctx,
                                                      struct yetty_yclass_object *obj, int fd,
                                                      uint32_t child_id, uint32_t kind,
@@ -251,8 +251,7 @@ static struct yetty_ycore_void_result view_ship(struct yetty_yview_view *view,
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yview:view:set_content")]] [[clang::annotate(
-    "local@yview:set_content")]]
+[[clang::annotate("virtual@yview:view:set_content")]] [[clang::annotate("local@yview:set_content")]]
 static struct yetty_ycore_void_result view_set_content(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
     const struct yetty_ydraw_drawable_list *content)
@@ -322,7 +321,7 @@ static struct yetty_ycore_void_result append_text_line(struct yetty_ydraw_drawab
  * content using the server figure's default font. The convenience FFI callers
  * want when they have text but no drawable list (the pager / nvim case).
  * font_size <= 0 selects a default. */
-[[clang::annotate("override@yview:view:set_text")]] [[clang::annotate("local@yview:set_text")]]
+[[clang::annotate("virtual@yview:view:set_text")]] [[clang::annotate("local@yview:set_text")]]
 static struct yetty_ycore_void_result view_set_text(struct yetty_yclass_ctx *ctx,
                                                     struct yetty_yclass_object *obj,
                                                     const char *text, float font_size)
@@ -382,7 +381,7 @@ static struct yetty_ycore_void_result view_set_text(struct yetty_yclass_ctx *ctx
  * rect (a plot doesn't scroll). x_max<=x_min or y_max<=y_min selects yplot's
  * default ranges. The ygrid figure renders the yplot composite prim via the
  * terminal's composite factory. */
-[[clang::annotate("override@yview:view:set_plot")]] [[clang::annotate("local@yview:set_plot")]]
+[[clang::annotate("virtual@yview:view:set_plot")]] [[clang::annotate("local@yview:set_plot")]]
 static struct yetty_ycore_void_result view_set_plot(struct yetty_yclass_ctx *ctx,
                                                     struct yetty_yclass_object *obj,
                                                     const char *expr, float x_min, float x_max,
@@ -429,7 +428,7 @@ static struct yetty_ycore_void_result view_set_plot(struct yetty_yclass_ctx *ctx
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yview:view:set_content_size")]] [[clang::annotate(
+[[clang::annotate("virtual@yview:view:set_content_size")]] [[clang::annotate(
     "local@yview:set_content_size")]]
 static struct yetty_ycore_void_result view_set_content_size(struct yetty_yclass_ctx *ctx,
                                                             struct yetty_yclass_object *obj,
@@ -459,7 +458,7 @@ static struct yetty_ycore_void_result view_set_content_size(struct yetty_yclass_
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yview:view:scroll_to")]] [[clang::annotate("local@yview:scroll_to")]]
+[[clang::annotate("virtual@yview:view:scroll_to")]] [[clang::annotate("local@yview:scroll_to")]]
 static struct yetty_ycore_void_result view_scroll_to(struct yetty_yclass_ctx *ctx,
                                                      struct yetty_yclass_object *obj,
                                                      float scroll_x, float scroll_y)
@@ -492,7 +491,7 @@ static struct yetty_ycore_void_result view_scroll_to(struct yetty_yclass_ctx *ct
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yview:view:scroll_by")]] [[clang::annotate("local@yview:scroll_by")]]
+[[clang::annotate("virtual@yview:view:scroll_by")]] [[clang::annotate("local@yview:scroll_by")]]
 static struct yetty_ycore_void_result view_scroll_by(struct yetty_yclass_ctx *ctx,
                                                      struct yetty_yclass_object *obj, float delta_x,
                                                      float delta_y)
@@ -506,7 +505,7 @@ static struct yetty_ycore_void_result view_scroll_by(struct yetty_yclass_ctx *ct
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yview:view:set_rect")]] [[clang::annotate("local@yview:set_rect")]]
+[[clang::annotate("virtual@yview:view:set_rect")]] [[clang::annotate("local@yview:set_rect")]]
 static struct yetty_ycore_void_result view_set_rect(struct yetty_yclass_ctx *ctx,
                                                     struct yetty_yclass_object *obj, float min_x,
                                                     float min_y, float max_x, float max_y)
@@ -535,7 +534,7 @@ static struct yetty_ycore_void_result view_set_rect(struct yetty_yclass_ctx *ctx
 }
 
 /* destroy: clear the surface (DELETE_CHILD) and free the object. */
-[[clang::annotate("override@yview:view:destroy")]] [[clang::annotate("local@yview:destroy")]]
+[[clang::annotate("virtual@yview:view:destroy")]] [[clang::annotate("local@yview:destroy")]]
 static struct yetty_ycore_void_result view_destroy(struct yetty_yclass_ctx *ctx,
                                                    struct yetty_yclass_object *obj)
 {

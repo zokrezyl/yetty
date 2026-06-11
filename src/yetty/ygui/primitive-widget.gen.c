@@ -5,9 +5,9 @@
 
 struct yetty_ycore_void_result;
 struct yetty_ygui_emit_ctx;
-struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_ctx *yclass_ctx,
-                                                           struct yetty_yclass_object *yclass_obj,
-                                                           struct yetty_ygui_emit_ctx *ctx);
+struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_ctx *ctx,
+                                                           struct yetty_yclass_object *obj,
+                                                           struct yetty_ygui_emit_ctx *emit_ctx);
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(
     struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 

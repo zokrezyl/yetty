@@ -633,6 +633,10 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     methods: dict = {}
     classes: dict = {}
     local_slots: set = set()
+    # Slots INTRODUCED via virtual@ in this module (their declaring class is
+    # the authoritative owner). Every same-module slot must appear here —
+    # see the post-parse enforcement below.
+    virtual_slots: set = set()
     exposed: list = []
     # Type registries for `types:` harvesting — every named struct/enum
     # definition seen across the parsed TUs, keyed by tag.
@@ -771,6 +775,7 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                             "return_type": _parse_return_type(qt),
                             "args": _fn_args(decl),
                         }
+                        virtual_slots.add(slot)
                         continue
                     if role == "override":
                         # Two shapes accepted:
@@ -903,6 +908,22 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
             f"error: local@{module}:<slot> annotations name slots with no "
             f"impl in this module: {dangling}. Each local-marked slot must "
             f"have at least one override@ in the same module.\n")
+        sys.exit(1)
+    # Every slot owned by THIS module must be INTRODUCED exactly once with
+    # virtual@. A slot that only ever appears in override@ has no declared
+    # owner — its header home would be guessed from processing order, and a
+    # typo'd slot name would silently create a phantom slot. Reject it: this
+    # is the codegen-time analog of C++ refusing `override` on a non-virtual
+    # method. The base class that declares the method must use virtual@.
+    missing_virtual = sorted(m["slot"] for m in methods.values()
+                             if m["slot"] not in virtual_slots)
+    if missing_virtual:
+        sys.stderr.write(
+            f"error: module '{module}': slot(s) {missing_virtual} are implemented/"
+            f"overridden but never INTRODUCED with "
+            f"virtual@{module}:<class>:<slot>. Declare each one once (with its "
+            f"default impl) in its base class using virtual@; override@ may only "
+            f"supply an impl for an already-declared virtual slot.\n")
         sys.exit(1)
     model = {
         "methods": list(methods.values()),

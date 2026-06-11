@@ -3149,7 +3149,7 @@ struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *gri
  * is correct for every current caller.
  *=========================================================================*/
 
-[[clang::annotate("override@ygrid:grid:add_record")]]
+[[clang::annotate("virtual@ygrid:grid:add_record")]]
 static struct yetty_ycore_void_result yetty_ygrid_grid_add_record_impl(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, struct yetty_ycore_buffer record)
 {
@@ -3160,7 +3160,7 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_add_record_impl(
     return yetty_ygrid_add_record_local(grid, record.data, record.size);
 }
 
-[[clang::annotate("override@ygrid:grid:clear")]]
+[[clang::annotate("virtual@ygrid:grid:clear")]]
 static struct yetty_ycore_void_result yetty_ygrid_grid_clear_impl(struct yetty_yclass_ctx *ctx,
                                                                   struct yetty_yclass_object *obj)
 {
@@ -3171,7 +3171,7 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_clear_impl(struct yetty_y
     return yetty_ygrid_clear_local(grid);
 }
 
-[[clang::annotate("override@ygrid:grid:destroy")]]
+[[clang::annotate("virtual@ygrid:grid:destroy")]]
 static struct yetty_ycore_void_result yetty_ygrid_grid_destroy_impl(struct yetty_yclass_ctx *ctx,
                                                                     struct yetty_yclass_object *obj)
 {
