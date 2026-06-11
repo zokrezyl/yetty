@@ -22,11 +22,11 @@ target_include_directories(ytop PRIVATE
 
 find_package(Threads REQUIRED)
 
-# ygui pulls in ydraw-core, ysdf, ycore, yface, yfont, yfigure,
-# yplatform_core, etc. as transitive PUBLIC deps. The new ygui is a pure
+# yetty_ygui pulls in ydraw-core, ysdf, ycore, yface, yfont, yfigure,
+# yplatform_core, etc. as transitive PUBLIC deps. The new yetty_ygui is a pure
 # widget framework (no libuv of its own) and ytop drives its own libuv
 # client loop, so libuv (uv_a) is listed explicitly.
-target_link_libraries(ytop PRIVATE ygui uv_a Threads::Threads)
+target_link_libraries(ytop PRIVATE yetty_ygui uv_a Threads::Threads)
 
 if(NOT MSVC)
     target_compile_options(ytop PRIVATE -Wall -Wextra)

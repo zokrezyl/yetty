@@ -88,9 +88,9 @@ set(YGUI_SOURCES
     rpc.gen.c
 )
 
-add_library(ygui STATIC ${YGUI_SOURCES})
+add_library(yetty_ygui STATIC ${YGUI_SOURCES})
 
-target_include_directories(ygui PUBLIC
+target_include_directories(yetty_ygui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${YETTY_ROOT}/include
 )
@@ -100,9 +100,9 @@ target_include_directories(ygui PUBLIC
 # must be a -I prefix for this target. PRIVATE — internal headers
 # must NOT leak to consumers; public callers go through the clean
 # public methods.h / rpc.h under include/yetty/ygui/.
-target_include_directories(ygui PRIVATE ${YETTY_ROOT}/src)
+target_include_directories(yetty_ygui PRIVATE ${YETTY_ROOT}/src)
 
-target_link_libraries(ygui PUBLIC
+target_link_libraries(yetty_ygui PUBLIC
     yetty_ycore
     yetty_yclass
     yetty_ydraw_core
@@ -128,12 +128,12 @@ target_link_libraries(ygui PUBLIC
 # definitions, and the backend libraries are only linked where the feature
 # is actually enabled.
 if(YETTY_ENABLE_FEATURE_YPDF)
-    target_link_libraries(ygui PUBLIC yetty_ypdf)
-    target_compile_definitions(ygui PRIVATE YETTY_YGUI_HAVE_YPDF=1)
+    target_link_libraries(yetty_ygui PUBLIC yetty_ypdf)
+    target_compile_definitions(yetty_ygui PRIVATE YETTY_YGUI_HAVE_YPDF=1)
 endif()
 if(YETTY_ENABLE_FEATURE_YBROWSER)
-    target_link_libraries(ygui PUBLIC yetty_ybrowser)
-    target_compile_definitions(ygui PRIVATE YETTY_YGUI_HAVE_YBROWSER=1)
+    target_link_libraries(yetty_ygui PUBLIC yetty_ybrowser)
+    target_compile_definitions(yetty_ygui PRIVATE YETTY_YGUI_HAVE_YBROWSER=1)
 endif()
 
 # The ydiagram widget wraps the Mermaid → ydraw renderer. The widget source
@@ -141,8 +141,8 @@ endif()
 # every platform; the render path is guarded by this definition and the
 # library is only linked where the feature is enabled.
 if(YETTY_ENABLE_FEATURE_YDIAGRAM)
-    target_link_libraries(ygui PUBLIC yetty_ydiagram)
-    target_compile_definitions(ygui PRIVATE YETTY_YGUI_HAVE_YDIAGRAM=1)
+    target_link_libraries(yetty_ygui PUBLIC yetty_ydiagram)
+    target_compile_definitions(yetty_ygui PRIVATE YETTY_YGUI_HAVE_YDIAGRAM=1)
 endif()
 
 # C2x so `[[clang::annotate(...)]]` attribute syntax parses (yclass
@@ -154,13 +154,13 @@ endif()
 # (build-tools/yetty/platform/windows/cmake.cmake), which parses the
 # same `[[...]]` attributes — so apply the property only off-MSVC.
 if(NOT MSVC)
-    set_target_properties(ygui PROPERTIES
+    set_target_properties(yetty_ygui PROPERTIES
         C_STANDARD 23
         C_STANDARD_REQUIRED ON
     )
 endif()
 
-install(TARGETS ygui ARCHIVE DESTINATION lib)
+install(TARGETS yetty_ygui ARCHIVE DESTINATION lib)
 install(DIRECTORY ${YETTY_ROOT}/include/yetty/ygui/
         DESTINATION include/yetty/ygui
         FILES_MATCHING PATTERN "*.h")

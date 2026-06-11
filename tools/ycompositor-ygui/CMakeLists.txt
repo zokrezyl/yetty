@@ -60,7 +60,7 @@ pkg_check_modules(FONTCONFIG REQUIRED fontconfig)
 
 target_link_libraries(ycompositor-ygui PRIVATE
 
-    ygui
+    yetty_ygui
     yetty_ygrid
     yetty_yfigure
     yetty_ymgui

@@ -51,6 +51,7 @@ import unicodedata
 import uuid
 
 import ywin  # sibling module: floating compositor windows via the yview FFI
+import ystats  # sibling module: floating ygui dialog for token/cost stats
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -113,16 +114,20 @@ def fmt_tokens(n: int) -> str:
 class SessionUsage:
     """Accumulates per-turn token/cost numbers across the whole session."""
 
-    def __init__(self):
+    def __init__(self, panel=None):
         self.input = 0
         self.output = 0
         self.cache_read = 0
         self.cache_creation = 0
         self.cost = 0.0
         self.turns = 0
+        # Optional floating ygui dialog; when present the token line goes there
+        # instead of into the terminal scrollback.
+        self.panel = panel
 
     def render_turn(self, usage: dict, cost, duration_ms) -> None:
-        """Update session totals from one turn's `result.usage` and print a line."""
+        """Update session totals from one turn's `result.usage` and surface the
+        token/cost numbers — in the ygui dialog if we have one, else as a line."""
         turn_in = usage.get("input_tokens", 0)
         turn_out = usage.get("output_tokens", 0)
         cache_read = usage.get("cache_read_input_tokens", 0)
@@ -137,14 +142,21 @@ class SessionUsage:
         seconds = (duration_ms or 0) / 1000.0
         rate = f" · {turn_out / seconds:.0f} tok/s" if seconds > 0 else ""
         cost_str = f" · ${cost:.4f}" if cost is not None else ""
-        sys.stdout.write(
-            f"{MUTED}  ↑{fmt_tokens(turn_in)} in"
-            f" · {fmt_tokens(cache_read)} cached"
+        turn_line = (
+            f"↑{fmt_tokens(turn_in)} in · {fmt_tokens(cache_read)} cached"
             f" · ↓{fmt_tokens(turn_out)} out"
-            f"{f' · {seconds:.1f}s' if seconds else ''}{rate}{cost_str}{RESET}\n"
-            f"{DIM}  session: ↓{fmt_tokens(self.output)} out"
-            f" · ${self.cost:.4f} · {self.turns} turn(s){RESET}\n"
+            f"{f' · {seconds:.1f}s' if seconds else ''}{rate}{cost_str}"
         )
+        session_line = (
+            f"session: ↓{fmt_tokens(self.output)} out"
+            f" · ${self.cost:.4f} · {self.turns} turn(s)"
+        )
+
+        if self.panel is not None:
+            # Tokens go to the ygui dialog; the terminal scrollback stays clean.
+            self.panel.update(turn_line, session_line)
+            return
+        sys.stdout.write(f"{MUTED}  {turn_line}{RESET}\n{DIM}  {session_line}{RESET}\n")
         sys.stdout.flush()
 
 
@@ -532,7 +544,11 @@ def main() -> int:
     session_id = resume or str(uuid.uuid4())
 
     transcript = Transcript(session_id)
-    state = {"session_id": session_id, "usage": SessionUsage()}
+    # Floating ygui dialog for token/cost stats (None if the FFI lib isn't
+    # built — then the stats fall back to a printed line). The conversation
+    # itself always streams to the terminal.
+    stats_panel = ystats.StatsPanel.create(sys.stdout.fileno())
+    state = {"session_id": session_id, "usage": SessionUsage(panel=stats_panel)}
     turn_done = threading.Event()
 
     stderr_log = open(os.path.join("tmp", f"claude-stderr-{session_id}.log"), "w")
@@ -586,6 +602,8 @@ def main() -> int:
         except Exception:
             proc.kill()
         stderr_log.close()
+        if stats_panel is not None:
+            stats_panel.destroy(sys.stdout.fileno())
         sys.stdout.write(f"\n{DIM}transcript saved to {transcript.path}{RESET}\n")
 
     return 0

@@ -104,7 +104,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND YETTY_ENABLE_LIB_WEBGPU)
     # time, but the OBJECT compile happens here and needs the include dir.
     set(YRICH_APP_LINK_LIBS
         yetty_yrich
-        ygui
+        yetty_ygui
         yetty_ygrid
         yetty_yfigure
         yetty_ymgui

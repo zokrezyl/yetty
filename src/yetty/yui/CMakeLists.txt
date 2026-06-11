@@ -25,7 +25,7 @@ target_link_libraries(yetty_yui
         yetty_yshadertoy
         yetty_yui_core
         yetty_yterminal
-        ygui
+        yetty_ygui
         yetty_ychrome
 )
 

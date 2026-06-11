@@ -136,7 +136,7 @@ endif()
 # all link on the riscv64 cross (with the headers-only webgpu stub
 # defined in build-tools/yetty/platform/shared.cmake).
 target_link_libraries(ygreeter PRIVATE
-    ygui
+    yetty_ygui
     yetty_ywire
     yetty_yplatform_core
     yetty_yco
