@@ -126,7 +126,8 @@ float yetty_ylexbor_glyph_advance_ratio(const struct yetty_ylexbor *r)
     return 0.55f;
 }
 
-float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size, float advance_ratio)
+float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size,
+                                     float advance_ratio)
 {
     int n = 0;
     for (size_t i = 0; i < len;) {
@@ -909,7 +910,8 @@ int yetty_ylexbor_test_box_path_at(const struct yetty_ylexbor *r, int index, cha
     }
     int pos = 0;
     for (int i = nseg - 1; i >= 0; i--) {
-        int written = snprintf(out_buf + pos, (size_t)(cap - pos), "%s%s", pos > 0 ? ">" : "", segs[i]);
+        int written =
+            snprintf(out_buf + pos, (size_t)(cap - pos), "%s%s", pos > 0 ? ">" : "", segs[i]);
         if (written < 0 || written >= cap - pos) {
             break;
         }

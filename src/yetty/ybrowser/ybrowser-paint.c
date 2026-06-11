@@ -720,7 +720,8 @@ int yetty_ylexbor_start_image_fetch(struct yetty_ylexbor *r)
          * later start_image_fetch doesn't resubmit this url. */
         if (r->img_cache_count == r->img_cache_cap) {
             int nc = r->img_cache_cap ? r->img_cache_cap * 2 : 8;
-            struct yetty_ylexbor_img_cache_entry *p = realloc(r->img_cache, (size_t)nc * sizeof(*p));
+            struct yetty_ylexbor_img_cache_entry *p =
+                realloc(r->img_cache, (size_t)nc * sizeof(*p));
             if (!p) {
                 free(url);
                 break;
@@ -1234,8 +1235,8 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                         .half_width = half_w,
                         .half_height = half_t,
                     };
-                    (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg), 0,
-                                                                    0, &ubx);
+                    (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg),
+                                                                    0, 0, &ubx);
                 }
                 if (b->line_through) {
                     /* Strike through the visual middle of the glyphs (≈ half
@@ -1247,8 +1248,8 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                         .half_width = half_w,
                         .half_height = half_t,
                     };
-                    (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg), 0,
-                                                                    0, &sbx);
+                    (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg),
+                                                                    0, 0, &sbx);
                 }
                 if (b->overline) {
                     /* Above the cap line, near the top of the line box. */
@@ -1259,8 +1260,8 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                         .half_width = half_w,
                         .half_height = half_t,
                     };
-                    (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg), 0,
-                                                                    0, &obx);
+                    (void)yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, z++, pack_rgba(b->fg),
+                                                                    0, 0, &obx);
                 }
             }
             break;

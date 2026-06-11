@@ -185,8 +185,8 @@ static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx
 	 * wins; otherwise the engine-global estimate. Snapshot the ratio now — it's
 	 * also passed to every naive_text_width below — because `b` is invalidated
 	 * once emit_fragment grows the box vector. */
-    float advance_ratio = b->glyph_advance > 0.0f ? b->glyph_advance
-                                                  : yetty_ylexbor_glyph_advance_ratio(r);
+    float advance_ratio =
+        b->glyph_advance > 0.0f ? b->glyph_advance : yetty_ylexbor_glyph_advance_ratio(r);
     float per_glyph = font_size * advance_ratio;
     if (per_glyph < 1.0f) {
         per_glyph = 1.0f;
@@ -621,8 +621,7 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
     }
     if (n_children == 0) {
         /* Still place any out-of-flow children before bailing. */
-        flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w,
-                                      pad_top + pad_bottom);
+        flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, pad_top + pad_bottom);
         return YETTY_OK(float, pad_top + pad_bottom);
     }
 
@@ -807,8 +806,7 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
             if (item_main > content_width) {
                 item_main = content_width;
             }
-            if (!first_in_line &&
-                (line_x - content_origin_x) + item_main > content_width + 0.5f) {
+            if (!first_in_line && (line_x - content_origin_x) + item_main > content_width + 0.5f) {
                 line_top += line_h + self->grid_row_gap;
                 line_x = content_origin_x;
                 line_h = 0.0f;
@@ -1527,8 +1525,10 @@ static bool inset_is_set(const struct yetty_ylexbor_box *b, int side)
  * containing-block width (left/right) or height (top/bottom). */
 static float inset_value(const struct yetty_ylexbor_box *b, int side, float cb_w, float cb_h)
 {
-    float raw =
-        (side == 0) ? b->pos_top : (side == 1) ? b->pos_right : (side == 2) ? b->pos_bottom : b->pos_left;
+    float raw = (side == 0)   ? b->pos_top
+                : (side == 1) ? b->pos_right
+                : (side == 2) ? b->pos_bottom
+                              : b->pos_left;
     if (b->pos_pct_mask & (1u << side)) {
         return raw * ((side == 0 || side == 2) ? cb_h : cb_w);
     }
@@ -1537,8 +1537,8 @@ static float inset_value(const struct yetty_ylexbor_box *b, int side, float cb_w
 
 /* Visual shift applied to a `position: relative` box (and its whole subtree).
  * `left` wins over `right`, `top` over `bottom`, matching CSS. */
-static void relative_offset(const struct yetty_ylexbor_box *b, float cb_w, float cb_h, float *out_dx,
-                            float *out_dy)
+static void relative_offset(const struct yetty_ylexbor_box *b, float cb_w, float cb_h,
+                            float *out_dx, float *out_dy)
 {
     float dx = 0.0f, dy = 0.0f;
     if (inset_is_set(b, 3)) {
@@ -1870,9 +1870,8 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
             }
             int track = 0;
             if (c->grid_col_name != NULL) {
-                int line = yetty_ylexbor_grid_resolve_line(self->grid_line_spec, spec_len,
-                                                           c->grid_col_name,
-                                                           strlen(c->grid_col_name));
+                int line = yetty_ylexbor_grid_resolve_line(
+                    self->grid_line_spec, spec_len, c->grid_col_name, strlen(c->grid_col_name));
                 if (line >= 0 && line < ncols) {
                     track = line;
                 }
@@ -1917,8 +1916,8 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
             }
             apply_transform(r, cidx);
         }
-        float named_h = (band_h > 0.0f ? (row_top + band_h) : content_origin_y) - origin_y +
-                        pad_bottom;
+        float named_h =
+            (band_h > 0.0f ? (row_top + band_h) : content_origin_y) - origin_y + pad_bottom;
         self = &r->boxes.data[idx];
         flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, named_h);
         return YETTY_OK(float, named_h);
@@ -2321,11 +2320,10 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
                 self = &r->boxes.data[idx];
                 float parent_content_h = 0.0f;
                 if (self->css_height > 0.0f) {
-                    parent_content_h =
-                        self->border_box
-                            ? (self->css_height - self->padding_top - self->padding_bottom -
-                               self->border_top - self->border_bottom)
-                            : self->css_height;
+                    parent_content_h = self->border_box ? (self->css_height - self->padding_top -
+                                                           self->padding_bottom - self->border_top -
+                                                           self->border_bottom)
+                                                        : self->css_height;
                 }
                 if (parent_content_h > 0.0f) {
                     child_h = parent_content_h * (-c->css_height);
@@ -2434,8 +2432,9 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
 			 * overlay, whose bottom/right insets resolve against it. */
             if (self->css_height > 0.0f) {
                 float pad_box_h =
-                    self->border_box ? (self->css_height - self->border_top - self->border_bottom)
-                                     : (self->css_height + self->padding_top + self->padding_bottom);
+                    self->border_box
+                        ? (self->css_height - self->border_top - self->border_bottom)
+                        : (self->css_height + self->padding_top + self->padding_bottom);
                 if (pad_box_h > cb_h) {
                     cb_h = pad_box_h;
                 }

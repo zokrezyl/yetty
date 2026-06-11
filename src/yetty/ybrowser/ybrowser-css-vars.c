@@ -147,9 +147,9 @@ void yetty_ylexbor_css_scan_grid_content_width(struct yetty_ylexbor *r, const ch
         /* Parse the max-track number. */
         char numbuf[32];
         size_t k = 0;
-        while (j < len && k < sizeof(numbuf) - 1 &&
-               (src[j] == '.' || src[j] == '+' || src[j] == '-' ||
-                (src[j] >= '0' && src[j] <= '9'))) {
+        while (
+            j < len && k < sizeof(numbuf) - 1 &&
+            (src[j] == '.' || src[j] == '+' || src[j] == '-' || (src[j] >= '0' && src[j] <= '9'))) {
             numbuf[k++] = src[j++];
         }
         numbuf[k] = '\0';
@@ -357,7 +357,6 @@ static int sel_is_global_target(struct yetty_ylexbor *r, const char *sel, size_t
     }
     return 1;
 }
-
 
 /* Walk `src` looking for top-level rules. For each rule whose selector
  * looks like :root / html / body / asterisk-wildcard, scan its
@@ -1022,7 +1021,8 @@ static float grid_find_len(const char *block, size_t blen, const char *prop, int
                     buf[k++] = block[j++];
                 }
                 buf[k] = '\0';
-                if (idx == which || (which == 1 && (j >= blen || block[j] == ';' || block[j] == '}'))) {
+                if (idx == which ||
+                    (which == 1 && (j >= blen || block[j] == ';' || block[j] == '}'))) {
                     return (float)atof(buf);
                 }
                 if (j >= blen || block[j] == ';' || block[j] == '}') {
@@ -1161,9 +1161,8 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
          * before the rule would otherwise make the selector look like it
          * starts with a slash. */
         for (;;) {
-            while (sel_start < sel_end &&
-                   (src[sel_start] == ' ' || src[sel_start] == '\n' || src[sel_start] == '\t' ||
-                    src[sel_start] == '\r')) {
+            while (sel_start < sel_end && (src[sel_start] == ' ' || src[sel_start] == '\n' ||
+                                           src[sel_start] == '\t' || src[sel_start] == '\r')) {
                 sel_start++;
             }
             if (sel_start + 1 < sel_end && src[sel_start] == '/' && src[sel_start + 1] == '*') {
@@ -1215,8 +1214,8 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
             val_end++;
         }
         struct yl_grid_track tracks[YL_GRID_MAX_TRACKS];
-        int ntracks = grid_parse_tracks(src + val_start, val_end - val_start, tracks,
-                                        YL_GRID_MAX_TRACKS);
+        int ntracks =
+            grid_parse_tracks(src + val_start, val_end - val_start, tracks, YL_GRID_MAX_TRACKS);
         if (ntracks < 2) {
             continue; /* a single column is just a block — nothing to gain */
         }
@@ -1434,7 +1433,8 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
 }
 
 const struct yl_grid_class *yetty_ylexbor_grid_class_lookup(struct yetty_ylexbor *r,
-                                                            const char *class_attr, size_t class_len)
+                                                            const char *class_attr,
+                                                            size_t class_len)
 {
     if (r == NULL || class_attr == NULL || r->grid_class_count == 0) {
         return NULL;

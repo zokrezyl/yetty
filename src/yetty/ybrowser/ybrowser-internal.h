@@ -449,7 +449,7 @@ struct yetty_ylexbor {
 	 * yetty_ylexbor_run_deferred_scripts() once after that first paint. Drives
 	 * progressive rendering in the interactive UI. */
     int defer_scripts;
-    int dom_dirty;      /* JS mutated the DOM — host should
+    int dom_dirty; /* JS mutated the DOM — host should
 	                            * relayout. */
 
     int viewport_w, viewport_h;

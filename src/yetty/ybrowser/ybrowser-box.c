@@ -186,10 +186,10 @@ struct yl_style_state {
     bool font_italic;
     float glyph_advance; /* per-font advance override (1.0 for Ahem); 0 = global.
 	                      * Inherited so flushed inline-text boxes pick it up. */
-    bool underline;    /* true inside <a> (and any other inline element
+    bool underline;      /* true inside <a> (and any other inline element
 	                  * whose default_for() flags underline=1) */
-    bool line_through; /* `text-decoration: line-through` from CSS */
-    bool overline;     /* `text-decoration: overline` from CSS */
+    bool line_through;   /* `text-decoration: line-through` from CSS */
+    bool overline;       /* `text-decoration: overline` from CSS */
     struct yetty_ylexbor_color fg;
     int text_align; /* inherited; 0=left, 1=center, 2=right, 3=justify */
     /* Deepest inline ancestor element on the recursion stack — used to
@@ -475,16 +475,14 @@ static int inline_buf_force_break(struct yl_inline_buf *b)
 /* Parse one signed length token out of [s, end) — digits, sign, decimals.
  * Sets *out to the numeric value and *is_pct to whether it is followed by
  * '%'. Returns the cursor past the number (and unit), or `s` if no number. */
-static const char *parse_transform_number(const char *s, const char *end, float *out,
-                                          bool *is_pct)
+static const char *parse_transform_number(const char *s, const char *end, float *out, bool *is_pct)
 {
     while (s < end && (*s == ' ' || *s == '\t')) {
         s++;
     }
     char buf[32];
     int n = 0;
-    while (s < end && n < 31 &&
-           (*s == '-' || *s == '+' || *s == '.' || (*s >= '0' && *s <= '9'))) {
+    while (s < end && n < 31 && (*s == '-' || *s == '+' || *s == '.' || (*s >= '0' && *s <= '9'))) {
         buf[n++] = *s++;
     }
     if (n == 0) {
@@ -816,7 +814,6 @@ static bool parse_inline_flex(const lxb_char_t *style, size_t slen, float font_s
     *out_basis_auto = basis_auto;
     return true;
 }
-
 
 /* `display: none` check — the cheap path for hiding entire subtrees.
  * Returns 1 if the element should be entirely skipped at box-build. */
@@ -1291,8 +1288,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                             const lxb_char_t *gs = lxb_dom_element_get_attribute(
                                 el, (const lxb_char_t *)"style", 5, &gs_len);
                             if (gs && gs_len > 0) {
-                                float gap =
-                                    yetty_ylexbor_css_inline_gap((const char *)gs, gs_len);
+                                float gap = yetty_ylexbor_css_inline_gap((const char *)gs, gs_len);
                                 if (gap > 0.0f) {
                                     b->grid_col_gap = gap;
                                 }
@@ -1511,7 +1507,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                             /* A leading line NAME (not a number / `span` / `auto`)
 							 * — for named-line placement. */
                             size_t nm = 0;
-                            while (nm < gc_len && gc[nm] != '/' && gc[nm] != ' ' && gc[nm] != '\t') {
+                            while (nm < gc_len && gc[nm] != '/' && gc[nm] != ' ' &&
+                                   gc[nm] != '\t') {
                                 nm++;
                             }
                             char first = gc[0];
@@ -1589,8 +1586,8 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         float *inset_field[4] = {&b->pos_top, &b->pos_right, &b->pos_bottom,
                                                  &b->pos_left};
                         for (int side = 0; side < 4; side++) {
-                            int got = yetty_ybrowser_libcss_inset(r, cs, side, s.font_size, pct_basis,
-                                                                  &inset);
+                            int got = yetty_ybrowser_libcss_inset(r, cs, side, s.font_size,
+                                                                  pct_basis, &inset);
                             if (got) {
                                 *inset_field[side] = inset;
                                 b->pos_set_mask |= (uint8_t)(1u << side);
