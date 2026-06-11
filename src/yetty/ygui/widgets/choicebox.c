@@ -98,7 +98,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     }
     struct yetty_ygui_event ev = {
         .type = YETTY_YGUI_EVENT_VALUE_CHANGED, .source = obj, .i0 = idx, .i1 = count};
-    struct yetty_ycore_void_result er = yetty_ygui_object_emit(obj, &ev);
+    struct yetty_ycore_void_result er = yetty_ygui_widget_emit(obj, &ev);
     if (YETTY_IS_ERR(er)) {
         return YETTY_ERR(yetty_ycore_int, "choicebox: emit", er);
     }

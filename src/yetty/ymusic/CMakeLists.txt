@@ -17,7 +17,7 @@ add_library(yetty_ymusic STATIC
 target_include_directories(yetty_ymusic PUBLIC
     ${YETTY_ROOT}/include
 )
-# Internal codegen headers (methods.gen.h) live under src/yetty/ymusic/.
+# Codegen-emitted internal sources (*.gen.c) live under src/yetty/ymusic/.
 target_include_directories(yetty_ymusic PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_ymusic PUBLIC

@@ -14,16 +14,16 @@
 
 #include <stdlib.h>
 
-struct yetty_ycore_void_result yetty_ygui_object_subscribe(struct yetty_yclass_object *target,
+struct yetty_ycore_void_result yetty_ygui_widget_subscribe(struct yetty_yclass_object *target,
                                                            enum yetty_ygui_event_type type,
                                                            yetty_ygui_event_cb cb, void *userdata)
 {
     if (!target || !cb) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_object_subscribe: NULL arg");
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_subscribe: NULL arg");
     }
     struct yetty_ygui_event_subscription *sub = calloc(1, sizeof(*sub));
     if (!sub) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_object_subscribe: calloc failed");
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_subscribe: calloc failed");
     }
     sub->type = type;
     sub->cb = cb;
@@ -33,11 +33,11 @@ struct yetty_ycore_void_result yetty_ygui_object_subscribe(struct yetty_yclass_o
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ygui_object_emit(struct yetty_yclass_object *source,
+struct yetty_ycore_void_result yetty_ygui_widget_emit(struct yetty_yclass_object *source,
                                                       const struct yetty_ygui_event *event)
 {
     if (!source || !event) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_object_emit: NULL arg");
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_emit: NULL arg");
     }
     /* Walk the source's own subscriptions — the event model wires
      * "subscribe to events on a target", so emit fires on the source
@@ -51,7 +51,7 @@ struct yetty_ycore_void_result yetty_ygui_object_emit(struct yetty_yclass_object
         struct yetty_ycore_void_result r =
             s->cb(NULL, (struct yetty_yclass_object *)source, event, s->userdata);
         if (YETTY_IS_ERR(r)) {
-            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_object_emit: callback failed", r);
+            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_emit: callback failed", r);
         }
     }
     return YETTY_OK_VOID();

@@ -1218,7 +1218,7 @@ static int build_ui(struct app *a)
     err_ok(yetty_ygui_tabbar_set_on_new_tab(a->tabbar, on_new_tab_cb, a));
     err_ok(yetty_ygui_tabbar_set_on_close(a->tabbar, on_close_cb, a));
     err_ok(
-        yetty_ygui_object_subscribe(a->tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, on_tab_changed, a));
+        yetty_ygui_widget_subscribe(a->tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, on_tab_changed, a));
 
     /* --no-ui: collapse the tab strip to zero height and hide it. The widget
 	 * stays created so tab bookkeeping elsewhere keeps working; it just takes

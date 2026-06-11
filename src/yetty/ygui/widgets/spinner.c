@@ -94,7 +94,7 @@ static struct yetty_ycore_int_result spinner_on_press(struct yetty_yclass_ctx *y
     }
     struct yetty_ygui_event ev = {
         .type = YETTY_YGUI_EVENT_VALUE_CHANGED, .source = obj, .x = d->value};
-    yetty_ycore_error_destroy_unused(yetty_ygui_object_emit(obj, &ev));
+    yetty_ycore_error_destroy_unused(yetty_ygui_widget_emit(obj, &ev));
     return YETTY_OK(yetty_ycore_int, 1);
 }
 

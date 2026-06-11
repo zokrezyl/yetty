@@ -119,7 +119,7 @@ struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid
  * NAMING: this is the in-process, raw-bytes entry point — the legacy
  * surface tools and tests still drive directly. The canonical yclass
  * slot is `yetty_ygrid_add_record(ctx, obj, struct yetty_ycore_buffer)`
- * (emitted by codegen in `<yetty/ygrid/methods.h>`); it dispatches
+ * (emitted by codegen in `<yetty/ygrid/grid.h>`); it dispatches
  * via the registered class and works for local AND remote callers.
  * This `_local` variant exists only until every caller migrates. */
 struct yetty_ycore_void_result yetty_ygrid_add_record_local(struct yetty_ygrid_grid *grid,

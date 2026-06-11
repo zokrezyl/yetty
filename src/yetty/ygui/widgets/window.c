@@ -47,7 +47,7 @@ yetty_ygui_window {
     struct yetty_yclass_object *menu; /* borrowed, opened by the hamburger */
     /* When set, the title bar paints an "x" at the far right (ImGui's
      * Begin(&p_open) model). A click on it emits YETTY_YGUI_EVENT_CLOSE
-     * on the window; the app reacts via yetty_ygui_object_subscribe.
+     * on the window; the app reacts via yetty_ygui_widget_subscribe.
      * The framework owns the button; the app decides what closing
      * means (quit, hide, …). */
     int closable;
@@ -240,7 +240,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     if (close_bx >= 0.0f && x >= close_bx && x <= close_bx + WINDOW_BTN && y >= by &&
         y <= by + WINDOW_BTN) {
         struct yetty_ygui_event ev = {.type = YETTY_YGUI_EVENT_CLOSE, .source = obj};
-        struct yetty_ycore_void_result er = yetty_ygui_object_emit(obj, &ev);
+        struct yetty_ycore_void_result er = yetty_ygui_widget_emit(obj, &ev);
         if (YETTY_IS_ERR(er)) {
             return YETTY_ERR(yetty_ycore_int, "window: emit close", er);
         }

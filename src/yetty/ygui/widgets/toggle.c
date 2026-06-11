@@ -57,7 +57,7 @@ static struct yetty_ycore_void_result on_click_flip(struct yetty_yclass_ctx *ycl
     ev.type = YETTY_YGUI_EVENT_VALUE_CHANGED;
     ev.source = obj;
     ev.i0 = d->on;
-    return yetty_ygui_object_emit(obj, &ev);
+    return yetty_ygui_widget_emit(obj, &ev);
 }
 
 [[clang::annotate("override@ygui:toggle:constructor")]]

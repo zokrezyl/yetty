@@ -47,11 +47,11 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_event_cb)(struct yetty_yclas
                                                               const struct yetty_ygui_event *event,
                                                               void *userdata);
 
-struct yetty_ycore_void_result yetty_ygui_object_subscribe(struct yetty_yclass_object *target,
+struct yetty_ycore_void_result yetty_ygui_widget_subscribe(struct yetty_yclass_object *target,
                                                            enum yetty_ygui_event_type type,
                                                            yetty_ygui_event_cb cb, void *userdata);
 
-struct yetty_ycore_void_result yetty_ygui_object_emit(struct yetty_yclass_object *source,
+struct yetty_ycore_void_result yetty_ygui_widget_emit(struct yetty_yclass_object *source,
                                                       const struct yetty_ygui_event *event);
 
 #ifdef __cplusplus

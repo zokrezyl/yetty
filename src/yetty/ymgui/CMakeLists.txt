@@ -20,9 +20,10 @@ target_include_directories(yetty_ymgui PUBLIC
 )
 target_include_directories(yetty_ymgui PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
-    # Internal codegen headers (methods.gen.h) sit under
+    # Codegen-emitted internal sources (*.gen.c) sit under
     # src/yetty/ymgui/. PRIVATE so the path does not leak to
-    # consumers — they go through include/yetty/ymgui/methods.h.
+    # consumers — the public API is the per-class headers under
+    # include/yetty/ymgui/.
     ${YETTY_ROOT}/src
 )
 

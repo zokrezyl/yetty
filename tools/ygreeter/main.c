@@ -405,8 +405,8 @@ static const struct code_line code_widget_lines[] = {
     {{{"/* Adding a button — single call site. */", CODE_COMMENT}}},
     {{{"struct ", CODE_KEYWORD},
       {"yetty_yclass_object_ptr_result ", CODE_TYPE},
-      {"br = yetty_ygui_add(", BRAND_TEXT}}},
-    {{{"    yetty_ygui_button_class_get().value, parent);", BRAND_TEXT}}},
+      {"br = yetty_ygui_widget_add(", BRAND_TEXT}}},
+    {{{"    parent, yetty_ygui_button_class_get().value);", BRAND_TEXT}}},
     {{{"yetty_ygui_button_set_label(br.value, ", BRAND_TEXT},
       {"\"Apply\"", CODE_STRING},
       {");", CODE_PUNCT}}},
@@ -414,7 +414,7 @@ static const struct code_line code_widget_lines[] = {
 
 static const struct code_line code_subscribe_lines[] = {
     {{{"/* Subscribe to a value-changed event. */", CODE_COMMENT}}},
-    {{{"yetty_ygui_object_subscribe(", BRAND_TEXT}}},
+    {{{"yetty_ygui_widget_subscribe(", BRAND_TEXT}}},
     {{{"    slider, ", BRAND_TEXT},
       {"YETTY_YGUI_EVENT_VALUE_CHANGED", CODE_TYPE},
       {",", CODE_PUNCT}}},
@@ -2154,7 +2154,7 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(zr.value, &l));
         }
         g_shadertoy_widget = zr.value;
-        yetty_ycore_error_destroy_safe(yetty_ygui_object_subscribe(
+        yetty_ycore_error_destroy_safe(yetty_ygui_widget_subscribe(
             str.value, YETTY_YGUI_EVENT_VALUE_CHANGED, on_shadertoy_subtab, app));
         shadertoy_apply(0);
         content = vr.value;
@@ -2380,7 +2380,7 @@ static struct yetty_ycore_void_result rebuild_top(struct app *app, int top_index
     if (sub != 0) {
         yetty_ycore_error_destroy_safe(yetty_ygui_tabbar_set_active(str.value, sub));
     }
-    yetty_ycore_error_destroy_safe(yetty_ygui_object_subscribe(
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_subscribe(
         str.value, YETTY_YGUI_EVENT_VALUE_CHANGED, on_subtab_change, app));
     return build_scene_body(app, sb.value, tt->subs[sub]);
 }
@@ -2510,7 +2510,7 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
     /* Subscribe before selecting the start tab: a programmatic set_active
      * emits VALUE_CHANGED, so on_tab_change drives the initial build. That
      * keeps exactly one rebuild path (no second, racing rebuild). */
-    struct yetty_ycore_void_result subr = yetty_ygui_object_subscribe(
+    struct yetty_ycore_void_result subr = yetty_ygui_widget_subscribe(
         app->tabbar, YETTY_YGUI_EVENT_VALUE_CHANGED, on_tab_change, app);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, subr, "build_ui: subscribe");
 

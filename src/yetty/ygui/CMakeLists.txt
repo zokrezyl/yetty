@@ -10,13 +10,14 @@
 # mixins/clickable) carries `[[clang::annotate("class@ygui:…")]]` on
 # its data struct and `override@ygui:<class>:<slot>` on each impl.
 # Codegen runs as a standalone `make codegen` target at the repo
-# root, NOT as part of any platform build. It emits the per-class
-# `_class_get` accessor + module-wide public headers
-# (include/yetty/ygui/methods.h, rpc.h) plus internal sources/headers
-# next to the annotated .c files (methods.gen.h, methods.gen.c,
-# rpc.gen.c). The .c files include their per-class `<stem>.gen.c` at
-# the foot to pull in the accessor body. All generated files are
-# committed to git; platform builds compile what is in the tree.
+# root, NOT as part of any platform build. It emits each class's public
+# header include/yetty/ygui/<name>.h (accessor decl + the public stubs
+# and `<slot>_fn` typedefs for the slots that class introduces) plus
+# rpc.h, and the internal sources next to the annotated .c files
+# (methods.gen.c, rpc.gen.c, and per-class <stem>.gen.c). The .c files
+# include their per-class `<stem>.gen.c` at the foot to pull in the
+# accessor body. All generated files are committed to git; platform
+# builds compile what is in the tree.
 set(YGUI_ANNOTATED
     ${CMAKE_CURRENT_SOURCE_DIR}/widget.c
     ${CMAKE_CURRENT_SOURCE_DIR}/primitive-widget.c
@@ -93,12 +94,11 @@ target_include_directories(yetty_ygui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${YETTY_ROOT}/include
 )
-# Codegen-emitted internal headers (methods.gen.h, …) sit next to
-# their consuming .gen.c files under src/yetty/<module>/. The .gen.c
-# include them via `<yetty/<module>/methods.gen.h>`, so the src tree
-# must be a -I prefix for this target. PRIVATE — internal headers
-# must NOT leak to consumers; public callers go through the clean
-# public methods.h / rpc.h under include/yetty/ygui/.
+# Codegen-emitted internal sources (methods.gen.c, rpc.gen.c, per-class
+# <stem>.gen.c) sit under src/yetty/ygui/. The src tree is a PRIVATE -I
+# prefix for this target so those sources resolve their siblings without
+# the path leaking to consumers; public callers go through the per-class
+# headers + rpc.h under include/yetty/ygui/.
 target_include_directories(yetty_ygui PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_ygui PUBLIC

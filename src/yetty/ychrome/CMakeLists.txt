@@ -19,7 +19,7 @@ add_library(yetty_ychrome STATIC
 target_include_directories(yetty_ychrome PUBLIC
     ${YETTY_ROOT}/include
 )
-# Internal codegen headers (methods.gen.h) live under src/yetty/ychrome/.
+# Codegen-emitted internal sources (*.gen.c) live under src/yetty/ychrome/.
 target_include_directories(yetty_ychrome PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_ychrome PUBLIC

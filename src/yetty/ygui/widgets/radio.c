@@ -42,7 +42,7 @@ static struct yetty_ycore_void_result on_click(struct yetty_yclass_ctx *yclass_c
         return dr;
     }
     struct yetty_ygui_event ev = {.type = YETTY_YGUI_EVENT_VALUE_CHANGED, .source = obj, .i0 = 1};
-    return yetty_ygui_object_emit(obj, &ev);
+    return yetty_ygui_widget_emit(obj, &ev);
 }
 
 [[clang::annotate("override@ygui:radio:constructor")]]

@@ -14,7 +14,7 @@ add_library(yetty_yview STATIC
 target_include_directories(yetty_yview PUBLIC
     ${YETTY_ROOT}/include
 )
-# Internal codegen headers (methods.gen.h) live under src/yetty/yview/.
+# Codegen-emitted internal sources (*.gen.c) live under src/yetty/yview/.
 target_include_directories(yetty_yview PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_yview PUBLIC
