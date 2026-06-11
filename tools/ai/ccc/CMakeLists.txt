@@ -13,7 +13,6 @@ add_executable(ccc
     main.c
     render.c
     hud.c
-    commands.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
 )
 
@@ -26,10 +25,7 @@ find_package(Threads REQUIRED)
 
 # yetty_ygui is a pure widget framework (no libuv of its own); ccc drives
 # its own libuv client loop, so uv_a is listed explicitly.
-# yetty_yfont_shader_glyph is the name->codepoint table for the activity
-# status line's animated glyph (PUA-B, rendered by the host text layer).
-target_link_libraries(ccc PRIVATE yetty_ygui yetty_yfont_shader_glyph yyjson::yyjson uv_a
-                                  Threads::Threads)
+target_link_libraries(ccc PRIVATE yetty_ygui yyjson::yyjson uv_a Threads::Threads)
 
 if(NOT MSVC)
     target_compile_options(ccc PRIVATE -Wall -Wextra)
