@@ -17,7 +17,7 @@
 extern "C" {
 #endif
 
-struct yetty_ygui_object;
+struct yetty_yclass_object;
 struct yetty_ygui_event;
 
 enum yetty_ygui_event_type {
@@ -33,7 +33,7 @@ enum yetty_ygui_event_type {
 
 struct yetty_ygui_event {
     enum yetty_ygui_event_type type;
-    struct yetty_ygui_object *source;
+    struct yetty_yclass_object *source;
     /* Per-event-type payload — readers cast based on type. The struct
      * is small (≤32 B) so it travels by value through emit/subscribe. */
     float x, y;
@@ -47,11 +47,11 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_event_cb)(struct yetty_yclas
                                                               const struct yetty_ygui_event *event,
                                                               void *userdata);
 
-struct yetty_ycore_void_result yetty_ygui_object_subscribe(struct yetty_ygui_object *target,
+struct yetty_ycore_void_result yetty_ygui_object_subscribe(struct yetty_yclass_object *target,
                                                            enum yetty_ygui_event_type type,
                                                            yetty_ygui_event_cb cb, void *userdata);
 
-struct yetty_ycore_void_result yetty_ygui_object_emit(struct yetty_ygui_object *source,
+struct yetty_ycore_void_result yetty_ygui_object_emit(struct yetty_yclass_object *source,
                                                       const struct yetty_ygui_event *event);
 
 #ifdef __cplusplus

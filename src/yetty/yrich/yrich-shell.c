@@ -36,7 +36,7 @@
  *---------------------------------------------------------------------------*/
 
 static struct yetty_ygui_object_ptr_result add_child(const struct yetty_yclass *cls,
-                                                     struct yetty_ygui_object *parent,
+                                                     struct yetty_yclass_object *parent,
                                                      const char *css)
 {
     struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls, parent);
@@ -52,7 +52,7 @@ static struct yetty_ygui_object_ptr_result add_child(const struct yetty_yclass *
     return r;
 }
 
-static struct yetty_ygui_object_ptr_result add_button(struct yetty_ygui_object *toolbar,
+static struct yetty_ygui_object_ptr_result add_button(struct yetty_yclass_object *toolbar,
                                                       const char *label, yetty_ygui_event_cb cb,
                                                       void *userdata)
 {
@@ -95,7 +95,7 @@ static struct yetty_ycore_void_result fit_and_status(struct yetty_yrich_editor *
 
 /* Build the shared skeleton: root vbox + toolbar + scrollarea(view) +
  * statusbar. The document is attached by the caller. */
-static struct yetty_ycore_void_result build_skeleton(struct yetty_ygui_object *parent,
+static struct yetty_ycore_void_result build_skeleton(struct yetty_yclass_object *parent,
                                                      struct yetty_yrich_editor *out)
 {
     memset(out, 0, sizeof(*out));
@@ -145,7 +145,7 @@ static struct yetty_ycore_void_result act_undo(struct yetty_yclass_ctx *ctx,
     (void)ctx;
     (void)target;
     (void)event;
-    struct yetty_ygui_object *view = userdata;
+    struct yetty_yclass_object *view = userdata;
     struct yetty_yrich_document *doc = yetty_ygui_yrich_view_document(view);
     if (doc) {
         struct yetty_ycore_void_result r = yetty_yrich_document_undo(doc);
@@ -161,7 +161,7 @@ static struct yetty_ycore_void_result act_redo(struct yetty_yclass_ctx *ctx,
     (void)ctx;
     (void)target;
     (void)event;
-    struct yetty_ygui_object *view = userdata;
+    struct yetty_yclass_object *view = userdata;
     struct yetty_yrich_document *doc = yetty_ygui_yrich_view_document(view);
     if (doc) {
         struct yetty_ycore_void_result r = yetty_yrich_document_redo(doc);
@@ -178,7 +178,7 @@ static struct yetty_ycore_void_result act_add_paragraph(struct yetty_yclass_ctx 
     (void)ctx;
     (void)target;
     (void)event;
-    struct yetty_ygui_object *view = userdata;
+    struct yetty_yclass_object *view = userdata;
     struct yetty_yrich_document *doc = yetty_ygui_yrich_view_document(view);
     if (doc) {
         struct yetty_yrich_ydoc *d = (struct yetty_yrich_ydoc *)doc;
@@ -198,7 +198,7 @@ static struct yetty_ycore_void_result act_slide_prev(struct yetty_yclass_ctx *ct
     (void)ctx;
     (void)target;
     (void)event;
-    struct yetty_ygui_object *view = userdata;
+    struct yetty_yclass_object *view = userdata;
     struct yetty_yrich_document *doc = yetty_ygui_yrich_view_document(view);
     if (doc) {
         yetty_yrich_slides_prev((struct yetty_yrich_slides *)doc);
@@ -214,7 +214,7 @@ static struct yetty_ycore_void_result act_slide_next(struct yetty_yclass_ctx *ct
     (void)ctx;
     (void)target;
     (void)event;
-    struct yetty_ygui_object *view = userdata;
+    struct yetty_yclass_object *view = userdata;
     struct yetty_yrich_document *doc = yetty_ygui_yrich_view_document(view);
     if (doc) {
         yetty_yrich_slides_next((struct yetty_yrich_slides *)doc);
@@ -230,7 +230,7 @@ static struct yetty_ycore_void_result act_slide_add(struct yetty_yclass_ctx *ctx
     (void)ctx;
     (void)target;
     (void)event;
-    struct yetty_ygui_object *view = userdata;
+    struct yetty_yclass_object *view = userdata;
     struct yetty_yrich_document *doc = yetty_ygui_yrich_view_document(view);
     if (doc) {
         yetty_yrich_slides_add_slide((struct yetty_yrich_slides *)doc);
@@ -242,7 +242,7 @@ static struct yetty_ycore_void_result act_slide_add(struct yetty_yclass_ctx *ctx
  * Public builders.
  *---------------------------------------------------------------------------*/
 
-struct yetty_ycore_void_result yetty_yrich_ydoc_editor_create(struct yetty_ygui_object *parent,
+struct yetty_ycore_void_result yetty_yrich_ydoc_editor_create(struct yetty_yclass_object *parent,
                                                               struct yetty_yrich_editor *out)
 {
     if (!out) {
@@ -268,7 +268,7 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_editor_create(struct yetty_ygui_
     return fit_and_status(out, "ydoc");
 }
 
-struct yetty_ycore_void_result yetty_yrich_ysheet_editor_create(struct yetty_ygui_object *parent,
+struct yetty_ycore_void_result yetty_yrich_ysheet_editor_create(struct yetty_yclass_object *parent,
                                                                 struct yetty_yrich_editor *out)
 {
     if (!out) {
@@ -292,7 +292,7 @@ struct yetty_ycore_void_result yetty_yrich_ysheet_editor_create(struct yetty_ygu
     return fit_and_status(out, "ysheet");
 }
 
-struct yetty_ycore_void_result yetty_yrich_yslide_editor_create(struct yetty_ygui_object *parent,
+struct yetty_ycore_void_result yetty_yrich_yslide_editor_create(struct yetty_yclass_object *parent,
                                                                 struct yetty_yrich_editor *out)
 {
     if (!out) {

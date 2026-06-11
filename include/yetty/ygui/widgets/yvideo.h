@@ -14,18 +14,19 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_yvideo_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_yvideo;
-YETTY_YRESULT_DECLARE(yetty_ygui_yvideo_data_ptr, struct yetty_ygui_yvideo *);
-struct yetty_ygui_yvideo_data_ptr_result yetty_ygui_yvideo_data(struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_yvideo_ptr, struct yetty_ygui_yvideo *);
+struct yetty_ygui_yvideo_ptr_result yetty_ygui_yvideo_from(struct yetty_yclass_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_yvideo_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ygui_object;
-
-struct yetty_ycore_void_result yetty_ygui_yvideo_set_bytes(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_yvideo_set_bytes(struct yetty_yclass_object *obj,
                                                            const uint8_t *bytes, size_t len);
 
 #endif

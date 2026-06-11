@@ -14,17 +14,18 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_yrich_view_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_yrich_view;
-YETTY_YRESULT_DECLARE(yetty_ygui_yrich_view_data_ptr, struct yetty_ygui_yrich_view *);
-struct yetty_ygui_yrich_view_data_ptr_result yetty_ygui_yrich_view_data(
-    struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_yrich_view_ptr, struct yetty_ygui_yrich_view *);
+struct yetty_ygui_yrich_view_ptr_result yetty_ygui_yrich_view_from(struct yetty_yclass_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_yrich_view_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ygui_object;
 struct yetty_yrich_document;
 struct yetty_yrich_input_mods;
 
@@ -32,17 +33,17 @@ struct yetty_yrich_input_mods;
  * types, so the generated header must pull these in. */
 #include <yetty/yrich/yrich-document.h>
 #include <yetty/yrich/yrich-types.h>
-struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_yclass_object *obj,
                                                                   struct yetty_yrich_document *doc,
                                                                   int own);
-struct yetty_ycore_void_result yetty_ygui_yrich_view_invalidate(struct yetty_ygui_object *obj);
-struct yetty_yrich_document *yetty_ygui_yrich_view_document(const struct yetty_ygui_object *obj);
+struct yetty_ycore_void_result yetty_ygui_yrich_view_invalidate(struct yetty_yclass_object *obj);
+struct yetty_yrich_document *yetty_ygui_yrich_view_document(const struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_yrich_view_content_size(
-    const struct yetty_ygui_object *obj, float *w, float *h);
-struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_ygui_object *obj,
+    const struct yetty_yclass_object *obj, float *w, float *h);
+struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_yclass_object *obj,
                                                               uint32_t key,
                                                               struct yetty_yrich_input_mods mods);
-struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_yclass_object *obj,
                                                                const char *text, size_t len);
 
 #endif

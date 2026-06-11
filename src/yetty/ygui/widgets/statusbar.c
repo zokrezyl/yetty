@@ -12,10 +12,9 @@
  * statusbar.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_statusbar_data_ptr, struct yetty_ygui_statusbar *);
+YETTY_YRESULT_DECLARE(yetty_ygui_statusbar_ptr, struct yetty_ygui_statusbar *);
 struct yetty_yclass_ptr_result yetty_ygui_statusbar_class_get(void);
-struct yetty_ygui_statusbar_data_ptr_result yetty_ygui_statusbar_data(
-    struct yetty_ygui_object *obj);
+struct yetty_ygui_statusbar_ptr_result yetty_ygui_statusbar_from(struct yetty_yclass_object *obj);
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
@@ -38,7 +37,7 @@ static struct yetty_ycore_void_result statusbar_constructor(struct yetty_yclass_
                                                             struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_statusbar_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -61,7 +60,7 @@ static struct yetty_ycore_void_result statusbar_destructor(struct yetty_yclass_c
                                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_statusbar_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "statusbar_destructor: data_get");
@@ -79,7 +78,7 @@ static struct yetty_ycore_void_result statusbar_paint(struct yetty_yclass_ctx *y
                                                       struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "statusbar_paint: NULL ctx");
     }
@@ -139,7 +138,7 @@ static char *dup_or_null(const char *s)
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_statusbar_set_left(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_statusbar_set_left(struct yetty_yclass_object *obj,
                                                              const char *text)
 {
     if (!obj) {
@@ -158,7 +157,7 @@ struct yetty_ycore_void_result yetty_ygui_statusbar_set_left(struct yetty_ygui_o
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_statusbar_set_right(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_statusbar_set_right(struct yetty_yclass_object *obj,
                                                               const char *text)
 {
     if (!obj) {

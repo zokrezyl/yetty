@@ -166,12 +166,12 @@ struct tab {
 
 struct app {
     struct yetty_ygui_framework *fw;
-    struct yetty_ygui_object *root;
-    struct yetty_ygui_object *tabbar;
-    struct yetty_ygui_object *address; /* textinput */
-    struct yetty_ygui_object *scroll;  /* scrollarea */
-    struct yetty_ygui_object *page;    /* ydraw_embed (HTML/SVG) — shared */
-    struct yetty_ygui_object *image;   /* yimage widget (raster) — shared */
+    struct yetty_yclass_object *root;
+    struct yetty_yclass_object *tabbar;
+    struct yetty_yclass_object *address; /* textinput */
+    struct yetty_yclass_object *scroll;  /* scrollarea */
+    struct yetty_yclass_object *page;    /* ydraw_embed (HTML/SVG) — shared */
+    struct yetty_yclass_object *image;   /* yimage widget (raster) — shared */
     int showing_image;                 /* which content widget is visible */
 
     /* `--no-ui`: hide the tab strip + toolbar so only the page content is
@@ -886,12 +886,12 @@ static struct yetty_ycore_void_result on_reload_click(struct yetty_yclass_ctx *c
     return YETTY_OK_VOID();
 }
 
-static void on_new_tab_cb(struct yetty_ygui_object *tb, void *ud)
+static void on_new_tab_cb(struct yetty_yclass_object *tb, void *ud)
 {
     (void)tb;
     ui_new_tab((struct app *)ud);
 }
-static void on_close_cb(struct yetty_ygui_object *tb, int idx, void *ud)
+static void on_close_cb(struct yetty_yclass_object *tb, int idx, void *ud)
 {
     (void)tb;
     ui_close_tab((struct app *)ud, idx);
@@ -1164,7 +1164,7 @@ static void on_raw(void *user, const char *bytes, size_t n)
 /* ===========================================================================
  * UI construction + render pipeline.
  * ===========================================================================*/
-static struct yetty_ygui_object *add_nav_button(struct yetty_ygui_object *parent, const char *label,
+static struct yetty_yclass_object *add_nav_button(struct yetty_yclass_object *parent, const char *label,
                                                 float w, yetty_ygui_click_cb cb, void *ud)
 {
     struct yetty_ygui_object_ptr_result r =
@@ -1237,7 +1237,7 @@ static int build_ui(struct app *a)
         yetty_ycore_error_destroy(br.error);
         return -1;
     }
-    struct yetty_ygui_object *toolbar = br.value;
+    struct yetty_yclass_object *toolbar = br.value;
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(toolbar);
         l.height = 44.0f;
@@ -1319,7 +1319,7 @@ static int build_ui(struct app *a)
 /* Set the shared content widget's height (drives the scrollarea's scroll
  * range); width stays unset so the vbox stretch keeps it as wide as the
  * scrollarea (and the page follows pane resizes). */
-static void set_content_height(struct app *a, struct yetty_ygui_object *w, int height_px)
+static void set_content_height(struct app *a, struct yetty_yclass_object *w, int height_px)
 {
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
     l.width = -1.0f;

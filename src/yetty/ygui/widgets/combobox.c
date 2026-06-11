@@ -9,9 +9,9 @@
  * combobox.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_combobox_data_ptr, struct yetty_ygui_combobox *);
+YETTY_YRESULT_DECLARE(yetty_ygui_combobox_ptr, struct yetty_ygui_combobox *);
 struct yetty_yclass_ptr_result yetty_ygui_combobox_class_get(void);
-struct yetty_ygui_combobox_data_ptr_result yetty_ygui_combobox_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_combobox_ptr_result yetty_ygui_combobox_from(struct yetty_yclass_object *obj);
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/popup_menu.h>
@@ -25,7 +25,7 @@ struct [[clang::annotate("class@ygui:combobox")]] [[clang::annotate(
     "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]]
 yetty_ygui_combobox {
     char *text;
-    struct yetty_ygui_object *menu;
+    struct yetty_yclass_object *menu;
 };
 
 static struct yetty_ycore_void_result on_pick(struct yetty_yclass_ctx *yclass_ctx,
@@ -33,7 +33,7 @@ static struct yetty_ycore_void_result on_pick(struct yetty_yclass_ctx *yclass_ct
                                               void *ud)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *menu = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *menu = (struct yetty_yclass_object *)yclass_obj;
     (void)menu;
     (void)item;
     (void)ud;
@@ -44,7 +44,7 @@ static struct yetty_ycore_void_result on_click(struct yetty_yclass_ctx *yclass_c
                                                struct yetty_yclass_object *yclass_obj, void *ud)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)ud;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_combobox_class_get().value);
@@ -62,7 +62,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_combobox_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -81,7 +81,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_combobox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
@@ -97,7 +97,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "combo paint: NULL ctx");
     }
@@ -124,7 +124,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_combobox_set_text(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_combobox_set_text(struct yetty_yclass_object *obj,
                                                             const char *t)
 {
     if (!obj) {
@@ -148,7 +148,7 @@ struct yetty_ycore_void_result yetty_ygui_combobox_set_text(struct yetty_ygui_ob
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_combobox_add_suggestion(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_combobox_add_suggestion(struct yetty_yclass_object *obj,
                                                                   const char *t)
 {
     if (!obj || !t) {
@@ -165,8 +165,8 @@ struct yetty_ycore_void_result yetty_ygui_combobox_add_suggestion(struct yetty_y
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_combobox_set_menu(struct yetty_ygui_object *obj,
-                                                            struct yetty_ygui_object *menu)
+struct yetty_ycore_void_result yetty_ygui_combobox_set_menu(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *menu)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "combo_set_menu: NULL");
@@ -181,13 +181,13 @@ struct yetty_ycore_void_result yetty_ygui_combobox_set_menu(struct yetty_ygui_ob
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_const_char_ptr_result yetty_ygui_combobox_get_text(
-    const struct yetty_ygui_object *obj)
+    const struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_OK(yetty_ycore_const_char_ptr, "");
     }
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
-        (struct yetty_ygui_object *)obj, yetty_ygui_combobox_class_get().value);
+        (struct yetty_yclass_object *)obj, yetty_ygui_combobox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr, "yetty_ygui_combobox_get_text: data_get");
     struct yetty_ygui_combobox *d = d_dr.value;
     return YETTY_OK(yetty_ycore_const_char_ptr, d->text ? d->text : "");

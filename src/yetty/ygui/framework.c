@@ -321,13 +321,13 @@ int yetty_ygui_framework_has_pressed_widget(const struct yetty_ygui_framework *f
     return framework && framework->pressed_obj ? 1 : 0;
 }
 
-struct yetty_ygui_object *yetty_ygui_framework_pressed_widget(
+struct yetty_yclass_object *yetty_ygui_framework_pressed_widget(
     struct yetty_ygui_framework *framework)
 {
     return framework ? framework->pressed_obj : NULL;
 }
 
-struct yetty_ygui_object *yetty_ygui_framework_hovered_widget(
+struct yetty_yclass_object *yetty_ygui_framework_hovered_widget(
     struct yetty_ygui_framework *framework)
 {
     return framework ? framework->hovered_obj : NULL;
@@ -513,7 +513,7 @@ static int rect_contains(struct yetty_ycore_rectangle r, float x, float y)
 /* Returns the deepest descendant of `node` whose rect contains (x, y),
  * or NULL if no descendant matches. Children later in sibling order
  * win over earlier ones (paint order — last-drawn is on top). */
-static struct yetty_ygui_object *hit_test(struct yetty_ygui_object *node, float x, float y)
+static struct yetty_yclass_object *hit_test(struct yetty_yclass_object *node, float x, float y)
 {
     if (!node) {
         return NULL;
@@ -531,9 +531,10 @@ static struct yetty_ygui_object *hit_test(struct yetty_ygui_object *node, float 
     if (!rect_contains(r, x, y)) {
         return NULL;
     }
-    struct yetty_ygui_object *deepest = node;
-    for (struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
-        struct yetty_ygui_object *child_hit = hit_test(c, x, y);
+    struct yetty_yclass_object *deepest = node;
+    for (struct yetty_yclass_object *c = ygui_tree(node)->first_child; c;
+         c = ygui_tree(c)->next_sibling) {
+        struct yetty_yclass_object *child_hit = hit_test(c, x, y);
         if (child_hit) {
             deepest = child_hit;
         }
@@ -551,7 +552,7 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_button(
     if (!framework->root) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    struct yetty_ygui_object *target;
+    struct yetty_yclass_object *target;
     if (pressed) {
         target = hit_test(framework->root, x, y);
         /* Click-to-front: a press anywhere inside a floating overlay
@@ -560,10 +561,10 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_button(
          * shared chrome ygrid AND wins the next overlap hit-test. Walk up
          * to the nearest floating ancestor — independent of which inner
          * widget ends up handling the press. */
-        for (struct yetty_ygui_object *a = target; a; a = a->parent) {
-            if (a->floating) {
+        for (struct yetty_yclass_object *a = target; a; a = ygui_tree(a)->parent) {
+            if (ygui_tree(a)->floating) {
                 yetty_ygui_object_raise(a);
-                a->dirty = 1;
+                ygui_tree(a)->dirty = 1;
                 framework->dirty = 1;
                 break;
             }
@@ -591,7 +592,7 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_button(
             framework->dirty = 1;
             return YETTY_OK(yetty_ycore_int, 1); /* an interactive widget consumed it */
         }
-        target = target->parent;
+        target = ygui_tree(target)->parent;
     }
     return YETTY_OK(yetty_ycore_int, 0); /* fell through — chrome should handle it */
 }
@@ -610,7 +611,7 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_motion(
      * track past the widget's own rect. A drag is in progress, so the client
      * owns the pointer: report consumed regardless of which widget handled it. */
     if (framework->pressed_obj) {
-        struct yetty_ygui_object *cap = framework->pressed_obj;
+        struct yetty_yclass_object *cap = framework->pressed_obj;
         while (cap) {
             struct yetty_ycore_int_result r =
                 yetty_ygui_widget_on_motion(NULL, (struct yetty_yclass_object *)cap, x, y);
@@ -621,22 +622,22 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_motion(
             if (r.value) {
                 return YETTY_OK(yetty_ycore_int, 1);
             }
-            cap = cap->parent;
+            cap = ygui_tree(cap)->parent;
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
-    struct yetty_ygui_object *target = hit_test(framework->root, x, y);
+    struct yetty_yclass_object *target = hit_test(framework->root, x, y);
     /* Hover bookkeeping — flip enter/leave when the deepest-hit widget
      * changes from the previous motion event. Mark both old and new
      * dirty so the next emit repaints them with the correct variant. */
     if (target != framework->hovered_obj) {
         if (framework->hovered_obj) {
-            framework->hovered_obj->hovered = 0;
-            framework->hovered_obj->dirty = 1;
+            ygui_tree(framework->hovered_obj)->hovered = 0;
+            ygui_tree(framework->hovered_obj)->dirty = 1;
         }
         if (target) {
-            target->hovered = 1;
-            target->dirty = 1;
+            ygui_tree(target)->hovered = 1;
+            ygui_tree(target)->dirty = 1;
         }
         framework->hovered_obj = target;
         framework->dirty = 1;
@@ -651,7 +652,7 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_motion(
         if (r.value) {
             return YETTY_OK(yetty_ycore_int, 1);
         }
-        target = target->parent;
+        target = ygui_tree(target)->parent;
     }
     return YETTY_OK(yetty_ycore_int, 0);
 }
@@ -668,7 +669,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_scroll(
     }
     /* Deliver to the widget under the pointer, bubbling up until one
      * consumes it (a scrollarea / filepicker). Mirrors the press path. */
-    struct yetty_ygui_object *target = hit_test(framework->root, x, y);
+    struct yetty_yclass_object *target = hit_test(framework->root, x, y);
     while (target) {
         struct yetty_ycore_int_result r =
             yetty_ygui_widget_on_scroll(NULL, (struct yetty_yclass_object *)target, x, y, dx, dy);
@@ -680,32 +681,32 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_scroll(
             framework->dirty = 1;
             return YETTY_OK_VOID();
         }
-        target = target->parent;
+        target = ygui_tree(target)->parent;
     }
     return YETTY_OK_VOID();
 }
 
-struct yetty_ygui_object *yetty_ygui_framework_root(struct yetty_ygui_framework *framework)
+struct yetty_yclass_object *yetty_ygui_framework_root(struct yetty_ygui_framework *framework)
 {
     return framework ? framework->root : NULL;
 }
 
 struct yetty_ycore_void_result yetty_ygui_framework_set_root(struct yetty_ygui_framework *framework,
-                                                             struct yetty_ygui_object *root)
+                                                             struct yetty_yclass_object *root)
 {
     if (!framework || !root) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_set_root: NULL arg");
     }
     framework->root = root;
-    root->framework = framework;
+    ygui_tree(root)->framework = framework;
     /* Allocate the root's wire id retroactively. */
-    if (root->id == 0) {
+    if (ygui_tree(root)->id == 0) {
         struct uint32_result idr = yetty_ygui_framework_alloc_id(framework);
         if (YETTY_IS_ERR(idr)) {
             return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_set_root: alloc_id failed",
                              idr);
         }
-        root->id = idr.value;
+        ygui_tree(root)->id = idr.value;
     }
     return YETTY_OK_VOID();
 }
@@ -1048,7 +1049,7 @@ fail:
  * children that the layout pass legitimately gave a 0-px main-axis
  * size (e.g. labels without explicit height) still emit — they paint
  * their content from `rect.min` outward and a 0-height row is intended. */
-static int should_skip_subtree(const struct yetty_ygui_object *node)
+static int should_skip_subtree(const struct yetty_yclass_object *node)
 {
     const struct yetty_ygui_layout *l = yetty_ygui_widget_layout_get(node);
     if (!l) {
@@ -1073,12 +1074,13 @@ static int should_skip_subtree(const struct yetty_ygui_object *node)
  * walk_emit_body pass, so its dirtiness must not force the parent figure's
  * body to be re-shipped. This gates the incremental figure-body skip — a
  * figure whose body is unchanged keeps its last body on the receiver. */
-static int subtree_dirty(const struct yetty_ygui_object *node)
+static int subtree_dirty(const struct yetty_yclass_object *node)
 {
-    if (node->dirty) {
+    if (ygui_tree(node)->dirty) {
         return 1;
     }
-    for (const struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
+    for (const struct yetty_yclass_object *c = ygui_tree(node)->first_child; c;
+         c = ygui_tree(c)->next_sibling) {
         if (yetty_ygui_widget_figure_kind(c) != 0) {
             continue; /* shipped as its own figure body */
         }
@@ -1091,13 +1093,14 @@ static int subtree_dirty(const struct yetty_ygui_object *node)
 
 /* Clear every widget's dirty flag after a successful emit, so the next emit
  * only re-ships subtrees that actually changed since this one. */
-static void clear_subtree_dirty(struct yetty_ygui_object *node)
+static void clear_subtree_dirty(struct yetty_yclass_object *node)
 {
     if (!node) {
         return;
     }
-    node->dirty = 0;
-    for (struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
+    ygui_tree(node)->dirty = 0;
+    for (struct yetty_yclass_object *c = ygui_tree(node)->first_child; c;
+         c = ygui_tree(c)->next_sibling) {
         clear_subtree_dirty(c);
     }
 }
@@ -1106,7 +1109,7 @@ static void clear_subtree_dirty(struct yetty_ygui_object *node)
  * are independent receiver-side objects, so they must be explicitly told
  * to hide or they persist on screen (e.g. a scrollarea figure inside a
  * folded-away tab). Walk the subtree and hide every minted figure. */
-static struct yetty_ycore_void_result hide_subtree_figures(struct yetty_ygui_object *node,
+static struct yetty_ycore_void_result hide_subtree_figures(struct yetty_yclass_object *node,
                                                            struct yetty_ygui_emit_ctx *ctx)
 {
     if (!node) {
@@ -1118,7 +1121,8 @@ static struct yetty_ycore_void_result hide_subtree_figures(struct yetty_ygui_obj
             yetty_ygui_emit_set_child_hidden(ctx, yetty_ygui_object_id(node), 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "hide_subtree_figures: hide");
     }
-    for (struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
+    for (struct yetty_yclass_object *c = ygui_tree(node)->first_child; c;
+         c = ygui_tree(c)->next_sibling) {
         struct yetty_ycore_void_result rc = hide_subtree_figures(c, ctx);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rc, "hide_subtree_figures: child");
     }
@@ -1144,7 +1148,7 @@ static struct yetty_ycore_rectangle emit_rect_intersect(struct yetty_ycore_recta
 }
 
 struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
-    struct yetty_ygui_object *node, struct yetty_ygui_emit_ctx *ctx)
+    struct yetty_yclass_object *node, struct yetty_ygui_emit_ctx *ctx)
 {
     if (!node) {
         return YETTY_OK_VOID();
@@ -1207,7 +1211,8 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
         yetty_ygui_widget_emit_container(NULL, (struct yetty_yclass_object *)node, ctx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
                         "yetty_ygui_framework_walk_emit_container: emit_container");
-    for (struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
+    for (struct yetty_yclass_object *c = ygui_tree(node)->first_child; c;
+         c = ygui_tree(c)->next_sibling) {
         struct yetty_ycore_void_result rc = yetty_ygui_framework_walk_emit_container(c, ctx);
         if (YETTY_IS_ERR(rc)) {
             ctx->fig_clip = saved_clip;
@@ -1225,13 +1230,14 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
 /* Emit `node` and its subtree's prims into the currently-active draw
  * list (ctx->ygrid_drawable_list). Shared by the normal path and the
  * figure-boundary path below. */
-static struct yetty_ycore_void_result walk_emit_body_inline(struct yetty_ygui_object *node,
+static struct yetty_ycore_void_result walk_emit_body_inline(struct yetty_yclass_object *node,
                                                             struct yetty_ygui_emit_ctx *ctx)
 {
     struct yetty_ycore_void_result r =
         yetty_ygui_widget_emit_body(NULL, (struct yetty_yclass_object *)node, ctx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_walk_emit_body: emit_body");
-    for (struct yetty_ygui_object *c = node->first_child; c; c = c->next_sibling) {
+    for (struct yetty_yclass_object *c = ygui_tree(node)->first_child; c;
+         c = ygui_tree(c)->next_sibling) {
         struct yetty_ycore_void_result rc = yetty_ygui_framework_walk_emit_body(c, ctx);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rc,
                             "yetty_ygui_framework_walk_emit_body: child walk");
@@ -1239,7 +1245,7 @@ static struct yetty_ycore_void_result walk_emit_body_inline(struct yetty_ygui_ob
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_ygui_object *node,
+struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_yclass_object *node,
                                                                    struct yetty_ygui_emit_ctx *ctx)
 {
     if (!node) {
@@ -1259,8 +1265,9 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
      * for this figure id; a pure rect move is handled separately by the
      * pass-1 SET_CHILD_RECT. This is what stops an unchanged page (a
      * scrollarea figure) from being re-serialized every emit. */
-    if (ctx->framework && figure_is_minted(ctx->framework, node->id) && !subtree_dirty(node)) {
-        ydebug("figure SKIP (clean, minted) id=%u", node->id);
+    if (ctx->framework && figure_is_minted(ctx->framework, ygui_tree(node)->id) &&
+        !subtree_dirty(node)) {
+        ydebug("figure SKIP (clean, minted) id=%u", ygui_tree(node)->id);
         return YETTY_OK_VOID();
     }
 
@@ -1283,7 +1290,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
     struct yetty_ydraw_drawable_list *saved_dl = ctx->ygrid_drawable_list;
     uint32_t saved_fid = ctx->current_figure_id;
     ctx->ygrid_drawable_list = figure_dl;
-    ctx->current_figure_id = node->id;
+    ctx->current_figure_id = ygui_tree(node)->id;
 
     struct yetty_ycore_void_result br = walk_emit_body_inline(node, ctx);
 
@@ -1300,7 +1307,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
     if (body_size > 0) {
         const void *body_data = yetty_ydraw_drawable_list_data(figure_dl);
         struct yetty_ycore_void_result fr = yetty_ygui_emit_figure_body(
-            ctx, node->id, (const uint8_t *)body_data, (uint32_t)body_size);
+            ctx, ygui_tree(node)->id, (const uint8_t *)body_data, (uint32_t)body_size);
         if (YETTY_IS_ERR(fr)) {
             yetty_ydraw_drawable_list_destroy(figure_dl);
             return YETTY_ERR(yetty_ycore_void,

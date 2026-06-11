@@ -23,7 +23,7 @@ struct demo_runner;
 /* Build the demo's widget tree under `root`. The root is a vbox by
  * default; the demo can change its layout via yetty_ygui_widget_layout_set. */
 typedef struct yetty_ycore_void_result (*demo_build_fn)(struct demo_runner *runner,
-                                                        struct yetty_ygui_object *root);
+                                                        struct yetty_yclass_object *root);
 
 /* Run a demo. Returns 0 on clean shutdown, non-zero on error. */
 int demo_runner_run(int argc, char **argv, const char *name, demo_build_fn build);
@@ -37,7 +37,7 @@ int demo_runner_run_chrome(int argc, char **argv, const char *name, demo_build_f
 
 /* Accessors for demos that need them. */
 struct yetty_ygui_framework *demo_runner_engine(struct demo_runner *runner);
-struct yetty_ygui_object *demo_runner_root(struct demo_runner *runner);
+struct yetty_yclass_object *demo_runner_root(struct demo_runner *runner);
 
 #ifdef __cplusplus
 }

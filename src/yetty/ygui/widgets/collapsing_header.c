@@ -22,10 +22,10 @@
  * collapsing_header.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_collapsing_header_data_ptr, struct yetty_ygui_collapsing_header *);
+YETTY_YRESULT_DECLARE(yetty_ygui_collapsing_header_ptr, struct yetty_ygui_collapsing_header *);
 struct yetty_yclass_ptr_result yetty_ygui_collapsing_header_class_get(void);
-struct yetty_ygui_collapsing_header_data_ptr_result yetty_ygui_collapsing_header_data(
-    struct yetty_ygui_object *obj);
+struct yetty_ygui_collapsing_header_ptr_result yetty_ygui_collapsing_header_from(
+    struct yetty_yclass_object *obj);
 #include <yetty/ygui/widgets/vbox.h>
 #include <stdlib.h>
 
@@ -109,10 +109,10 @@ static struct yetty_ycore_void_result ch_chevron(struct yetty_ygui_emit_ctx *ctx
 }
 
 /* Fold the children's subtrees in/out of layout + emit. */
-static struct yetty_ycore_void_result ch_set_children_hidden(struct yetty_ygui_object *obj,
+static struct yetty_ycore_void_result ch_set_children_hidden(struct yetty_yclass_object *obj,
                                                              int hidden)
 {
-    for (struct yetty_ygui_object *c = yetty_ygui_object_first_child(obj); c;
+    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(obj); c;
          c = yetty_ygui_object_next_sibling(c)) {
         struct yetty_ygui_layout cl = *yetty_ygui_widget_layout_get(c);
         if (cl.hidden == hidden) {
@@ -126,7 +126,7 @@ static struct yetty_ycore_void_result ch_set_children_hidden(struct yetty_ygui_o
 }
 
 /* Reconcile own height + children visibility with d->open. */
-static struct yetty_ycore_void_result ch_apply_open(struct yetty_ygui_object *obj,
+static struct yetty_ycore_void_result ch_apply_open(struct yetty_yclass_object *obj,
                                                     struct yetty_ygui_collapsing_header *d)
 {
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
@@ -150,7 +150,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, ch_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "collapsing_header: super");
@@ -174,7 +174,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, ch_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
     struct yetty_ygui_collapsing_header *d = d_dr.value;
@@ -190,7 +190,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     (void)yclass_ctx;
     (void)x;
     (void)btn;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, ch_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_press: data_get");
     struct yetty_ygui_collapsing_header *d = d_dr.value;
@@ -213,7 +213,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "collapsing_header paint: NULL ctx");
     }
@@ -263,8 +263,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_title(struct yetty_ygui_object *obj,
-                                                                      const char *title)
+struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_title(
+    struct yetty_yclass_object *obj, const char *title)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "ch_set_title: NULL");
@@ -286,8 +286,8 @@ struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_title(struct yet
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_open(struct yetty_ygui_object *obj,
-                                                                     int open)
+struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_open(
+    struct yetty_yclass_object *obj, int open)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "ch_set_open: NULL");
@@ -300,13 +300,13 @@ struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_open(struct yett
 }
 
 [[clang::annotate("expose")]]
-int yetty_ygui_collapsing_header_is_open(const struct yetty_ygui_object *obj)
+int yetty_ygui_collapsing_header_is_open(const struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return 0;
     }
     return ((struct yetty_ygui_collapsing_header *)yetty_ygui_data_get(
-                (struct yetty_ygui_object *)obj, ch_class()))
+                (struct yetty_yclass_object *)obj, ch_class()))
         ->open;
 }
 

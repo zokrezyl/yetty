@@ -21,7 +21,7 @@ static inline void err_ok(struct yetty_ycore_void_result r)
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
     {
@@ -29,7 +29,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
             yetty_ygui_add(yetty_ygui_label_class_get().value, root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "header");
         err_ok(yetty_ygui_label_set_text(r.value, "Dashboard"));
-        struct yetty_ygui_object *w = r.value;
+        struct yetty_yclass_object *w = r.value;
         {
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
             l.height = 32;
@@ -49,7 +49,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
             yetty_ygui_add(yetty_ygui_statusbar_class_get().value, root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "status");
         err_ok(yetty_ygui_statusbar_set_left(r.value, "Ready"));
-        struct yetty_ygui_object *w = r.value;
+        struct yetty_yclass_object *w = r.value;
         {
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
             l.height = 24;

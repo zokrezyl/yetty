@@ -36,7 +36,7 @@ extern "C" {
 struct yetty_yui;
 struct yetty_context;
 struct yetty_ydraw_target;
-struct yetty_ygui_object;
+struct yetty_yclass_object;
 struct yetty_ygui_framework;
 struct yetty_yui_tabbar_model;
 
@@ -158,7 +158,7 @@ struct yetty_ycore_void_result yetty_yui_show_context_menu(struct yetty_yui *yui
  * that need richer widgets in the bar add children directly to the
  * widget returned by yetty_yui_statusbar(). NULL when ygui engine
  * allocation failed. */
-struct yetty_ygui_object *yetty_yui_statusbar(struct yetty_yui *yui);
+struct yetty_yclass_object *yetty_yui_statusbar(struct yetty_yui *yui);
 
 /* Direct access to yui's ygui engine — for consumers that want to add
  * free-floating widgets (yplot, custom layouts) outside the tabbar /

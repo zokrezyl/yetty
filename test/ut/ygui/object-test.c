@@ -44,7 +44,7 @@ static struct yetty_ycore_int_result probe_a_on_press(struct yetty_yclass_ctx *_
                                                       float y, int button)
 {
     (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;
     (void)x;
     (void)y;
     (void)button;
@@ -93,7 +93,7 @@ static struct yetty_ycore_void_result probe_b_constructor(struct yetty_yclass_ct
                                                           struct yetty_yclass_object *_yc_obj)
 {
     (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, probe_b_class_get(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
     if (YETTY_IS_ERR(sr)) {
@@ -109,7 +109,7 @@ static struct yetty_ycore_int_result probe_b_on_motion(struct yetty_yclass_ctx *
                                                        float y)
 {
     (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;
     (void)x;
     (void)y;
     struct probe_b_data *d = yetty_ygui_data_get(obj, probe_b_class_get());
@@ -164,7 +164,7 @@ static void test_instance_alloc_and_dispatch(void)
 {
     struct yetty_ygui_object_ptr_result r = yetty_ygui_add(probe_a_class_get(), NULL);
     assert(YETTY_IS_OK(r));
-    struct yetty_ygui_object *obj = r.value;
+    struct yetty_yclass_object *obj = r.value;
 
     /* Base widget class data slice should be present and zero-initialised. */
     struct yetty_ycore_rectangle rect = yetty_ygui_widget_rect(obj);
@@ -193,7 +193,7 @@ static void test_subclass_dispatch_and_super(void)
 {
     struct yetty_ygui_object_ptr_result r = yetty_ygui_add(probe_b_class_get(), NULL);
     assert(YETTY_IS_OK(r));
-    struct yetty_ygui_object *obj = r.value;
+    struct yetty_yclass_object *obj = r.value;
 
     /* Constructor chained: probe_b's ctor sets marker, base widget's
      * ctor initialised the layout struct. */
@@ -228,7 +228,7 @@ static void test_tooltip_pilot(void)
 
     struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls, NULL);
     assert(YETTY_IS_OK(r));
-    struct yetty_ygui_object *obj = r.value;
+    struct yetty_yclass_object *obj = r.value;
 
     /* Default label is NULL. */
     struct yetty_ycore_const_char_ptr_result text_default = yetty_ygui_tooltip_get_text(obj);

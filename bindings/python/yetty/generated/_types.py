@@ -37,6 +37,12 @@ class ynode_drag_mode(IntEnum):
     YNODE_DRAG_LINK = 2
     YNODE_DRAG_RESIZE = 3
 
+class ymusic_clef(IntEnum):
+    YMUSIC_CLEF_TREBLE = 0
+    YMUSIC_CLEF_BASS = 1
+    YMUSIC_CLEF_ALTO = 2
+    YMUSIC_CLEF_TENOR = 3
+
 class timespec(Structure):
     pass
 timespec._fields_ = [("tv_sec", c_void_p), ("tv_nsec", c_void_p)]
@@ -149,9 +155,25 @@ class yetty_ycore_void_result(Structure):
 yetty_ycore_void_result._anonymous_ = ('_anon1',)
 yetty_ycore_void_result._fields_ = [("ok", c_int), ("_anon1", yetty_ycore_void_result_u1)]
 
+class yetty_ydraw_drawable_list_result_u1(Union):
+    pass
+yetty_ydraw_drawable_list_result_u1._fields_ = [("value", c_void_p), ("error", yetty_ycore_error)]
+class yetty_ydraw_drawable_list_result(Structure):
+    pass
+yetty_ydraw_drawable_list_result._anonymous_ = ('_anon1',)
+yetty_ydraw_drawable_list_result._fields_ = [("ok", c_int), ("_anon1", yetty_ydraw_drawable_list_result_u1)]
+
 class yetty_yevent_event_listener(Structure):
     pass
 yetty_yevent_event_listener._fields_ = [("handler", c_void_p)]
+
+class yetty_yfigure_figure_ptr_result_u1(Union):
+    pass
+yetty_yfigure_figure_ptr_result_u1._fields_ = [("value", c_void_p), ("error", yetty_ycore_error)]
+class yetty_yfigure_figure_ptr_result(Structure):
+    pass
+yetty_yfigure_figure_ptr_result._anonymous_ = ('_anon1',)
+yetty_yfigure_figure_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_yfigure_figure_ptr_result_u1)]
 
 class yetty_yfigure_hit(Structure):
     pass
@@ -169,9 +191,21 @@ class yetty_ygui_object_ptr_result(Structure):
 yetty_ygui_object_ptr_result._anonymous_ = ('_anon1',)
 yetty_ygui_object_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_ygui_object_ptr_result_u1)]
 
+class yetty_ygui_tree(Structure):
+    pass
+yetty_ygui_tree._fields_ = [("parent", c_void_p), ("first_child", c_void_p), ("next_sibling", c_void_p), ("id", c_uint32), ("figure_kind", c_uint32), ("figure_z", c_int32), ("floating", c_int), ("dirty", c_int), ("hovered", c_int), ("framework", c_void_p), ("subscriptions", c_void_p)]
+
 class yetty_ygui_yplot_config(Structure):
     pass
 yetty_ygui_yplot_config._fields_ = [("x_min", c_float), ("x_max", c_float), ("y_min", c_float), ("y_max", c_float), ("flags", c_uint32)]
+
+class yetty_ymgui_figure_ptr_result_u1(Union):
+    pass
+yetty_ymgui_figure_ptr_result_u1._fields_ = [("value", c_void_p), ("error", yetty_ycore_error)]
+class yetty_ymgui_figure_ptr_result(Structure):
+    pass
+yetty_ymgui_figure_ptr_result._anonymous_ = ('_anon1',)
+yetty_ymgui_figure_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_ymgui_figure_ptr_result_u1)]
 
 class yetty_yrender_buffer(Structure):
     pass
@@ -200,4 +234,8 @@ yetty_yrender_gpu_resource_set._fields_ = [("namespace", (c_char * 64)), ("pixel
 class yetty_yrich_input_mods(Structure):
     pass
 yetty_yrich_input_mods._fields_ = [("shift", c_bool), ("ctrl", c_bool), ("alt", c_bool), ("meta", c_bool)]
+
+class ymusic_staff(Structure):
+    pass
+ymusic_staff._fields_ = [("clef", c_int), ("key_fifths", c_int), ("time_num", c_int), ("time_den", c_int), ("measures", c_void_p), ("count", c_size_t), ("cap", c_size_t)]
 

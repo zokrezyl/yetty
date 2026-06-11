@@ -14,24 +14,25 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_combobox_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_combobox;
-YETTY_YRESULT_DECLARE(yetty_ygui_combobox_data_ptr, struct yetty_ygui_combobox *);
-struct yetty_ygui_combobox_data_ptr_result yetty_ygui_combobox_data(struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_combobox_ptr, struct yetty_ygui_combobox *);
+struct yetty_ygui_combobox_ptr_result yetty_ygui_combobox_from(struct yetty_yclass_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_combobox_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ygui_object;
-
-struct yetty_ycore_void_result yetty_ygui_combobox_set_text(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_combobox_set_text(struct yetty_yclass_object *obj,
                                                             const char *t);
-struct yetty_ycore_void_result yetty_ygui_combobox_add_suggestion(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_combobox_add_suggestion(struct yetty_yclass_object *obj,
                                                                   const char *t);
-struct yetty_ycore_void_result yetty_ygui_combobox_set_menu(struct yetty_ygui_object *obj,
-                                                            struct yetty_ygui_object *menu);
+struct yetty_ycore_void_result yetty_ygui_combobox_set_menu(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *menu);
 struct yetty_ycore_const_char_ptr_result yetty_ygui_combobox_get_text(
-    const struct yetty_ygui_object *obj);
+    const struct yetty_yclass_object *obj);
 
 #endif

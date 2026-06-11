@@ -21,7 +21,7 @@ static inline void err_ok(struct yetty_ycore_void_result r)
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
     struct yetty_ygui_object_ptr_result r;
@@ -30,7 +30,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "label");
     err_ok(yetty_ygui_label_set_text(r.value, "Label"));
     {
-        struct yetty_ygui_object *w = r.value;
+        struct yetty_yclass_object *w = r.value;
         {
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
             l.height = 24;
@@ -42,7 +42,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "button");
     err_ok(yetty_ygui_button_set_label(r.value, "Button"));
     {
-        struct yetty_ygui_object *w = r.value;
+        struct yetty_yclass_object *w = r.value;
         {
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
             l.height = 32;
@@ -54,7 +54,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "checkbox");
     err_ok(yetty_ygui_checkbox_set_label(r.value, "Checkbox"));
     {
-        struct yetty_ygui_object *w = r.value;
+        struct yetty_yclass_object *w = r.value;
         {
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
             l.height = 24;
@@ -66,7 +66,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "slider");
     err_ok(yetty_ygui_slider_set_value(r.value, 0.5f));
     {
-        struct yetty_ygui_object *w = r.value;
+        struct yetty_yclass_object *w = r.value;
         {
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
             l.height = 24;
@@ -78,7 +78,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "progress");
     err_ok(yetty_ygui_progress_set_value(r.value, 0.6f));
     {
-        struct yetty_ygui_object *w = r.value;
+        struct yetty_yclass_object *w = r.value;
         {
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
             l.height = 14;

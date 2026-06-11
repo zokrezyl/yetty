@@ -16,9 +16,9 @@
  * window.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_window_data_ptr, struct yetty_ygui_window *);
+YETTY_YRESULT_DECLARE(yetty_ygui_window_ptr, struct yetty_ygui_window *);
 struct yetty_yclass_ptr_result yetty_ygui_window_class_get(void);
-struct yetty_ygui_window_data_ptr_result yetty_ygui_window_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_window_ptr_result yetty_ygui_window_from(struct yetty_yclass_object *obj);
 #include <yetty/ygui/event.h>
 #include <yetty/ygui/framework.h>
 #include <yetty/ygui/object.h>
@@ -43,8 +43,8 @@ struct yetty_ygui_window_data_ptr_result yetty_ygui_window_data(struct yetty_ygu
 struct [[clang::annotate("class@ygui:window")]] [[clang::annotate("parent@ygui:vbox")]]
 yetty_ygui_window {
     char *title;
-    struct yetty_ygui_object *body; /* auto-allocated child, owned by tree */
-    struct yetty_ygui_object *menu; /* borrowed, opened by the hamburger */
+    struct yetty_yclass_object *body; /* auto-allocated child, owned by tree */
+    struct yetty_yclass_object *menu; /* borrowed, opened by the hamburger */
     /* When set, the title bar paints an "x" at the far right (ImGui's
      * Begin(&p_open) model). A click on it emits YETTY_YGUI_EVENT_CLOSE
      * on the window; the app reacts via yetty_ygui_object_subscribe.
@@ -119,7 +119,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, window_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "window: super");
@@ -154,7 +154,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, window_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
     struct yetty_ygui_window *d = d_dr.value;
@@ -169,7 +169,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "window paint: NULL ctx");
     }
@@ -227,7 +227,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
 {
     (void)yclass_ctx;
     (void)btn;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, window_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_press: data_get");
     struct yetty_ygui_window *d = d_dr.value;
@@ -278,7 +278,7 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
                                                float y)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, window_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_motion: data_get");
     struct yetty_ygui_window *d = d_dr.value;
@@ -313,7 +313,7 @@ static struct yetty_ycore_int_result on_release(struct yetty_yclass_ctx *yclass_
     (void)x;
     (void)y;
     (void)btn;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, window_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_release: data_get");
     struct yetty_ygui_window *d = d_dr.value;
@@ -322,7 +322,7 @@ static struct yetty_ycore_int_result on_release(struct yetty_yclass_ctx *yclass_
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ygui_object *yetty_ygui_window_body(struct yetty_ygui_object *obj)
+struct yetty_yclass_object *yetty_ygui_window_body(struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return NULL;
@@ -331,7 +331,7 @@ struct yetty_ygui_object *yetty_ygui_window_body(struct yetty_ygui_object *obj)
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_yclass_object *obj,
                                                            const char *title)
 {
     if (!obj) {
@@ -354,8 +354,8 @@ struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_ygui_obj
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_ygui_object *obj,
-                                                          struct yetty_ygui_object *menu)
+struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_yclass_object *obj,
+                                                          struct yetty_yclass_object *menu)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "window_set_menu: NULL");
@@ -368,7 +368,7 @@ struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_ygui_obje
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_yclass_object *obj,
                                                               int closable)
 {
     if (!obj) {

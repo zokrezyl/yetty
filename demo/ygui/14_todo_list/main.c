@@ -21,7 +21,7 @@ static inline void err_ok(struct yetty_ycore_void_result r)
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
     const char *items[] = {"Buy milk", "Walk dog", "Write demo", "Ship code"};
@@ -30,7 +30,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
             yetty_ygui_add(yetty_ygui_checkbox_class_get().value, root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "todo");
         err_ok(yetty_ygui_checkbox_set_label(r.value, items[i]));
-        struct yetty_ygui_object *w = r.value;
+        struct yetty_yclass_object *w = r.value;
         {
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
             l.height = 28;

@@ -21,7 +21,7 @@ static inline void err_ok(struct yetty_ycore_void_result r)
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
     const char *labels[] = {"Auto save", "Show grid", "Wrap lines"};
@@ -33,7 +33,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         if (i == 1) {
             err_ok(yetty_ygui_checkbox_set_checked(r.value, 1));
         }
-        struct yetty_ygui_object *w = r.value;
+        struct yetty_yclass_object *w = r.value;
         {
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
             l.height = 28;

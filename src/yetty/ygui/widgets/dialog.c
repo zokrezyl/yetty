@@ -17,9 +17,9 @@
  * dialog.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_dialog_data_ptr, struct yetty_ygui_dialog *);
+YETTY_YRESULT_DECLARE(yetty_ygui_dialog_ptr, struct yetty_ygui_dialog *);
 struct yetty_yclass_ptr_result yetty_ygui_dialog_class_get(void);
-struct yetty_ygui_dialog_data_ptr_result yetty_ygui_dialog_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_dialog_ptr_result yetty_ygui_dialog_from(struct yetty_yclass_object *obj);
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/widgets/vbox.h>
@@ -46,7 +46,7 @@ static struct yetty_ycore_void_result dialog_constructor(struct yetty_yclass_ctx
                                                          struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_dialog_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "dialog_constructor: super");
@@ -74,7 +74,7 @@ static struct yetty_ycore_void_result dialog_destructor(struct yetty_yclass_ctx 
                                                         struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_dialog_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dialog_destructor: data_get");
@@ -127,7 +127,7 @@ static struct yetty_ycore_void_result dialog_paint(struct yetty_yclass_ctx *ycla
                                                    struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_dialog_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dialog_paint: data_get");
@@ -161,7 +161,7 @@ static struct yetty_ycore_void_result dialog_paint(struct yetty_yclass_ctx *ycla
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_dialog_set_title(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_dialog_set_title(struct yetty_yclass_object *obj,
                                                            const char *title)
 {
     if (!obj) {
@@ -186,7 +186,7 @@ struct yetty_ycore_void_result yetty_ygui_dialog_set_title(struct yetty_ygui_obj
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_dialog_open_at(struct yetty_ygui_object *obj, float x,
+struct yetty_ycore_void_result yetty_ygui_dialog_open_at(struct yetty_yclass_object *obj, float x,
                                                          float y, float width, float height)
 {
     if (!obj) {
@@ -209,7 +209,7 @@ struct yetty_ycore_void_result yetty_ygui_dialog_open_at(struct yetty_ygui_objec
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_dialog_close(struct yetty_ygui_object *obj)
+struct yetty_ycore_void_result yetty_ygui_dialog_close(struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "dialog_close: NULL obj");
@@ -231,13 +231,13 @@ struct yetty_ycore_void_result yetty_ygui_dialog_close(struct yetty_ygui_object 
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_int_result yetty_ygui_dialog_is_open(const struct yetty_ygui_object *obj)
+struct yetty_ycore_int_result yetty_ygui_dialog_is_open(const struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_dialog_is_open: invalid args");
     }
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
-        (struct yetty_ygui_object *)obj, yetty_ygui_dialog_class_get().value);
+        (struct yetty_yclass_object *)obj, yetty_ygui_dialog_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_dialog_is_open: data_get");
     struct yetty_ygui_dialog *d = d_dr.value;
     return YETTY_OK(yetty_ycore_int, d->open);

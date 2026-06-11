@@ -18,9 +18,9 @@
  * rich.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_rich_data_ptr, struct yetty_ygui_rich *);
+YETTY_YRESULT_DECLARE(yetty_ygui_rich_ptr, struct yetty_ygui_rich *);
 struct yetty_yclass_ptr_result yetty_ygui_rich_class_get(void);
-struct yetty_ygui_rich_data_ptr_result yetty_ygui_rich_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_rich_ptr_result yetty_ygui_rich_from(struct yetty_yclass_object *obj);
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
@@ -52,7 +52,7 @@ static struct yetty_ycore_void_result rich_constructor(struct yetty_yclass_ctx *
                                                        struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_rich_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "rich_constructor: super");
@@ -82,7 +82,7 @@ static struct yetty_ycore_void_result rich_destructor(struct yetty_yclass_ctx *y
                                                       struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "rich_destructor: data_get");
@@ -102,7 +102,7 @@ static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_ctx *yclass
                                                  struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "rich_paint: NULL ctx");
     }
@@ -196,7 +196,7 @@ static int spans_grow(struct rich_line *l, int need)
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_ygui_object *obj)
+struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "rich_clear: NULL obj");
@@ -213,7 +213,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_ygui_object *o
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_ygui_object *obj)
+struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "rich_add_line: NULL obj");
@@ -233,7 +233,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_ygui_object
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_yclass_object *obj,
                                                         const char *text, float font_size,
                                                         uint32_t color_rgba)
 {

@@ -43,7 +43,7 @@ static inline void u32_ok(struct uint32_result r)
 
 /* Instantiate `cls` under `parent`, swallowing (and freeing) any error so
  * the build keeps going — a demo wants best-effort, not abort-on-first. */
-static struct yetty_ygui_object *add_obj(struct yetty_ygui_object *parent,
+static struct yetty_yclass_object *add_obj(struct yetty_yclass_object *parent,
                                          struct yetty_yclass_ptr_result cls)
 {
     if (YETTY_IS_ERR(cls)) {
@@ -59,7 +59,7 @@ static struct yetty_ygui_object *add_obj(struct yetty_ygui_object *parent,
 }
 
 /* Author the body widget's height; width is stretched by the node's vbox. */
-static void set_h(struct yetty_ygui_object *o, float h)
+static void set_h(struct yetty_yclass_object *o, float h)
 {
     if (!o) {
         return;
@@ -69,7 +69,7 @@ static void set_h(struct yetty_ygui_object *o, float h)
     err_ok(yetty_ygui_widget_layout_set(o, &l));
 }
 
-static struct yetty_ygui_object *make_node(struct yetty_ygui_object *editor, float gx, float gy,
+static struct yetty_yclass_object *make_node(struct yetty_yclass_object *editor, float gx, float gy,
                                            float gw, float gh, const char *title)
 {
     struct yetty_ygui_object_ptr_result nr = yetty_ygui_ynodes_add_node(editor, gx, gy);
@@ -83,7 +83,7 @@ static struct yetty_ygui_object *make_node(struct yetty_ygui_object *editor, flo
 }
 
 /* Register one insertable widget kind, swallowing a failed class lookup. */
-static void reg_widget(struct yetty_ygui_object *editor, const char *name,
+static void reg_widget(struct yetty_yclass_object *editor, const char *name,
                        struct yetty_yclass_ptr_result cls)
 {
     if (YETTY_IS_ERR(cls)) {
@@ -94,12 +94,12 @@ static void reg_widget(struct yetty_ygui_object *editor, const char *name,
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
 
     /* Instruction strip. */
-    struct yetty_ygui_object *hint = add_obj(root, yetty_ygui_label_class_get());
+    struct yetty_yclass_object *hint = add_obj(root, yetty_ygui_label_class_get());
     if (hint) {
         err_ok(yetty_ygui_label_set_text(
             hint, "drag nodes  •  drag pin\xe2\x86\x92pin to connect  •  right-click for menu  •  "
@@ -109,7 +109,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     }
 
     /* The editor fills the rest of the window. */
-    struct yetty_ygui_object *editor = add_obj(root, yetty_ygui_ynodes_class_get());
+    struct yetty_yclass_object *editor = add_obj(root, yetty_ygui_ynodes_class_get());
     if (!editor) {
         return YETTY_ERR(yetty_ycore_void, "38_ynodes: ynodes create failed");
     }
@@ -128,16 +128,16 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     reg_widget(editor, "Progress", yetty_ygui_progress_class_get());
 
     /* Node A — a source with one output. */
-    struct yetty_ygui_object *a = make_node(editor, 60.0f, 70.0f, 190.0f, 130.0f, "Source");
+    struct yetty_yclass_object *a = make_node(editor, 60.0f, 70.0f, 190.0f, 130.0f, "Source");
     if (a) {
         u32_ok(yetty_ygui_ynode_add_output(a, "value"));
-        struct yetty_ygui_object *lbl = add_obj(a, yetty_ygui_label_class_get());
+        struct yetty_yclass_object *lbl = add_obj(a, yetty_ygui_label_class_get());
         if (lbl) {
             err_ok(yetty_ygui_label_set_text(lbl, "amplitude"));
             err_ok(yetty_ygui_label_set_color(lbl, (struct yetty_ycore_rgba){224, 229, 228, 255}));
             set_h(lbl, 18.0f);
         }
-        struct yetty_ygui_object *sld = add_obj(a, yetty_ygui_slider_class_get());
+        struct yetty_yclass_object *sld = add_obj(a, yetty_ygui_slider_class_get());
         if (sld) {
             err_ok(yetty_ygui_slider_set_range(sld, 0.0f, 1.0f));
             err_ok(yetty_ygui_slider_set_value(sld, 0.6f));
@@ -146,18 +146,18 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     }
 
     /* Node B — a processor: two inputs, one output, a couple of controls. */
-    struct yetty_ygui_object *b = make_node(editor, 350.0f, 130.0f, 200.0f, 160.0f, "Mixer");
+    struct yetty_yclass_object *b = make_node(editor, 350.0f, 130.0f, 200.0f, 160.0f, "Mixer");
     if (b) {
         u32_ok(yetty_ygui_ynode_add_input(b, "a"));
         u32_ok(yetty_ygui_ynode_add_input(b, "b"));
         u32_ok(yetty_ygui_ynode_add_output(b, "out"));
-        struct yetty_ygui_object *chk = add_obj(b, yetty_ygui_checkbox_class_get());
+        struct yetty_yclass_object *chk = add_obj(b, yetty_ygui_checkbox_class_get());
         if (chk) {
             err_ok(yetty_ygui_checkbox_set_label(chk, "enabled"));
             err_ok(yetty_ygui_checkbox_set_checked(chk, 1));
             set_h(chk, 24.0f);
         }
-        struct yetty_ygui_object *btn = add_obj(b, yetty_ygui_button_class_get());
+        struct yetty_yclass_object *btn = add_obj(b, yetty_ygui_button_class_get());
         if (btn) {
             err_ok(yetty_ygui_button_set_label(btn, "Apply"));
             set_h(btn, 32.0f);
@@ -165,16 +165,16 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     }
 
     /* Node C — a sink with one input. */
-    struct yetty_ygui_object *c = make_node(editor, 680.0f, 90.0f, 180.0f, 120.0f, "Output");
+    struct yetty_yclass_object *c = make_node(editor, 680.0f, 90.0f, 180.0f, 120.0f, "Output");
     if (c) {
         u32_ok(yetty_ygui_ynode_add_input(c, "result"));
-        struct yetty_ygui_object *lbl = add_obj(c, yetty_ygui_label_class_get());
+        struct yetty_yclass_object *lbl = add_obj(c, yetty_ygui_label_class_get());
         if (lbl) {
             err_ok(yetty_ygui_label_set_text(lbl, "preview"));
             err_ok(yetty_ygui_label_set_color(lbl, (struct yetty_ycore_rgba){168, 167, 159, 255}));
             set_h(lbl, 18.0f);
         }
-        struct yetty_ygui_object *btn = add_obj(c, yetty_ygui_button_class_get());
+        struct yetty_yclass_object *btn = add_obj(c, yetty_ygui_button_class_get());
         if (btn) {
             err_ok(yetty_ygui_button_set_label(btn, "Save"));
             set_h(btn, 32.0f);

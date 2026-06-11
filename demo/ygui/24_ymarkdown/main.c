@@ -30,7 +30,7 @@ static inline void err_ok(struct yetty_ycore_void_result r)
 
 /* Add `cls` under `parent` and author its main-axis height. Returns NULL on
  * allocation failure (the demo simply skips that widget). */
-static struct yetty_ygui_object *add_w(struct yetty_ygui_object *parent,
+static struct yetty_yclass_object *add_w(struct yetty_yclass_object *parent,
                                        const struct yetty_yclass *cls, float height)
 {
     struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls, parent);
@@ -44,7 +44,7 @@ static struct yetty_ygui_object *add_w(struct yetty_ygui_object *parent,
     return r.value;
 }
 
-static void set_grow(struct yetty_ygui_object *w, float grow)
+static void set_grow(struct yetty_yclass_object *w, float grow)
 {
     if (!w) {
         return;
@@ -55,7 +55,7 @@ static void set_grow(struct yetty_ygui_object *w, float grow)
 }
 
 /* Open collapsing_header section, titled, initially expanded. */
-static struct yetty_ygui_object *add_section(struct yetty_ygui_object *area, const char *title)
+static struct yetty_yclass_object *add_section(struct yetty_yclass_object *area, const char *title)
 {
     struct yetty_ygui_object_ptr_result r =
         yetty_ygui_add(yetty_ygui_collapsing_header_class_get().value, area);
@@ -70,7 +70,7 @@ static struct yetty_ygui_object *add_section(struct yetty_ygui_object *area, con
 
 /* Derive a section's open height from its children: header strip + paddings +
  * the sum of authored child heights + inter-row gaps. */
-static void finalize_section(struct yetty_ygui_object *sec)
+static void finalize_section(struct yetty_yclass_object *sec)
 {
     if (!sec) {
         return;
@@ -78,7 +78,7 @@ static void finalize_section(struct yetty_ygui_object *sec)
     const struct yetty_ygui_layout *sl = yetty_ygui_widget_layout_get(sec);
     float total = sl->padding_top + sl->padding_bottom;
     int n = 0;
-    for (struct yetty_ygui_object *c = yetty_ygui_object_first_child(sec); c;
+    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(sec); c;
          c = yetty_ygui_object_next_sibling(c)) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
         total += cl->height > 0.0f ? cl->height : 0.0f;
@@ -97,9 +97,9 @@ static void finalize_section(struct yetty_ygui_object *sec)
  * renderer advances ~22.4px per line at the demo's 16px cell, and tables /
  * code fences render fewer lines than they span in source, so line_count * 24
  * plus a small pad never clips. */
-static void add_md_section(struct yetty_ygui_object *area, const char *title, const char *src)
+static void add_md_section(struct yetty_yclass_object *area, const char *title, const char *src)
 {
-    struct yetty_ygui_object *sec = add_section(area, title);
+    struct yetty_yclass_object *sec = add_section(area, title);
     if (!sec) {
         return;
     }
@@ -111,7 +111,7 @@ static void add_md_section(struct yetty_ygui_object *area, const char *title, co
         }
     }
     float h = (float)lines * 24.0f + 12.0f;
-    struct yetty_ygui_object *md = add_w(sec, yetty_ygui_ymarkdown_class_get().value, h);
+    struct yetty_yclass_object *md = add_w(sec, yetty_ygui_ymarkdown_class_get().value, h);
     if (md) {
         err_ok(yetty_ygui_ymarkdown_set_source(md, src, len));
     }
@@ -119,7 +119,7 @@ static void add_md_section(struct yetty_ygui_object *area, const char *title, co
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
 
@@ -128,7 +128,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         yetty_ygui_add(yetty_ygui_scrollarea_class_get().value, root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "build: scrollarea");
     set_grow(sr.value, 1.0f);
-    struct yetty_ygui_object *area = sr.value;
+    struct yetty_yclass_object *area = sr.value;
 
     add_md_section(area, "Overview",
                    "# ymarkdown\n"

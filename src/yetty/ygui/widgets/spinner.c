@@ -13,9 +13,9 @@
  * spinner.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_spinner_data_ptr, struct yetty_ygui_spinner *);
+YETTY_YRESULT_DECLARE(yetty_ygui_spinner_ptr, struct yetty_ygui_spinner *);
 struct yetty_yclass_ptr_result yetty_ygui_spinner_class_get(void);
-struct yetty_ygui_spinner_data_ptr_result yetty_ygui_spinner_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_spinner_ptr_result yetty_ygui_spinner_from(struct yetty_yclass_object *obj);
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/primitive-widget.h>
@@ -46,7 +46,7 @@ static struct yetty_ycore_void_result spinner_constructor(struct yetty_yclass_ct
                                                           struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_spinner_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -68,7 +68,7 @@ static struct yetty_ycore_int_result spinner_on_press(struct yetty_yclass_ctx *y
                                                       float x, float y, int button)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)y;
     (void)button;
     struct yetty_ygui_void_ptr_result d_dr =
@@ -146,7 +146,7 @@ static struct yetty_ycore_void_result spinner_paint(struct yetty_yclass_ctx *ycl
                                                     struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "spinner_paint: NULL ctx");
     }
@@ -182,7 +182,8 @@ static struct yetty_ycore_void_result spinner_paint(struct yetty_yclass_ctx *ycl
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_spinner_set_value(struct yetty_ygui_object *obj, float v)
+struct yetty_ycore_void_result yetty_ygui_spinner_set_value(struct yetty_yclass_object *obj,
+                                                            float v)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "spinner_set_value: NULL");
@@ -195,8 +196,8 @@ struct yetty_ycore_void_result yetty_ygui_spinner_set_value(struct yetty_ygui_ob
     return yetty_ygui_object_set_dirty(obj);
 }
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_ygui_object *obj, float mn,
-                                                            float mx, float step)
+struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_yclass_object *obj,
+                                                            float mn, float mx, float step)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "spinner_set_range: NULL");
@@ -211,13 +212,13 @@ struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_ygui_ob
     return yetty_ygui_object_set_dirty(obj);
 }
 [[clang::annotate("expose")]]
-struct yetty_ycore_float_result yetty_ygui_spinner_get_value(const struct yetty_ygui_object *obj)
+struct yetty_ycore_float_result yetty_ygui_spinner_get_value(const struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_float, "yetty_ygui_spinner_get_value: NULL obj");
     }
     struct yetty_ygui_void_ptr_result data_result = yetty_ygui_data_get_result(
-        (struct yetty_ygui_object *)obj, yetty_ygui_spinner_class_get().value);
+        (struct yetty_yclass_object *)obj, yetty_ygui_spinner_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_float, data_result, "yetty_ygui_spinner_get_value: data_get");
     return YETTY_OK(yetty_ycore_float, ((struct yetty_ygui_spinner *)data_result.value)->value);
 }

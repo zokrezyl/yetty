@@ -24,7 +24,7 @@
 #include <yetty/yshadertoy/demo-shaders.h>
 
 /* Single demo instance — the tab handler reaches the shader widget here. */
-static struct yetty_ygui_object *g_shader_widget;
+static struct yetty_yclass_object *g_shader_widget;
 
 static void apply_shader(int idx)
 {
@@ -52,7 +52,7 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *ctx
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
 

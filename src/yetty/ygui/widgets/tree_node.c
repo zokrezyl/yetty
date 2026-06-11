@@ -10,10 +10,9 @@
  * tree_node.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_tree_node_data_ptr, struct yetty_ygui_tree_node *);
+YETTY_YRESULT_DECLARE(yetty_ygui_tree_node_ptr, struct yetty_ygui_tree_node *);
 struct yetty_yclass_ptr_result yetty_ygui_tree_node_class_get(void);
-struct yetty_ygui_tree_node_data_ptr_result yetty_ygui_tree_node_data(
-    struct yetty_ygui_object *obj);
+struct yetty_ygui_tree_node_ptr_result yetty_ygui_tree_node_from(struct yetty_yclass_object *obj);
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/widgets/vbox.h>
 #include <stdlib.h>
@@ -36,9 +35,9 @@ yetty_ygui_tree_node {
  * `hidden`-flag mechanism collapsing_header uses). The node's own height
  * is left unset (-1) so the flex layout's intrinsic measure sizes it to
  * header-only when closed and header + children when open. */
-static struct yetty_ycore_void_result tn_fold_children(struct yetty_ygui_object *obj, int open)
+static struct yetty_ycore_void_result tn_fold_children(struct yetty_yclass_object *obj, int open)
 {
-    for (struct yetty_ygui_object *c = yetty_ygui_object_first_child(obj); c;
+    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(obj); c;
          c = yetty_ygui_object_next_sibling(c)) {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(c);
         if (l.absolute) {
@@ -56,7 +55,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_tree_node_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -81,7 +80,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_tree_node_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
@@ -97,7 +96,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
                                               float y, int btn)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)x;
     (void)btn;
     struct yetty_ygui_void_ptr_result d_dr =
@@ -132,7 +131,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "tree_node paint: NULL ctx");
     }
@@ -155,7 +154,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_tree_node_set_label(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_tree_node_set_label(struct yetty_yclass_object *obj,
                                                               const char *label)
 {
     if (!obj) {
@@ -179,7 +178,7 @@ struct yetty_ycore_void_result yetty_ygui_tree_node_set_label(struct yetty_ygui_
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_tree_node_set_open(struct yetty_ygui_object *obj, int o)
+struct yetty_ycore_void_result yetty_ygui_tree_node_set_open(struct yetty_yclass_object *obj, int o)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "tn_set_open: NULL");
@@ -195,19 +194,19 @@ struct yetty_ycore_void_result yetty_ygui_tree_node_set_open(struct yetty_ygui_o
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_int_result yetty_ygui_tree_node_is_open(const struct yetty_ygui_object *obj)
+struct yetty_ycore_int_result yetty_ygui_tree_node_is_open(const struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_tree_node_is_open: NULL obj");
     }
     struct yetty_ygui_void_ptr_result data_result = yetty_ygui_data_get_result(
-        (struct yetty_ygui_object *)obj, yetty_ygui_tree_node_class_get().value);
+        (struct yetty_yclass_object *)obj, yetty_ygui_tree_node_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, data_result, "yetty_ygui_tree_node_is_open: data_get");
     return YETTY_OK(yetty_ycore_int, ((struct yetty_ygui_tree_node *)data_result.value)->open);
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_tree_node_on_toggle(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_tree_node_on_toggle(struct yetty_yclass_object *obj,
                                                               yetty_ygui_click_cb cb,
                                                               void *userdata)
 {

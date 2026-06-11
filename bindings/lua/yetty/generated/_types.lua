@@ -6,12 +6,17 @@ typedef long __time_t;
 typedef long yetty_ycore_event_handler;
 struct yetty_yclass_ctx;
 struct yetty_yclass_object;
+struct yetty_ycore_xthread_event_pipe;
 struct yetty_ydraw_drawable_list;
 struct yetty_ydraw_target;
 struct yetty_yfigure_figure;
 struct yetty_ygui_emit_ctx;
-struct yetty_ygui_object;
+struct yetty_ygui_event_subscription;
+struct yetty_ygui_framework;
+struct yetty_ymgui_figure;
+struct yetty_yui_event;
 struct yetty_ywire_wire_statemachine;
+struct ymusic_measure;
 struct timespec {
   __time_t tv_sec;
   __syscall_slong_t tv_nsec;
@@ -120,8 +125,22 @@ struct yetty_ycore_void_result {
     struct yetty_ycore_error error;
   };
 };
+struct yetty_ydraw_drawable_list_result {
+  int ok;
+  union {
+    struct yetty_ydraw_drawable_list *value;
+    struct yetty_ycore_error error;
+  };
+};
 struct yetty_yevent_event_listener {
   yetty_ycore_event_handler handler;
+};
+struct yetty_yfigure_figure_ptr_result {
+  int ok;
+  union {
+    struct yetty_yfigure_figure *value;
+    struct yetty_ycore_error error;
+  };
 };
 struct yetty_yfigure_hit {
   uint32_t figure_id;
@@ -153,9 +172,22 @@ struct yetty_ygui_layout {
 struct yetty_ygui_object_ptr_result {
   int ok;
   union {
-    struct yetty_ygui_object *value;
+    struct yetty_yclass_object *value;
     struct yetty_ycore_error error;
   };
+};
+struct yetty_ygui_tree {
+  struct yetty_yclass_object *parent;
+  struct yetty_yclass_object *first_child;
+  struct yetty_yclass_object *next_sibling;
+  uint32_t id;
+  uint32_t figure_kind;
+  int32_t figure_z;
+  int floating;
+  int dirty;
+  int hovered;
+  struct yetty_ygui_framework *framework;
+  struct yetty_ygui_event_subscription *subscriptions;
 };
 struct yetty_ygui_yplot_config {
   float x_min;
@@ -163,6 +195,13 @@ struct yetty_ygui_yplot_config {
   float y_min;
   float y_max;
   uint32_t flags;
+};
+struct yetty_ymgui_figure_ptr_result {
+  int ok;
+  union {
+    struct yetty_ymgui_figure *value;
+    struct yetty_ycore_error error;
+  };
 };
 struct yetty_yrender_buffer {
   uint8_t *data;
@@ -222,6 +261,15 @@ struct yetty_yrich_input_mods {
   bool alt;
   bool meta;
 };
+struct ymusic_staff {
+  int clef;
+  int key_fifths;
+  int time_num;
+  int time_den;
+  struct ymusic_measure **measures;
+  size_t count;
+  size_t cap;
+};
 ]]
 local M = {}
 M.yetty_yrender_uniform_type = {
@@ -254,5 +302,11 @@ M.ynode_drag_mode = {
   YNODE_DRAG_MOVE = 1,
   YNODE_DRAG_LINK = 2,
   YNODE_DRAG_RESIZE = 3,
+}
+M.ymusic_clef = {
+  YMUSIC_CLEF_TREBLE = 0,
+  YMUSIC_CLEF_BASS = 1,
+  YMUSIC_CLEF_ALTO = 2,
+  YMUSIC_CLEF_TENOR = 3,
 }
 return M

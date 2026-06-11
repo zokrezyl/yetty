@@ -21,7 +21,7 @@ static inline void err_ok(struct yetty_ycore_void_result r)
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
     {
@@ -29,7 +29,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
             yetty_ygui_add(yetty_ygui_chip_class_get().value, root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "chip");
         err_ok(yetty_ygui_chip_set_label(r.value, "tag"));
-        struct yetty_ygui_object *w = r.value;
+        struct yetty_yclass_object *w = r.value;
         {
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
             l.height = 24;
@@ -42,7 +42,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "bc");
         err_ok(yetty_ygui_breadcrumbs_add(r.value, "Home"));
         err_ok(yetty_ygui_breadcrumbs_add(r.value, "Settings"));
-        struct yetty_ygui_object *w = r.value;
+        struct yetty_yclass_object *w = r.value;
         {
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
             l.height = 24;
@@ -57,7 +57,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_stepper_add_step(r.value, "Configure"));
         err_ok(yetty_ygui_stepper_add_step(r.value, "Finish"));
         err_ok(yetty_ygui_stepper_set_current(r.value, 1));
-        struct yetty_ygui_object *w = r.value;
+        struct yetty_yclass_object *w = r.value;
         {
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
             l.height = 56;

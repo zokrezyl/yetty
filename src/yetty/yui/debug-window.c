@@ -44,13 +44,13 @@ static struct yetty_ycore_rgba debug_rgba(uint32_t packed)
 
 struct yetty_yui_debug_window {
     struct yetty_ygui_framework *engine; /* borrowed */
-    struct yetty_ygui_object *window;
+    struct yetty_yclass_object *window;
     /* Three separate labels — one per rolling window. ygui's label is
      * single-line, so multi-line text via "\n" doesn't render; stacking
      * them in the window's body vbox is the right primitive. */
-    struct yetty_ygui_object *label_1s;
-    struct yetty_ygui_object *label_10s;
-    struct yetty_ygui_object *label_60s;
+    struct yetty_yclass_object *label_1s;
+    struct yetty_yclass_object *label_10s;
+    struct yetty_yclass_object *label_60s;
     yetty_ycore_object_id pane_id;
     /* Layout runs every frame, but we want the initial placement
      * (top-right of the pane) to stick exactly once, then leave x/y
@@ -64,7 +64,7 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
     if (!engine) {
         return YETTY_ERR(yetty_yui_debug_window_ptr, "debug_window_create: NULL engine");
     }
-    struct yetty_ygui_object *root = yetty_ygui_framework_root(engine);
+    struct yetty_yclass_object *root = yetty_ygui_framework_root(engine);
     if (!root) {
         return YETTY_ERR(yetty_yui_debug_window_ptr, "debug_window_create: engine has no root");
     }
@@ -105,9 +105,9 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
         }
     }
 
-    struct yetty_ygui_object *body = yetty_ygui_window_body(dw->window);
+    struct yetty_yclass_object *body = yetty_ygui_window_body(dw->window);
     if (body) {
-        struct yetty_ygui_object **slots[3] = {&dw->label_1s, &dw->label_10s, &dw->label_60s};
+        struct yetty_yclass_object **slots[3] = {&dw->label_1s, &dw->label_10s, &dw->label_60s};
         for (int i = 0; i < 3; i++) {
             struct yetty_ygui_object_ptr_result lr =
                 yetty_ygui_add(yetty_ygui_label_class_get().value, body);

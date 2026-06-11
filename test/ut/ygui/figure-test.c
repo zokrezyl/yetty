@@ -140,7 +140,7 @@ static const uint8_t k_bmp_2x2[] = {
 /* Build a headless engine whose root panel holds one 100x100 yimage.
  * The stub pty must outlive the returned engine — the caller owns it. */
 static struct yetty_ygui_framework *make_engine_with_yimage(struct yetty_platform_pty *stub,
-                                                            struct yetty_ygui_object **out_img)
+                                                            struct yetty_yclass_object **out_img)
 {
     struct yetty_ygui_framework_ptr_result er = yetty_ygui_framework_create(stub);
     CHECK(YETTY_IS_OK(er), "engine_create");
@@ -149,14 +149,14 @@ static struct yetty_ygui_framework *make_engine_with_yimage(struct yetty_platfor
     struct yetty_ygui_object_ptr_result rr =
         yetty_ygui_add(yetty_ygui_panel_class_get().value, NULL);
     CHECK(YETTY_IS_OK(rr), "add panel");
-    struct yetty_ygui_object *root = rr.value;
+    struct yetty_yclass_object *root = rr.value;
     struct yetty_ycore_void_result sr = yetty_ygui_framework_set_root(engine, root);
     CHECK(YETTY_IS_OK(sr), "engine_set_root");
 
     struct yetty_ygui_object_ptr_result ir =
         yetty_ygui_add(yetty_ygui_yimage_class_get().value, root);
     CHECK(YETTY_IS_OK(ir), "add yimage");
-    struct yetty_ygui_object *img = ir.value;
+    struct yetty_yclass_object *img = ir.value;
 
     /* Give yimage an explicit width/height so the layout pass produces
      * a non-empty rect for emit_container to ship. */
@@ -173,7 +173,7 @@ static void test_yimage_emit(void)
 {
     /* Stub pty lives on the stack of this function. */
     struct yetty_platform_pty stub = {.ops = stub_pty_ops_get()};
-    struct yetty_ygui_object *img = NULL;
+    struct yetty_yclass_object *img = NULL;
     struct yetty_ygui_framework *engine = make_engine_with_yimage(&stub, &img);
 
     struct yetty_ycore_void_result br =
@@ -290,7 +290,7 @@ static void test_incremental_figure_skip(void)
     struct yetty_ygui_object_ptr_result rr =
         yetty_ygui_add(yetty_ygui_panel_class_get().value, NULL);
     CHECK(YETTY_IS_OK(rr), "skip: add panel");
-    struct yetty_ygui_object *root = rr.value;
+    struct yetty_yclass_object *root = rr.value;
     CHECK(YETTY_IS_OK(yetty_ygui_framework_set_root(engine, root)), "skip: set_root");
 
     /* A scrollarea promotes itself to its own YGRID figure (figure_kind !=
@@ -299,7 +299,7 @@ static void test_incremental_figure_skip(void)
     struct yetty_ygui_object_ptr_result sr =
         yetty_ygui_add(yetty_ygui_scrollarea_class_get().value, root);
     CHECK(YETTY_IS_OK(sr), "skip: add scrollarea");
-    struct yetty_ygui_object *scroll = sr.value;
+    struct yetty_yclass_object *scroll = sr.value;
     struct yetty_ygui_layout sl = *yetty_ygui_widget_layout_get(scroll);
     sl.width = 200.0f;
     sl.height = 200.0f;
@@ -308,7 +308,7 @@ static void test_incremental_figure_skip(void)
     struct yetty_ygui_object_ptr_result lr =
         yetty_ygui_add(yetty_ygui_label_class_get().value, scroll);
     CHECK(YETTY_IS_OK(lr), "skip: add label");
-    struct yetty_ygui_object *label = lr.value;
+    struct yetty_yclass_object *label = lr.value;
     CHECK(YETTY_IS_OK(yetty_ygui_label_set_text(label, "page content")), "skip: label text");
     struct yetty_ygui_layout ll = *yetty_ygui_widget_layout_get(label);
     ll.width = 180.0f;
@@ -342,7 +342,7 @@ static void test_incremental_figure_skip(void)
 static void test_yimage_emit_rejects_malformed(void)
 {
     struct yetty_platform_pty stub = {.ops = stub_pty_ops_get()};
-    struct yetty_ygui_object *img = NULL;
+    struct yetty_yclass_object *img = NULL;
     struct yetty_ygui_framework *engine = make_engine_with_yimage(&stub, &img);
 
     uint8_t garbage[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04};

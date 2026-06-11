@@ -14,21 +14,23 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_panel_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_panel;
-YETTY_YRESULT_DECLARE(yetty_ygui_panel_data_ptr, struct yetty_ygui_panel *);
-struct yetty_ygui_panel_data_ptr_result yetty_ygui_panel_data(struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_panel_ptr, struct yetty_ygui_panel *);
+struct yetty_ygui_panel_ptr_result yetty_ygui_panel_from(struct yetty_yclass_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_panel_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
 struct yetty_ycore_rgba;
-struct yetty_ygui_object;
 
-struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_yclass_object *obj,
                                                        struct yetty_ycore_rgba color);
-struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_yclass_object *obj,
                                                            struct yetty_ycore_rgba color,
                                                            float width_px);
 

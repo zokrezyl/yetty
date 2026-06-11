@@ -20,10 +20,9 @@
  * scrollarea.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_scrollarea_data_ptr, struct yetty_ygui_scrollarea *);
+YETTY_YRESULT_DECLARE(yetty_ygui_scrollarea_ptr, struct yetty_ygui_scrollarea *);
 struct yetty_yclass_ptr_result yetty_ygui_scrollarea_class_get(void);
-struct yetty_ygui_scrollarea_data_ptr_result yetty_ygui_scrollarea_data(
-    struct yetty_ygui_object *obj);
+struct yetty_ygui_scrollarea_ptr_result yetty_ygui_scrollarea_from(struct yetty_yclass_object *obj);
 #include "paint-helpers.h"
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygui/mixins/draggable.h>
@@ -48,7 +47,7 @@ static struct yetty_yclass_ptr_result scrollarea_class(void)
 
 /* Apply a clamped offset: store it, push it to the base scroll offset (so
  * the layout slides the children), and request a frame. */
-static struct yetty_ycore_void_result scrollarea_set_offset(struct yetty_ygui_object *obj,
+static struct yetty_ycore_void_result scrollarea_set_offset(struct yetty_yclass_object *obj,
                                                             struct yetty_ygui_scrollarea *d,
                                                             float off)
 {
@@ -66,7 +65,7 @@ static struct yetty_ycore_void_result scrollarea_set_offset(struct yetty_ygui_ob
 
 /* Drag callback installed on the draggable mixin. The cursor moves the
  * thumb 1:1; the thumb's travel maps onto the full content offset. */
-static struct yetty_ycore_void_result scrollarea_on_drag(struct yetty_ygui_object *obj, float dx,
+static struct yetty_ycore_void_result scrollarea_on_drag(struct yetty_yclass_object *obj, float dx,
                                                          float dy, void *userdata)
 {
     (void)dx;
@@ -98,7 +97,7 @@ static struct yetty_ycore_int_result on_scroll(struct yetty_yclass_ctx *yclass_c
     (void)x;
     (void)y;
     (void)dx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_yclass_ptr_result class_result = scrollarea_class();
     YETTY_RETURN_IF_ERR(yetty_ycore_int, class_result, "on_scroll: class");
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, class_result.value);
@@ -117,7 +116,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_scrollarea_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -144,7 +143,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "scrollarea paint: NULL ctx");
     }
@@ -168,7 +167,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     }
     float content_h = 0.0f;
     int n = 0;
-    for (struct yetty_ygui_object *c = yetty_ygui_object_first_child(obj); c;
+    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(obj); c;
          c = yetty_ygui_object_next_sibling(c)) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
         if (cl->hidden || cl->absolute) {

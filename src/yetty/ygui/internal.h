@@ -2,7 +2,7 @@
  * ygui-internal.h — private types shared across the ygui implementation.
  *
  * Held to the .c files (not installed). Exposes:
- *   - struct yetty_ygui_object (full definition; public API is opaque)
+ *   - struct yetty_yclass_object (full definition; public API is opaque)
  *   - struct yetty_ygui_framework (full definition; public API is opaque)
  *
  * Out-of-file callers go through the public API — including this
@@ -59,14 +59,12 @@ struct yetty_yclass_impl_t_result yetty_ygui_dispatch_lookup_super(
 
 /*===========================================================================
  * Classes — `struct yetty_yclass` (from <yetty/yclass/class.h>) is the only
- * class type ygui knows about. Slot allocation, dispatch, and parent /
- * mixin walks all go through the yclass runtime. ygui adds:
- *   - the heavier `struct yetty_ygui_object` instance header
- *     (parent/sibling/id state, see below) — yclass's bare
- *     yclass_object isn't enough for the widget tree.
- *   - data-slice offset computation inside that header (see
- *     yetty_ygui_data_get), walking the yclass inheritance chain via
- *     yetty_yclass_parent / _mixin_at.
+ * class type ygui knows about. Slot allocation, dispatch, parent / mixin
+ * walks, instance allocation (yetty_yclass_object_alloc) and data-slice
+ * resolution (yetty_yclass_object_data) all go through the yclass runtime.
+ * ygui objects ARE plain `struct yetty_yclass_object`s; the widget tree and
+ * per-widget framework state live in the base-class data slice (struct
+ * yetty_ygui_tree, embedded at the head of struct yetty_ygui_widget).
  *=========================================================================*/
 
 /*===========================================================================
@@ -80,18 +78,21 @@ struct yetty_ygui_event_subscription {
     struct yetty_ygui_event_subscription *next;
 };
 
-struct yetty_ygui_object {
-    /* The yclass this object was minted under. Field name `klass`
-     * matches the layout of `struct yetty_yclass_object` so an
-     * `yetty_ygui_object *` can be cast to `struct yetty_yclass_object *`
-     * for direct yclass dispatch (the first member is the same
-     * pointer-typed field). */
-    const struct yetty_yclass *klass;
-    struct yetty_ygui_object *parent;
+struct yetty_ygui_framework;
 
-    /* Sibling links inside parent->first_child list. */
-    struct yetty_ygui_object *first_child;
-    struct yetty_ygui_object *next_sibling;
+/* Widget tree + per-widget framework state. Lives at the head of the
+ * `class@ygui:widget` base-class data slice (struct yetty_ygui_widget).
+ * widget is the root class of every ygui object, so every object carries
+ * this slice; ygui_tree() below resolves it through the yclass runtime so
+ * the generic framework code (layout, emit, hit-test) can traverse the tree
+ * without each call site repeating the resolve. Tree links are typed as the
+ * plain yclass object — every ygui object is one. */
+struct yetty_ygui_tree {
+    struct yetty_yclass_object *parent;
+
+    /* Sibling links inside parent's first_child list. */
+    struct yetty_yclass_object *first_child;
+    struct yetty_yclass_object *next_sibling;
 
     /* Wire id allocated by the framework at construction. 0 = unassigned. */
     uint32_t id;
@@ -131,10 +132,33 @@ struct yetty_ygui_object {
 
     /* Event subscriptions — singly-linked list, freed at object destroy. */
     struct yetty_ygui_event_subscription *subscriptions;
-
-    /* Per-class data slices follow this header in memory. yetty_ygui_data_get
-     * resolves the requested class's offset and returns this + offset. */
 };
+
+/* The base widget class accessor (defined in the generated widget.gen.c).
+ * Forward-declared here — internal.h must not pull in widget.h (the widget
+ * TU's own generated header) — so ygui_tree() can resolve the widget slice. */
+struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void);
+
+/* Reach the widget-tree slice of any ygui object. widget is the root class
+ * of every ygui widget; its data slice (struct yetty_ygui_widget, whose
+ * first member is the tree) is resolved through the yclass runtime — the
+ * runtime lays slices out direct-parent-first, so the widget slice is NOT
+ * at a fixed offset for multi-level hierarchies. The widget class accessor
+ * caches its pointer, so this stays cheap on the hot path. Takes a const
+ * object and returns a mutable tree pointer: slice access is const-agnostic
+ * here (as value getters are), so const getters and mutating setters share
+ * this one accessor. The resolve only fails on a non-widget object — a
+ * programmer error that faults at the returned NULL. */
+static inline struct yetty_ygui_tree *ygui_tree(const struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_void_ptr_result slice = yetty_yclass_object_data(
+        (struct yetty_yclass_object *)obj, yetty_ygui_widget_class_get().value);
+    if (YETTY_IS_ERR(slice)) {
+        yetty_ycore_error_destroy(slice.error);
+        return NULL;
+    }
+    return (struct yetty_ygui_tree *)slice.value;
+}
 
 /*===========================================================================
  * framework.
@@ -191,7 +215,7 @@ struct yetty_ygui_framework {
     size_t minted_figure_count;
     size_t minted_figure_cap;
 
-    struct yetty_ygui_object *root;
+    struct yetty_yclass_object *root;
 
     /* Viewport in pixels — root widget bounds for the next layout
      * pass. Defaults to 800x600 until set_viewport is called. */
@@ -226,14 +250,14 @@ struct yetty_ygui_framework {
     /* Deepest widget currently under the mouse, tracked by
      * feed_mouse_motion. Used to dispatch enter/leave + flip the
      * obj->hovered flag so widgets can paint a hover variant. */
-    struct yetty_ygui_object *hovered_obj;
+    struct yetty_yclass_object *hovered_obj;
 
     /* Pointer-capture target. Set to the widget that consumed the last
      * press; subsequent motion + the matching release are routed here
      * regardless of hit-test, so click-and-drag (slider, splitter)
      * keeps working when the cursor leaves the widget's rect. Cleared
      * on release and on destroy of the captured object. */
-    struct yetty_ygui_object *pressed_obj;
+    struct yetty_yclass_object *pressed_obj;
 
     /* yclass-dispatch state for shipping the per-emit envelope to the
      * receiver-side yfigure root container. When `container_obj` is
@@ -270,10 +294,10 @@ struct yetty_ycore_void_result yetty_ygui_framework_ensure_chrome(
 
 /* Walk the tree invoking emit_container on every widget (pre-order). */
 struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
-    struct yetty_ygui_object *node, struct yetty_ygui_emit_ctx *ctx);
+    struct yetty_yclass_object *node, struct yetty_ygui_emit_ctx *ctx);
 
 /* Walk the tree invoking emit_body on every widget (pre-order). */
-struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_ygui_object *node,
+struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_yclass_object *node,
                                                                    struct yetty_ygui_emit_ctx *ctx);
 
 /* Flush the three streams into the output pty as one yface envelope.
@@ -293,9 +317,9 @@ struct yetty_ycore_void_result yetty_ygui_wire_append_record(struct yetty_ycore_
 
 /* Main-axis scroll offset on the base widget slice — read by the layout
  * pass to slide a scrolling container's in-flow children. Internal. */
-struct yetty_ycore_void_result yetty_ygui_widget_scroll_main_set(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_widget_scroll_main_set(struct yetty_yclass_object *obj,
                                                                  float offset);
-float yetty_ygui_widget_scroll_main_get(const struct yetty_ygui_object *obj);
+float yetty_ygui_widget_scroll_main_get(const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }

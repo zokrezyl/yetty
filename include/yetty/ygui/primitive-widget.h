@@ -14,11 +14,14 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_primitive_widget_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_primitive_widget;
-YETTY_YRESULT_DECLARE(yetty_ygui_primitive_widget_data_ptr, struct yetty_ygui_primitive_widget *);
-struct yetty_ygui_primitive_widget_data_ptr_result yetty_ygui_primitive_widget_data(
-    struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_primitive_widget_ptr, struct yetty_ygui_primitive_widget *);
+struct yetty_ygui_primitive_widget_ptr_result yetty_ygui_primitive_widget_from(
+    struct yetty_yclass_object *obj);
 
 struct yetty_ycore_void_result;
 struct yetty_ygui_emit_ctx;

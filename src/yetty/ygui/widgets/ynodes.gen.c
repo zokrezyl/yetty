@@ -71,17 +71,15 @@ struct yetty_yclass_ptr_result yetty_ygui_ynodes_class_get(void)
     return register_class_r;
 }
 
-struct yetty_ygui_ynodes_data_ptr_result yetty_ygui_ynodes_data(struct yetty_ygui_object *obj)
+struct yetty_ygui_ynodes_ptr_result yetty_ygui_ynodes_from(struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_ptr_result class_r = yetty_ygui_ynodes_class_get();
     if (YETTY_IS_ERR(class_r)) {
-        yerror("yetty_ygui_ynodes_data: class accessor failed: %s", class_r.error.msg);
-        return YETTY_ERR(yetty_ygui_ynodes_data_ptr,
-                         "yetty_ygui_ynodes_data: class accessor failed", class_r);
+        return YETTY_ERR(yetty_ygui_ynodes_ptr, "yetty_ygui_ynodes_from: class accessor", class_r);
     }
-    struct yetty_ygui_void_ptr_result data_slice_r = yetty_ygui_data_get_result(obj, class_r.value);
-    if (YETTY_IS_ERR(data_slice_r)) {
-        return YETTY_ERR(yetty_ygui_ynodes_data_ptr, "yetty_ygui_ynodes_data", data_slice_r);
+    struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
+    if (YETTY_IS_ERR(slice_r)) {
+        return YETTY_ERR(yetty_ygui_ynodes_ptr, "yetty_ygui_ynodes_from: object_data", slice_r);
     }
-    return YETTY_OK(yetty_ygui_ynodes_data_ptr, (struct yetty_ygui_ynodes *)data_slice_r.value);
+    return YETTY_OK(yetty_ygui_ynodes_ptr, (struct yetty_ygui_ynodes *)slice_r.value);
 }

@@ -16,10 +16,9 @@
  * textinput.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_textinput_data_ptr, struct yetty_ygui_textinput *);
+YETTY_YRESULT_DECLARE(yetty_ygui_textinput_ptr, struct yetty_ygui_textinput *);
 struct yetty_yclass_ptr_result yetty_ygui_textinput_class_get(void);
-struct yetty_ygui_textinput_data_ptr_result yetty_ygui_textinput_data(
-    struct yetty_ygui_object *obj);
+struct yetty_ygui_textinput_ptr_result yetty_ygui_textinput_from(struct yetty_yclass_object *obj);
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/mixins/clickable.h>
@@ -57,7 +56,7 @@ static struct yetty_ycore_void_result on_click_focus(struct yetty_yclass_ctx *yc
                                                      void *userdata)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)userdata;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
@@ -90,7 +89,7 @@ static struct yetty_ycore_void_result textinput_constructor(struct yetty_yclass_
                                                             struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_textinput_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -113,7 +112,7 @@ static struct yetty_ycore_void_result textinput_destructor(struct yetty_yclass_c
                                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "textinput_destructor: data_get");
@@ -165,7 +164,7 @@ static struct yetty_ycore_void_result textinput_paint(struct yetty_yclass_ctx *y
                                                       struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "textinput_paint: NULL ctx");
     }
@@ -238,7 +237,7 @@ static int ensure_cap(struct yetty_ygui_textinput *d, size_t need)
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_textinput_set_text(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_textinput_set_text(struct yetty_yclass_object *obj,
                                                              const char *text)
 {
     if (!obj) {
@@ -265,13 +264,13 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_text(struct yetty_ygui_o
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_const_char_ptr_result yetty_ygui_textinput_get_text(
-    const struct yetty_ygui_object *obj)
+    const struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_const_char_ptr, "yetty_ygui_textinput_get_text: invalid args");
     }
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
-        (struct yetty_ygui_object *)obj, yetty_ygui_textinput_class_get().value);
+        (struct yetty_yclass_object *)obj, yetty_ygui_textinput_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr,
                         "yetty_ygui_textinput_get_text: data_get");
     struct yetty_ygui_textinput *d = d_dr.value;
@@ -279,7 +278,7 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_textinput_get_text(
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_textinput_set_placeholder(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_textinput_set_placeholder(struct yetty_yclass_object *obj,
                                                                     const char *placeholder)
 {
     if (!obj) {
@@ -304,7 +303,7 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_placeholder(struct yetty
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_textinput_set_focus(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_textinput_set_focus(struct yetty_yclass_object *obj,
                                                               int focused)
 {
     if (!obj) {
@@ -319,7 +318,7 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_focus(struct yetty_ygui_
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_int_result yetty_ygui_textinput_handle_key(struct yetty_ygui_object *obj,
+struct yetty_ycore_int_result yetty_ygui_textinput_handle_key(struct yetty_yclass_object *obj,
                                                               uint32_t key)
 {
     if (!obj) {

@@ -22,9 +22,9 @@
  * yimage.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_yimage_data_ptr, struct yetty_ygui_yimage *);
+YETTY_YRESULT_DECLARE(yetty_ygui_yimage_ptr, struct yetty_ygui_yimage *);
 struct yetty_yclass_ptr_result yetty_ygui_yimage_class_get(void);
-struct yetty_ygui_yimage_data_ptr_result yetty_ygui_yimage_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_yimage_ptr_result yetty_ygui_yimage_from(struct yetty_yclass_object *obj);
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
@@ -44,7 +44,7 @@ static struct yetty_ycore_void_result yimage_constructor(struct yetty_yclass_ctx
                                                          struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_yimage_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yimage_constructor: super");
@@ -62,7 +62,7 @@ static struct yetty_ycore_void_result yimage_destructor(struct yetty_yclass_ctx 
                                                         struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yimage_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yimage_destructor: data_get");
@@ -84,7 +84,7 @@ static struct yetty_ycore_void_result yimage_emit_container(struct yetty_yclass_
                                                             struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_object_id(obj), YETTY_YFIGURE_KIND_YIMAGE,
                                         r.min.x, r.min.y, r.max.x, r.max.y,
@@ -97,7 +97,7 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *
                                                        struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yimage_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yimage_emit_body: data_get");
@@ -183,7 +183,7 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_yclass_object *obj,
                                                            const uint8_t *bytes, size_t len)
 {
     if (!obj) {
@@ -209,26 +209,26 @@ struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_ygui_obj
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_const_uint8_ptr_result yetty_ygui_yimage_bytes(
-    const struct yetty_ygui_object *obj)
+    const struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_const_uint8_ptr, "yetty_ygui_yimage_bytes: invalid args");
     }
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
-        (struct yetty_ygui_object *)obj, yetty_ygui_yimage_class_get().value);
+        (struct yetty_yclass_object *)obj, yetty_ygui_yimage_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_uint8_ptr, d_dr, "yetty_ygui_yimage_bytes: data_get");
     struct yetty_ygui_yimage *d = d_dr.value;
     return YETTY_OK(yetty_ycore_const_uint8_ptr, d->bytes);
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_size_result yetty_ygui_yimage_bytes_len(const struct yetty_ygui_object *obj)
+struct yetty_ycore_size_result yetty_ygui_yimage_bytes_len(const struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_size, "yetty_ygui_yimage_bytes_len: invalid args");
     }
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
-        (struct yetty_ygui_object *)obj, yetty_ygui_yimage_class_get().value);
+        (struct yetty_yclass_object *)obj, yetty_ygui_yimage_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_size, d_dr, "yetty_ygui_yimage_bytes_len: data_get");
     struct yetty_ygui_yimage *d = d_dr.value;
     return YETTY_OK(yetty_ycore_size, d->len);

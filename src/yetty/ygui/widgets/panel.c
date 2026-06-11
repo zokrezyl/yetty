@@ -18,9 +18,9 @@
  * panel.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_panel_data_ptr, struct yetty_ygui_panel *);
+YETTY_YRESULT_DECLARE(yetty_ygui_panel_ptr, struct yetty_ygui_panel *);
 struct yetty_yclass_ptr_result yetty_ygui_panel_class_get(void);
-struct yetty_ygui_panel_data_ptr_result yetty_ygui_panel_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_panel_ptr_result yetty_ygui_panel_from(struct yetty_yclass_object *obj);
 
 #include <yetty/ygui/primitive-widget.h>
 
@@ -40,7 +40,7 @@ static struct yetty_ycore_void_result panel_constructor(struct yetty_yclass_ctx 
                                                         struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_panel_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "panel_constructor: super");
@@ -66,7 +66,7 @@ static struct yetty_ycore_void_result panel_paint(struct yetty_yclass_ctx *yclas
                                                   struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "panel_paint: NULL ctx");
     }
@@ -93,7 +93,7 @@ static struct yetty_ycore_void_result panel_paint(struct yetty_yclass_ctx *yclas
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_yclass_object *obj,
                                                        struct yetty_ycore_rgba color)
 {
     if (!obj) {
@@ -108,7 +108,7 @@ struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_ygui_object 
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_yclass_object *obj,
                                                            struct yetty_ycore_rgba color,
                                                            float width_px)
 {

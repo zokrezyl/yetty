@@ -9,9 +9,9 @@
  * stepper.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_stepper_data_ptr, struct yetty_ygui_stepper *);
+YETTY_YRESULT_DECLARE(yetty_ygui_stepper_ptr, struct yetty_ygui_stepper *);
 struct yetty_yclass_ptr_result yetty_ygui_stepper_class_get(void);
-struct yetty_ygui_stepper_data_ptr_result yetty_ygui_stepper_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_stepper_ptr_result yetty_ygui_stepper_from(struct yetty_yclass_object *obj);
 #include <yetty/ygui/primitive-widget.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -35,7 +35,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_stepper_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -56,7 +56,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_stepper_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
@@ -75,7 +75,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "stepper paint: NULL ctx");
     }
@@ -145,7 +145,7 @@ static int grow(struct yetty_ygui_stepper *d, int n)
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_yclass_object *obj,
                                                            const char *label)
 {
     if (!obj) {
@@ -173,7 +173,8 @@ struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_ygui_obj
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_stepper_set_current(struct yetty_ygui_object *obj, int i)
+struct yetty_ycore_void_result yetty_ygui_stepper_set_current(struct yetty_yclass_object *obj,
+                                                              int i)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "stepper_set_current: NULL");

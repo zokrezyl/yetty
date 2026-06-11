@@ -15,9 +15,9 @@
  * yzoo.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_yzoo_data_ptr, struct yetty_ygui_yzoo *);
+YETTY_YRESULT_DECLARE(yetty_ygui_yzoo_ptr, struct yetty_ygui_yzoo *);
 struct yetty_yclass_ptr_result yetty_ygui_yzoo_class_get(void);
-struct yetty_ygui_yzoo_data_ptr_result yetty_ygui_yzoo_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_yzoo_ptr_result yetty_ygui_yzoo_from(struct yetty_yclass_object *obj);
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/yzoo/yzoo.h>
@@ -37,7 +37,7 @@ static struct yetty_ycore_void_result yzoo_ctor(struct yetty_yclass_ctx *yclass_
                                                 struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_yzoo_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yzoo_ctor: super");
@@ -61,7 +61,7 @@ static struct yetty_ycore_void_result yzoo_dtor(struct yetty_yclass_ctx *yclass_
                                                 struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yzoo_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yzoo_dtor: data_get");
@@ -78,7 +78,7 @@ static struct yetty_ycore_void_result yzoo_emit_body(struct yetty_yclass_ctx *yc
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yzoo_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yzoo_emit_body: data_get");

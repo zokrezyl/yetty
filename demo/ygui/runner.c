@@ -79,7 +79,7 @@ struct demo_runner {
     demo_build_fn build;
 
     struct yetty_ygui_framework *engine;
-    struct yetty_ygui_object *root;
+    struct yetty_yclass_object *root;
 
     struct yetty_yframework *yframework;
     struct yetty_yplatform_memory_pty_pair pty_pair;
@@ -129,7 +129,7 @@ struct yetty_ygui_framework *demo_runner_engine(struct demo_runner *r)
     return r ? r->engine : NULL;
 }
 
-struct yetty_ygui_object *demo_runner_root(struct demo_runner *r)
+struct yetty_yclass_object *demo_runner_root(struct demo_runner *r)
 {
     return r ? r->root : NULL;
 }
@@ -649,7 +649,7 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
      * a column layout. Demos receive the body panel as their `root`
      * argument, so they get a styled, padded canvas instead of a bare
      * window with a black void below their widgets. */
-    struct yetty_ygui_object *body = NULL;
+    struct yetty_yclass_object *body = NULL;
     {
         struct yetty_ygui_object_ptr_result rr =
             yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
@@ -1316,7 +1316,7 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
     /* Same two-level root the standalone path uses: outer vbox owning
      * the viewport, inner body panel with the brand background and
      * column-direction layout. */
-    struct yetty_ygui_object *body = NULL;
+    struct yetty_yclass_object *body = NULL;
     {
         struct yetty_ygui_object_ptr_result rr =
             yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);

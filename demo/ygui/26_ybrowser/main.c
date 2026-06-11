@@ -266,7 +266,7 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *ctx
 {
     (void)ctx;
     (void)target;
-    struct yetty_ygui_object *browser = userdata;
+    struct yetty_yclass_object *browser = userdata;
     if (!browser || !event) {
         return YETTY_OK_VOID();
     }
@@ -280,7 +280,7 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *ctx
 }
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
 
@@ -288,7 +288,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     struct yetty_ygui_object_ptr_result tbr =
         yetty_ygui_add(yetty_ygui_tabbar_class_get().value, root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tbr, "tabbar");
-    struct yetty_ygui_object *tabbar = tbr.value;
+    struct yetty_yclass_object *tabbar = tbr.value;
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(tabbar);
         l.height = 36;
@@ -307,7 +307,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     struct yetty_ygui_object_ptr_result br =
         yetty_ygui_add(yetty_ygui_ybrowser_class_get().value, root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "ybrowser");
-    struct yetty_ygui_object *browser = br.value;
+    struct yetty_yclass_object *browser = br.value;
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(browser);
         l.flex_grow = 1.0f;

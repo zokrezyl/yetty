@@ -17,9 +17,9 @@
  * yplot.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_yplot_data_ptr, struct yetty_ygui_yplot *);
+YETTY_YRESULT_DECLARE(yetty_ygui_yplot_ptr, struct yetty_ygui_yplot *);
 struct yetty_yclass_ptr_result yetty_ygui_yplot_class_get(void);
-struct yetty_ygui_yplot_data_ptr_result yetty_ygui_yplot_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_yplot_ptr_result yetty_ygui_yplot_from(struct yetty_yclass_object *obj);
 /* Real-build copy of the header-destined config struct. Codegen reads the
  * `#ifdef YCLASS_CODEGEN` block at the foot (copied verbatim into the
  * generated header); the two never coexist in one parse. */
@@ -78,7 +78,7 @@ static struct yetty_ycore_void_result yplot_constructor(struct yetty_yclass_ctx 
                                                         struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_yplot_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yplot_constructor: super");
@@ -99,7 +99,7 @@ static struct yetty_ycore_void_result yplot_destructor(struct yetty_yclass_ctx *
                                                        struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yplot_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yplot_destructor: data_get");
@@ -117,7 +117,7 @@ static struct yetty_ycore_void_result yplot_emit_container(struct yetty_yclass_c
                                                            struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_object_id(obj), YETTY_YFIGURE_KIND_YPLOT,
                                         r.min.x, r.min.y, r.max.x, r.max.y,
@@ -130,7 +130,7 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *y
                                                       struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yplot_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yplot_emit_body: data_get");
@@ -235,7 +235,7 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *y
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_yclass_object *obj,
                                                            const char *source)
 {
     if (!obj) {
@@ -262,7 +262,7 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_ygui_obj
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_yplot_set_config(
-    struct yetty_ygui_object *obj, const struct yetty_ygui_yplot_config *cfg)
+    struct yetty_yclass_object *obj, const struct yetty_ygui_yplot_config *cfg)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yplot_set_config: NULL obj");
@@ -282,7 +282,7 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_config(
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_yplot_set_buffers(
-    struct yetty_ygui_object *obj, const char *source, size_t source_len,
+    struct yetty_yclass_object *obj, const char *source, size_t source_len,
     const struct yetty_yplot_buffer_input *buffers, size_t buffer_count,
     const struct yetty_ygui_yplot_config *config)
 {
@@ -348,7 +348,7 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_buffers(
 #ifdef YCLASS_CODEGEN
 #include <stddef.h>
 #include <stdint.h>
-struct yetty_ygui_object;
+struct yetty_yclass_object;
 struct yetty_ygui_yplot_config {
     float x_min;
     float x_max;

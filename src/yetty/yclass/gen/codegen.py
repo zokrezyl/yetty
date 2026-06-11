@@ -1552,34 +1552,6 @@ def emit_class_accessor(cls: dict) -> str:
         mixin_arg = "NULL"
         mixin_count = "0"
 
-    # ygui widget/mixin classes carry their per-instance state as a data
-    # slice inside the shared yetty_ygui_object block; the runtime resolves
-    # the slice offset from the class. Emit a typed accessor so a method
-    # never hand-writes `data_get(obj, X_class_get().value)` + a cast: the
-    # generator already knows both the class accessor and the concrete data
-    # struct. The accessor is file-local (the data struct is file-local) and
-    # returns a Result — a wrong-class obj or unregistered class surfaces as
-    # an error instead of a NULL deref. Only ygui uses the data-slice object
-    # model; yfigure/yterm/... place their body at obj+1 and are excluded.
-    data_accessor_block = ""
-    if cls["domain"] == "ygui" and cls.get("data"):
-        result_id = f"{qcls}_data_ptr"
-        data_accessor_block = (
-            f"\nstruct {result_id}_result {qcls}_data(struct yetty_ygui_object *obj)\n"
-            f"{{\n"
-            f"    struct yetty_yclass_ptr_result class_r = {accessor}();\n"
-            f"    if (YETTY_IS_ERR(class_r)) {{\n"
-            f'        yerror("{qcls}_data: class accessor failed: %s", class_r.error.msg);\n'
-            f'        return YETTY_ERR({result_id}, "{qcls}_data: class accessor failed", class_r);\n'
-            f"    }}\n"
-            f"    struct yetty_ygui_void_ptr_result data_slice_r =\n"
-            f"        yetty_ygui_data_get_result(obj, class_r.value);\n"
-            f"    if (YETTY_IS_ERR(data_slice_r))\n"
-            f'        return YETTY_ERR({result_id}, "{qcls}_data", data_slice_r);\n'
-            f"    return YETTY_OK({result_id}, ({data} *)data_slice_r.value);\n"
-            f"}}\n"
-        )
-
     # `property`-annotated members → standardized data handle + per-member
     # getters/setters, all keyed on the yclass object. The data struct stays
     # private to the owning .c; every other class reaches members only through
@@ -1587,15 +1559,13 @@ def emit_class_accessor(cls: dict) -> str:
     # so this works for any class whose body is a yclass data slice.
     property_block = ""
     property_fields = [f for f in cls.get("data_fields", []) if f.get("get") or f.get("set")]
-    # Every regular class with a data slice gets the obj->typed-slice accessor
-    # `<class>_from` (the downcast built on yetty_yclass_object_data — it
-    # returns a Result because the object may not be of this class). Per-field
-    # getters/setters are added only for `property`-annotated members.
-    # ygui is excluded: its objects use a custom fat header (struct
-    # yetty_ygui_object), so yetty_yclass_object_data would miscompute the
-    # slice — ygui keeps its own `_data` family until #313 collapses that
-    # header onto yetty_yclass_object.
-    if cls.get("data") and cls.get("type") != "mixin" and cls["domain"] != "ygui":
+    # Every class or mixin with a data slice gets the obj->typed-slice
+    # accessor `<class>_from` (the downcast built on yetty_yclass_object_data
+    # — it returns a Result because the object may not carry this slice).
+    # Mixins are downcastable the same way: their slice is resolved from the
+    # object's class chain. Per-field getters/setters are added only for
+    # `property`-annotated members.
+    if cls.get("data"):
         data_ptr_rid = f"{qcls}_ptr"
         parts = [
             f"\nstruct {data_ptr_rid}_result {qcls}_from(struct yetty_yclass_object *obj)\n"
@@ -1665,7 +1635,7 @@ struct yetty_yclass_ptr_result {accessor}(void)
     cls = register_class_r.value;
     return register_class_r;
 }}
-{data_accessor_block}{property_block}"""
+{property_block}"""
 
 
 
@@ -1716,39 +1686,14 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             f"(void);"
             for c in classes
         )
-        # ygui classes carry per-instance state as a data slice inside the
-        # shared object block. Declare a typed accessor (defined in the
-        # matching .gen.c) so widget methods never hand-write
-        # `data_get(obj, X_class_get().value)` + a cast. Declared here in the
-        # top-included header so calls above the bottom `#include "X.gen.c"`
-        # resolve — same shape as the class accessor. The data struct is
-        # file-local, so forward-declare its tag (the result holds a pointer).
-        data_decls = ""
-        if module == "ygui":
-            blocks = []
-            for c in classes:
-                if not c.get("data"):
-                    continue
-                q = qualified_class(c)
-                rid = f"{q}_data_ptr"
-                blocks.append(
-                    f"{c['data']};\n"
-                    f"YETTY_YRESULT_DECLARE({rid}, {c['data']} *);\n"
-                    f"struct {rid}_result {q}_data(struct yetty_ygui_object *obj);"
-                )
-            if blocks:
-                data_decls = ("\n\nstruct yetty_ygui_object;\n"
-                              + "\n\n".join(blocks))
         # `property`-annotated members → opaque data-block handle + per-member
         # getters/setters, keyed on the yclass object. The struct body never
         # leaves its owning .c; only a forward decl + the accessors cross here.
+        data_decls = ""
         property_decls = ""
         prop_blocks = []
         for c in classes:
-            # ygui has its own `_data` family over yetty_ygui_object (see #313);
-            # the general `_from` would miscompute on ygui's fat header, so it
-            # is excluded until that header is collapsed onto yetty_yclass_object.
-            if c.get("type") == "mixin" or not c.get("data") or module == "ygui":
+            if not c.get("data"):
                 continue
             pfields = [f for f in c.get("data_fields", []) if f.get("get") or f.get("set")]
             q = qualified_class(c)

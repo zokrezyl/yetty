@@ -6,6 +6,16 @@ from ctypes import (c_bool, c_char, c_char_p, c_double, c_float, c_int,
 from .. import runtime as _rt
 from . import _types as _t
 
+class Grid:
+    """yclass yvterm:grid"""
+    def __init__(self, _handle=None):
+        if _handle is None:
+            _fn = _rt.cfn("yetty_yvterm_grid_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+            res = _fn(None)
+            _rt.check(res)
+            _handle = res.value
+        self._handle = _handle
+
 class ShaderGlyph:
     """yclass yvterm:shader_glyph"""
     def __init__(self, _handle=None):

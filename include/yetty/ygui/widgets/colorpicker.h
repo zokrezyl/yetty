@@ -14,21 +14,22 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_colorpicker_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_colorpicker;
-YETTY_YRESULT_DECLARE(yetty_ygui_colorpicker_data_ptr, struct yetty_ygui_colorpicker *);
-struct yetty_ygui_colorpicker_data_ptr_result yetty_ygui_colorpicker_data(
-    struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_colorpicker_ptr, struct yetty_ygui_colorpicker *);
+struct yetty_ygui_colorpicker_ptr_result yetty_ygui_colorpicker_from(
+    struct yetty_yclass_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_colorpicker_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ygui_object;
-
-struct yetty_ycore_void_result yetty_ygui_colorpicker_set_color(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_colorpicker_set_color(struct yetty_yclass_object *obj,
                                                                 uint32_t c);
 struct yetty_ycore_uint32_result yetty_ygui_colorpicker_get_color(
-    const struct yetty_ygui_object *obj);
+    const struct yetty_yclass_object *obj);
 
 #endif

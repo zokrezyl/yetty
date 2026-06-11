@@ -28,7 +28,7 @@ static inline void err_ok(struct yetty_ycore_void_result r)
     }
 }
 
-static void set_grow(struct yetty_ygui_object *w, float grow)
+static void set_grow(struct yetty_yclass_object *w, float grow)
 {
     if (!w) {
         return;
@@ -39,7 +39,7 @@ static void set_grow(struct yetty_ygui_object *w, float grow)
 }
 
 /* Open collapsing_header section, titled, initially expanded. */
-static struct yetty_ygui_object *add_section(struct yetty_ygui_object *area, const char *title)
+static struct yetty_yclass_object *add_section(struct yetty_yclass_object *area, const char *title)
 {
     struct yetty_ygui_object_ptr_result r =
         yetty_ygui_add(yetty_ygui_collapsing_header_class_get().value, area);
@@ -55,7 +55,7 @@ static struct yetty_ygui_object *add_section(struct yetty_ygui_object *area, con
 /* Add one ydiagram leaf under `sec`, fed `mermaid`. The widget sizes its
  * own layout box to the diagram's intrinsic extent in set_source, so the
  * section height (summed below) reserves exactly the right space. */
-static struct yetty_ygui_object *add_diagram(struct yetty_ygui_object *sec, const char *mermaid)
+static struct yetty_yclass_object *add_diagram(struct yetty_yclass_object *sec, const char *mermaid)
 {
     if (!sec) {
         return NULL;
@@ -73,7 +73,7 @@ static struct yetty_ygui_object *add_diagram(struct yetty_ygui_object *sec, cons
 /* Derive a section's open height from its child diagram(s): header strip
  * paddings + the sum of authored child heights + inter-row gaps. Must run
  * after every child is added. */
-static void finalize_section(struct yetty_ygui_object *sec)
+static void finalize_section(struct yetty_yclass_object *sec)
 {
     if (!sec) {
         return;
@@ -81,7 +81,7 @@ static void finalize_section(struct yetty_ygui_object *sec)
     const struct yetty_ygui_layout *sl = yetty_ygui_widget_layout_get(sec);
     float total = sl->padding_top + sl->padding_bottom;
     int n = 0;
-    for (struct yetty_ygui_object *c = yetty_ygui_object_first_child(sec); c;
+    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(sec); c;
          c = yetty_ygui_object_next_sibling(c)) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
         total += cl->height > 0.0f ? cl->height : 0.0f;
@@ -152,7 +152,7 @@ static const char *k_state_machine = "flowchart TD\n"
                                      "  Failed -->|abort|      Done((done))\n";
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
 
@@ -161,7 +161,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         yetty_ygui_add(yetty_ygui_scrollarea_class_get().value, root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "build: scrollarea");
     set_grow(sr.value, 1.0f);
-    struct yetty_ygui_object *area = sr.value;
+    struct yetty_yclass_object *area = sr.value;
 
     struct {
         const char *title;
@@ -175,7 +175,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     };
 
     for (size_t i = 0; i < sizeof(sections) / sizeof(sections[0]); i++) {
-        struct yetty_ygui_object *sec = add_section(area, sections[i].title);
+        struct yetty_yclass_object *sec = add_section(area, sections[i].title);
         add_diagram(sec, sections[i].src);
         finalize_section(sec);
     }

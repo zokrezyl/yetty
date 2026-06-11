@@ -26,7 +26,7 @@
 #include <yetty/ygui/widgets/label.h>
 
 static struct yetty_ycore_void_result build(struct demo_runner *runner,
-                                            struct yetty_ygui_object *root)
+                                            struct yetty_yclass_object *root)
 {
     (void)runner;
 

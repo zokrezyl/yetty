@@ -2,19 +2,12 @@
  * ygui-object.c — runtime instance lifecycle + data slice access +
  * super invokers + lifecycle method stubs.
  *
- * Now built on top of <yetty/yclass/class.h> — no ygui-side class system.
- * The per-instance memory layout ygui needs (object header followed
- * by every reachable class's data slice in inheritance order) is
- * computed on the fly by walking the yclass parent / mixin chain.
- *
- * Per-instance layout:
- *   [ struct yetty_ygui_object header                              ]
- *   [ root data | …  | direct parent data | parent mixins data … ]
- *   [ own data | own mixins data …                                ]
- *
- * Order matches yetty_yclass_register's layout (root-down through
- * parent chain, with each level's mixins immediately after that
- * level's own data, then own + own mixins last).
+ * Built on top of <yetty/yclass/class.h> — ygui owns no class system. An
+ * ygui object IS a plain `struct yetty_yclass_object`; the yclass runtime
+ * owns instance allocation (yetty_yclass_object_alloc) and data-slice
+ * resolution (yetty_yclass_object_data). The widget tree + per-widget
+ * framework state live in the `class@ygui:widget` base-class data slice
+ * (struct yetty_ygui_tree); ygui_tree() resolves it from any object.
  */
 
 #include "internal.h"
@@ -45,7 +38,7 @@
  * Super invokers.
  *=========================================================================*/
 
-struct yetty_ycore_void_result yetty_ygui_super_void(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_super_void(struct yetty_yclass_object *obj,
                                                      const struct yetty_yclass *self_class,
                                                      yetty_yclass_method_id_t method_id)
 {
@@ -70,7 +63,7 @@ struct yetty_ycore_void_result yetty_ygui_super_void(struct yetty_ygui_object *o
     return ((fn_t)impl)(NULL, (struct yetty_yclass_object *)obj);
 }
 
-struct yetty_ycore_int_result yetty_ygui_super_int(struct yetty_ygui_object *obj,
+struct yetty_ycore_int_result yetty_ygui_super_int(struct yetty_yclass_object *obj,
                                                    const struct yetty_yclass *self_class,
                                                    yetty_yclass_method_id_t method_id)
 {
@@ -96,265 +89,80 @@ struct yetty_ycore_int_result yetty_ygui_super_int(struct yetty_ygui_object *obj
 }
 
 /*===========================================================================
- * Data slice access — walks the leaf class's parent / mixin chain
- * (via the yclass getters) and returns a typed pointer to the
- * requested class's slice within the object's body.
- *
- * Layout order (matches yetty_yclass_register's instance layout):
- *   sizeof(yetty_ygui_object)
- *   then root → parent (each class's own data + its mixins' data)
- *   then leaf own data + leaf own mixins data
- *
- * Walk is O(chain length × mixin count) per data_get call. Widget
- * trees are shallow (typically ≤3 levels with ≤2 mixins each) so the
- * linear search is cache-friendly. No caching today; if profiling
- * later shows it matters, a per-(leaf,target) → offset hash is the
- * obvious cache.
+ * Data slice access. ygui objects are plain `struct yetty_yclass_object`s,
+ * so slice resolution + instance sizing go through the yclass runtime
+ * (yetty_yclass_object_data / yetty_yclass_object_alloc). The two helpers
+ * below are thin adapters that keep the historic ygui signatures (a Result
+ * wrapper and an assert-based void* convenience) over the canonical
+ * resolver, so the ~300 widget call sites need no churn.
  *=========================================================================*/
 
-/* If `cls` matches `target`, write `offset` to `*out_offset` and
- * return 1. Otherwise advance `offset` by `cls`'s data_size and
- * return 0. NULL `cls` is silently skipped. */
-static struct yetty_ycore_int_result try_match(const struct yetty_yclass *cls,
-                                               const struct yetty_yclass *target, size_t *offset,
-                                               size_t *out_offset)
-{
-    if (!cls) {
-        return YETTY_OK(yetty_ycore_int, 0);
-    }
-    if (cls == target) {
-        *out_offset = *offset;
-        return YETTY_OK(yetty_ycore_int, 1);
-    }
-    struct yetty_ycore_size_result data_size = yetty_yclass_data_size(cls);
-    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_size, "try_match: data_size");
-    *offset += data_size.value;
-    return YETTY_OK(yetty_ycore_int, 0);
-}
-
-/* Walk `cls`'s mixins, checking each against `target`. Returns 1 + sets
- * `*out_offset` when found. */
-static struct yetty_ycore_int_result walk_mixins(const struct yetty_yclass *cls,
-                                                 const struct yetty_yclass *target, size_t *offset,
-                                                 size_t *out_offset)
-{
-    struct yetty_ycore_size_result mixin_count = yetty_yclass_mixin_count(cls);
-    YETTY_RETURN_IF_ERR(yetty_ycore_int, mixin_count, "walk_mixins: mixin_count");
-    for (size_t i = 0; i < mixin_count.value; ++i) {
-        struct yetty_yclass_ptr_result mixin = yetty_yclass_mixin_at(cls, i);
-        YETTY_RETURN_IF_ERR(yetty_ycore_int, mixin, "walk_mixins: mixin_at");
-        struct yetty_ycore_int_result matched = try_match(mixin.value, target, offset, out_offset);
-        YETTY_RETURN_IF_ERR(yetty_ycore_int, matched, "walk_mixins: try_match");
-        if (matched.value) {
-            return YETTY_OK(yetty_ycore_int, 1);
-        }
-    }
-    return YETTY_OK(yetty_ycore_int, 0);
-}
-
-/* Compute the byte offset of `target`'s data slice within an instance
- * of `leaf`'s class. Returns SIZE_MAX if `target` isn't in the chain
- * (programmer error). */
-static struct yetty_ycore_size_result data_offset(const struct yetty_yclass *leaf,
-                                                  const struct yetty_yclass *target)
-{
-    size_t offset = sizeof(struct yetty_ygui_object);
-    size_t out_offset = 0;
-
-    /* Walk the parent chain root-down. Collect parents into a tiny
-     * stack so we can iterate root → leaf without recursion. */
-    const struct yetty_yclass *chain[64];
-    size_t chain_len = 0;
-    {
-        const struct yetty_yclass *cur = leaf;
-        for (;;) {
-            struct yetty_yclass_ptr_result parent = yetty_yclass_parent(cur);
-            YETTY_RETURN_IF_ERR(yetty_ycore_size, parent, "data_offset: parent walk");
-            if (!parent.value) {
-                break;
-            }
-            if (chain_len >= sizeof(chain) / sizeof(chain[0])) {
-                return YETTY_OK(yetty_ycore_size, SIZE_MAX);
-            }
-            chain[chain_len++] = parent.value;
-            cur = parent.value;
-        }
-    }
-
-    /* Iterate root → direct parent: each level's data first, then its
-     * mixins. */
-    for (size_t i = chain_len; i > 0; --i) {
-        const struct yetty_yclass *parent_class = chain[i - 1];
-        struct yetty_ycore_int_result matched =
-            try_match(parent_class, target, &offset, &out_offset);
-        YETTY_RETURN_IF_ERR(yetty_ycore_size, matched, "data_offset: parent try_match");
-        if (matched.value) {
-            return YETTY_OK(yetty_ycore_size, out_offset);
-        }
-        struct yetty_ycore_int_result mixin_matched =
-            walk_mixins(parent_class, target, &offset, &out_offset);
-        YETTY_RETURN_IF_ERR(yetty_ycore_size, mixin_matched, "data_offset: parent walk_mixins");
-        if (mixin_matched.value) {
-            return YETTY_OK(yetty_ycore_size, out_offset);
-        }
-    }
-
-    /* Leaf's own data, then leaf's mixins. */
-    struct yetty_ycore_int_result leaf_matched = try_match(leaf, target, &offset, &out_offset);
-    YETTY_RETURN_IF_ERR(yetty_ycore_size, leaf_matched, "data_offset: leaf try_match");
-    if (leaf_matched.value) {
-        return YETTY_OK(yetty_ycore_size, out_offset);
-    }
-    struct yetty_ycore_int_result leaf_mixin_matched =
-        walk_mixins(leaf, target, &offset, &out_offset);
-    YETTY_RETURN_IF_ERR(yetty_ycore_size, leaf_mixin_matched, "data_offset: leaf walk_mixins");
-    if (leaf_mixin_matched.value) {
-        return YETTY_OK(yetty_ycore_size, out_offset);
-    }
-    return YETTY_OK(yetty_ycore_size, SIZE_MAX);
-}
-
-struct yetty_ygui_void_ptr_result yetty_ygui_data_get_result(struct yetty_ygui_object *obj,
+struct yetty_ygui_void_ptr_result yetty_ygui_data_get_result(struct yetty_yclass_object *obj,
                                                              const struct yetty_yclass *cls)
 {
-    if (!obj) {
-        return YETTY_ERR(yetty_ygui_void_ptr, "yetty_ygui_data_get_result: NULL obj");
+    struct yetty_yclass_void_ptr_result slice = yetty_yclass_object_data(obj, cls);
+    if (YETTY_IS_ERR(slice)) {
+        return YETTY_ERR(yetty_ygui_void_ptr, "yetty_ygui_data_get_result", slice);
     }
-    /* A NULL `cls` is the common failure: the call site passed the
-     * `.value` of a `*_class_get()` that errored. Report it instead of
-     * indexing a slice at offset 0 (which would alias the header). */
-    if (!cls) {
-        return YETTY_ERR(yetty_ygui_void_ptr, "yetty_ygui_data_get_result: NULL class");
-    }
-    struct yetty_ycore_size_result off = data_offset(obj->klass, cls);
-    YETTY_RETURN_IF_ERR(yetty_ygui_void_ptr, off, "yetty_ygui_data_get_result: data_offset");
-    if (off.value == SIZE_MAX) {
-        return YETTY_ERR(yetty_ygui_void_ptr,
-                         "yetty_ygui_data_get_result: class not in object's chain");
-    }
-    return YETTY_OK(yetty_ygui_void_ptr, (char *)obj + off.value);
+    return YETTY_OK(yetty_ygui_void_ptr, slice.value);
 }
 
 /* Assert-based convenience accessor for value getters whose public
  * signature returns a plain value (widget_rect, layout_get, …) and
  * cannot become a Result without cascading through ~90 call sites in
- * modules outside this one. The class/offset walk only fails on a
- * programmer error (target class not in the object's chain), which the
- * assert below catches in debug builds; the inner Result has nowhere to
- * propagate at this deliberately non-Result boundary. New code should
- * prefer yetty_ygui_data_get_result. */
+ * modules outside this one. Resolution only fails on a programmer error
+ * (target class not in the object's chain), caught by the assert in debug
+ * builds; the inner Result has nowhere to propagate at this deliberately
+ * non-Result boundary. New code should prefer yetty_ygui_data_get_result. */
 YETTY_EXTERNAL_CALLBACK
-void *yetty_ygui_data_get(struct yetty_ygui_object *obj, const struct yetty_yclass *cls)
+void *yetty_ygui_data_get(struct yetty_yclass_object *obj, const struct yetty_yclass *cls)
 {
-    assert(obj && cls);
-    struct yetty_ycore_size_result off = data_offset(obj->klass, cls);
-    if (YETTY_IS_ERR(off)) {
-        yetty_ycore_error_destroy(off.error);
-        assert(0 && "yetty_ygui_data_get: data_offset failed");
+    struct yetty_yclass_void_ptr_result slice = yetty_yclass_object_data(obj, cls);
+    if (YETTY_IS_ERR(slice)) {
+        yetty_ycore_error_destroy(slice.error);
+        assert(0 && "yetty_ygui_data_get: yetty_yclass_object_data failed");
         return NULL;
     }
-    assert(off.value != SIZE_MAX && "yetty_ygui_data_get: class not in object's chain");
-    if (off.value == SIZE_MAX) {
-        return NULL;
-    }
-    return (char *)obj + off.value;
-}
-
-/* Add `cls`'s own data_size + every mixin's data_size to `*total`.
- * Any failure on the yclass side is propagated — a partial sum would
- * under-allocate the instance, which surfaces later as an assert in
- * data_get or worse (silent slice overlap), so we bail at the first
- * unreadable size. */
-static struct yetty_ycore_void_result instance_size_add_level(const struct yetty_yclass *cls,
-                                                              size_t *total)
-{
-    struct yetty_ycore_size_result ds = yetty_yclass_data_size(cls);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, ds, "instance_size_add_level: data_size");
-    *total += ds.value;
-    struct yetty_ycore_size_result mc = yetty_yclass_mixin_count(cls);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, mc, "instance_size_add_level: mixin_count");
-    for (size_t j = 0; j < mc.value; ++j) {
-        struct yetty_yclass_ptr_result mxr = yetty_yclass_mixin_at(cls, j);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, mxr, "instance_size_add_level: mixin_at");
-        struct yetty_ycore_size_result mds = yetty_yclass_data_size(mxr.value);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, mds, "instance_size_add_level: mixin data_size");
-        *total += mds.value;
-    }
-    return YETTY_OK_VOID();
-}
-
-/* Total per-instance size (object header + every data slice) for a
- * class. Used by yetty_ygui_add to size the calloc. Sums via the
- * same walk data_offset does — root-down through parent + parent
- * mixins, then leaf own + leaf mixins. Returns a Result so callers
- * propagate yclass failures instead of allocating a partial body
- * that data_get can't honestly satisfy. */
-static struct yetty_ycore_size_result instance_size_of(const struct yetty_yclass *leaf)
-{
-    size_t total = sizeof(struct yetty_ygui_object);
-    const struct yetty_yclass *chain[64];
-    size_t chain_len = 0;
-    {
-        const struct yetty_yclass *cur = leaf;
-        for (;;) {
-            struct yetty_yclass_ptr_result pr = yetty_yclass_parent(cur);
-            YETTY_RETURN_IF_ERR(yetty_ycore_size, pr, "instance_size_of: parent walk");
-            if (!pr.value) {
-                break;
-            }
-            if (chain_len >= sizeof(chain) / sizeof(chain[0])) {
-                return YETTY_ERR(yetty_ycore_size, "instance_size_of: parent chain too deep");
-            }
-            chain[chain_len++] = pr.value;
-            cur = pr.value;
-        }
-    }
-    for (size_t i = chain_len; i > 0; --i) {
-        struct yetty_ycore_void_result lr = instance_size_add_level(chain[i - 1], &total);
-        YETTY_RETURN_IF_ERR(yetty_ycore_size, lr, "instance_size_of: parent level");
-    }
-    /* Leaf own + leaf mixins. */
-    struct yetty_ycore_void_result lr = instance_size_add_level(leaf, &total);
-    YETTY_RETURN_IF_ERR(yetty_ycore_size, lr, "instance_size_of: leaf level");
-    return YETTY_OK(yetty_ycore_size, total);
+    return slice.value;
 }
 
 /*===========================================================================
  * Instance lifecycle.
  *=========================================================================*/
 
-static void object_unlink_from_parent(struct yetty_ygui_object *obj)
+static void object_unlink_from_parent(struct yetty_yclass_object *obj)
 {
-    struct yetty_ygui_object *p = obj->parent;
+    struct yetty_yclass_object *p = ygui_tree(obj)->parent;
     if (!p) {
         return;
     }
-    struct yetty_ygui_object **slot = &p->first_child;
+    struct yetty_yclass_object **slot = &ygui_tree(p)->first_child;
     while (*slot && *slot != obj) {
-        slot = &(*slot)->next_sibling;
+        slot = &ygui_tree(*slot)->next_sibling;
     }
     if (*slot == obj) {
-        *slot = obj->next_sibling;
+        *slot = ygui_tree(obj)->next_sibling;
     }
-    obj->next_sibling = NULL;
-    obj->parent = NULL;
+    ygui_tree(obj)->next_sibling = NULL;
+    ygui_tree(obj)->parent = NULL;
 }
 
-static void object_link_to_parent(struct yetty_ygui_object *obj, struct yetty_ygui_object *parent)
+static void object_link_to_parent(struct yetty_yclass_object *obj,
+                                  struct yetty_yclass_object *parent)
 {
-    obj->parent = parent;
+    ygui_tree(obj)->parent = parent;
     if (!parent) {
         return;
     }
-    if (!parent->first_child) {
-        parent->first_child = obj;
+    if (!ygui_tree(parent)->first_child) {
+        ygui_tree(parent)->first_child = obj;
         return;
     }
-    struct yetty_ygui_object *t = parent->first_child;
-    while (t->next_sibling) {
-        t = t->next_sibling;
+    struct yetty_yclass_object *t = ygui_tree(parent)->first_child;
+    while (ygui_tree(t)->next_sibling) {
+        t = ygui_tree(t)->next_sibling;
     }
-    t->next_sibling = obj;
+    ygui_tree(t)->next_sibling = obj;
 }
 
 const struct yetty_yclass *yetty_ygui_class_expect(struct yetty_yclass_ptr_result class_result,
@@ -370,7 +178,7 @@ const struct yetty_yclass *yetty_ygui_class_expect(struct yetty_yclass_ptr_resul
 }
 
 struct yetty_ygui_object_ptr_result yetty_ygui_add(const struct yetty_yclass *cls,
-                                                   struct yetty_ygui_object *parent)
+                                                   struct yetty_yclass_object *parent)
 {
     if (!cls) {
         return YETTY_ERR(yetty_ygui_object_ptr, "yetty_ygui_add: NULL class");
@@ -386,15 +194,14 @@ struct yetty_ygui_object_ptr_result yetty_ygui_add(const struct yetty_yclass *cl
         yetty_ycore_error_destroy(tr.error);
     }
 
-    struct yetty_ycore_size_result szr = instance_size_of(cls);
-    if (YETTY_IS_ERR(szr)) {
-        return YETTY_ERR(yetty_ygui_object_ptr, "yetty_ygui_add: instance_size_of failed", szr);
+    /* The yclass runtime owns instance layout + sizing: the object is a
+     * plain yetty_yclass_object whose data slices (widget tree first, then
+     * each subclass / mixin slice) follow the header. */
+    struct yetty_yclass_object_ptr_result objr = yetty_yclass_object_alloc(cls);
+    if (YETTY_IS_ERR(objr)) {
+        return YETTY_ERR(yetty_ygui_object_ptr, "yetty_ygui_add: object_alloc failed", objr);
     }
-    struct yetty_ygui_object *obj = calloc(1, szr.value);
-    if (!obj) {
-        return YETTY_ERR(yetty_ygui_object_ptr, "yetty_ygui_add: calloc instance failed");
-    }
-    obj->klass = cls;
+    struct yetty_yclass_object *obj = objr.value;
     object_link_to_parent(obj, parent);
 
     struct yetty_ygui_framework *framework = yetty_ygui_object_framework(obj);
@@ -405,14 +212,15 @@ struct yetty_ygui_object_ptr_result yetty_ygui_add(const struct yetty_yclass *cl
             free(obj);
             return YETTY_ERR(yetty_ygui_object_ptr, "yetty_ygui_add: id alloc failed", idr);
         }
-        obj->id = idr.value;
+        ygui_tree(obj)->id = idr.value;
     }
 
     struct yetty_ycore_void_result cr =
         yetty_ygui_constructor(NULL, (struct yetty_yclass_object *)obj);
     if (YETTY_IS_ERR(cr)) {
-        if (framework && obj->id) {
-            struct yetty_ycore_void_result fr = yetty_ygui_framework_free_id(framework, obj->id);
+        if (framework && ygui_tree(obj)->id) {
+            struct yetty_ycore_void_result fr =
+                yetty_ygui_framework_free_id(framework, ygui_tree(obj)->id);
             if (YETTY_IS_ERR(fr)) {
                 yetty_ycore_error_destroy(fr.error);
             }
@@ -425,32 +233,33 @@ struct yetty_ygui_object_ptr_result yetty_ygui_add(const struct yetty_yclass *cl
     return YETTY_OK(yetty_ygui_object_ptr, obj);
 }
 
-struct yetty_ycore_void_result yetty_ygui_del(struct yetty_ygui_object *obj)
+struct yetty_ycore_void_result yetty_ygui_del(struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_OK_VOID();
     }
-    while (obj->first_child) {
-        struct yetty_ycore_void_result cr = yetty_ygui_del(obj->first_child);
+    while (ygui_tree(obj)->first_child) {
+        struct yetty_ycore_void_result cr = yetty_ygui_del(ygui_tree(obj)->first_child);
         if (YETTY_IS_ERR(cr)) {
             yetty_ycore_error_destroy(cr.error);
         }
     }
-    struct yetty_ygui_event_subscription *sub = obj->subscriptions;
+    struct yetty_ygui_event_subscription *sub = ygui_tree(obj)->subscriptions;
     while (sub) {
         struct yetty_ygui_event_subscription *next = sub->next;
         free(sub);
         sub = next;
     }
-    obj->subscriptions = NULL;
+    ygui_tree(obj)->subscriptions = NULL;
     struct yetty_ycore_void_result dr =
         yetty_ygui_destructor(NULL, (struct yetty_yclass_object *)obj);
     if (YETTY_IS_ERR(dr)) {
         yetty_ycore_error_destroy(dr.error);
     }
     struct yetty_ygui_framework *framework = yetty_ygui_object_framework(obj);
-    if (framework && obj->id != 0) {
-        struct yetty_ycore_void_result fr = yetty_ygui_framework_free_id(framework, obj->id);
+    if (framework && ygui_tree(obj)->id != 0) {
+        struct yetty_ycore_void_result fr =
+            yetty_ygui_framework_free_id(framework, ygui_tree(obj)->id);
         if (YETTY_IS_ERR(fr)) {
             yetty_ycore_error_destroy(fr.error);
         }
@@ -470,57 +279,57 @@ struct yetty_ycore_void_result yetty_ygui_del(struct yetty_ygui_object *obj)
  * Hierarchy + id + dirty accessors.
  *=========================================================================*/
 
-struct yetty_ygui_object *yetty_ygui_object_parent(struct yetty_ygui_object *obj)
+struct yetty_yclass_object *yetty_ygui_object_parent(struct yetty_yclass_object *obj)
 {
-    return obj ? obj->parent : NULL;
+    return obj ? ygui_tree(obj)->parent : NULL;
 }
 
-struct yetty_ygui_object *yetty_ygui_object_first_child(struct yetty_ygui_object *obj)
+struct yetty_yclass_object *yetty_ygui_object_first_child(struct yetty_yclass_object *obj)
 {
-    return obj ? obj->first_child : NULL;
+    return obj ? ygui_tree(obj)->first_child : NULL;
 }
 
-struct yetty_ygui_object *yetty_ygui_object_next_sibling(struct yetty_ygui_object *obj)
+struct yetty_yclass_object *yetty_ygui_object_next_sibling(struct yetty_yclass_object *obj)
 {
-    return obj ? obj->next_sibling : NULL;
+    return obj ? ygui_tree(obj)->next_sibling : NULL;
 }
 
-void yetty_ygui_object_raise(struct yetty_ygui_object *obj)
+void yetty_ygui_object_raise(struct yetty_yclass_object *obj)
 {
-    if (!obj || !obj->parent) {
+    if (!obj || !ygui_tree(obj)->parent) {
         return;
     }
     /* Move to the end of the sibling list so the framework's widget
      * hit-test (last-match-wins) prefers this widget over earlier
      * siblings it overlaps. The render side is ordered by figure z
      * separately; raising bumps both so they agree. */
-    struct yetty_ygui_object *parent = obj->parent;
+    struct yetty_yclass_object *parent = ygui_tree(obj)->parent;
     object_unlink_from_parent(obj);
     object_link_to_parent(obj, parent);
 }
 
-struct yetty_ygui_framework *yetty_ygui_object_framework(struct yetty_ygui_object *obj)
+struct yetty_ygui_framework *yetty_ygui_object_framework(struct yetty_yclass_object *obj)
 {
     while (obj) {
-        if (obj->framework) {
-            return obj->framework;
+        if (ygui_tree(obj)->framework) {
+            return ygui_tree(obj)->framework;
         }
-        obj = obj->parent;
+        obj = ygui_tree(obj)->parent;
     }
     return NULL;
 }
 
-uint32_t yetty_ygui_object_id(const struct yetty_ygui_object *obj)
+uint32_t yetty_ygui_object_id(const struct yetty_yclass_object *obj)
 {
-    return obj ? obj->id : 0;
+    return obj ? ygui_tree(obj)->id : 0;
 }
 
-struct yetty_ycore_void_result yetty_ygui_object_set_dirty(struct yetty_ygui_object *obj)
+struct yetty_ycore_void_result yetty_ygui_object_set_dirty(struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_object_set_dirty: NULL obj");
     }
-    obj->dirty = 1;
+    ygui_tree(obj)->dirty = 1;
     struct yetty_ygui_framework *framework = yetty_ygui_object_framework(obj);
     if (framework) {
         yetty_ygui_framework_mark_dirty(framework);
@@ -528,17 +337,17 @@ struct yetty_ycore_void_result yetty_ygui_object_set_dirty(struct yetty_ygui_obj
     return YETTY_OK_VOID();
 }
 
-int yetty_ygui_object_is_dirty(const struct yetty_ygui_object *obj)
+int yetty_ygui_object_is_dirty(const struct yetty_yclass_object *obj)
 {
-    return obj && obj->dirty;
+    return obj && ygui_tree(obj)->dirty;
 }
 
-int yetty_ygui_object_is_hovered(const struct yetty_ygui_object *obj)
+int yetty_ygui_object_is_hovered(const struct yetty_yclass_object *obj)
 {
-    return obj && obj->hovered;
+    return obj && ygui_tree(obj)->hovered;
 }
 
-const struct yetty_yclass *yetty_ygui_object_class(const struct yetty_ygui_object *obj)
+const struct yetty_yclass *yetty_ygui_object_class(const struct yetty_yclass_object *obj)
 {
     return obj ? obj->klass : NULL;
 }

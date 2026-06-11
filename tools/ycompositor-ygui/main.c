@@ -97,7 +97,7 @@ struct ycomp_ygui_app {
     struct yetty_ychrome_host *chrome;
     /* Borrowed pointer to the outer window — it is the framework root,
      * so the layout pass stretches it to the viewport automatically. */
-    struct yetty_ygui_object *win;
+    struct yetty_yclass_object *win;
     /* Default font handed to the compositor; every per-group ygrid the
      * compositor creates borrows this at slot 0 so TEXT_DRAWABLE_LIST records
      * (button labels, etc.) expand into renderable glyphs. */
@@ -143,7 +143,7 @@ struct ycomp_ygui_app {
  * window auto-fills via flex CSS so the actual canvas dim doesn't
  * matter much. */
 /* Add `cls` under `parent`, returning the new object or NULL. */
-static struct yetty_ygui_object *cy_add(struct yetty_ygui_object *parent,
+static struct yetty_yclass_object *cy_add(struct yetty_yclass_object *parent,
                                         struct yetty_yclass_ptr_result cls_r)
 {
     if (YETTY_IS_ERR(cls_r)) {
@@ -162,13 +162,13 @@ static void build_scene(struct ycomp_ygui_app *app)
 {
     /* Outer window — it becomes the framework root, so the layout pass
      * stretches it to the viewport automatically. */
-    struct yetty_ygui_object *win = cy_add(NULL, yetty_ygui_window_class_get());
+    struct yetty_yclass_object *win = cy_add(NULL, yetty_ygui_window_class_get());
     if (!win) {
         return;
     }
     app->win = win;
     yetty_ycore_error_destroy_safe(yetty_ygui_window_set_title(win, "ycompositor-ygui demo"));
-    struct yetty_ygui_object *body = yetty_ygui_window_body(win);
+    struct yetty_yclass_object *body = yetty_ygui_window_body(win);
     if (!body) {
         return;
     }
@@ -177,14 +177,14 @@ static void build_scene(struct ycomp_ygui_app *app)
 
     /* Menubar with one menu so the chrome looks real. The popup lives
      * under the window so the tree owns it; the menubar borrows it. */
-    struct yetty_ygui_object *mf = cy_add(win, yetty_ygui_popup_menu_class_get());
+    struct yetty_yclass_object *mf = cy_add(win, yetty_ygui_popup_menu_class_get());
     if (mf) {
         yetty_ycore_error_destroy_safe(yetty_ygui_popup_menu_add_item(mf, "New tab", NULL, NULL));
         yetty_ycore_error_destroy_safe(yetty_ygui_popup_menu_add_item(mf, "Reload", NULL, NULL));
         yetty_ycore_error_destroy_safe(yetty_ygui_popup_menu_add_separator(mf));
         yetty_ycore_error_destroy_safe(yetty_ygui_popup_menu_add_item(mf, "Quit", NULL, NULL));
     }
-    struct yetty_ygui_object *mb = cy_add(body, yetty_ygui_menubar_class_get());
+    struct yetty_yclass_object *mb = cy_add(body, yetty_ygui_menubar_class_get());
     if (mb) {
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(mb, 0.0f, 26.0f));
         if (mf) {
@@ -192,7 +192,7 @@ static void build_scene(struct ycomp_ygui_app *app)
         }
     }
 
-    struct yetty_ygui_object *hdr = cy_add(body, yetty_ygui_label_class_get());
+    struct yetty_yclass_object *hdr = cy_add(body, yetty_ygui_label_class_get());
     if (hdr) {
         yetty_ycore_error_destroy_safe(
             yetty_ygui_label_set_text(hdr, "ygui scene rendered through ycompositor"));
@@ -200,14 +200,14 @@ static void build_scene(struct ycomp_ygui_app *app)
     }
 
     /* Action row — horizontal flex with several buttons. */
-    struct yetty_ygui_object *actions = cy_add(body, yetty_ygui_hbox_class_get());
+    struct yetty_yclass_object *actions = cy_add(body, yetty_ygui_hbox_class_get());
     if (actions) {
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
             actions, "display: flex; flex-direction: row; gap: 8px; height: 48px;"));
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(actions, 0.0f, 48.0f));
         static const char *const acts[] = {"New", "Open", "Save", "Delete"};
         for (size_t i = 0; i < sizeof(acts) / sizeof(acts[0]); i++) {
-            struct yetty_ygui_object *b = cy_add(actions, yetty_ygui_button_class_get());
+            struct yetty_yclass_object *b = cy_add(actions, yetty_ygui_button_class_get());
             if (b) {
                 yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(b, acts[i]));
                 yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(b, 120.0f, 36.0f));
@@ -216,12 +216,12 @@ static void build_scene(struct ycomp_ygui_app *app)
     }
 
     /* Settings panel with several checkboxes + a slider. */
-    struct yetty_ygui_object *panel = cy_add(body, yetty_ygui_panel_class_get());
+    struct yetty_yclass_object *panel = cy_add(body, yetty_ygui_panel_class_get());
     if (panel) {
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
             panel, "display: flex; flex-direction: column; padding: 12px; gap: 8px;"));
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(panel, 0.0f, 220.0f));
-        struct yetty_ygui_object *plabel = cy_add(panel, yetty_ygui_label_class_get());
+        struct yetty_yclass_object *plabel = cy_add(panel, yetty_ygui_label_class_get());
         if (plabel) {
             yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(plabel, "Settings"));
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(plabel, 0.0f, 24.0f));
@@ -231,19 +231,19 @@ static void build_scene(struct ycomp_ygui_app *app)
             int checked;
         } cbs[] = {{"Enable animations", 1}, {"Reduce motion", 0}, {"Show debug overlay", 0}};
         for (size_t i = 0; i < sizeof(cbs) / sizeof(cbs[0]); i++) {
-            struct yetty_ygui_object *cb = cy_add(panel, yetty_ygui_checkbox_class_get());
+            struct yetty_yclass_object *cb = cy_add(panel, yetty_ygui_checkbox_class_get());
             if (cb) {
                 yetty_ycore_error_destroy_safe(yetty_ygui_checkbox_set_label(cb, cbs[i].label));
                 yetty_ycore_error_destroy_safe(yetty_ygui_checkbox_set_checked(cb, cbs[i].checked));
                 yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(cb, 0.0f, 26.0f));
             }
         }
-        struct yetty_ygui_object *slabel = cy_add(panel, yetty_ygui_label_class_get());
+        struct yetty_yclass_object *slabel = cy_add(panel, yetty_ygui_label_class_get());
         if (slabel) {
             yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(slabel, "Brightness"));
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(slabel, 0.0f, 24.0f));
         }
-        struct yetty_ygui_object *slider = cy_add(panel, yetty_ygui_slider_class_get());
+        struct yetty_yclass_object *slider = cy_add(panel, yetty_ygui_slider_class_get());
         if (slider) {
             yetty_ycore_error_destroy_safe(yetty_ygui_slider_set_range(slider, 0.0f, 100.0f));
             yetty_ycore_error_destroy_safe(yetty_ygui_slider_set_value(slider, 65.0f));
@@ -252,14 +252,14 @@ static void build_scene(struct ycomp_ygui_app *app)
     }
 
     /* Trailing button to confirm flex layout stops where it should. */
-    struct yetty_ygui_object *footer = cy_add(body, yetty_ygui_button_class_get());
+    struct yetty_yclass_object *footer = cy_add(body, yetty_ygui_button_class_get());
     if (footer) {
         yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(footer, "Apply"));
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(footer, 160.0f, 38.0f));
     }
 
     /* Statusbar at the bottom of the body. */
-    struct yetty_ygui_object *sb = cy_add(body, yetty_ygui_statusbar_class_get());
+    struct yetty_yclass_object *sb = cy_add(body, yetty_ygui_statusbar_class_get());
     if (sb) {
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(sb, 0.0f, 22.0f));
         yetty_ycore_error_destroy_safe(

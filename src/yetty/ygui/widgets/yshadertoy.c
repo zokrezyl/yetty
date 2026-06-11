@@ -21,10 +21,9 @@
  * yshadertoy.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_yshadertoy_data_ptr, struct yetty_ygui_yshadertoy *);
+YETTY_YRESULT_DECLARE(yetty_ygui_yshadertoy_ptr, struct yetty_ygui_yshadertoy *);
 struct yetty_yclass_ptr_result yetty_ygui_yshadertoy_class_get(void);
-struct yetty_ygui_yshadertoy_data_ptr_result yetty_ygui_yshadertoy_data(
-    struct yetty_ygui_object *obj);
+struct yetty_ygui_yshadertoy_ptr_result yetty_ygui_yshadertoy_from(struct yetty_yclass_object *obj);
 #include <yetty/yfigure/wire.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,12 +40,12 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_yshadertoy_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yshadertoy: super");
-    struct yetty_ygui_yshadertoy_data_ptr_result d_r = yetty_ygui_yshadertoy_data(obj);
+    struct yetty_ygui_yshadertoy_ptr_result d_r = yetty_ygui_yshadertoy_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "ctor: data");
     struct yetty_ygui_yshadertoy *d = d_r.value;
     d->src = NULL;
@@ -60,8 +59,8 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
                                            struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ygui_yshadertoy_data_ptr_result d_r = yetty_ygui_yshadertoy_data(obj);
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
+    struct yetty_ygui_yshadertoy_ptr_result d_r = yetty_ygui_yshadertoy_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "dtor: data");
     struct yetty_ygui_yshadertoy *d = d_r.value;
     free(d->src);
@@ -75,7 +74,7 @@ static struct yetty_ycore_void_result emit_container(struct yetty_yclass_ctx *yc
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_object_id(obj),
                                         YETTY_YFIGURE_KIND_YSHADERTOY, r.min.x, r.min.y, r.max.x,
@@ -88,8 +87,8 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_ctx *yclass_
                                                 struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
-    struct yetty_ygui_yshadertoy_data_ptr_result d_r = yetty_ygui_yshadertoy_data(obj);
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
+    struct yetty_ygui_yshadertoy_ptr_result d_r = yetty_ygui_yshadertoy_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "emit_body: data");
     struct yetty_ygui_yshadertoy *d = d_r.value;
     /* Ship the WGSL only when it changed — the figure recompiles on
@@ -109,13 +108,13 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_ctx *yclass_
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_yshadertoy_set_source(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_yshadertoy_set_source(struct yetty_yclass_object *obj,
                                                                 const char *src, size_t len)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yshadertoy_set_source: NULL");
     }
-    struct yetty_ygui_yshadertoy_data_ptr_result d_r = yetty_ygui_yshadertoy_data(obj);
+    struct yetty_ygui_yshadertoy_ptr_result d_r = yetty_ygui_yshadertoy_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "yetty_ygui_yshadertoy_set_source: data");
     struct yetty_ygui_yshadertoy *d = d_r.value;
     free(d->src);

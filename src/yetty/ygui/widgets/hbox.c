@@ -17,9 +17,9 @@
  * hbox.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_hbox_data_ptr, struct yetty_ygui_hbox *);
+YETTY_YRESULT_DECLARE(yetty_ygui_hbox_ptr, struct yetty_ygui_hbox *);
 struct yetty_yclass_ptr_result yetty_ygui_hbox_class_get(void);
-struct yetty_ygui_hbox_data_ptr_result yetty_ygui_hbox_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_hbox_ptr_result yetty_ygui_hbox_from(struct yetty_yclass_object *obj);
 
 #include <yetty/ygui/primitive-widget.h>
 
@@ -28,7 +28,7 @@ static struct yetty_ycore_void_result hbox_constructor(struct yetty_yclass_ctx *
                                                        struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_hbox_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "hbox_constructor: super");

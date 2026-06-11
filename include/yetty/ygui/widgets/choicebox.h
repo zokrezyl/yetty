@@ -14,21 +14,21 @@
 
 struct yetty_yclass_ptr_result yetty_ygui_choicebox_class_get(void);
 
-struct yetty_ygui_object;
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
 struct yetty_ygui_choicebox;
-YETTY_YRESULT_DECLARE(yetty_ygui_choicebox_data_ptr, struct yetty_ygui_choicebox *);
-struct yetty_ygui_choicebox_data_ptr_result yetty_ygui_choicebox_data(
-    struct yetty_ygui_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_choicebox_ptr, struct yetty_ygui_choicebox *);
+struct yetty_ygui_choicebox_ptr_result yetty_ygui_choicebox_from(struct yetty_yclass_object *obj);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_choicebox_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ygui_object;
-
-struct yetty_ycore_void_result yetty_ygui_choicebox_add(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_choicebox_add(struct yetty_yclass_object *obj,
                                                         const char *label);
-struct yetty_ycore_int_result yetty_ygui_choicebox_is_selected(const struct yetty_ygui_object *obj,
-                                                               int idx);
+struct yetty_ycore_int_result yetty_ygui_choicebox_is_selected(
+    const struct yetty_yclass_object *obj, int idx);
 
 #endif

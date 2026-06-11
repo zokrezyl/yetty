@@ -38,7 +38,7 @@ static void test_hbox_two_children(void)
 {
     struct yetty_ygui_object_ptr_result r = yetty_ygui_add(yetty_ygui_hbox_class_get().value, NULL);
     assert(YETTY_IS_OK(r));
-    struct yetty_ygui_object *root = r.value;
+    struct yetty_yclass_object *root = r.value;
 
     struct yetty_ygui_object_ptr_result rc1 =
         yetty_ygui_add(yetty_ygui_label_class_get().value, root);
@@ -67,8 +67,8 @@ static void test_hbox_two_children(void)
 
     /* Children appear in insertion order (yetty_ygui_add appends at
      * tail). rc1 first, then rc2. */
-    struct yetty_ygui_object *first = yetty_ygui_object_first_child(root);
-    struct yetty_ygui_object *second = yetty_ygui_object_next_sibling(first);
+    struct yetty_yclass_object *first = yetty_ygui_object_first_child(root);
+    struct yetty_yclass_object *second = yetty_ygui_object_next_sibling(first);
     assert(first == rc1.value);
     assert(second == rc2.value);
 
@@ -89,12 +89,12 @@ static void test_vbox_flex_grow(void)
      * with explicit heights. Free space should land in the grow child. */
     struct yetty_ygui_object_ptr_result r = yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
     assert(YETTY_IS_OK(r));
-    struct yetty_ygui_object *root = r.value;
+    struct yetty_yclass_object *root = r.value;
 
     /* Append at tail: insertion order == layout order (c1, c2, c3). */
-    struct yetty_ygui_object *c1 = yetty_ygui_add(yetty_ygui_label_class_get().value, root).value;
-    struct yetty_ygui_object *c2 = yetty_ygui_add(yetty_ygui_label_class_get().value, root).value;
-    struct yetty_ygui_object *c3 = yetty_ygui_add(yetty_ygui_label_class_get().value, root).value;
+    struct yetty_yclass_object *c1 = yetty_ygui_add(yetty_ygui_label_class_get().value, root).value;
+    struct yetty_yclass_object *c2 = yetty_ygui_add(yetty_ygui_label_class_get().value, root).value;
+    struct yetty_yclass_object *c3 = yetty_ygui_add(yetty_ygui_label_class_get().value, root).value;
 
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(c1);
     l.height = 0.0f;
@@ -133,8 +133,8 @@ static void test_vbox_flex_grow(void)
 
 static void test_padding(void)
 {
-    struct yetty_ygui_object *root = yetty_ygui_add(yetty_ygui_hbox_class_get().value, NULL).value;
-    struct yetty_ygui_object *c = yetty_ygui_add(yetty_ygui_label_class_get().value, root).value;
+    struct yetty_yclass_object *root = yetty_ygui_add(yetty_ygui_hbox_class_get().value, NULL).value;
+    struct yetty_yclass_object *c = yetty_ygui_add(yetty_ygui_label_class_get().value, root).value;
 
     struct yetty_ygui_layout lp = *yetty_ygui_widget_layout_get(root);
     lp.padding_left = 10;
@@ -169,7 +169,7 @@ static struct yetty_ycore_void_result on_click_cb(struct yetty_yclass_ctx *_yc_c
                                                   void *userdata)
 {
     (void)_yc_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)_yc_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;
     (void)obj;
     int *counter = (int *)userdata;
     (*counter)++;
@@ -178,7 +178,7 @@ static struct yetty_ycore_void_result on_click_cb(struct yetty_yclass_ctx *_yc_c
 
 static void test_clickable_state_machine(void)
 {
-    struct yetty_ygui_object *btn = yetty_ygui_add(yetty_ygui_button_class_get().value, NULL).value;
+    struct yetty_yclass_object *btn = yetty_ygui_add(yetty_ygui_button_class_get().value, NULL).value;
     assert(btn);
     yetty_ygui_button_set_label(btn, "OK");
     struct yetty_ycore_const_char_ptr_result label = yetty_ygui_button_get_label(btn);
@@ -225,11 +225,11 @@ static void test_widget_paint_emits_real_prims(void)
     /* Build a tree: panel (10,10)-(110,110) containing a label and a
      * button. Drive paint and verify real SDF prims + a TEXT_DRAWABLE_LIST
      * land in the ydraw drawable_list. */
-    struct yetty_ygui_object *panel =
+    struct yetty_yclass_object *panel =
         yetty_ygui_add(yetty_ygui_panel_class_get().value, NULL).value;
-    struct yetty_ygui_object *label =
+    struct yetty_yclass_object *label =
         yetty_ygui_add(yetty_ygui_label_class_get().value, panel).value;
-    struct yetty_ygui_object *btn =
+    struct yetty_yclass_object *btn =
         yetty_ygui_add(yetty_ygui_button_class_get().value, panel).value;
     yetty_ygui_label_set_text(label, "hi");
     yetty_ygui_button_set_label(btn, "go");

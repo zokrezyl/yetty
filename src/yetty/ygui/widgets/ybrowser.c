@@ -14,9 +14,9 @@
  * ybrowser.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_ybrowser_data_ptr, struct yetty_ygui_ybrowser *);
+YETTY_YRESULT_DECLARE(yetty_ygui_ybrowser_ptr, struct yetty_ygui_ybrowser *);
 struct yetty_yclass_ptr_result yetty_ygui_ybrowser_class_get(void);
-struct yetty_ygui_ybrowser_data_ptr_result yetty_ygui_ybrowser_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_ybrowser_ptr_result yetty_ygui_ybrowser_from(struct yetty_yclass_object *obj);
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
@@ -40,7 +40,7 @@ static struct yetty_ycore_void_result ybr_constructor(struct yetty_yclass_ctx *y
                                                       struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_ybrowser_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -61,7 +61,7 @@ static struct yetty_ycore_void_result ybr_destructor(struct yetty_yclass_ctx *yc
                                                      struct yetty_yclass_object *yclass_obj)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ybrowser_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ybr_destructor: data_get");
@@ -86,7 +86,7 @@ static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_ctx *yclass
     return YETTY_OK_VOID();
 #else
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ybrowser_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ybr_render: data_get");
@@ -135,7 +135,7 @@ static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_ctx *ycl
                                                     struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ybrowser_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ybr_emit_body: data_get");
@@ -164,7 +164,7 @@ static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_ctx *ycl
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_ybrowser_set_html(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_ybrowser_set_html(struct yetty_yclass_object *obj,
                                                             const char *html, size_t len)
 {
     if (!obj || !html) {

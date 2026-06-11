@@ -15,20 +15,20 @@
  * splitter.gen.c defines are declared here so the foot include and the impls
  * have them in scope. The generated public header publishes the identical
  * declarations for consumers. */
-YETTY_YRESULT_DECLARE(yetty_ygui_splitter_data_ptr, struct yetty_ygui_splitter *);
+YETTY_YRESULT_DECLARE(yetty_ygui_splitter_ptr, struct yetty_ygui_splitter *);
 struct yetty_yclass_ptr_result yetty_ygui_splitter_class_get(void);
-struct yetty_ygui_splitter_data_ptr_result yetty_ygui_splitter_data(struct yetty_ygui_object *obj);
+struct yetty_ygui_splitter_ptr_result yetty_ygui_splitter_from(struct yetty_yclass_object *obj);
 /* Real-build copy of the header-destined change callback typedef. Codegen
  * reads the `#ifdef YCLASS_CODEGEN` block at the foot (copied verbatim into
  * the generated header); the two never coexist in one parse. */
 #ifdef YCLASS_CODEGEN
-struct yetty_ygui_object;
-typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_ygui_object *splitter, float delta,
+struct yetty_yclass_object;
+typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_yclass_object *splitter, float delta,
                                               void *userdata);
 #endif
 #ifndef YCLASS_CODEGEN
-struct yetty_ygui_object;
-typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_ygui_object *splitter, float delta,
+struct yetty_yclass_object;
+typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_yclass_object *splitter, float delta,
                                               void *userdata);
 #endif
 #include "paint-helpers.h"
@@ -66,7 +66,7 @@ static struct yetty_yclass_ptr_result splitter_class(void)
 /* Effective axis: 1 = row-bar (horizontal resize), 0 = column-bar
  * (vertical resize). Honours an explicit override, else derives from the
  * parent's flex direction. */
-static int splitter_axis_row(struct yetty_ygui_object *obj, const struct yetty_ygui_splitter *d)
+static int splitter_axis_row(struct yetty_yclass_object *obj, const struct yetty_ygui_splitter *d)
 {
     if (d->axis_plus1 == 1) {
         return 0;
@@ -74,7 +74,7 @@ static int splitter_axis_row(struct yetty_ygui_object *obj, const struct yetty_y
     if (d->axis_plus1 == 2) {
         return 1;
     }
-    struct yetty_ygui_object *parent = yetty_ygui_object_parent(obj);
+    struct yetty_yclass_object *parent = yetty_ygui_object_parent(obj);
     if (parent) {
         const struct yetty_ygui_layout *pl = yetty_ygui_widget_layout_get(parent);
         return pl->direction == YETTY_YGUI_FLEX_ROW ? 1 : 0;
@@ -88,7 +88,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "splitter paint: NULL ctx");
     }
@@ -111,14 +111,14 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 /* The immediately preceding in-flow sibling (skips absolute / hidden). */
-static struct yetty_ygui_object *splitter_prev_sibling(struct yetty_ygui_object *obj)
+static struct yetty_yclass_object *splitter_prev_sibling(struct yetty_yclass_object *obj)
 {
-    struct yetty_ygui_object *parent = yetty_ygui_object_parent(obj);
+    struct yetty_yclass_object *parent = yetty_ygui_object_parent(obj);
     if (!parent) {
         return NULL;
     }
-    struct yetty_ygui_object *prev = NULL;
-    for (struct yetty_ygui_object *c = yetty_ygui_object_first_child(parent); c && c != obj;
+    struct yetty_yclass_object *prev = NULL;
+    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(parent); c && c != obj;
          c = yetty_ygui_object_next_sibling(c)) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
         if (cl->absolute || cl->hidden) {
@@ -149,7 +149,7 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
                                                float y)
 {
     (void)yclass_ctx;
-    struct yetty_ygui_object *obj = (struct yetty_ygui_object *)yclass_obj;
+    struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_yclass_ptr_result class_result = splitter_class();
     YETTY_RETURN_IF_ERR(yetty_ycore_int, class_result, "on_motion: class");
     struct yetty_ygui_void_ptr_result sd_dr = yetty_ygui_data_get_result(obj, class_result.value);
@@ -183,8 +183,8 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
-    struct yetty_ygui_object *parent = yetty_ygui_object_parent(obj);
-    struct yetty_ygui_object *prev = splitter_prev_sibling(obj);
+    struct yetty_yclass_object *parent = yetty_ygui_object_parent(obj);
+    struct yetty_yclass_object *prev = splitter_prev_sibling(obj);
     if (!parent || !prev) {
         return YETTY_OK(yetty_ycore_int, 1);
     }
@@ -233,7 +233,8 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
  *---------------------------------------------------------------------------*/
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_splitter_set_axis(struct yetty_ygui_object *obj, int row)
+struct yetty_ycore_void_result yetty_ygui_splitter_set_axis(struct yetty_yclass_object *obj,
+                                                            int row)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_splitter_set_axis: NULL obj");
@@ -251,7 +252,7 @@ struct yetty_ycore_void_result yetty_ygui_splitter_set_axis(struct yetty_ygui_ob
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_int_result yetty_ygui_splitter_get_axis(const struct yetty_ygui_object *obj)
+struct yetty_ycore_int_result yetty_ygui_splitter_get_axis(const struct yetty_yclass_object *obj)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_splitter_get_axis: NULL obj");
@@ -265,12 +266,12 @@ struct yetty_ycore_int_result yetty_ygui_splitter_get_axis(const struct yetty_yg
         return YETTY_OK(yetty_ycore_int, -1);
     }
     const struct yetty_ygui_splitter *d =
-        yetty_ygui_data_get((struct yetty_ygui_object *)obj, cr.value);
+        yetty_ygui_data_get((struct yetty_yclass_object *)obj, cr.value);
     return YETTY_OK(yetty_ycore_int, d->axis_plus1 == 0 ? -1 : d->axis_plus1 - 1);
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_splitter_set_min(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_splitter_set_min(struct yetty_yclass_object *obj,
                                                            float min_size)
 {
     if (!obj) {
@@ -289,7 +290,7 @@ struct yetty_ycore_void_result yetty_ygui_splitter_set_min(struct yetty_ygui_obj
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_ygui_splitter_on_change(struct yetty_ygui_object *obj,
+struct yetty_ycore_void_result yetty_ygui_splitter_on_change(struct yetty_yclass_object *obj,
                                                              yetty_ygui_splitter_change_cb cb,
                                                              void *userdata)
 {

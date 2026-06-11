@@ -63,7 +63,7 @@ struct yrich_app {
     struct yetty_yclass_object *container_obj;
     struct yetty_yfigure_registry *registry;
     struct yetty_ygui_framework *ygui;
-    struct yetty_ygui_object *win; /* framework root widget */
+    struct yetty_yclass_object *win; /* framework root widget */
     struct yetty_yfont_font *font;
     struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
     struct yetty_ygrid_factory_args figure_args;
