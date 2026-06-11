@@ -4,7 +4,6 @@
 #include "hud.h"
 
 #include <yetty/ygui/framework.h>
-#include <yetty/ygui/object.h>
 #include <yetty/ygui/widget.h>
 #include <yetty/ygui/widgets/label.h>
 #include <yetty/ygui/widgets/vbox.h>
@@ -109,11 +108,11 @@ static const struct yetty_platform_pty_ops *hud_pty_ops(void)
 struct ccc_hud {
     struct yetty_platform_pty pty;
     struct yetty_ygui_framework *framework;
-    struct yetty_ygui_object *root;
-    struct yetty_ygui_object *window;
-    struct yetty_ygui_object *state_label;
-    struct yetty_ygui_object *turn_label;
-    struct yetty_ygui_object *session_label;
+    struct yetty_yclass_object *root;
+    struct yetty_yclass_object *window;
+    struct yetty_yclass_object *state_label;
+    struct yetty_yclass_object *turn_label;
+    struct yetty_yclass_object *session_label;
 
     /* ccc-side corner-resize drag state (the window widget on this
      * branch has no resize grip of its own; resize lives here). */
@@ -159,35 +158,38 @@ static void window_rect(const struct ccc_hud *hud, float *min_x, float *min_y, f
     *height = layout->height;
 }
 
-static struct yetty_ygui_object_ptr_result hud_add(struct yetty_ygui_object *parent,
+static struct yetty_yclass_object_ptr_result hud_add(struct yetty_yclass_object *parent,
                                                    struct yetty_yclass_ptr_result class_result)
 {
     if (YETTY_IS_ERR(class_result)) {
-        return YETTY_ERR(yetty_ygui_object_ptr, "hud_add: class_get failed", class_result);
+        return YETTY_ERR(yetty_yclass_object_ptr, "hud_add: class_get failed", class_result);
     }
-    return yetty_ygui_add(class_result.value, parent);
+    if (!parent) {
+        return yetty_ygui_widget_new(class_result.value);
+    }
+    return yetty_ygui_widget_add(parent, class_result.value);
 }
 
-static struct yetty_ygui_object_ptr_result hud_add_label(struct ccc_hud *hud,
+static struct yetty_yclass_object_ptr_result hud_add_label(struct ccc_hud *hud,
                                                          const char *initial_text,
                                                          struct yetty_ycore_rgba color)
 {
-    struct yetty_ygui_object *body = yetty_ygui_window_body(hud->window);
+    struct yetty_yclass_object *body = yetty_ygui_window_body(hud->window);
     if (!body) {
-        return YETTY_ERR(yetty_ygui_object_ptr, "hud_add_label: window has no body");
+        return YETTY_ERR(yetty_yclass_object_ptr, "hud_add_label: window has no body");
     }
-    struct yetty_ygui_object_ptr_result label_res = hud_add(body, yetty_ygui_label_class_get());
-    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, label_res, "hud_add_label: add label");
-    struct yetty_ygui_object *label = label_res.value;
+    struct yetty_yclass_object_ptr_result label_res = hud_add(body, yetty_ygui_label_class_get());
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, label_res, "hud_add_label: add label");
+    struct yetty_yclass_object *label = label_res.value;
 
     struct yetty_ycore_void_result size_res =
         yetty_ygui_widget_set_size(label, 0.0f, CCC_HUD_LABEL_HEIGHT);
-    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, size_res, "hud_add_label: set_size");
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, size_res, "hud_add_label: set_size");
     struct yetty_ycore_void_result text_res = yetty_ygui_label_set_text(label, initial_text);
-    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, text_res, "hud_add_label: set_text");
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, text_res, "hud_add_label: set_text");
     struct yetty_ycore_void_result color_res = yetty_ygui_label_set_color(label, color);
-    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, color_res, "hud_add_label: set_color");
-    return YETTY_OK(yetty_ygui_object_ptr, label);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, color_res, "hud_add_label: set_color");
+    return YETTY_OK(yetty_yclass_object_ptr, label);
 }
 
 /* Apply the current viewport: framework layout space + window
@@ -236,14 +238,14 @@ static struct yetty_ycore_void_result hud_apply_viewport(struct ccc_hud *hud)
  * tear the framework down on any failure without repeating cleanup. */
 static struct yetty_ycore_void_result hud_build(struct ccc_hud *hud)
 {
-    struct yetty_ygui_object_ptr_result root_res = hud_add(NULL, yetty_ygui_vbox_class_get());
+    struct yetty_yclass_object_ptr_result root_res = hud_add(NULL, yetty_ygui_vbox_class_get());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, root_res, "hud_build: root vbox");
     hud->root = root_res.value;
     struct yetty_ycore_void_result set_root_res =
         yetty_ygui_framework_set_root(hud->framework, hud->root);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, set_root_res, "hud_build: set_root");
 
-    struct yetty_ygui_object_ptr_result window_res =
+    struct yetty_yclass_object_ptr_result window_res =
         hud_add(hud->root, yetty_ygui_window_class_get());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, window_res, "hud_build: window");
     hud->window = window_res.value;
@@ -261,14 +263,14 @@ static struct yetty_ycore_void_result hud_build(struct ccc_hud *hud)
 
     struct yetty_ycore_rgba accent = {.r = 107, .g = 168, .b = 146, .a = 255};
     struct yetty_ycore_rgba secondary = {.r = 159, .g = 167, .b = 168, .a = 255};
-    struct yetty_ygui_object_ptr_result state_res = hud_add_label(hud, "idle", accent);
+    struct yetty_yclass_object_ptr_result state_res = hud_add_label(hud, "idle", accent);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, state_res, "hud_build: state label");
     hud->state_label = state_res.value;
-    struct yetty_ygui_object_ptr_result turn_res =
+    struct yetty_yclass_object_ptr_result turn_res =
         hud_add_label(hud, "waiting for first turn…", secondary);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, turn_res, "hud_build: turn label");
     hud->turn_label = turn_res.value;
-    struct yetty_ygui_object_ptr_result session_res = hud_add_label(hud, "", secondary);
+    struct yetty_yclass_object_ptr_result session_res = hud_add_label(hud, "", secondary);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, session_res, "hud_build: session label");
     hud->session_label = session_res.value;
 

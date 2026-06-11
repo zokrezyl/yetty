@@ -303,11 +303,11 @@ struct yetty_ycore_void_result yetty_yui_debug_window_destroy(struct yetty_yui_d
         return YETTY_OK_VOID();
     }
     if (dw->grip_right) {
-        yetty_ycore_error_destroy_safe(yetty_ygui_del(dw->grip_right));
+        yetty_ycore_error_destroy_safe(yetty_ygui_widget_destroy(dw->grip_right));
         dw->grip_right = NULL;
     }
     if (dw->grip_bottom) {
-        yetty_ycore_error_destroy_safe(yetty_ygui_del(dw->grip_bottom));
+        yetty_ycore_error_destroy_safe(yetty_ygui_widget_destroy(dw->grip_bottom));
         dw->grip_bottom = NULL;
     }
     if (dw->window) {
