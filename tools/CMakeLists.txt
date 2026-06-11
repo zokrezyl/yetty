@@ -59,6 +59,13 @@ if(YETTY_ENABLE_TOOL_YTOP)
     add_subdirectory(ytop)
 endif()
 
+# ccc is POSIX-only (fork/execl child spawn, termios raw mode, poll,
+# ioctl): tvOS prohibits fork outright and Windows lacks the headers.
+# Linux-only for the moment — macOS likely works but is unverified.
+if(YETTY_ENABLE_TOOL_CCC AND YETTY_PLATFORM STREQUAL "linux")
+    add_subdirectory(ai/ccc)
+endif()
+
 if(YETTY_ENABLE_TOOL_YGREETER)
     add_subdirectory(ygreeter)
 endif()

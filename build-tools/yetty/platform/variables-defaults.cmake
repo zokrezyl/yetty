@@ -157,6 +157,7 @@ option(YETTY_ENABLE_TOOL_GEN_ERROR       "gen-error tool (malformed OSC test) " 
 option(YETTY_ENABLE_TOOL_YRDAWN_DEMO       "yrdawn-demo tool (bridge smoke test)" ON)
 option(YETTY_ENABLE_TOOL_YPLOT           "yplot tool"                        ON)
 option(YETTY_ENABLE_TOOL_YTOP            "ytop tool (CPU monitor)"           ON)
+option(YETTY_ENABLE_TOOL_CCC             "ccc tool (claude CLI loop)"        ON)
 option(YETTY_ENABLE_TOOL_YGREETER        "ygreeter first-contact tool"       ON)
 option(YETTY_ENABLE_TOOL_YINSTALL        "yinstall installer"                ON)
 

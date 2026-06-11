@@ -7,12 +7,15 @@
  *
  * This is a ygui construct, in the same spirit as the tabbar / statusbar /
  * splitter widgets owned by yui: yui keeps an array of debug windows
- * (one per pane in the active workspace's tile tree) and reconciles them
- * every frame in yui_debug_windows_sync (see yui.c).
+ * (one per pane whose debug_open flag is set in the active workspace's
+ * tile tree) and reconciles them every frame in yui_debug_windows_sync
+ * (see yui.c).
  *
- * Each debug window is a small ygui panel anchored at the top-right of
- * its pane with a single label child. Step 2 will replace the label with
- * actual content; the scaffold is just to make the panel visible.
+ * Each debug window is a small closable, draggable, resizable ygui
+ * window initially anchored at the top-right of its pane. It starts
+ * closed; the pane context menu opens it, and the title-bar close
+ * button reports back through the close callback so yui can clear the
+ * pane's debug_open flag.
  */
 
 #include <stddef.h>
@@ -30,10 +33,18 @@ struct yetty_ywire_stats_snapshot;
 
 YETTY_YRESULT_DECLARE(yetty_yui_debug_window_ptr, struct yetty_yui_debug_window *);
 
+/* Invoked when the user clicks the window's title-bar close button.
+ * The owner reacts by clearing the pane's debug_open flag; the window
+ * itself is then destroyed by the next reconcile pass. */
+typedef struct yetty_ycore_void_result (*yetty_yui_debug_window_close_cb)(
+    void *userdata, yetty_ycore_object_id pane_id);
+
 /* Build the widget tree under `engine`'s root. `pane_id` is woven into
- * a debug tag so multiple debug windows are distinguishable in traces. */
+ * a debug tag so multiple debug windows are distinguishable in traces.
+ * `on_close` (optional) fires when the title-bar close button is hit. */
 struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
-    struct yetty_ygui_framework *engine, yetty_ycore_object_id pane_id);
+    struct yetty_ygui_framework *engine, yetty_ycore_object_id pane_id,
+    yetty_yui_debug_window_close_cb on_close, void *on_close_userdata);
 
 /* Removes the widget tree from the engine and frees the bookkeeping. */
 struct yetty_ycore_void_result yetty_yui_debug_window_destroy(struct yetty_yui_debug_window *dw);

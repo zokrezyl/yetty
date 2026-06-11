@@ -103,6 +103,14 @@ int yetty_yui_tile_pane_focused(const struct yetty_yui_tile *pane);
 
 void yetty_yui_tile_pane_set_focused(struct yetty_yui_tile *pane, int focused);
 
+/* Per-pane debug-window visibility. Closed (0) by default; toggled from
+ * the pane context menu and cleared again by the debug window's close
+ * button. yui's per-frame reconcile reads this to decide whether the
+ * pane gets a debug window. */
+int yetty_yui_tile_pane_debug_open(const struct yetty_yui_tile *pane);
+
+void yetty_yui_tile_pane_set_debug_open(struct yetty_yui_tile *pane, int open);
+
 /* Tree helpers */
 struct yetty_yui_tile *yetty_yui_tile_find_by_id(struct yetty_yui_tile *root,
                                                  yetty_ycore_object_id id);

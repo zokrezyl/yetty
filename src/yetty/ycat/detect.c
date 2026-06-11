@@ -56,6 +56,10 @@ enum yetty_ycat_type yetty_ycat_type_from_mime(const char *mime)
         strcmp(mime, "application/vnd.mermaid") == 0) {
         return YETTY_YCAT_TYPE_MERMAID;
     }
+    /* LilyPond has no IANA MIME either; honour the de-facto editor string. */
+    if (strcmp(mime, "text/x-lilypond") == 0) {
+        return YETTY_YCAT_TYPE_MUSIC;
+    }
     /* Check SVG before the generic "image/" prefix so it routes to the
      * vector handler instead of the raster decoder. */
     if (strcmp(mime, "image/svg+xml") == 0 || strcmp(mime, "image/svg") == 0) {
@@ -132,6 +136,10 @@ enum yetty_ycat_type yetty_ycat_type_from_extension(const char *ext)
     if (strcasecmp(noleading, "h264") == 0 || strcasecmp(noleading, "264") == 0 ||
         strcasecmp(noleading, "avc") == 0 || strcasecmp(noleading, "x264") == 0) {
         return YETTY_YCAT_TYPE_VIDEO;
+    }
+    /* LilyPond scores and their include files. */
+    if (strcasecmp(noleading, "ly") == 0 || strcasecmp(noleading, "ily") == 0) {
+        return YETTY_YCAT_TYPE_MUSIC;
     }
     if (strcasecmp(noleading, "txt") == 0) {
         return YETTY_YCAT_TYPE_TEXT;
@@ -246,6 +254,34 @@ static int looks_like_h264_annex_b(const uint8_t *bytes, size_t len)
     return 0;
 }
 
+#ifdef YETTY_YCAT_HAS_YMUSIC
+/* LilyPond has no libmagic signature, but its leading commands are
+ * distinctive. Scan the first few KB for a telltale command — the same
+ * markers the yless pager keys on. Only compiled in when the music
+ * handler is, so a handler-less build never classifies text as MUSIC. */
+static int looks_like_lilypond(const uint8_t *bytes, size_t len)
+{
+    if (!bytes || len == 0) {
+        return 0;
+    }
+    size_t scan = len < 4096u ? len : 4096u;
+    static const char *const markers[] = {"\\relative",  "\\version", "\\score",
+                                          "\\new Staff", "\\clef",    "\\time"};
+    for (size_t marker = 0; marker < sizeof(markers) / sizeof(markers[0]); marker++) {
+        size_t needle_len = strlen(markers[marker]);
+        if (needle_len > scan) {
+            continue;
+        }
+        for (size_t i = 0; i + needle_len <= scan; i++) {
+            if (memcmp(bytes + i, markers[marker], needle_len) == 0) {
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+#endif
+
 enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const char *path)
 {
     /* Extension first on types libmagic generalises away (markdown,
@@ -253,7 +289,8 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
     enum yetty_ycat_type by_ext = yetty_ycat_type_from_extension(path_extension(path));
     if (by_ext == YETTY_YCAT_TYPE_MARKDOWN || by_ext == YETTY_YCAT_TYPE_PDF ||
         by_ext == YETTY_YCAT_TYPE_SVG || by_ext == YETTY_YCAT_TYPE_MERMAID ||
-        by_ext == YETTY_YCAT_TYPE_VIDEO || by_ext == YETTY_YCAT_TYPE_LOTTIE) {
+        by_ext == YETTY_YCAT_TYPE_VIDEO || by_ext == YETTY_YCAT_TYPE_LOTTIE ||
+        by_ext == YETTY_YCAT_TYPE_MUSIC) {
         return by_ext;
     }
 
@@ -284,6 +321,13 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
      * unrelated data, so sniff for its tell-tale top-level shape. */
     if (bytes && len > 0 && yetty_ylottie_can_parse((const char *)bytes, len)) {
         return YETTY_YCAT_TYPE_LOTTIE;
+    }
+#endif
+
+#ifdef YETTY_YCAT_HAS_YMUSIC
+    /* LilyPond sniff — covers piped stdin with no .ly extension. */
+    if (looks_like_lilypond(bytes, len)) {
+        return YETTY_YCAT_TYPE_MUSIC;
     }
 #endif
 

@@ -385,6 +385,8 @@ static struct yetty_ycore_void_result yui_split_kind_action(struct yetty_yclass_
 static struct yetty_ycore_void_result yui_split_back_to_context(struct yetty_yclass_ctx *ctx,
                                                                 struct yetty_yclass_object *menu,
                                                                 int item_index, void *userdata);
+static struct yetty_ycore_void_result yui_context_toggle_debug_window(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *menu, int item_index, void *userdata);
 static struct yetty_ycore_void_result yui_gpu_info_refresh(struct yetty_yclass_ctx *ctx,
                                                            struct yetty_yclass_object *button,
                                                            void *userdata);
@@ -1291,6 +1293,27 @@ static struct yetty_ycore_void_result yui_debug_window_remove_at(struct yetty_yu
     return YETTY_OK_VOID();
 }
 
+/* Close-button callback wired into every debug window: clear the owning
+ * pane's debug_open flag so the next reconcile pass sweeps the window. */
+static struct yetty_ycore_void_result yui_debug_window_on_close(void *userdata,
+                                                                yetty_ycore_object_id pane_id)
+{
+    struct yetty_yui *yui = userdata;
+    if (!yui || !yui->tabbar_model) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_yui_workspace *ws = yetty_yui_tabbar_model_active_workspace(yui->tabbar_model);
+    struct yetty_yui_tile *root = ws ? yetty_yui_workspace_root(ws) : NULL;
+    struct yetty_yui_tile *pane = root ? yetty_yui_tile_find_by_id(root, pane_id) : NULL;
+    if (pane) {
+        yetty_yui_tile_pane_set_debug_open(pane, 0);
+    }
+    if (yui->engine) {
+        yetty_ygui_framework_mark_dirty(yui->engine);
+    }
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result yui_debug_window_walk_tree(struct yetty_yui *yui,
                                                                  struct yetty_yui_tile *tile,
                                                                  yetty_ycore_object_id workspace_id)
@@ -1312,6 +1335,13 @@ static struct yetty_ycore_void_result yui_debug_window_walk_tree(struct yetty_yu
     yetty_ycore_object_id pane_id = yetty_yui_tile_id(tile);
     struct yetty_yui_rect b = yetty_yui_tile_bounds(tile);
 
+    /* Closed by default — a pane only carries a debug window while its
+     * debug_open flag is set (context-menu toggle / close button). An
+     * existing window stays unseen here and the sweep destroys it. */
+    if (!yetty_yui_tile_pane_debug_open(tile)) {
+        return YETTY_OK_VOID();
+    }
+
     struct yetty_yui_debug_window_entry *e = yui_debug_window_find_entry(yui, pane_id);
     if (!e) {
         e = yui_debug_window_alloc_entry(yui);
@@ -1321,7 +1351,7 @@ static struct yetty_ycore_void_result yui_debug_window_walk_tree(struct yetty_yu
         e->pane_id = pane_id;
         e->workspace_id = workspace_id;
         struct yetty_yui_debug_window_ptr_result dr =
-            yetty_yui_debug_window_create(yui->engine, pane_id);
+            yetty_yui_debug_window_create(yui->engine, pane_id, yui_debug_window_on_close, yui);
         if (YETTY_IS_ERR(dr)) {
             ywarn("yui: debug_window_create pane=%llu failed: %s", (unsigned long long)pane_id,
                   dr.error.msg);
@@ -1604,6 +1634,20 @@ static struct yetty_ycore_void_result yui_app_menu_populate_context_root(struct 
     struct yetty_ycore_void_result settings_r =
         yetty_ygui_popup_menu_add_item(yui->app_menu, "Settings…", yui_app_menu_open_settings, yui);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, settings_r, "populate_context_root: add settings");
+    /* Debug-window toggle for the focused pane (the right-clicked pane
+     * is focused before this menu opens). */
+    {
+        struct yetty_yui_workspace *ws =
+            yui->tabbar_model ? yetty_yui_tabbar_model_active_workspace(yui->tabbar_model) : NULL;
+        struct yetty_yui_tile *root = ws ? yetty_yui_workspace_root(ws) : NULL;
+        struct yetty_yui_tile *pane = root ? yetty_yui_tile_find_focused_pane(root) : NULL;
+        const char *debug_label = (pane && yetty_yui_tile_pane_debug_open(pane))
+                                      ? "Hide debug window"
+                                      : "Show debug window";
+        struct yetty_ycore_void_result debug_r = yetty_ygui_popup_menu_add_item(
+            yui->app_menu, debug_label, yui_context_toggle_debug_window, yui);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, debug_r, "populate_context_root: add debug window");
+    }
     struct yetty_ycore_void_result sep_r = yetty_ygui_popup_menu_add_separator(yui->app_menu);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sep_r, "populate_context_root: separator");
     struct yetty_ycore_void_result split_v_r = yetty_ygui_popup_menu_add_drill_item(
@@ -1684,6 +1728,31 @@ static struct yetty_ycore_void_result yui_split_back_to_context(struct yetty_ycl
     struct yetty_ycore_void_result populate_r =
         yui_app_menu_populate_context_root((struct yetty_yui *)userdata);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, populate_r, "split_back_to_context: populate");
+    return YETTY_OK_VOID();
+}
+
+/* Context-menu action: toggle the focused pane's debug window. The flag
+ * lives on the pane; the per-frame reconcile creates/destroys the actual
+ * widget on the next sync. */
+static struct yetty_ycore_void_result yui_context_toggle_debug_window(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *menu, int item_index, void *userdata)
+{
+    (void)ctx;
+    (void)menu;
+    (void)item_index;
+    struct yetty_yui *yui = userdata;
+    if (!yui || !yui->tabbar_model) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_yui_workspace *ws = yetty_yui_tabbar_model_active_workspace(yui->tabbar_model);
+    struct yetty_yui_tile *root = ws ? yetty_yui_workspace_root(ws) : NULL;
+    struct yetty_yui_tile *pane = root ? yetty_yui_tile_find_focused_pane(root) : NULL;
+    if (pane) {
+        yetty_yui_tile_pane_set_debug_open(pane, !yetty_yui_tile_pane_debug_open(pane));
+    }
+    if (yui->engine) {
+        yetty_ygui_framework_mark_dirty(yui->engine);
+    }
     return YETTY_OK_VOID();
 }
 

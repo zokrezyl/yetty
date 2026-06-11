@@ -33,6 +33,13 @@ if(YETTY_ENABLE_FEATURE_YLOTTIE)
     list(APPEND YCAT_SOURCES handler-lottie.c)
 endif()
 
+# Music handler — engraves LilyPond (.ly) scores via ymusic. Same gate as the
+# ymusic library itself (src/yetty/CMakeLists.txt). detect.c's LilyPond
+# content sniffer is guarded by the same compile-time flag.
+if(YETTY_ENABLE_FEATURE_YMUSIC AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)
+    list(APPEND YCAT_SOURCES handler-music.c)
+endif()
+
 #=============================================================================
 # Tree-sitter highlight queries are embedded at configure time. Each grammar
 # exports TS_QUERIES_DIR_<name> (see build-tools/yetty/libs/tree-sitter.cmake).
@@ -125,6 +132,11 @@ endif()
 if(YETTY_ENABLE_FEATURE_YLOTTIE)
     target_link_libraries(yetty_ycat PUBLIC yetty_ylottie)
     target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_LOTTIE=1)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YMUSIC AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)
+    target_link_libraries(yetty_ycat PUBLIC yetty_ymusic)
+    target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_YMUSIC=1)
 endif()
 
 if(YETTY_ENABLE_LIB_LIBMAGIC AND TARGET magic)
