@@ -29,16 +29,26 @@
  * tmp/transcript-<session>.jsonl.
  *
  * Usage:
- *     ./ccc                      # fresh session
- *     ./ccc --resume <uuid>      # resume a prior session id
+ *     ./ccc                      # fresh session (claude backend)
+ *     ./ccc --backend codex      # drive `codex exec --json` instead
+ *     ./ccc --resume <id>        # resume (claude session / codex thread)
+ *     CCC_BACKEND=codex ./ccc    # backend via environment
  *     CCC_SHOW_THINKING=1 ./ccc  # show dim thinking text
  *     CCC_FOLD_LINES=20 ./ccc    # tool-output preview cap (default 8)
  *     CCC_NO_HUD=1 ./ccc         # stats as plain lines, no ygui window
  *
  * Type a message at the prompt. Ctrl-D or /quit to exit; Ctrl-C
- * interrupts the turn in flight.
+ * interrupts the turn in flight. "/shell" (or "!cmd") hands the PTY to
+ * a shell; the prompt continues when it exits.
+ *
+ * The prompt is a pinned bottom row and stays available while a turn is
+ * in flight (typed messages queue; local commands run immediately). An
+ * animated shader glyph on the prompt row shows agent activity, and the
+ * in-progress streamed line rides a ticker row above it; both are
+ * erased before any history write (render.h: pinned zone).
  */
 
+#include "commands.h"
 #include "hud.h"
 #include "render.h"
 
@@ -47,6 +57,7 @@
 #include <yetty/yterminal/client-input.h>
 #include <yetty/ytrace/ytrace.h>
 
+#include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdint.h>
@@ -54,6 +65,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -64,8 +76,36 @@
 #define CCC_TOOL_NAME_MAP_SIZE 128
 #define CCC_QUEUE_MAX 16
 #define CCC_KILL_TIMEOUT_MS 5000
+/* Completion menu rows under the prompt while typing a /command. */
+#define CCC_MENU_ROWS CCC_RENDERER_MENU_ROWS
+#define CCC_HISTORY_MAX 100
+#define CCC_INIT_REQUEST_ID "ccc-init"
 
 #define CCC_PROMPT "\n" CCC_MINT "you ▸ " CCC_RESET
+
+struct ccc_app;
+
+/* Backend polymorphism. Both backends run on the SAME ccc_app state —
+ * only message/response handling differs. Claude: one long-lived child
+ * with a bidirectional stream-json pipe. Codex: a fresh
+ * `codex exec --json [resume <id>]` child per turn — its exit is the
+ * turn boundary, and session_id carries the conversation. */
+struct ccc_backend_ops {
+    const char *name;
+    /* Session start: claude spawns its persistent child here; codex
+     * spawns per turn and starts nothing. */
+    struct yetty_ycore_void_result (*start)(struct ccc_app *app);
+    /* Begin a turn with the user's text. */
+    struct yetty_ycore_void_result (*send_user_message)(struct ccc_app *app, const char *text);
+    /* One decoded JSONL event from the child's stdout. */
+    void (*handle_event)(struct ccc_app *app, yyjson_val *event);
+    /* Ctrl-C during a turn. */
+    struct yetty_ycore_void_result (*interrupt)(struct ccc_app *app);
+    /* Child lifecycle policy: process exit / stdout EOF semantics
+     * (claude: session death; codex: normal turn boundary). */
+    void (*on_child_exit)(struct ccc_app *app, int64_t exit_status);
+    void (*on_child_eof)(struct ccc_app *app);
+};
 
 struct ccc_tool_name_entry {
     char id[80];
@@ -79,6 +119,17 @@ struct ccc_session_usage {
     uint64_t cache_creation;
     double cost;
     int turns;
+};
+
+/* One in-flight can_use_tool permission request. The CLI blocks the
+ * tool until ccc answers with a control_response. */
+struct ccc_pending_permission {
+    int active;
+    char request_id[80];
+    char tool_name[80];
+    /* Deep copy of the request's `input` object — echoed back as
+     * updatedInput on allow. Owned while active. */
+    yyjson_mut_doc *input_doc;
 };
 
 struct ccc_app {
@@ -100,13 +151,26 @@ struct ccc_app {
     int focus_gui; /* 1 = the HUD window owns keyboard input */
     int mouse_subscribed;
     int echo_input;   /* echo typed bytes (stdin is a tty in raw mode) */
-    int escape_state; /* line-editor ESC/CSI swallow: 0 none, 1 ESC, 2 CSI */
+    int escape_state; /* line-editor ESC/CSI decode: 0 none, 1 ESC, 2 CSI */
+    int escape_param; /* numeric CSI parameter (last group) */
     struct termios saved_termios;
     int termios_saved;
 
     FILE *transcript_file;
     char transcript_path[256];
-    char session_id[40];
+    /* THE conversation id, both backends: claude session uuid / codex
+     * thread id — each is the resume token of its CLI. Claude mints it
+     * client-side (we pass --session-id); codex mints it server-side
+     * (empty until thread.started arrives). */
+    char session_id[48];
+
+    const struct ccc_backend_ops *backend;
+
+    /* Open uv handles of the current child (process + pipes). Per-turn
+     * backends respawn only once this drops to zero. */
+    int child_open_handles;
+    int child_stderr_fd;
+    int resume_requested; /* --resume given: session_id is a backend id */
 
     int child_alive;
     int child_stdin_open;
@@ -122,6 +186,14 @@ struct ccc_app {
     /* line editor buffer (terminal-focused typing) */
     char stdin_buf[8192];
     size_t stdin_len;
+    size_t stdin_cursor; /* byte offset of the editing cursor */
+
+    /* input history (submitted lines, newest last; up/down browses) */
+    char *history[CCC_HISTORY_MAX];
+    int history_len;
+    int history_browse; /* -1 = not browsing; else index into history */
+    char history_stash[8192];
+    size_t history_stash_len;
 
     /* messages typed while a turn was in flight */
     char *queue[CCC_QUEUE_MAX];
@@ -129,6 +201,16 @@ struct ccc_app {
 
     struct ccc_tool_name_entry tool_names[CCC_TOOL_NAME_MAP_SIZE];
     int tool_name_next;
+
+    struct ccc_pending_permission pending_permission;
+
+    /* Slash commands: locals + the CLI's list from `initialize`. */
+    struct ccc_command_table commands;
+    /* Live completion menu state (drawn below the input line). */
+    int menu_visible;
+    size_t menu_matches[CCC_MENU_ROWS];
+    size_t menu_match_count;
+    size_t menu_selected;
 
     int interrupt_request_counter;
 };
@@ -138,16 +220,30 @@ struct ccc_app {
  * scrollback (our UI), then destroy the chain.
  *---------------------------------------------------------------------------*/
 
-static void report_error(const char *context, struct yetty_ycore_void_result result)
+static void report_error(struct ccc_app *app, const char *context,
+                         struct yetty_ycore_void_result result)
 {
     if (!YETTY_IS_ERR(result)) {
         return;
     }
     char message[512];
     yetty_ycore_error_snprint(message, sizeof(message), result.error);
+    ccc_renderer_zone_suspend(&app->renderer);
     printf("\n" CCC_RED "✗ %s: %s" CCC_RESET "\n", context, message);
     fflush(stdout);
+    ccc_renderer_zone_resume(&app->renderer);
     yetty_ycore_error_destroy(result.error);
+}
+
+/* Update the activity surfaces together: the animated shader glyph on
+ * the pinned prompt row and, when present, the HUD state text. */
+static void set_activity(struct ccc_app *app, const char *glyph_name, const char *state_text)
+{
+    ccc_renderer_activity_set(&app->renderer, glyph_name);
+    if (app->hud) {
+        report_error(app, "hud state", ccc_hud_set_state(app->hud, state_text));
+        report_error(app, "hud flush", ccc_hud_flush(app->hud));
+    }
 }
 
 /*---------------------------------------------------------------------------
@@ -197,6 +293,15 @@ static void show_prompt(struct ccc_app *app)
 {
     if (app->shutting_down) {
         return;
+    }
+    if (app->renderer.pin_enabled) {
+        /* The prompt is the pinned bottom row — always there, busy or
+         * not, so commands can be typed/queued mid-turn. */
+        ccc_renderer_pin_show(&app->renderer);
+        return;
+    }
+    if (app->waiting) {
+        return; /* legacy (non-tty) mode: no prompt while a turn runs */
     }
     fputs(CCC_PROMPT, stdout);
     fflush(stdout);
@@ -282,6 +387,130 @@ static struct yetty_ycore_void_result unsubscribe_mouse(struct ccc_app *app)
     return YETTY_OK_VOID();
 }
 
+/*---------------------------------------------------------------------------
+ * Shell escape — /shell [cmd…] or !cmd. ccc hands the PTY to a shell
+ * (cooked tty, no mouse envelopes, no stdin polling) and blocks until
+ * it exits; then it re-takes ownership and the prompt continues.
+ *---------------------------------------------------------------------------*/
+
+YETTY_EXTERNAL_CALLBACK
+static void on_stdin_readable(uv_poll_t *poll_handle, int status, int events);
+YETTY_EXTERNAL_CALLBACK
+static void on_sigint(uv_signal_t *signal_handle, int signum);
+
+/* Give the terminal back to plain processes. Mirror of resume below. */
+static struct yetty_ycore_void_result suspend_terminal_ownership(struct ccc_app *app)
+{
+    struct yetty_ycore_void_result unsub_res = unsubscribe_mouse(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, unsub_res, "suspend_terminal: unsubscribe mouse");
+    struct yetty_ycore_void_result cooked_res = leave_raw_input(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cooked_res, "suspend_terminal: restore tty");
+    uv_poll_stop(&app->stdin_poll);
+    uv_signal_stop(&app->sigint_handle);
+    return YETTY_OK_VOID();
+}
+
+/* Re-take the terminal. Best-effort: every step runs even if an
+ * earlier one failed — a half-resumed ccc is unusable. */
+static struct yetty_ycore_void_result resume_terminal_ownership(struct ccc_app *app)
+{
+    struct yetty_ycore_void_result resume = YETTY_OK_VOID();
+    resume = yetty_ycore_void_chain(resume, enter_raw_input(app));
+    if (app->hud) {
+        resume = yetty_ycore_void_chain(resume, subscribe_mouse(app));
+    }
+    uv_poll_start(&app->stdin_poll, UV_READABLE, on_stdin_readable);
+    uv_signal_start(&app->sigint_handle, on_sigint, SIGINT);
+    return resume;
+}
+
+/* Run `command` (NULL = interactive $SHELL) as the foreground process
+ * group of the tty — real job control inside, Ctrl-C hits the shell,
+ * not ccc. Blocks the event loop on purpose: while the shell owns the
+ * screen, ccc must process nothing. Only callable between turns. */
+static struct yetty_ycore_void_result run_shell(struct ccc_app *app, const char *command)
+{
+    if (app->waiting) {
+        return YETTY_ERR(yetty_ycore_void, "run_shell: a turn is in flight — try again after it");
+    }
+    /* The shell owns the screen: drop the pinned prompt zone until the
+     * caller re-shows it after the handoff ends. */
+    ccc_renderer_pin_hide(&app->renderer);
+    const char *shell = getenv("SHELL");
+    if (!shell || !shell[0]) {
+        shell = "/bin/sh";
+    }
+    struct yetty_ycore_void_result suspend_res = suspend_terminal_ownership(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "run_shell: suspend");
+    if (app->hud) {
+        report_error(app, "hud state", ccc_hud_set_state(app->hud, "⌨ shell"));
+        report_error(app, "hud flush", ccc_hud_flush(app->hud));
+    }
+    printf(CCC_DIM "(entering %s — exit to return to ccc)" CCC_RESET "\n",
+           command ? command : shell);
+    fflush(stdout);
+
+    pid_t child = fork();
+    if (child < 0) {
+        struct yetty_ycore_void_result resume_res = resume_terminal_ownership(app);
+        if (YETTY_IS_ERR(resume_res)) {
+            return YETTY_ERR(yetty_ycore_void, "run_shell: fork failed AND resume failed",
+                             resume_res);
+        }
+        return YETTY_ERR(yetty_ycore_void, "run_shell: fork failed");
+    }
+    if (child == 0) {
+        /* Child: own process group, foreground on the tty, default
+         * signal dispositions, then become the shell. */
+        setpgid(0, 0);
+        tcsetpgrp(STDIN_FILENO, getpid());
+        signal(SIGINT, SIG_DFL);
+        signal(SIGQUIT, SIG_DFL);
+        signal(SIGTSTP, SIG_DFL);
+        signal(SIGTTOU, SIG_DFL);
+        signal(SIGTTIN, SIG_DFL);
+        unsetenv("YETTY_MCP_VIA_PARENT");
+        if (command && command[0]) {
+            execl(shell, shell, "-c", command, (char *)NULL);
+        } else {
+            execl(shell, shell, (char *)NULL);
+        }
+        _exit(127);
+    }
+
+    /* Parent: mirror the pgrp/foreground handoff (whichever side runs
+     * first wins the race), then block until the shell is done. */
+    setpgid(child, child);
+    tcsetpgrp(STDIN_FILENO, child);
+    int wait_status = 0;
+    while (waitpid(child, &wait_status, 0) < 0 && errno == EINTR) {
+    }
+    /* Take the tty back; the tcsetpgrp from a non-foreground group
+     * raises SIGTTOU, which must be ignored for the takeback itself. */
+    void (*saved_ttou_handler)(int) = signal(SIGTTOU, SIG_IGN);
+    tcsetpgrp(STDIN_FILENO, getpgrp());
+    signal(SIGTTOU, saved_ttou_handler);
+
+    if (WIFEXITED(wait_status)) {
+        printf(CCC_DIM "(shell exited %d)" CCC_RESET "\n", WEXITSTATUS(wait_status));
+    } else if (WIFSIGNALED(wait_status)) {
+        printf(CCC_DIM "(shell killed by signal %d)" CCC_RESET "\n", WTERMSIG(wait_status));
+    }
+    fflush(stdout);
+
+    if (app->hud) {
+        report_error(app, "hud state", ccc_hud_set_state(app->hud, "idle"));
+        /* No flush yet — resume re-subscribes first so the emit lands
+         * after the tty is ours again. */
+    }
+    struct yetty_ycore_void_result resume_res = resume_terminal_ownership(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, resume_res, "run_shell: resume");
+    if (app->hud) {
+        report_error(app, "hud flush", ccc_hud_flush(app->hud));
+    }
+    return YETTY_OK_VOID();
+}
+
 /* Bounce an event ccc did not consume back to the host for its default
  * handling (wheel → terminal scrollback, …). Subscribing made the host
  * forward everything; this is the return path for the rest. */
@@ -359,11 +588,12 @@ static struct yetty_ycore_void_result write_json_to_child(struct ccc_app *app, y
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result send_user_message(struct ccc_app *app, const char *text)
+static struct yetty_ycore_void_result claude_send_user_message(struct ccc_app *app,
+                                                               const char *text)
 {
     yyjson_mut_doc *doc = yyjson_mut_doc_new(NULL);
     if (!doc) {
-        return YETTY_ERR(yetty_ycore_void, "send_user_message: yyjson_mut_doc_new");
+        return YETTY_ERR(yetty_ycore_void, "claude_send_user_message: yyjson_mut_doc_new");
     }
     yyjson_mut_val *envelope = yyjson_mut_obj(doc);
     yyjson_mut_doc_set_root(doc, envelope);
@@ -373,7 +603,7 @@ static struct yetty_ycore_void_result send_user_message(struct ccc_app *app, con
     yyjson_mut_obj_add_str(doc, message, "content", text);
     yyjson_mut_obj_add_val(doc, envelope, "message", message);
     struct yetty_ycore_void_result res = write_json_to_child(app, doc);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "send_user_message");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "claude_send_user_message");
     return YETTY_OK_VOID();
 }
 
@@ -396,6 +626,176 @@ static struct yetty_ycore_void_result send_interrupt_request(struct ccc_app *app
     struct yetty_ycore_void_result res = write_json_to_child(app, doc);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "send_interrupt_request");
     return YETTY_OK_VOID();
+}
+
+/* The SDK-style handshake: its response carries the CLI's slash-command
+ * list (name + description + argumentHint) — the source the completion
+ * menu mirrors. */
+static struct yetty_ycore_void_result send_initialize_request(struct ccc_app *app)
+{
+    yyjson_mut_doc *doc = yyjson_mut_doc_new(NULL);
+    if (!doc) {
+        return YETTY_ERR(yetty_ycore_void, "send_initialize_request: yyjson_mut_doc_new");
+    }
+    yyjson_mut_val *envelope = yyjson_mut_obj(doc);
+    yyjson_mut_doc_set_root(doc, envelope);
+    yyjson_mut_obj_add_str(doc, envelope, "type", "control_request");
+    yyjson_mut_obj_add_str(doc, envelope, "request_id", CCC_INIT_REQUEST_ID);
+    yyjson_mut_val *request = yyjson_mut_obj(doc);
+    yyjson_mut_obj_add_str(doc, request, "subtype", "initialize");
+    yyjson_mut_obj_add_val(doc, request, "hooks", yyjson_mut_obj(doc));
+    yyjson_mut_obj_add_val(doc, envelope, "request", request);
+    struct yetty_ycore_void_result res = write_json_to_child(app, doc);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "send_initialize_request");
+    return YETTY_OK_VOID();
+}
+
+static void handle_control_response(struct ccc_app *app, yyjson_val *event)
+{
+    yyjson_val *response = yyjson_obj_get(event, "response");
+    const char *request_id = yyjson_get_str(yyjson_obj_get(response, "request_id"));
+    if (!request_id || strcmp(request_id, CCC_INIT_REQUEST_ID) != 0) {
+        return; /* interrupt acks etc. — nothing to do */
+    }
+    yyjson_val *payload = yyjson_obj_get(response, "response");
+    yyjson_val *commands_array = payload ? yyjson_obj_get(payload, "commands") : NULL;
+    if (commands_array) {
+        report_error(app, "command list", ccc_command_table_load(&app->commands, commands_array));
+        ydebug("ccc: command table loaded, %zu entries", app->commands.count);
+    }
+}
+
+/*---------------------------------------------------------------------------
+ * Permission prompts — the CLI runs with `--permission-prompt-tool
+ * stdio`: tools outside the allowlist arrive as can_use_tool
+ * control_requests and block until ccc answers. The answer comes from
+ * a click on the HUD window's Allow/Deny buttons, or — without a HUD —
+ * from a y/n line at the prompt.
+ *---------------------------------------------------------------------------*/
+
+static void drop_pending_permission(struct ccc_app *app)
+{
+    if (app->pending_permission.input_doc) {
+        yyjson_mut_doc_free(app->pending_permission.input_doc);
+    }
+    memset(&app->pending_permission, 0, sizeof(app->pending_permission));
+}
+
+/* Ship one can_use_tool control_response. `input_doc` (may be NULL) is
+ * echoed back as updatedInput on allow; borrowed, not freed here. */
+static struct yetty_ycore_void_result send_permission_response(struct ccc_app *app,
+                                                               const char *request_id, int allowed,
+                                                               yyjson_mut_doc *input_doc)
+{
+    yyjson_mut_doc *doc = yyjson_mut_doc_new(NULL);
+    if (!doc) {
+        return YETTY_ERR(yetty_ycore_void, "send_permission_response: yyjson_mut_doc_new");
+    }
+    yyjson_mut_val *envelope = yyjson_mut_obj(doc);
+    yyjson_mut_doc_set_root(doc, envelope);
+    yyjson_mut_obj_add_str(doc, envelope, "type", "control_response");
+    yyjson_mut_val *response = yyjson_mut_obj(doc);
+    yyjson_mut_obj_add_str(doc, response, "subtype", "success");
+    yyjson_mut_obj_add_str(doc, response, "request_id", request_id);
+    yyjson_mut_val *verdict = yyjson_mut_obj(doc);
+    if (allowed) {
+        yyjson_mut_obj_add_str(doc, verdict, "behavior", "allow");
+        yyjson_mut_val *input_root = input_doc ? yyjson_mut_doc_get_root(input_doc) : NULL;
+        yyjson_mut_val *input_copy = input_root ? yyjson_mut_val_mut_copy(doc, input_root) : NULL;
+        yyjson_mut_obj_add_val(doc, verdict, "updatedInput",
+                               input_copy ? input_copy : yyjson_mut_obj(doc));
+    } else {
+        yyjson_mut_obj_add_str(doc, verdict, "behavior", "deny");
+        yyjson_mut_obj_add_str(doc, verdict, "message", "denied from ccc");
+    }
+    yyjson_mut_obj_add_val(doc, response, "response", verdict);
+    yyjson_mut_obj_add_val(doc, envelope, "response", response);
+    struct yetty_ycore_void_result send_res = write_json_to_child(app, doc);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, send_res, "send_permission_response: send");
+    return YETTY_OK_VOID();
+}
+
+/* Answer the pending request. `allowed`: 1 = allow (echoes the input
+ * back as updatedInput), 0 = deny. */
+static struct yetty_ycore_void_result resolve_pending_permission(struct ccc_app *app, int allowed)
+{
+    if (!app->pending_permission.active) {
+        return YETTY_OK_VOID();
+    }
+    ccc_renderer_zone_suspend(&app->renderer);
+    printf("\n%s%s" CCC_RESET "\n", allowed ? CCC_MINT "✓ allowed: " : CCC_RED "✗ denied: ",
+           app->pending_permission.tool_name);
+    fflush(stdout);
+    struct yetty_ycore_void_result send_res = send_permission_response(
+        app, app->pending_permission.request_id, allowed, app->pending_permission.input_doc);
+    drop_pending_permission(app);
+    set_activity(app, "typing-dots", "… thinking");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, send_res, "resolve_pending_permission");
+    return YETTY_OK_VOID();
+}
+
+static void handle_control_request(struct ccc_app *app, yyjson_val *event)
+{
+    yyjson_val *request = yyjson_obj_get(event, "request");
+    const char *subtype = yyjson_get_str(yyjson_obj_get(request, "subtype"));
+    const char *request_id = yyjson_get_str(yyjson_obj_get(event, "request_id"));
+    if (!subtype || !request_id || strcmp(subtype, "can_use_tool") != 0) {
+        return; /* only the feature we enabled can arrive */
+    }
+    if (app->pending_permission.active) {
+        /* One at a time; a second concurrent request would deadlock the
+         * UI — answer it deny-busy immediately, pending stays intact. */
+        report_error(app, "permission", send_permission_response(app, request_id, 0, NULL));
+        return;
+    }
+
+    const char *tool_name = yyjson_get_str(yyjson_obj_get(request, "tool_name"));
+    if (!tool_name) {
+        tool_name = "?";
+    }
+    yyjson_val *input = yyjson_obj_get(request, "input");
+
+    app->pending_permission.active = 1;
+    snprintf(app->pending_permission.request_id, sizeof(app->pending_permission.request_id), "%s",
+             request_id);
+    snprintf(app->pending_permission.tool_name, sizeof(app->pending_permission.tool_name), "%s",
+             tool_name);
+    app->pending_permission.input_doc = yyjson_mut_doc_new(NULL);
+    if (app->pending_permission.input_doc && input) {
+        yyjson_mut_val *copy = yyjson_val_mut_copy(app->pending_permission.input_doc, input);
+        if (copy) {
+            yyjson_mut_doc_set_root(app->pending_permission.input_doc, copy);
+        }
+    }
+
+    char summary[80];
+    ccc_summarize_tool_input(input, summary, sizeof(summary));
+
+    ccc_renderer_zone_suspend(&app->renderer);
+    printf("\n" CCC_MINT "? permission: " CCC_RESET CCC_BOLD "%s" CCC_RESET " " CCC_DIM
+           "%s" CCC_RESET "\n" CCC_DIM "  allow? type y / n" CCC_RESET "\n",
+           tool_name, summary);
+    fflush(stdout);
+    /* The status line + HUD mirror the pending question (display-only —
+     * the verdict is typed at the prompt). */
+    char state_line[96];
+    snprintf(state_line, sizeof(state_line), "? %s %s", tool_name, summary);
+    set_activity(app, "hourglass", state_line);
+}
+
+static void handle_control_cancel(struct ccc_app *app, yyjson_val *event)
+{
+    const char *request_id = yyjson_get_str(yyjson_obj_get(event, "request_id"));
+    if (!app->pending_permission.active || !request_id ||
+        strcmp(request_id, app->pending_permission.request_id) != 0) {
+        return;
+    }
+    ccc_renderer_zone_suspend(&app->renderer);
+    printf("\n" CCC_DIM "(permission request cancelled)" CCC_RESET "\n");
+    fflush(stdout);
+    drop_pending_permission(app);
+    /* The turn is still in flight — the result event ends it. */
+    set_activity(app, "typing-dots", "… thinking");
 }
 
 /*---------------------------------------------------------------------------
@@ -477,12 +877,13 @@ static void render_turn_usage(struct ccc_app *app, yyjson_val *result_event)
 
     if (app->hud) {
         /* Tokens go to the HUD window; the scrollback stays clean. */
-        report_error("hud turn line", ccc_hud_set_turn(app->hud, turn_line));
-        report_error("hud session line", ccc_hud_set_session(app->hud, session_line));
-        report_error("hud state", ccc_hud_set_state(app->hud, "idle"));
-        report_error("hud flush", ccc_hud_flush(app->hud));
+        report_error(app, "hud turn line", ccc_hud_set_turn(app->hud, turn_line));
+        report_error(app, "hud session line", ccc_hud_set_session(app->hud, session_line));
+        report_error(app, "hud state", ccc_hud_set_state(app->hud, "idle"));
+        report_error(app, "hud flush", ccc_hud_flush(app->hud));
         return;
     }
+    ccc_renderer_zone_suspend(&app->renderer);
     printf(CCC_MUTED "  %s" CCC_RESET "\n" CCC_DIM "  %s" CCC_RESET "\n", turn_line, session_line);
     fflush(stdout);
 }
@@ -555,13 +956,10 @@ static void handle_assistant_event(struct ccc_app *app, yyjson_val *event)
         if (tool_use_id) {
             remember_tool_name(app, tool_use_id, name);
         }
-        ccc_render_tool_call(name, yyjson_obj_get(block, "input"));
-        if (app->hud) {
-            char state_line[96];
-            snprintf(state_line, sizeof(state_line), "⚙ %s", name);
-            report_error("hud state", ccc_hud_set_state(app->hud, state_line));
-            report_error("hud flush", ccc_hud_flush(app->hud));
-        }
+        ccc_render_tool_call(&app->renderer, name, yyjson_obj_get(block, "input"));
+        char state_line[96];
+        snprintf(state_line, sizeof(state_line), "⚙ %s", name);
+        set_activity(app, "orbit-dots", state_line);
     }
 }
 
@@ -583,24 +981,24 @@ static void handle_user_event(struct ccc_app *app, yyjson_val *event)
         const char *tool_use_id = yyjson_get_str(yyjson_obj_get(block, "tool_use_id"));
         yyjson_val *is_error_value = yyjson_obj_get(block, "is_error");
         int is_error = is_error_value && yyjson_get_bool(is_error_value);
-        report_error("render tool result",
+        report_error(app, "render tool result",
                      ccc_render_tool_result(&app->renderer, yyjson_obj_get(block, "content"),
                                             is_error, lookup_tool_name(app, tool_use_id)));
     }
 }
 
-static void handle_result_event(struct ccc_app *app, yyjson_val *event)
+/* Backend-neutral turn boundary: pump the queue or re-prompt. */
+static void turn_finished(struct ccc_app *app)
 {
-    ccc_renderer_finish_turn(&app->renderer);
-    render_turn_usage(app, event);
     app->waiting = 0;
-
+    ccc_renderer_activity_clear(&app->renderer);
     if (app->queue_len > 0) {
         /* Pump the next queued message instead of prompting. */
         char *queued = app->queue[0];
         memmove(&app->queue[0], &app->queue[1],
                 sizeof(app->queue[0]) * (size_t)(app->queue_len - 1));
         app->queue_len--;
+        ccc_renderer_zone_suspend(&app->renderer);
         printf("\n" CCC_DIM "(sending queued message)" CCC_RESET "\n");
         fflush(stdout);
         handle_input_line(app, queued, strlen(queued));
@@ -610,7 +1008,15 @@ static void handle_result_event(struct ccc_app *app, yyjson_val *event)
     show_prompt(app);
 }
 
-static void handle_event(struct ccc_app *app, yyjson_val *event)
+static void handle_result_event(struct ccc_app *app, yyjson_val *event)
+{
+    ccc_renderer_activity_clear(&app->renderer);
+    ccc_renderer_finish_turn(&app->renderer);
+    render_turn_usage(app, event);
+    turn_finished(app);
+}
+
+static void claude_handle_event(struct ccc_app *app, yyjson_val *event)
 {
     const char *kind = yyjson_get_str(yyjson_obj_get(event, "type"));
 
@@ -636,8 +1042,20 @@ static void handle_event(struct ccc_app *app, yyjson_val *event)
         handle_user_event(app, event);
         return;
     }
+    if (kind && strcmp(kind, "control_request") == 0) {
+        handle_control_request(app, event);
+        return;
+    }
+    if (kind && strcmp(kind, "control_response") == 0) {
+        handle_control_response(app, event);
+        return;
+    }
+    if (kind && strcmp(kind, "control_cancel_request") == 0) {
+        handle_control_cancel(app, event);
+        return;
+    }
     if ((kind && strstr(kind, "hook")) || yyjson_obj_get(event, "hook_event_name")) {
-        ccc_render_hook(event);
+        ccc_render_hook(&app->renderer, event);
         return;
     }
     if (kind && strcmp(kind, "result") == 0) {
@@ -665,7 +1083,7 @@ static void handle_child_line(struct ccc_app *app, const char *line, size_t len)
     }
     yyjson_val *root = yyjson_doc_get_root(doc);
     if (yyjson_is_obj(root)) {
-        handle_event(app, root);
+        app->backend->handle_event(app, root);
     }
     yyjson_doc_free(doc);
 }
@@ -683,7 +1101,9 @@ static void child_exited_unexpectedly(struct ccc_app *app)
     if (app->shutting_down) {
         return;
     }
-    printf("\n" CCC_RED "✗ claude exited unexpectedly — see stderr log under tmp/" CCC_RESET "\n");
+    ccc_renderer_pin_hide(&app->renderer);
+    printf("\n" CCC_RED "✗ %s exited unexpectedly — see stderr log under tmp/" CCC_RESET "\n",
+           app->backend->name);
     fflush(stdout);
     app->exit_code = 1;
     begin_shutdown(app);
@@ -695,12 +1115,8 @@ static void on_child_stdout_read(uv_stream_t *stream, ssize_t nread, const uv_bu
     struct ccc_app *app = stream->data;
     if (nread < 0) {
         free(buffer->base);
-        /* Pipe closed: the turn (if any) will never finish — never hang
-         * waiting for it. */
         uv_read_stop(stream);
-        if (app->child_alive) {
-            child_exited_unexpectedly(app);
-        }
+        app->backend->on_child_eof(app);
         return;
     }
     if (nread == 0) {
@@ -715,7 +1131,7 @@ static void on_child_stdout_read(uv_stream_t *stream, ssize_t nread, const uv_bu
         char *grown = realloc(app->child_out_buf, new_cap);
         if (!grown) {
             free(buffer->base);
-            report_error("child stdout",
+            report_error(app, "child stdout",
                          YETTY_ERR(yetty_ycore_void, "on_child_stdout_read: realloc"));
             return;
         }
@@ -744,6 +1160,164 @@ static void on_child_stdout_read(uv_stream_t *stream, ssize_t nread, const uv_bu
 }
 
 /*---------------------------------------------------------------------------
+ * Slash-command completion menu — matches live here; the rows render as
+ * part of the pinned zone (render.c), so asynchronous history writes
+ * repaint them safely even while a turn is in flight.
+ *---------------------------------------------------------------------------*/
+
+/* Hand the current matches to the renderer as prerendered rows. */
+static void menu_render(struct ccc_app *app)
+{
+    char row_storage[CCC_MENU_ROWS][CCC_RENDERER_MENU_ROW_BYTES];
+    const char *row_pointers[CCC_MENU_ROWS];
+    for (size_t row = 0; row < app->menu_match_count; row++) {
+        const struct ccc_command *command = &app->commands.items[app->menu_matches[row]];
+        char detail[96];
+        snprintf(detail, sizeof(detail), "%s%s%.56s", command->argument_hint,
+                 command->argument_hint[0] ? "  " : "", command->description);
+        if (row == app->menu_selected) {
+            snprintf(row_storage[row], sizeof(row_storage[row]),
+                     CCC_MINT "▸ /%s" CCC_RESET " " CCC_DIM "%s" CCC_RESET, command->name, detail);
+        } else {
+            snprintf(row_storage[row], sizeof(row_storage[row]),
+                     "  " CCC_BOLD "/%s" CCC_RESET " " CCC_DIM "%s" CCC_RESET, command->name,
+                     detail);
+        }
+        row_pointers[row] = row_storage[row];
+    }
+    ccc_renderer_menu_set(&app->renderer, row_pointers, app->menu_match_count);
+}
+
+static void menu_close(struct ccc_app *app)
+{
+    if (!app->menu_visible) {
+        return;
+    }
+    app->menu_visible = 0;
+    app->menu_match_count = 0;
+    ccc_renderer_menu_clear(&app->renderer);
+}
+
+/* Recompute matches + redraw after every edit of the input line. */
+static void menu_update(struct ccc_app *app)
+{
+    if (!app->echo_input || !app->renderer.pin_enabled || app->stdin_len == 0 ||
+        app->stdin_buf[0] != '/' || memchr(app->stdin_buf, ' ', app->stdin_len)) {
+        menu_close(app);
+        return;
+    }
+    size_t match_count = ccc_command_table_match(
+        &app->commands, app->stdin_buf + 1, app->stdin_len - 1, app->menu_matches, CCC_MENU_ROWS);
+    if (match_count == 0) {
+        menu_close(app);
+        return;
+    }
+    app->menu_match_count = match_count;
+    if (app->menu_selected >= match_count) {
+        app->menu_selected = 0;
+    }
+    app->menu_visible = 1;
+    menu_render(app);
+}
+
+static void menu_move_selection(struct ccc_app *app, int delta)
+{
+    if (!app->menu_visible || app->menu_match_count == 0) {
+        return;
+    }
+    app->menu_selected =
+        (app->menu_selected + (size_t)(delta + (int)app->menu_match_count)) % app->menu_match_count;
+    menu_render(app);
+}
+
+/* Replace the input line with the selected command. */
+static void menu_adopt_selection(struct ccc_app *app, int trailing_space)
+{
+    if (!app->menu_visible || app->menu_match_count == 0) {
+        return;
+    }
+    const struct ccc_command *command = &app->commands.items[app->menu_matches[app->menu_selected]];
+    int written = snprintf(app->stdin_buf, sizeof(app->stdin_buf), "/%s%s", command->name,
+                           (trailing_space && command->argument_hint[0]) ? " " : "");
+    app->stdin_len = (written > 0) ? (size_t)written : 0;
+    app->stdin_cursor = app->stdin_len;
+    ccc_renderer_pin_redraw(&app->renderer);
+}
+
+/*---------------------------------------------------------------------------
+ * Input history — submitted lines, browsed with up/down when the
+ * completion menu is closed.
+ *---------------------------------------------------------------------------*/
+
+static void history_add(struct ccc_app *app, const char *line, size_t len)
+{
+    if (len == 0) {
+        return;
+    }
+    if (app->history_len > 0) {
+        const char *last = app->history[app->history_len - 1];
+        if (strlen(last) == len && memcmp(last, line, len) == 0) {
+            return; /* immediate duplicate */
+        }
+    }
+    char *copy = strndup(line, len);
+    if (!copy) {
+        return; /* history is best-effort */
+    }
+    if (app->history_len == CCC_HISTORY_MAX) {
+        free(app->history[0]);
+        memmove(&app->history[0], &app->history[1],
+                sizeof(app->history[0]) * (CCC_HISTORY_MAX - 1));
+        app->history_len--;
+    }
+    app->history[app->history_len++] = copy;
+}
+
+static void history_load_entry(struct ccc_app *app, const char *text, size_t len)
+{
+    if (len >= sizeof(app->stdin_buf)) {
+        len = sizeof(app->stdin_buf) - 1;
+    }
+    memcpy(app->stdin_buf, text, len);
+    app->stdin_len = len;
+    app->stdin_cursor = len;
+}
+
+static void history_browse_move(struct ccc_app *app, int delta)
+{
+    if (app->history_len == 0) {
+        return;
+    }
+    if (app->history_browse < 0) {
+        if (delta > 0) {
+            return; /* not browsing; down does nothing */
+        }
+        /* Stash the in-progress line; up enters browsing at the end. */
+        memcpy(app->history_stash, app->stdin_buf, app->stdin_len);
+        app->history_stash_len = app->stdin_len;
+        app->history_browse = app->history_len - 1;
+    } else {
+        int next = app->history_browse + delta;
+        if (next < 0) {
+            return; /* already at the oldest entry */
+        }
+        if (next >= app->history_len) {
+            /* Walked past the newest entry: restore the stashed line. */
+            app->history_browse = -1;
+            history_load_entry(app, app->history_stash, app->history_stash_len);
+            ccc_renderer_pin_redraw(&app->renderer);
+            menu_update(app);
+            return;
+        }
+        app->history_browse = next;
+    }
+    const char *entry = app->history[app->history_browse];
+    history_load_entry(app, entry, strlen(entry));
+    ccc_renderer_pin_redraw(&app->renderer);
+    menu_update(app);
+}
+
+/*---------------------------------------------------------------------------
  * Line editor (terminal-focused typing). stdin is raw: ccc echoes,
  * erases, and dispatches lines itself.
  *---------------------------------------------------------------------------*/
@@ -760,19 +1334,77 @@ static void handle_input_line(struct ccc_app *app, const char *line, size_t len)
     if (len == 0) {
         if (!app->waiting) {
             show_prompt(app);
+        } else {
+            ccc_renderer_zone_resume(&app->renderer);
         }
         return;
     }
-    if ((len == 5 && strncmp(line, "/quit", 5) == 0) ||
-        (len == 5 && strncmp(line, "/exit", 5) == 0)) {
-        begin_shutdown(app);
+    /* A pending permission consumes the next typed line as its verdict
+     * — BEFORE the queue: "y" must never be shipped as a message. */
+    if (app->pending_permission.active) {
+        if (len == 1 && (line[0] == 'y' || line[0] == 'Y')) {
+            report_error(app, "permission", resolve_pending_permission(app, 1));
+        } else if (len == 1 && (line[0] == 'n' || line[0] == 'N')) {
+            report_error(app, "permission", resolve_pending_permission(app, 0));
+        } else {
+            ccc_renderer_zone_suspend(&app->renderer);
+            printf(CCC_DIM "  pending permission — answer y or n (or click)" CCC_RESET "\n");
+            fflush(stdout);
+            ccc_renderer_zone_resume(&app->renderer);
+        }
+        return;
+    }
+    /* Slash commands: table-driven. Local entries are dispatched here;
+     * everything else starting with '/' falls through and is forwarded
+     * as a user message — the CLI executes its own commands. */
+    const char *shell_args = NULL;
+    size_t shell_args_len = 0;
+    int is_shell = 0;
+    if (line[0] == '/') {
+        size_t word_len = 0;
+        while (1 + word_len < len && line[1 + word_len] != ' ') {
+            word_len++;
+        }
+        const struct ccc_command *command =
+            ccc_command_table_find(&app->commands, line + 1, word_len);
+        if (command && command->local) {
+            if (strcmp(command->name, "quit") == 0 || strcmp(command->name, "exit") == 0) {
+                begin_shutdown(app);
+                return;
+            }
+            if (strcmp(command->name, "shell") == 0) {
+                is_shell = 1;
+                shell_args = line + 1 + word_len;
+                shell_args_len = len - 1 - word_len;
+            }
+        }
+    } else if (line[0] == '!') {
+        /* Bang escape: "!cmd" ("!" alone = interactive shell). */
+        is_shell = 1;
+        shell_args = line + 1;
+        shell_args_len = len - 1;
+    }
+    if (is_shell) {
+        while (shell_args_len > 0 && shell_args[0] == ' ') {
+            shell_args++;
+            shell_args_len--;
+        }
+        char *command = (shell_args_len > 0) ? strndup(shell_args, shell_args_len) : NULL;
+        if (shell_args_len > 0 && !command) {
+            report_error(app, "shell", YETTY_ERR(yetty_ycore_void, "handle_input_line: strndup"));
+            return;
+        }
+        report_error(app, "shell", run_shell(app, command));
+        free(command);
+        show_prompt(app);
         return;
     }
     if (app->waiting) {
+        ccc_renderer_zone_suspend(&app->renderer);
         if (app->queue_len < CCC_QUEUE_MAX) {
             char *copy = strndup(line, len);
             if (!copy) {
-                report_error("queue", YETTY_ERR(yetty_ycore_void, "handle_input_line: strndup"));
+                report_error(app, "queue", YETTY_ERR(yetty_ycore_void, "handle_input_line: strndup"));
                 return;
             }
             app->queue[app->queue_len++] = copy;
@@ -782,62 +1414,180 @@ static void handle_input_line(struct ccc_app *app, const char *line, size_t len)
             printf(CCC_RED "queue full — message dropped" CCC_RESET "\n");
             fflush(stdout);
         }
+        ccc_renderer_zone_resume(&app->renderer);
         return;
     }
     char *copy = strndup(line, len);
     if (!copy) {
-        report_error("send", YETTY_ERR(yetty_ycore_void, "handle_input_line: strndup"));
+        report_error(app, "send", YETTY_ERR(yetty_ycore_void, "handle_input_line: strndup"));
         return;
     }
     app->waiting = 1;
-    if (app->hud) {
-        report_error("hud state", ccc_hud_set_state(app->hud, "… thinking"));
-        report_error("hud flush", ccc_hud_flush(app->hud));
-    }
-    struct yetty_ycore_void_result send_res = send_user_message(app, copy);
+    set_activity(app, "typing-dots", "… thinking");
+    struct yetty_ycore_void_result send_res = app->backend->send_user_message(app, copy);
     free(copy);
     if (YETTY_IS_ERR(send_res)) {
         app->waiting = 0;
-        report_error("send", send_res);
+        ccc_renderer_activity_clear(&app->renderer);
+        report_error(app, "send", send_res);
         show_prompt(app);
+    }
+}
+
+/* Pinned mode repaints the whole prompt row per edit; legacy (non-tty)
+ * mode echoes bytes in place. */
+static void editor_render(struct ccc_app *app)
+{
+    if (app->renderer.pin_enabled) {
+        ccc_renderer_pin_redraw(&app->renderer);
     }
 }
 
 static void editor_echo(struct ccc_app *app, const char *bytes, size_t len)
 {
-    if (!app->echo_input) {
+    if (!app->echo_input || app->renderer.pin_enabled) {
         return;
     }
     fwrite(bytes, 1, len, stdout);
     fflush(stdout);
 }
 
-static void editor_erase_one(struct ccc_app *app)
+/* Byte offset of the codepoint start before `position`. */
+static size_t editor_prev_char(const struct ccc_app *app, size_t position)
 {
-    if (app->stdin_len == 0) {
+    while (position > 0 && (app->stdin_buf[position - 1] & 0xC0) == 0x80) {
+        position--;
+    }
+    return position > 0 ? position - 1 : 0;
+}
+
+/* Byte offset just past the codepoint starting at `position`. */
+static size_t editor_next_char(const struct ccc_app *app, size_t position)
+{
+    if (position >= app->stdin_len) {
+        return app->stdin_len;
+    }
+    position++;
+    while (position < app->stdin_len && (app->stdin_buf[position] & 0xC0) == 0x80) {
+        position++;
+    }
+    return position;
+}
+
+/* Remove the bytes [from, to) and pull the cursor to `from`. */
+static void editor_delete_range(struct ccc_app *app, size_t from, size_t to)
+{
+    if (to <= from) {
         return;
     }
-    /* Drop one UTF-8 character: trailing continuation bytes + the lead. */
-    while (app->stdin_len > 0 && (app->stdin_buf[app->stdin_len - 1] & 0xC0) == 0x80) {
-        app->stdin_len--;
+    memmove(app->stdin_buf + from, app->stdin_buf + to, app->stdin_len - to);
+    app->stdin_len -= to - from;
+    app->stdin_cursor = from;
+}
+
+static void editor_erase_one(struct ccc_app *app)
+{
+    if (app->stdin_cursor == 0) {
+        return;
     }
-    if (app->stdin_len > 0) {
-        app->stdin_len--;
-    }
+    editor_delete_range(app, editor_prev_char(app, app->stdin_cursor), app->stdin_cursor);
     editor_echo(app, "\b \b", 3);
+}
+
+/* Delete the word before the cursor (spaces, then the word). */
+static void editor_erase_word(struct ccc_app *app)
+{
+    size_t from = app->stdin_cursor;
+    while (from > 0 && app->stdin_buf[from - 1] == ' ') {
+        from--;
+    }
+    while (from > 0 && app->stdin_buf[from - 1] != ' ') {
+        from--;
+    }
+    editor_delete_range(app, from, app->stdin_cursor);
+}
+
+/* Every edit invalidates a history-browse position (the edited text
+ * becomes the new in-progress line). */
+static void editor_edited(struct ccc_app *app)
+{
+    app->history_browse = -1;
+    editor_render(app);
+    menu_update(app);
+}
+
+static void editor_handle_csi(struct ccc_app *app, char final_byte, int parameter)
+{
+    switch (final_byte) {
+    case 'A': /* up: menu selection, else history */
+        if (app->menu_visible) {
+            menu_move_selection(app, -1);
+        } else {
+            history_browse_move(app, -1);
+        }
+        return;
+    case 'B': /* down */
+        if (app->menu_visible) {
+            menu_move_selection(app, 1);
+        } else {
+            history_browse_move(app, 1);
+        }
+        return;
+    case 'C': /* right */
+        app->stdin_cursor = editor_next_char(app, app->stdin_cursor);
+        editor_render(app);
+        return;
+    case 'D': /* left */
+        if (app->stdin_cursor > 0) {
+            app->stdin_cursor = editor_prev_char(app, app->stdin_cursor);
+        }
+        editor_render(app);
+        return;
+    case 'H': /* home */
+        app->stdin_cursor = 0;
+        editor_render(app);
+        return;
+    case 'F': /* end */
+        app->stdin_cursor = app->stdin_len;
+        editor_render(app);
+        return;
+    case '~':
+        if (parameter == 3) { /* delete: the codepoint under the cursor */
+            editor_delete_range(app, app->stdin_cursor,
+                                editor_next_char(app, app->stdin_cursor));
+            editor_edited(app);
+        } else if (parameter == 1 || parameter == 7) { /* home variants */
+            app->stdin_cursor = 0;
+            editor_render(app);
+        } else if (parameter == 4 || parameter == 8) { /* end variants */
+            app->stdin_cursor = app->stdin_len;
+            editor_render(app);
+        }
+        return;
+    default:
+        return; /* other sequences: swallow */
+    }
 }
 
 static void editor_feed_byte(struct ccc_app *app, char ch)
 {
-    /* Swallow ESC / CSI sequences (arrow keys etc.) — the minimal
-     * editor has no cursor movement. */
     if (app->escape_state == 1) {
         app->escape_state = (ch == '[') ? 2 : 0;
+        app->escape_param = 0;
         return;
     }
     if (app->escape_state == 2) {
+        if (ch >= '0' && ch <= '9') {
+            app->escape_param = app->escape_param * 10 + (ch - '0');
+            return;
+        }
+        if (ch == ';') {
+            app->escape_param = 0; /* keep only the last parameter group */
+            return;
+        }
         if ((unsigned char)ch >= 0x40 && (unsigned char)ch <= 0x7E) {
             app->escape_state = 0;
+            editor_handle_csi(app, ch, app->escape_param);
         }
         return;
     }
@@ -846,32 +1596,81 @@ static void editor_feed_byte(struct ccc_app *app, char ch)
         app->escape_state = 1;
         return;
     case '\r':
-    case '\n':
-        editor_echo(app, "\n", 1);
+    case '\n': {
+        if (app->menu_visible) {
+            /* Enter accepts the highlighted command. */
+            menu_adopt_selection(app, /*trailing_space=*/0);
+            menu_close(app);
+        }
         app->stdin_buf[app->stdin_len] = '\0';
-        handle_input_line(app, app->stdin_buf, app->stdin_len);
+        size_t submitted_len = app->stdin_len;
+        history_add(app, app->stdin_buf, submitted_len);
+        app->history_browse = -1;
+        /* Reset BEFORE dispatch so zone redraws show an empty prompt;
+         * the bytes stay valid for handle_input_line. */
         app->stdin_len = 0;
+        app->stdin_cursor = 0;
+        if (app->renderer.pin_enabled) {
+            /* Commit the pinned prompt row into history as a plain
+             * line (no animated glyph may enter the scrollback). */
+            ccc_renderer_zone_suspend(&app->renderer);
+            if (submitted_len > 0) {
+                printf(CCC_MINT "you ▸ " CCC_RESET "%s\n", app->stdin_buf);
+                fflush(stdout);
+            }
+        } else {
+            editor_echo(app, "\n", 1);
+        }
+        handle_input_line(app, app->stdin_buf, submitted_len);
+        return;
+    }
+    case '\t': /* Tab fills the highlighted command (plus arg space) */
+        if (app->menu_visible) {
+            menu_adopt_selection(app, /*trailing_space=*/1);
+            menu_update(app);
+        }
         return;
     case 0x7F:
     case 0x08:
         editor_erase_one(app);
+        editor_edited(app);
+        return;
+    case 0x01: /* Ctrl-A: start of line */
+        app->stdin_cursor = 0;
+        editor_render(app);
+        return;
+    case 0x05: /* Ctrl-E: end of line */
+        app->stdin_cursor = app->stdin_len;
+        editor_render(app);
+        return;
+    case 0x0B: /* Ctrl-K: kill to end of line */
+        editor_delete_range(app, app->stdin_cursor, app->stdin_len);
+        editor_edited(app);
+        return;
+    case 0x17: /* Ctrl-W: kill the word before the cursor */
+        editor_erase_word(app);
+        editor_edited(app);
         return;
     case 0x15: /* Ctrl-U: kill the line */
-        while (app->stdin_len > 0) {
-            editor_erase_one(app);
-        }
+        app->stdin_len = 0;
+        app->stdin_cursor = 0;
+        editor_edited(app);
         return;
     case 0x04: /* Ctrl-D: EOF on an empty line */
         if (app->stdin_len == 0) {
+            menu_close(app);
             begin_shutdown(app);
         }
         return;
     case 0x03: /* Ctrl-C (ISIG is off in raw input mode) */
         if (app->waiting && app->child_alive) {
+            ccc_renderer_zone_suspend(&app->renderer);
             printf("\n" CCC_MUTED "(interrupt requested)" CCC_RESET "\n");
             fflush(stdout);
-            report_error("interrupt", send_interrupt_request(app));
+            report_error(app, "interrupt", app->backend->interrupt(app));
+            ccc_renderer_zone_resume(&app->renderer);
         } else {
+            menu_close(app);
             begin_shutdown(app);
         }
         return;
@@ -882,8 +1681,13 @@ static void editor_feed_byte(struct ccc_app *app, char ch)
         return; /* other control bytes: ignore */
     }
     if (app->stdin_len + 1 < sizeof(app->stdin_buf)) {
-        app->stdin_buf[app->stdin_len++] = ch;
+        memmove(app->stdin_buf + app->stdin_cursor + 1, app->stdin_buf + app->stdin_cursor,
+                app->stdin_len - app->stdin_cursor);
+        app->stdin_buf[app->stdin_cursor] = ch;
+        app->stdin_len++;
+        app->stdin_cursor++;
         editor_echo(app, &ch, 1);
+        editor_edited(app);
     }
 }
 
@@ -894,7 +1698,7 @@ static void keyboard_input(struct ccc_app *app, const char *bytes, size_t len)
     ydebug("ccc: keys len=%zu first=0x%02x -> %s", len, len ? (unsigned char)bytes[0] : 0,
            (app->focus_gui && app->hud) ? "gui" : "editor");
     if (app->focus_gui && app->hud) {
-        report_error("gui keys", ccc_hud_feed_keys(app->hud, bytes, len));
+        report_error(app, "gui keys", ccc_hud_feed_keys(app->hud, bytes, len));
         return;
     }
     for (size_t index = 0; index < len; index++) {
@@ -993,7 +1797,7 @@ static void handle_mouse_envelope(struct ccc_app *app, const uint8_t *payload, s
         struct yetty_ycore_int_result press_res =
             ccc_hud_mouse_button(app->hud, mouse.x, mouse.y, mouse.button, mouse.pressed);
         if (YETTY_IS_ERR(press_res)) {
-            report_error("gui mouse",
+            report_error(app, "gui mouse",
                          (struct yetty_ycore_void_result){.ok = 0, .error = press_res.error});
             return;
         }
@@ -1005,7 +1809,7 @@ static void handle_mouse_envelope(struct ccc_app *app, const uint8_t *payload, s
         return;
     }
     case YETTY_YMGUI_INPUT_MOUSE_POS:
-        report_error("gui motion", ccc_hud_mouse_motion(app->hud, mouse.x, mouse.y));
+        report_error(app, "gui motion", ccc_hud_mouse_motion(app->hud, mouse.x, mouse.y));
         return;
     case YETTY_YMGUI_INPUT_MOUSE_WHEEL: {
         /* Client-side decision: wheel over the window scrolls the GUI;
@@ -1013,17 +1817,17 @@ static void handle_mouse_envelope(struct ccc_app *app, const uint8_t *payload, s
         struct yetty_ycore_int_result inside_res =
             ccc_hud_contains_point(app->hud, mouse.x, mouse.y);
         if (YETTY_IS_ERR(inside_res)) {
-            report_error("gui wheel hit-test",
+            report_error(app, "gui wheel hit-test",
                          (struct yetty_ycore_void_result){.ok = 0, .error = inside_res.error});
             return;
         }
         ydebug("ccc: wheel at (%.0f,%.0f) dy=%.1f -> %s", mouse.x, mouse.y, mouse.wheel_dy,
                inside_res.value ? "gui" : "reinject");
         if (inside_res.value) {
-            report_error("gui wheel",
+            report_error(app, "gui wheel",
                          ccc_hud_mouse_wheel(app->hud, mouse.x, mouse.y, mouse.wheel_dy));
         } else {
-            report_error("wheel reinject", reinject_mouse(&mouse));
+            report_error(app, "wheel reinject", reinject_mouse(&mouse));
         }
         return;
     }
@@ -1045,7 +1849,7 @@ static void handle_resize_envelope(struct ccc_app *app, const uint8_t *payload, 
     if (resize_event.magic != YETTY_CLIENT_INPUT_RESIZE_MAGIC) {
         return;
     }
-    report_error("hud viewport",
+    report_error(app, "hud viewport",
                  ccc_hud_set_viewport(app->hud, resize_event.width, resize_event.height));
 }
 
@@ -1120,7 +1924,7 @@ static void on_stdin_readable(uv_poll_t *poll_handle, int status, int events)
         }
         return;
     }
-    report_error("input demux", yetty_yface_feed_bytes(app->yface, chunk, (size_t)nread));
+    report_error(app, "input demux", yetty_yface_feed_bytes(app->yface, chunk, (size_t)nread));
 }
 
 /*---------------------------------------------------------------------------
@@ -1133,9 +1937,11 @@ static void on_sigint(uv_signal_t *signal_handle, int signum)
     struct ccc_app *app = signal_handle->data;
     (void)signum;
     if (app->waiting && app->child_alive) {
+        ccc_renderer_zone_suspend(&app->renderer);
         printf("\n" CCC_MUTED "(interrupt requested)" CCC_RESET "\n");
         fflush(stdout);
-        report_error("interrupt", send_interrupt_request(app));
+        report_error(app, "interrupt", app->backend->interrupt(app));
+        ccc_renderer_zone_resume(&app->renderer);
         return;
     }
     begin_shutdown(app);
@@ -1147,8 +1953,10 @@ static void on_sigwinch(uv_signal_t *signal_handle, int signum)
     struct ccc_app *app = signal_handle->data;
     (void)signum;
     if (app->hud) {
-        report_error("hud viewport", ccc_hud_viewport_changed(app->hud));
+        report_error(app, "hud viewport", ccc_hud_viewport_changed(app->hud));
     }
+    /* Re-clip the pinned zone to the new width. */
+    ccc_renderer_pin_redraw(&app->renderer);
 }
 
 /*---------------------------------------------------------------------------
@@ -1175,6 +1983,13 @@ static void begin_shutdown(struct ccc_app *app)
     if (app->shutting_down) {
         return;
     }
+    /* Never leave the CLI blocked on an unanswered permission. */
+    if (app->pending_permission.active) {
+        report_error(app, "permission", resolve_pending_permission(app, 0));
+    }
+    /* No animated glyph may survive the session — drop the pinned zone
+     * for good before the teardown output. */
+    ccc_renderer_pin_hide(&app->renderer);
     app->shutting_down = 1;
     uv_poll_stop(&app->stdin_poll);
     uv_signal_stop(&app->sigint_handle);
@@ -1191,35 +2006,58 @@ static void begin_shutdown(struct ccc_app *app)
     }
 }
 
+/* Shared uv exit callback — semantics are backend policy. */
 YETTY_EXTERNAL_CALLBACK
 static void on_child_exit(uv_process_t *process, int64_t exit_status, int term_signal)
 {
     struct ccc_app *app = process->data;
     (void)term_signal;
     app->child_alive = 0;
+    uv_timer_stop(&app->kill_timer);
+    app->backend->on_child_exit(app, exit_status);
+}
+
+/*---------------------------------------------------------------------------
+ * Claude backend — one persistent child, bidirectional stream-json.
+ *---------------------------------------------------------------------------*/
+
+static void claude_on_child_exit(struct ccc_app *app, int64_t exit_status)
+{
     if (!app->shutting_down) {
         if (exit_status != 0) {
+            ccc_renderer_pin_hide(&app->renderer);
             printf("\n" CCC_RED "✗ claude exited with status %lld — see %s and tmp/" CCC_RESET "\n",
                    (long long)exit_status, app->transcript_path);
             app->exit_code = 1;
         }
         begin_shutdown(app);
     }
-    uv_timer_stop(&app->kill_timer);
-    uv_close((uv_handle_t *)process, on_handle_closed);
+    uv_close((uv_handle_t *)&app->child_process, on_handle_closed);
     uv_stop(&app->loop);
 }
 
-/*---------------------------------------------------------------------------
- * Spawn
- *---------------------------------------------------------------------------*/
-
-static struct yetty_ycore_void_result spawn_claude(struct ccc_app *app,
-                                                   const char *resume_session_id, int stderr_fd)
+static void claude_on_child_eof(struct ccc_app *app)
 {
+    /* The persistent pipe closed: the session is dead — the turn (if
+     * any) will never finish; never hang waiting for it. */
+    if (app->child_alive) {
+        child_exited_unexpectedly(app);
+    }
+}
+
+static struct yetty_ycore_void_result claude_start(struct ccc_app *app)
+{
+    /* The loop owns the terminal: the yetty MCP server must hand figures
+     * back via the sentinel in the tool result instead of racing us to
+     * the PTY. Claude-only — the codex backend lets the server write
+     * /dev/tty directly (its items don't carry tool output back). */
+    setenv("YETTY_MCP_VIA_PARENT", "1", 1);
+
     const char *permission_mode = getenv("CCC_PERMISSION_MODE");
     if (!permission_mode || !permission_mode[0]) {
-        permission_mode = "auto";
+        /* "default" makes un-allowlisted tools prompt — the whole point
+         * of the clickable permission flow. */
+        permission_mode = "default";
     }
     const char *allowed_tools = getenv("CCC_ALLOWED_TOOLS");
     if (!allowed_tools || !allowed_tools[0]) {
@@ -1241,11 +2079,14 @@ static struct yetty_ycore_void_result spawn_claude(struct ccc_app *app,
     args[arg_count++] = "--verbose";
     args[arg_count++] = "--permission-mode";
     args[arg_count++] = permission_mode;
+    /* Route permission prompts to us as can_use_tool control_requests. */
+    args[arg_count++] = "--permission-prompt-tool";
+    args[arg_count++] = "stdio";
     args[arg_count++] = "--allowedTools";
     args[arg_count++] = allowed_tools;
-    if (resume_session_id) {
+    if (app->resume_requested) {
         args[arg_count++] = "--resume";
-        args[arg_count++] = resume_session_id;
+        args[arg_count++] = app->session_id;
     } else {
         args[arg_count++] = "--session-id";
         args[arg_count++] = app->session_id;
@@ -1267,7 +2108,7 @@ static struct yetty_ycore_void_result spawn_claude(struct ccc_app *app,
     stdio[1].flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
     stdio[1].data.stream = (uv_stream_t *)&app->child_stdout_pipe;
     stdio[2].flags = UV_INHERIT_FD;
-    stdio[2].data.fd = stderr_fd;
+    stdio[2].data.fd = app->child_stderr_fd;
 
     uv_process_options_t options = {0};
     options.exit_cb = on_child_exit;
@@ -1280,13 +2121,316 @@ static struct yetty_ycore_void_result spawn_claude(struct ccc_app *app,
     app->child_process.data = app;
     int spawn_status = uv_spawn(&app->loop, &app->child_process, &options);
     if (spawn_status != 0) {
-        return YETTY_ERR(yetty_ycore_void, "spawn_claude: uv_spawn failed (claude not in PATH?)");
+        return YETTY_ERR(yetty_ycore_void, "claude_start: uv_spawn failed (claude not in PATH?)");
     }
     app->child_alive = 1;
     app->child_stdin_open = 1;
     uv_read_start((uv_stream_t *)&app->child_stdout_pipe, on_child_stdout_alloc,
                   on_child_stdout_read);
+    /* Fetch the CLI's slash-command list for the completion menu. */
+    struct yetty_ycore_void_result init_res = send_initialize_request(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, init_res, "claude_start: initialize");
     return YETTY_OK_VOID();
+}
+
+static const struct ccc_backend_ops *ccc_backend_claude(void)
+{
+    static const struct ccc_backend_ops ops = {
+        .name = "claude",
+        .start = claude_start,
+        .send_user_message = claude_send_user_message,
+        .handle_event = claude_handle_event,
+        .interrupt = send_interrupt_request,
+        .on_child_exit = claude_on_child_exit,
+        .on_child_eof = claude_on_child_eof,
+    };
+    return &ops;
+}
+
+/*---------------------------------------------------------------------------
+ * Codex backend — a fresh `codex exec --json [resume <id>]` child per
+ * turn. The turn is over when BOTH child handles (process + stdout
+ * pipe) have fully closed; only then is a respawn safe.
+ *---------------------------------------------------------------------------*/
+
+YETTY_EXTERNAL_CALLBACK
+static void on_codex_handle_closed(uv_handle_t *handle)
+{
+    struct ccc_app *app = handle->data;
+    app->child_open_handles--;
+    if (app->child_open_handles > 0) {
+        return;
+    }
+    if (app->shutting_down) {
+        uv_stop(&app->loop);
+        return;
+    }
+    ccc_renderer_finish_turn(&app->renderer);
+    turn_finished(app);
+}
+
+static void codex_on_child_exit(struct ccc_app *app, int64_t exit_status)
+{
+    if (!app->shutting_down && exit_status != 0) {
+        ccc_renderer_zone_suspend(&app->renderer);
+        printf("\n" CCC_RED "✗ codex exited with status %lld — see stderr log under tmp/" CCC_RESET
+               "\n",
+               (long long)exit_status);
+    }
+    uv_close((uv_handle_t *)&app->child_process, on_codex_handle_closed);
+}
+
+static void codex_on_child_eof(struct ccc_app *app)
+{
+    /* Normal end of a per-turn stream. Flush any unterminated tail. */
+    if (app->child_out_len > 0) {
+        app->child_out_buf[app->child_out_len] = '\0';
+        handle_child_line(app, app->child_out_buf, app->child_out_len);
+        app->child_out_len = 0;
+    }
+    uv_close((uv_handle_t *)&app->child_stdout_pipe, on_codex_handle_closed);
+}
+
+static struct yetty_ycore_void_result codex_send_user_message(struct ccc_app *app, const char *text)
+{
+    if (app->child_open_handles > 0 || app->child_alive) {
+        return YETTY_ERR(yetty_ycore_void, "codex_send_user_message: previous turn still open");
+    }
+    const char *model = getenv("CCC_MODEL");
+    char model_override[128] = "";
+    if (model && model[0]) {
+        snprintf(model_override, sizeof(model_override), "model=%s", model);
+    }
+
+    /* MCP tool calls are auto-cancelled by codex exec unless the
+     * sandbox allows them ("user cancelled MCP tool call"); empirically
+     * only danger-full-access lets them run non-interactively. */
+    const char *sandbox_mode = getenv("CCC_CODEX_SANDBOX");
+    if (!sandbox_mode || !sandbox_mode[0]) {
+        sandbox_mode = "danger-full-access";
+    }
+
+    const char *args[16];
+    int arg_count = 0;
+    args[arg_count++] = "codex";
+    args[arg_count++] = "exec";
+    args[arg_count++] = "--json";
+    args[arg_count++] = "--skip-git-repo-check";
+    args[arg_count++] = "--sandbox";
+    args[arg_count++] = sandbox_mode;
+    if (model_override[0]) {
+        args[arg_count++] = "-c";
+        args[arg_count++] = model_override;
+    }
+    if (app->session_id[0]) {
+        args[arg_count++] = "resume";
+        args[arg_count++] = app->session_id;
+    }
+    args[arg_count++] = text;
+    args[arg_count] = NULL;
+
+    uv_pipe_init(&app->loop, &app->child_stdout_pipe, 0);
+    app->child_stdout_pipe.data = app;
+
+    uv_stdio_container_t stdio[3];
+    stdio[0].flags = UV_IGNORE; /* prompt rides argv, not stdin */
+    stdio[1].flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
+    stdio[1].data.stream = (uv_stream_t *)&app->child_stdout_pipe;
+    stdio[2].flags = UV_INHERIT_FD;
+    stdio[2].data.fd = app->child_stderr_fd;
+
+    uv_process_options_t options = {0};
+    options.exit_cb = on_child_exit;
+    options.file = "codex";
+    options.args = (char **)args;
+    options.stdio_count = 3;
+    options.stdio = stdio;
+
+    app->child_process.data = app;
+    int spawn_status = uv_spawn(&app->loop, &app->child_process, &options);
+    if (spawn_status != 0) {
+        uv_close((uv_handle_t *)&app->child_stdout_pipe, on_handle_closed);
+        return YETTY_ERR(yetty_ycore_void,
+                         "codex_send_user_message: uv_spawn failed (codex not in PATH?)");
+    }
+    app->child_alive = 1;
+    app->child_open_handles = 2; /* process + stdout pipe */
+    uv_read_start((uv_stream_t *)&app->child_stdout_pipe, on_child_stdout_alloc,
+                  on_child_stdout_read);
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result codex_start(struct ccc_app *app)
+{
+    (void)app; /* nothing runs until the first turn spawns */
+    /* Codex items carry no tool output back to ccc, so the yetty MCP
+     * server must write its figure envelope to /dev/tty itself. */
+    unsetenv("YETTY_MCP_VIA_PARENT");
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result codex_interrupt(struct ccc_app *app)
+{
+    if (!app->child_alive) {
+        return YETTY_OK_VOID();
+    }
+    if (uv_process_kill(&app->child_process, SIGINT) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "codex_interrupt: uv_process_kill");
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Render one completed thread item. Items arrive whole (exec mode has
+ * no deltas), so each maps to one scrollback block. */
+static void codex_render_item(struct ccc_app *app, yyjson_val *item)
+{
+    const char *item_type = yyjson_get_str(yyjson_obj_get(item, "type"));
+    if (!item_type) {
+        return;
+    }
+    ccc_renderer_zone_suspend(&app->renderer);
+    if (strcmp(item_type, "agent_message") == 0) {
+        const char *text = yyjson_get_str(yyjson_obj_get(item, "text"));
+        if (text && text[0]) {
+            printf("\n" CCC_MINT CCC_BOLD "codex" CCC_RESET " %s\n", text);
+            fflush(stdout);
+        }
+        ccc_renderer_zone_resume(&app->renderer);
+        return;
+    }
+    if (strcmp(item_type, "reasoning") == 0) {
+        if (app->renderer.show_thinking) {
+            const char *text = yyjson_get_str(yyjson_obj_get(item, "text"));
+            if (text && text[0]) {
+                printf("\n" CCC_MUTED "thinking " CCC_RESET CCC_DIM "%s" CCC_RESET "\n", text);
+                fflush(stdout);
+            }
+        }
+        ccc_renderer_zone_resume(&app->renderer);
+        return;
+    }
+    if (strcmp(item_type, "command_execution") == 0) {
+        const char *command = yyjson_get_str(yyjson_obj_get(item, "command"));
+        yyjson_val *exit_code_value = yyjson_obj_get(item, "exit_code");
+        int is_error = exit_code_value && yyjson_get_int(exit_code_value) != 0;
+        printf("\n" CCC_MUTED "⚙ " CCC_BOLD "shell" CCC_RESET " " CCC_DIM "%s" CCC_RESET "\n",
+               command ? command : "?");
+        report_error(app, "render tool result",
+                     ccc_render_tool_result(&app->renderer,
+                                            yyjson_obj_get(item, "aggregated_output"), is_error,
+                                            "shell"));
+        return;
+    }
+    if (strcmp(item_type, "mcp_tool_call") == 0 || strcmp(item_type, "file_change") == 0 ||
+        strcmp(item_type, "todo_list") == 0 || strcmp(item_type, "web_search") == 0) {
+        char summary[100];
+        ccc_summarize_tool_input(item, summary, sizeof(summary));
+        printf("\n" CCC_MUTED "⚙ " CCC_BOLD "%s" CCC_RESET " " CCC_DIM "%s" CCC_RESET "\n",
+               item_type, summary);
+        /* Figure envelopes from the yetty MCP server ride tool output;
+         * the generic result renderer decodes the sentinel. */
+        report_error(app, "render tool result",
+                     ccc_render_tool_result(&app->renderer, item, 0, item_type));
+        return;
+    }
+    if (strcmp(item_type, "error") == 0) {
+        const char *message = yyjson_get_str(yyjson_obj_get(item, "message"));
+        printf("\n" CCC_RED "✗ %s" CCC_RESET "\n", message ? message : "error");
+        fflush(stdout);
+        ccc_renderer_zone_resume(&app->renderer);
+        return;
+    }
+    char summary[100];
+    ccc_summarize_tool_input(item, summary, sizeof(summary));
+    printf(CCC_DIM "  (%s %s)" CCC_RESET "\n", item_type, summary);
+    fflush(stdout);
+    ccc_renderer_zone_resume(&app->renderer);
+}
+
+static void codex_render_usage(struct ccc_app *app, yyjson_val *usage)
+{
+    uint64_t turn_input = usage_field(usage, "input_tokens");
+    uint64_t cached = usage_field(usage, "cached_input_tokens");
+    uint64_t turn_output = usage_field(usage, "output_tokens");
+    app->usage.input += turn_input;
+    app->usage.output += turn_output;
+    app->usage.cache_read += cached;
+    app->usage.turns++;
+
+    char input_text[16];
+    char output_text[16];
+    char cached_text[16];
+    char session_output_text[16];
+    ccc_format_tokens(turn_input, input_text, sizeof(input_text));
+    ccc_format_tokens(turn_output, output_text, sizeof(output_text));
+    ccc_format_tokens(cached, cached_text, sizeof(cached_text));
+    ccc_format_tokens(app->usage.output, session_output_text, sizeof(session_output_text));
+    char turn_line[192];
+    snprintf(turn_line, sizeof(turn_line), "↑%s in · %s cached · ↓%s out", input_text, cached_text,
+             output_text);
+    char session_line[128];
+    snprintf(session_line, sizeof(session_line), "session: ↓%s out · %d turn(s)",
+             session_output_text, app->usage.turns);
+    if (app->hud) {
+        report_error(app, "hud turn line", ccc_hud_set_turn(app->hud, turn_line));
+        report_error(app, "hud session line", ccc_hud_set_session(app->hud, session_line));
+        report_error(app, "hud state", ccc_hud_set_state(app->hud, "idle"));
+        report_error(app, "hud flush", ccc_hud_flush(app->hud));
+        return;
+    }
+    ccc_renderer_zone_suspend(&app->renderer);
+    printf(CCC_MUTED "  %s" CCC_RESET "\n" CCC_DIM "  %s" CCC_RESET "\n", turn_line, session_line);
+    fflush(stdout);
+}
+
+static void codex_handle_event(struct ccc_app *app, yyjson_val *event)
+{
+    const char *kind = yyjson_get_str(yyjson_obj_get(event, "type"));
+    if (!kind) {
+        return;
+    }
+    if (strcmp(kind, "thread.started") == 0) {
+        const char *thread_id = yyjson_get_str(yyjson_obj_get(event, "thread_id"));
+        if (thread_id && strcmp(thread_id, app->session_id) != 0) {
+            snprintf(app->session_id, sizeof(app->session_id), "%s", thread_id);
+            ccc_renderer_zone_suspend(&app->renderer);
+            printf(CCC_DIM "(codex thread %s)" CCC_RESET "\n", app->session_id);
+            fflush(stdout);
+            ccc_renderer_zone_resume(&app->renderer);
+        }
+        return;
+    }
+    if (strcmp(kind, "item.completed") == 0) {
+        codex_render_item(app, yyjson_obj_get(event, "item"));
+        return;
+    }
+    if (strcmp(kind, "turn.completed") == 0) {
+        codex_render_usage(app, yyjson_obj_get(event, "usage"));
+        return;
+    }
+    if (strcmp(kind, "turn.failed") == 0 || strcmp(kind, "error") == 0) {
+        char summary[100];
+        ccc_summarize_tool_input(event, summary, sizeof(summary));
+        ccc_renderer_zone_suspend(&app->renderer);
+        printf("\n" CCC_RED "✗ %s %s" CCC_RESET "\n", kind, summary);
+        fflush(stdout);
+        return;
+    }
+    /* turn.started, item.started, item.updated, …: nothing to draw. */
+}
+
+static const struct ccc_backend_ops *ccc_backend_codex(void)
+{
+    static const struct ccc_backend_ops ops = {
+        .name = "codex",
+        .start = codex_start,
+        .send_user_message = codex_send_user_message,
+        .handle_event = codex_handle_event,
+        .interrupt = codex_interrupt,
+        .on_child_exit = codex_on_child_exit,
+        .on_child_eof = codex_on_child_eof,
+    };
+    return &ops;
 }
 
 /*---------------------------------------------------------------------------
@@ -1298,47 +2442,62 @@ int main(int argc, char **argv)
     ytrace_init();
 
     const char *resume_session_id = NULL;
-    if (argc >= 3 && strcmp(argv[1], "--resume") == 0) {
-        resume_session_id = argv[2];
+    const char *backend_name = getenv("CCC_BACKEND");
+    for (int arg_index = 1; arg_index < argc; arg_index++) {
+        if (strcmp(argv[arg_index], "--resume") == 0 && arg_index + 1 < argc) {
+            resume_session_id = argv[++arg_index];
+        } else if (strcmp(argv[arg_index], "--backend") == 0 && arg_index + 1 < argc) {
+            backend_name = argv[++arg_index];
+        }
     }
 
     struct ccc_app *app = calloc(1, sizeof(*app));
     if (!app) {
         return 1;
     }
+    app->backend = (backend_name && strcmp(backend_name, "codex") == 0) ? ccc_backend_codex()
+                                                                        : ccc_backend_claude();
+
+    /* session_id is the backend's resume token. Claude mints it client-
+     * side; codex mints it server-side (stays empty until
+     * thread.started). The transcript/log files are named by a tag that
+     * always exists. */
+    char file_tag[48];
+    generate_session_id(file_tag, sizeof(file_tag));
     if (resume_session_id) {
+        app->resume_requested = 1;
         snprintf(app->session_id, sizeof(app->session_id), "%s", resume_session_id);
-    } else {
-        generate_session_id(app->session_id, sizeof(app->session_id));
+    } else if (app->backend == ccc_backend_claude()) {
+        snprintf(app->session_id, sizeof(app->session_id), "%s", file_tag);
     }
     ccc_renderer_init(&app->renderer, env_int("CCC_FOLD_LINES", CCC_DEFAULT_FOLD_LINES),
                       env_flag("CCC_SHOW_THINKING"));
+    ccc_renderer_pin_setup(&app->renderer, app->stdin_buf, &app->stdin_len, &app->stdin_cursor);
+    app->history_browse = -1;
     app->echo_input = isatty(STDIN_FILENO);
+    report_error(app, "command table", ccc_command_table_init(&app->commands));
 
     mkdir("tmp", 0777);
     snprintf(app->transcript_path, sizeof(app->transcript_path), "tmp/transcript-%s.jsonl",
-             app->session_id);
+             file_tag);
     app->transcript_file = fopen(app->transcript_path, "a");
 
     char stderr_log_path[256];
-    snprintf(stderr_log_path, sizeof(stderr_log_path), "tmp/claude-stderr-%s.log", app->session_id);
+    snprintf(stderr_log_path, sizeof(stderr_log_path), "tmp/%s-stderr-%s.log", app->backend->name,
+             file_tag);
     int stderr_fd = open(stderr_log_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (stderr_fd < 0) {
         stderr_fd = STDERR_FILENO;
     }
-
-    /* The loop owns the terminal: the yetty MCP server must hand figures
-     * back via the sentinel instead of racing us to the PTY. Set before
-     * spawn; the child inherits our environment. */
-    setenv("YETTY_MCP_VIA_PARENT", "1", 1);
+    app->child_stderr_fd = stderr_fd;
 
     /* Raw input BEFORE the first envelope write — otherwise the tty
      * echoes the ESC bytes back and the host renders "^[" garbage. */
-    report_error("raw input", enter_raw_input(app));
+    report_error(app, "raw input", enter_raw_input(app));
 
     struct ccc_hud_ptr_result hud_res = ccc_hud_create();
     if (YETTY_IS_ERR(hud_res)) {
-        report_error("hud create",
+        report_error(app, "hud create",
                      (struct yetty_ycore_void_result){.ok = 0, .error = hud_res.error});
         app->hud = NULL; /* run without the window */
     } else {
@@ -1347,11 +2506,11 @@ int main(int argc, char **argv)
 
     struct yetty_yface_ptr_result yface_res = yetty_yface_create();
     if (YETTY_IS_ERR(yface_res)) {
-        report_error("input demux",
+        report_error(app, "input demux",
                      (struct yetty_ycore_void_result){.ok = 0, .error = yface_res.error});
-        report_error("raw input restore", leave_raw_input(app));
+        report_error(app, "raw input restore", leave_raw_input(app));
         if (app->hud) {
-            report_error("hud destroy", ccc_hud_destroy(app->hud));
+            report_error(app, "hud destroy", ccc_hud_destroy(app->hud));
         }
         free(app);
         return 1;
@@ -1363,14 +2522,14 @@ int main(int argc, char **argv)
     uv_timer_init(&app->loop, &app->kill_timer);
     app->kill_timer.data = app;
 
-    struct yetty_ycore_void_result spawn_res = spawn_claude(app, resume_session_id, stderr_fd);
+    struct yetty_ycore_void_result spawn_res = app->backend->start(app);
     if (YETTY_IS_ERR(spawn_res)) {
-        report_error("spawn", spawn_res);
-        report_error("raw input restore", leave_raw_input(app));
+        report_error(app, "spawn", spawn_res);
+        report_error(app, "raw input restore", leave_raw_input(app));
         if (app->hud) {
-            report_error("hud destroy", ccc_hud_destroy(app->hud));
+            report_error(app, "hud destroy", ccc_hud_destroy(app->hud));
         }
-        report_error("input demux destroy", yetty_yface_destroy(app->yface));
+        report_error(app, "input demux destroy", yetty_yface_destroy(app->yface));
         free(app);
         return 1;
     }
@@ -1387,14 +2546,16 @@ int main(int argc, char **argv)
     uv_signal_start(&app->sigwinch_handle, on_sigwinch, SIGWINCH);
 
     if (app->hud) {
-        report_error("mouse subscribe", subscribe_mouse(app));
+        report_error(app, "mouse subscribe", subscribe_mouse(app));
     }
 
     printf(CCC_MINT CCC_BOLD
-           "ccc" CCC_RESET " " CCC_MUTED "session %s" CCC_RESET "\n" CCC_DIM
+           "ccc" CCC_RESET " " CCC_MUTED "backend %s · session %s" CCC_RESET "\n" CCC_DIM
            "transcript=%s  hud=%s" CCC_RESET "\n" CCC_DIM
-           "Type a message. /quit or Ctrl-D to exit; Ctrl-C interrupts a turn." CCC_RESET "\n",
-           app->session_id, app->transcript_path, app->hud ? "on" : "off");
+           "Type a message. /quit or Ctrl-D to exit; Ctrl-C interrupts a turn; /shell or !cmd "
+           "for a shell." CCC_RESET "\n",
+           app->backend->name, app->session_id[0] ? app->session_id : "(new)", app->transcript_path,
+           app->hud ? "on" : "off");
     show_prompt(app);
 
     uv_run(&app->loop, UV_RUN_DEFAULT);
@@ -1410,13 +2571,13 @@ int main(int argc, char **argv)
     uv_run(&app->loop, UV_RUN_NOWAIT);
     uv_loop_close(&app->loop);
 
-    report_error("mouse unsubscribe", unsubscribe_mouse(app));
+    report_error(app, "mouse unsubscribe", unsubscribe_mouse(app));
     if (app->hud) {
-        report_error("hud destroy", ccc_hud_destroy(app->hud));
+        report_error(app, "hud destroy", ccc_hud_destroy(app->hud));
         app->hud = NULL;
     }
-    report_error("input demux destroy", yetty_yface_destroy(app->yface));
-    report_error("raw input restore", leave_raw_input(app));
+    report_error(app, "input demux destroy", yetty_yface_destroy(app->yface));
+    report_error(app, "raw input restore", leave_raw_input(app));
     printf("\n" CCC_DIM "transcript saved to %s" CCC_RESET "\n", app->transcript_path);
 
     int exit_code = app->exit_code;
@@ -1428,6 +2589,12 @@ int main(int argc, char **argv)
     }
     for (int queue_index = 0; queue_index < app->queue_len; queue_index++) {
         free(app->queue[queue_index]);
+    }
+    drop_pending_permission(app);
+    ccc_command_table_destroy(&app->commands);
+    ccc_renderer_destroy(&app->renderer);
+    for (int history_index = 0; history_index < app->history_len; history_index++) {
+        free(app->history[history_index]);
     }
     free(app->child_out_buf);
     free(app);
