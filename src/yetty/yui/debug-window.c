@@ -1,5 +1,6 @@
 #include <yetty/yui/debug-window.h>
 
+#include <yetty/ygui/event.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ytrace/ytrace.h>
@@ -53,13 +54,34 @@ struct yetty_yui_debug_window {
     struct yetty_yclass_object *label_60s;
     yetty_ycore_object_id pane_id;
     /* Layout runs every frame, but we want the initial placement
-     * (top-right of the pane) to stick exactly once, then leave x/y
-     * alone. Set on the first layout that lands a real pane rect. */
+     * (top-right of the pane) to stick exactly once, then leave the
+     * geometry to the user (title drag + corner resize). Set on the
+     * first layout that lands a real pane rect. */
     int placed;
+    /* Fired by the title-bar close button; the owner clears the pane's
+     * debug_open flag and the next reconcile destroys this window. */
+    yetty_yui_debug_window_close_cb on_close;
+    void *on_close_userdata;
 };
 
+/* ygui CLOSE-event trampoline — forwards to the owner's close callback. */
+static struct yetty_ycore_void_result debug_window_on_close_event(
+    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *target,
+    const struct yetty_ygui_event *event, void *userdata)
+{
+    (void)ctx;
+    (void)target;
+    (void)event;
+    struct yetty_yui_debug_window *dw = userdata;
+    if (!dw || !dw->on_close) {
+        return YETTY_OK_VOID();
+    }
+    return dw->on_close(dw->on_close_userdata, dw->pane_id);
+}
+
 struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
-    struct yetty_ygui_framework *engine, yetty_ycore_object_id pane_id)
+    struct yetty_ygui_framework *engine, yetty_ycore_object_id pane_id,
+    yetty_yui_debug_window_close_cb on_close, void *on_close_userdata)
 {
     if (!engine) {
         return YETTY_ERR(yetty_yui_debug_window_ptr, "debug_window_create: NULL engine");
@@ -75,6 +97,8 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
     }
     dw->engine = engine;
     dw->pane_id = pane_id;
+    dw->on_close = on_close;
+    dw->on_close_userdata = on_close_userdata;
 
     struct yetty_yclass_object_ptr_result wr =
         yetty_ygui_widget_add(root, yetty_ygui_window_class_get().value);
@@ -89,6 +113,10 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
         yetty_ygui_widget_set_size(dw->window, DEBUG_WIN_W, DEBUG_WIN_H));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_floating(dw->window, 1));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(dw->window, 1));
+    yetty_ycore_error_destroy_safe(yetty_ygui_window_set_closable(dw->window, 1));
+    yetty_ycore_error_destroy_safe(yetty_ygui_window_set_resizable(dw->window, 1));
+    yetty_ycore_error_destroy_safe(yetty_ygui_object_subscribe(dw->window, YETTY_YGUI_EVENT_CLOSE,
+                                                               debug_window_on_close_event, dw));
 
     /* Attach a placeholder popup menu so the title-bar hamburger has
      * something to toggle. Real actions land in later steps. The menu is
@@ -156,6 +184,14 @@ struct yetty_ycore_void_result yetty_yui_debug_window_layout(struct yetty_yui_de
         return YETTY_OK_VOID();
     }
 
+    /* Geometry is applied exactly once — top-right corner of the pane,
+     * clamped to the pane rect. From then on the user owns position and
+     * size (title-bar drag / corner-grip resize); the per-frame reconcile
+     * must not fight them. */
+    if (dw->placed) {
+        return YETTY_OK_VOID();
+    }
+
     float w = DEBUG_WIN_W;
     float h = DEBUG_WIN_H;
     if (w > pane_w - 2.0f * DEBUG_WIN_INSET) {
@@ -165,19 +201,16 @@ struct yetty_ycore_void_result yetty_yui_debug_window_layout(struct yetty_yui_de
         h = pane_h - 2.0f * DEBUG_WIN_INSET;
     }
     if (w < 1.0f || h < 1.0f) {
+        /* Pane has no usable area yet — try again next frame. */
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(dw->window, 0));
         return YETTY_OK_VOID();
     }
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(dw->window, 1));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(dw->window, w, h));
-
-    /* Initial placement only — top-right corner of the pane. */
-    if (!dw->placed) {
-        float x = pane_x + pane_w - w - DEBUG_WIN_INSET;
-        float y = pane_y + DEBUG_WIN_INSET;
-        yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_position(dw->window, x, y));
-        dw->placed = 1;
-    }
+    float x = pane_x + pane_w - w - DEBUG_WIN_INSET;
+    float y = pane_y + DEBUG_WIN_INSET;
+    yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_position(dw->window, x, y));
+    dw->placed = 1;
     return YETTY_OK_VOID();
 }
 

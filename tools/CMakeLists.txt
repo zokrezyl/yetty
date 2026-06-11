@@ -59,6 +59,10 @@ if(YETTY_ENABLE_TOOL_YTOP)
     add_subdirectory(ytop)
 endif()
 
+if(YETTY_ENABLE_TOOL_CCC)
+    add_subdirectory(ai/ccc)
+endif()
+
 if(YETTY_ENABLE_TOOL_YGREETER)
     add_subdirectory(ygreeter)
 endif()

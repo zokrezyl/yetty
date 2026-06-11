@@ -51,6 +51,9 @@ struct yetty_yui_pane {
     size_t view_count;
     size_t view_capacity;
     int focused;
+    /* Debug-window visibility — closed by default, opened from the pane
+     * context menu, closed again via the window's close button. */
+    int debug_open;
 
     /* Per-pane background — opaque RGBA fill rendered before the view's
      * own layers. Owned by the pane; created lazily by
@@ -674,6 +677,22 @@ void yetty_yui_tile_pane_set_focused(struct yetty_yui_tile *tile, int focused)
         return;
     }
     ((struct yetty_yui_pane *)tile)->focused = focused;
+}
+
+int yetty_yui_tile_pane_debug_open(const struct yetty_yui_tile *tile)
+{
+    if (!tile || tile->type != YETTY_YUI_TILE_PANE) {
+        return 0;
+    }
+    return ((const struct yetty_yui_pane *)tile)->debug_open;
+}
+
+void yetty_yui_tile_pane_set_debug_open(struct yetty_yui_tile *tile, int open)
+{
+    if (!tile || tile->type != YETTY_YUI_TILE_PANE) {
+        return;
+    }
+    ((struct yetty_yui_pane *)tile)->debug_open = open;
 }
 
 /*=============================================================================
