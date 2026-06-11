@@ -88,7 +88,7 @@ static struct yetty_ycore_int_result spinner_on_press(struct yetty_yclass_ctx *y
     if (d->value > d->max_v) {
         d->value = d->max_v;
     }
-    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
         return YETTY_ERR(yetty_ycore_int, "spinner_on_press: dirty", dr);
     }
@@ -189,7 +189,7 @@ struct yetty_ycore_void_result yetty_ygui_spinner_set_value(struct yetty_yclass_
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_spinner_set_value: data_get");
     struct yetty_ygui_spinner *d = d_dr.value;
     d->value = v;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 [[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_yclass_object *obj,
@@ -204,7 +204,7 @@ struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_yclass_
     d->min_v = mn;
     d->max_v = mx;
     d->step = step > 0 ? step : 1;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 [[clang::annotate("expose")]]
 struct yetty_ycore_float_result yetty_ygui_spinner_get_value(const struct yetty_yclass_object *obj)
@@ -212,7 +212,8 @@ struct yetty_ycore_float_result yetty_ygui_spinner_get_value(const struct yetty_
     if (!obj) {
         return YETTY_ERR(yetty_ycore_float, "yetty_ygui_spinner_get_value: NULL obj");
     }
-    struct yetty_ygui_spinner_ptr_result data_result = yetty_ygui_spinner_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_spinner_ptr_result data_result =
+        yetty_ygui_spinner_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_float, data_result, "yetty_ygui_spinner_get_value: data_get");
     return YETTY_OK(yetty_ycore_float, ((struct yetty_ygui_spinner *)data_result.value)->value);
 }

@@ -24,8 +24,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
                                             struct yetty_yclass_object *root)
 {
     (void)runner;
-    struct yetty_ygui_object_ptr_result tbr =
-        yetty_ygui_add(yetty_ygui_tabbar_class_get().value, root);
+    struct yetty_yclass_object_ptr_result tbr =
+        yetty_ygui_widget_add(root, yetty_ygui_tabbar_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tbr, "tabbar");
     struct yetty_yclass_object *w = tbr.value;
     {
@@ -34,11 +34,11 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         l.gap = 4;
         err_ok(yetty_ygui_widget_layout_set(w, &l));
     }
-    struct yetty_ygui_object_ptr_result hr = yetty_ygui_tabbar_add_tab(tbr.value, "Plot");
+    struct yetty_yclass_object_ptr_result hr = yetty_ygui_tabbar_add_tab(tbr.value, "Plot");
     YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "tabbar add_tab");
 
-    struct yetty_ygui_object_ptr_result pr =
-        yetty_ygui_add(yetty_ygui_yplot_class_get().value, root);
+    struct yetty_yclass_object_ptr_result pr =
+        yetty_ygui_widget_add(root, yetty_ygui_yplot_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "yplot");
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(pr.value);

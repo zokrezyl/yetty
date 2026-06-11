@@ -17,8 +17,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
                                             struct yetty_yclass_object *root)
 {
     (void)runner;
-    struct yetty_ygui_object_ptr_result pr =
-        yetty_ygui_add(yetty_ygui_ypdf_class_get().value, root);
+    struct yetty_yclass_object_ptr_result pr =
+        yetty_ygui_widget_add(root, yetty_ygui_ypdf_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "ypdf");
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(pr.value);
     l.flex_grow = 1.0f;

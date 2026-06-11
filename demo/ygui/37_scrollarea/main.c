@@ -62,7 +62,7 @@ static struct yetty_yclass_object *add_obj(struct yetty_yclass_object *parent,
         yetty_ycore_error_destroy(cls.error);
         return NULL;
     }
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls.value, parent);
+    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_add(parent, cls.value);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return NULL;
@@ -338,7 +338,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         const char *labels[] = {"Multi-line text", "Widget group", "Long list", "Fits",
                                 "Nested x3"};
         for (size_t i = 0; i < sizeof(labels) / sizeof(labels[0]); i++) {
-            struct yetty_ygui_object_ptr_result t = yetty_ygui_tabbar_add_tab(tabbar, labels[i]);
+            struct yetty_yclass_object_ptr_result t = yetty_ygui_tabbar_add_tab(tabbar, labels[i]);
             if (YETTY_IS_ERR(t)) {
                 yetty_ycore_error_destroy(t.error);
             }

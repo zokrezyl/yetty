@@ -139,7 +139,7 @@ struct yetty_ycore_void_result yetty_ygui_combobox_set_text(struct yetty_yclass_
         }
         memcpy(d->text, t, n + 1);
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -179,7 +179,8 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_combobox_get_text(
     if (!obj) {
         return YETTY_OK(yetty_ycore_const_char_ptr, "");
     }
-    struct yetty_ygui_combobox_ptr_result d_dr = yetty_ygui_combobox_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_combobox_ptr_result d_dr =
+        yetty_ygui_combobox_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr, "yetty_ygui_combobox_get_text: data_get");
     struct yetty_ygui_combobox *d = d_dr.value;
     return YETTY_OK(yetty_ycore_const_char_ptr, d->text ? d->text : "");

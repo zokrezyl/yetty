@@ -332,7 +332,7 @@ static struct yetty_ycore_int_result popup_menu_on_press(struct yetty_yclass_ctx
             if (YETTY_IS_ERR(lr)) {
                 return YETTY_ERR(yetty_ycore_int, "popup_menu_on_press: re-measure", lr);
             }
-            struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+            struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
             if (YETTY_IS_ERR(dr)) {
                 return YETTY_ERR(yetty_ycore_int, "popup_menu_on_press: dirty", dr);
             }
@@ -362,7 +362,7 @@ static struct yetty_ycore_int_result popup_menu_on_motion(struct yetty_yclass_ct
     int idx = hit_item(d, y - r.min.y);
     if (idx != d->hover_index) {
         d->hover_index = idx;
-        struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+        struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
         if (YETTY_IS_ERR(dr)) {
             return YETTY_ERR(yetty_ycore_int, "popup_menu_on_motion: dirty", dr);
         }
@@ -454,7 +454,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_open_at(struct yetty_yclass
     l.height = menu_total_h(d);
     struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "popup_menu_open_at: layout");
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -476,7 +476,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_close(struct yetty_yclass_o
     l.height = 0.0f;
     struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "popup_menu_close: layout");
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -485,7 +485,8 @@ struct yetty_ycore_int_result yetty_ygui_popup_menu_is_open(const struct yetty_y
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_popup_menu_is_open: invalid args");
     }
-    struct yetty_ygui_popup_menu_ptr_result d_dr = yetty_ygui_popup_menu_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_popup_menu_ptr_result d_dr =
+        yetty_ygui_popup_menu_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_popup_menu_is_open: data_get");
     struct yetty_ygui_popup_menu *d = d_dr.value;
     return YETTY_OK(yetty_ycore_int, d->open);
@@ -526,7 +527,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_clear(struct yetty_yclass_o
     d->hover_index = -1;
     free(d->title);
     d->title = NULL;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -549,7 +550,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_set_title(struct yetty_ycla
         }
         memcpy(d->title, title, n + 1);
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]

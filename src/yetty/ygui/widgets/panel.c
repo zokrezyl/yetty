@@ -101,7 +101,7 @@ struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_yclass_objec
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_panel_set_bg: data_get");
     struct yetty_ygui_panel *d = d_dr.value;
     d->bg = color;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -117,7 +117,7 @@ struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_yclass_o
     struct yetty_ygui_panel *d = d_dr.value;
     d->border = color;
     d->border_width = width_px;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "panel.gen.c"

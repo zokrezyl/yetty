@@ -64,7 +64,7 @@ static struct yetty_ycore_void_result emit_container(struct yetty_yclass_ctx *yc
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
-    return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_object_id(obj), YETTY_YFIGURE_KIND_YVIDEO,
+    return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_widget_id(obj), YETTY_YFIGURE_KIND_YVIDEO,
                                         r.min.x, r.min.y, r.max.x, r.max.y, NULL, 0);
 }
 
@@ -142,7 +142,7 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_ctx *yclass_
             memcpy(combined, zbytes, zsize);
         }
         memcpy(combined + zsize, bytes, size);
-        er = yetty_ygui_emit_figure_body(ctx, yetty_ygui_object_id(obj), combined, (uint32_t)total);
+        er = yetty_ygui_emit_figure_body(ctx, yetty_ygui_widget_id(obj), combined, (uint32_t)total);
         free(combined);
         yetty_ydraw_drawable_list_destroy(zl);
     }
@@ -171,7 +171,7 @@ struct yetty_ycore_void_result yetty_ygui_yvideo_set_bytes(struct yetty_yclass_o
         memcpy(d->bytes, bytes, len);
         d->len = len;
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "yvideo.gen.c"

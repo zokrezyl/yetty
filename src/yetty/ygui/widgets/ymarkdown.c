@@ -155,7 +155,7 @@ struct yetty_ycore_void_result yetty_ygui_ymarkdown_set_source(struct yetty_ycla
     /* Force re-render at the next emit even if rect hasn't moved. */
     d->rendered_w = 0.0f;
     d->rendered_h = 0.0f;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]

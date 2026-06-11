@@ -39,7 +39,7 @@ static inline void err_ok(struct yetty_ycore_void_result r)
 static struct yetty_yclass_object *add_w(struct yetty_yclass_object *parent,
                                        const struct yetty_yclass *cls, float height)
 {
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls, parent);
+    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_add(parent, cls);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return NULL;
@@ -73,8 +73,8 @@ static void set_grow(struct yetty_yclass_object *w, float grow)
 /* Open collapsing_header section, titled, initially expanded. */
 static struct yetty_yclass_object *add_section(struct yetty_yclass_object *area, const char *title)
 {
-    struct yetty_ygui_object_ptr_result r =
-        yetty_ygui_add(yetty_ygui_collapsing_header_class_get().value, area);
+    struct yetty_yclass_object_ptr_result r =
+        yetty_ygui_widget_add(area, yetty_ygui_collapsing_header_class_get().value);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return NULL;
@@ -95,8 +95,8 @@ static void finalize_section(struct yetty_yclass_object *sec)
     const struct yetty_ygui_layout *sl = yetty_ygui_widget_layout_get(sec);
     float total = sl->padding_top + sl->padding_bottom;
     int n = 0;
-    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(sec); c;
-         c = yetty_ygui_object_next_sibling(c)) {
+    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(sec); c;
+         c = yetty_ygui_widget_next_sibling(c)) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
         total += cl->height > 0.0f ? cl->height : 0.0f;
         n++;
@@ -349,12 +349,12 @@ static void build_overlays(struct yetty_yclass_object *area, struct yetty_yclass
     finalize_section(sec);
 
     /* Modal dialog — closed until the trigger fires. */
-    struct yetty_ygui_object_ptr_result dr =
-        yetty_ygui_add(yetty_ygui_dialog_class_get().value, root);
+    struct yetty_yclass_object_ptr_result dr =
+        yetty_ygui_widget_add(root, yetty_ygui_dialog_class_get().value);
     if (YETTY_IS_OK(dr)) {
         err_ok(yetty_ygui_dialog_set_title(dr.value, "Dialog"));
-        struct yetty_ygui_object_ptr_result body =
-            yetty_ygui_add(yetty_ygui_label_class_get().value, dr.value);
+        struct yetty_yclass_object_ptr_result body =
+            yetty_ygui_widget_add(dr.value, yetty_ygui_label_class_get().value);
         if (YETTY_IS_OK(body)) {
             err_ok(yetty_ygui_label_set_text(body.value, "This is a modal dialog."));
         }
@@ -362,8 +362,8 @@ static void build_overlays(struct yetty_yclass_object *area, struct yetty_yclass
     }
 
     /* Standalone popup menu. */
-    struct yetty_ygui_object_ptr_result pm =
-        yetty_ygui_add(yetty_ygui_popup_menu_class_get().value, root);
+    struct yetty_yclass_object_ptr_result pm =
+        yetty_ygui_widget_add(root, yetty_ygui_popup_menu_class_get().value);
     if (YETTY_IS_OK(pm)) {
         err_ok(yetty_ygui_popup_menu_add_item(pm.value, "First action", on_menu_item, NULL));
         err_ok(yetty_ygui_popup_menu_add_item(pm.value, "Second action", on_menu_item, NULL));
@@ -387,8 +387,8 @@ static void build_menubar(struct yetty_yclass_object *mb, struct yetty_yclass_ob
         {"View", {"Zoom In", "Zoom Out"}, 2},
     };
     for (size_t m = 0; m < sizeof(menus) / sizeof(menus[0]); m++) {
-        struct yetty_ygui_object_ptr_result pm =
-            yetty_ygui_add(yetty_ygui_popup_menu_class_get().value, root);
+        struct yetty_yclass_object_ptr_result pm =
+            yetty_ygui_widget_add(root, yetty_ygui_popup_menu_class_get().value);
         if (YETTY_IS_ERR(pm)) {
             yetty_ycore_error_destroy(pm.error);
             continue;
@@ -409,8 +409,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     struct yetty_yclass_object *mb = add_w(root, yetty_ygui_menubar_class_get().value, ROW_H);
 
     /* Scrollarea fills the rest and stacks the sections. */
-    struct yetty_ygui_object_ptr_result sr =
-        yetty_ygui_add(yetty_ygui_scrollarea_class_get().value, root);
+    struct yetty_yclass_object_ptr_result sr =
+        yetty_ygui_widget_add(root, yetty_ygui_scrollarea_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "build: scrollarea");
     set_grow(sr.value, 1.0f);
     struct yetty_yclass_object *area = sr.value;

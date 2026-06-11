@@ -37,7 +37,7 @@ static struct yetty_ycore_void_result on_click(struct yetty_yclass_ctx *yclass_c
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "on_click: data_get");
     struct yetty_ygui_radio *d = d_dr.value;
     d->selected = 1;
-    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
         return dr;
     }
@@ -136,7 +136,7 @@ struct yetty_ycore_void_result yetty_ygui_radio_set_label(struct yetty_yclass_ob
         }
         memcpy(d->label, label, n + 1);
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -149,7 +149,7 @@ struct yetty_ycore_void_result yetty_ygui_radio_set_selected(struct yetty_yclass
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_radio_set_selected: data_get");
     struct yetty_ygui_radio *d = d_dr.value;
     d->selected = s ? 1 : 0;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -158,7 +158,8 @@ struct yetty_ycore_int_result yetty_ygui_radio_is_selected(const struct yetty_yc
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_radio_is_selected: NULL obj");
     }
-    struct yetty_ygui_radio_ptr_result data_result = yetty_ygui_radio_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_radio_ptr_result data_result =
+        yetty_ygui_radio_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, data_result, "yetty_ygui_radio_is_selected: data_get");
     return YETTY_OK(yetty_ycore_int, ((struct yetty_ygui_radio *)data_result.value)->selected);
 }

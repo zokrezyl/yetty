@@ -315,7 +315,7 @@ static struct yetty_yclass_object *ytop_place(struct app_state *s,
         yetty_ycore_error_destroy(cls_r.error);
         return NULL;
     }
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls_r.value, s->root);
+    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_add(s->root, cls_r.value);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return NULL;
@@ -691,8 +691,8 @@ int main(int argc, char **argv)
 
     /* Root + widget tree (absolutely positioned, mirroring ytop's
      * hand-laid-out chrome). */
-    struct yetty_ygui_object_ptr_result rr =
-        yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
+    struct yetty_yclass_object_ptr_result rr =
+        yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
     if (YETTY_IS_OK(rr)) {
         s->root = rr.value;
         yetty_ycore_error_destroy_safe(yetty_ygui_framework_set_root(s->engine, s->root));

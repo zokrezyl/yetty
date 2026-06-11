@@ -225,7 +225,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
         } else {
             return YETTY_OK(yetty_ycore_int, 0);
         }
-        struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+        struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
         if (YETTY_IS_ERR(dr)) {
             return YETTY_ERR(yetty_ycore_int, "dp: dirty", dr);
         }
@@ -252,7 +252,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     d->sel_year = d->shown_year;
     d->sel_month = d->shown_month;
     d->sel_day = day;
-    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
         return YETTY_ERR(yetty_ycore_int, "dp: dirty", dr);
     }
@@ -274,7 +274,7 @@ struct yetty_ycore_void_result yetty_ygui_datepicker_set_date(struct yetty_yclas
     d->sel_year = year;
     d->sel_month = month_0_based;
     d->sel_day = day;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]

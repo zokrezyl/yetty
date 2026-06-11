@@ -31,7 +31,6 @@
 
 #include <webgpu/webgpu.h>
 #include <yetty/yrdawn/client.h>
-#include <yetty/yrdawn/methods.gen.h>
 
 #include "common.h"
 

@@ -3,7 +3,7 @@
  *
  * No per-instance data; the only customisation vs the base widget is
  * the constructor's layout struct override (direction=ROW). Children
- * are added via yetty_ygui_add(child_cls, hbox_obj) — the layout pass
+ * are added via yetty_ygui_widget_add(hbox_obj, child_cls) — the layout pass
  * positions them left-to-right.
  */
 

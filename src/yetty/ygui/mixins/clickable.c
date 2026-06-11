@@ -15,6 +15,7 @@
  */
 
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
 
 /* The click callback typedef is header-destined: codegen copies the
  * `#ifdef YCLASS_CODEGEN` block verbatim into the generated header. The
@@ -66,7 +67,7 @@ static struct yetty_ycore_int_result clickable_on_press(struct yetty_yclass_ctx 
     cd->pressed = 1;
     cd->press_x = x;
     cd->press_y = y;
-    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
         return YETTY_ERR(yetty_ycore_int, "clickable_on_press: set_dirty", dr);
     }
@@ -98,7 +99,7 @@ static struct yetty_ycore_int_result clickable_on_release(struct yetty_yclass_ct
      * a garbage engine pointer and a SEGV in framework_mark_dirty.
      * Setting dirty first preserves the "something happened this
      * frame" hint without depending on the widget surviving. */
-    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
         return YETTY_ERR(yetty_ycore_int, "clickable_on_release: set_dirty", dr);
     }
@@ -134,7 +135,8 @@ struct yetty_ycore_int_result yetty_ygui_clickable_is_pressed(const struct yetty
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_clickable_is_pressed: NULL obj");
     }
-    struct yetty_ygui_clickable_ptr_result cd_dr = yetty_ygui_clickable_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_clickable_ptr_result cd_dr =
+        yetty_ygui_clickable_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, cd_dr, "yetty_ygui_clickable_is_pressed: data_get");
     struct yetty_ygui_clickable *cd = cd_dr.value;
     return YETTY_OK(yetty_ycore_int, cd->pressed);
@@ -147,7 +149,8 @@ struct yetty_ycore_void_result yetty_ygui_clickable_press_pos(const struct yetty
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_clickable_press_pos: NULL obj");
     }
-    struct yetty_ygui_clickable_ptr_result cd_dr = yetty_ygui_clickable_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_clickable_ptr_result cd_dr =
+        yetty_ygui_clickable_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cd_dr, "yetty_ygui_clickable_press_pos: data_get");
     struct yetty_ygui_clickable *cd = cd_dr.value;
     if (x) {

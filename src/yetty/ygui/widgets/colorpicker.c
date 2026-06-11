@@ -86,7 +86,7 @@ struct yetty_ycore_void_result yetty_ygui_colorpicker_set_color(struct yetty_ycl
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_colorpicker_set_color: data_get");
     struct yetty_ygui_colorpicker *d = d_dr.value;
     d->color = c;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -96,7 +96,8 @@ struct yetty_ycore_uint32_result yetty_ygui_colorpicker_get_color(
     if (!obj) {
         return YETTY_ERR(yetty_ycore_uint32, "yetty_ygui_colorpicker_get_color: NULL obj");
     }
-    struct yetty_ygui_colorpicker_ptr_result data_result = yetty_ygui_colorpicker_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_colorpicker_ptr_result data_result =
+        yetty_ygui_colorpicker_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_uint32, data_result,
                         "yetty_ygui_colorpicker_get_color: data_get");
     return YETTY_OK(yetty_ycore_uint32,

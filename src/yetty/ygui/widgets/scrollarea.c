@@ -60,7 +60,7 @@ static struct yetty_ycore_void_result scrollarea_set_offset(struct yetty_yclass_
     d->offset = off;
     struct yetty_ycore_void_result sr = yetty_ygui_widget_scroll_main_set(obj, off);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "scrollarea: scroll_main");
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 /* Drag callback installed on the draggable mixin. The cursor moves the
@@ -167,8 +167,8 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     }
     float content_h = 0.0f;
     int n = 0;
-    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(obj); c;
-         c = yetty_ygui_object_next_sibling(c)) {
+    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(obj); c;
+         c = yetty_ygui_widget_next_sibling(c)) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
         if (cl->hidden || cl->absolute) {
             continue;

@@ -24,8 +24,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
                                             struct yetty_yclass_object *root)
 {
     (void)runner;
-    struct yetty_ygui_object_ptr_result br =
-        yetty_ygui_add(yetty_ygui_button_class_get().value, root);
+    struct yetty_yclass_object_ptr_result br =
+        yetty_ygui_widget_add(root, yetty_ygui_button_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "trigger");
     err_ok(yetty_ygui_button_set_label(br.value, "Dialog is open"));
     {
@@ -36,13 +36,13 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
             err_ok(yetty_ygui_widget_layout_set(w, &l));
         }
     }
-    struct yetty_ygui_object_ptr_result dr =
-        yetty_ygui_add(yetty_ygui_dialog_class_get().value, root);
+    struct yetty_yclass_object_ptr_result dr =
+        yetty_ygui_widget_add(root, yetty_ygui_dialog_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "dialog");
     err_ok(yetty_ygui_dialog_set_title(dr.value, "Hello"));
     {
-        struct yetty_ygui_object_ptr_result l =
-            yetty_ygui_add(yetty_ygui_label_class_get().value, dr.value);
+        struct yetty_yclass_object_ptr_result l =
+            yetty_ygui_widget_add(dr.value, yetty_ygui_label_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, l, "body");
         err_ok(yetty_ygui_label_set_text(l.value, "Dialog body — press q to quit"));
     }

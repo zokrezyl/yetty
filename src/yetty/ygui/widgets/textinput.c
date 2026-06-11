@@ -80,7 +80,7 @@ static struct yetty_ycore_void_result on_click_focus(struct yetty_yclass_ctx *yc
         idx = (long)d->text_len;
     }
     d->cursor = (size_t)idx;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("override@ygui:textinput:constructor")]]
@@ -254,7 +254,7 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_text(struct yetty_yclass
     }
     d->text_len = n;
     d->cursor = n; /* caret to end on programmatic set */
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -264,7 +264,8 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_textinput_get_text(
     if (!obj) {
         return YETTY_ERR(yetty_ycore_const_char_ptr, "yetty_ygui_textinput_get_text: invalid args");
     }
-    struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_textinput_ptr_result d_dr =
+        yetty_ygui_textinput_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr,
                         "yetty_ygui_textinput_get_text: data_get");
     struct yetty_ygui_textinput *d = d_dr.value;
@@ -292,7 +293,7 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_placeholder(struct yetty
         }
         memcpy(d->placeholder, placeholder, n + 1);
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -306,7 +307,7 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_focus(struct yetty_yclas
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_textinput_set_focus: data_get");
     struct yetty_ygui_textinput *d = d_dr.value;
     d->focused = focused ? 1 : 0;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -389,7 +390,7 @@ struct yetty_ycore_int_result yetty_ygui_textinput_handle_key(struct yetty_yclas
         break;
     }
     if (changed) {
-        struct yetty_ycore_void_result r = yetty_ygui_object_set_dirty(obj);
+        struct yetty_ycore_void_result r = yetty_ygui_widget_set_dirty(obj);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "yetty_ygui_textinput_handle_key: dirty");
     }
     return YETTY_OK(yetty_ycore_int, consumed);

@@ -106,7 +106,7 @@ static struct yetty_ycore_void_result yjungle_emit_body(struct yetty_yclass_ctx 
         }
         struct yetty_ycore_void_result sb = yetty_ygui_ydraw_embed_set_buffer(obj, br.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sb, "yjungle_emit_body: set_buffer");
-        (void)yetty_ygui_object_set_dirty(obj);
+        (void)yetty_ygui_widget_set_dirty(obj);
     }
 
     struct yetty_yclass_method_slot_result slot_result =

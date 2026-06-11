@@ -109,7 +109,7 @@ static struct yetty_ycore_void_result ymz_emit_body(struct yetty_yclass_ctx *ycl
         struct yetty_ycore_void_result sb = yetty_ygui_ydraw_embed_set_buffer(obj, br.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sb, "ymaze_emit_body: set_buffer");
         /* Keep the frame pump alive — the maze is animated. */
-        (void)yetty_ygui_object_set_dirty(obj);
+        (void)yetty_ygui_widget_set_dirty(obj);
     }
 
     /* Forward to super's emit_body (ydraw_embed paints the buffer). */

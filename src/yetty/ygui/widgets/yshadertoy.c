@@ -76,7 +76,7 @@ static struct yetty_ycore_void_result emit_container(struct yetty_yclass_ctx *yc
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
-    return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_object_id(obj),
+    return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_widget_id(obj),
                                         YETTY_YFIGURE_KIND_YSHADERTOY, r.min.x, r.min.y, r.max.x,
                                         r.max.y, NULL, 0);
 }
@@ -101,7 +101,7 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_ctx *yclass_
         return YETTY_ERR(yetty_ycore_void, "yshadertoy_emit_body: shader text exceeds u32 length");
     }
     struct yetty_ycore_void_result er = yetty_ygui_emit_figure_body(
-        ctx, yetty_ygui_object_id(obj), (const uint8_t *)d->src, (uint32_t)d->len);
+        ctx, yetty_ygui_widget_id(obj), (const uint8_t *)d->src, (uint32_t)d->len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "yshadertoy_emit_body: emit_figure_body");
     d->dirty = 0;
     return YETTY_OK_VOID();
@@ -130,7 +130,7 @@ struct yetty_ycore_void_result yetty_ygui_yshadertoy_set_source(struct yetty_ycl
         d->len = len;
         d->dirty = 1;
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "yshadertoy.gen.c"

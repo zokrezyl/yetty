@@ -167,7 +167,7 @@ struct yetty_ycore_void_result yetty_ygui_table_set_columns(struct yetty_yclass_
         }
     }
     d->n_cols = n_cols;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -210,7 +210,7 @@ struct yetty_ycore_void_result yetty_ygui_table_add_row(struct yetty_yclass_obje
         memcpy(row[i], cells[i], n + 1);
     }
     d->rows[d->n_rows++] = row;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -226,7 +226,7 @@ struct yetty_ycore_void_result yetty_ygui_table_clear_rows(struct yetty_yclass_o
         free_row(d->rows[i], d->n_cols);
     }
     d->n_rows = 0;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "table.gen.c"

@@ -26,8 +26,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     (void)runner;
     const char *labels[] = {"top", "middle", "bottom"};
     for (size_t i = 0; i < sizeof(labels) / sizeof(labels[0]); ++i) {
-        struct yetty_ygui_object_ptr_result lr =
-            yetty_ygui_add(yetty_ygui_label_class_get().value, root);
+        struct yetty_yclass_object_ptr_result lr =
+            yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "label");
         err_ok(yetty_ygui_label_set_text(lr.value, labels[i]));
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(lr.value);

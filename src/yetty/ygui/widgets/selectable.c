@@ -38,7 +38,7 @@ static struct yetty_ycore_void_result on_click(struct yetty_yclass_ctx *yclass_c
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "on_click: data_get");
     struct yetty_ygui_selectable *d = d_dr.value;
     d->selected = !d->selected;
-    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
         return dr;
     }
@@ -135,7 +135,7 @@ struct yetty_ycore_void_result yetty_ygui_selectable_set_text(struct yetty_yclas
         }
         memcpy(d->text, t, n + 1);
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -149,7 +149,7 @@ struct yetty_ycore_void_result yetty_ygui_selectable_set_selected(struct yetty_y
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_selectable_set_selected: data_get");
     struct yetty_ygui_selectable *d = d_dr.value;
     d->selected = s ? 1 : 0;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -159,7 +159,8 @@ struct yetty_ycore_int_result yetty_ygui_selectable_is_selected(
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_selectable_is_selected: NULL obj");
     }
-    struct yetty_ygui_selectable_ptr_result data_result = yetty_ygui_selectable_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_selectable_ptr_result data_result =
+        yetty_ygui_selectable_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, data_result,
                         "yetty_ygui_selectable_is_selected: data_get");
     return YETTY_OK(yetty_ycore_int, ((struct yetty_ygui_selectable *)data_result.value)->selected);

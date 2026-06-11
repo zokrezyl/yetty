@@ -149,7 +149,7 @@ struct yetty_ycore_void_result yetty_ygui_statusbar_set_left(struct yetty_yclass
     if (text && !d->left) {
         return YETTY_ERR(yetty_ycore_void, "statusbar_set_left: malloc");
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -167,7 +167,7 @@ struct yetty_ycore_void_result yetty_ygui_statusbar_set_right(struct yetty_yclas
     if (text && !d->right) {
         return YETTY_ERR(yetty_ycore_void, "statusbar_set_right: malloc");
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "statusbar.gen.c"

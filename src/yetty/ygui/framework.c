@@ -119,7 +119,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_fr
         return YETTY_OK_VOID();
     }
     if (framework->root) {
-        struct yetty_ycore_void_result r = yetty_ygui_del(framework->root);
+        struct yetty_ycore_void_result r = yetty_ygui_widget_destroy(framework->root);
         if (YETTY_IS_ERR(r)) {
             yetty_ycore_error_destroy(r.error);
         }
@@ -563,7 +563,7 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_button(
          * widget ends up handling the press. */
         for (struct yetty_yclass_object *a = target; a; a = ygui_tree(a)->parent) {
             if (ygui_tree(a)->floating) {
-                yetty_ygui_object_raise(a);
+                yetty_ygui_widget_raise(a);
                 ygui_tree(a)->dirty = 1;
                 framework->dirty = 1;
                 break;
@@ -1116,9 +1116,9 @@ static struct yetty_ycore_void_result hide_subtree_figures(struct yetty_yclass_o
         return YETTY_OK_VOID();
     }
     if (yetty_ygui_widget_figure_kind(node) != 0 && ctx->framework &&
-        figure_is_minted(ctx->framework, yetty_ygui_object_id(node))) {
+        figure_is_minted(ctx->framework, yetty_ygui_widget_id(node))) {
         struct yetty_ycore_void_result hr =
-            yetty_ygui_emit_set_child_hidden(ctx, yetty_ygui_object_id(node), 1);
+            yetty_ygui_emit_set_child_hidden(ctx, yetty_ygui_widget_id(node), 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "hide_subtree_figures: hide");
     }
     for (struct yetty_yclass_object *c = ygui_tree(node)->first_child; c;
@@ -1164,7 +1164,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
      * re-showing then costs one record, not a CREATE + full-body re-ship.
      * A boundary that has never been shown is simply not created yet. */
     if (fkind != 0) {
-        uint32_t fid = yetty_ygui_object_id(node);
+        uint32_t fid = yetty_ygui_widget_id(node);
         if (skip) {
             /* Hidden/zero-size: only flag it if it already exists. */
             if (ctx->framework && figure_is_minted(ctx->framework, fid)) {
@@ -1199,13 +1199,13 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
         ctx->fig_clip = fr;
         ctx->fig_clip_active = 1;
     } else if (skip) {
-        ydebug("walk_container: SKIP node=%p id=%u", (void *)node, yetty_ygui_object_id(node));
+        ydebug("walk_container: SKIP node=%p id=%u", (void *)node, yetty_ygui_widget_id(node));
         /* Folded-away subtree: don't emit it, but hide any figures inside
          * it so they don't linger (e.g. a scrollarea figure in a hidden
          * tab). */
         return hide_subtree_figures(node, ctx);
     }
-    ydebug("walk_container: node=%p id=%u klass=%p", (void *)node, yetty_ygui_object_id(node),
+    ydebug("walk_container: node=%p id=%u klass=%p", (void *)node, yetty_ygui_widget_id(node),
            (void *)node->klass);
     struct yetty_ycore_void_result r =
         yetty_ygui_widget_emit_container(NULL, (struct yetty_yclass_object *)node, ctx);

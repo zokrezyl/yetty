@@ -1,11 +1,12 @@
 /* GENERATED — do not edit. */
-#include "yetty/yvterm/methods.gen.h"
-#include "yetty/yvterm/grid.h"
-#include "yetty/yvterm/shader-glyph-figure.h"
+#include <yetty/yclass/class.h>
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ycore/types.h> /* container_of */
+#include <yetty/ycore/types.h>  /* container_of */
 #include <yetty/ytrace/ytrace.h>
 #include <stdint.h>
-#include <stdlib.h> /* malloc/free for buffer-arg marshalling */
+#include <stdlib.h>  /* malloc/free for buffer-arg marshalling */
 #include <string.h>
+
+
+

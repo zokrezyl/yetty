@@ -78,7 +78,6 @@ set(YGUI_ANNOTATED
 )
 set(YGUI_SOURCES
     dispatch.c
-    object.c
     framework.c
     event.c
     layout.c

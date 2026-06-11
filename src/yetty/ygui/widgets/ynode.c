@@ -105,7 +105,7 @@ static struct yetty_ygui_ynode *ynode_data(struct yetty_yclass_object *node)
 YETTY_EXTERNAL_CALLBACK
 static struct yetty_yclass_object *ynode_editor(struct yetty_yclass_object *node)
 {
-    struct yetty_yclass_object *parent = yetty_ygui_object_parent(node);
+    struct yetty_yclass_object *parent = yetty_ygui_widget_parent(node);
     if (!parent) {
         return NULL;
     }
@@ -163,7 +163,7 @@ static struct yetty_ycore_void_result ynode_constructor(struct yetty_yclass_ctx 
     l.gap = 6.0f;
     struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "ynode_constructor: layout");
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 static void ynode_free_pins(struct ynode_pin *pins, size_t count)
@@ -540,7 +540,7 @@ static struct yetty_ycore_int_result ynode_on_motion(struct yetty_yclass_ctx *yc
             return YETTY_ERR(yetty_ycore_int, "ynode_on_motion: resize reflow", rr);
         }
         if (editor) {
-            struct yetty_ycore_void_result er = yetty_ygui_object_set_dirty(editor);
+            struct yetty_ycore_void_result er = yetty_ygui_widget_set_dirty(editor);
             if (YETTY_IS_ERR(er)) {
                 return YETTY_ERR(yetty_ycore_int, "ynode_on_motion: resize dirty", er);
             }
@@ -564,7 +564,7 @@ static struct yetty_ycore_int_result ynode_on_motion(struct yetty_yclass_ctx *yc
         /* Marking the editor dirty redraws the links that follow the node;
          * the node's own move is picked up by the next layout pass. */
         if (editor) {
-            struct yetty_ycore_void_result er = yetty_ygui_object_set_dirty(editor);
+            struct yetty_ycore_void_result er = yetty_ygui_widget_set_dirty(editor);
             if (YETTY_IS_ERR(er)) {
                 return YETTY_ERR(yetty_ycore_int, "ynode_on_motion: dirty", er);
             }
@@ -617,7 +617,7 @@ struct yetty_ycore_void_result yetty_ygui_ynode_set_title(struct yetty_yclass_ob
     }
     free(d->title);
     d->title = copy;
-    return yetty_ygui_object_set_dirty(node);
+    return yetty_ygui_widget_set_dirty(node);
 }
 
 [[clang::annotate("expose")]]
@@ -719,7 +719,7 @@ static struct uint32_result ynode_add_pin(struct yetty_yclass_object *node, int 
     (*arr)[*count].color = YNODE_PIN;
     uint32_t index = (uint32_t)*count;
     (*count)++;
-    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(node);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(node);
     if (YETTY_IS_ERR(dr)) {
         return YETTY_ERR(uint32, "yetty_ygui_ynode_add_pin: dirty", dr);
     }

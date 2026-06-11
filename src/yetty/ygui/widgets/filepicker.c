@@ -284,7 +284,7 @@ static struct yetty_ycore_int_result fp_on_motion(struct yetty_yclass_ctx *yclas
     (void)yclass_ctx;
     (void)x;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_framework *eng = yetty_ygui_object_framework(obj);
+    struct yetty_ygui_framework *eng = yetty_ygui_widget_framework(obj);
     if (!eng || eng->pressed_obj != obj) {
         return YETTY_OK(yetty_ycore_int, 0); /* only while we're the drag target */
     }
@@ -312,7 +312,7 @@ static struct yetty_ycore_int_result fp_on_motion(struct yetty_yclass_ctx *yclas
     }
     if (ns != d->scroll) {
         d->scroll = ns;
-        struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+        struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
         if (YETTY_IS_ERR(dr)) {
             return YETTY_ERR(yetty_ycore_int, "fp: scroll dirty", dr);
         }
@@ -354,7 +354,7 @@ static struct yetty_ycore_int_result fp_on_scroll(struct yetty_yclass_ctx *yclas
     }
     if (ns != d->scroll) {
         d->scroll = ns;
-        struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+        struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
         if (YETTY_IS_ERR(dr)) {
             return YETTY_ERR(yetty_ycore_int, "fp: scroll dirty", dr);
         }
@@ -414,7 +414,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
         }
         d->scroll = ns;
         d->press_scroll = d->scroll;
-        struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+        struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
         if (YETTY_IS_ERR(dr)) {
             return YETTY_ERR(yetty_ycore_int, "fp: gutter scroll dirty", dr);
         }
@@ -472,7 +472,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
         /* File — select. */
         d->selected = row;
     }
-    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
         return YETTY_ERR(yetty_ycore_int, "fp: dirty", dr);
     }
@@ -502,7 +502,7 @@ struct yetty_ycore_void_result yetty_ygui_filepicker_set_dir(struct yetty_yclass
         return YETTY_ERR(yetty_ycore_void, "filepicker_set_dir: load", lr);
     }
     free(old);
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -511,7 +511,9 @@ const char *yetty_ygui_filepicker_get_dir(const struct yetty_yclass_object *obj)
     if (!obj) {
         return NULL;
     }
-    return ((struct yetty_ygui_filepicker *)yetty_ygui_filepicker_from((struct yetty_yclass_object *)obj).value)
+    return ((struct yetty_ygui_filepicker *)yetty_ygui_filepicker_from(
+                (struct yetty_yclass_object *)obj)
+                .value)
         ->cwd;
 }
 

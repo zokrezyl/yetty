@@ -165,7 +165,7 @@ struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_yclass_o
         d->labels[d->n] = NULL;
     }
     d->n++;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -179,7 +179,7 @@ struct yetty_ycore_void_result yetty_ygui_stepper_set_current(struct yetty_yclas
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_stepper_set_current: data_get");
     struct yetty_ygui_stepper *d = d_dr.value;
     d->current = i;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "stepper.gen.c"

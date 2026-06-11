@@ -64,8 +64,8 @@ struct yetty_ycore_void_result yetty_ygui_menubar_add(struct yetty_yclass_object
     if (!bar || !label) {
         return YETTY_ERR(yetty_ycore_void, "menubar_add: NULL arg");
     }
-    struct yetty_ygui_object_ptr_result br =
-        yetty_ygui_add(yetty_ygui_button_class_get().value, bar);
+    struct yetty_yclass_object_ptr_result br =
+        yetty_ygui_widget_add(bar, yetty_ygui_button_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "menubar_add: button");
     struct yetty_yclass_object *btn = br.value;
     struct yetty_ycore_void_result lr = yetty_ygui_button_set_label(btn, label);

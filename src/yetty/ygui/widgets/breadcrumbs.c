@@ -136,7 +136,7 @@ struct yetty_ycore_void_result yetty_ygui_breadcrumbs_add(struct yetty_yclass_ob
     }
     memcpy(d->items[d->n_items], text, n + 1);
     d->n_items++;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -152,7 +152,7 @@ struct yetty_ycore_void_result yetty_ygui_breadcrumbs_clear(struct yetty_yclass_
         free(d->items[i]);
     }
     d->n_items = 0;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "breadcrumbs.gen.c"

@@ -742,6 +742,36 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                             continue
                         local_slots.add(slot_name)
                         continue
+                    if role == "virtual":
+                        # `virtual@<DOMAIN>:<CLASS>:<SLOT>` — INTRODUCE a virtual
+                        # method. The annotated function is its default impl,
+                        # and <CLASS> OWNS the slot (its stub + `_fn` typedef are
+                        # emitted into <CLASS>'s header; every subclass reaches
+                        # them through the parent header it includes). This is
+                        # the only annotation that *creates* a slot — `override@`
+                        # merely supplies another class's impl for it.
+                        require_segments(role, args, 3, "virtual@<DOMAIN>:<CLASS>:<SLOT>")
+                        impl_dom, cls, slot = args
+                        if impl_dom != module:
+                            continue
+                        slot_dom = impl_dom
+                        b = bucket(cls)
+                        b["ops"].append({
+                            "slot": slot,
+                            "slot_domain": slot_dom,
+                            "impl": decl["name"],
+                        })
+                        # Authoritative owner. Overwrite any provisional entry an
+                        # earlier override@ created so owning_class is the
+                        # introducer regardless of source-processing order.
+                        qt = decl.get("type", {}).get("qualType", "")
+                        methods[slot] = {
+                            "slot": slot, "domain": slot_dom,
+                            "owning_class": cls,
+                            "return_type": _parse_return_type(qt),
+                            "args": _fn_args(decl),
+                        }
+                        continue
                     if role == "override":
                         # Two shapes accepted:
                         #   3 segs — slot lives in the impl class's domain
@@ -1415,30 +1445,38 @@ def emit_dispatch_body(m: dict) -> str:
 
 
 def emit_methods_c(model: dict, module: str, out_path: Path):
-    # methods.gen.h carries the `_fn` typedefs the dispatch body casts to
-    # plus the stub prototypes, but it deliberately does NOT pull in the
-    # per-class public headers (see emit_methods_gen_h). This TU DEFINES
-    # the stubs, so it needs the complete `_ptr_result` types those
-    # headers own — and as a standalone .gen.c (never `#include`d into a
-    # hand-written .c) it can include every class header without risking a
-    # redefinition against a .c's manual declaration. Absolute paths
-    # (resolved via `-Isrc`) so the includes work from subdirs too.
+    # Self-contained: this TU defines every public slot stub and casts the
+    # resolved impl to the slot's `<slot>_fn`. It does NOT include any
+    # per-class `<stem>.h` (that would re-define their `expose`d structs in
+    # one TU) and there is no module-wide methods header — so it forward-
+    # declares the structs its signatures name and emits the `_fn` typedefs
+    # itself. Slot signatures return core/result types (from result.h);
+    # pointer args only need a forward-decl.
     parts = [HEADER,
-             f'#include "yetty/{module}/methods.gen.h"\n']
-    seen_headers = []
-    for c in model.get("classes", []):
-        h = class_header_for(c, module)
-        if h not in seen_headers:
-            seen_headers.append(h)
-    for h in seen_headers:
-        parts.append(f'#include "{h}"\n')
-    parts += ['#include <yetty/yclass/rpc.h>\n',
+             '#include <yetty/yclass/class.h>\n',
+             '#include <yetty/yclass/rpc.h>\n',
              '#include <yetty/ycore/result.h>\n',
              '#include <yetty/ycore/types.h>  /* container_of */\n',
              '#include <yetty/ytrace/ytrace.h>\n',
              '#include <stdint.h>\n'
              '#include <stdlib.h>  /* malloc/free for buffer-arg marshalling */\n'
              '#include <string.h>\n\n']
+    structs = set()
+    for m in model["methods"]:
+        structs |= struct_names_in(m["return_type"])
+        structs.add(f"{result_type_id(m['return_type'])}_result")
+        for a in m["args"]:
+            structs |= struct_names_in(a["type"])
+    for known in ("yetty_yclass_ctx", "yetty_yclass_object", "yetty_yclass",
+                  "yetty_ycore_buffer"):
+        structs.discard(known)
+    parts.append("".join(f"struct {s};\n" for s in sorted(structs)))
+    parts.append("\n")
+    for m in model["methods"]:
+        type_only = ", ".join(a["type"] for a in m["args"])
+        rt = result_type(m["return_type"])
+        parts.append(f"typedef {rt} (*{qualified_slot(m)}_fn)({type_only});\n")
+    parts.append("\n")
     for m in model["methods"]:
         params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
         rt = result_type(m["return_type"])
@@ -1456,16 +1494,15 @@ def emit_class_accessor(cls: dict) -> str:
     type_const = "YETTY_YCLASS_TYPE_MIXIN" if is_mixin else "YETTY_YCLASS_TYPE_REGULAR"
 
     # Compile-time signature check: assigning each override impl to a
-    # variable of the slot's function-pointer typedef forces the C
-    # compiler to verify return type + parameter types match. Mismatch
-    # ⇒ compile error at this line, well before the impl_t cast in the
-    # ops table erases types. Works for both same-domain and cross-
-    # domain overrides — the typedef lives in <slot_domain>/methods.h
-    # which the .gen.c already includes.
+    # variable of the slot's function-pointer typedef forces the compiler
+    # to verify return + parameter types. The `<slot>_fn` typedefs these
+    # use are emitted at the head of this same .gen.c (emit_class_gen_c) for
+    # same-module slots, and come from an included parent/foreign header for
+    # cross-module overrides — so the check needs no module-wide header.
     #
     # The check variable name MUST include slot_domain — a class that
-    # overrides the same local slot name from two different domains
-    # would otherwise collide on the static variable name.
+    # overrides the same local slot name from two different domains would
+    # otherwise collide on the static variable name.
     qcls = qualified_class(cls)
     typecheck_lines = [
         f"[[maybe_unused]]\n"
@@ -1812,6 +1849,14 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             + ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
             + ");\n"
             for m in group_methods)
+        # Slot function-pointer typedefs — a subclass that overrides one of
+        # these slots includes this header and needs `<slot>_fn` to type-check
+        # its impl. Public, alongside the stubs (replaces the old methods.gen.h).
+        stub_typedefs = "".join(
+            f"typedef {result_type(m['return_type'])} (*{qualified_slot(m)}_fn)("
+            + ", ".join(a["type"] for a in m["args"])
+            + ");\n"
+            for m in group_methods)
         # create() for each concrete (non-mixin) class in this source, plus
         # the module's RPC-discovery installer. register() is module-level;
         # an identical prototype in every source header is legal C and keeps
@@ -1827,6 +1872,8 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             rpc_decls += "\n\n" + stub_fwd.rstrip()
         if stub_decls:
             rpc_decls += "\n\n" + stub_decls.rstrip()
+        if stub_typedefs:
+            rpc_decls += "\n\n" + stub_typedefs.rstrip()
         if create_decls:
             rpc_decls += "\n\n" + create_decls.rstrip()
         rpc_decls += "\n\n" + register_decl.rstrip()
@@ -1888,16 +1935,12 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
         src_path_p = Path(src_path)
         inc_path = src_path_p.with_name(src_path_p.stem + ".gen.c")
 
-        # Collect headers needed for this .gen.c: each class's own
-        # header + the (possibly cross-domain) parent + mixin headers
-        # + this module's internal methods.gen.h (carries the `_fn`
-        # typedefs the impl-pointer static checks use) + the same
-        # internal methods.gen.h for every foreign slot domain (cross-
-        # module override). methods.gen.h transitively pulls in its
-        # sibling public methods.h so the function declarations the
-        # impl is built from are also in scope.
+        # Collect headers needed for this .gen.c: the (possibly cross-domain)
+        # parent + mixin headers, which carry the parent/foreign slot stubs +
+        # `_fn` typedefs an override references. Same-module slot stubs +
+        # typedefs are emitted locally below (slot_block) — there is no
+        # module-wide methods header.
         needed = set()
-        needed.add(f"yetty/{module}/methods.gen.h")
         for c in classes:
             # NOT the class's own header: this .gen.c is `#include`d at the
             # foot of the hand-written .c, which already provides the class's
@@ -1914,10 +1957,6 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
                 needed.add(_class_header_lookup(model, p, fallback_dom=p['domain']))
             for mx in c.get("mixins", []):
                 needed.add(_class_header_lookup(model, mx, fallback_dom=mx['domain']))
-            for op in c.get("ops", []):
-                sd = op.get("slot_domain", c["domain"])
-                if sd != c["domain"]:
-                    needed.add(f"yetty/{sd}/methods.gen.h")
         include_block = "".join(f'#include "{h}"\n' for h in sorted(needed))
         # The accessor body emits ydebug() and YETTY_OK / YETTY_ERR
         # which expand to ycore + ytrace primitives. Pull those in
@@ -1930,7 +1969,50 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
             '#include <yetty/ytrace/ytrace.h>\n'
         )
 
-        body = HEADER + include_block + "\n" \
+        # Same-module slot stubs this .gen.c's ops reference, emitted locally:
+        # the bare stub prototype (the ops-table method-id sentinel) + the
+        # `<slot>_fn` typedef (the impl-pointer signature check). The old
+        # module-wide methods.gen.h carried these; now each .gen.c declares
+        # only what it overrides. Function + typedef declarations are
+        # duplicate-safe, so re-declaring what the public <stem>.h also
+        # publishes is fine. Cross-module slots come from the parent/mixin
+        # headers included above.
+        method_by_slot = {(m["domain"], m["slot"]): m for m in model.get("methods", [])}
+        slot_keys = []
+        for c in classes:
+            for op in c.get("ops", []):
+                key = (op["slot_domain"], op["slot"])
+                if op["slot_domain"] == module and key not in slot_keys:
+                    slot_keys.append(key)
+        proto_structs = set()
+        proto_lines = []
+        typedef_lines = []
+        for key in slot_keys:
+            m = method_by_slot.get(key)
+            if not m:
+                continue
+            proto_structs |= struct_names_in(m["return_type"])
+            proto_structs.add(f"{result_type_id(m['return_type'])}_result")
+            for a in m["args"]:
+                proto_structs |= struct_names_in(a["type"])
+            params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
+            type_only = ", ".join(a["type"] for a in m["args"])
+            rt = result_type(m["return_type"])
+            proto_lines.append(f"{rt} {qualified_slot(m)}({params});")
+            typedef_lines.append(f"typedef {rt} (*{qualified_slot(m)}_fn)({type_only});")
+        for known in ("yetty_yclass_ctx", "yetty_yclass_object", "yetty_yclass",
+                      "yetty_ycore_buffer"):
+            proto_structs.discard(known)
+        slot_block = ""
+        if proto_lines:
+            slot_block = (
+                "".join(f"struct {s};\n" for s in sorted(proto_structs))
+                + "".join(line + "\n" for line in proto_lines)
+                + "".join(line + "\n" for line in typedef_lines)
+                + "\n"
+            )
+
+        body = HEADER + include_block + "\n" + slot_block \
              + "\n".join(emit_class_accessor(c) for c in classes)
         inc_path.write_text(body)
 
@@ -2415,12 +2497,11 @@ def main():
             hdr = hdr_dir / (s.stem + ".h")
             if not hdr.exists():
                 hdr.write_text(placeholder_class_h)
-    # Internal placeholder under src/yetty/<module>/. The `.gen.h`
-    # suffix marks it as codegen-output sitting inside the module's
-    # private area (.gen.c files include it for the impl typedefs).
-    p_internal = module_src / "methods.gen.h"
-    if not p_internal.exists():
-        p_internal.write_text(placeholder_class_h)
+    # Remove stale module-wide method headers — slot stubs + `_fn` typedefs
+    # now live in each source's own <stem>.h (and inline in methods.gen.c).
+    for stale in (module_src / "methods.gen.h", include_module / "methods.h"):
+        if stale.exists():
+            stale.unlink()
 
     # Clang search path: shared include/, the module's own generated-
     # header dir (include/<module>/), and the module src dir (for
@@ -2440,7 +2521,6 @@ def main():
         validate_method(m)
 
     emit_class_public_headers(model, module, include_module)
-    emit_methods_gen_h(model, module, module_src / "methods.gen.h")
     emit_methods_c(model, module, module_src / "methods.gen.c")
     emit_class_gen_c(model, module, module_src)
     emit_rpc_c(model, module, module_src / "rpc.gen.c")

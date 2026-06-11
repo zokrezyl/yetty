@@ -41,8 +41,8 @@ static void set_grow(struct yetty_yclass_object *w, float grow)
 /* Open collapsing_header section, titled, initially expanded. */
 static struct yetty_yclass_object *add_section(struct yetty_yclass_object *area, const char *title)
 {
-    struct yetty_ygui_object_ptr_result r =
-        yetty_ygui_add(yetty_ygui_collapsing_header_class_get().value, area);
+    struct yetty_yclass_object_ptr_result r =
+        yetty_ygui_widget_add(area, yetty_ygui_collapsing_header_class_get().value);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return NULL;
@@ -60,8 +60,8 @@ static struct yetty_yclass_object *add_diagram(struct yetty_yclass_object *sec, 
     if (!sec) {
         return NULL;
     }
-    struct yetty_ygui_object_ptr_result r =
-        yetty_ygui_add(yetty_ygui_ydiagram_class_get().value, sec);
+    struct yetty_yclass_object_ptr_result r =
+        yetty_ygui_widget_add(sec, yetty_ygui_ydiagram_class_get().value);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return NULL;
@@ -81,8 +81,8 @@ static void finalize_section(struct yetty_yclass_object *sec)
     const struct yetty_ygui_layout *sl = yetty_ygui_widget_layout_get(sec);
     float total = sl->padding_top + sl->padding_bottom;
     int n = 0;
-    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(sec); c;
-         c = yetty_ygui_object_next_sibling(c)) {
+    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(sec); c;
+         c = yetty_ygui_widget_next_sibling(c)) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
         total += cl->height > 0.0f ? cl->height : 0.0f;
         n++;
@@ -157,8 +157,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     (void)runner;
 
     /* Scrollarea fills the body and stacks the sections vertically. */
-    struct yetty_ygui_object_ptr_result sr =
-        yetty_ygui_add(yetty_ygui_scrollarea_class_get().value, root);
+    struct yetty_yclass_object_ptr_result sr =
+        yetty_ygui_widget_add(root, yetty_ygui_scrollarea_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "build: scrollarea");
     set_grow(sr.value, 1.0f);
     struct yetty_yclass_object *area = sr.value;

@@ -21,7 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_window_class_get(void);
 struct yetty_ygui_window_ptr_result yetty_ygui_window_from(struct yetty_yclass_object *obj);
 #include <yetty/ygui/event.h>
 #include <yetty/ygui/framework.h>
-#include <yetty/ygui/object.h>
+#include <yetty/ygui/widget.h>
 #include <yetty/ygui/widgets/popup_menu.h>
 #include <yetty/ygui/widgets/vbox.h>
 #include <stdlib.h>
@@ -141,7 +141,8 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "window: layout");
 
     /* Auto-allocate the body — a flex-grow vbox filling the content box. */
-    struct yetty_ygui_object_ptr_result br = yetty_ygui_add(yetty_ygui_vbox_class_get().value, obj);
+    struct yetty_yclass_object_ptr_result br =
+        yetty_ygui_widget_add(obj, yetty_ygui_vbox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "window: body add");
     d->body = br.value;
     struct yetty_ygui_layout bl = *yetty_ygui_widget_layout_get(d->body);
@@ -297,7 +298,7 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
     if (YETTY_IS_ERR(lr)) {
         return YETTY_ERR(yetty_ycore_int, "window: drag move", lr);
     }
-    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
         return YETTY_ERR(yetty_ycore_int, "window: drag dirty", dr);
     }
@@ -350,7 +351,7 @@ struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_yclass_o
         }
         memcpy(d->title, title, n + 1);
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -364,7 +365,7 @@ struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_yclass_ob
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_window_set_menu: data_get");
     struct yetty_ygui_window *d = d_dr.value;
     d->menu = menu;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -378,7 +379,7 @@ struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_yclas
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_window_set_closable: data_get");
     struct yetty_ygui_window *d = d_dr.value;
     d->closable = closable ? 1 : 0;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "window.gen.c"

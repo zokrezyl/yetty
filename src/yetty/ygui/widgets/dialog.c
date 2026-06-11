@@ -178,7 +178,7 @@ struct yetty_ycore_void_result yetty_ygui_dialog_set_title(struct yetty_yclass_o
         }
         memcpy(d->title, title, n + 1);
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -200,7 +200,7 @@ struct yetty_ycore_void_result yetty_ygui_dialog_open_at(struct yetty_yclass_obj
     l.height = height;
     struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "dialog_open_at: layout");
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -221,7 +221,7 @@ struct yetty_ycore_void_result yetty_ygui_dialog_close(struct yetty_yclass_objec
     l.height = 0.0f;
     struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "dialog_close: layout");
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -230,7 +230,8 @@ struct yetty_ycore_int_result yetty_ygui_dialog_is_open(const struct yetty_yclas
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_dialog_is_open: invalid args");
     }
-    struct yetty_ygui_dialog_ptr_result d_dr = yetty_ygui_dialog_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_dialog_ptr_result d_dr =
+        yetty_ygui_dialog_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_dialog_is_open: data_get");
     struct yetty_ygui_dialog *d = d_dr.value;
     return YETTY_OK(yetty_ycore_int, d->open);

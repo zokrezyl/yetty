@@ -122,7 +122,7 @@ struct yetty_ycore_void_result yetty_ygui_tooltip_set_text(struct yetty_yclass_o
         }
         memcpy(td->text, text, n + 1);
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -132,7 +132,8 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_tooltip_get_text(
     if (!obj) {
         return YETTY_ERR(yetty_ycore_const_char_ptr, "yetty_ygui_tooltip_get_text: invalid args");
     }
-    struct yetty_ygui_tooltip_ptr_result td_dr = yetty_ygui_tooltip_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_tooltip_ptr_result td_dr =
+        yetty_ygui_tooltip_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, td_dr, "yetty_ygui_tooltip_get_text: data_get");
     struct yetty_ygui_tooltip *td = td_dr.value;
     return YETTY_OK(yetty_ycore_const_char_ptr, td->text);

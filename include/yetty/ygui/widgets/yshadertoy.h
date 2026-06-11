@@ -27,7 +27,6 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yshadertoy_create(struct yetty_
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_yshadertoy_set_source(struct yetty_yclass_object *obj,
-                                                                const char *src, size_t len);
+struct yetty_ycore_void_result yetty_ygui_yshadertoy_set_source(struct yetty_yclass_object *obj, const char *src, size_t len);
 
 #endif

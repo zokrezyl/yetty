@@ -61,12 +61,12 @@ struct yetty_yui_config_dialog {
 /* Add `cls` under `parent`, returning the new object. Propagates both
  * the class-getter error and the add error so the build chain surfaces
  * the cause. Keeps the build code below readable. */
-static struct yetty_ygui_object_ptr_result cfg_add(struct yetty_yclass_object *parent,
-                                                   struct yetty_yclass_ptr_result cls_r)
+static struct yetty_yclass_object_ptr_result cfg_add(struct yetty_yclass_object *parent,
+                                                     struct yetty_yclass_ptr_result cls_r)
 {
-    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, cls_r, "cfg_add: class getter");
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls_r.value, parent);
-    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, r, "cfg_add: add");
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, cls_r, "cfg_add: class getter");
+    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_add(parent, cls_r.value);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, r, "cfg_add: add");
     return r;
 }
 
@@ -209,7 +209,7 @@ static struct yetty_ycore_void_result build_tree(struct yetty_yui_config_dialog 
         pb->dlg = dlg;
         snprintf(pb->path, sizeof(pb->path), "%s", child_path);
 
-        struct yetty_ygui_object_ptr_result node_r =
+        struct yetty_yclass_object_ptr_result node_r =
             cfg_add(container, yetty_ygui_tree_node_class_get());
         YETTY_RETURN_IF_ERR(yetty_ycore_void, node_r, "build_tree: tree_node");
         struct yetty_yclass_object *node = node_r.value;
@@ -270,7 +270,7 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
         dlg->bundles_cap = (size_t)branches;
     }
 
-    struct yetty_ygui_object_ptr_result win_r = cfg_add(root, yetty_ygui_window_class_get());
+    struct yetty_yclass_object_ptr_result win_r = cfg_add(root, yetty_ygui_window_class_get());
     if (YETTY_IS_ERR(win_r)) {
         free(dlg->bundles);
         free(dlg);
@@ -291,7 +291,7 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
         body, "display:flex;flex-direction:column;gap:10;padding:14 14 14 14;"));
 
-    struct yetty_ygui_object_ptr_result split_r = cfg_add(body, yetty_ygui_hbox_class_get());
+    struct yetty_yclass_object_ptr_result split_r = cfg_add(body, yetty_ygui_hbox_class_get());
     if (YETTY_IS_ERR(split_r)) {
         free(dlg->bundles);
         free(dlg);
@@ -301,7 +301,7 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
         split, "display:flex;flex-direction:row;gap:12;flex:1 1 0;align-items:stretch;"));
 
-    struct yetty_ygui_object_ptr_result left_scroll_r =
+    struct yetty_yclass_object_ptr_result left_scroll_r =
         cfg_add(split, yetty_ygui_scrollarea_class_get());
     if (YETTY_IS_ERR(left_scroll_r)) {
         free(dlg->bundles);
@@ -319,7 +319,7 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
     sl.flex_grow = 0.0f;
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(left_scroll, &sl));
 
-    struct yetty_ygui_object_ptr_result tree_box_r =
+    struct yetty_yclass_object_ptr_result tree_box_r =
         cfg_add(left_scroll, yetty_ygui_vbox_class_get());
     if (YETTY_IS_ERR(tree_box_r)) {
         free(dlg->bundles);
@@ -336,7 +336,7 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
         return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: build_tree", tree_r);
     }
 
-    struct yetty_ygui_object_ptr_result right_r = cfg_add(split, yetty_ygui_textarea_class_get());
+    struct yetty_yclass_object_ptr_result right_r = cfg_add(split, yetty_ygui_textarea_class_get());
     if (YETTY_IS_ERR(right_r)) {
         free(dlg->bundles);
         free(dlg);
@@ -351,7 +351,7 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
 
     /* Authored height on the actions row so flex reserves the space up
      * front (see gpu_info dialog comment in yui.c). */
-    struct yetty_ygui_object_ptr_result actions_r = cfg_add(body, yetty_ygui_hbox_class_get());
+    struct yetty_yclass_object_ptr_result actions_r = cfg_add(body, yetty_ygui_hbox_class_get());
     if (YETTY_IS_ERR(actions_r)) {
         free(dlg->bundles);
         free(dlg);
@@ -362,7 +362,7 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
         actions, "display:flex;flex-direction:row;justify-content:end;gap:8;"
                  "flex:0 0 auto;align-items:center;"));
-    struct yetty_ygui_object_ptr_result close_r = cfg_add(actions, yetty_ygui_button_class_get());
+    struct yetty_yclass_object_ptr_result close_r = cfg_add(actions, yetty_ygui_button_class_get());
     if (YETTY_IS_ERR(close_r)) {
         free(dlg->bundles);
         free(dlg);

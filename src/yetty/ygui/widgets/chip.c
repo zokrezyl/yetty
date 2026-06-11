@@ -114,7 +114,7 @@ struct yetty_ycore_void_result yetty_ygui_chip_set_label(struct yetty_yclass_obj
         }
         memcpy(d->label, label, n + 1);
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -127,7 +127,7 @@ struct yetty_ycore_void_result yetty_ygui_chip_set_closable(struct yetty_yclass_
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_chip_set_closable: data_get");
     struct yetty_ygui_chip *d = d_dr.value;
     d->closable = c ? 1 : 0;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "chip.gen.c"

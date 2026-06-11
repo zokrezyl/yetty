@@ -143,8 +143,8 @@ static int header_index_in_tabbar(struct yetty_yclass_object *header,
                                   struct yetty_yclass_object *tabbar)
 {
     int idx = 0;
-    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(tabbar); c;
-         c = yetty_ygui_object_next_sibling(c)) {
+    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(tabbar); c;
+         c = yetty_ygui_widget_next_sibling(c)) {
         if (c == header) {
             return idx;
         }
@@ -306,8 +306,8 @@ static struct yetty_ycore_void_result header_set_label(struct yetty_yclass_ctx *
 static float tabbar_tabs_right_edge(struct yetty_yclass_object *tabbar, float fallback)
 {
     struct yetty_yclass_object *last = NULL;
-    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(tabbar); c;
-         c = yetty_ygui_object_next_sibling(c)) {
+    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(tabbar); c;
+         c = yetty_ygui_widget_next_sibling(c)) {
         last = c;
     }
     if (!last) {
@@ -495,7 +495,7 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
      * fallback literals are belt-and-braces — theme is engine-owned and
      * non-NULL after framework_create. */
     const struct yetty_ygui_theme *theme =
-        yetty_ygui_framework_theme(yetty_ygui_object_framework(obj));
+        yetty_ygui_framework_theme(yetty_ygui_widget_framework(obj));
     uint32_t color_strip = theme ? theme->yui_strip : 0xFF1F1A14u;
     uint32_t color_active = theme ? theme->yui_tab_active : 0xFF14100Bu;
     uint32_t color_inactive = theme ? theme->yui_tab_inactive : 0xFF2C261Eu;
@@ -521,8 +521,8 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
     int idx = 0;
     struct yetty_yclass_object *prev_header = NULL;
     int prev_active = 0;
-    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(obj); c;
-         c = yetty_ygui_object_next_sibling(c)) {
+    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(obj); c;
+         c = yetty_ygui_widget_next_sibling(c)) {
         struct yetty_ycore_rectangle pr = yetty_ygui_widget_rect(c);
         float pw = pr.max.x - pr.min.x;
         float ph = pr.max.y - pr.min.y;
@@ -619,20 +619,21 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_ctx *ycla
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ygui_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_yclass_object *tabbar,
-                                                              const char *label)
+struct yetty_yclass_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_yclass_object *tabbar,
+                                                                const char *label)
 {
     if (!tabbar) {
-        return YETTY_ERR(yetty_ygui_object_ptr, "yetty_ygui_tabbar_add_tab: NULL tabbar");
+        return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_tabbar_add_tab: NULL tabbar");
     }
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(header_class_get().value, tabbar);
+    struct yetty_yclass_object_ptr_result r =
+        yetty_ygui_widget_add(tabbar, header_class_get().value);
     if (YETTY_IS_ERR(r)) {
         return r;
     }
     struct yetty_yclass_object *header = r.value;
     struct yetty_yclass_void_ptr_result hd_dr =
         yetty_yclass_object_data(header, header_class_get().value);
-    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, hd_dr, "yetty_ygui_tabbar_add_tab: data_get");
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, hd_dr, "yetty_ygui_tabbar_add_tab: data_get");
     struct header_data *hd = hd_dr.value;
     hd->tabbar = tabbar;
     if (label) {
@@ -643,16 +644,16 @@ struct yetty_ygui_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_yclas
         }
     }
     struct yetty_ygui_tabbar_ptr_result td_dr = yetty_ygui_tabbar_from(tabbar);
-    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, td_dr, "yetty_ygui_tabbar_add_tab: data_get");
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, td_dr, "yetty_ygui_tabbar_add_tab: data_get");
     struct yetty_ygui_tabbar *td = td_dr.value;
     if (td->active_index < 0) {
         td->active_index = 0;
-        struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(tabbar);
+        struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(tabbar);
         if (YETTY_IS_ERR(dr)) {
             yetty_ycore_error_destroy(dr.error);
         }
     }
-    return YETTY_OK(yetty_ygui_object_ptr, header);
+    return YETTY_OK(yetty_yclass_object_ptr, header);
 }
 
 [[clang::annotate("expose")]]
@@ -663,10 +664,10 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_yclass_
         return YETTY_OK_VOID();
     }
     int i = 0;
-    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(tabbar); c;) {
-        struct yetty_yclass_object *next = yetty_ygui_object_next_sibling(c);
+    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(tabbar); c;) {
+        struct yetty_yclass_object *next = yetty_ygui_widget_next_sibling(c);
         if (i == index) {
-            struct yetty_ycore_void_result dr = yetty_ygui_del(c);
+            struct yetty_ycore_void_result dr = yetty_ygui_widget_destroy(c);
             if (YETTY_IS_ERR(dr)) {
                 return YETTY_ERR(yetty_ycore_void, "yetty_ygui_tabbar_remove_tab: del", dr);
             }
@@ -677,7 +678,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_yclass_
             if (td->active_index >= n) {
                 td->active_index = n - 1;
             }
-            return yetty_ygui_object_set_dirty(tabbar);
+            return yetty_ygui_widget_set_dirty(tabbar);
         }
         c = next;
         i++;
@@ -693,13 +694,13 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_label(struct yetty_yclass_o
         return YETTY_OK_VOID();
     }
     int i = 0;
-    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(tabbar); c;
-         c = yetty_ygui_object_next_sibling(c)) {
+    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(tabbar); c;
+         c = yetty_ygui_widget_next_sibling(c)) {
         if (i == index) {
             struct yetty_ycore_void_result lr =
                 header_set_label(NULL, (struct yetty_yclass_object *)c, label);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "yetty_ygui_tabbar_set_label: set");
-            return yetty_ygui_object_set_dirty(tabbar);
+            return yetty_ygui_widget_set_dirty(tabbar);
         }
         i++;
     }
@@ -714,8 +715,8 @@ int yetty_ygui_tabbar_count(const struct yetty_yclass_object *tabbar)
     }
     int n = 0;
     for (struct yetty_yclass_object *c =
-             yetty_ygui_object_first_child((struct yetty_yclass_object *)tabbar);
-         c; c = yetty_ygui_object_next_sibling(c)) {
+             yetty_ygui_widget_first_child((struct yetty_yclass_object *)tabbar);
+         c; c = yetty_ygui_widget_next_sibling(c)) {
         n++;
     }
     return n;
@@ -727,7 +728,8 @@ struct yetty_ycore_int_result yetty_ygui_tabbar_active(const struct yetty_yclass
     if (!tabbar) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_tabbar_active: NULL obj");
     }
-    struct yetty_ygui_tabbar_ptr_result td_dr = yetty_ygui_tabbar_from((struct yetty_yclass_object *)tabbar);
+    struct yetty_ygui_tabbar_ptr_result td_dr =
+        yetty_ygui_tabbar_from((struct yetty_yclass_object *)tabbar);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, td_dr, "yetty_ygui_tabbar_active: data_get");
     struct yetty_ygui_tabbar *td = td_dr.value;
     return YETTY_OK(yetty_ycore_int, td->active_index);
@@ -757,7 +759,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_yclass_
         return YETTY_OK_VOID();
     }
     td->active_index = index;
-    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(tabbar);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(tabbar);
     if (YETTY_IS_ERR(dr)) {
         return dr;
     }
@@ -781,7 +783,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_close(struct yetty_yclas
     struct yetty_ygui_tabbar *td = td_dr.value;
     td->close_cb = cb;
     td->close_userdata = userdata;
-    return yetty_ygui_object_set_dirty(tabbar);
+    return yetty_ygui_widget_set_dirty(tabbar);
 }
 
 [[clang::annotate("expose")]]
@@ -797,7 +799,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_new_tab(struct yetty_ycl
     struct yetty_ygui_tabbar *td = td_dr.value;
     td->new_tab_cb = cb;
     td->new_tab_userdata = userdata;
-    return yetty_ygui_object_set_dirty(tabbar);
+    return yetty_ygui_widget_set_dirty(tabbar);
 }
 
 /*-----------------------------------------------------------------------------

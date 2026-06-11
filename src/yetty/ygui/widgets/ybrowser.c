@@ -181,7 +181,7 @@ struct yetty_ycore_void_result yetty_ygui_ybrowser_set_html(struct yetty_yclass_
     d->html_len = len;
     d->rendered_w = 0.0f;
     d->rendered_h = 0.0f;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "ybrowser.gen.c"

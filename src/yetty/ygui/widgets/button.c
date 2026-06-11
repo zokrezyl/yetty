@@ -137,7 +137,7 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *ycla
     } else {
         yetty_ycore_error_destroy(pressed_r.error);
     }
-    int hovered = yetty_ygui_object_is_hovered(obj);
+    int hovered = yetty_ygui_widget_is_hovered(obj);
 
     /* Window-control mode: paint a flat caption cell with an SDF icon (no
      * rounded gradient surface, no text label), matching ychrome's controls so
@@ -249,7 +249,7 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *ycla
          * in user config reaches the button. Belt-and-braces fallback if
          * theme is somehow NULL (engine owns it post-create). */
         const struct yetty_ygui_theme *theme =
-            yetty_ygui_framework_theme(yetty_ygui_object_framework(obj));
+            yetty_ygui_framework_theme(yetty_ygui_widget_framework(obj));
         float font_size = theme && theme->font_size > 0.0f ? theme->font_size : 14.0f;
         float x = r.min.x + 12.0f;
         float y = r.min.y + press_offset + (h + font_size) * 0.5f - 2.0f;
@@ -288,7 +288,7 @@ struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_yclass_o
         }
         memcpy(d->label, label, n + 1);
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 /* Draw the button as a window-control cell with an SDF icon instead of a text
@@ -305,7 +305,7 @@ struct yetty_ycore_void_result yetty_ygui_button_set_chrome_icon(struct yetty_yc
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_button_set_chrome_icon: data_get");
     struct yetty_ygui_button *d = d_dr.value;
     d->chrome_icon = (kind >= 1 && kind <= 3) ? kind : 0;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -315,7 +315,8 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_button_get_label(
     if (!obj) {
         return YETTY_ERR(yetty_ycore_const_char_ptr, "yetty_ygui_button_get_label: invalid args");
     }
-    struct yetty_ygui_button_ptr_result d_dr = yetty_ygui_button_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_button_ptr_result d_dr =
+        yetty_ygui_button_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr, "yetty_ygui_button_get_label: data_get");
     struct yetty_ygui_button *d = d_dr.value;
     return YETTY_OK(yetty_ycore_const_char_ptr, d->label);

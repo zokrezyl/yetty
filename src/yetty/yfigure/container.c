@@ -30,7 +30,6 @@
  * this TU dispatches through. It is self-contained and deliberately does
  * NOT pull in the per-class public headers, so it cannot clash with the
  * yetty_yfigure_container_ptr_result declared below. */
-#include "yetty/yfigure/methods.gen.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -1643,7 +1642,7 @@ struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yclass_ob
 /* yclass instance layout: yclass_object header at offset 0, user data
  * (the `struct yetty_yfigure_container` body) immediately after. Cast
  * via (obj + 1) advances past the header in pointer arithmetic. */
-[[clang::annotate("override@yfigure:container:constructor")]]
+[[clang::annotate("virtual@yfigure:container:constructor")]]
 static struct yetty_ycore_void_result yetty_yfigure_container_constructor_impl(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
 {
@@ -1655,7 +1654,7 @@ static struct yetty_ycore_void_result yetty_yfigure_container_constructor_impl(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yfigure:container:add_child")]]
+[[clang::annotate("virtual@yfigure:container:add_child")]]
 static struct yetty_ycore_void_result yetty_yfigure_container_add_child_impl(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
     struct yetty_yfigure_figure *child, uint32_t id)
@@ -1664,7 +1663,7 @@ static struct yetty_ycore_void_result yetty_yfigure_container_add_child_impl(
     return yetty_yfigure_container_add_child(obj, child, id);
 }
 
-[[clang::annotate("override@yfigure:container:remove_child_by_id")]]
+[[clang::annotate("virtual@yfigure:container:remove_child_by_id")]]
 static struct yetty_ycore_void_result yetty_yfigure_container_remove_child_by_id_impl(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, uint32_t id)
 {
@@ -1672,7 +1671,7 @@ static struct yetty_ycore_void_result yetty_yfigure_container_remove_child_by_id
     return yetty_yfigure_container_remove_child_by_id(obj, id);
 }
 
-[[clang::annotate("override@yfigure:container:raise_child_by_id")]]
+[[clang::annotate("virtual@yfigure:container:raise_child_by_id")]]
 static struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id_impl(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, uint32_t id)
 {
@@ -1680,7 +1679,7 @@ static struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id_
     return yetty_yfigure_container_raise_child_by_id(obj, id);
 }
 
-[[clang::annotate("override@yfigure:container:process_records")]]
+[[clang::annotate("virtual@yfigure:container:process_records")]]
 static struct yetty_ycore_void_result yetty_yfigure_container_process_records_impl(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, struct yetty_ycore_buffer bytes)
 {

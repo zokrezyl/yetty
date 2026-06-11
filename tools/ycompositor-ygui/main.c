@@ -150,7 +150,7 @@ static struct yetty_yclass_object *cy_add(struct yetty_yclass_object *parent,
         yetty_ycore_error_destroy(cls_r.error);
         return NULL;
     }
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls_r.value, parent);
+    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_add(parent, cls_r.value);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return NULL;

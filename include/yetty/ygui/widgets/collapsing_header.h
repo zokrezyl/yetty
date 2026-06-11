@@ -20,20 +20,15 @@ struct yetty_yclass_ptr_result yetty_ygui_collapsing_header_class_get(void);
  * through the per-property getters/setters below. */
 struct yetty_ygui_collapsing_header;
 YETTY_YRESULT_DECLARE(yetty_ygui_collapsing_header_ptr, struct yetty_ygui_collapsing_header *);
-struct yetty_ygui_collapsing_header_ptr_result yetty_ygui_collapsing_header_from(
-    struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_collapsing_header_to(
-    struct yetty_ygui_collapsing_header *data);
+struct yetty_ygui_collapsing_header_ptr_result yetty_ygui_collapsing_header_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_collapsing_header_to(struct yetty_ygui_collapsing_header *data);
 
-struct yetty_yclass_object_ptr_result yetty_ygui_collapsing_header_create(
-    struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_ygui_collapsing_header_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_title(
-    struct yetty_yclass_object *obj, const char *title);
-struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_open(
-    struct yetty_yclass_object *obj, int open);
+struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_title(struct yetty_yclass_object *obj, const char *title);
+struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_open(struct yetty_yclass_object *obj, int open);
 int yetty_ygui_collapsing_header_is_open(const struct yetty_yclass_object *obj);
 
 #endif

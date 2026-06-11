@@ -27,10 +27,8 @@ struct yetty_yclass_object_ptr_result yetty_ygui_slider_create(struct yetty_ycla
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_slider_set_range(struct yetty_yclass_object *obj,
-                                                           float min, float max);
-struct yetty_ycore_void_result yetty_ygui_slider_set_value(struct yetty_yclass_object *obj,
-                                                           float value);
+struct yetty_ycore_void_result yetty_ygui_slider_set_range(struct yetty_yclass_object *obj, float min, float max);
+struct yetty_ycore_void_result yetty_ygui_slider_set_value(struct yetty_yclass_object *obj, float value);
 struct yetty_ycore_float_result yetty_ygui_slider_get_value(const struct yetty_yclass_object *obj);
 
 #endif

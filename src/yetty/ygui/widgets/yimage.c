@@ -84,7 +84,7 @@ static struct yetty_ycore_void_result yimage_emit_container(struct yetty_yclass_
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
-    return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_object_id(obj), YETTY_YFIGURE_KIND_YIMAGE,
+    return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_widget_id(obj), YETTY_YFIGURE_KIND_YIMAGE,
                                         r.min.x, r.min.y, r.max.x, r.max.y,
                                         /*init_payload=*/NULL, /*init_payload_bytes=*/0);
 }
@@ -171,7 +171,7 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *
             memcpy(combined, zbytes, zsize);
         }
         memcpy(combined + zsize, bytes, size);
-        er = yetty_ygui_emit_figure_body(ctx, yetty_ygui_object_id(obj), combined, (uint32_t)total);
+        er = yetty_ygui_emit_figure_body(ctx, yetty_ygui_widget_id(obj), combined, (uint32_t)total);
         free(combined);
         yetty_ydraw_drawable_list_destroy(zl);
     }
@@ -200,7 +200,7 @@ struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_yclass_o
         memcpy(d->bytes, bytes, len);
         d->len = len;
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -210,7 +210,8 @@ struct yetty_ycore_const_uint8_ptr_result yetty_ygui_yimage_bytes(
     if (!obj) {
         return YETTY_ERR(yetty_ycore_const_uint8_ptr, "yetty_ygui_yimage_bytes: invalid args");
     }
-    struct yetty_ygui_yimage_ptr_result d_dr = yetty_ygui_yimage_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_yimage_ptr_result d_dr =
+        yetty_ygui_yimage_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_uint8_ptr, d_dr, "yetty_ygui_yimage_bytes: data_get");
     struct yetty_ygui_yimage *d = d_dr.value;
     return YETTY_OK(yetty_ycore_const_uint8_ptr, d->bytes);
@@ -222,7 +223,8 @@ struct yetty_ycore_size_result yetty_ygui_yimage_bytes_len(const struct yetty_yc
     if (!obj) {
         return YETTY_ERR(yetty_ycore_size, "yetty_ygui_yimage_bytes_len: invalid args");
     }
-    struct yetty_ygui_yimage_ptr_result d_dr = yetty_ygui_yimage_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_yimage_ptr_result d_dr =
+        yetty_ygui_yimage_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_size, d_dr, "yetty_ygui_yimage_bytes_len: data_get");
     struct yetty_ygui_yimage *d = d_dr.value;
     return YETTY_OK(yetty_ycore_size, d->len);

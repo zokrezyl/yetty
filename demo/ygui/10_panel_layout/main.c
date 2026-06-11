@@ -24,8 +24,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
                                             struct yetty_yclass_object *root)
 {
     (void)runner;
-    struct yetty_ygui_object_ptr_result pr =
-        yetty_ygui_add(yetty_ygui_panel_class_get().value, root);
+    struct yetty_yclass_object_ptr_result pr =
+        yetty_ygui_widget_add(root, yetty_ygui_panel_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "panel");
     {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(pr.value);
@@ -36,8 +36,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_widget_layout_set(pr.value, &l));
     }
     for (int i = 0; i < 3; ++i) {
-        struct yetty_ygui_object_ptr_result lr =
-            yetty_ygui_add(yetty_ygui_label_class_get().value, pr.value);
+        struct yetty_yclass_object_ptr_result lr =
+            yetty_ygui_widget_add(pr.value, yetty_ygui_label_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "label");
         char buf[24];
         snprintf(buf, sizeof(buf), "Row %d", i + 1);

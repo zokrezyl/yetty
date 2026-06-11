@@ -164,7 +164,7 @@ static void test_class_registration(void)
 
 static void test_instance_alloc_and_dispatch(void)
 {
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(probe_a_class_get(), NULL);
+    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_new(probe_a_class_get());
     assert(YETTY_IS_OK(r));
     struct yetty_yclass_object *obj = r.value;
 
@@ -187,13 +187,13 @@ static void test_instance_alloc_and_dispatch(void)
     assert(mr.value == 0);
 
     /* Clean up. */
-    struct yetty_ycore_void_result dr = yetty_ygui_del(obj);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_destroy(obj);
     assert(YETTY_IS_OK(dr));
 }
 
 static void test_subclass_dispatch_and_super(void)
 {
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(probe_b_class_get(), NULL);
+    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_new(probe_b_class_get());
     assert(YETTY_IS_OK(r));
     struct yetty_yclass_object *obj = r.value;
 
@@ -220,7 +220,7 @@ static void test_subclass_dispatch_and_super(void)
     struct probe_a_data *ad = yetty_yclass_object_data(obj, probe_a_class_get()).value;
     assert(ad->press_count == 1);
 
-    yetty_ygui_del(obj);
+    yetty_ygui_widget_destroy(obj);
 }
 
 static void test_tooltip_pilot(void)
@@ -228,7 +228,7 @@ static void test_tooltip_pilot(void)
     const struct yetty_yclass *cls = yetty_ygui_tooltip_class_get().value;
     assert(cls != NULL);
 
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls, NULL);
+    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_new(cls);
     assert(YETTY_IS_OK(r));
     struct yetty_yclass_object *obj = r.value;
 
@@ -242,7 +242,7 @@ static void test_tooltip_pilot(void)
     struct yetty_ycore_const_char_ptr_result text_after = yetty_ygui_tooltip_get_text(obj);
     assert(YETTY_IS_OK(text_after));
     assert(strcmp(text_after.value, "hello") == 0);
-    assert(yetty_ygui_object_is_dirty(obj));
+    assert(yetty_ygui_widget_is_dirty(obj));
 
     /* Position the widget so paint emits a TEXT_DRAWABLE_LIST at a known coord. */
     struct yetty_ycore_rectangle wr = {{10.0f, 20.0f}, {200.0f, 60.0f}};
@@ -270,7 +270,7 @@ static void test_tooltip_pilot(void)
     assert(prims_size >= 8);
     assert(prims[0] == 0x40000002u);
     yetty_ydraw_drawable_list_destroy(dlr.value);
-    yetty_ygui_del(obj);
+    yetty_ygui_widget_destroy(obj);
 }
 
 int main(void)

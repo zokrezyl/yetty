@@ -37,8 +37,8 @@ yetty_ygui_tree_node {
  * header-only when closed and header + children when open. */
 static struct yetty_ycore_void_result tn_fold_children(struct yetty_yclass_object *obj, int open)
 {
-    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(obj); c;
-         c = yetty_ygui_object_next_sibling(c)) {
+    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(obj); c;
+         c = yetty_ygui_widget_next_sibling(c)) {
         struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(c);
         if (l.absolute) {
             continue;
@@ -109,7 +109,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     if (YETTY_IS_ERR(fold_result)) {
         return YETTY_ERR(yetty_ycore_int, "tree_node: fold", fold_result);
     }
-    struct yetty_ycore_void_result lr = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result lr = yetty_ygui_widget_set_dirty(obj);
     if (YETTY_IS_ERR(lr)) {
         return YETTY_ERR(yetty_ycore_int, "tree_node: dirty", lr);
     }
@@ -169,7 +169,7 @@ struct yetty_ycore_void_result yetty_ygui_tree_node_set_label(struct yetty_yclas
         }
         memcpy(d->label, label, n + 1);
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -184,7 +184,7 @@ struct yetty_ycore_void_result yetty_ygui_tree_node_set_open(struct yetty_yclass
     d->open = o ? 1 : 0;
     struct yetty_ycore_void_result fold_result = tn_fold_children(obj, d->open);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fold_result, "tree_node: fold");
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -193,7 +193,8 @@ struct yetty_ycore_int_result yetty_ygui_tree_node_is_open(const struct yetty_yc
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_tree_node_is_open: NULL obj");
     }
-    struct yetty_ygui_tree_node_ptr_result data_result = yetty_ygui_tree_node_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_tree_node_ptr_result data_result =
+        yetty_ygui_tree_node_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, data_result, "yetty_ygui_tree_node_is_open: data_get");
     return YETTY_OK(yetty_ycore_int, ((struct yetty_ygui_tree_node *)data_result.value)->open);
 }

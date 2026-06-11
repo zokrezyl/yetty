@@ -169,7 +169,8 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_ydiagram_get_source(
         return YETTY_ERR(yetty_ycore_const_char_ptr,
                          "yetty_ygui_ydiagram_get_source: invalid args");
     }
-    struct yetty_ygui_ydiagram_ptr_result d_dr = yetty_ygui_ydiagram_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_ydiagram_ptr_result d_dr =
+        yetty_ygui_ydiagram_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr,
                         "yetty_ygui_ydiagram_get_source: data_get");
     struct yetty_ygui_ydiagram *d = d_dr.value;

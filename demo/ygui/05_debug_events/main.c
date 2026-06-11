@@ -24,8 +24,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
                                             struct yetty_yclass_object *root)
 {
     (void)runner;
-    struct yetty_ygui_object_ptr_result lr =
-        yetty_ygui_add(yetty_ygui_label_class_get().value, root);
+    struct yetty_yclass_object_ptr_result lr =
+        yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "label");
     err_ok(yetty_ygui_label_set_text(lr.value,
                                      "Press keys / click to exercise the event path. q to quit."));

@@ -168,7 +168,7 @@ static void yrich_view_retint_text(struct yetty_ydraw_drawable_list *buf, uint32
  * widget is not yet attached to an engine. */
 static void yrich_view_theme_colors(struct yetty_yclass_object *obj, uint32_t *text, uint32_t *page)
 {
-    struct yetty_ygui_framework *engine = yetty_ygui_object_framework(obj);
+    struct yetty_ygui_framework *engine = yetty_ygui_widget_framework(obj);
     if (engine) {
         struct yetty_ygui_theme *theme = yetty_ygui_framework_theme(engine);
         if (theme) {
@@ -279,7 +279,7 @@ static struct yetty_ycore_int_result yrich_view_on_press(struct yetty_yclass_ctx
     struct yetty_yrich_input_mods mods = {0};
     yetty_yrich_document_on_mouse_down(d->doc, dx, dy, (uint32_t)button, mods);
     d->pressed = 1;
-    struct yetty_ycore_void_result result_263 = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result result_263 = yetty_ygui_widget_set_dirty(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, result_263, "yrich_view_on_press");
     return YETTY_OK(yetty_ycore_int, 1);
 }
@@ -302,7 +302,7 @@ static struct yetty_ycore_int_result yrich_view_on_release(struct yetty_yclass_c
     struct yetty_yrich_input_mods mods = {0};
     yetty_yrich_document_on_mouse_up(d->doc, dx, dy, (uint32_t)button, mods);
     d->pressed = 0;
-    struct yetty_ycore_void_result result_285 = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result result_285 = yetty_ygui_widget_set_dirty(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, result_285, "yrich_view_on_release");
     return YETTY_OK(yetty_ycore_int, 1);
 }
@@ -324,7 +324,7 @@ static struct yetty_ycore_int_result yrich_view_on_motion(struct yetty_yclass_ct
     to_doc_coords(obj, x, y, &dx, &dy);
     struct yetty_yrich_input_mods mods = {0};
     yetty_yrich_document_on_mouse_drag(d->doc, dx, dy, 0, mods);
-    struct yetty_ycore_void_result result_306 = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result result_306 = yetty_ygui_widget_set_dirty(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, result_306, "yrich_view_on_motion");
     return YETTY_OK(yetty_ycore_int, 1);
 }
@@ -354,7 +354,7 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_y
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cb, "yrich_view_set_document: clear buffer");
     d->rendered_w = 0.0f;
     d->rendered_h = 0.0f;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 /* Force a re-render at the next emit even when neither the rect nor the
@@ -371,7 +371,7 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_invalidate(struct yetty_ycl
     struct yetty_ygui_yrich_view *d = d_dr.value;
     d->rendered_w = 0.0f;
     d->rendered_h = 0.0f;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -421,7 +421,7 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_yclas
     }
     struct yetty_ycore_void_result kr = yetty_yrich_document_on_key_down(d->doc, key, mods);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, kr, "yrich_view_feed_key");
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -438,7 +438,7 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_ycla
         return YETTY_OK_VOID();
     }
     yetty_yrich_document_on_text_input(d->doc, text, len);
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "yrich_view.gen.c"

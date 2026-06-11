@@ -49,7 +49,7 @@ static struct yetty_ycore_void_result on_click_flip(struct yetty_yclass_ctx *ycl
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "on_click_flip: data_get");
     struct yetty_ygui_toggle *d = d_dr.value;
     d->on = !d->on;
-    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
         return dr;
     }
@@ -194,7 +194,7 @@ struct yetty_ycore_void_result yetty_ygui_toggle_set_label(struct yetty_yclass_o
         }
         memcpy(d->label, label, n + 1);
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -207,7 +207,7 @@ struct yetty_ycore_void_result yetty_ygui_toggle_set_on(struct yetty_yclass_obje
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_toggle_set_on: data_get");
     struct yetty_ygui_toggle *d = d_dr.value;
     d->on = on ? 1 : 0;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -216,7 +216,8 @@ struct yetty_ycore_int_result yetty_ygui_toggle_get_on(const struct yetty_yclass
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_toggle_get_on: invalid args");
     }
-    struct yetty_ygui_toggle_ptr_result d_dr = yetty_ygui_toggle_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_toggle_ptr_result d_dr =
+        yetty_ygui_toggle_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_toggle_get_on: data_get");
     struct yetty_ygui_toggle *d = d_dr.value;
     return YETTY_OK(yetty_ycore_int, d->on);

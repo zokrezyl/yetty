@@ -92,7 +92,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     for (int i = 0; i < d->n; i++) {
         count += d->rows[i].selected;
     }
-    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
         return YETTY_ERR(yetty_ycore_int, "choicebox: dirty", dr);
     }
@@ -185,7 +185,7 @@ struct yetty_ycore_void_result yetty_ygui_choicebox_add(struct yetty_yclass_obje
     memcpy(d->rows[d->n].label, label, n + 1);
     d->rows[d->n].selected = 0;
     d->n++;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -195,7 +195,8 @@ struct yetty_ycore_int_result yetty_ygui_choicebox_is_selected(
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_choicebox_is_selected: invalid args");
     }
-    struct yetty_ygui_choicebox_ptr_result d_dr = yetty_ygui_choicebox_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_choicebox_ptr_result d_dr =
+        yetty_ygui_choicebox_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_choicebox_is_selected: data_get");
     struct yetty_ygui_choicebox *d = d_dr.value;
     if (idx < 0 || idx >= d->n) {

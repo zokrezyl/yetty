@@ -117,7 +117,7 @@ static struct yetty_ycore_void_result yplot_emit_container(struct yetty_yclass_c
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
-    return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_object_id(obj), YETTY_YFIGURE_KIND_YPLOT,
+    return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_widget_id(obj), YETTY_YFIGURE_KIND_YPLOT,
                                         r.min.x, r.min.y, r.max.x, r.max.y,
                                         /*init_payload=*/NULL, /*init_payload_bytes=*/0);
 }
@@ -223,7 +223,7 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *y
             memcpy(combined, zbytes, zsize);
         }
         memcpy(combined + zsize, bytes, size);
-        fr = yetty_ygui_emit_figure_body(ctx, yetty_ygui_object_id(obj), combined, (uint32_t)total);
+        fr = yetty_ygui_emit_figure_body(ctx, yetty_ygui_widget_id(obj), combined, (uint32_t)total);
         free(combined);
         yetty_ydraw_drawable_list_destroy(zl);
     }
@@ -253,7 +253,7 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_yclass_o
         memcpy(d->source, source, n + 1);
         d->source_len = n;
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -272,7 +272,7 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_config(
     } else {
         d->has_cfg = 0;
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -334,7 +334,7 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_buffers(
         d->cfg = *config;
         d->has_cfg = 1;
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "yplot.gen.c"

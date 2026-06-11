@@ -112,8 +112,8 @@ static struct yetty_ycore_void_result ch_chevron(struct yetty_ygui_emit_ctx *ctx
 static struct yetty_ycore_void_result ch_set_children_hidden(struct yetty_yclass_object *obj,
                                                              int hidden)
 {
-    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(obj); c;
-         c = yetty_ygui_object_next_sibling(c)) {
+    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(obj); c;
+         c = yetty_ygui_widget_next_sibling(c)) {
         struct yetty_ygui_layout cl = *yetty_ygui_widget_layout_get(c);
         if (cl.hidden == hidden) {
             continue;
@@ -254,7 +254,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     }
 
     /* Accent outline over the strip while hovered. */
-    if (yetty_ygui_object_is_hovered(obj)) {
+    if (yetty_ygui_widget_is_hovered(obj)) {
         struct yetty_ycore_void_result result_247 =
             ch_rounded(ctx, r.min.x, r.min.y, w, HEADER_H, 0u, CH_HOVER, 1.5f, CH_RADIUS);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_247, "ch: hover");
@@ -282,7 +282,7 @@ struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_title(
         }
         memcpy(d->title, title, n + 1);
     }
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -305,7 +305,9 @@ int yetty_ygui_collapsing_header_is_open(const struct yetty_yclass_object *obj)
     if (!obj) {
         return 0;
     }
-    return ((struct yetty_ygui_collapsing_header *)yetty_ygui_collapsing_header_from((struct yetty_yclass_object *)obj).value)
+    return ((struct yetty_ygui_collapsing_header *)yetty_ygui_collapsing_header_from(
+                (struct yetty_yclass_object *)obj)
+                .value)
         ->open;
 }
 

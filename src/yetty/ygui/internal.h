@@ -21,7 +21,6 @@
 #include <yetty/ycore/types.h>
 #include <yetty/ygui/framework.h>
 #include <yetty/ygui/event.h>
-#include <yetty/ygui/object.h>
 /* Deliberately NOT including <yetty/ygui/widget.h> here: that is the base
  * widget class's own generated public header. widget.c includes this
  * internal.h, and a TU must not pull in its own generated header (its
@@ -122,12 +121,12 @@ struct yetty_ygui_tree {
 
     /* Hover state — set by the framework's pointer-tracking pass when
      * this widget is the deepest hit; cleared when the mouse leaves.
-     * Widgets read it via yetty_ygui_object_is_hovered() to paint a
+     * Widgets read it via yetty_ygui_widget_is_hovered() to paint a
      * hover variant. */
     int hovered;
 
     /* framework that owns this widget tree. Stored only on the root; child
-     * widgets resolve via parent walk through yetty_ygui_object_framework. */
+     * widgets resolve via parent walk through yetty_ygui_widget_framework. */
     struct yetty_ygui_framework *framework;
 
     /* Event subscriptions — singly-linked list, freed at object destroy. */

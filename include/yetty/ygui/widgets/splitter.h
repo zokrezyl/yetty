@@ -30,13 +30,9 @@ struct yetty_ycore_void_result yetty_ygui_register(void);
 struct yetty_yclass_object;
 typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_yclass_object *splitter, float delta,
                                               void *userdata);
-struct yetty_ycore_void_result yetty_ygui_splitter_set_axis(struct yetty_yclass_object *obj,
-                                                            int row);
+struct yetty_ycore_void_result yetty_ygui_splitter_set_axis(struct yetty_yclass_object *obj, int row);
 struct yetty_ycore_int_result yetty_ygui_splitter_get_axis(const struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_splitter_set_min(struct yetty_yclass_object *obj,
-                                                           float min_size);
-struct yetty_ycore_void_result yetty_ygui_splitter_on_change(struct yetty_yclass_object *obj,
-                                                             yetty_ygui_splitter_change_cb cb,
-                                                             void *userdata);
+struct yetty_ycore_void_result yetty_ygui_splitter_set_min(struct yetty_yclass_object *obj, float min_size);
+struct yetty_ycore_void_result yetty_ygui_splitter_on_change(struct yetty_yclass_object *obj, yetty_ygui_splitter_change_cb cb, void *userdata);
 
 #endif

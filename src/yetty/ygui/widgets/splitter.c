@@ -74,7 +74,7 @@ static int splitter_axis_row(struct yetty_yclass_object *obj, const struct yetty
     if (d->axis_plus1 == 2) {
         return 1;
     }
-    struct yetty_yclass_object *parent = yetty_ygui_object_parent(obj);
+    struct yetty_yclass_object *parent = yetty_ygui_widget_parent(obj);
     if (parent) {
         const struct yetty_ygui_layout *pl = yetty_ygui_widget_layout_get(parent);
         return pl->direction == YETTY_YGUI_FLEX_ROW ? 1 : 0;
@@ -113,13 +113,13 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
 /* The immediately preceding in-flow sibling (skips absolute / hidden). */
 static struct yetty_yclass_object *splitter_prev_sibling(struct yetty_yclass_object *obj)
 {
-    struct yetty_yclass_object *parent = yetty_ygui_object_parent(obj);
+    struct yetty_yclass_object *parent = yetty_ygui_widget_parent(obj);
     if (!parent) {
         return NULL;
     }
     struct yetty_yclass_object *prev = NULL;
-    for (struct yetty_yclass_object *c = yetty_ygui_object_first_child(parent); c && c != obj;
-         c = yetty_ygui_object_next_sibling(c)) {
+    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(parent); c && c != obj;
+         c = yetty_ygui_widget_next_sibling(c)) {
         const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
         if (cl->absolute || cl->hidden) {
             continue;
@@ -162,7 +162,7 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
      * the divider (no button held) would drag the panes. The framework
      * captures the pointer on a consumed press, so pressed_obj == this
      * splitter exactly during a real drag. */
-    struct yetty_ygui_framework *eng = yetty_ygui_object_framework(obj);
+    struct yetty_ygui_framework *eng = yetty_ygui_widget_framework(obj);
     if (!eng || eng->pressed_obj != obj) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
@@ -176,14 +176,14 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
         float cy = (r.min.y + r.max.y) * 0.5f;
         float delta = row ? (x - cx) : (y - cy);
         sd->change_cb(obj, delta, sd->change_userdata);
-        struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+        struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
         if (YETTY_IS_ERR(dr)) {
             return YETTY_ERR(yetty_ycore_int, "splitter: external dirty", dr);
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
-    struct yetty_yclass_object *parent = yetty_ygui_object_parent(obj);
+    struct yetty_yclass_object *parent = yetty_ygui_widget_parent(obj);
     struct yetty_yclass_object *prev = splitter_prev_sibling(obj);
     if (!parent || !prev) {
         return YETTY_OK(yetty_ycore_int, 1);
@@ -219,7 +219,7 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
         return YETTY_ERR(yetty_ycore_int, "splitter: resize", sr);
     }
     /* Mark dirty so the next frame re-runs the layout pass + repaints. */
-    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(prev);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(prev);
     if (YETTY_IS_ERR(dr)) {
         return YETTY_ERR(yetty_ycore_int, "splitter: dirty", dr);
     }

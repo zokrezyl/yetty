@@ -285,8 +285,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     (void)runner;
 
     /* Tabbar across the top. */
-    struct yetty_ygui_object_ptr_result tbr =
-        yetty_ygui_add(yetty_ygui_tabbar_class_get().value, root);
+    struct yetty_yclass_object_ptr_result tbr =
+        yetty_ygui_widget_add(root, yetty_ygui_tabbar_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tbr, "tabbar");
     struct yetty_yclass_object *tabbar = tbr.value;
     {
@@ -299,13 +299,13 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     int label_count = 0;
     const char *const *labels = demo_labels(&label_count);
     for (int i = 0; i < label_count; ++i) {
-        struct yetty_ygui_object_ptr_result hr = yetty_ygui_tabbar_add_tab(tabbar, labels[i]);
+        struct yetty_yclass_object_ptr_result hr = yetty_ygui_tabbar_add_tab(tabbar, labels[i]);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "tabbar add_tab");
     }
 
     /* The single ybrowser that fills the rest of the body. */
-    struct yetty_ygui_object_ptr_result br =
-        yetty_ygui_add(yetty_ygui_ybrowser_class_get().value, root);
+    struct yetty_yclass_object_ptr_result br =
+        yetty_ygui_widget_add(root, yetty_ygui_ybrowser_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "ybrowser");
     struct yetty_yclass_object *browser = br.value;
     {

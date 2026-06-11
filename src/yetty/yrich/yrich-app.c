@@ -77,8 +77,8 @@ struct yrich_app {
  * resolve an engine and get wire ids when added underneath it. */
 static struct yetty_ycore_void_result build_editor(struct yrich_app *app)
 {
-    struct yetty_ygui_object_ptr_result rootr = yetty_ygui_add(
-        yetty_ygui_class_expect(yetty_ygui_vbox_class_get(), "yetty_ygui_vbox_class_get"), NULL);
+    struct yetty_yclass_object_ptr_result rootr = yetty_ygui_widget_new(
+        yetty_ygui_class_expect(yetty_ygui_vbox_class_get(), "yetty_ygui_vbox_class_get"));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rootr, "build_editor: root add");
     app->win = rootr.value;
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(app->win);

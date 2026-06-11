@@ -76,8 +76,8 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
     dw->engine = engine;
     dw->pane_id = pane_id;
 
-    struct yetty_ygui_object_ptr_result wr =
-        yetty_ygui_add(yetty_ygui_window_class_get().value, root);
+    struct yetty_yclass_object_ptr_result wr =
+        yetty_ygui_widget_add(root, yetty_ygui_window_class_get().value);
     if (YETTY_IS_ERR(wr)) {
         free(dw);
         return YETTY_ERR(yetty_yui_debug_window_ptr, "debug_window_create: window widget", wr);
@@ -94,8 +94,8 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
      * something to toggle. Real actions land in later steps. The menu is
      * a child of the same root and floats absolutely when opened. */
     {
-        struct yetty_ygui_object_ptr_result mr =
-            yetty_ygui_add(yetty_ygui_popup_menu_class_get().value, root);
+        struct yetty_yclass_object_ptr_result mr =
+            yetty_ygui_widget_add(root, yetty_ygui_popup_menu_class_get().value);
         if (YETTY_IS_OK(mr)) {
             yetty_ycore_error_destroy_safe(
                 yetty_ygui_popup_menu_add_item(mr.value, "(no actions yet)", NULL, NULL));
@@ -109,8 +109,8 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
     if (body) {
         struct yetty_yclass_object **slots[3] = {&dw->label_1s, &dw->label_10s, &dw->label_60s};
         for (int i = 0; i < 3; i++) {
-            struct yetty_ygui_object_ptr_result lr =
-                yetty_ygui_add(yetty_ygui_label_class_get().value, body);
+            struct yetty_yclass_object_ptr_result lr =
+                yetty_ygui_widget_add(body, yetty_ygui_label_class_get().value);
             if (YETTY_IS_OK(lr)) {
                 yetty_ycore_error_destroy_safe(yetty_ygui_label_set_text(lr.value, "—"));
                 yetty_ycore_error_destroy_safe(
@@ -135,7 +135,7 @@ struct yetty_ycore_void_result yetty_yui_debug_window_destroy(struct yetty_yui_d
         return YETTY_OK_VOID();
     }
     if (dw->window) {
-        yetty_ycore_error_destroy_safe(yetty_ygui_del(dw->window));
+        yetty_ycore_error_destroy_safe(yetty_ygui_widget_destroy(dw->window));
         dw->window = NULL;
     }
     dw->label_1s = NULL;

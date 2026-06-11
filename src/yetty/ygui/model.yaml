@@ -2487,6 +2487,108 @@ struct yetty_ycore_void_result yetty_ygui_layout_compute(struct yetty_yclass_obj
  * — come from the codegen-emitted module-wide methods.h pulled
  * in by class.h's include chain. The yclass slot signature is
  * `(struct yetty_yclass_ctx *, struct yetty_yclass_object *, …)`. */"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_super_void
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: self_class
+        type: "const struct yetty_yclass *"
+      - name: method_id
+        type: yetty_yclass_method_id_t
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_super_int
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: self_class
+        type: "const struct yetty_yclass *"
+      - name: method_id
+        type: yetty_yclass_method_id_t
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_class_expect
+    return_type: "const struct yetty_yclass *"
+    args:
+      - name: class_result
+        type: struct yetty_yclass_ptr_result
+      - name: name
+        type: "const char *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_parent
+    return_type: "struct yetty_yclass_object *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_first_child
+    return_type: "struct yetty_yclass_object *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_next_sibling
+    return_type: "struct yetty_yclass_object *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_framework
+    return_type: "struct yetty_ygui_framework *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_id
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "const struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_set_dirty
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_is_dirty
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_is_hovered
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_new
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: cls
+        type: "const struct yetty_yclass *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_add
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: parent
+        type: "struct yetty_yclass_object *"
+      - name: cls
+        type: "const struct yetty_yclass *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_destroy
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_raise
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
   - source_file: src/yetty/ygui/widgets/breadcrumbs.c
     name: yetty_ygui_breadcrumbs_add
     return_type: struct yetty_ycore_void_result
@@ -3140,7 +3242,7 @@ typedef void (*yetty_ygui_tab_close_cb)(struct yetty_yclass_object *tabbar, int 
 typedef void (*yetty_ygui_tab_new_cb)(struct yetty_yclass_object *tabbar, void *userdata);"
   - source_file: src/yetty/ygui/widgets/tabbar.c
     name: yetty_ygui_tabbar_add_tab
-    return_type: struct yetty_ygui_object_ptr_result
+    return_type: struct yetty_yclass_object_ptr_result
     args:
       - name: tabbar
         type: "struct yetty_yclass_object *"
@@ -3564,7 +3666,7 @@ typedef void (*yetty_ygui_tab_new_cb)(struct yetty_yclass_object *tabbar, void *
         type: "const struct yetty_yclass_object *"
   - source_file: src/yetty/ygui/widgets/ynodes.c
     verbatim: "#include <yetty/ycore/result.h>
-#include <yetty/ygui/object.h>
+#include <yetty/ygui/widget.h>
 typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(
     struct yetty_yclass_object *editor, struct yetty_yclass_object *from, int out_idx,
     struct yetty_yclass_object *to, int in_idx, void *userdata);"
@@ -3674,7 +3776,7 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(
         type: float
   - source_file: src/yetty/ygui/widgets/ynodes.c
     name: yetty_ygui_ynodes_add_node
-    return_type: struct yetty_ygui_object_ptr_result
+    return_type: struct yetty_yclass_object_ptr_result
     args:
       - name: editor
         type: "struct yetty_yclass_object *"
@@ -3880,6 +3982,18 @@ types:
             type: "struct yetty_yclass_object *"
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_yclass_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const struct yetty_yclass *"
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_ycore_const_char_ptr_result
     kind: result
     fields:
@@ -4074,18 +4188,6 @@ types:
         type: float
       - name: hidden
         type: int
-  - name: yetty_ygui_object_ptr_result
-    kind: result
-    fields:
-      - name: ok
-        type: int
-      - name: 
-        kind: union
-        fields:
-          - name: value
-            type: "struct yetty_yclass_object *"
-          - name: error
-            type: struct yetty_ycore_error
   - name: yetty_ygui_tree
     kind: struct
     fields:

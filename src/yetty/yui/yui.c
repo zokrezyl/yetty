@@ -197,15 +197,15 @@ struct yetty_yui {
  * class-getter error and the add error so the caller surfaces the cause.
  * A NULL parent yields a NULL object (no error) — callers that treat a
  * missing parent as a soft skip rely on this. */
-static struct yetty_ygui_object_ptr_result yui_add(struct yetty_yclass_object *parent,
-                                                   struct yetty_yclass_ptr_result cls_r)
+static struct yetty_yclass_object_ptr_result yui_add(struct yetty_yclass_object *parent,
+                                                     struct yetty_yclass_ptr_result cls_r)
 {
-    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, cls_r, "yui_add: class getter");
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, cls_r, "yui_add: class getter");
     if (!parent) {
-        return YETTY_OK(yetty_ygui_object_ptr, NULL);
+        return YETTY_OK(yetty_yclass_object_ptr, NULL);
     }
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls_r.value, parent);
-    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, r, "yui_add: add");
+    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_add(parent, cls_r.value);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, r, "yui_add: add");
     return r;
 }
 
@@ -441,7 +441,7 @@ static struct yui_cb_ctx s_cb_ctx[YETTY_YUI_VIEW_KIND_COUNT];
 /* Build one config dialog window for view kind `k` under `root`. */
 static struct yetty_ycore_void_result yui_build_view_dialog(struct yetty_yui *yui, int k)
 {
-    struct yetty_ygui_object_ptr_result dlg_r = yui_add(yui->root, yetty_ygui_window_class_get());
+    struct yetty_yclass_object_ptr_result dlg_r = yui_add(yui->root, yetty_ygui_window_class_get());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dlg_r, "build_view_dialog: window");
     struct yetty_yclass_object *dlg = dlg_r.value;
     yui->dialogs[k] = dlg;
@@ -462,7 +462,7 @@ static struct yetty_ycore_void_result yui_build_view_dialog(struct yetty_yui *yu
         body, "display:flex;flex-direction:column;gap:14;padding:14 14 14 14;"));
 
     for (int f = 0; f < s_views[k].num_fields; f++) {
-        struct yetty_ygui_object_ptr_result row_r = yui_add(body, yetty_ygui_hbox_class_get());
+        struct yetty_yclass_object_ptr_result row_r = yui_add(body, yetty_ygui_hbox_class_get());
         YETTY_RETURN_IF_ERR(yetty_ycore_void, row_r, "build_view_dialog: row");
         struct yetty_yclass_object *row = row_r.value;
         if (!row) {
@@ -472,7 +472,7 @@ static struct yetty_ycore_void_result yui_build_view_dialog(struct yetty_yui *yu
             row, "display:flex;flex-direction:row;gap:10;align-items:center;min-height:28;"));
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(row, 0.0f, 28.0f));
 
-        struct yetty_ygui_object_ptr_result lbl_r = yui_add(row, yetty_ygui_label_class_get());
+        struct yetty_yclass_object_ptr_result lbl_r = yui_add(row, yetty_ygui_label_class_get());
         YETTY_RETURN_IF_ERR(yetty_ycore_void, lbl_r, "build_view_dialog: label");
         struct yetty_yclass_object *lbl = lbl_r.value;
         if (lbl) {
@@ -480,7 +480,7 @@ static struct yetty_ycore_void_result yui_build_view_dialog(struct yetty_yui *yu
                 yetty_ygui_label_set_text(lbl, s_views[k].fields[f].label));
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(lbl, "width:30%;"));
         }
-        struct yetty_ygui_object_ptr_result input_r =
+        struct yetty_yclass_object_ptr_result input_r =
             yui_add(row, yetty_ygui_textinput_class_get());
         YETTY_RETURN_IF_ERR(yetty_ycore_void, input_r, "build_view_dialog: textinput");
         struct yetty_yclass_object *in = input_r.value;
@@ -499,14 +499,14 @@ static struct yetty_ycore_void_result yui_build_view_dialog(struct yetty_yui *yu
         }
     }
 
-    struct yetty_ygui_object_ptr_result actions_r = yui_add(body, yetty_ygui_hbox_class_get());
+    struct yetty_yclass_object_ptr_result actions_r = yui_add(body, yetty_ygui_hbox_class_get());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, actions_r, "build_view_dialog: actions");
     struct yetty_yclass_object *actions = actions_r.value;
     if (actions) {
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
             actions, "display:flex;flex-direction:row;justify-content:end;gap:8;"));
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(actions, 0.0f, 36.0f));
-        struct yetty_ygui_object_ptr_result cancel_r =
+        struct yetty_yclass_object_ptr_result cancel_r =
             yui_add(actions, yetty_ygui_button_class_get());
         YETTY_RETURN_IF_ERR(yetty_ycore_void, cancel_r, "build_view_dialog: cancel");
         struct yetty_yclass_object *cancel = cancel_r.value;
@@ -516,7 +516,7 @@ static struct yetty_ycore_void_result yui_build_view_dialog(struct yetty_yui *yu
             yetty_ycore_error_destroy_safe(
                 yetty_ygui_clickable_on_click_set(cancel, yui_dialog_cancel, &s_cb_ctx[k]));
         }
-        struct yetty_ygui_object_ptr_result connect_r =
+        struct yetty_yclass_object_ptr_result connect_r =
             yui_add(actions, yetty_ygui_button_class_get());
         YETTY_RETURN_IF_ERR(yetty_ycore_void, connect_r, "build_view_dialog: connect");
         struct yetty_yclass_object *connect = connect_r.value;
@@ -537,7 +537,7 @@ static struct yetty_ycore_void_result yui_build_gpu_dialog(struct yetty_yui *yui
     yui->gpu_info_adapter = context->runtime->gpu.adapter;
     yui->gpu_info_allocator = context->runtime->gpu.allocator;
 
-    struct yetty_ygui_object_ptr_result gpu_dlg_r =
+    struct yetty_yclass_object_ptr_result gpu_dlg_r =
         yui_add(yui->root, yetty_ygui_window_class_get());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, gpu_dlg_r, "build_gpu_dialog: window");
     struct yetty_yclass_object *gpu_dlg = gpu_dlg_r.value;
@@ -558,7 +558,7 @@ static struct yetty_ycore_void_result yui_build_gpu_dialog(struct yetty_yui *yui
     }
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
         body, "display:flex;flex-direction:column;gap:10;padding:14 14 14 14;"));
-    struct yetty_ygui_object_ptr_result ta_r = yui_add(body, yetty_ygui_textarea_class_get());
+    struct yetty_yclass_object_ptr_result ta_r = yui_add(body, yetty_ygui_textarea_class_get());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ta_r, "build_gpu_dialog: textarea");
     struct yetty_yclass_object *ta = ta_r.value;
     if (ta) {
@@ -567,7 +567,7 @@ static struct yetty_ycore_void_result yui_build_gpu_dialog(struct yetty_yui *yui
             yetty_ygui_textarea_set_text(ta, "(no info yet — click Refresh)"));
         yui->gpu_info_textarea = ta;
     }
-    struct yetty_ygui_object_ptr_result actions_r = yui_add(body, yetty_ygui_hbox_class_get());
+    struct yetty_yclass_object_ptr_result actions_r = yui_add(body, yetty_ygui_hbox_class_get());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, actions_r, "build_gpu_dialog: actions");
     struct yetty_yclass_object *actions = actions_r.value;
     if (actions) {
@@ -575,7 +575,7 @@ static struct yetty_ycore_void_result yui_build_gpu_dialog(struct yetty_yui *yui
             actions, "display:flex;flex-direction:row;justify-content:end;gap:8;"
                      "flex:0 0 auto;align-items:center;"));
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(actions, 0.0f, 36.0f));
-        struct yetty_ygui_object_ptr_result refresh_r =
+        struct yetty_yclass_object_ptr_result refresh_r =
             yui_add(actions, yetty_ygui_button_class_get());
         YETTY_RETURN_IF_ERR(yetty_ycore_void, refresh_r, "build_gpu_dialog: refresh");
         struct yetty_yclass_object *refresh = refresh_r.value;
@@ -585,7 +585,7 @@ static struct yetty_ycore_void_result yui_build_gpu_dialog(struct yetty_yui *yui
             yetty_ycore_error_destroy_safe(
                 yetty_ygui_clickable_on_click_set(refresh, yui_gpu_info_refresh, yui));
         }
-        struct yetty_ygui_object_ptr_result close_r =
+        struct yetty_yclass_object_ptr_result close_r =
             yui_add(actions, yetty_ygui_button_class_get());
         YETTY_RETURN_IF_ERR(yetty_ycore_void, close_r, "build_gpu_dialog: close");
         struct yetty_yclass_object *close = close_r.value;
@@ -766,8 +766,8 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
 
         /* Root vbox — titlebar (top), spacer (flex), statusbar (bottom).
          * Overlays float on top as absolute children added afterwards. */
-        struct yetty_ygui_object_ptr_result rr =
-            yetty_ygui_add(yetty_ygui_vbox_class_get().value, NULL);
+        struct yetty_yclass_object_ptr_result rr =
+            yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
         if (YETTY_IS_OK(rr)) {
             yui->root = rr.value;
             struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(yui->root);
@@ -809,7 +809,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         }
 
         /* Spacer pushes the statusbar to the bottom. */
-        struct yetty_ygui_object_ptr_result spacer_r =
+        struct yetty_yclass_object_ptr_result spacer_r =
             yui_add(yui->root, yetty_ygui_vbox_class_get());
         if (YETTY_IS_ERR(spacer_r)) {
             ywarn("yui_create: spacer add: %s", spacer_r.error.msg);
@@ -821,7 +821,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         }
 
         /* Statusbar — bottom strip. */
-        struct yetty_ygui_object_ptr_result sb_r =
+        struct yetty_yclass_object_ptr_result sb_r =
             yui_add(yui->root, yetty_ygui_statusbar_class_get());
         if (YETTY_IS_ERR(sb_r)) {
             ywarn("yui_create: statusbar add: %s", sb_r.error.msg);
@@ -834,7 +834,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         }
 
         /* App / hamburger menu — drill-down popup reused across levels. */
-        struct yetty_ygui_object_ptr_result app_menu_r =
+        struct yetty_yclass_object_ptr_result app_menu_r =
             yui_add(yui->root, yetty_ygui_popup_menu_class_get());
         if (YETTY_IS_ERR(app_menu_r)) {
             ywarn("yui_create: app_menu add: %s", app_menu_r.error.msg);
@@ -1042,7 +1042,7 @@ static struct yetty_ycore_void_result yui_splitter_entry_destroy_widget(
     }
     struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
     if (e->widget) {
-        struct yetty_ycore_void_result del_r = yetty_ygui_del(e->widget);
+        struct yetty_ycore_void_result del_r = yetty_ygui_widget_destroy(e->widget);
         if (YETTY_IS_ERR(del_r)) {
             first_err = del_r;
         }
@@ -1095,7 +1095,7 @@ static struct yetty_ycore_void_result yui_splitter_walk_tree(struct yetty_yui *y
         e->workspace_id = workspace_id;
         e->yui = yui;
 
-        struct yetty_ygui_object_ptr_result widget_r =
+        struct yetty_yclass_object_ptr_result widget_r =
             yui_add(yui->root, yetty_ygui_splitter_class_get());
         YETTY_RETURN_IF_ERR(yetty_ycore_void, widget_r, "splitter_walk_tree: add splitter");
         e->widget = widget_r.value;
@@ -1947,16 +1947,16 @@ static struct yetty_ycore_void_result yui_app_menu_open_settings(struct yetty_yc
  * Titlebar (ygui-driven)
  *===========================================================================*/
 
-static struct yetty_ygui_object_ptr_result yui_titlebar_button(struct yetty_yui *yui,
-                                                               const char *glyph,
-                                                               yetty_ygui_click_cb cb)
+static struct yetty_yclass_object_ptr_result yui_titlebar_button(struct yetty_yui *yui,
+                                                                 const char *glyph,
+                                                                 yetty_ygui_click_cb cb)
 {
-    struct yetty_ygui_object_ptr_result button_r =
+    struct yetty_yclass_object_ptr_result button_r =
         yui_add(yui->titlebar, yetty_ygui_button_class_get());
-    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, button_r, "titlebar_button: add");
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, button_r, "titlebar_button: add");
     struct yetty_yclass_object *b = button_r.value;
     if (!b) {
-        return YETTY_OK(yetty_ygui_object_ptr, NULL);
+        return YETTY_OK(yetty_yclass_object_ptr, NULL);
     }
     yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(b, glyph));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(b, TITLEBAR_BTN_W, TITLEBAR_STRIP_H));
@@ -1968,15 +1968,16 @@ static struct yetty_ygui_object_ptr_result yui_titlebar_button(struct yetty_yui 
 /* Like yui_titlebar_button but draws an SDF window-control icon (1=minimize,
  * 2=maximize, 3=close) instead of a font glyph, so yetty's controls match the
  * ychrome SDF controls the tools use. */
-static struct yetty_ygui_object_ptr_result yui_titlebar_icon_button(struct yetty_yui *yui, int kind,
-                                                                    yetty_ygui_click_cb cb)
+static struct yetty_yclass_object_ptr_result yui_titlebar_icon_button(struct yetty_yui *yui,
+                                                                      int kind,
+                                                                      yetty_ygui_click_cb cb)
 {
-    struct yetty_ygui_object_ptr_result button_r =
+    struct yetty_yclass_object_ptr_result button_r =
         yui_add(yui->titlebar, yetty_ygui_button_class_get());
-    YETTY_RETURN_IF_ERR(yetty_ygui_object_ptr, button_r, "titlebar_icon_button: add");
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, button_r, "titlebar_icon_button: add");
     struct yetty_yclass_object *b = button_r.value;
     if (!b) {
-        return YETTY_OK(yetty_ygui_object_ptr, NULL);
+        return YETTY_OK(yetty_yclass_object_ptr, NULL);
     }
     yetty_ycore_error_destroy_safe(yetty_ygui_button_set_chrome_icon(b, kind));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(b, TITLEBAR_BTN_W, TITLEBAR_STRIP_H));
@@ -1991,7 +1992,7 @@ static struct yetty_ycore_void_result yui_titlebar_build(struct yetty_yui *yui)
         return YETTY_OK_VOID();
     }
 
-    struct yetty_ygui_object_ptr_result tb_r = yui_add(yui->root, yetty_ygui_hbox_class_get());
+    struct yetty_yclass_object_ptr_result tb_r = yui_add(yui->root, yetty_ygui_hbox_class_get());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tb_r, "titlebar_build: hbox");
     struct yetty_yclass_object *tb = tb_r.value;
     if (!tb) {
@@ -2007,14 +2008,14 @@ static struct yetty_ycore_void_result yui_titlebar_build(struct yetty_yui *yui)
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(tb, &l));
     }
 
-    struct yetty_ygui_object_ptr_result hamburger_r =
+    struct yetty_yclass_object_ptr_result hamburger_r =
         yui_titlebar_button(yui, "\xE2\x89\xA1" /* ≡ */, yui_titlebar_on_hamburger);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, hamburger_r, "titlebar_build: hamburger");
     yui->titlebar_hamburger = hamburger_r.value;
 
     /* Native TABBAR widget — absorbs the space between the hamburger and
      * the window-control buttons. */
-    struct yetty_ygui_object_ptr_result tabbar_r = yui_add(tb, yetty_ygui_tabbar_class_get());
+    struct yetty_yclass_object_ptr_result tabbar_r = yui_add(tb, yetty_ygui_tabbar_class_get());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tabbar_r, "titlebar_build: tabbar");
     yui->titlebar_tabbar = tabbar_r.value;
     if (yui->titlebar_tabbar) {
@@ -2060,7 +2061,7 @@ static struct yetty_ycore_void_result yui_titlebar_sync(struct yetty_yui *yui)
     while ((size_t)wcount < count) {
         char label[16];
         snprintf(label, sizeof(label), "Tab %d", wcount + 1);
-        struct yetty_ygui_object_ptr_result ar =
+        struct yetty_yclass_object_ptr_result ar =
             yetty_ygui_tabbar_add_tab(yui->titlebar_tabbar, label);
         if (YETTY_IS_ERR(ar)) {
             yetty_ycore_error_destroy(ar.error);

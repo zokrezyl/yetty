@@ -50,7 +50,7 @@ static struct yetty_yclass_object *add_obj(struct yetty_yclass_object *parent,
         yetty_ycore_error_destroy(cls.error);
         return NULL;
     }
-    struct yetty_ygui_object_ptr_result r = yetty_ygui_add(cls.value, parent);
+    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_add(parent, cls.value);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return NULL;
@@ -72,7 +72,7 @@ static void set_h(struct yetty_yclass_object *o, float h)
 static struct yetty_yclass_object *make_node(struct yetty_yclass_object *editor, float gx, float gy,
                                            float gw, float gh, const char *title)
 {
-    struct yetty_ygui_object_ptr_result nr = yetty_ygui_ynodes_add_node(editor, gx, gy);
+    struct yetty_yclass_object_ptr_result nr = yetty_ygui_ynodes_add_node(editor, gx, gy);
     if (YETTY_IS_ERR(nr)) {
         yetty_ycore_error_destroy(nr.error);
         return NULL;

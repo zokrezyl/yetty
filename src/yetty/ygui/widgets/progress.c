@@ -125,7 +125,7 @@ struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_yclass
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_progress_set_value: data_get");
     struct yetty_ygui_progress *d = d_dr.value;
     d->value = value;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -134,7 +134,8 @@ struct yetty_ycore_float_result yetty_ygui_progress_get_value(const struct yetty
     if (!obj) {
         return YETTY_OK(yetty_ycore_float, 0.0f);
     }
-    struct yetty_ygui_progress_ptr_result d_dr = yetty_ygui_progress_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_progress_ptr_result d_dr =
+        yetty_ygui_progress_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_float, d_dr, "yetty_ygui_progress_get_value: data_get");
     struct yetty_ygui_progress *d = d_dr.value;
     return YETTY_OK(yetty_ycore_float, d->value);
@@ -151,7 +152,7 @@ struct yetty_ycore_void_result yetty_ygui_progress_set_accent(struct yetty_yclas
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_progress_set_accent: data_get");
     struct yetty_ygui_progress *d = d_dr.value;
     d->accent = color;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "progress.gen.c"

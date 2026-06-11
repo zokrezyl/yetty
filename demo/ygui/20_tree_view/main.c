@@ -24,8 +24,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
                                             struct yetty_yclass_object *root)
 {
     (void)runner;
-    struct yetty_ygui_object_ptr_result tr =
-        yetty_ygui_add(yetty_ygui_tree_node_class_get().value, root);
+    struct yetty_yclass_object_ptr_result tr =
+        yetty_ygui_widget_add(root, yetty_ygui_tree_node_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "tree");
     err_ok(yetty_ygui_tree_node_set_label(tr.value, "src/"));
     err_ok(yetty_ygui_tree_node_set_open(tr.value, 1));
@@ -36,8 +36,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_widget_layout_set(tr.value, &l));
     }
     {
-        struct yetty_ygui_object_ptr_result c =
-            yetty_ygui_add(yetty_ygui_label_class_get().value, tr.value);
+        struct yetty_yclass_object_ptr_result c =
+            yetty_ygui_widget_add(tr.value, yetty_ygui_label_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, c, "child");
         err_ok(yetty_ygui_label_set_text(c.value, "main.c"));
         struct yetty_yclass_object *w = c.value;
@@ -48,8 +48,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         }
     }
     {
-        struct yetty_ygui_object_ptr_result c =
-            yetty_ygui_add(yetty_ygui_label_class_get().value, tr.value);
+        struct yetty_yclass_object_ptr_result c =
+            yetty_ygui_widget_add(tr.value, yetty_ygui_label_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, c, "child");
         err_ok(yetty_ygui_label_set_text(c.value, "utils.c"));
         struct yetty_yclass_object *w = c.value;

@@ -205,7 +205,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_yclass_object 
         free_line(&d->lines[i]);
     }
     d->n_lines = 0;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -224,7 +224,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_yclass_obje
     d->lines[d->n_lines].n_spans = 0;
     d->lines[d->n_lines].cap = 0;
     d->n_lines++;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -256,7 +256,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_yclass_obje
     line->spans[line->n_spans].font_size = font_size > 0.0f ? font_size : 14.0f;
     line->spans[line->n_spans].color = color_rgba;
     line->n_spans++;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "rich.gen.c"

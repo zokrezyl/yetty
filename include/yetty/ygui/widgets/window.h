@@ -28,11 +28,8 @@ struct yetty_yclass_object_ptr_result yetty_ygui_window_create(struct yetty_ycla
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
 struct yetty_yclass_object *yetty_ygui_window_body(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_yclass_object *obj,
-                                                           const char *title);
-struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_yclass_object *obj,
-                                                          struct yetty_yclass_object *menu);
-struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_yclass_object *obj,
-                                                              int closable);
+struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_yclass_object *obj, const char *title);
+struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_yclass_object *obj, struct yetty_yclass_object *menu);
+struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_yclass_object *obj, int closable);
 
 #endif

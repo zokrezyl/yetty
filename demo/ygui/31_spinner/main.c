@@ -24,8 +24,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
                                             struct yetty_yclass_object *root)
 {
     (void)runner;
-    struct yetty_ygui_object_ptr_result sr =
-        yetty_ygui_add(yetty_ygui_spinner_class_get().value, root);
+    struct yetty_yclass_object_ptr_result sr =
+        yetty_ygui_widget_add(root, yetty_ygui_spinner_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "spinner");
     err_ok(yetty_ygui_spinner_set_value(sr.value, 42.0f));
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(sr.value);

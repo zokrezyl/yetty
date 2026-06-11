@@ -236,7 +236,7 @@ struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(
         yetty_ydraw_drawable_list_destroy(d->buf);
     }
     d->buf = buf;
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 #include "ydraw_embed.gen.c"

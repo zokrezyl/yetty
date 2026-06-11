@@ -51,7 +51,7 @@ struct yetty_ywire_wire_statemachine;
  * process_input/process_bytes reject (a kind that wants them overrides),
  * and dump returns NULL so the public wrapper emits its rect fallback. */
 
-[[clang::annotate("override@yfigure:figure:render")]] [[clang::annotate("local@yfigure:render")]]
+[[clang::annotate("virtual@yfigure:figure:render")]] [[clang::annotate("local@yfigure:render")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_render(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
     struct yetty_ydraw_target *target)
@@ -65,7 +65,7 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_render(
 /* destroy: tears down concrete state and frees the figure. The base
  * default is a no-op — the base class is never instantiated as a leaf;
  * every concrete kind overrides this and frees via object_free. */
-[[clang::annotate("override@yfigure:figure:destroy")]] [[clang::annotate("local@yfigure:destroy")]]
+[[clang::annotate("virtual@yfigure:figure:destroy")]] [[clang::annotate("local@yfigure:destroy")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_destroy(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
 {
@@ -78,7 +78,7 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_destroy(
  * Base default rejects — a purely visual figure ignores wire updates.
  * The container only routes here for kinds that override it (capability
  * detected via yetty_yfigure_figure_implements). */
-[[clang::annotate("override@yfigure:figure:process_input")]] [[clang::annotate(
+[[clang::annotate("virtual@yfigure:figure:process_input")]] [[clang::annotate(
     "local@yfigure:process_input")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_input(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
@@ -91,7 +91,7 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_input
 }
 
 /* process_bytes: apply a buffered wire body. Base default rejects. */
-[[clang::annotate("override@yfigure:figure:process_bytes")]] [[clang::annotate(
+[[clang::annotate("virtual@yfigure:figure:process_bytes")]] [[clang::annotate(
     "local@yfigure:process_bytes")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_bytes(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, const uint8_t *bytes,
@@ -106,7 +106,7 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_bytes
 
 /* reset_content: drop content, keep GPU state. Base default rejects so the
  * container falls back to destroy + mint for kinds that don't support it. */
-[[clang::annotate("override@yfigure:figure:reset_content")]] [[clang::annotate(
+[[clang::annotate("virtual@yfigure:figure:reset_content")]] [[clang::annotate(
     "local@yfigure:reset_content")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_reset_content(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
@@ -118,7 +118,7 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_reset_content
 
 /* dump_state: heap text snapshot for tests. Base default yields a NULL
  * string so the yetty_yfigure_dump wrapper emits its rect fallback. */
-[[clang::annotate("override@yfigure:figure:dump_state")]] [[clang::annotate(
+[[clang::annotate("virtual@yfigure:figure:dump_state")]] [[clang::annotate(
     "local@yfigure:dump_state")]]
 static struct yetty_ycore_char_ptr_result yetty_yfigure_figure_default_dump_state(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int indent)
@@ -135,7 +135,7 @@ static struct yetty_ycore_char_ptr_result yetty_yfigure_figure_default_dump_stat
  * the container can drive the offset by id from a wire SET_CHILD_SCROLL
  * record or the terminal's autonomous wheel/key handler, without re-shipping
  * content. */
-[[clang::annotate("override@yfigure:figure:set_scroll")]] [[clang::annotate(
+[[clang::annotate("virtual@yfigure:figure:set_scroll")]] [[clang::annotate(
     "local@yfigure:set_scroll")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_set_scroll(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, float scroll_x, float scroll_y)
@@ -150,7 +150,7 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_set_scroll(
 /* set_content_size: declare the figure's content extent in px (the rect stays
  * the visible window; content may be larger, making the figure a scroll
  * viewport). Base default rejects. Scrollable kinds override it. */
-[[clang::annotate("override@yfigure:figure:set_content_size")]] [[clang::annotate(
+[[clang::annotate("virtual@yfigure:figure:set_content_size")]] [[clang::annotate(
     "local@yfigure:set_content_size")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_set_content_size(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, float content_w, float content_h)

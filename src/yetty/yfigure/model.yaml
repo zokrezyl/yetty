@@ -1,7 +1,7 @@
 methods:
   - slot: destroy
     domain: yfigure
-    owning_class: container
+    owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
       - name: ctx
@@ -11,7 +11,7 @@ methods:
     local: true
   - slot: render
     domain: yfigure
-    owning_class: container
+    owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
       - name: ctx
@@ -83,7 +83,7 @@ methods:
     local: false
   - slot: process_input
     domain: yfigure
-    owning_class: container
+    owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
       - name: ctx
@@ -95,7 +95,7 @@ methods:
     local: true
   - slot: process_bytes
     domain: yfigure
-    owning_class: container
+    owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
       - name: ctx
@@ -109,7 +109,7 @@ methods:
     local: true
   - slot: dump_state
     domain: yfigure
-    owning_class: container
+    owning_class: figure
     return_type: struct yetty_ycore_char_ptr_result
     args:
       - name: ctx

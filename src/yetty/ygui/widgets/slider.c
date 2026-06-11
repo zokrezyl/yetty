@@ -174,7 +174,7 @@ static struct yetty_ycore_int_result slider_on_press(struct yetty_yclass_ctx *yc
         t = 1.0f;
     }
     d->value = d->min_val + t * (d->max_val - d->min_val);
-    struct yetty_ycore_void_result dr = yetty_ygui_object_set_dirty(obj);
+    struct yetty_ycore_void_result dr = yetty_ygui_widget_set_dirty(obj);
     if (YETTY_IS_ERR(dr)) {
         return YETTY_ERR(yetty_ycore_int, "slider_on_press: dirty", dr);
     }
@@ -201,7 +201,7 @@ static struct yetty_ycore_int_result slider_on_motion(struct yetty_yclass_ctx *y
      * motion to whatever the pointer merely hovers (not just the capture
      * target), so without this guard the value would change on a plain
      * hover instead of a click-drag. */
-    struct yetty_ygui_framework *engine = yetty_ygui_object_framework(obj);
+    struct yetty_ygui_framework *engine = yetty_ygui_widget_framework(obj);
     if (!engine || yetty_ygui_framework_pressed_widget(engine) != obj) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
@@ -221,7 +221,7 @@ struct yetty_ycore_void_result yetty_ygui_slider_set_range(struct yetty_yclass_o
     d->min_val = min;
     d->max_val = max;
     d->value = clampf(d->value, min, max);
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -235,7 +235,7 @@ struct yetty_ycore_void_result yetty_ygui_slider_set_value(struct yetty_yclass_o
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_slider_set_value: data_get");
     struct yetty_ygui_slider *d = d_dr.value;
     d->value = clampf(value, d->min_val, d->max_val);
-    return yetty_ygui_object_set_dirty(obj);
+    return yetty_ygui_widget_set_dirty(obj);
 }
 
 [[clang::annotate("expose")]]
@@ -244,7 +244,8 @@ struct yetty_ycore_float_result yetty_ygui_slider_get_value(const struct yetty_y
     if (!obj) {
         return YETTY_OK(yetty_ycore_float, 0.0f);
     }
-    struct yetty_ygui_slider_ptr_result d_dr = yetty_ygui_slider_from((struct yetty_yclass_object *)obj);
+    struct yetty_ygui_slider_ptr_result d_dr =
+        yetty_ygui_slider_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_float, d_dr, "yetty_ygui_slider_get_value: data_get");
     struct yetty_ygui_slider *d = d_dr.value;
     return YETTY_OK(yetty_ycore_float, d->value);
