@@ -48,7 +48,7 @@ static struct yetty_ycore_int_result probe_a_on_press(struct yetty_yclass_ctx *_
     (void)x;
     (void)y;
     (void)button;
-    struct probe_a_data *d = yetty_ygui_data_get(obj, probe_a_class_get());
+    struct probe_a_data *d = yetty_yclass_object_data(obj, probe_a_class_get()).value;
     d->press_count++;
     return YETTY_OK(yetty_ycore_int, 1);
 }
@@ -100,7 +100,7 @@ static struct yetty_ycore_void_result probe_b_constructor(struct yetty_yclass_ct
     if (YETTY_IS_ERR(sr)) {
         return sr;
     }
-    struct probe_b_data *d = yetty_ygui_data_get(obj, probe_b_class_get());
+    struct probe_b_data *d = yetty_yclass_object_data(obj, probe_b_class_get()).value;
     d->ctor_marker = 0xCAFE;
     return YETTY_OK_VOID();
 }
@@ -113,7 +113,7 @@ static struct yetty_ycore_int_result probe_b_on_motion(struct yetty_yclass_ctx *
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;
     (void)x;
     (void)y;
-    struct probe_b_data *d = yetty_ygui_data_get(obj, probe_b_class_get());
+    struct probe_b_data *d = yetty_yclass_object_data(obj, probe_b_class_get()).value;
     d->motion_count++;
     return YETTY_OK(yetty_ycore_int, 1);
 }
@@ -177,7 +177,7 @@ static void test_instance_alloc_and_dispatch(void)
         yetty_ygui_widget_on_press(NULL, (struct yetty_yclass_object *)obj, 1.0f, 2.0f, 0);
     assert(YETTY_IS_OK(pr));
     assert(pr.value == 1);
-    struct probe_a_data *ad = yetty_ygui_data_get(obj, probe_a_class_get());
+    struct probe_a_data *ad = yetty_yclass_object_data(obj, probe_a_class_get()).value;
     assert(ad->press_count == 1);
 
     /* Dispatch on_motion → falls through to base widget default (return 0). */
@@ -199,7 +199,7 @@ static void test_subclass_dispatch_and_super(void)
 
     /* Constructor chained: probe_b's ctor sets marker, base widget's
      * ctor initialised the layout struct. */
-    struct probe_b_data *bd = yetty_ygui_data_get(obj, probe_b_class_get());
+    struct probe_b_data *bd = yetty_yclass_object_data(obj, probe_b_class_get()).value;
     assert(bd->ctor_marker == 0xCAFE);
     const struct yetty_ygui_layout *lay = yetty_ygui_widget_layout_get(obj);
     assert(lay != NULL);
@@ -217,7 +217,7 @@ static void test_subclass_dispatch_and_super(void)
         yetty_ygui_widget_on_press(NULL, (struct yetty_yclass_object *)obj, 0, 0, 0);
     assert(YETTY_IS_OK(pr));
     assert(pr.value == 1);
-    struct probe_a_data *ad = yetty_ygui_data_get(obj, probe_a_class_get());
+    struct probe_a_data *ad = yetty_yclass_object_data(obj, probe_a_class_get()).value;
     assert(ad->press_count == 1);
 
     yetty_ygui_del(obj);

@@ -58,8 +58,7 @@ static struct yetty_ycore_void_result on_click_focus(struct yetty_yclass_ctx *yc
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)userdata;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
+    struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "on_click_focus: data_get");
     struct yetty_ygui_textinput *d = d_dr.value;
     d->focused = 1;
@@ -94,8 +93,7 @@ static struct yetty_ycore_void_result textinput_constructor(struct yetty_yclass_
         yetty_ygui_super_void(obj, yetty_ygui_textinput_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "textinput_constructor: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
+    struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "textinput_constructor: data_get");
     struct yetty_ygui_textinput *d = d_dr.value;
     d->text = NULL;
@@ -113,8 +111,7 @@ static struct yetty_ycore_void_result textinput_destructor(struct yetty_yclass_c
 {
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
+    struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "textinput_destructor: data_get");
     struct yetty_ygui_textinput *d = d_dr.value;
     free(d->text);
@@ -168,8 +165,7 @@ static struct yetty_ycore_void_result textinput_paint(struct yetty_yclass_ctx *y
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "textinput_paint: NULL ctx");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
+    struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "textinput_paint: data_get");
     struct yetty_ygui_textinput *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -243,8 +239,7 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_text(struct yetty_yclass
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "textinput_set_text: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
+    struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_textinput_set_text: data_get");
     struct yetty_ygui_textinput *d = d_dr.value;
     size_t n = text ? strlen(text) : 0;
@@ -269,8 +264,7 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_textinput_get_text(
     if (!obj) {
         return YETTY_ERR(yetty_ycore_const_char_ptr, "yetty_ygui_textinput_get_text: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
-        (struct yetty_yclass_object *)obj, yetty_ygui_textinput_class_get().value);
+    struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr,
                         "yetty_ygui_textinput_get_text: data_get");
     struct yetty_ygui_textinput *d = d_dr.value;
@@ -284,8 +278,7 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_placeholder(struct yetty
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "textinput_set_placeholder: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
+    struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_textinput_set_placeholder: data_get");
     struct yetty_ygui_textinput *d = d_dr.value;
     free(d->placeholder);
@@ -309,8 +302,7 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_focus(struct yetty_yclas
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "textinput_set_focus: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_textinput_class_get().value);
+    struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_textinput_set_focus: data_get");
     struct yetty_ygui_textinput *d = d_dr.value;
     d->focused = focused ? 1 : 0;
@@ -326,7 +318,7 @@ struct yetty_ycore_int_result yetty_ygui_textinput_handle_key(struct yetty_yclas
     }
     struct yetty_yclass_ptr_result class_result = yetty_ygui_textinput_class_get();
     YETTY_RETURN_IF_ERR(yetty_ycore_int, class_result, "yetty_ygui_textinput_handle_key: class");
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, class_result.value);
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, class_result.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_textinput_handle_key: data_get");
     struct yetty_ygui_textinput *d = d_dr.value;
     if (!d->focused) {

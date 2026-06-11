@@ -34,8 +34,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_chip_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "chip: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_chip_class_get().value);
+    struct yetty_ygui_chip_ptr_result d_dr = yetty_ygui_chip_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
     struct yetty_ygui_chip *d = d_dr.value;
     d->label = NULL;
@@ -49,8 +48,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_chip_class_get().value);
+    struct yetty_ygui_chip_ptr_result d_dr = yetty_ygui_chip_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
     struct yetty_ygui_chip *d = d_dr.value;
     free(d->label);
@@ -68,8 +66,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "chip paint: NULL ctx");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_chip_class_get().value);
+    struct yetty_ygui_chip_ptr_result d_dr = yetty_ygui_chip_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
     struct yetty_ygui_chip *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -104,8 +101,7 @@ struct yetty_ycore_void_result yetty_ygui_chip_set_label(struct yetty_yclass_obj
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "chip_set_label: NULL");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_chip_class_get().value);
+    struct yetty_ygui_chip_ptr_result d_dr = yetty_ygui_chip_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_chip_set_label: data_get");
     struct yetty_ygui_chip *d = d_dr.value;
     free(d->label);
@@ -127,8 +123,7 @@ struct yetty_ycore_void_result yetty_ygui_chip_set_closable(struct yetty_yclass_
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "chip_set_closable: NULL");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_chip_class_get().value);
+    struct yetty_ygui_chip_ptr_result d_dr = yetty_ygui_chip_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_chip_set_closable: data_get");
     struct yetty_ygui_chip *d = d_dr.value;
     d->closable = c ? 1 : 0;

@@ -42,8 +42,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_table_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "table: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_table_class_get().value);
+    struct yetty_ygui_table_ptr_result d_dr = yetty_ygui_table_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
     struct yetty_ygui_table *d = d_dr.value;
     d->headers = NULL;
@@ -68,8 +67,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_table_class_get().value);
+    struct yetty_ygui_table_ptr_result d_dr = yetty_ygui_table_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
     struct yetty_ygui_table *d = d_dr.value;
     for (int i = 0; i < d->n_cols; i++) {
@@ -94,8 +92,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "table paint: NULL ctx");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_table_class_get().value);
+    struct yetty_ygui_table_ptr_result d_dr = yetty_ygui_table_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
     struct yetty_ygui_table *d = d_dr.value;
     if (d->n_cols <= 0) {
@@ -148,8 +145,7 @@ struct yetty_ycore_void_result yetty_ygui_table_set_columns(struct yetty_yclass_
     if (!obj || n_cols <= 0) {
         return YETTY_ERR(yetty_ycore_void, "table_set_columns: bad");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_table_class_get().value);
+    struct yetty_ygui_table_ptr_result d_dr = yetty_ygui_table_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_table_set_columns: data_get");
     struct yetty_ygui_table *d = d_dr.value;
     for (int i = 0; i < d->n_cols; i++) {
@@ -181,8 +177,7 @@ struct yetty_ycore_void_result yetty_ygui_table_add_row(struct yetty_yclass_obje
     if (!obj || !cells) {
         return YETTY_ERR(yetty_ycore_void, "table_add_row: NULL");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_table_class_get().value);
+    struct yetty_ygui_table_ptr_result d_dr = yetty_ygui_table_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_table_add_row: data_get");
     struct yetty_ygui_table *d = d_dr.value;
     if (d->n_rows + 1 > d->rows_cap) {
@@ -224,8 +219,7 @@ struct yetty_ycore_void_result yetty_ygui_table_clear_rows(struct yetty_yclass_o
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "table_clear_rows: NULL");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_table_class_get().value);
+    struct yetty_ygui_table_ptr_result d_dr = yetty_ygui_table_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_table_clear_rows: data_get");
     struct yetty_ygui_table *d = d_dr.value;
     for (int i = 0; i < d->n_rows; i++) {

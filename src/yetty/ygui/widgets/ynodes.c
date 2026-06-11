@@ -130,7 +130,7 @@ static const struct yetty_yclass *ynodes_class(void)
 
 static struct yetty_ygui_ynodes *yyetty_ygui_ynodes(struct yetty_yclass_object *editor)
 {
-    return yetty_ygui_data_get(editor, ynodes_class());
+    return yetty_ygui_ynodes_from(editor).value;
 }
 
 YETTY_EXTERNAL_CALLBACK

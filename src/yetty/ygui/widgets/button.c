@@ -52,8 +52,7 @@ static struct yetty_ycore_void_result button_constructor(struct yetty_yclass_ctx
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_button_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "button_constructor: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_button_class_get().value);
+    struct yetty_ygui_button_ptr_result d_dr = yetty_ygui_button_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "button_constructor: data_get");
     struct yetty_ygui_button *d = d_dr.value;
     d->label = NULL;
@@ -66,8 +65,7 @@ static struct yetty_ycore_void_result button_destructor(struct yetty_yclass_ctx 
 {
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_button_class_get().value);
+    struct yetty_ygui_button_ptr_result d_dr = yetty_ygui_button_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "button_destructor: data_get");
     struct yetty_ygui_button *d = d_dr.value;
     free(d->label);
@@ -123,8 +121,7 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_ctx *ycla
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "button_paint: NULL ctx");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_button_class_get().value);
+    struct yetty_ygui_button_ptr_result d_dr = yetty_ygui_button_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "button_paint: data_get");
     struct yetty_ygui_button *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -277,8 +274,7 @@ struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_yclass_o
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_button_set_label: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_button_class_get().value);
+    struct yetty_ygui_button_ptr_result d_dr = yetty_ygui_button_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_button_set_label: data_get");
     struct yetty_ygui_button *d = d_dr.value;
     free(d->label);
@@ -305,8 +301,7 @@ struct yetty_ycore_void_result yetty_ygui_button_set_chrome_icon(struct yetty_yc
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_button_set_chrome_icon: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_button_class_get().value);
+    struct yetty_ygui_button_ptr_result d_dr = yetty_ygui_button_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_button_set_chrome_icon: data_get");
     struct yetty_ygui_button *d = d_dr.value;
     d->chrome_icon = (kind >= 1 && kind <= 3) ? kind : 0;
@@ -320,8 +315,7 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_button_get_label(
     if (!obj) {
         return YETTY_ERR(yetty_ycore_const_char_ptr, "yetty_ygui_button_get_label: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
-        (struct yetty_yclass_object *)obj, yetty_ygui_button_class_get().value);
+    struct yetty_ygui_button_ptr_result d_dr = yetty_ygui_button_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr, "yetty_ygui_button_get_label: data_get");
     struct yetty_ygui_button *d = d_dr.value;
     return YETTY_OK(yetty_ycore_const_char_ptr, d->label);

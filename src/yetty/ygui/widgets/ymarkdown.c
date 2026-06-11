@@ -42,8 +42,7 @@ static struct yetty_ycore_void_result ymd_constructor(struct yetty_yclass_ctx *y
         yetty_ygui_super_void(obj, yetty_ygui_ymarkdown_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ymarkdown_ctor: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_ymarkdown_class_get().value);
+    struct yetty_ygui_ymarkdown_ptr_result d_dr = yetty_ygui_ymarkdown_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymd_constructor: data_get");
     struct yetty_ygui_ymarkdown *d = d_dr.value;
     d->source = NULL;
@@ -59,8 +58,7 @@ static struct yetty_ycore_void_result ymd_destructor(struct yetty_yclass_ctx *yc
 {
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_ymarkdown_class_get().value);
+    struct yetty_ygui_ymarkdown_ptr_result d_dr = yetty_ygui_ymarkdown_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymd_destructor: data_get");
     struct yetty_ygui_ymarkdown *d = d_dr.value;
     free(d->source);
@@ -75,8 +73,7 @@ static struct yetty_ycore_void_result ymd_render(struct yetty_yclass_ctx *yclass
 {
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_ymarkdown_class_get().value);
+    struct yetty_ygui_ymarkdown_ptr_result d_dr = yetty_ygui_ymarkdown_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymd_render: data_get");
     struct yetty_ygui_ymarkdown *d = d_dr.value;
     if (!d->source || d->source_len == 0) {
@@ -108,8 +105,7 @@ static struct yetty_ycore_void_result ymd_emit_body(struct yetty_yclass_ctx *ycl
 {
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_ymarkdown_class_get().value);
+    struct yetty_ygui_ymarkdown_ptr_result d_dr = yetty_ygui_ymarkdown_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymd_emit_body: data_get");
     struct yetty_ygui_ymarkdown *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -143,8 +139,7 @@ struct yetty_ycore_void_result yetty_ygui_ymarkdown_set_source(struct yetty_ycla
     if (!obj || !src) {
         return YETTY_ERR(yetty_ycore_void, "ymarkdown_set_source: NULL");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_ymarkdown_class_get().value);
+    struct yetty_ygui_ymarkdown_ptr_result d_dr = yetty_ygui_ymarkdown_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_ymarkdown_set_source: data_get");
     struct yetty_ygui_ymarkdown *d = d_dr.value;
     char *buf = malloc(len);

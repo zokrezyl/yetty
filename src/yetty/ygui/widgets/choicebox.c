@@ -44,8 +44,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
         yetty_ygui_super_void(obj, yetty_ygui_choicebox_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "choicebox: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_choicebox_class_get().value);
+    struct yetty_ygui_choicebox_ptr_result d_dr = yetty_ygui_choicebox_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
     struct yetty_ygui_choicebox *d = d_dr.value;
     d->rows = NULL;
@@ -60,8 +59,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_choicebox_class_get().value);
+    struct yetty_ygui_choicebox_ptr_result d_dr = yetty_ygui_choicebox_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
     struct yetty_ygui_choicebox *d = d_dr.value;
     for (int i = 0; i < d->n; i++) {
@@ -81,8 +79,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)x;
     (void)btn;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_choicebox_class_get().value);
+    struct yetty_ygui_choicebox_ptr_result d_dr = yetty_ygui_choicebox_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_press: data_get");
     struct yetty_ygui_choicebox *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -118,8 +115,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "choicebox paint: NULL ctx");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_choicebox_class_get().value);
+    struct yetty_ygui_choicebox_ptr_result d_dr = yetty_ygui_choicebox_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
     struct yetty_ygui_choicebox *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -175,8 +171,7 @@ struct yetty_ycore_void_result yetty_ygui_choicebox_add(struct yetty_yclass_obje
     if (!obj || !label) {
         return YETTY_ERR(yetty_ycore_void, "choicebox_add: NULL");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_choicebox_class_get().value);
+    struct yetty_ygui_choicebox_ptr_result d_dr = yetty_ygui_choicebox_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_choicebox_add: data_get");
     struct yetty_ygui_choicebox *d = d_dr.value;
     if (!grow(d, d->n + 1)) {
@@ -200,8 +195,7 @@ struct yetty_ycore_int_result yetty_ygui_choicebox_is_selected(
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_choicebox_is_selected: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
-        (struct yetty_yclass_object *)obj, yetty_ygui_choicebox_class_get().value);
+    struct yetty_ygui_choicebox_ptr_result d_dr = yetty_ygui_choicebox_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_choicebox_is_selected: data_get");
     struct yetty_ygui_choicebox *d = d_dr.value;
     if (idx < 0 || idx >= d->n) {

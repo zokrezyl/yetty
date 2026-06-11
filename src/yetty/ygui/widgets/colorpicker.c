@@ -35,8 +35,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
         yetty_ygui_super_void(obj, yetty_ygui_colorpicker_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "colorpicker: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_colorpicker_class_get().value);
+    struct yetty_ygui_colorpicker_ptr_result d_dr = yetty_ygui_colorpicker_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
     struct yetty_ygui_colorpicker *d = d_dr.value;
     d->color = 0xFF92A86Bu; /* brand accent default */
@@ -53,8 +52,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "colorpicker paint: NULL ctx");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_colorpicker_class_get().value);
+    struct yetty_ygui_colorpicker_ptr_result d_dr = yetty_ygui_colorpicker_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
     struct yetty_ygui_colorpicker *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -84,8 +82,7 @@ struct yetty_ycore_void_result yetty_ygui_colorpicker_set_color(struct yetty_ycl
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "cp_set_color: NULL");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_colorpicker_class_get().value);
+    struct yetty_ygui_colorpicker_ptr_result d_dr = yetty_ygui_colorpicker_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_colorpicker_set_color: data_get");
     struct yetty_ygui_colorpicker *d = d_dr.value;
     d->color = c;
@@ -99,8 +96,7 @@ struct yetty_ycore_uint32_result yetty_ygui_colorpicker_get_color(
     if (!obj) {
         return YETTY_ERR(yetty_ycore_uint32, "yetty_ygui_colorpicker_get_color: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result data_result = yetty_ygui_data_get_result(
-        (struct yetty_yclass_object *)obj, yetty_ygui_colorpicker_class_get().value);
+    struct yetty_ygui_colorpicker_ptr_result data_result = yetty_ygui_colorpicker_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_uint32, data_result,
                         "yetty_ygui_colorpicker_get_color: data_get");
     return YETTY_OK(yetty_ycore_uint32,

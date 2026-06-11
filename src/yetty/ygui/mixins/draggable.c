@@ -62,8 +62,7 @@ static struct yetty_ycore_int_result draggable_on_press(struct yetty_yclass_ctx 
     (void)yclass_ctx;
     (void)button;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result dd_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_draggable_mixin_get().value);
+    struct yetty_ygui_draggable_ptr_result dd_dr = yetty_ygui_draggable_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dd_dr, "draggable_on_press: data_get");
     struct yetty_ygui_draggable *dd = dd_dr.value;
     dd->dragging = 1;
@@ -85,8 +84,7 @@ static struct yetty_ycore_int_result draggable_on_motion(struct yetty_yclass_ctx
 {
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result dd_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_draggable_mixin_get().value);
+    struct yetty_ygui_draggable_ptr_result dd_dr = yetty_ygui_draggable_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dd_dr, "draggable_on_motion: data_get");
     struct yetty_ygui_draggable *dd = dd_dr.value;
     /* The framework also delivers motion to whatever the pointer hovers,
@@ -118,8 +116,7 @@ static struct yetty_ycore_int_result draggable_on_release(struct yetty_yclass_ct
     (void)y;
     (void)button;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result dd_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_draggable_mixin_get().value);
+    struct yetty_ygui_draggable_ptr_result dd_dr = yetty_ygui_draggable_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dd_dr, "draggable_on_release: data_get");
     struct yetty_ygui_draggable *dd = dd_dr.value;
     dd->dragging = 0;
@@ -138,8 +135,7 @@ struct yetty_ycore_void_result yetty_ygui_draggable_on_drag_set(struct yetty_ycl
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_draggable_on_drag_set: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result dd_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_draggable_mixin_get().value);
+    struct yetty_ygui_draggable_ptr_result dd_dr = yetty_ygui_draggable_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dd_dr, "yetty_ygui_draggable_on_drag_set: data_get");
     struct yetty_ygui_draggable *dd = dd_dr.value;
     dd->on_drag = cb;
@@ -154,8 +150,7 @@ struct yetty_ycore_int_result yetty_ygui_draggable_is_dragging(
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_draggable_is_dragging: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result dd_dr = yetty_ygui_data_get_result(
-        (struct yetty_yclass_object *)obj, yetty_ygui_draggable_mixin_get().value);
+    struct yetty_ygui_draggable_ptr_result dd_dr = yetty_ygui_draggable_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dd_dr, "yetty_ygui_draggable_is_dragging: data_get");
     struct yetty_ygui_draggable *dd = dd_dr.value;
     return YETTY_OK(yetty_ycore_int, dd->dragging);

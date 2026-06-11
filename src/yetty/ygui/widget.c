@@ -102,6 +102,15 @@ struct [[clang::annotate("class@ygui:widget")]] yetty_ygui_widget {
     float scroll_main;
 };
 
+/* The codegen accessor/downcast defined in the appended widget.gen.c, plus
+ * the object-lifecycle Result type, declared here (this TU does not include
+ * its own generated widget.h) so the helpers + exposed object API below have
+ * them in scope. The generated widget.h publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_widget_ptr, struct yetty_ygui_widget *);
+struct yetty_ygui_widget_ptr_result yetty_ygui_widget_from(struct yetty_yclass_object *obj);
+YETTY_YRESULT_DECLARE(yetty_ygui_object_ptr, struct yetty_yclass_object *);
+
 /* Convenience accessor — every internal helper that needs the widget
  * class pointer goes through this. By the time any widget method runs,
  * the class is already registered (you cannot dispatch a method on an
@@ -141,8 +150,7 @@ static struct yetty_ycore_void_result widget_default_constructor(struct yetty_yc
                                                                  struct yetty_yclass_object *obj)
 {
     (void)ctx;
-    struct yetty_ygui_void_ptr_result wd_dr =
-        yetty_ygui_data_get_result(self_of(obj), widget_class());
+    struct yetty_ygui_widget_ptr_result wd_dr = yetty_ygui_widget_from(self_of(obj));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_dr, "widget_default_constructor: data_get");
     struct yetty_ygui_widget *wd = wd_dr.value;
     wd->rect.min.x = 0;
@@ -286,7 +294,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_rect(struct yetty_yclass_ob
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_rect: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result wd_dr = yetty_ygui_data_get_result(obj, widget_class());
+    struct yetty_ygui_widget_ptr_result wd_dr = yetty_ygui_widget_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_dr, "yetty_ygui_widget_set_rect: data_get");
     struct yetty_ygui_widget *wd = wd_dr.value;
     /* Only dirty on an actual change. The layout pass calls set_rect for
@@ -307,7 +315,7 @@ struct yetty_ycore_rectangle yetty_ygui_widget_rect(const struct yetty_yclass_ob
         return z;
     }
     struct yetty_ygui_widget *wd =
-        yetty_ygui_data_get((struct yetty_yclass_object *)obj, widget_class());
+        yetty_ygui_widget_from((struct yetty_yclass_object *)obj).value;
     return wd->rect;
 }
 
@@ -320,7 +328,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_scroll_main_set(struct yetty_yc
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_scroll_main_set: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result wd_dr = yetty_ygui_data_get_result(obj, widget_class());
+    struct yetty_ygui_widget_ptr_result wd_dr = yetty_ygui_widget_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_dr, "yetty_ygui_widget_scroll_main_set: data_get");
     struct yetty_ygui_widget *wd = wd_dr.value;
     if (wd->scroll_main != offset) {
@@ -336,7 +344,7 @@ float yetty_ygui_widget_scroll_main_get(const struct yetty_yclass_object *obj)
         return 0.0f;
     }
     struct yetty_ygui_widget *wd =
-        yetty_ygui_data_get((struct yetty_yclass_object *)obj, widget_class());
+        yetty_ygui_widget_from((struct yetty_yclass_object *)obj).value;
     return wd->scroll_main;
 }
 
@@ -346,7 +354,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_layout_set(struct yetty_yclass_
     if (!obj || !layout) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_layout_set: NULL arg");
     }
-    struct yetty_ygui_void_ptr_result wd_dr = yetty_ygui_data_get_result(obj, widget_class());
+    struct yetty_ygui_widget_ptr_result wd_dr = yetty_ygui_widget_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_dr, "yetty_ygui_widget_layout_set: data_get");
     struct yetty_ygui_widget *wd = wd_dr.value;
     wd->layout = *layout;
@@ -360,7 +368,7 @@ const struct yetty_ygui_layout *yetty_ygui_widget_layout_get(const struct yetty_
         return NULL;
     }
     struct yetty_ygui_widget *wd =
-        yetty_ygui_data_get((struct yetty_yclass_object *)obj, widget_class());
+        yetty_ygui_widget_from((struct yetty_yclass_object *)obj).value;
     return &wd->layout;
 }
 
@@ -370,7 +378,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_visible(struct yetty_yclass
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_visible: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result wd_dr = yetty_ygui_data_get_result(obj, widget_class());
+    struct yetty_ygui_widget_ptr_result wd_dr = yetty_ygui_widget_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_dr, "yetty_ygui_widget_set_visible: data_get");
     struct yetty_ygui_widget *wd = wd_dr.value;
     wd->layout.hidden = visible ? 0 : 1;
@@ -383,7 +391,7 @@ int yetty_ygui_widget_is_visible(const struct yetty_yclass_object *obj)
         return 0;
     }
     struct yetty_ygui_widget *wd =
-        yetty_ygui_data_get((struct yetty_yclass_object *)obj, widget_class());
+        yetty_ygui_widget_from((struct yetty_yclass_object *)obj).value;
     return wd->layout.hidden ? 0 : 1;
 }
 
@@ -393,7 +401,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_size(struct yetty_yclass_ob
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_size: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result wd_dr = yetty_ygui_data_get_result(obj, widget_class());
+    struct yetty_ygui_widget_ptr_result wd_dr = yetty_ygui_widget_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_dr, "yetty_ygui_widget_set_size: data_get");
     struct yetty_ygui_widget *wd = wd_dr.value;
     wd->layout.width = w;
@@ -407,7 +415,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_yclas
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_position: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result wd_dr = yetty_ygui_data_get_result(obj, widget_class());
+    struct yetty_ygui_widget_ptr_result wd_dr = yetty_ygui_widget_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_dr, "yetty_ygui_widget_set_position: data_get");
     struct yetty_ygui_widget *wd = wd_dr.value;
     wd->layout.absolute = 1;
@@ -471,7 +479,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_bg_color(struct yetty_yclas
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_bg_color: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result wd_dr = yetty_ygui_data_get_result(obj, widget_class());
+    struct yetty_ygui_widget_ptr_result wd_dr = yetty_ygui_widget_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_dr, "yetty_ygui_widget_set_bg_color: data_get");
     struct yetty_ygui_widget *wd = wd_dr.value;
     wd->bg = color;
@@ -484,7 +492,7 @@ uint32_t yetty_ygui_widget_bg(const struct yetty_yclass_object *obj)
         return 0;
     }
     struct yetty_ygui_widget *wd =
-        yetty_ygui_data_get((struct yetty_yclass_object *)obj, widget_class());
+        yetty_ygui_widget_from((struct yetty_yclass_object *)obj).value;
     return wd->bg;
 }
 
@@ -596,7 +604,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_apply_css(struct yetty_yclass_o
     if (!css) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ygui_void_ptr_result wd_dr = yetty_ygui_data_get_result(obj, widget_class());
+    struct yetty_ygui_widget_ptr_result wd_dr = yetty_ygui_widget_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_dr, "yetty_ygui_widget_apply_css: data_get");
     struct yetty_ygui_widget *wd = wd_dr.value;
     struct yetty_ygui_layout l = wd->layout;

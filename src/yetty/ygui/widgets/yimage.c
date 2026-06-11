@@ -48,8 +48,7 @@ static struct yetty_ycore_void_result yimage_constructor(struct yetty_yclass_ctx
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_yimage_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yimage_constructor: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_yimage_class_get().value);
+    struct yetty_ygui_yimage_ptr_result d_dr = yetty_ygui_yimage_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yimage_constructor: data_get");
     struct yetty_ygui_yimage *d = d_dr.value;
     d->bytes = NULL;
@@ -63,8 +62,7 @@ static struct yetty_ycore_void_result yimage_destructor(struct yetty_yclass_ctx 
 {
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_yimage_class_get().value);
+    struct yetty_ygui_yimage_ptr_result d_dr = yetty_ygui_yimage_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yimage_destructor: data_get");
     struct yetty_ygui_yimage *d = d_dr.value;
     free(d->bytes);
@@ -98,8 +96,7 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *
 {
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_yimage_class_get().value);
+    struct yetty_ygui_yimage_ptr_result d_dr = yetty_ygui_yimage_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yimage_emit_body: data_get");
     struct yetty_ygui_yimage *d = d_dr.value;
     if (!d->bytes || d->len == 0) {
@@ -189,8 +186,7 @@ struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_yclass_o
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_yimage_set_bytes: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_yimage_class_get().value);
+    struct yetty_ygui_yimage_ptr_result d_dr = yetty_ygui_yimage_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_yimage_set_bytes: data_get");
     struct yetty_ygui_yimage *d = d_dr.value;
     free(d->bytes);
@@ -214,8 +210,7 @@ struct yetty_ycore_const_uint8_ptr_result yetty_ygui_yimage_bytes(
     if (!obj) {
         return YETTY_ERR(yetty_ycore_const_uint8_ptr, "yetty_ygui_yimage_bytes: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
-        (struct yetty_yclass_object *)obj, yetty_ygui_yimage_class_get().value);
+    struct yetty_ygui_yimage_ptr_result d_dr = yetty_ygui_yimage_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_uint8_ptr, d_dr, "yetty_ygui_yimage_bytes: data_get");
     struct yetty_ygui_yimage *d = d_dr.value;
     return YETTY_OK(yetty_ycore_const_uint8_ptr, d->bytes);
@@ -227,8 +222,7 @@ struct yetty_ycore_size_result yetty_ygui_yimage_bytes_len(const struct yetty_yc
     if (!obj) {
         return YETTY_ERR(yetty_ycore_size, "yetty_ygui_yimage_bytes_len: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
-        (struct yetty_yclass_object *)obj, yetty_ygui_yimage_class_get().value);
+    struct yetty_ygui_yimage_ptr_result d_dr = yetty_ygui_yimage_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_size, d_dr, "yetty_ygui_yimage_bytes_len: data_get");
     struct yetty_ygui_yimage *d = d_dr.value;
     return YETTY_OK(yetty_ycore_size, d->len);

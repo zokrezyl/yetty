@@ -44,8 +44,7 @@ static struct yetty_ycore_void_result slider_constructor(struct yetty_yclass_ctx
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_slider_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "slider_constructor: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_slider_class_get().value);
+    struct yetty_ygui_slider_ptr_result d_dr = yetty_ygui_slider_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "slider_constructor: data_get");
     struct yetty_ygui_slider *d = d_dr.value;
     d->min_val = 0.0f;
@@ -114,8 +113,7 @@ static struct yetty_ycore_void_result slider_paint(struct yetty_yclass_ctx *ycla
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "slider_paint: NULL ctx");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_slider_class_get().value);
+    struct yetty_ygui_slider_ptr_result d_dr = yetty_ygui_slider_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "slider_paint: data_get");
     struct yetty_ygui_slider *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -160,8 +158,7 @@ static struct yetty_ycore_int_result slider_on_press(struct yetty_yclass_ctx *yc
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)y;
     (void)button;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_slider_class_get().value);
+    struct yetty_ygui_slider_ptr_result d_dr = yetty_ygui_slider_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "slider_on_press: data_get");
     struct yetty_ygui_slider *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -218,8 +215,7 @@ struct yetty_ycore_void_result yetty_ygui_slider_set_range(struct yetty_yclass_o
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "slider_set_range: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_slider_class_get().value);
+    struct yetty_ygui_slider_ptr_result d_dr = yetty_ygui_slider_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_slider_set_range: data_get");
     struct yetty_ygui_slider *d = d_dr.value;
     d->min_val = min;
@@ -235,8 +231,7 @@ struct yetty_ycore_void_result yetty_ygui_slider_set_value(struct yetty_yclass_o
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "slider_set_value: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_slider_class_get().value);
+    struct yetty_ygui_slider_ptr_result d_dr = yetty_ygui_slider_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_slider_set_value: data_get");
     struct yetty_ygui_slider *d = d_dr.value;
     d->value = clampf(value, d->min_val, d->max_val);
@@ -249,8 +244,7 @@ struct yetty_ycore_float_result yetty_ygui_slider_get_value(const struct yetty_y
     if (!obj) {
         return YETTY_OK(yetty_ycore_float, 0.0f);
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
-        (struct yetty_yclass_object *)obj, yetty_ygui_slider_class_get().value);
+    struct yetty_ygui_slider_ptr_result d_dr = yetty_ygui_slider_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_float, d_dr, "yetty_ygui_slider_get_value: data_get");
     struct yetty_ygui_slider *d = d_dr.value;
     return YETTY_OK(yetty_ycore_float, d->value);

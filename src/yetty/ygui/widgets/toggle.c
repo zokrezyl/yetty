@@ -45,8 +45,7 @@ static struct yetty_ycore_void_result on_click_flip(struct yetty_yclass_ctx *ycl
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)userdata;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_toggle_class_get().value);
+    struct yetty_ygui_toggle_ptr_result d_dr = yetty_ygui_toggle_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "on_click_flip: data_get");
     struct yetty_ygui_toggle *d = d_dr.value;
     d->on = !d->on;
@@ -70,8 +69,7 @@ static struct yetty_ycore_void_result toggle_constructor(struct yetty_yclass_ctx
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_toggle_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "toggle_constructor: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_toggle_class_get().value);
+    struct yetty_ygui_toggle_ptr_result d_dr = yetty_ygui_toggle_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "toggle_constructor: data_get");
     struct yetty_ygui_toggle *d = d_dr.value;
     d->label = NULL;
@@ -85,8 +83,7 @@ static struct yetty_ycore_void_result toggle_destructor(struct yetty_yclass_ctx 
 {
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_toggle_class_get().value);
+    struct yetty_ygui_toggle_ptr_result d_dr = yetty_ygui_toggle_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "toggle_destructor: data_get");
     struct yetty_ygui_toggle *d = d_dr.value;
     free(d->label);
@@ -144,8 +141,7 @@ static struct yetty_ycore_void_result toggle_paint(struct yetty_yclass_ctx *ycla
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "toggle_paint: NULL ctx");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_toggle_class_get().value);
+    struct yetty_ygui_toggle_ptr_result d_dr = yetty_ygui_toggle_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "toggle_paint: data_get");
     struct yetty_ygui_toggle *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -184,8 +180,7 @@ struct yetty_ycore_void_result yetty_ygui_toggle_set_label(struct yetty_yclass_o
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "toggle_set_label: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_toggle_class_get().value);
+    struct yetty_ygui_toggle_ptr_result d_dr = yetty_ygui_toggle_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_toggle_set_label: data_get");
     struct yetty_ygui_toggle *d = d_dr.value;
     free(d->label);
@@ -208,8 +203,7 @@ struct yetty_ycore_void_result yetty_ygui_toggle_set_on(struct yetty_yclass_obje
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "toggle_set_on: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_toggle_class_get().value);
+    struct yetty_ygui_toggle_ptr_result d_dr = yetty_ygui_toggle_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_toggle_set_on: data_get");
     struct yetty_ygui_toggle *d = d_dr.value;
     d->on = on ? 1 : 0;
@@ -222,8 +216,7 @@ struct yetty_ycore_int_result yetty_ygui_toggle_get_on(const struct yetty_yclass
     if (!obj) {
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_toggle_get_on: invalid args");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
-        (struct yetty_yclass_object *)obj, yetty_ygui_toggle_class_get().value);
+    struct yetty_ygui_toggle_ptr_result d_dr = yetty_ygui_toggle_from((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_toggle_get_on: data_get");
     struct yetty_ygui_toggle *d = d_dr.value;
     return YETTY_OK(yetty_ycore_int, d->on);

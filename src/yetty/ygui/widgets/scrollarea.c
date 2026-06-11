@@ -72,7 +72,7 @@ static struct yetty_ycore_void_result scrollarea_on_drag(struct yetty_yclass_obj
     (void)userdata;
     struct yetty_yclass_ptr_result class_result = scrollarea_class();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_result, "scrollarea_on_drag: class");
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, class_result.value);
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, class_result.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "scrollarea_on_drag: data_get");
     struct yetty_ygui_scrollarea *d = d_dr.value;
     if (d->max_offset <= 0.0f || d->thumb_travel <= 0.0f) {
@@ -100,7 +100,7 @@ static struct yetty_ycore_int_result on_scroll(struct yetty_yclass_ctx *yclass_c
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_yclass_ptr_result class_result = scrollarea_class();
     YETTY_RETURN_IF_ERR(yetty_ycore_int, class_result, "on_scroll: class");
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, class_result.value);
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, class_result.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_scroll: data_get");
     struct yetty_ygui_scrollarea *d = d_dr.value;
     if (d->max_offset <= 0.0f) {
@@ -149,7 +149,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     }
     struct yetty_yclass_ptr_result class_result = scrollarea_class();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, class_result, "paint: class");
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, class_result.value);
+    struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, class_result.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
     struct yetty_ygui_scrollarea *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);

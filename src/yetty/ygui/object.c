@@ -89,45 +89,12 @@ struct yetty_ycore_int_result yetty_ygui_super_int(struct yetty_yclass_object *o
 }
 
 /*===========================================================================
- * Data slice access. ygui objects are plain `struct yetty_yclass_object`s,
- * so slice resolution + instance sizing go through the yclass runtime
- * (yetty_yclass_object_data / yetty_yclass_object_alloc). The two helpers
- * below are thin adapters that keep the historic ygui signatures (a Result
- * wrapper and an assert-based void* convenience) over the canonical
- * resolver, so the ~300 widget call sites need no churn.
- *=========================================================================*/
-
-struct yetty_ygui_void_ptr_result yetty_ygui_data_get_result(struct yetty_yclass_object *obj,
-                                                             const struct yetty_yclass *cls)
-{
-    struct yetty_yclass_void_ptr_result slice = yetty_yclass_object_data(obj, cls);
-    if (YETTY_IS_ERR(slice)) {
-        return YETTY_ERR(yetty_ygui_void_ptr, "yetty_ygui_data_get_result", slice);
-    }
-    return YETTY_OK(yetty_ygui_void_ptr, slice.value);
-}
-
-/* Assert-based convenience accessor for value getters whose public
- * signature returns a plain value (widget_rect, layout_get, …) and
- * cannot become a Result without cascading through ~90 call sites in
- * modules outside this one. Resolution only fails on a programmer error
- * (target class not in the object's chain), caught by the assert in debug
- * builds; the inner Result has nowhere to propagate at this deliberately
- * non-Result boundary. New code should prefer yetty_ygui_data_get_result. */
-YETTY_EXTERNAL_CALLBACK
-void *yetty_ygui_data_get(struct yetty_yclass_object *obj, const struct yetty_yclass *cls)
-{
-    struct yetty_yclass_void_ptr_result slice = yetty_yclass_object_data(obj, cls);
-    if (YETTY_IS_ERR(slice)) {
-        yetty_ycore_error_destroy(slice.error);
-        assert(0 && "yetty_ygui_data_get: yetty_yclass_object_data failed");
-        return NULL;
-    }
-    return slice.value;
-}
-
-/*===========================================================================
  * Instance lifecycle.
+ *
+ * ygui objects are plain `struct yetty_yclass_object`s: slice resolution
+ * goes through the yclass runtime (yetty_yclass_object_data) and the typed
+ * generated `<class>_from(obj)` accessors directly — ygui carries no
+ * data-get wrapper of its own.
  *=========================================================================*/
 
 static void object_unlink_from_parent(struct yetty_yclass_object *obj)

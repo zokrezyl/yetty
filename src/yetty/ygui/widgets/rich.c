@@ -56,8 +56,7 @@ static struct yetty_ycore_void_result rich_constructor(struct yetty_yclass_ctx *
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_rich_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "rich_constructor: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
+    struct yetty_ygui_rich_ptr_result d_dr = yetty_ygui_rich_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "rich_constructor: data_get");
     struct yetty_ygui_rich *d = d_dr.value;
     d->lines = NULL;
@@ -83,8 +82,7 @@ static struct yetty_ycore_void_result rich_destructor(struct yetty_yclass_ctx *y
 {
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
+    struct yetty_ygui_rich_ptr_result d_dr = yetty_ygui_rich_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "rich_destructor: data_get");
     struct yetty_ygui_rich *d = d_dr.value;
     for (int i = 0; i < d->n_lines; ++i) {
@@ -106,8 +104,7 @@ static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_ctx *yclass
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "rich_paint: NULL ctx");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
+    struct yetty_ygui_rich_ptr_result d_dr = yetty_ygui_rich_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "rich_paint: data_get");
     struct yetty_ygui_rich *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -201,8 +198,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_yclass_object 
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "rich_clear: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
+    struct yetty_ygui_rich_ptr_result d_dr = yetty_ygui_rich_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_rich_clear: data_get");
     struct yetty_ygui_rich *d = d_dr.value;
     for (int i = 0; i < d->n_lines; ++i) {
@@ -218,8 +214,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_yclass_obje
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "rich_add_line: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
+    struct yetty_ygui_rich_ptr_result d_dr = yetty_ygui_rich_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_rich_add_line: data_get");
     struct yetty_ygui_rich *d = d_dr.value;
     if (!lines_grow(d, d->n_lines + 1)) {
@@ -240,8 +235,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_yclass_obje
     if (!obj || !text) {
         return YETTY_ERR(yetty_ycore_void, "rich_add_span: NULL arg");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_rich_class_get().value);
+    struct yetty_ygui_rich_ptr_result d_dr = yetty_ygui_rich_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_rich_add_span: data_get");
     struct yetty_ygui_rich *d = d_dr.value;
     if (d->n_lines == 0) {

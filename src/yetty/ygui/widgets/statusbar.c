@@ -42,8 +42,7 @@ static struct yetty_ycore_void_result statusbar_constructor(struct yetty_yclass_
         yetty_ygui_super_void(obj, yetty_ygui_statusbar_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "statusbar_constructor: super");
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_statusbar_class_get().value);
+    struct yetty_ygui_statusbar_ptr_result d_dr = yetty_ygui_statusbar_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "statusbar_constructor: data_get");
     struct yetty_ygui_statusbar *d = d_dr.value;
     d->left = NULL;
@@ -61,8 +60,7 @@ static struct yetty_ycore_void_result statusbar_destructor(struct yetty_yclass_c
 {
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_statusbar_class_get().value);
+    struct yetty_ygui_statusbar_ptr_result d_dr = yetty_ygui_statusbar_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "statusbar_destructor: data_get");
     struct yetty_ygui_statusbar *d = d_dr.value;
     free(d->left);
@@ -82,8 +80,7 @@ static struct yetty_ycore_void_result statusbar_paint(struct yetty_yclass_ctx *y
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "statusbar_paint: NULL ctx");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_statusbar_class_get().value);
+    struct yetty_ygui_statusbar_ptr_result d_dr = yetty_ygui_statusbar_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "statusbar_paint: data_get");
     struct yetty_ygui_statusbar *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -144,8 +141,7 @@ struct yetty_ycore_void_result yetty_ygui_statusbar_set_left(struct yetty_yclass
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "statusbar_set_left: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_statusbar_class_get().value);
+    struct yetty_ygui_statusbar_ptr_result d_dr = yetty_ygui_statusbar_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_statusbar_set_left: data_get");
     struct yetty_ygui_statusbar *d = d_dr.value;
     free(d->left);
@@ -163,8 +159,7 @@ struct yetty_ycore_void_result yetty_ygui_statusbar_set_right(struct yetty_yclas
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "statusbar_set_right: NULL obj");
     }
-    struct yetty_ygui_void_ptr_result d_dr =
-        yetty_ygui_data_get_result(obj, yetty_ygui_statusbar_class_get().value);
+    struct yetty_ygui_statusbar_ptr_result d_dr = yetty_ygui_statusbar_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_statusbar_set_right: data_get");
     struct yetty_ygui_statusbar *d = d_dr.value;
     free(d->right);

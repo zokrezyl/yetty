@@ -96,7 +96,7 @@ static const struct yetty_yclass *ynode_class(void)
 
 static struct yetty_ygui_ynode *ynode_data(struct yetty_yclass_object *node)
 {
-    return yetty_ygui_data_get(node, ynode_class());
+    return yetty_ygui_ynode_from(node).value;
 }
 
 /* The owning editor: a node's parent is its ynodes editor. Returns NULL

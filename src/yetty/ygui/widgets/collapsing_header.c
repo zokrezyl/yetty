@@ -154,7 +154,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, ch_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "collapsing_header: super");
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, ch_class());
+    struct yetty_ygui_collapsing_header_ptr_result d_dr = yetty_ygui_collapsing_header_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
     struct yetty_ygui_collapsing_header *d = d_dr.value;
     d->title = NULL;
@@ -175,7 +175,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
 {
     (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, ch_class());
+    struct yetty_ygui_collapsing_header_ptr_result d_dr = yetty_ygui_collapsing_header_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
     struct yetty_ygui_collapsing_header *d = d_dr.value;
     free(d->title);
@@ -191,7 +191,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     (void)x;
     (void)btn;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, ch_class());
+    struct yetty_ygui_collapsing_header_ptr_result d_dr = yetty_ygui_collapsing_header_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_press: data_get");
     struct yetty_ygui_collapsing_header *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -217,7 +217,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "collapsing_header paint: NULL ctx");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, ch_class());
+    struct yetty_ygui_collapsing_header_ptr_result d_dr = yetty_ygui_collapsing_header_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
     struct yetty_ygui_collapsing_header *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
@@ -269,7 +269,7 @@ struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_title(
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "ch_set_title: NULL");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, ch_class());
+    struct yetty_ygui_collapsing_header_ptr_result d_dr = yetty_ygui_collapsing_header_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_collapsing_header_set_title: data_get");
     struct yetty_ygui_collapsing_header *d = d_dr.value;
     free(d->title);
@@ -292,7 +292,7 @@ struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_open(
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "ch_set_open: NULL");
     }
-    struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(obj, ch_class());
+    struct yetty_ygui_collapsing_header_ptr_result d_dr = yetty_ygui_collapsing_header_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_collapsing_header_set_open: data_get");
     struct yetty_ygui_collapsing_header *d = d_dr.value;
     d->open = open ? 1 : 0;
@@ -305,8 +305,7 @@ int yetty_ygui_collapsing_header_is_open(const struct yetty_yclass_object *obj)
     if (!obj) {
         return 0;
     }
-    return ((struct yetty_ygui_collapsing_header *)yetty_ygui_data_get(
-                (struct yetty_yclass_object *)obj, ch_class()))
+    return ((struct yetty_ygui_collapsing_header *)yetty_ygui_collapsing_header_from((struct yetty_yclass_object *)obj).value)
         ->open;
 }
 

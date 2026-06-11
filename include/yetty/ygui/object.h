@@ -42,17 +42,9 @@ const struct yetty_yclass *yetty_ygui_class_expect(struct yetty_yclass_ptr_resul
  * cascades to children, and frees the block. NULL-safe. */
 struct yetty_ycore_void_result yetty_ygui_del(struct yetty_yclass_object *obj);
 
-/* Return a typed pointer to `cls`'s data slice inside `obj`. Caller
- * casts to the slice struct type. Infallible: `cls` must be in `obj`'s
- * class chain (own class, parent chain, or any mixin). Debug builds
- * assert; release builds trust the call site. */
-YETTY_YRESULT_DECLARE(yetty_ygui_void_ptr, void *);
-
-struct yetty_ygui_void_ptr_result yetty_ygui_data_get_result(struct yetty_yclass_object *obj,
-                                                             const struct yetty_yclass *cls);
-
-YETTY_EXTERNAL_CALLBACK
-void *yetty_ygui_data_get(struct yetty_yclass_object *obj, const struct yetty_yclass *cls);
+/* Per-class data slices are reached through the yclass runtime
+ * (`yetty_yclass_object_data`) or, preferably, the typed generated
+ * accessor `yetty_ygui_<class>_from(obj)`. ygui no longer wraps these. */
 
 /* Parent / first-child / next-sibling access. NULL when no relation. */
 struct yetty_yclass_object *yetty_ygui_object_parent(struct yetty_yclass_object *obj);
