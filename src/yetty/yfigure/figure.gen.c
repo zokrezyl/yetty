@@ -72,25 +72,24 @@ struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void)
     return register_class_r;
 }
 
-struct yetty_yfigure_figure_data_ptr_result yetty_yfigure_figure_data_get(
-    struct yetty_yclass_object *obj)
+struct yetty_yfigure_figure_ptr_result yetty_yfigure_figure_from(struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_ptr_result class_r = yetty_yfigure_figure_class_get();
     if (YETTY_IS_ERR(class_r)) {
-        return YETTY_ERR(yetty_yfigure_figure_data_ptr,
-                         "yetty_yfigure_figure_data_get: class accessor", class_r);
+        return YETTY_ERR(yetty_yfigure_figure_ptr, "yetty_yfigure_figure_from: class accessor",
+                         class_r);
     }
     struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
     if (YETTY_IS_ERR(slice_r)) {
-        return YETTY_ERR(yetty_yfigure_figure_data_ptr,
-                         "yetty_yfigure_figure_data_get: object_data", slice_r);
+        return YETTY_ERR(yetty_yfigure_figure_ptr, "yetty_yfigure_figure_from: object_data",
+                         slice_r);
     }
-    return YETTY_OK(yetty_yfigure_figure_data_ptr, (struct yetty_yfigure_figure *)slice_r.value);
+    return YETTY_OK(yetty_yfigure_figure_ptr, (struct yetty_yfigure_figure *)slice_r.value);
 }
 
 struct rectangle_result yetty_yfigure_figure_rect_get(struct yetty_yclass_object *obj)
 {
-    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    struct yetty_yfigure_figure_ptr_result data = yetty_yfigure_figure_from(obj);
     if (YETTY_IS_ERR(data)) {
         return YETTY_ERR(rectangle, "yetty_yfigure_figure_rect_get: data block", data);
     }
@@ -100,7 +99,7 @@ struct rectangle_result yetty_yfigure_figure_rect_get(struct yetty_yclass_object
 struct yetty_ycore_void_result yetty_yfigure_figure_rect_set(struct yetty_yclass_object *obj,
                                                              struct yetty_ycore_rectangle value)
 {
-    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    struct yetty_yfigure_figure_ptr_result data = yetty_yfigure_figure_from(obj);
     if (YETTY_IS_ERR(data)) {
         return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_figure_rect_set: data block", data);
     }
@@ -110,7 +109,7 @@ struct yetty_ycore_void_result yetty_yfigure_figure_rect_set(struct yetty_yclass
 
 struct yetty_ycore_int_result yetty_yfigure_figure_z_get(struct yetty_yclass_object *obj)
 {
-    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    struct yetty_yfigure_figure_ptr_result data = yetty_yfigure_figure_from(obj);
     if (YETTY_IS_ERR(data)) {
         return YETTY_ERR(yetty_ycore_int, "yetty_yfigure_figure_z_get: data block", data);
     }
@@ -120,7 +119,7 @@ struct yetty_ycore_int_result yetty_yfigure_figure_z_get(struct yetty_yclass_obj
 struct yetty_ycore_void_result yetty_yfigure_figure_z_set(struct yetty_yclass_object *obj,
                                                           int value)
 {
-    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    struct yetty_yfigure_figure_ptr_result data = yetty_yfigure_figure_from(obj);
     if (YETTY_IS_ERR(data)) {
         return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_figure_z_set: data block", data);
     }
@@ -130,7 +129,7 @@ struct yetty_ycore_void_result yetty_yfigure_figure_z_set(struct yetty_yclass_ob
 
 struct yetty_ycore_int_result yetty_yfigure_figure_hidden_get(struct yetty_yclass_object *obj)
 {
-    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    struct yetty_yfigure_figure_ptr_result data = yetty_yfigure_figure_from(obj);
     if (YETTY_IS_ERR(data)) {
         return YETTY_ERR(yetty_ycore_int, "yetty_yfigure_figure_hidden_get: data block", data);
     }
@@ -140,7 +139,7 @@ struct yetty_ycore_int_result yetty_yfigure_figure_hidden_get(struct yetty_yclas
 struct yetty_ycore_void_result yetty_yfigure_figure_hidden_set(struct yetty_yclass_object *obj,
                                                                int value)
 {
-    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    struct yetty_yfigure_figure_ptr_result data = yetty_yfigure_figure_from(obj);
     if (YETTY_IS_ERR(data)) {
         return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_figure_hidden_set: data block", data);
     }
@@ -150,7 +149,7 @@ struct yetty_ycore_void_result yetty_yfigure_figure_hidden_set(struct yetty_ycla
 
 struct yetty_ycore_int_result yetty_yfigure_figure_dirty_get(struct yetty_yclass_object *obj)
 {
-    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    struct yetty_yfigure_figure_ptr_result data = yetty_yfigure_figure_from(obj);
     if (YETTY_IS_ERR(data)) {
         return YETTY_ERR(yetty_ycore_int, "yetty_yfigure_figure_dirty_get: data block", data);
     }
@@ -160,7 +159,7 @@ struct yetty_ycore_int_result yetty_yfigure_figure_dirty_get(struct yetty_yclass
 struct yetty_ycore_void_result yetty_yfigure_figure_dirty_set(struct yetty_yclass_object *obj,
                                                               int value)
 {
-    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    struct yetty_yfigure_figure_ptr_result data = yetty_yfigure_figure_from(obj);
     if (YETTY_IS_ERR(data)) {
         return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_figure_dirty_set: data block", data);
     }
@@ -171,7 +170,7 @@ struct yetty_ycore_void_result yetty_yfigure_figure_dirty_set(struct yetty_yclas
 struct yetty_ycore_int_result yetty_yfigure_figure_absolute_coords_get(
     struct yetty_yclass_object *obj)
 {
-    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    struct yetty_yfigure_figure_ptr_result data = yetty_yfigure_figure_from(obj);
     if (YETTY_IS_ERR(data)) {
         return YETTY_ERR(yetty_ycore_int, "yetty_yfigure_figure_absolute_coords_get: data block",
                          data);
@@ -182,7 +181,7 @@ struct yetty_ycore_int_result yetty_yfigure_figure_absolute_coords_get(
 struct yetty_ycore_void_result yetty_yfigure_figure_absolute_coords_set(
     struct yetty_yclass_object *obj, int value)
 {
-    struct yetty_yfigure_figure_data_ptr_result data = yetty_yfigure_figure_data_get(obj);
+    struct yetty_yfigure_figure_ptr_result data = yetty_yfigure_figure_from(obj);
     if (YETTY_IS_ERR(data)) {
         return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_figure_absolute_coords_set: data block",
                          data);

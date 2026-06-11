@@ -95,7 +95,7 @@ classes:
     source_file: src/yetty/ymusic/music.c
     parent: null
     mixins: []
-    data: struct music_data
+    data: struct yetty_ymusic_music
     data_fields:
       - name: width
         type: float
@@ -169,7 +169,11 @@ classes:
         impl: music_obj_destroy
 exposed:
   - source_file: src/yetty/ymusic/music.c
-    verbatim: "/* Public constants — copied verbatim into the generated music.h. */
+    verbatim: "/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
+ * generated music.h (and the dispatch TU that includes it) needs the complete
+ * type — pull its defining header into the public header. */
+#include <yetty/ydraw-core/drawable-list.h>
+/* Public constants — copied verbatim into the generated music.h. */
 #define YETTY_YMUSIC_NO_ELEMENT (-1) /* hit_test: no element under the point */
 #define YETTY_YMUSIC_FLAG_NONE 0x0u  /* reserved render flags */"
   - source_file: src/yetty/ymusic/music.c

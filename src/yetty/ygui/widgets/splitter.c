@@ -6,16 +6,40 @@
  * even when it leaves the thin strip.
  */
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * splitter.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_splitter_data_ptr, struct yetty_ygui_splitter *);
+struct yetty_yclass_ptr_result yetty_ygui_splitter_class_get(void);
+struct yetty_ygui_splitter_data_ptr_result yetty_ygui_splitter_data(struct yetty_ygui_object *obj);
+/* Real-build copy of the header-destined change callback typedef. Codegen
+ * reads the `#ifdef YCLASS_CODEGEN` block at the foot (copied verbatim into
+ * the generated header); the two never coexist in one parse. */
+#ifdef YCLASS_CODEGEN
+struct yetty_ygui_object;
+typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_ygui_object *splitter, float delta,
+                                              void *userdata);
+#endif
+#ifndef YCLASS_CODEGEN
+struct yetty_ygui_object;
+typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_ygui_object *splitter, float delta,
+                                              void *userdata);
+#endif
 #include "paint-helpers.h"
 #include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/splitter.h>
 
 #define COLOR_TRACK 0xFF2C261Eu
 #define COLOR_GRIP 0xFF92A86Bu
 #define SPLITTER_MIN 40.0f
 
 struct [[clang::annotate("class@ygui:splitter")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] splitter_data {
+    "parent@ygui:primitive_widget")]] yetty_ygui_splitter {
     /* axis_plus1: 0 = auto (derive from parent flex direction); 1 =
      * column-bar (horizontal bar between stacked siblings → vertical
      * resize); 2 = row-bar (vertical bar between side-by-side siblings
@@ -42,7 +66,7 @@ static struct yetty_yclass_ptr_result splitter_class(void)
 /* Effective axis: 1 = row-bar (horizontal resize), 0 = column-bar
  * (vertical resize). Honours an explicit override, else derives from the
  * parent's flex direction. */
-static int splitter_axis_row(struct yetty_ygui_object *obj, const struct splitter_data *d)
+static int splitter_axis_row(struct yetty_ygui_object *obj, const struct yetty_ygui_splitter *d)
 {
     if (d->axis_plus1 == 1) {
         return 0;
@@ -130,7 +154,7 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_c
     YETTY_RETURN_IF_ERR(yetty_ycore_int, class_result, "on_motion: class");
     struct yetty_ygui_void_ptr_result sd_dr = yetty_ygui_data_get_result(obj, class_result.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, sd_dr, "on_motion: data_get");
-    struct splitter_data *sd = sd_dr.value;
+    struct yetty_ygui_splitter *sd = sd_dr.value;
 
     /* Only resize while this splitter is the actively-dragged widget.
      * The framework also delivers on_motion to whatever the pointer is
@@ -221,7 +245,7 @@ struct yetty_ycore_void_result yetty_ygui_splitter_set_axis(struct yetty_ygui_ob
     if (obj->klass != cr.value) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_splitter_set_axis: not a splitter");
     }
-    struct splitter_data *d = yetty_ygui_data_get(obj, cr.value);
+    struct yetty_ygui_splitter *d = yetty_ygui_data_get(obj, cr.value);
     d->axis_plus1 = (row ? 2 : 1);
     return YETTY_OK_VOID();
 }
@@ -240,7 +264,8 @@ struct yetty_ycore_int_result yetty_ygui_splitter_get_axis(const struct yetty_yg
         /* Not a splitter — a valid query result, not an error. */
         return YETTY_OK(yetty_ycore_int, -1);
     }
-    const struct splitter_data *d = yetty_ygui_data_get((struct yetty_ygui_object *)obj, cr.value);
+    const struct yetty_ygui_splitter *d =
+        yetty_ygui_data_get((struct yetty_ygui_object *)obj, cr.value);
     return YETTY_OK(yetty_ycore_int, d->axis_plus1 == 0 ? -1 : d->axis_plus1 - 1);
 }
 
@@ -258,7 +283,7 @@ struct yetty_ycore_void_result yetty_ygui_splitter_set_min(struct yetty_ygui_obj
     if (obj->klass != cr.value) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_splitter_set_min: not a splitter");
     }
-    struct splitter_data *d = yetty_ygui_data_get(obj, cr.value);
+    struct yetty_ygui_splitter *d = yetty_ygui_data_get(obj, cr.value);
     d->min_size = min_size;
     return YETTY_OK_VOID();
 }
@@ -278,16 +303,10 @@ struct yetty_ycore_void_result yetty_ygui_splitter_on_change(struct yetty_ygui_o
     if (obj->klass != cr.value) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_splitter_on_change: not a splitter");
     }
-    struct splitter_data *d = yetty_ygui_data_get(obj, cr.value);
+    struct yetty_ygui_splitter *d = yetty_ygui_data_get(obj, cr.value);
     d->change_cb = cb;
     d->change_userdata = userdata;
     return YETTY_OK_VOID();
 }
 
 #include "splitter.gen.c"
-
-#ifdef YCLASS_CODEGEN
-struct yetty_ygui_object;
-typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_ygui_object *splitter, float delta,
-                                              void *userdata);
-#endif

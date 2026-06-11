@@ -2,8 +2,6 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
-#include "yetty/yrdawn/rpc.h"
-#include "yetty/yrdawn/methods.h"
 #include <yetty/yclass/class.h>
 #include "yetty/yrdawn/figure.h"
 #include <stdbool.h>

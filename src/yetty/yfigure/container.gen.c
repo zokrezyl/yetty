@@ -96,3 +96,19 @@ struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void)
     cls = register_class_r.value;
     return register_class_r;
 }
+
+struct yetty_yfigure_container_ptr_result yetty_yfigure_container_from(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_ptr_result class_r = yetty_yfigure_container_class_get();
+    if (YETTY_IS_ERR(class_r)) {
+        return YETTY_ERR(yetty_yfigure_container_ptr,
+                         "yetty_yfigure_container_from: class accessor", class_r);
+    }
+    struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
+    if (YETTY_IS_ERR(slice_r)) {
+        return YETTY_ERR(yetty_yfigure_container_ptr, "yetty_yfigure_container_from: object_data",
+                         slice_r);
+    }
+    return YETTY_OK(yetty_yfigure_container_ptr, (struct yetty_yfigure_container *)slice_r.value);
+}

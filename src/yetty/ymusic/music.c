@@ -25,11 +25,17 @@
  * foot. Every slot is `local@` — a music model is an in-process frontend, never
  * proxied over RPC; the model still records the methods so bindings emit them.
  */
+/* This TU deliberately does NOT include its own generated public header
+ * `yetty/ymusic/music.h` — that header is a downstream artifact for other
+ * modules. The foundational types this TU and the appended music.gen.c need
+ * (yclass identity, Result, core types) are pulled in directly below, and
+ * this TU declares its own `yetty_ymusic_music_ptr_result` (after the class
+ * struct) — the same one music.h publishes for consumers. */
 #include <yetty/yclass/class.h>
-#include <yetty/ymusic/music.h>
+#include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
 
 #include <yetty/yface/yface.h>
-#include <yetty/ycore/types.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
@@ -43,7 +49,19 @@
 #include <string.h>
 
 #ifdef YCLASS_CODEGEN
+/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
+ * generated music.h (and the dispatch TU that includes it) needs the complete
+ * type — pull its defining header into the public header. */
+#include <yetty/ydraw-core/drawable-list.h>
 /* Public constants — copied verbatim into the generated music.h. */
+#define YETTY_YMUSIC_NO_ELEMENT (-1) /* hit_test: no element under the point */
+#define YETTY_YMUSIC_FLAG_NONE 0x0u  /* reserved render flags */
+#endif
+
+#ifndef YCLASS_CODEGEN
+/* Same public constants, defined for the real build of this TU (which no
+ * longer includes music.h). The codegen block above re-emits them into the
+ * generated public header for consumers. */
 #define YETTY_YMUSIC_NO_ELEMENT (-1) /* hit_test: no element under the point */
 #define YETTY_YMUSIC_FLAG_NONE 0x0u  /* reserved render flags */
 #endif
@@ -152,7 +170,7 @@ struct ymusic_staff {
  * Class data
  *===========================================================================*/
 
-struct [[clang::annotate("class@ymusic:music")]] music_data {
+struct [[clang::annotate("class@ymusic:music")]] yetty_ymusic_music {
     /* Render configuration. */
     float width;
     float staff_space;
@@ -175,6 +193,20 @@ struct [[clang::annotate("class@ymusic:music")]] music_data {
     float content_w;
     float content_h;
 };
+
+/* Result wrapper for the music handle. Declared here (not pulled from
+ * music.h, which this TU does not include) so the appended music.gen.c —
+ * which defines yetty_ymusic_music_from() returning it — has the type in
+ * scope. The public music.h publishes the identical declaration for other
+ * modules. */
+YETTY_YRESULT_DECLARE(yetty_ymusic_music_ptr, struct yetty_ymusic_music *);
+
+/* Defined in the appended music.gen.c (foot of this TU). Forward-declared
+ * here because this TU does not include its own generated header — the class
+ * accessor backs music_from_obj below, and the obj→body downcast is part of
+ * the generated public surface this TU must keep in scope. */
+struct yetty_yclass_ptr_result yetty_ymusic_music_class_get(void);
+struct yetty_ymusic_music_ptr_result yetty_ymusic_music_from(struct yetty_yclass_object *obj);
 
 static struct yetty_yclass_void_ptr_result music_from_obj(struct yetty_yclass_object *obj)
 {
@@ -531,8 +563,8 @@ static struct ymusic_measure *ensure_measure(struct ymusic_staff *staff, uint32_
     return staff->measures[staff->count - 1];
 }
 
-static struct yetty_ycore_void_result parse_lilypond(struct music_data *music, const char *input,
-                                                     size_t len)
+static struct yetty_ycore_void_result parse_lilypond(struct yetty_ymusic_music *music,
+                                                     const char *input, size_t len)
 {
     struct ymusic_staff *staff = &music->staff;
     struct parse_state state = {.prev_dur_log = 2,
@@ -871,7 +903,8 @@ static int element_has_accidental(const struct ymusic_element *element)
     return 0;
 }
 
-static float element_advance(const struct music_data *music, const struct ymusic_element *element)
+static float element_advance(const struct yetty_ymusic_music *music,
+                             const struct ymusic_element *element)
 {
     float quarters = duration_quarters(element->dur_log, element->dots);
     float advance = music->staff_space * (2.4f + 1.6f * sqrtf(quarters));
@@ -1077,7 +1110,7 @@ static struct yetty_ycore_void_result emit_number(struct yetty_ydraw_drawable_li
 }
 
 static struct yetty_ycore_void_result emit_element(struct yetty_ydraw_drawable_list *buf,
-                                                   const struct music_data *music,
+                                                   const struct yetty_ymusic_music *music,
                                                    const struct layout_geom *geom,
                                                    const struct ymusic_element *element,
                                                    int32_t font_id, uint32_t *z)
@@ -1216,7 +1249,7 @@ static struct yetty_ycore_void_result emit_element(struct yetty_ydraw_drawable_l
  * Font loading
  *===========================================================================*/
 
-static struct yetty_ycore_void_result music_load_font(struct music_data *music)
+static struct yetty_ycore_void_result music_load_font(struct yetty_ymusic_music *music)
 {
     if (music->font_bytes) {
         return YETTY_OK_VOID();
@@ -1268,7 +1301,7 @@ static struct yetty_ycore_void_result music_configure(struct yetty_yclass_ctx *c
     (void)ctx;
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, music_r, "ymusic configure: from_obj");
-    struct music_data *music = music_r.value;
+    struct yetty_ymusic_music *music = music_r.value;
     music->width = width;
     music->staff_space = staff_space;
     music->flags = flags;
@@ -1287,7 +1320,7 @@ static struct yetty_ycore_void_result music_set_font_path(struct yetty_yclass_ct
     (void)ctx;
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, music_r, "ymusic set_font_path: from_obj");
-    struct music_data *music = music_r.value;
+    struct yetty_ymusic_music *music = music_r.value;
     free(music->font_path);
     music->font_path = NULL;
     free(music->font_bytes);
@@ -1312,7 +1345,7 @@ static struct yetty_ycore_void_result music_parse(struct yetty_yclass_ctx *ctx,
     (void)ctx;
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, music_r, "ymusic parse: from_obj");
-    struct music_data *music = music_r.value;
+    struct yetty_ymusic_music *music = music_r.value;
     if (!input && len > 0) {
         return YETTY_ERR(yetty_ycore_void, "ymusic parse: NULL input");
     }
@@ -1363,14 +1396,14 @@ static struct layout_geom system_geom(float staff_space, int system)
     return geom;
 }
 
-static int key_count_of(const struct music_data *music)
+static int key_count_of(const struct yetty_ymusic_music *music)
 {
     return music->staff.key_fifths < 0 ? -music->staff.key_fifths : music->staff.key_fifths;
 }
 
 /* Width of a system's leading clef + key signature (+ time signature on the
  * first system only). Mirrors what emit_system_prefix lays down. */
-static float prefix_width(const struct music_data *music, float staff_space, int show_time)
+static float prefix_width(const struct yetty_ymusic_music *music, float staff_space, int show_time)
 {
     float width = staff_space * 3.0f; /* clef */
     int key_count = key_count_of(music);
@@ -1383,8 +1416,8 @@ static float prefix_width(const struct music_data *music, float staff_space, int
     return width;
 }
 
-static float measure_width(const struct music_data *music, const struct ymusic_measure *measure,
-                           float bar_gutter)
+static float measure_width(const struct yetty_ymusic_music *music,
+                           const struct ymusic_measure *measure, float bar_gutter)
 {
     float width = 0.0f;
     for (size_t i = 0; i < measure->count; i++) {
@@ -1410,7 +1443,7 @@ static struct yetty_ycore_void_result emit_staff_lines(struct yetty_ydraw_drawab
 /* Clef + key signature (+ time signature when show_time) at a system's left
  * edge. The staff lines already span from left_x. */
 static struct yetty_ycore_void_result emit_system_prefix(struct yetty_ydraw_drawable_list *buf,
-                                                         const struct music_data *music,
+                                                         const struct yetty_ymusic_music *music,
                                                          const struct layout_geom *geom,
                                                          float left_x, int show_time,
                                                          int32_t font_id, uint32_t *z)
@@ -1462,7 +1495,7 @@ static struct yetty_ydraw_drawable_list_result music_render(struct yetty_yclass_
     (void)ctx;
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, music_r, "ymusic render: from_obj");
-    struct music_data *music = music_r.value;
+    struct yetty_ymusic_music *music = music_r.value;
 
     struct yetty_ycore_void_result font_r = music_load_font(music);
     if (YETTY_IS_ERR(font_r)) {
@@ -1607,7 +1640,7 @@ static struct yetty_ycore_int_result music_hit_test(struct yetty_yclass_ctx *ctx
     (void)ctx;
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, music_r, "ymusic hit_test: from_obj");
-    struct music_data *music = music_r.value;
+    struct yetty_ymusic_music *music = music_r.value;
     float staff_space =
         music->staff_space > 0.0f ? music->staff_space : (float)YMUSIC_DEFAULT_STAFF_SPACE;
     for (size_t mi = 0; mi < music->staff.count; mi++) {
@@ -1636,7 +1669,7 @@ static struct yetty_ycore_void_result music_set_highlight(struct yetty_yclass_ct
     (void)ctx;
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, music_r, "ymusic set_highlight: from_obj");
-    struct music_data *music = music_r.value;
+    struct yetty_ymusic_music *music = music_r.value;
     music->highlight_id =
         (element_id >= 0 && (uint32_t)element_id < music->element_count) ? element_id : -1;
     return YETTY_OK_VOID();
@@ -1652,7 +1685,7 @@ static struct yetty_ycore_void_result music_obj_destroy(struct yetty_yclass_ctx 
     if (YETTY_IS_ERR(music_r)) {
         yetty_ycore_error_destroy(music_r.error);
     } else {
-        struct music_data *music = music_r.value;
+        struct yetty_ymusic_music *music = music_r.value;
         staff_clear(&music->staff);
         free(music->index);
         free(music->font_path);

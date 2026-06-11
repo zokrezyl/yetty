@@ -40,11 +40,19 @@
  *   shape    = yetty_ychrome_edge_cursor_at(NULL, obj, x, y); // optional hover
  *   yetty_ychrome_destroy(NULL, obj);
  */
+/* This TU deliberately does NOT include its own generated header
+ * `yetty/ychrome/chrome.h` — that header is a downstream artifact for other
+ * modules. The foundational types this TU and the appended chrome.gen.c need
+ * (yclass identity, Result, core types) are pulled in directly here, and this
+ * TU declares its own `yetty_ychrome_chrome_ptr_result` below (the same one
+ * chrome.h publishes for consumers). The configure() FLAG_* macros the body
+ * uses are defined unconditionally below; codegen re-emits them into chrome.h
+ * from the `#ifdef YCLASS_CODEGEN` block at the foot. */
 #include <yetty/yclass/class.h>
-#include <yetty/ychrome/chrome.h>
+#include <yetty/ycore/result.h>
 
-#include <yetty/yevent/event.h>      /* event types + resize-edge / cursor enums */
-#include <yetty/yplatform/methods.h> /* window_manager gesture slots */
+#include <yetty/yevent/event.h> /* event types + resize-edge / cursor enums */
+#include <yetty/yplatform/window-manager.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -58,7 +66,24 @@
 
 #include <stdint.h>
 
+/* Feature flags for configure(). OR them together; FLAG_ALL enables the lot.
+ * Defined here for the real build (this TU no longer includes its own header);
+ * the `#ifdef YCLASS_CODEGEN` block below re-emits them into the generated
+ * chrome.h for consumers. The guard keeps the codegen pass — which sees both
+ * — from redefining them. */
+#ifndef YETTY_YCHROME_FLAG_DRAG
+#define YETTY_YCHROME_FLAG_DRAG 0x1u     /* caption drag moves the window      */
+#define YETTY_YCHROME_FLAG_RESIZE 0x2u   /* right/bottom edges resize          */
+#define YETTY_YCHROME_FLAG_MAXIMIZE 0x4u /* caption double-click toggles max   */
+#define YETTY_YCHROME_FLAG_ALL                                                                     \
+    (YETTY_YCHROME_FLAG_DRAG | YETTY_YCHROME_FLAG_RESIZE | YETTY_YCHROME_FLAG_MAXIMIZE)
+#endif
+
 #ifdef YCLASS_CODEGEN
+/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
+ * generated chrome.h (and the dispatch TU that includes it) needs the complete
+ * type — pull its defining header into the public header. */
+#include <yetty/ydraw-core/drawable-list.h>
 /* Feature flags for configure(). OR them together; FLAG_ALL enables the lot.
  * Copied verbatim into the generated chrome.h. */
 #define YETTY_YCHROME_FLAG_DRAG 0x1u     /* caption drag moves the window      */
@@ -90,7 +115,7 @@ enum {
 #define YCHROME_HOVER_BG 0xFF463A30u       /* lifted strip */
 #define YCHROME_HOVER_CLOSE_BG 0xFF3B3BC8u /* #C83B3B red */
 
-struct [[clang::annotate("class@ychrome:chrome")]] chrome_data {
+struct [[clang::annotate("class@ychrome:chrome")]] yetty_ychrome_chrome {
     /* Borrowed yplatform:window_manager yclass object — set by configure(). */
     struct yetty_yclass_object *window_manager;
 
@@ -132,7 +157,20 @@ struct [[clang::annotate("class@ychrome:chrome")]] chrome_data {
     int edge_cursor_on;
 };
 
-/* Resolve the object's chrome_data slice, preserving the class_get /
+/* Result wrapper for the chrome handle. Declared here (not pulled from
+ * chrome.h, which this TU does not include) so the appended chrome.gen.c —
+ * which defines yetty_ychrome_chrome_from() returning it — has the type in
+ * scope. The public chrome.h publishes the identical declaration for other
+ * modules. */
+YETTY_YRESULT_DECLARE(yetty_ychrome_chrome_ptr, struct yetty_ychrome_chrome *);
+
+/* Defined in the appended chrome.gen.c (foot of this TU). Forward-declared
+ * here because this TU does not include its own generated header — the class
+ * accessor and the obj→body downcast are used by the helpers below. */
+struct yetty_yclass_ptr_result yetty_ychrome_chrome_class_get(void);
+struct yetty_ychrome_chrome_ptr_result yetty_ychrome_chrome_from(struct yetty_yclass_object *obj);
+
+/* Resolve the object's yetty_ychrome_chrome slice, preserving the class_get /
  * object_data error chain. */
 static struct yetty_yclass_void_ptr_result chrome_from_obj(struct yetty_yclass_object *obj)
 {
@@ -192,7 +230,7 @@ static struct yetty_ycore_void_result chrome_configure(struct yetty_yclass_ctx *
      * (drag / resize / maximize / close → window_manager slots) are skipped. */
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "chrome configure: object");
-    struct chrome_data *chrome = data_r.value;
+    struct yetty_ychrome_chrome *chrome = data_r.value;
     chrome->window_manager = window_manager;
     chrome->caption_height = caption_height > 0.0f ? caption_height : 0.0f;
     chrome->edge_size = edge_size > 0.0f ? edge_size : (float)YCHROME_DEFAULT_EDGE_PX;
@@ -211,7 +249,7 @@ static struct yetty_ycore_void_result chrome_set_size(struct yetty_yclass_ctx *c
     (void)ctx;
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "chrome set_size: object");
-    struct chrome_data *chrome = data_r.value;
+    struct yetty_ychrome_chrome *chrome = data_r.value;
     chrome->width = width;
     chrome->height = height;
     return YETTY_OK_VOID();
@@ -235,7 +273,7 @@ static struct yetty_ycore_void_result chrome_destroy(struct yetty_yclass_ctx *ct
  * duplicating the hit-test. */
 /* Which resize edges (if any) the point (x, y) is over. Any combination →
  * corners are two edges at once. The bands hug all four window margins. */
-static void chrome_edges_at(const struct chrome_data *chrome, float x, float y, int *left,
+static void chrome_edges_at(const struct yetty_ychrome_chrome *chrome, float x, float y, int *left,
                             int *right, int *top, int *bottom)
 {
     float edge = chrome->edge_size;
@@ -254,7 +292,7 @@ static struct yetty_ycore_int_result chrome_edge_cursor_at(struct yetty_yclass_c
     (void)ctx;
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, data_r, "chrome edge_cursor_at: object");
-    struct chrome_data *chrome = data_r.value;
+    struct yetty_ychrome_chrome *chrome = data_r.value;
     if (!(chrome->flags & YETTY_YCHROME_FLAG_RESIZE) || chrome->width <= 0.0f ||
         chrome->height <= 0.0f) {
         return YETTY_OK(yetty_ycore_int, YETTY_YCORE_CURSOR_DEFAULT);
@@ -279,7 +317,7 @@ static struct yetty_ycore_int_result chrome_edge_cursor_at(struct yetty_yclass_c
  * or 0 for none. The three are flush against the right edge, each YCHROME_BTN_W
  * wide, within the caption strip. Shared by render() (placement) and
  * handle_event() (hit-test). */
-static int chrome_button_at(const struct chrome_data *chrome, float x, float y)
+static int chrome_button_at(const struct yetty_ychrome_chrome *chrome, float x, float y)
 {
     if (y < 0.0f || y >= chrome->caption_height) {
         return 0;
@@ -310,7 +348,7 @@ static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass
     (void)ctx;
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, data_r, "chrome render: object");
-    struct chrome_data *chrome = data_r.value;
+    struct yetty_ychrome_chrome *chrome = data_r.value;
     float width = chrome->width;
     float height = chrome->caption_height;
     if (width <= 0.0f || height <= 0.0f) {
@@ -398,7 +436,7 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
     }
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, data_r, "chrome handle_event: object");
-    struct chrome_data *chrome = data_r.value;
+    struct yetty_ychrome_chrome *chrome = data_r.value;
     struct yetty_yclass_object *wm = chrome->window_manager;
 
     float x = 0.0f, y = 0.0f;
@@ -613,7 +651,7 @@ struct yetty_ycore_int_result yetty_ychrome_hover_button(struct yetty_yclass_obj
 {
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, data_r, "chrome hover_button: object");
-    return YETTY_OK(yetty_ycore_int, ((struct chrome_data *)data_r.value)->hover_button);
+    return YETTY_OK(yetty_ycore_int, ((struct yetty_ychrome_chrome *)data_r.value)->hover_button);
 }
 
 #include "chrome.gen.c"

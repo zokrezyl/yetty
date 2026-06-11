@@ -31,7 +31,6 @@
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
-#include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 
@@ -133,7 +132,6 @@ static struct yetty_ycore_char_ptr_result test_leaf_dump(struct yetty_yclass_ctx
 {
     (void)ctx;
     const struct test_leaf *l = test_leaf_from_obj(obj);
-    const struct yetty_yfigure_figure *self = l->base;
     char pad[64];
     int n = indent < 0 ? 0 : indent;
     if ((size_t)n + 1 > sizeof(pad)) {
@@ -152,12 +150,11 @@ static struct yetty_ycore_char_ptr_result test_leaf_dump(struct yetty_yclass_ctx
              "%srect: [%.1f, %.1f, %.1f, %.1f]\n"
              "%sbytes_seen: %zu\n"
              "%scall_count: %u\n",
-             pad, pad,
-             yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self)-1).value.min.x,
-             yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self)-1).value.min.y,
-             yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self)-1).value.max.x,
-             yetty_yfigure_figure_rect_get((struct yetty_yclass_object *)(self)-1).value.max.y, pad,
-             l->bytes_seen, pad, l->call_count);
+             pad, pad, yetty_yfigure_figure_rect_get(obj).value.min.x,
+             yetty_yfigure_figure_rect_get(obj).value.min.y,
+             yetty_yfigure_figure_rect_get(obj).value.max.x,
+             yetty_yfigure_figure_rect_get(obj).value.max.y, pad, l->bytes_seen, pad,
+             l->call_count);
     return YETTY_OK(yetty_ycore_char_ptr, buf);
 }
 
@@ -196,24 +193,24 @@ static struct yetty_yclass_ptr_result test_leaf_class_get(void)
     return r;
 }
 
-static struct yetty_yfigure_figure_data_ptr_result test_leaf_factory(
+static struct yetty_yfigure_figure_ptr_result test_leaf_factory(
     struct yetty_ycore_rectangle rect, const struct yetty_context *ctx, void *user)
 {
     (void)ctx;
     (void)user;
     struct yetty_yclass_ptr_result cls_r = test_leaf_class_get();
     if (YETTY_IS_ERR(cls_r)) {
-        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "test_leaf_factory: class", cls_r);
+        return YETTY_ERR(yetty_yfigure_figure_ptr, "test_leaf_factory: class", cls_r);
     }
     struct yetty_yclass_object_ptr_result obj_r = yetty_yclass_object_alloc(cls_r.value);
     if (YETTY_IS_ERR(obj_r)) {
-        return YETTY_ERR(yetty_yfigure_figure_data_ptr, "test_leaf_factory: alloc", obj_r);
+        return YETTY_ERR(yetty_yfigure_figure_ptr, "test_leaf_factory: alloc", obj_r);
     }
     struct test_leaf *l = test_leaf_from_obj(obj_r.value);
     l->base = (struct yetty_yfigure_figure *)(obj_r.value + 1);
-    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(l->base) - 1, rect);
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(l->base) - 1, 1);
-    return YETTY_OK(yetty_yfigure_figure_data_ptr, l->base);
+    yetty_yfigure_figure_rect_set(obj_r.value, rect);
+    yetty_yfigure_figure_dirty_set(obj_r.value, 1);
+    return YETTY_OK(yetty_yfigure_figure_ptr, l->base);
 }
 
 /*===========================================================================
@@ -239,7 +236,7 @@ static struct yetty_yfigure_registry *make_registry(void)
     return r.value;
 }
 
-static struct yetty_yfigure_container *make_root(struct yetty_yfigure_registry *registry)
+static struct yetty_yclass_object *make_root(struct yetty_yfigure_registry *registry)
 {
     struct yetty_ycore_rectangle rect = {{0, 0}, {1000, 1000}};
     struct yetty_yclass_ctx yclass_ctx = {0};
@@ -249,7 +246,7 @@ static struct yetty_yfigure_container *make_root(struct yetty_yfigure_registry *
         yetty_ycore_error_destroy(obj_res.error);
         exit(2);
     }
-    struct yetty_yfigure_container *root = yetty_yfigure_container_from(obj_res.value);
+    struct yetty_yclass_object *root = obj_res.value;
     yetty_yfigure_container_set_registry(root, registry);
     yetty_yfigure_container_set_rect(root, rect);
     return root;
@@ -267,7 +264,7 @@ static struct yetty_ydraw_drawable_list *make_buf(void)
     return r.value;
 }
 
-static void feed(struct yetty_yfigure_container *root, const struct yetty_ydraw_drawable_list *buf)
+static void feed(struct yetty_yclass_object *root, const struct yetty_ydraw_drawable_list *buf)
 {
     const uint8_t *bytes = (const uint8_t *)yetty_ydraw_drawable_list_data(buf);
     size_t len = yetty_ydraw_drawable_list_size(buf);
@@ -279,7 +276,7 @@ static void feed(struct yetty_yfigure_container *root, const struct yetty_ydraw_
     }
 }
 
-static char *dump_root(struct yetty_yfigure_container *root)
+static char *dump_root(struct yetty_yclass_object *root)
 {
     struct yetty_ycore_char_ptr_result dump_result =
         yetty_yfigure_dump(yetty_yfigure_container_as_figure(root), 0);
@@ -299,7 +296,7 @@ static void test_empty_container(void)
     fprintf(stderr, "\n[test_empty_container]\n");
     g_tests++;
     struct yetty_yfigure_registry *reg = make_registry();
-    struct yetty_yfigure_container *root = make_root(reg);
+    struct yetty_yclass_object *root = make_root(reg);
 
     char *dump = dump_root(root);
     const char *expected = "kind: container\n"
@@ -310,8 +307,7 @@ static void test_empty_container(void)
     ASSERT_STR_EQ("empty_container", dump, expected);
     free(dump);
 
-    struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
+    yetty_yfigure_destroy(NULL, root);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -323,7 +319,7 @@ static void test_one_create_child(void)
     fprintf(stderr, "\n[test_one_create_child]\n");
     g_tests++;
     struct yetty_yfigure_registry *reg = make_registry();
-    struct yetty_yfigure_container *root = make_root(reg);
+    struct yetty_yclass_object *root = make_root(reg);
 
     struct yetty_ydraw_drawable_list *buf = make_buf();
     yetty_ydraw_drawable_list_add_admin_create_child(buf, /*child_id=*/1u, TEST_LEAF_KIND, 10.0f,
@@ -345,8 +341,7 @@ static void test_one_create_child(void)
     ASSERT_STR_EQ("one_create_child", dump, expected);
     free(dump);
 
-    struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
+    yetty_yfigure_destroy(NULL, root);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -359,7 +354,7 @@ static void test_two_create_child(void)
     fprintf(stderr, "\n[test_two_create_child]\n");
     g_tests++;
     struct yetty_yfigure_registry *reg = make_registry();
-    struct yetty_yfigure_container *root = make_root(reg);
+    struct yetty_yclass_object *root = make_root(reg);
 
     struct yetty_ydraw_drawable_list *buf = make_buf();
     yetty_ydraw_drawable_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 100, 100, NULL,
@@ -388,8 +383,7 @@ static void test_two_create_child(void)
     ASSERT_STR_EQ("two_create_child", dump, expected);
     free(dump);
 
-    struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
+    yetty_yfigure_destroy(NULL, root);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -401,7 +395,7 @@ static void test_create_then_delete(void)
     fprintf(stderr, "\n[test_create_then_delete]\n");
     g_tests++;
     struct yetty_yfigure_registry *reg = make_registry();
-    struct yetty_yfigure_container *root = make_root(reg);
+    struct yetty_yclass_object *root = make_root(reg);
 
     struct yetty_ydraw_drawable_list *buf = make_buf();
     yetty_ydraw_drawable_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 50, 50, NULL,
@@ -426,8 +420,7 @@ static void test_create_then_delete(void)
     ASSERT_STR_EQ("create_then_delete", dump, expected);
     free(dump);
 
-    struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
+    yetty_yfigure_destroy(NULL, root);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -440,7 +433,7 @@ static void test_create_with_init_payload(void)
     fprintf(stderr, "\n[test_create_with_init_payload]\n");
     g_tests++;
     struct yetty_yfigure_registry *reg = make_registry();
-    struct yetty_yfigure_container *root = make_root(reg);
+    struct yetty_yclass_object *root = make_root(reg);
 
     /* Arbitrary 32-byte payload — the leaf just counts bytes. */
     uint8_t init[32];
@@ -467,8 +460,7 @@ static void test_create_with_init_payload(void)
     ASSERT_STR_EQ("create_with_init_payload", dump, expected);
     free(dump);
 
-    struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
+    yetty_yfigure_destroy(NULL, root);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -481,7 +473,7 @@ static void test_routed_to_child(void)
     fprintf(stderr, "\n[test_routed_to_child]\n");
     g_tests++;
     struct yetty_yfigure_registry *reg = make_registry();
-    struct yetty_yfigure_container *root = make_root(reg);
+    struct yetty_yclass_object *root = make_root(reg);
 
     struct yetty_ydraw_drawable_list *buf = make_buf();
     yetty_ydraw_drawable_list_add_admin_create_child(buf, 3u, TEST_LEAF_KIND, 0, 0, 1, 1, NULL, 0);
@@ -506,8 +498,7 @@ static void test_routed_to_child(void)
     ASSERT_STR_EQ("routed_to_child", dump, expected);
     free(dump);
 
-    struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
+    yetty_yfigure_destroy(NULL, root);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -519,7 +510,7 @@ static void test_clear_all(void)
     fprintf(stderr, "\n[test_clear_all]\n");
     g_tests++;
     struct yetty_yfigure_registry *reg = make_registry();
-    struct yetty_yfigure_container *root = make_root(reg);
+    struct yetty_yclass_object *root = make_root(reg);
 
     struct yetty_ydraw_drawable_list *buf = make_buf();
     yetty_ydraw_drawable_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 1, 1, NULL, 0);
@@ -537,8 +528,7 @@ static void test_clear_all(void)
     ASSERT_STR_EQ("clear_all", dump, expected);
     free(dump);
 
-    struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
+    yetty_yfigure_destroy(NULL, root);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -552,7 +542,7 @@ static void test_stale_delete_is_noop(void)
     fprintf(stderr, "\n[test_stale_delete_is_noop]\n");
     g_tests++;
     struct yetty_yfigure_registry *reg = make_registry();
-    struct yetty_yfigure_container *root = make_root(reg);
+    struct yetty_yclass_object *root = make_root(reg);
 
     struct yetty_ydraw_drawable_list *buf = make_buf();
     yetty_ydraw_drawable_list_add_admin_create_child(buf, 5u, TEST_LEAF_KIND, 0, 0, 10, 10, NULL,
@@ -575,8 +565,7 @@ static void test_stale_delete_is_noop(void)
     ASSERT_STR_EQ("stale_delete_is_noop", dump, expected);
     free(dump);
 
-    struct yetty_yfigure_figure *fig = yetty_yfigure_container_as_figure(root);
-    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
+    yetty_yfigure_destroy(NULL, root);
     yetty_yfigure_registry_destroy(reg);
 }
 

@@ -40,12 +40,10 @@
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
-#include <yetty/ygrid/rpc.h>
+#include <yetty/ygrid/grid.h>
 #include <yetty/yvterm/shader-glyph-figure.h>
-#include <yetty/yvterm/rpc.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui-core/view.h>
 
@@ -79,7 +77,7 @@ struct yetty_yterminal_terminal_context {
 
 /* The compositor's wire-SM entry now lives in yfigure/container.c as
  * yetty_yfigure_container_process_input — it's registered directly with
- * userdata = terminal->root_container, no terminal-local wrapper. */
+ * userdata = terminal->root_container_obj, no terminal-local wrapper. */
 
 struct yetty_yterminal_terminal {
     struct yetty_yui_view view; /* MUST be first - allows cast to view */
@@ -141,14 +139,14 @@ struct yetty_yterminal_terminal {
      * figure the producer addresses by id; consumes YCOMPOSITOR_BIN
      * envelopes as `{length, id, payload}` record streams via the
      * comp_sm_shim below. Owned directly. */
-    struct yetty_yfigure_container *root_container;
+    struct yetty_yclass_object *root_container_obj;
     struct yetty_yfigure_registry *figure_registry;
 
     /* The content (text grid + ydraw canvas) seated as the lowest-z child of
      * root_container and rendered through the figure path. Borrows
      * terminal->layer; owned by the container. NULL until terminal_create
      * wires it. */
-    struct yetty_yvterm_grid *grid;
+    struct yetty_yclass_object *grid;
 
     /* Default MSDF font attached to every ygrid the root container
      * mints (registered as user-data on KIND_YGRID factory). Borrowed
@@ -289,9 +287,9 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
          * above only covers libvterm-side mutations, so without this any
          * frame coming over OSC 630000 lands silently and the screen stays
          * stale until something else triggers a render. */
-        if (terminal->root_container) {
+        if (terminal->root_container_obj) {
             struct yetty_yfigure_figure *rf =
-                yetty_yfigure_container_as_figure(terminal->root_container);
+                yetty_yfigure_container_as_figure(terminal->root_container_obj);
             if (rf && yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rf)-1).value) {
                 terminal->context.yetty_context.event_loop->ops->request_render(
                     terminal->context.yetty_context.event_loop);
@@ -354,11 +352,12 @@ static struct yetty_ycore_void_result terminal_pty_write_callback(const char *da
 static struct yetty_ycore_void_result terminal_clear_figures_callback(void *userdata)
 {
     struct yetty_yterminal_terminal *terminal = userdata;
-    if (!terminal || !terminal->root_container) {
+    if (!terminal || !terminal->root_container_obj) {
         return YETTY_OK_VOID();
     }
     ydebug("terminal_clear_figures_callback: full-screen erase/reset -> clearing root container");
-    struct yetty_ycore_void_result r = yetty_yfigure_container_clear_all(terminal->root_container);
+    struct yetty_ycore_void_result r =
+        yetty_yfigure_container_clear_all(terminal->root_container_obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
                         "terminal_clear_figures_callback: container clear_all");
     return YETTY_OK_VOID();
@@ -563,7 +562,7 @@ static struct yetty_yfigure_hit terminal_resolve_figure_hit(
     struct yetty_yterminal_terminal *terminal, float lx, float ly, uint32_t captured_figure_id)
 {
     struct yetty_yfigure_hit hit = {0, 0, 0};
-    if (!terminal->root_container) {
+    if (!terminal->root_container_obj) {
         return hit;
     }
 
@@ -573,7 +572,7 @@ static struct yetty_yfigure_hit terminal_resolve_figure_hit(
          * Hit-test first — if cursor is still inside the captured figure,
          * use the natural local coords; otherwise fall back to the raw
          * pane coords tagged with the captured id. */
-        hit = yetty_yfigure_container_hit_test(terminal->root_container, lx, ly);
+        hit = yetty_yfigure_container_hit_test(terminal->root_container_obj, lx, ly);
         if (hit.figure_id == captured_figure_id) {
             return hit;
         }
@@ -581,7 +580,7 @@ static struct yetty_yfigure_hit terminal_resolve_figure_hit(
         return captured;
     }
 
-    return yetty_yfigure_container_hit_test(terminal->root_container, lx, ly);
+    return yetty_yfigure_container_hit_test(terminal->root_container_obj, lx, ly);
 }
 
 /* Emit a keyboard event for the focused figure. Returns 1 if delivered
@@ -1004,12 +1003,12 @@ static struct yetty_ycore_void_result terminal_render_frame(
      * always sit on freshly-drawn pixels — so force_redraw needs no separate
      * handling here. */
     (void)force_redraw;
-    if (!terminal->root_container) {
+    if (!terminal->root_container_obj) {
         return YETTY_ERR(yetty_ycore_void, "terminal_render_frame: no root container to render");
     }
     {
         struct yetty_yfigure_figure *rf =
-            yetty_yfigure_container_as_figure(terminal->root_container);
+            yetty_yfigure_container_as_figure(terminal->root_container_obj);
         struct yetty_ycore_void_result render_res =
             yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, render_res,
@@ -1315,10 +1314,10 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, obj_res,
                         "terminal_create: root_container create failed");
-    terminal->root_container = yetty_yfigure_container_from(obj_res.value);
-    yetty_yfigure_container_set_context(terminal->root_container, yetty_context);
-    yetty_yfigure_container_set_registry(terminal->root_container, terminal->figure_registry);
-    yetty_yfigure_container_set_rect(terminal->root_container, root_rect);
+    terminal->root_container_obj = obj_res.value;
+    yetty_yfigure_container_set_context(terminal->root_container_obj, yetty_context);
+    yetty_yfigure_container_set_registry(terminal->root_container_obj, terminal->figure_registry);
+    yetty_yfigure_container_set_rect(terminal->root_container_obj, root_rect);
     ydebug("terminal_create: root container ready");
 
     /* Seat the content (libvterm text grid + ydraw canvas) as the lowest-z
@@ -1326,13 +1325,13 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * beneath every producer figure, instead of a bespoke pre-container pass.
      * The grid figure borrows terminal->layer; the container owns the figure. */
     {
-        struct yetty_yvterm_grid_ptr_result grid_res =
+        struct yetty_yclass_object_ptr_result grid_res =
             yetty_yvterm_grid_figure_create(terminal->layer, root_rect);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, grid_res,
                             "terminal_create: grid figure create failed");
         terminal->grid = grid_res.value;
         struct yetty_ycore_void_result add_res = yetty_yfigure_container_add_child(
-            terminal->root_container, yetty_yvterm_grid_as_figure(terminal->grid),
+            terminal->root_container_obj, yetty_yvterm_grid_as_figure(terminal->grid),
             YETTY_YTERMINAL_GRID_FIGURE_ID);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, add_res,
                             "terminal_create: add grid figure to root container failed");
@@ -1341,7 +1340,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
          * dropping its figures at exit) and a full-screen erase / reset cannot
          * destroy the text layer along with the compositor children. */
         struct yetty_ycore_void_result protect_res = yetty_yfigure_container_protect_child(
-            terminal->root_container, YETTY_YTERMINAL_GRID_FIGURE_ID);
+            terminal->root_container_obj, YETTY_YTERMINAL_GRID_FIGURE_ID);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, protect_res,
                             "terminal_create: protect grid figure failed");
     }
@@ -1357,7 +1356,8 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * userdata is the container itself; no terminal-local wrapper. */
     rr = yetty_ywire_wire_statemachine_register(
         terminal->sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN, /*has_args=*/1,
-        yetty_yfigure_container_process_input, terminal->root_container);
+        (yetty_ywire_process_input_fn)yetty_yfigure_container_process_input,
+        terminal->root_container_obj);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr,
                         "terminal_create: register compositor for YCOMPOSITOR_BIN");
     ydebug("terminal_create: ycompositor registered for DCS %d", YETTY_DCS_YCOMPOSITOR_BIN);
@@ -1445,9 +1445,9 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
      * compositor_font — so the font is only safe to free after the
      * container cascade completes. The registry holds borrowed refs to
      * the same font (factory user-data); destroy registry next. */
-    if (terminal->root_container) {
+    if (terminal->root_container_obj) {
         struct yetty_yfigure_figure *rf =
-            yetty_yfigure_container_as_figure(terminal->root_container);
+            yetty_yfigure_container_as_figure(terminal->root_container_obj);
         struct yetty_ycore_void_result r =
             yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
         if (YETTY_IS_ERR(r)) {
@@ -1459,7 +1459,7 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
                 yetty_ycore_error_destroy(r.error);
             }
         }
-        terminal->root_container = NULL;
+        terminal->root_container_obj = NULL;
     }
     if (terminal->figure_registry) {
         struct yetty_ycore_void_result r =
@@ -1566,14 +1566,14 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
      * its own rect via wire SET_CHILD_RECT records. On terminal resize
      * the producer re-emits the layout in the new dims; the root
      * container's own rect gets refreshed at viewport-offset push time. */
-    if (terminal->root_container) {
+    if (terminal->root_container_obj) {
         struct yetty_ycore_rectangle new_rect = {
             .min = {.x = 0.0f, .y = 0.0f},
             .max = {.x = (float)grid_size.cols * cell_size.width,
                     .y = (float)grid_size.rows * cell_size.height},
         };
         struct yetty_yfigure_figure *rf =
-            yetty_yfigure_container_as_figure(terminal->root_container);
+            yetty_yfigure_container_as_figure(terminal->root_container_obj);
         {
             struct yetty_ycore_void_result drop_r =
                 yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf)-1, new_rect);
@@ -1588,9 +1588,8 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
         /* The content grid figure spans the whole pane — keep its rect in
          * lockstep with the container so its render/clip bounds track resizes. */
         if (terminal->grid) {
-            struct yetty_ycore_void_result grid_rect_res = yetty_yfigure_figure_rect_set(
-                (struct yetty_yclass_object *)(yetty_yvterm_grid_as_figure(terminal->grid)) - 1,
-                new_rect);
+            struct yetty_ycore_void_result grid_rect_res =
+                yetty_yfigure_figure_rect_set(terminal->grid, new_rect);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_rect_res,
                                 "yetty_yterminal_terminal_resize_grid: grid figure rect_set");
         }
@@ -1676,8 +1675,9 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
      * origin into the compositor so it can shift incoming rects, keeping
      * the rendered pixels aligned with the mouse coords the input
      * pipeline subtracts (bounds.x/y) on the way down to the producer. */
-    if (terminal->root_container) {
-        yetty_yfigure_container_set_viewport_offset(terminal->root_container, bounds.x, bounds.y);
+    if (terminal->root_container_obj) {
+        yetty_yfigure_container_set_viewport_offset(terminal->root_container_obj, bounds.x,
+                                                    bounds.y);
     }
 
     /* Actually resize the terminal when the pixel size changes. The

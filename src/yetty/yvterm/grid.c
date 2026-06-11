@@ -12,6 +12,13 @@
  * Ownership of the libvterm screen and the per-line artifact storage (today
  * split between text-layer and ydraw's scrolling-grid) folds into this class
  * in a later step; for now it composes the existing content layer unchanged.
+ *
+ * This TU deliberately does NOT include its own generated header
+ * `yetty/yvterm/grid.h` — that header is a downstream artifact for other
+ * modules. The foundational types it needs (yclass identity, Result,
+ * rectangle) are pulled in directly, and this TU declares its own
+ * yetty_yvterm_grid_ptr_result below (the same one grid.h publishes for
+ * consumers). The figure base type comes from the parent header figure.h.
  */
 #include <stdlib.h>
 
@@ -21,8 +28,6 @@
 #include <yetty/yfigure/figure.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterminal/terminal.h>
-#include <yetty/yvterm/content-layer.h>
-#include <yetty/yvterm/grid.h>
 #include <yetty/ytrace/ytrace.h>
 
 /* Absolute lowest stacking order: the container sorts children by
@@ -38,34 +43,37 @@
 
 struct [[clang::annotate("class@yvterm:grid")]] [[clang::annotate("parent@yfigure:figure")]]
 yetty_yvterm_grid {
-    /* Upward handle to the embedded figure base (lives at obj + 1; base is
-     * its first member). */
-    struct yetty_yfigure_figure *base;
-
     /* The text+ydraw content composer this grid owns and renders. */
     struct yetty_yrender_terminal_layer *content;
 };
 
-/* This kind's own data slice (its fields sit after the figure base slice in
- * the shared yclass object). */
-static struct yetty_yclass_void_ptr_result grid_from_obj(struct yetty_yclass_object *obj)
-{
-    struct yetty_yclass_ptr_result class_res = yetty_yvterm_grid_class_get();
-    YETTY_RETURN_IF_ERR(yetty_yclass_void_ptr, class_res, "grid_from_obj: class");
-    return yetty_yclass_object_data(obj, class_res.value);
-}
+/* Result wrapper for the grid handle. Declared here (not pulled from grid.h,
+ * which this TU does not include) so the appended grid.gen.c — which defines
+ * yetty_yvterm_grid_from() returning it — has the type in scope. The public
+ * grid.h publishes the identical declaration for other modules. */
+YETTY_YRESULT_DECLARE(yetty_yvterm_grid_ptr, struct yetty_yvterm_grid *);
+
+/* Defined in the appended grid.gen.c (foot of this TU). Forward-declared here
+ * because this TU does not include its own generated header — the class
+ * accessor and the obj→body downcast are used by the helpers and the
+ * object-keyed public API below. */
+struct yetty_yclass_ptr_result yetty_yvterm_grid_class_get(void);
+struct yetty_yvterm_grid_ptr_result yetty_yvterm_grid_from(struct yetty_yclass_object *obj);
 
 /* ===========================================================================
- * Figure ops
+ * Figure ops — slots take the yclass object; the body slice sits inside it,
+ * reached via the generated downcast yetty_yvterm_grid_from.
  * ========================================================================= */
 
-static struct yetty_ycore_void_result grid_figure_render(struct yetty_yfigure_figure *self,
-                                                         struct yetty_ydraw_target *target)
+[[clang::annotate("override@yvterm:grid:yfigure:render")]]
+static struct yetty_ycore_void_result grid_figure_render_slot(struct yetty_yclass_ctx *ctx,
+                                                              struct yetty_yclass_object *obj,
+                                                              struct yetty_ydraw_target *target)
 {
-    struct yetty_yclass_void_ptr_result figure_res =
-        grid_from_obj((struct yetty_yclass_object *)self - 1);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, figure_res, "grid_figure_render: from_obj");
-    struct yetty_yvterm_grid *grid = figure_res.value;
+    (void)ctx;
+    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "grid_figure_render: from_obj");
+    struct yetty_yvterm_grid *grid = grid_res.value;
 
     if (!grid->content || !grid->content->ops || !grid->content->ops->render) {
         return YETTY_OK_VOID();
@@ -77,12 +85,14 @@ static struct yetty_ycore_void_result grid_figure_render(struct yetty_yfigure_fi
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result grid_figure_destroy(struct yetty_yfigure_figure *self)
+[[clang::annotate("override@yvterm:grid:yfigure:destroy")]]
+static struct yetty_ycore_void_result grid_figure_destroy_slot(struct yetty_yclass_ctx *ctx,
+                                                               struct yetty_yclass_object *obj)
 {
-    struct yetty_yclass_void_ptr_result figure_res =
-        grid_from_obj((struct yetty_yclass_object *)self - 1);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, figure_res, "grid_figure_destroy: from_obj");
-    struct yetty_yvterm_grid *grid = figure_res.value;
+    (void)ctx;
+    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "grid_figure_destroy: from_obj");
+    struct yetty_yvterm_grid *grid = grid_res.value;
 
     /* The content layer is BORROWED, not owned: the terminal created it and
      * destroys it directly (terminal->layer). We only drop our reference so a
@@ -92,87 +102,81 @@ static struct yetty_ycore_void_result grid_figure_destroy(struct yetty_yfigure_f
 }
 
 /* ===========================================================================
- * Ops vtable — cross-domain overrides of yfigure methods. Body sits at obj+1.
- * ========================================================================= */
-
-[[clang::annotate("override@yvterm:grid:yfigure:render")]]
-static struct yetty_ycore_void_result grid_figure_render_slot(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj,
-                                                              struct yetty_ydraw_target *target)
-{
-    (void)ctx;
-    return grid_figure_render((struct yetty_yfigure_figure *)(obj + 1), target);
-}
-
-[[clang::annotate("override@yvterm:grid:yfigure:destroy")]]
-static struct yetty_ycore_void_result grid_figure_destroy_slot(struct yetty_yclass_ctx *ctx,
-                                                               struct yetty_yclass_object *obj)
-{
-    (void)ctx;
-    return grid_figure_destroy((struct yetty_yfigure_figure *)(obj + 1));
-}
-
-/* ===========================================================================
  * Public API
  * ========================================================================= */
 
-struct yetty_yvterm_grid_ptr_result yetty_yvterm_grid_figure_create(
+/* Wrap an already-created content layer as the grid figure. Returns the yclass
+ * object handle; callers route it through yetty_yvterm_grid_as_figure for
+ * add_child / render and yetty_yvterm_grid_content / _from for body access. */
+struct yetty_yclass_object_ptr_result yetty_yvterm_grid_figure_create(
     struct yetty_yrender_terminal_layer *content, struct yetty_ycore_rectangle rect)
 {
     if (!content) {
-        return YETTY_ERR(yetty_yvterm_grid_ptr, "yetty_yvterm_grid_figure_create: content is NULL");
+        return YETTY_ERR(yetty_yclass_object_ptr,
+                         "yetty_yvterm_grid_figure_create: content is NULL");
     }
 
     /* Allocate as a yclass object so the figure carries a class header
-     * (enables yclass dispatch). Typed body lives at obj + 1; the embedded
-     * `base` is its first member. */
+     * (enables yclass dispatch). The typed body and the embedded figure base
+     * slice live inside the object; reach them via the generated downcasts. */
     struct yetty_yclass_ptr_result class_res = yetty_yvterm_grid_class_get();
-    YETTY_RETURN_IF_ERR(yetty_yvterm_grid_ptr, class_res, "yetty_yvterm_grid_figure_create: class");
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, class_res,
+                        "yetty_yvterm_grid_figure_create: class");
 
     struct yetty_yclass_object_ptr_result object_res = yetty_yclass_object_alloc(class_res.value);
-    YETTY_RETURN_IF_ERR(yetty_yvterm_grid_ptr, object_res,
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, object_res,
                         "yetty_yvterm_grid_figure_create: object_alloc");
+    struct yetty_yclass_object *obj = object_res.value;
 
-    struct yetty_yclass_void_ptr_result figure_res = grid_from_obj(object_res.value);
-    YETTY_RETURN_IF_ERR(yetty_yvterm_grid_ptr, figure_res,
+    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, grid_res,
                         "yetty_yvterm_grid_figure_create: from_obj");
-    struct yetty_yvterm_grid *grid = figure_res.value;
+    struct yetty_yvterm_grid *grid = grid_res.value;
 
-    grid->base = (struct yetty_yfigure_figure *)(object_res.value + 1);
     grid->content = content;
 
     {
-        struct yetty_ycore_void_result rect_set_res =
-            yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(grid->base) - 1, rect);
-        YETTY_RETURN_IF_ERR(yetty_yvterm_grid_ptr, rect_set_res,
+        struct yetty_ycore_void_result rect_set_res = yetty_yfigure_figure_rect_set(obj, rect);
+        YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, rect_set_res,
                             "yetty_yvterm_grid_figure_create: rect_set");
     }
     {
-        struct yetty_ycore_void_result z_set_res = yetty_yfigure_figure_z_set(
-            (struct yetty_yclass_object *)(grid->base) - 1, YETTY_YVTERM_GRID_Z);
-        YETTY_RETURN_IF_ERR(yetty_yvterm_grid_ptr, z_set_res,
+        struct yetty_ycore_void_result z_set_res =
+            yetty_yfigure_figure_z_set(obj, YETTY_YVTERM_GRID_Z);
+        YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, z_set_res,
                             "yetty_yvterm_grid_figure_create: z_set");
     }
     /* Start dirty so the first container render walk paints us. */
     {
-        struct yetty_ycore_void_result dirty_set_res =
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(grid->base) - 1, 1);
-        YETTY_RETURN_IF_ERR(yetty_yvterm_grid_ptr, dirty_set_res,
+        struct yetty_ycore_void_result dirty_set_res = yetty_yfigure_figure_dirty_set(obj, 1);
+        YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, dirty_set_res,
                             "yetty_yvterm_grid_figure_create: dirty_set");
     }
 
     ydebug("yvterm_grid: created (content=%p z=%d)", (void *)content, YETTY_YVTERM_GRID_Z);
-    return YETTY_OK(yetty_yvterm_grid_ptr, grid);
+    return YETTY_OK(yetty_yclass_object_ptr, obj);
 }
 
-struct yetty_yfigure_figure *yetty_yvterm_grid_as_figure(struct yetty_yvterm_grid *grid)
+/* Upcast to the figure base. The grid's figure base is the first slice in the
+ * object, so it is simply (obj + 1). NULL obj yields NULL. */
+struct yetty_yfigure_figure *yetty_yvterm_grid_as_figure(struct yetty_yclass_object *obj)
 {
-    return grid ? grid->base : NULL;
+    return obj ? yetty_yfigure_figure_from(obj).value : NULL;
 }
 
-struct yetty_yrender_terminal_layer *yetty_yvterm_grid_content(struct yetty_yvterm_grid *grid)
+/* Borrow the owned content layer (for the terminal's direct scroll / selection
+ * / anchor / resize calls during the transition). */
+struct yetty_yrender_terminal_layer *yetty_yvterm_grid_content(struct yetty_yclass_object *obj)
 {
-    return grid ? grid->content : NULL;
+    if (!obj) {
+        return NULL;
+    }
+    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
+    if (YETTY_IS_ERR(grid_res)) {
+        yetty_ycore_error_destroy(grid_res.error);
+        return NULL;
+    }
+    return grid_res.value ? grid_res.value->content : NULL;
 }
 
 #include "grid.gen.c"

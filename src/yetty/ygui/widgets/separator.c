@@ -3,10 +3,22 @@
  */
 
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * separator.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_separator_data_ptr, struct yetty_ygui_separator *);
+struct yetty_yclass_ptr_result yetty_ygui_separator_class_get(void);
+struct yetty_ygui_separator_data_ptr_result yetty_ygui_separator_data(
+    struct yetty_ygui_object *obj);
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/separator.h>
 #include <yetty/ysdf/funcs.gen.h>
 
 #define COLOR_BORDER 0xFF474A36u
@@ -38,7 +50,7 @@ static struct yetty_ycore_void_result separator_paint(struct yetty_yclass_ctx *y
 }
 
 struct [[clang::annotate("class@ygui:separator")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] separator_data {
+    "parent@ygui:primitive_widget")]] yetty_ygui_separator {
     char _empty;
 };
 

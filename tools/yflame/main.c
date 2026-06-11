@@ -15,7 +15,6 @@
  */
 
 #include <yetty/yflame/flame.h>
-#include <yetty/yflame/rpc.h>
 #include <yetty/yclass/class.h>
 #include <yetty/yplatform/getopt.h>
 #include <yetty/ycore/result.h>

@@ -29,7 +29,7 @@ extern "C" {
 struct yetty_ydraw_canvas;
 struct yetty_ydraw_canvas_ops;
 struct yetty_ydraw_composite_factory;
-struct yetty_ydraw_figure;
+struct yetty_ydraw_composite;
 struct yetty_ydraw_drawable_list_registry;
 struct yetty_yfont_font;
 struct yetty_ywire_wire_statemachine;
@@ -151,8 +151,8 @@ struct yetty_ydraw_canvas_ops {
 
     /* Complex drawable access (for atlas rendering). */
     uint32_t (*figure_count)(const struct yetty_ydraw_canvas *canvas);
-    struct yetty_ydraw_figure *(*get_figure)(const struct yetty_ydraw_canvas *canvas,
-                                             uint32_t index);
+    struct yetty_ydraw_composite *(*get_figure)(const struct yetty_ydraw_canvas *canvas,
+                                                uint32_t index);
 
     /* Glyph iteration. Does work + invokes the visitor — must surface
      * any internal failure (alloc, decode of evicted lines, ...) via

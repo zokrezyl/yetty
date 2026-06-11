@@ -192,7 +192,7 @@ static bool emit_record(uint32_t id, bool compressed,
     if (!g_state.yface_out) {
         return false;
     }
-    struct yetty_yfigure_wire_record hdr = {(uint32_t)body_len, id};
+    struct yetty_yfigure_header hdr = {(uint32_t)body_len, id};
     if (!yetty_yface_start_write(g_state.yface_out, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN,
                                  compressed ? 1 : 0, /*args=*/NULL, 0)
              .ok) {
@@ -584,7 +584,7 @@ static bool upload_figure_atlas(ymgui_figure_state *c)
      * The outer record length covers all three. */
     uint32_t sub_op = YETTY_YMGUI_FIGURE_SUB_TEX_UPLOAD;
     uint32_t body_len = (uint32_t)(sizeof(sub_op) + sizeof(hdr) + pixel_bytes);
-    struct yetty_yfigure_wire_record outer = {body_len, c->id};
+    struct yetty_yfigure_header outer = {body_len, c->id};
     if (!yetty_yface_start_write(g_state.yface_out, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN,
                                  /*compressed=*/1, /*args=*/NULL, 0).ok) {
         return false;
@@ -895,7 +895,7 @@ void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDraw
      * Outer length covers the sub_op + the entire frame total_size. */
     uint32_t sub_op = YETTY_YMGUI_FIGURE_SUB_FRAME;
     uint32_t outer_len = (uint32_t)(sizeof(sub_op) + total_size);
-    struct yetty_yfigure_wire_record outer = {outer_len, figure_id};
+    struct yetty_yfigure_header outer = {outer_len, figure_id};
     if (!yetty_yface_start_write(g_state.yface_out, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN,
                                  /*compressed=*/1, /*args=*/NULL, 0).ok) {
         return;

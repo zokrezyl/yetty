@@ -8,12 +8,24 @@
  */
 
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * ydraw_embed.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_ydraw_embed_data_ptr, struct yetty_ygui_ydraw_embed *);
+struct yetty_yclass_ptr_result yetty_ygui_ydraw_embed_class_get(void);
+struct yetty_ygui_ydraw_embed_data_ptr_result yetty_ygui_ydraw_embed_data(
+    struct yetty_ygui_object *obj);
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/ydraw_embed.h>
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 
@@ -24,7 +36,7 @@
 #define RICH_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
 
 struct [[clang::annotate("class@ygui:ydraw_embed")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] embed_data {
+    "parent@ygui:primitive_widget")]] yetty_ygui_ydraw_embed {
     struct yetty_ydraw_drawable_list *buf;
 };
 
@@ -41,7 +53,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ydraw_embed_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
-    struct embed_data *d = d_dr.value;
+    struct yetty_ygui_ydraw_embed *d = d_dr.value;
     d->buf = NULL;
     return YETTY_OK_VOID();
 }
@@ -55,7 +67,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ydraw_embed_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
-    struct embed_data *d = d_dr.value;
+    struct yetty_ygui_ydraw_embed *d = d_dr.value;
     if (d->buf) {
         yetty_ydraw_drawable_list_destroy(d->buf);
     }
@@ -141,7 +153,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ydraw_embed_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
-    struct embed_data *d = d_dr.value;
+    struct yetty_ygui_ydraw_embed *d = d_dr.value;
     if (!d->buf) {
         return YETTY_OK_VOID();
     }
@@ -223,7 +235,7 @@ struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ydraw_embed_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_ydraw_embed_set_buffer: data_get");
-    struct embed_data *d = d_dr.value;
+    struct yetty_ygui_ydraw_embed *d = d_dr.value;
     if (d->buf && d->buf != buf) {
         yetty_ydraw_drawable_list_destroy(d->buf);
     }

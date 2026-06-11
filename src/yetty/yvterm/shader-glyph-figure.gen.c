@@ -23,7 +23,7 @@ struct yetty_yclass_ptr_result yetty_yvterm_shader_glyph_class_get(void)
     static const struct yetty_yclass_descriptor desc = {
         .name = "yetty_yvterm_shader_glyph",
         .type = YETTY_YCLASS_TYPE_REGULAR,
-        .data_size = sizeof(struct yetty_yvterm_shader_glyph_figure),
+        .data_size = sizeof(struct yetty_yvterm_shader_glyph),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_yfigure", "render", (yetty_yclass_method_id_t)yetty_yfigure_render,
@@ -50,4 +50,21 @@ struct yetty_yclass_ptr_result yetty_yvterm_shader_glyph_class_get(void)
     }
     cls = register_class_r.value;
     return register_class_r;
+}
+
+struct yetty_yvterm_shader_glyph_ptr_result yetty_yvterm_shader_glyph_from(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_ptr_result class_r = yetty_yvterm_shader_glyph_class_get();
+    if (YETTY_IS_ERR(class_r)) {
+        return YETTY_ERR(yetty_yvterm_shader_glyph_ptr,
+                         "yetty_yvterm_shader_glyph_from: class accessor", class_r);
+    }
+    struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
+    if (YETTY_IS_ERR(slice_r)) {
+        return YETTY_ERR(yetty_yvterm_shader_glyph_ptr,
+                         "yetty_yvterm_shader_glyph_from: object_data", slice_r);
+    }
+    return YETTY_OK(yetty_yvterm_shader_glyph_ptr,
+                    (struct yetty_yvterm_shader_glyph *)slice_r.value);
 }

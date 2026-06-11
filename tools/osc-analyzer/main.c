@@ -457,7 +457,7 @@ static struct yetty_ydraw_drawable_list_registry *make_full_registry(void)
         goto err;
     }
     a = yetty_ydraw_drawable_list_registry_add(rr.value, YETTY_YDRAW_COMPOSITE_TYPE_BASE,
-                                               0xFFFFFFFFu, yetty_ydraw_composite_handler);
+                                               0xFFFFFFFFu, yetty_ydraw_composite_record_handler);
     if (YETTY_IS_ERR(a)) {
         goto err;
     }
@@ -979,12 +979,12 @@ static void walk_records(const uint8_t *bytes, size_t bytes_len, int depth)
     size_t off = 0;
     int idx = 0;
     while (off < bytes_len) {
-        if (bytes_len - off < sizeof(struct yetty_yfigure_wire_record)) {
+        if (bytes_len - off < sizeof(struct yetty_yfigure_header)) {
             ind(depth);
             out("record #%d header TRUNCATED (only %zu bytes left)\n", idx, bytes_len - off);
             return;
         }
-        struct yetty_yfigure_wire_record hdr;
+        struct yetty_yfigure_header hdr;
         memcpy(&hdr, bytes + off, sizeof(hdr));
         off += sizeof(hdr);
         if (hdr.length > bytes_len - off) {

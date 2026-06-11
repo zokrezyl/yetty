@@ -1,14 +1,29 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `grid` (module: yvterm).
- * Fully generated from the source .c — do not edit. Function
- * and public-type APIs come from `expose` annotations; the
- * forward declarations are derived from the prototype types. */
+ * Fully generated from the source .c — do not edit. This single
+ * header is the source's complete public interface: class
+ * accessors, method stubs, create()/register(), and any
+ * `expose`d API. Public types come from `expose` annotations. */
 #ifndef YETTY_YCLASSGEN_YVTERM_GRID_H
 #define YETTY_YCLASSGEN_YVTERM_GRID_H
 
 #include <yetty/yclass/class.h>
-#include <yetty/yvterm/methods.h>
+#include <yetty/yclass/rpc.h>
+#include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
 
 struct yetty_yclass_ptr_result yetty_yvterm_grid_class_get(void);
+
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
+struct yetty_yvterm_grid;
+YETTY_YRESULT_DECLARE(yetty_yvterm_grid_ptr, struct yetty_yvterm_grid *);
+struct yetty_yvterm_grid_ptr_result yetty_yvterm_grid_from(struct yetty_yclass_object *obj);
+
+struct yetty_yclass_object_ptr_result yetty_yvterm_grid_create(struct yetty_yclass_ctx *ctx);
+
+struct yetty_ycore_void_result yetty_yvterm_register(void);
 
 #endif

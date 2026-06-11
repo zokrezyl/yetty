@@ -167,20 +167,25 @@ codegen: ## Run yclass codegen for all annotated modules (output committed to gi
 	@# signature resolves to the real type instead of int via recovery.
 	@for pass in 1 2; do \
 		echo "==> yclass codegen: pass $$pass"; \
+		fail=0; \
 		for mod in $(YCLASS_MODULES); do \
 			src_dir="src/yetty/$$mod"; \
 			sources=$$(grep -lrE 'clang::annotate\("(class|mixin)@'"$$mod"':' "$$src_dir" --include='*.c' --exclude='*.gen.c' | LC_ALL=C sort); \
 			if [ -z "$$sources" ]; then \
 				echo "ERROR: no annotated sources found under $$src_dir"; \
-				exit 1; \
+				fail=1; continue; \
 			fi; \
 			echo "==> yclass codegen: $$mod"; \
 			YCLASS_CODEGEN_INCLUDES="$(CURDIR)/include:$(CURDIR)/src" \
 				uv run src/yetty/yclass/gen/codegen.py "$$mod" \
 					"$(CURDIR)/include/yetty" \
 					"$(CURDIR)/$$src_dir" \
-					$$sources || exit $$?; \
+					$$sources || fail=1; \
 		done; \
+		if [ $$fail -ne 0 ]; then \
+			echo "==> yclass codegen: errors above — see each module's report"; \
+			exit 1; \
+		fi; \
 	done
 
 .PHONY: ffi

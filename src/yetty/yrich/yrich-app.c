@@ -19,11 +19,9 @@
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/rpc.h>
 #include <yetty/yfont/font.h>
 #include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
-#include <yetty/ychrome/methods.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>
@@ -61,7 +59,7 @@ struct yrich_app {
     struct yetty_context ctx;
     struct yetty_yframework *yrt;
     struct yetty_ydraw_target *target;
-    struct yetty_yfigure_container *root;
+    struct yetty_yclass_object *root_obj;
     struct yetty_yclass_object *container_obj;
     struct yetty_yfigure_registry *registry;
     struct yetty_ygui_framework *ygui;
@@ -164,7 +162,7 @@ static struct yetty_ycore_void_result handle_event(struct yrich_app *app,
         struct yetty_yrender_viewport vp = {.x = 0, .y = 0, .w = (float)w, .h = (float)h};
         struct yetty_ycore_void_result resize_r = app->target->ops->resize(app->target, vp);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, resize_r, "yrich: target resize");
-        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
+        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root_obj);
         struct yetty_ycore_void_result rect_r = yetty_yfigure_figure_rect_set(
             (struct yetty_yclass_object *)(rf)-1, (struct yetty_ycore_rectangle){
                                                       .min = {.x = 0.0f, .y = 0.0f},
@@ -285,10 +283,10 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
     struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "root_container create failed");
     app->container_obj = obj_res.value;
-    app->root = yetty_yfigure_container_from(obj_res.value);
-    yetty_yfigure_container_set_context(app->root, &app->ctx);
-    yetty_yfigure_container_set_registry(app->root, app->registry);
-    yetty_yfigure_container_set_rect(app->root, root_rect);
+    app->root_obj = obj_res.value;
+    yetty_yfigure_container_set_context(app->root_obj, &app->ctx);
+    yetty_yfigure_container_set_registry(app->root_obj, app->registry);
+    yetty_yfigure_container_set_rect(app->root_obj, root_rect);
 
     /* ygui framework → container over the in-process yclass slot path. */
     struct yetty_ygui_framework_ptr_result eng_r = yetty_ygui_framework_create(NULL);
@@ -307,7 +305,7 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
      * font). Composited as a pinned figure over the document. */
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
-            app->root, app->font, &app->ctx, app->yrt->window_manager, (float)app->surface_w,
+            app->root_obj, app->font, &app->ctx, app->yrt->window_manager, (float)app->surface_w,
             (float)app->surface_h, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             app->chrome = chrome_r.value;
@@ -343,7 +341,7 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
         if (rt->instance) {
             wgpuInstanceProcessEvents((WGPUInstance)rt->instance);
         }
-        struct yetty_yfigure_figure *rrf = yetty_yfigure_container_as_figure(app->root);
+        struct yetty_yfigure_figure *rrf = yetty_yfigure_container_as_figure(app->root_obj);
         if (!(needs_render || had_events ||
               yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rrf)-1).value)) {
             continue;
@@ -374,10 +372,10 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
 
     /* Teardown — container first so pending GPU work flushes. */
     {
-        struct yetty_yfigure_figure *rrf = yetty_yfigure_container_as_figure(app->root);
+        struct yetty_yfigure_figure *rrf = yetty_yfigure_container_as_figure(app->root_obj);
         destroy_safe(yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rrf - 1));
     }
-    app->root = NULL;
+    app->root_obj = NULL;
     if (app->registry) {
         destroy_safe(yetty_yfigure_registry_destroy(app->registry));
         app->registry = NULL;

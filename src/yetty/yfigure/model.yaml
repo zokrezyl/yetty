@@ -169,10 +169,6 @@ classes:
     mixins: []
     data: struct yetty_yfigure_container
     data_fields:
-      - name: base
-        type: "struct yetty_yfigure_figure *"
-        get: false
-        set: false
       - name: children
         type: "struct child_entry *"
         get: false
@@ -305,44 +301,38 @@ exposed:
     name: yetty_yfigure_container_clear_all
     return_type: struct yetty_ycore_void_result
     args:
-      - name: container
-        type: "struct yetty_yfigure_container *"
-  - source_file: src/yetty/yfigure/container.c
-    name: yetty_yfigure_container_from
-    return_type: "struct yetty_yfigure_container *"
-    args:
       - name: obj
         type: "struct yetty_yclass_object *"
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_set_registry
     return_type: void
     args:
-      - name: container
-        type: "struct yetty_yfigure_container *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
       - name: registry
         type: "struct yetty_yfigure_registry *"
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_set_context
     return_type: void
     args:
-      - name: container
-        type: "struct yetty_yfigure_container *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
       - name: context
         type: "const struct yetty_context *"
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_set_rect
     return_type: struct yetty_ycore_void_result
     args:
-      - name: container
-        type: "struct yetty_yfigure_container *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
       - name: rect
         type: struct yetty_ycore_rectangle
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_set_viewport_offset
     return_type: void
     args:
-      - name: container
-        type: "struct yetty_yfigure_container *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
       - name: offset_x
         type: float
       - name: offset_y
@@ -351,8 +341,8 @@ exposed:
     name: yetty_yfigure_container_consume_envelope
     return_type: struct yetty_ycore_void_result
     args:
-      - name: container
-        type: "struct yetty_yfigure_container *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
       - name: sm
         type: "struct yetty_ywire_wire_statemachine *"
   - source_file: src/yetty/yfigure/container.c
@@ -367,8 +357,8 @@ exposed:
     name: yetty_yfigure_container_process_records
     return_type: struct yetty_ycore_void_result
     args:
-      - name: container
-        type: "struct yetty_yfigure_container *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
       - name: bytes
         type: "const uint8_t *"
       - name: bytes_len
@@ -377,14 +367,14 @@ exposed:
     name: yetty_yfigure_container_as_figure
     return_type: "struct yetty_yfigure_figure *"
     args:
-      - name: container
-        type: "struct yetty_yfigure_container *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_add_child
     return_type: struct yetty_ycore_void_result
     args:
-      - name: container
-        type: "struct yetty_yfigure_container *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
       - name: child
         type: "struct yetty_yfigure_figure *"
       - name: id
@@ -393,40 +383,40 @@ exposed:
     name: yetty_yfigure_container_find_child_by_id
     return_type: "struct yetty_yfigure_figure *"
     args:
-      - name: container
-        type: "const struct yetty_yfigure_container *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
       - name: id
         type: uint32_t
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_remove_child_by_id
     return_type: struct yetty_ycore_void_result
     args:
-      - name: container
-        type: "struct yetty_yfigure_container *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
       - name: id
         type: uint32_t
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_protect_child
     return_type: struct yetty_ycore_void_result
     args:
-      - name: container
-        type: "struct yetty_yfigure_container *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
       - name: id
         type: uint32_t
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_raise_child_by_id
     return_type: struct yetty_ycore_void_result
     args:
-      - name: container
-        type: "struct yetty_yfigure_container *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
       - name: id
         type: uint32_t
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_hit_test
     return_type: struct yetty_yfigure_hit
     args:
-      - name: container
-        type: "struct yetty_yfigure_container *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
       - name: x
         type: float
       - name: y

@@ -8,10 +8,20 @@
  */
 
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * hbox.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_hbox_data_ptr, struct yetty_ygui_hbox *);
+struct yetty_yclass_ptr_result yetty_ygui_hbox_class_get(void);
+struct yetty_ygui_hbox_data_ptr_result yetty_ygui_hbox_data(struct yetty_ygui_object *obj);
 
 #include <yetty/ygui/primitive-widget.h>
-
-#include <yetty/ygui/widgets/hbox.h>
 
 [[clang::annotate("override@ygui:hbox:constructor")]]
 static struct yetty_ycore_void_result hbox_constructor(struct yetty_yclass_ctx *yclass_ctx,
@@ -32,7 +42,7 @@ static struct yetty_ycore_void_result hbox_constructor(struct yetty_yclass_ctx *
 }
 
 struct [[clang::annotate("class@ygui:hbox")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-hbox_data {
+yetty_ygui_hbox {
     char _empty;
 };
 

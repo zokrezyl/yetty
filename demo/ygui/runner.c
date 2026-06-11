@@ -27,8 +27,6 @@
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
-#include <yetty/yfigure/methods.h> /* process_bytes / reset_content for the caption figure */
-#include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/yshadertoy/figure.h>
@@ -54,12 +52,10 @@
  * reusable, ygui/yui-independent engine. This is the POC integration other
  * apps copy. */
 #include <yetty/ychrome/chrome.h>
-#include <yetty/ychrome/methods.h>
-#include <yetty/ychrome/rpc.h>
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/widgets/button.h>
 #include <yetty/ygui/widgets/label.h>
-#include <yetty/yplatform/methods.h> /* window_manager iconify/toggle_maximize/request_close */
+#include <yetty/yplatform/window-manager.h>
 
 /* Caption-strip height (px) for chrome-enabled demos. The drawn strip and the
  * engine's drag/double-click zone share this value. */
@@ -88,7 +84,7 @@ struct demo_runner {
     struct yetty_yframework *yframework;
     struct yetty_yplatform_memory_pty_pair pty_pair;
     int has_pty_pair;
-    struct yetty_yfigure_container *root_container;
+    struct yetty_yclass_object *root_container;
     struct yetty_yfigure_registry *figure_registry;
     struct yetty_ydraw_composite_factory *composite_factory;
     struct yetty_ywire_wire_statemachine *wire_sm;
@@ -611,7 +607,7 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         struct yetty_yclass_ctx yclass_ctx = {0};
         struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "demo_runner: container_create");
-        r->root_container = yetty_yfigure_container_from(obj_res.value);
+        r->root_container = obj_res.value;
         yetty_yfigure_container_set_context(r->root_container, &ctx);
         yetty_yfigure_container_set_registry(r->root_container, r->figure_registry);
         yetty_yfigure_container_set_rect(r->root_container, root_rect);

@@ -24,7 +24,24 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/ymgui/figure.h> /* YRESULT_DECLARE + create/destroy decl */
+
+/* Shared pipeline lifecycle. The compositor (or any host that owns
+ * multiple ymgui figures) builds one lazily on first ymgui OSC and
+ * hands the borrowed pointer to every figure it creates. The pipeline
+ * must outlive every figure that holds the pointer. The internal layout
+ * (below) is private to the ymgui module — callers treat
+ * `struct yetty_ymgui_pipeline *` as opaque.
+ *
+ * These declarations live in this internal header rather than the
+ * generated public figure.h so that figure.c can consume them without
+ * transitively pulling in its own generated header. */
+struct yetty_ymgui_pipeline;
+YETTY_YRESULT_DECLARE(yetty_ymgui_pipeline_ptr, struct yetty_ymgui_pipeline *);
+
+struct yetty_ymgui_pipeline_ptr_result yetty_ymgui_pipeline_create(
+    const struct yetty_context *context);
+
+struct yetty_ycore_void_result yetty_ymgui_pipeline_destroy(struct yetty_ymgui_pipeline *pipeline);
 
 struct yetty_ymgui_pipeline {
     /* Borrowed from yetty_context. */

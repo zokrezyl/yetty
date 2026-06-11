@@ -16,20 +16,42 @@
 
 #include "../internal.h"
 
-#include <yetty/ygui/mixins/clickable.h>
-
+/* The click callback typedef is header-destined: codegen copies the
+ * `#ifdef YCLASS_CODEGEN` block verbatim into the generated header. The
+ * real build no longer pulls that generated header in, so it gets its own
+ * copy from the separate `#ifndef YCLASS_CODEGEN` block. The two never
+ * coexist in one parse. (They are kept as two independent blocks rather
+ * than one `#ifdef/#else` — the verbatim-block extractor only understands
+ * a plain `#ifdef YCLASS_CODEGEN … #endif`.) */
 #ifdef YCLASS_CODEGEN
 typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_ctx *ctx,
                                                               struct yetty_yclass_object *obj,
                                                               void *userdata);
 #endif
+#ifndef YCLASS_CODEGEN
+typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_ctx *ctx,
+                                                              struct yetty_yclass_object *obj,
+                                                              void *userdata);
+#endif
 
-struct [[clang::annotate("mixin@ygui:clickable")]] clickable_data {
+struct [[clang::annotate("mixin@ygui:clickable")]] yetty_ygui_clickable {
     int pressed;
     float press_x, press_y;
     yetty_ygui_click_cb on_click;
     void *userdata;
 };
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * clickable.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_clickable_data_ptr, struct yetty_ygui_clickable *);
+struct yetty_yclass_ptr_result yetty_ygui_clickable_mixin_get(void);
+struct yetty_ygui_clickable_data_ptr_result yetty_ygui_clickable_data(
+    struct yetty_ygui_object *obj);
 
 [[clang::annotate("override@ygui:clickable:widget_on_press")]]
 static struct yetty_ycore_int_result clickable_on_press(struct yetty_yclass_ctx *yclass_ctx,
@@ -42,7 +64,7 @@ static struct yetty_ycore_int_result clickable_on_press(struct yetty_yclass_ctx 
     struct yetty_ygui_void_ptr_result cd_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_clickable_mixin_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, cd_dr, "clickable_on_press: data_get");
-    struct clickable_data *cd = cd_dr.value;
+    struct yetty_ygui_clickable *cd = cd_dr.value;
     cd->pressed = 1;
     cd->press_x = x;
     cd->press_y = y;
@@ -66,7 +88,7 @@ static struct yetty_ycore_int_result clickable_on_release(struct yetty_yclass_ct
     struct yetty_ygui_void_ptr_result cd_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_clickable_mixin_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, cd_dr, "clickable_on_release: data_get");
-    struct clickable_data *cd = cd_dr.value;
+    struct yetty_ygui_clickable *cd = cd_dr.value;
     int was_pressed = cd->pressed;
     cd->pressed = 0;
     /* Mark dirty BEFORE invoking on_click. The callback is free to
@@ -104,7 +126,7 @@ struct yetty_ycore_void_result yetty_ygui_clickable_on_click_set(struct yetty_yg
     struct yetty_ygui_void_ptr_result cd_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_clickable_mixin_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cd_dr, "yetty_ygui_clickable_on_click_set: data_get");
-    struct clickable_data *cd = cd_dr.value;
+    struct yetty_ygui_clickable *cd = cd_dr.value;
     cd->on_click = cb;
     cd->userdata = userdata;
     return YETTY_OK_VOID();
@@ -119,7 +141,7 @@ struct yetty_ycore_int_result yetty_ygui_clickable_is_pressed(const struct yetty
     struct yetty_ygui_void_ptr_result cd_dr = yetty_ygui_data_get_result(
         (struct yetty_ygui_object *)obj, yetty_ygui_clickable_mixin_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, cd_dr, "yetty_ygui_clickable_is_pressed: data_get");
-    struct clickable_data *cd = cd_dr.value;
+    struct yetty_ygui_clickable *cd = cd_dr.value;
     return YETTY_OK(yetty_ycore_int, cd->pressed);
 }
 
@@ -133,7 +155,7 @@ struct yetty_ycore_void_result yetty_ygui_clickable_press_pos(const struct yetty
     struct yetty_ygui_void_ptr_result cd_dr = yetty_ygui_data_get_result(
         (struct yetty_ygui_object *)obj, yetty_ygui_clickable_mixin_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cd_dr, "yetty_ygui_clickable_press_pos: data_get");
-    struct clickable_data *cd = cd_dr.value;
+    struct yetty_ygui_clickable *cd = cd_dr.value;
     if (x) {
         *x = cd->press_x;
     }

@@ -27,17 +27,35 @@
 #include "internal.h"
 
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ygui/primitive-widget.h>
+#include <yetty/ygui/widget.h>
 #include <yetty/ysdf/funcs.gen.h>
+
+/* This TU deliberately does NOT include its own generated header
+ * `yetty/ygui/primitive-widget.h` — that header is a downstream artifact
+ * for other modules. The parent `widget.h` (pulled in via internal.h) and
+ * the foundational yclass / result / types headers carry everything the
+ * impls need. The class-handle Result wrapper and the obj→slice downcast
+ * the appended primitive-widget.gen.c defines are declared just after the
+ * class struct below; the public primitive-widget.h publishes the
+ * identical declarations for consumers. */
 
 /* Marker data struct — primitive_widget adds no per-instance fields
  * (it's a chrome-widget base), but yclass codegen needs a `class@`
  * annotation to sit on something. The struct's size contributes 1
  * byte to the instance layout, which is harmless. */
 struct [[clang::annotate("class@ygui:primitive_widget")]] [[clang::annotate("parent@ygui:widget")]]
-primitive_widget_data {
+yetty_ygui_primitive_widget {
     char unused;
 };
+
+/* Result wrapper for the primitive_widget data slice + the codegen
+ * downcast/accessor the appended primitive-widget.gen.c defines.
+ * Declared here (not pulled from primitive-widget.h, which this TU does
+ * not include) so the foot include has them in scope. */
+YETTY_YRESULT_DECLARE(yetty_ygui_primitive_widget_data_ptr, struct yetty_ygui_primitive_widget *);
+struct yetty_yclass_ptr_result yetty_ygui_primitive_widget_class_get(void);
+struct yetty_ygui_primitive_widget_data_ptr_result yetty_ygui_primitive_widget_data(
+    struct yetty_ygui_object *obj);
 
 [[clang::annotate("override@ygui:primitive_widget:widget_emit_body")]]
 static struct yetty_ycore_void_result primitive_emit_body(struct yetty_yclass_ctx *yclass_ctx,

@@ -1,7 +1,18 @@
 /* ygui-stepper.c — wizard step indicator. */
 #include "paint-helpers.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * stepper.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_stepper_data_ptr, struct yetty_ygui_stepper *);
+struct yetty_yclass_ptr_result yetty_ygui_stepper_class_get(void);
+struct yetty_ygui_stepper_data_ptr_result yetty_ygui_stepper_data(struct yetty_ygui_object *obj);
 #include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/stepper.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -12,7 +23,7 @@
 #define COLOR_NUM 0xFF14100Bu
 
 struct [[clang::annotate("class@ygui:stepper")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-stepper_data {
+yetty_ygui_stepper {
     char **labels;
     int n;
     int cap;
@@ -32,7 +43,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_stepper_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
-    struct stepper_data *d = d_dr.value;
+    struct yetty_ygui_stepper *d = d_dr.value;
     d->labels = NULL;
     d->n = 0;
     d->cap = 0;
@@ -49,7 +60,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_stepper_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
-    struct stepper_data *d = d_dr.value;
+    struct yetty_ygui_stepper *d = d_dr.value;
     for (int i = 0; i < d->n; i++) {
         free(d->labels[i]);
     }
@@ -71,7 +82,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_stepper_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
-    struct stepper_data *d = d_dr.value;
+    struct yetty_ygui_stepper *d = d_dr.value;
     if (d->n <= 0) {
         return YETTY_OK_VOID();
     }
@@ -115,7 +126,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     return YETTY_OK_VOID();
 }
 
-static int grow(struct stepper_data *d, int n)
+static int grow(struct yetty_ygui_stepper *d, int n)
 {
     if (n <= d->cap) {
         return 1;
@@ -143,7 +154,7 @@ struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_ygui_obj
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_stepper_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_stepper_add_step: data_get");
-    struct stepper_data *d = d_dr.value;
+    struct yetty_ygui_stepper *d = d_dr.value;
     if (!grow(d, d->n + 1)) {
         return YETTY_ERR(yetty_ycore_void, "stepper_add_step: realloc");
     }
@@ -170,7 +181,7 @@ struct yetty_ycore_void_result yetty_ygui_stepper_set_current(struct yetty_ygui_
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_stepper_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_stepper_set_current: data_get");
-    struct stepper_data *d = d_dr.value;
+    struct yetty_ygui_stepper *d = d_dr.value;
     d->current = i;
     return yetty_ygui_object_set_dirty(obj);
 }

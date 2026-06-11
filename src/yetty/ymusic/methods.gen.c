@@ -1,5 +1,6 @@
 /* GENERATED — do not edit. */
 #include "yetty/ymusic/methods.gen.h"
+#include "yetty/ymusic/music.h"
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h> /* container_of */

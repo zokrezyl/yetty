@@ -21,12 +21,9 @@
 #include <yetty/ychrome/host.h>
 
 #include <yetty/ychrome/chrome.h>
-#include <yetty/ychrome/methods.h>
-#include <yetty/ychrome/rpc.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/figure.h>
-#include <yetty/yfigure/methods.h>
 #include <yetty/yfigure/producer.h>
 #include <yetty/yfigure/wire.h>
 #ifdef YETTY_YCHROME_HAS_LOCAL
@@ -141,7 +138,7 @@ static struct yetty_ycore_void_result host_local_load(struct yetty_yclass_object
 
 /* Create a pinned ygrid figure under `container`, load `body` into it, set its
  * z + absolute-coords flag, and add it as `id`. */
-static struct yetty_ygrid_grid_ptr_result host_pin_grid(struct yetty_yfigure_container *container,
+static struct yetty_ygrid_grid_ptr_result host_pin_grid(struct yetty_yclass_object *container_obj,
                                                         const struct yetty_context *ctx,
                                                         struct yetty_yfont_font *font,
                                                         struct yetty_ycore_rectangle rect,
@@ -166,7 +163,7 @@ static struct yetty_ygrid_grid_ptr_result host_pin_grid(struct yetty_yfigure_con
         YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, load_result, "chrome host pin: load");
     }
     struct yetty_ycore_void_result add_result =
-        yetty_yfigure_container_add_child(container, yetty_ygrid_as_figure(grid), id);
+        yetty_yfigure_container_add_child(container_obj, yetty_ygrid_as_figure(grid), id);
     YETTY_RETURN_IF_ERR(yetty_ygrid_grid_ptr, add_result, "chrome host pin: add_child");
     return YETTY_OK(yetty_ygrid_grid_ptr, grid);
 }
@@ -327,11 +324,11 @@ static struct yetty_ychrome_host_ptr_result host_build_fail(struct yetty_ychrome
 
 #ifdef YETTY_YCHROME_HAS_LOCAL
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
-    struct yetty_yfigure_container *container, struct yetty_yfont_font *font,
+    struct yetty_yclass_object *container_obj, struct yetty_yfont_font *font,
     const struct yetty_context *ctx, struct yetty_yclass_object *window_manager, float width,
     float height, float caption_height, float edge_size, unsigned int flags)
 {
-    if (!container) {
+    if (!container_obj) {
         return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host_create: container required");
     }
     struct yetty_ychrome_host_ptr_result alloc_result =
@@ -348,8 +345,9 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
     /* Caption — empty for now; host_caption_refresh paints it with hover state. */
     struct yetty_ycore_rectangle caption_rect = {.min = {0.0f, 0.0f},
                                                  .max = {width, caption_height}};
-    struct yetty_ygrid_grid_ptr_result caption_pin = host_pin_grid(
-        container, ctx, font, caption_rect, NULL, 0, YCHROME_CAPTION_Z, YCHROME_LOCAL_CAPTION_ID);
+    struct yetty_ygrid_grid_ptr_result caption_pin =
+        host_pin_grid(container_obj, ctx, font, caption_rect, NULL, 0, YCHROME_CAPTION_Z,
+                      YCHROME_LOCAL_CAPTION_ID);
     if (YETTY_IS_ERR(caption_pin)) {
         return host_build_fail(host, "ychrome_host_create: caption pin",
                                YETTY_ERR(yetty_ycore_void, "caption pin", caption_pin));

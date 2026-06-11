@@ -36,11 +36,9 @@
 #include <yetty/yshadertoy/figure.h>
 #ifdef YETTY_HAS_YMGUI
 #include <yetty/ymgui/figure.h>
-#include <yetty/ymgui/rpc.h>
 #endif
 #ifndef __EMSCRIPTEN__
 #include <yetty/yrdawn/figure.h>
-#include <yetty/yrdawn/rpc.h>
 #define YETTY_HAS_YRDAWN_SERVER 1
 #endif
 

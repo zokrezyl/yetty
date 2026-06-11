@@ -1,8 +1,18 @@
 /* ygui-ypdf.c — opens a PDF via pdfio, renders to drawable_list. */
 #include "../internal.h"
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * ypdf.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_ypdf_data_ptr, struct yetty_ygui_ypdf *);
+struct yetty_yclass_ptr_result yetty_ygui_ypdf_class_get(void);
+struct yetty_ygui_ypdf_data_ptr_result yetty_ygui_ypdf_data(struct yetty_ygui_object *obj);
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
-#include <yetty/ygui/widgets/ypdf.h>
 #if YETTY_YGUI_HAVE_YPDF
 #include <pdfio.h>
 #include <yetty/ypdf/ypdf.h>
@@ -11,7 +21,7 @@
 /* ypdf adds no ops or state on top of ydraw_embed; the class exists only
  * so callers can name it in yetty_ygui_add. The 1-byte slice is unused. */
 struct [[clang::annotate("class@ygui:ypdf")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
-ypdf_data {
+yetty_ygui_ypdf {
     char unused;
 };
 

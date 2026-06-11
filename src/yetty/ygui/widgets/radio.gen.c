@@ -23,7 +23,7 @@ struct yetty_yclass_ptr_result yetty_ygui_radio_class_get(void)
     static const struct yetty_yclass_descriptor desc = {
         .name = "yetty_ygui_radio",
         .type = YETTY_YCLASS_TYPE_REGULAR,
-        .data_size = sizeof(struct radio_data),
+        .data_size = sizeof(struct yetty_ygui_radio),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_ygui", "constructor", (yetty_yclass_method_id_t)yetty_ygui_constructor,
@@ -69,5 +69,5 @@ struct yetty_ygui_radio_data_ptr_result yetty_ygui_radio_data(struct yetty_ygui_
     if (YETTY_IS_ERR(data_slice_r)) {
         return YETTY_ERR(yetty_ygui_radio_data_ptr, "yetty_ygui_radio_data", data_slice_r);
     }
-    return YETTY_OK(yetty_ygui_radio_data_ptr, (struct radio_data *)data_slice_r.value);
+    return YETTY_OK(yetty_ygui_radio_data_ptr, (struct yetty_ygui_radio *)data_slice_r.value);
 }

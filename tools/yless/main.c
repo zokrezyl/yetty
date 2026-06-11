@@ -20,11 +20,9 @@
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yconfig/config.h> /* read brand colours from the yetty config */
 #include <yetty/ymusic/music.h>   /* yetty_ymusic_* — LilyPond score rendering */
-#include <yetty/ymusic/rpc.h>     /* yetty_ymusic_music_create / _register */
 #include <yetty/yplatform/getopt.h>
 #include <yetty/yplatform/term.h> /* yetty_yplatform_term_get_size */
 #include <yetty/yplatform/tty.h>  /* raw mode + stdin read, cross-platform */
-#include <yetty/yview/rpc.h>      /* yetty_yview_view_create */
 #include <yetty/yview/view.h>     /* yetty_yview_configure / _set_content / _scroll_* / _destroy */
 
 #include <stdbool.h>

@@ -2,8 +2,6 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
-#include "yetty/yvterm/rpc.h"
-#include "yetty/yvterm/methods.h"
 #include <yetty/yclass/class.h>
 #include "yetty/yvterm/grid.h"
 #include "yetty/yvterm/shader-glyph-figure.h"

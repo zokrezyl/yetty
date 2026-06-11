@@ -37,7 +37,7 @@ extern "C" {
 //=============================================================================
 
 struct yetty_ydraw_concrete_factory;
-struct yetty_ydraw_figure;
+struct yetty_ydraw_composite;
 struct yetty_ydraw_target;
 struct yetty_ydraw_gpu_allocator;
 
@@ -64,31 +64,32 @@ struct yetty_ydraw_gpu_allocator;
 //   uniform body is the new scalar, etc.).
 //=============================================================================
 
-struct yetty_ydraw_figure_ops {
+struct yetty_ydraw_composite_ops {
     /* Destroy: tear down GPU resources + free the instance. Called
-     * via yetty_ydraw_figure_destroy(). Must release everything the
+     * via yetty_ydraw_composite_destroy(). Must release everything the
      * figure owns; the caller frees nothing after. */
-    void (*destroy)(struct yetty_ydraw_figure *self);
+    void (*destroy)(struct yetty_ydraw_composite *self);
 
     /* Apply a CMD_UPDATE addressed to this instance. `target_field`
      * is the first u32 of the wire payload; `body`/`body_size` is
      * the rest. NULL on figures that don't accept incremental
      * updates — the scene-canvas drops the wire record silently in
      * that case. */
-    struct yetty_ycore_void_result (*update)(struct yetty_ydraw_figure *self, uint32_t target_field,
-                                             const void *body, size_t body_size);
+    struct yetty_ycore_void_result (*update)(struct yetty_ydraw_composite *self,
+                                             uint32_t target_field, const void *body,
+                                             size_t body_size);
 };
 
 //=============================================================================
 // Instance - per primitive occurrence, stored in grid
 //=============================================================================
 
-struct yetty_ydraw_figure {
+struct yetty_ydraw_composite {
     /* Per-instance vtable. Shared across all instances of one
      * concrete type — pointer to a static const ops table. Method
      * dispatch (update / destroy) goes through here; the factory is
      * out of the runtime path. NULL until create_instance wires it. */
-    const struct yetty_ydraw_figure_ops *ops;
+    const struct yetty_ydraw_composite_ops *ops;
 
     uint32_t type;
     struct yetty_ydraw_concrete_factory *factory; // back-pointer
@@ -114,7 +115,7 @@ struct yetty_ydraw_figure {
      * `listener.handler` at their own dispatcher and register with the
      * event loop (see `factory->event_loop`). The handler recovers the
      * instance pointer with `container_of(l, struct
-     * yetty_ydraw_figure, listener)`. Figures that don't
+     * yetty_ydraw_composite, listener)`. Figures that don't
      * subscribe simply leave the handler NULL — registration is opt-in. */
     struct yetty_yevent_event_listener listener;
 
@@ -123,17 +124,17 @@ struct yetty_ydraw_figure {
      * owns its own resource_set (per-instance uniform/buffer values) and
      * binder (its own GPU uniform_buffer, storage_buffer, bind_group).
      * Both are heap-allocated and owned by the instance — destroyed in
-     * yetty_ydraw_figure_destroy. May be NULL during
+     * yetty_ydraw_composite_destroy. May be NULL during
      * partial initialisation. */
     struct yetty_yrender_gpu_resource_set *resource_set;
     struct yetty_yrender_gpu_resource_binder *binder;
 
     // Render to target at x,y (canvas provides x,y for scrolling)
-    struct yetty_ycore_void_result (*render)(struct yetty_ydraw_figure *self,
+    struct yetty_ycore_void_result (*render)(struct yetty_ydraw_composite *self,
                                              struct yetty_ydraw_target *target, float x, float y);
 };
 
-YETTY_YRESULT_DECLARE(yetty_ydraw_figure_ptr, struct yetty_ydraw_figure *);
+YETTY_YRESULT_DECLARE(yetty_ydraw_composite_ptr, struct yetty_ydraw_composite *);
 
 //=============================================================================
 // Concrete factory interface - one per type (yplot, image, video, etc.)
@@ -168,13 +169,13 @@ struct yetty_ydraw_concrete_factory {
     WGPURenderPipeline (*get_pipeline)(struct yetty_ydraw_concrete_factory *self);
 
     // Create instance from buffer data
-    struct yetty_ydraw_figure_ptr_result (*create_instance)(
+    struct yetty_ydraw_composite_ptr_result (*create_instance)(
         struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
         uint32_t rolling_row);
 
     // Destroy instance
     void (*destroy_instance)(struct yetty_ydraw_concrete_factory *self,
-                             struct yetty_ydraw_figure *instance);
+                             struct yetty_ydraw_composite *instance);
 
     /* Apply a CMD_UPDATE payload to an existing instance. Optional — leave
      * NULL on factories that don't accept incremental updates; the canvas
@@ -184,7 +185,7 @@ struct yetty_ydraw_concrete_factory {
      * [samples × f32]). The instance pointer was previously returned by
      * create_instance — the canvas resolves the wire id to it. */
     struct yetty_ycore_void_result (*update_instance)(struct yetty_ydraw_concrete_factory *self,
-                                                      struct yetty_ydraw_figure *instance,
+                                                      struct yetty_ydraw_composite *instance,
                                                       const void *payload, size_t size);
 
     // Get shared RS (for buffer data access)
@@ -231,12 +232,12 @@ struct yetty_ycore_void_result yetty_ydraw_composite_factory_register(
 
 // Create instance (reads type from buffer_data, dispatches to concrete factory)
 YETTY_ANNOT_CALLER_OWNED
-struct yetty_ydraw_figure_ptr_result yetty_ydraw_composite_factory_create_instance(
+struct yetty_ydraw_composite_ptr_result yetty_ydraw_composite_factory_create_instance(
     struct yetty_ydraw_composite_factory *factory, const void *buffer_data YETTY_ANNOT_ARRAY(size),
     size_t size, uint32_t rolling_row);
 
 // Destroy instance (uses instance->factory back-pointer)
-void yetty_ydraw_figure_destroy(struct yetty_ydraw_figure *instance YETTY_ANNOT_CALLEE_OWNED);
+void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance YETTY_ANNOT_CALLEE_OWNED);
 
 // Fan out visual-zoom state to every registered concrete factory (yplot,
 // yimage, ...). Safe to call with no registrations. Concrete factories that

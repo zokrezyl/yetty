@@ -3,10 +3,22 @@
  */
 
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * statusbar.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_statusbar_data_ptr, struct yetty_ygui_statusbar *);
+struct yetty_yclass_ptr_result yetty_ygui_statusbar_class_get(void);
+struct yetty_ygui_statusbar_data_ptr_result yetty_ygui_statusbar_data(
+    struct yetty_ygui_object *obj);
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/statusbar.h>
 #include <yetty/ysdf/funcs.gen.h>
 
 #include <stdlib.h>
@@ -16,7 +28,7 @@
 #define COLOR_TEXT 0xFFA8A79Fu /* BRAND_TEXT_SECONDARY */
 
 struct [[clang::annotate("class@ygui:statusbar")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] statusbar_data {
+    "parent@ygui:primitive_widget")]] yetty_ygui_statusbar {
     char *left;
     char *right;
 };
@@ -34,7 +46,7 @@ static struct yetty_ycore_void_result statusbar_constructor(struct yetty_yclass_
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_statusbar_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "statusbar_constructor: data_get");
-    struct statusbar_data *d = d_dr.value;
+    struct yetty_ygui_statusbar *d = d_dr.value;
     d->left = NULL;
     d->right = NULL;
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
@@ -53,7 +65,7 @@ static struct yetty_ycore_void_result statusbar_destructor(struct yetty_yclass_c
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_statusbar_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "statusbar_destructor: data_get");
-    struct statusbar_data *d = d_dr.value;
+    struct yetty_ygui_statusbar *d = d_dr.value;
     free(d->left);
     free(d->right);
     d->left = d->right = NULL;
@@ -74,7 +86,7 @@ static struct yetty_ycore_void_result statusbar_paint(struct yetty_yclass_ctx *y
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_statusbar_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "statusbar_paint: data_get");
-    struct statusbar_data *d = d_dr.value;
+    struct yetty_ygui_statusbar *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
@@ -136,7 +148,7 @@ struct yetty_ycore_void_result yetty_ygui_statusbar_set_left(struct yetty_ygui_o
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_statusbar_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_statusbar_set_left: data_get");
-    struct statusbar_data *d = d_dr.value;
+    struct yetty_ygui_statusbar *d = d_dr.value;
     free(d->left);
     d->left = dup_or_null(text);
     if (text && !d->left) {
@@ -155,7 +167,7 @@ struct yetty_ycore_void_result yetty_ygui_statusbar_set_right(struct yetty_ygui_
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_statusbar_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_statusbar_set_right: data_get");
-    struct statusbar_data *d = d_dr.value;
+    struct yetty_ygui_statusbar *d = d_dr.value;
     free(d->right);
     d->right = dup_or_null(text);
     if (text && !d->right) {

@@ -2,8 +2,6 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
-#include "yetty/ygui/rpc.h"
-#include "yetty/ygui/methods.h"
 #include <yetty/yclass/class.h>
 #include "yetty/ygui/mixins/clickable.h"
 #include "yetty/ygui/mixins/draggable.h"

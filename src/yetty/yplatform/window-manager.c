@@ -23,6 +23,14 @@
  * #included at the foot. Every slot is `local@` — the window manager is an
  * in-process object bound to one GLFW window, never proxied over RPC.
  *
+ * This TU deliberately does NOT include its own generated public header
+ * `yetty/yplatform/window-manager.h` — that header is a downstream artifact
+ * for other modules. The foundational types it would pull in (yclass
+ * identity, Result, ycore types) are included directly below, and this TU
+ * declares its own `yetty_yplatform_window_manager_ptr_result` (after the
+ * class struct) plus forward decls for the generated class accessor and the
+ * obj->body downcast the appended window-manager.gen.c defines.
+ *
  * Lifecycle:
  *   yetty_yplatform_register();
  *   obj = yetty_yplatform_window_manager_create(NULL);
@@ -32,12 +40,12 @@
  *   yetty_yplatform_window_manager_destroy(NULL, obj);  // frees cursors + object
  */
 #include <yetty/yclass/class.h>
-#include <yetty/yplatform/window-manager.h>
+#include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
 
 #include <yetty/yevent/event.h>
 #include <yetty/yplatform/move-resize.h>
 #include <yetty/yplatform/platform-input-pipe.h>
-#include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <GLFW/glfw3.h>
@@ -50,7 +58,7 @@
  * drag, not a click, and shouldn't pair into a double-click on the next press. */
 void yetty_yplatform_os_event_invalidate_click_pairing(GLFWwindow *window);
 
-struct [[clang::annotate("class@yplatform:window_manager")]] window_manager_data {
+struct [[clang::annotate("class@yplatform:window_manager")]] yetty_yplatform_window_manager {
     /* All three borrowed — owned by the caller, set via configure(). */
     GLFWwindow *window;
     struct yetty_ycore_xthread_event_pipe *output_pipe;
@@ -84,7 +92,22 @@ struct [[clang::annotate("class@yplatform:window_manager")]] window_manager_data
     int macos_saved_h;
 };
 
-/* Resolve the object's window_manager_data slice, preserving the
+/* Result wrapper for the window-manager handle. Declared here (not pulled
+ * from window-manager.h, which this TU does not include) so the appended
+ * window-manager.gen.c — which defines yetty_yplatform_window_manager_from()
+ * returning it — has the type in scope. The public window-manager.h
+ * publishes the identical declaration for other modules. */
+YETTY_YRESULT_DECLARE(yetty_yplatform_window_manager_ptr, struct yetty_yplatform_window_manager *);
+
+/* Defined in the appended window-manager.gen.c (foot of this TU). Forward-
+ * declared here because this TU does not include its own generated header —
+ * the class accessor and the obj->body downcast are used by the helpers and
+ * the object-keyed slots below. */
+struct yetty_yclass_ptr_result yetty_yplatform_window_manager_class_get(void);
+struct yetty_yplatform_window_manager_ptr_result yetty_yplatform_window_manager_from(
+    struct yetty_yclass_object *obj);
+
+/* Resolve the object's yetty_yplatform_window_manager slice, preserving the
  * class_get / object_data error chain. */
 static struct yetty_yclass_void_ptr_result window_manager_from_obj(struct yetty_yclass_object *obj)
 {
@@ -97,7 +120,8 @@ static struct yetty_yclass_void_ptr_result window_manager_from_obj(struct yetty_
 
 /* Push one typed event to the main thread + wake it up. Best-effort: a full or
  * broken pipe just drops the request (matches the pre-yclass behaviour). */
-static void post_event(struct window_manager_data *manager, const struct yetty_yui_event *event)
+static void post_event(struct yetty_yplatform_window_manager *manager,
+                       const struct yetty_yui_event *event)
 {
     if (!manager->output_pipe) {
         return;
@@ -132,7 +156,7 @@ static struct yetty_ycore_void_result window_manager_configure(
     }
     struct yetty_yclass_void_ptr_result data_r = window_manager_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "window_manager configure: object");
-    struct window_manager_data *manager = data_r.value;
+    struct yetty_yplatform_window_manager *manager = data_r.value;
     manager->window = os_window;
     manager->output_pipe = output_pipe;
     manager->input_pipe = input_pipe;
@@ -150,8 +174,8 @@ static struct yetty_ycore_void_result window_manager_destroy(struct yetty_yclass
     /* Best-effort teardown: even if the slice can't be resolved we still free
      * the object. Stash (not swallow) any resolve error as the first error. */
     struct yetty_yclass_void_ptr_result data_r = window_manager_from_obj(obj);
-    struct window_manager_data *manager =
-        YETTY_IS_OK(data_r) ? (struct window_manager_data *)data_r.value : NULL;
+    struct yetty_yplatform_window_manager *manager =
+        YETTY_IS_OK(data_r) ? (struct yetty_yplatform_window_manager *)data_r.value : NULL;
     struct yetty_ycore_void_result result =
         YETTY_IS_ERR(data_r) ? YETTY_ERR(yetty_ycore_void, "window_manager destroy: object", data_r)
                              : YETTY_OK_VOID();
@@ -344,7 +368,7 @@ static struct yetty_ycore_void_result window_manager_handle_event(
     (void)ctx;
     struct yetty_yclass_void_ptr_result data_r = window_manager_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "window_manager handle_event: object");
-    struct window_manager_data *manager = data_r.value;
+    struct yetty_yplatform_window_manager *manager = data_r.value;
     if (!manager->window || !event) {
         ydebug("window_manager: handle_event window=%p event=%p — skipping",
                (void *)manager->window, (const void *)event);

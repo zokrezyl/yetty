@@ -14,6 +14,7 @@
  */
 
 #include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ygui/mixins/draggable.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/ygui/widgets/tooltip.h>
 

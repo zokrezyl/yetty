@@ -121,25 +121,25 @@ static struct yetty_ydraw_concrete_factory *composite_factory_get(
 // Abstract factory instance creation
 //=============================================================================
 
-struct yetty_ydraw_figure_ptr_result yetty_ydraw_composite_factory_create_instance(
+struct yetty_ydraw_composite_ptr_result yetty_ydraw_composite_factory_create_instance(
     struct yetty_ydraw_composite_factory *factory, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
     if (!factory) {
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "factory is NULL");
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "factory is NULL");
     }
-    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite)) {
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "invalid buffer data");
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite_record)) {
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "invalid buffer data");
     }
 
     // Read type from buffer
-    const struct yetty_ydraw_composite *prim = buffer_data;
-    uint32_t type_id = prim->type;
+    const struct yetty_ydraw_composite_record *prim = buffer_data;
+    uint32_t type_id = prim->header.type;
 
     // Get concrete factory
     struct yetty_ydraw_concrete_factory *concrete = composite_factory_get(factory, type_id);
     if (!concrete) {
-        return YETTY_ERR(yetty_ydraw_figure_ptr, "type not registered");
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "type not registered");
     }
 
     // Delegate to concrete factory
@@ -192,7 +192,7 @@ void yetty_ydraw_composite_factory_set_cell_zoom(struct yetty_ydraw_composite_fa
 // Instance destruction (uses back-pointer)
 //=============================================================================
 
-void yetty_ydraw_figure_destroy(struct yetty_ydraw_figure *instance)
+void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance)
 {
     if (!instance) {
         return;

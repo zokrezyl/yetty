@@ -26,7 +26,7 @@ struct yetty_yclass_ptr_result yetty_ygui_textinput_class_get(void)
     static const struct yetty_yclass_descriptor desc = {
         .name = "yetty_ygui_textinput",
         .type = YETTY_YCLASS_TYPE_REGULAR,
-        .data_size = sizeof(struct textinput_data),
+        .data_size = sizeof(struct yetty_ygui_textinput),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_ygui", "constructor", (yetty_yclass_method_id_t)yetty_ygui_constructor,
@@ -75,5 +75,6 @@ struct yetty_ygui_textinput_data_ptr_result yetty_ygui_textinput_data(struct yet
     if (YETTY_IS_ERR(data_slice_r)) {
         return YETTY_ERR(yetty_ygui_textinput_data_ptr, "yetty_ygui_textinput_data", data_slice_r);
     }
-    return YETTY_OK(yetty_ygui_textinput_data_ptr, (struct textinput_data *)data_slice_r.value);
+    return YETTY_OK(yetty_ygui_textinput_data_ptr,
+                    (struct yetty_ygui_textinput *)data_slice_r.value);
 }

@@ -61,7 +61,7 @@ yetty_ydraw_drawable_list_registry_create_default(void)
 
     // Complex prim handler (types >= 0x80000000)
     struct yetty_ycore_void_result r_complex = yetty_ydraw_drawable_list_registry_add(
-        reg, YETTY_YDRAW_COMPOSITE_TYPE_BASE, 0xFFFFFFFF, yetty_ydraw_composite_handler);
+        reg, YETTY_YDRAW_COMPOSITE_TYPE_BASE, 0xFFFFFFFF, yetty_ydraw_composite_record_handler);
     if (YETTY_IS_ERR(r_complex)) {
         yetty_ydraw_drawable_list_registry_destroy(reg);
         return YETTY_ERR(yetty_ydraw_drawable_list_registry_ptr,

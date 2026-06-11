@@ -13,17 +13,28 @@
  */
 
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * yimage.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_yimage_data_ptr, struct yetty_ygui_yimage *);
+struct yetty_yclass_ptr_result yetty_ygui_yimage_class_get(void);
+struct yetty_ygui_yimage_data_ptr_result yetty_ygui_yimage_data(struct yetty_ygui_object *obj);
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfigure/wire.h>
-#include <yetty/ygui/widgets/yimage.h>
 #include <yetty/yimage/yimage.h>
 #include <stdlib.h>
 #include <string.h>
 
 struct [[clang::annotate("class@ygui:yimage")]] [[clang::annotate("parent@ygui:widget")]]
-yimage_data {
+yetty_ygui_yimage {
     uint8_t *bytes;
     size_t len;
 };
@@ -40,7 +51,7 @@ static struct yetty_ycore_void_result yimage_constructor(struct yetty_yclass_ctx
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yimage_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yimage_constructor: data_get");
-    struct yimage_data *d = d_dr.value;
+    struct yetty_ygui_yimage *d = d_dr.value;
     d->bytes = NULL;
     d->len = 0;
     return YETTY_OK_VOID();
@@ -55,7 +66,7 @@ static struct yetty_ycore_void_result yimage_destructor(struct yetty_yclass_ctx 
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yimage_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yimage_destructor: data_get");
-    struct yimage_data *d = d_dr.value;
+    struct yetty_ygui_yimage *d = d_dr.value;
     free(d->bytes);
     d->bytes = NULL;
     d->len = 0;
@@ -90,7 +101,7 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yimage_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yimage_emit_body: data_get");
-    struct yimage_data *d = d_dr.value;
+    struct yetty_ygui_yimage *d = d_dr.value;
     if (!d->bytes || d->len == 0) {
         /* Nothing to ship — figure stays alive at its current rect
          * with empty content. */
@@ -181,7 +192,7 @@ struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_ygui_obj
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yimage_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_yimage_set_bytes: data_get");
-    struct yimage_data *d = d_dr.value;
+    struct yetty_ygui_yimage *d = d_dr.value;
     free(d->bytes);
     d->bytes = NULL;
     d->len = 0;
@@ -206,7 +217,7 @@ struct yetty_ycore_const_uint8_ptr_result yetty_ygui_yimage_bytes(
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
         (struct yetty_ygui_object *)obj, yetty_ygui_yimage_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_uint8_ptr, d_dr, "yetty_ygui_yimage_bytes: data_get");
-    struct yimage_data *d = d_dr.value;
+    struct yetty_ygui_yimage *d = d_dr.value;
     return YETTY_OK(yetty_ycore_const_uint8_ptr, d->bytes);
 }
 
@@ -219,7 +230,7 @@ struct yetty_ycore_size_result yetty_ygui_yimage_bytes_len(const struct yetty_yg
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
         (struct yetty_ygui_object *)obj, yetty_ygui_yimage_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_size, d_dr, "yetty_ygui_yimage_bytes_len: data_get");
-    struct yimage_data *d = d_dr.value;
+    struct yetty_ygui_yimage *d = d_dr.value;
     return YETTY_OK(yetty_ycore_size, d->len);
 }
 

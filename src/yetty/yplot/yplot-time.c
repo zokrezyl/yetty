@@ -137,8 +137,8 @@ static struct yetty_ycore_int_result on_tick(struct yetty_yevent_event_listener 
                                              const struct yetty_yui_event *event)
 {
     (void)event;
-    struct yetty_ydraw_figure *instance =
-        container_of(listener, struct yetty_ydraw_figure, listener);
+    struct yetty_ydraw_composite *instance =
+        container_of(listener, struct yetty_ydraw_composite, listener);
     if (!instance || !instance->resource_set || !instance->factory ||
         !instance->factory->event_loop) {
         return YETTY_OK(yetty_ycore_int, 0);
@@ -168,7 +168,7 @@ static struct yetty_ycore_int_result on_tick(struct yetty_yevent_event_listener 
  * Public attach / detach — called from yplot's create / destroy.
  *-------------------------------------------------------------------------*/
 
-struct yetty_ycore_void_result yetty_yplot_time_attach(struct yetty_ydraw_figure *instance)
+struct yetty_ycore_void_result yetty_yplot_time_attach(struct yetty_ydraw_composite *instance)
 {
     if (!instance || !instance->buffer_data || !instance->factory) {
         return YETTY_OK_VOID();
@@ -203,7 +203,7 @@ struct yetty_ycore_void_result yetty_yplot_time_attach(struct yetty_ydraw_figure
     return YETTY_OK_VOID();
 }
 
-void yetty_yplot_time_detach(struct yetty_ydraw_figure *instance)
+void yetty_yplot_time_detach(struct yetty_ydraw_composite *instance)
 {
     if (!instance) {
         return;

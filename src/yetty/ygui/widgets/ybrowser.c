@@ -5,8 +5,20 @@
  * bytes; the next emit triggers a render and feeds the buffer into the
  * ydraw_embed base. Cached (w, h) gates re-renders. */
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * ybrowser.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_ybrowser_data_ptr, struct yetty_ygui_ybrowser *);
+struct yetty_yclass_ptr_result yetty_ygui_ybrowser_class_get(void);
+struct yetty_ygui_ybrowser_data_ptr_result yetty_ygui_ybrowser_data(struct yetty_ygui_object *obj);
+#include <yetty/ygui/primitive-widget.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/ygui/widgets/ybrowser.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
 #if YETTY_YGUI_HAVE_YBROWSER
 #include <yetty/ybrowser/ybrowser.h>
@@ -16,7 +28,7 @@
 #include <string.h>
 
 struct [[clang::annotate("class@ygui:ybrowser")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
-ybrowser_data {
+yetty_ygui_ybrowser {
     char *html;
     size_t html_len;
     float rendered_w;
@@ -36,7 +48,7 @@ static struct yetty_ycore_void_result ybr_constructor(struct yetty_yclass_ctx *y
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ybrowser_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ybr_constructor: data_get");
-    struct ybrowser_data *d = d_dr.value;
+    struct yetty_ygui_ybrowser *d = d_dr.value;
     d->html = NULL;
     d->html_len = 0;
     d->rendered_w = 0.0f;
@@ -53,7 +65,7 @@ static struct yetty_ycore_void_result ybr_destructor(struct yetty_yclass_ctx *yc
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ybrowser_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ybr_destructor: data_get");
-    struct ybrowser_data *d = d_dr.value;
+    struct yetty_ygui_ybrowser *d = d_dr.value;
     free(d->html);
     d->html = NULL;
     return yetty_ygui_super_void(obj, yetty_ygui_ybrowser_class_get().value,
@@ -78,7 +90,7 @@ static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_ctx *yclass
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ybrowser_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ybr_render: data_get");
-    struct ybrowser_data *d = d_dr.value;
+    struct yetty_ygui_ybrowser *d = d_dr.value;
     if (!d->html || d->html_len == 0) {
         return YETTY_OK_VOID();
     }
@@ -127,7 +139,7 @@ static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_ctx *ycl
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ybrowser_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ybr_emit_body: data_get");
-    struct ybrowser_data *d = d_dr.value;
+    struct yetty_ygui_ybrowser *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
@@ -161,7 +173,7 @@ struct yetty_ycore_void_result yetty_ygui_ybrowser_set_html(struct yetty_ygui_ob
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_ybrowser_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_ybrowser_set_html: data_get");
-    struct ybrowser_data *d = d_dr.value;
+    struct yetty_ygui_ybrowser *d = d_dr.value;
     char *buf = malloc(len);
     if (len > 0 && !buf) {
         return YETTY_ERR(yetty_ycore_void, "ybrowser_set_html: malloc");

@@ -7,10 +7,21 @@
  */
 
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * slider.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_slider_data_ptr, struct yetty_ygui_slider *);
+struct yetty_yclass_ptr_result yetty_ygui_slider_class_get(void);
+struct yetty_ygui_slider_data_ptr_result yetty_ygui_slider_data(struct yetty_ygui_object *obj);
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/slider.h>
 #include <yetty/ysdf/funcs.gen.h>
 
 #define COLOR_TRACK 0xFF2C261Eu
@@ -18,7 +29,7 @@
 #define COLOR_THUMB 0xFFE4E5E0u
 
 struct [[clang::annotate("class@ygui:slider")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-slider_data {
+yetty_ygui_slider {
     float min_val;
     float max_val;
     float value;
@@ -36,7 +47,7 @@ static struct yetty_ycore_void_result slider_constructor(struct yetty_yclass_ctx
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_slider_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "slider_constructor: data_get");
-    struct slider_data *d = d_dr.value;
+    struct yetty_ygui_slider *d = d_dr.value;
     d->min_val = 0.0f;
     d->max_val = 1.0f;
     d->value = 0.0f;
@@ -106,7 +117,7 @@ static struct yetty_ycore_void_result slider_paint(struct yetty_yclass_ctx *ycla
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_slider_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "slider_paint: data_get");
-    struct slider_data *d = d_dr.value;
+    struct yetty_ygui_slider *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
@@ -152,7 +163,7 @@ static struct yetty_ycore_int_result slider_on_press(struct yetty_yclass_ctx *yc
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_slider_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "slider_on_press: data_get");
-    struct slider_data *d = d_dr.value;
+    struct yetty_ygui_slider *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;
     if (w <= 0.0f) {
@@ -210,7 +221,7 @@ struct yetty_ycore_void_result yetty_ygui_slider_set_range(struct yetty_ygui_obj
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_slider_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_slider_set_range: data_get");
-    struct slider_data *d = d_dr.value;
+    struct yetty_ygui_slider *d = d_dr.value;
     d->min_val = min;
     d->max_val = max;
     d->value = clampf(d->value, min, max);
@@ -227,7 +238,7 @@ struct yetty_ycore_void_result yetty_ygui_slider_set_value(struct yetty_ygui_obj
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_slider_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_slider_set_value: data_get");
-    struct slider_data *d = d_dr.value;
+    struct yetty_ygui_slider *d = d_dr.value;
     d->value = clampf(value, d->min_val, d->max_val);
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -241,7 +252,7 @@ struct yetty_ycore_float_result yetty_ygui_slider_get_value(const struct yetty_y
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
         (struct yetty_ygui_object *)obj, yetty_ygui_slider_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_float, d_dr, "yetty_ygui_slider_get_value: data_get");
-    struct slider_data *d = d_dr.value;
+    struct yetty_ygui_slider *d = d_dr.value;
     return YETTY_OK(yetty_ycore_float, d->value);
 }
 

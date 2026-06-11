@@ -8,11 +8,34 @@
  */
 
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * yplot.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_yplot_data_ptr, struct yetty_ygui_yplot *);
+struct yetty_yclass_ptr_result yetty_ygui_yplot_class_get(void);
+struct yetty_ygui_yplot_data_ptr_result yetty_ygui_yplot_data(struct yetty_ygui_object *obj);
+/* Real-build copy of the header-destined config struct. Codegen reads the
+ * `#ifdef YCLASS_CODEGEN` block at the foot (copied verbatim into the
+ * generated header); the two never coexist in one parse. */
+#ifndef YCLASS_CODEGEN
+struct yetty_ygui_yplot_config {
+    float x_min;
+    float x_max;
+    float y_min;
+    float y_max;
+    uint32_t flags;
+};
+#endif
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfigure/wire.h>
-#include <yetty/ygui/widgets/yplot.h>
 #include <yetty/yplot/yplot.h>
 
 #include <stdlib.h>
@@ -26,7 +49,7 @@ struct yplot_buf_slot {
 };
 
 struct [[clang::annotate("class@ygui:yplot")]] [[clang::annotate("parent@ygui:widget")]]
-yplot_data {
+yetty_ygui_yplot {
     char *source;
     size_t source_len;
     struct yetty_ygui_yplot_config cfg;
@@ -38,7 +61,7 @@ yplot_data {
     size_t buffer_count;
 };
 
-static void yplot_free_buffers(struct yplot_data *d)
+static void yplot_free_buffers(struct yetty_ygui_yplot *d)
 {
     if (d->buffers) {
         for (size_t i = 0; i < d->buffer_count; i++) {
@@ -62,7 +85,7 @@ static struct yetty_ycore_void_result yplot_constructor(struct yetty_yclass_ctx 
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yplot_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yplot_constructor: data_get");
-    struct yplot_data *d = d_dr.value;
+    struct yetty_ygui_yplot *d = d_dr.value;
     d->source = NULL;
     d->source_len = 0;
     d->has_cfg = 0;
@@ -80,7 +103,7 @@ static struct yetty_ycore_void_result yplot_destructor(struct yetty_yclass_ctx *
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yplot_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yplot_destructor: data_get");
-    struct yplot_data *d = d_dr.value;
+    struct yetty_ygui_yplot *d = d_dr.value;
     free(d->source);
     d->source = NULL;
     yplot_free_buffers(d);
@@ -111,7 +134,7 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *y
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yplot_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yplot_emit_body: data_get");
-    struct yplot_data *d = d_dr.value;
+    struct yetty_ygui_yplot *d = d_dr.value;
     int have_source = d->source && d->source_len > 0;
     int have_buffers = d->buffers && d->buffer_count > 0;
     if (!have_source && !have_buffers) {
@@ -221,7 +244,7 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_ygui_obj
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yplot_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_yplot_set_source: data_get");
-    struct yplot_data *d = d_dr.value;
+    struct yetty_ygui_yplot *d = d_dr.value;
     free(d->source);
     d->source = NULL;
     d->source_len = 0;
@@ -247,7 +270,7 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_config(
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yplot_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_yplot_set_config: data_get");
-    struct yplot_data *d = d_dr.value;
+    struct yetty_ygui_yplot *d = d_dr.value;
     if (cfg) {
         d->cfg = *cfg;
         d->has_cfg = 1;
@@ -269,7 +292,7 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_buffers(
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yplot_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_yplot_set_buffers: data_get");
-    struct yplot_data *d = d_dr.value;
+    struct yetty_ygui_yplot *d = d_dr.value;
 
     /* Replace the expression source (NULL clears it — buffer-only plot). */
     free(d->source);

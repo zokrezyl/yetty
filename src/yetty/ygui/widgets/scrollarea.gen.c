@@ -24,7 +24,7 @@ struct yetty_yclass_ptr_result yetty_ygui_scrollarea_class_get(void)
     static const struct yetty_yclass_descriptor desc = {
         .name = "yetty_ygui_scrollarea",
         .type = YETTY_YCLASS_TYPE_REGULAR,
-        .data_size = sizeof(struct scrollarea_data),
+        .data_size = sizeof(struct yetty_ygui_scrollarea),
     };
     static const struct yetty_yclass_op ops[] = {
         {"yetty_ygui", "widget_on_scroll", (yetty_yclass_method_id_t)yetty_ygui_widget_on_scroll,
@@ -76,5 +76,6 @@ struct yetty_ygui_scrollarea_data_ptr_result yetty_ygui_scrollarea_data(
         return YETTY_ERR(yetty_ygui_scrollarea_data_ptr, "yetty_ygui_scrollarea_data",
                          data_slice_r);
     }
-    return YETTY_OK(yetty_ygui_scrollarea_data_ptr, (struct scrollarea_data *)data_slice_r.value);
+    return YETTY_OK(yetty_ygui_scrollarea_data_ptr,
+                    (struct yetty_ygui_scrollarea *)data_slice_r.value);
 }

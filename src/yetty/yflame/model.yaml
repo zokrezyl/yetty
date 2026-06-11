@@ -117,7 +117,7 @@ classes:
     source_file: src/yetty/yflame/flame.c
     parent: null
     mixins: []
-    data: struct flame_data
+    data: struct yetty_yflame_flame
     data_fields:
       - name: width
         type: float
@@ -193,7 +193,11 @@ classes:
         impl: flame_obj_destroy
 exposed:
   - source_file: src/yetty/yflame/flame.c
-    verbatim: "/* Public flags — copied verbatim into the generated flame.h. */
+    verbatim: "/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
+ * generated flame.h (and the dispatch TU that includes it) needs the complete
+ * type — pull its defining header into the public header. */
+#include <yetty/ydraw-core/drawable-list.h>
+/* Public flags — copied verbatim into the generated flame.h. */
 #define YETTY_YFLAME_FLAG_LABELS 0x1u /* draw truncated frame-name labels */
 #define YETTY_YFLAME_FLAG_ICICLE 0x2u /* root at top, growing down (vs flame: bottom-up) */
 /* hit_test returns these (in place of a node id) when a navigation button is

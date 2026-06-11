@@ -1,15 +1,26 @@
 /* ygui-chip.c — pill label. */
 #include "paint-helpers.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * chip.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_chip_data_ptr, struct yetty_ygui_chip *);
+struct yetty_yclass_ptr_result yetty_ygui_chip_class_get(void);
+struct yetty_ygui_chip_data_ptr_result yetty_ygui_chip_data(struct yetty_ygui_object *obj);
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/chip.h>
 #include <stdlib.h>
 
 #define COLOR_BG 0xFF2C261Eu
 #define COLOR_TEXT 0xFFE4E5E0u
 
 struct [[clang::annotate("class@ygui:chip")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]] chip_data {
+    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]] yetty_ygui_chip {
     char *label;
     int closable;
 };
@@ -26,7 +37,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_chip_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
-    struct chip_data *d = d_dr.value;
+    struct yetty_ygui_chip *d = d_dr.value;
     d->label = NULL;
     d->closable = 0;
     return YETTY_OK_VOID();
@@ -41,7 +52,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_chip_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
-    struct chip_data *d = d_dr.value;
+    struct yetty_ygui_chip *d = d_dr.value;
     free(d->label);
     return yetty_ygui_super_void(obj, yetty_ygui_chip_class_get().value,
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
@@ -60,7 +71,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_chip_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
-    struct chip_data *d = d_dr.value;
+    struct yetty_ygui_chip *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {
@@ -96,7 +107,7 @@ struct yetty_ycore_void_result yetty_ygui_chip_set_label(struct yetty_ygui_objec
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_chip_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_chip_set_label: data_get");
-    struct chip_data *d = d_dr.value;
+    struct yetty_ygui_chip *d = d_dr.value;
     free(d->label);
     d->label = NULL;
     if (label) {
@@ -119,7 +130,7 @@ struct yetty_ycore_void_result yetty_ygui_chip_set_closable(struct yetty_ygui_ob
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_chip_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_chip_set_closable: data_get");
-    struct chip_data *d = d_dr.value;
+    struct yetty_ygui_chip *d = d_dr.value;
     d->closable = c ? 1 : 0;
     return yetty_ygui_object_set_dirty(obj);
 }

@@ -35,6 +35,14 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yfigure/figure.h>
+/* The generated per-class header publishes the canonical class accessor,
+ * the opaque `struct yetty_ygrid_grid` forward decl, and the
+ * `YETTY_YRESULT_DECLARE(yetty_ygrid_grid_ptr, …)` wrapper this header's
+ * own declarations return. Pull it in so the result type has a single
+ * definition shared by every consumer — this header no longer declares
+ * its own (which would redefine the struct in any TU that included
+ * both). */
+#include <yetty/ygrid/grid.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -86,8 +94,6 @@ struct yetty_ycore_void_result yetty_ygrid_register_factory_for_kind(
  * the factory and are rendered alongside the SDF / glyph pass. */
 void yetty_ygrid_set_composite_factory(struct yetty_ygrid_grid *grid,
                                        struct yetty_ydraw_composite_factory *factory);
-
-YETTY_YRESULT_DECLARE(yetty_ygrid_grid_ptr, struct yetty_ygrid_grid *);
 
 /* Create an empty ygrid figure with the given AABB in absolute target
  * pixel space. The grid cell layout (cols × rows) controls how the GPU

@@ -10,7 +10,8 @@
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ydraw/cell-ref-table.h>
-#include <yetty/yfigure/methods.h>
+#include <yetty/yfigure/container.h>
+#include <yetty/yfigure/figure.h>
 #include <yetty/yvterm/ydraw-content.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
@@ -188,8 +189,9 @@ struct yetty_yvterm_text_layer {
     /* Shader-glyph figure — animated procedural glyphs at PUA-B cells. It
      * reads this layer's cell buffer, so the text-layer owns its creation +
      * management (resize / visual-zoom). The terminal attaches it to the root
-     * container, which renders it and owns its destroy (cascade). */
-    struct yetty_yvterm_shader_glyph_figure *shader_glyph_figure;
+     * container, which renders it and owns its destroy (cascade). Stored as
+     * the yclass object handle; the shader-glyph API is keyed by object. */
+    struct yetty_yclass_object *shader_glyph_figure;
 
     /* Scrollback view (tmux-style copy mode). When active, the GPU buffer
      * is built by stitching sb_lines + live screen so the user sees a
@@ -482,7 +484,7 @@ static struct yetty_ycore_void_result text_layer_set_visual_zoom(
 
     /* Mirror the zoom onto the owned shader-glyph figure (outside layers[]). */
     if (text_layer->shader_glyph_figure) {
-        struct yetty_ycore_void_result vr = yetty_yvterm_shader_glyph_figure_set_visual_zoom(
+        struct yetty_ycore_void_result vr = yetty_yvterm_shader_glyph_set_visual_zoom(
             text_layer->shader_glyph_figure, scale, off_x, off_y);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, vr,
                             "text_layer_set_visual_zoom: shader_glyph figure zoom");
@@ -782,7 +784,7 @@ static struct yetty_yclass_object *text_layer_sgf_object(struct yetty_yvterm_tex
         return NULL;
     }
     struct yetty_yfigure_figure *base =
-        yetty_yvterm_shader_glyph_figure_as_figure(text_layer->shader_glyph_figure);
+        yetty_yvterm_shader_glyph_as_figure(text_layer->shader_glyph_figure);
     return (struct yetty_yclass_object *)base - 1;
 }
 
@@ -982,11 +984,10 @@ struct yetty_yterminal_layer_result yetty_yvterm_text_layer_create(
             .max = {.x = (float)cols * text_layer->base.cell_size.width,
                     .y = (float)rows * text_layer->base.cell_size.height},
         };
-        struct yetty_yvterm_shader_glyph_figure_ptr_result sgf_res =
-            yetty_yvterm_shader_glyph_figure_create(
-                sgf_rect, cols, rows, text_layer->base.cell_size.width,
-                text_layer->base.cell_size.height, &text_layer->base, context, request_render_fn,
-                request_render_userdata);
+        struct yetty_yclass_object_ptr_result sgf_res = yetty_yvterm_shader_glyph_figure_create(
+            sgf_rect, cols, rows, text_layer->base.cell_size.width,
+            text_layer->base.cell_size.height, &text_layer->base, context, request_render_fn,
+            request_render_userdata);
         YETTY_RETURN_IF_ERR(yetty_yterminal_layer, sgf_res,
                             "text_layer_create: shader_glyph figure create failed");
         text_layer->shader_glyph_figure = sgf_res.value;
@@ -1091,8 +1092,8 @@ static struct yetty_ycore_void_result text_layer_resize_grid(
     /* Keep the owned shader-glyph figure tracking the grid (it's outside
      * layers[], so it never sees the resize broadcast on its own). */
     if (text_layer->shader_glyph_figure) {
-        struct yetty_ycore_void_result sgr = yetty_yvterm_shader_glyph_figure_resize(
-            text_layer->shader_glyph_figure, grid_size, cell_size);
+        struct yetty_ycore_void_result sgr =
+            yetty_yvterm_shader_glyph_resize(text_layer->shader_glyph_figure, grid_size, cell_size);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sgr,
                             "text_layer_resize_grid: shader_glyph figure resize");
     }

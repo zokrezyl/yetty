@@ -85,7 +85,7 @@ classes:
     source_file: src/yetty/ychrome/chrome.c
     parent: null
     mixins: []
-    data: struct chrome_data
+    data: struct yetty_ychrome_chrome
     data_fields:
       - name: window_manager
         type: "struct yetty_yclass_object *"
@@ -200,7 +200,11 @@ classes:
         impl: chrome_handle_event
 exposed:
   - source_file: src/yetty/ychrome/chrome.c
-    verbatim: "/* Feature flags for configure(). OR them together; FLAG_ALL enables the lot.
+    verbatim: "/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
+ * generated chrome.h (and the dispatch TU that includes it) needs the complete
+ * type — pull its defining header into the public header. */
+#include <yetty/ydraw-core/drawable-list.h>
+/* Feature flags for configure(). OR them together; FLAG_ALL enables the lot.
  * Copied verbatim into the generated chrome.h. */
 #define YETTY_YCHROME_FLAG_DRAG 0x1u     /* caption drag moves the window      */
 #define YETTY_YCHROME_FLAG_RESIZE 0x2u   /* right/bottom edges resize          */

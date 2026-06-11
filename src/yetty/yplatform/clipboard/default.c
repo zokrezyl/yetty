@@ -21,7 +21,7 @@
  * doesn't handle, so other producers can share the same pipe. */
 
 #include <yetty/yplatform/clipboard-manager.h>
-#include <yetty/yplatform/methods.h> /* yetty_yplatform_window_manager_handle_event */
+#include <yetty/yplatform/window-manager.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yevent/event.h>
 #include <yetty/ycore/types.h>

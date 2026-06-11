@@ -44,10 +44,14 @@ extern "C" {
 //=============================================================================
 // Composite header (FAM wire format)
 //=============================================================================
-
-struct yetty_ydraw_composite {
+//
+struct yetty_ydraw_composite_header {
     uint32_t type;
     uint32_t payload_size;
+};
+
+struct yetty_ydraw_composite_record {
+    struct yetty_ydraw_composite_header header;
     uint8_t data[];
 };
 
@@ -55,7 +59,7 @@ struct yetty_ydraw_composite {
 bool yetty_ydraw_is_composite(uint32_t type);
 
 // Get AABB (reads bounds from standard offset 0-15 in payload)
-struct rectangle_result yetty_ydraw_composite_aabb(const void *data);
+struct rectangle_result yetty_ydraw_composite_record_aabb(const void *data);
 
 //=============================================================================
 // Base ops for composites (for drawable-list registry)
@@ -65,7 +69,7 @@ struct rectangle_result yetty_ydraw_composite_aabb(const void *data);
 #include <yetty/ydraw-core/drawable-list-registry.h>
 
 // Handler for complex prim types (>= 0x80000000)
-struct yetty_ydraw_drawable_list_entry_ops_ptr_result yetty_ydraw_composite_handler(
+struct yetty_ydraw_drawable_list_entry_ops_ptr_result yetty_ydraw_composite_record_handler(
     uint32_t drawable_type);
 
 #ifdef __cplusplus

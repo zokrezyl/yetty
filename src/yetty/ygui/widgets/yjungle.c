@@ -7,14 +7,26 @@
  * after every emit so the framework keeps re-emitting — that animates the
  * growing chain. */
 #include "../internal.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * yjungle.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_yjungle_data_ptr, struct yetty_ygui_yjungle *);
+struct yetty_yclass_ptr_result yetty_ygui_yjungle_class_get(void);
+struct yetty_ygui_yjungle_data_ptr_result yetty_ygui_yjungle_data(struct yetty_ygui_object *obj);
+#include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/ydraw_embed.h>
-#include <yetty/ygui/widgets/yjungle.h>
 #include <yetty/yjungle/yjungle.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yplatform/time.h>
 
 struct [[clang::annotate("class@ygui:yjungle")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
-yjungle_data {
+yetty_ygui_yjungle {
     struct yetty_yjungle *jungle;
     double start_time;
     float scene_w;
@@ -34,7 +46,7 @@ static struct yetty_ycore_void_result yjungle_ctor(struct yetty_yclass_ctx *ycla
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yjungle_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yjungle_ctor: data_get");
-    struct yjungle_data *d = d_dr.value;
+    struct yetty_ygui_yjungle *d = d_dr.value;
 
     struct yetty_yjungle_config cfg = yetty_yjungle_config_default();
     struct yetty_yjungle_ptr_result jr = yetty_yjungle_create(&cfg, 0);
@@ -55,7 +67,7 @@ static struct yetty_ycore_void_result yjungle_dtor(struct yetty_yclass_ctx *ycla
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yjungle_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yjungle_dtor: data_get");
-    struct yjungle_data *d = d_dr.value;
+    struct yetty_ygui_yjungle *d = d_dr.value;
     yetty_yjungle_destroy(d->jungle);
     d->jungle = NULL;
     return yetty_ygui_super_void(obj, yetty_ygui_yjungle_class_get().value,
@@ -72,7 +84,7 @@ static struct yetty_ycore_void_result yjungle_emit_body(struct yetty_yclass_ctx 
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_yjungle_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yjungle_emit_body: data_get");
-    struct yjungle_data *d = d_dr.value;
+    struct yetty_ygui_yjungle *d = d_dr.value;
 
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x;

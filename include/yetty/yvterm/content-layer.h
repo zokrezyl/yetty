@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yterminal/terminal.h>
+#include <yetty/yvterm/grid.h>
 #include <yetty/ywire/wire-statemachine.h>
 
 #ifdef __cplusplus
@@ -59,21 +60,22 @@ void yetty_yvterm_content_layer_set_clear_hook(struct yetty_yrender_terminal_lay
  * _create (the terminal still owns and destroys it).
  *
  * `yetty_yvterm_grid` is a yclass figure (class@yvterm:grid,
- * parent@yfigure:figure); `grid.h` (generated) carries its class accessor. */
-struct yetty_yvterm_grid;
-YETTY_YRESULT_DECLARE(yetty_yvterm_grid_ptr, struct yetty_yvterm_grid *);
+ * parent@yfigure:figure); `grid.h` (generated, included above) carries its
+ * class accessor and the yetty_yvterm_grid_ptr_result downcast type. */
 
 /* Wrap an already-created content layer as the grid figure. `rect` is the
- * figure's pixel space in the root container — (0,0)-(cols*cw, rows*ch). */
-struct yetty_yvterm_grid_ptr_result yetty_yvterm_grid_figure_create(
+ * figure's pixel space in the root container — (0,0)-(cols*cw, rows*ch).
+ * Returns the yclass object handle; route it through the helpers below. */
+struct yetty_yclass_object_ptr_result yetty_yvterm_grid_figure_create(
     struct yetty_yrender_terminal_layer *content, struct yetty_ycore_rectangle rect);
 
-/* Upcast to the figure base (stable pointer) for add_child / render. */
-struct yetty_yfigure_figure *yetty_yvterm_grid_as_figure(struct yetty_yvterm_grid *grid);
+/* Upcast the grid object to the figure base (stable pointer) for add_child /
+ * render. */
+struct yetty_yfigure_figure *yetty_yvterm_grid_as_figure(struct yetty_yclass_object *obj);
 
 /* Borrow the owned content layer (for the terminal's direct scroll / selection
- * / anchor / resize calls during the transition). */
-struct yetty_yrender_terminal_layer *yetty_yvterm_grid_content(struct yetty_yvterm_grid *grid);
+ * / anchor / resize calls during the transition). Takes the grid object. */
+struct yetty_yrender_terminal_layer *yetty_yvterm_grid_content(struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }

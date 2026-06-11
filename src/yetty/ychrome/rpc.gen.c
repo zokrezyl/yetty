@@ -2,8 +2,6 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
-#include "yetty/ychrome/rpc.h"
-#include "yetty/ychrome/methods.h"
 #include <yetty/yclass/class.h>
 #include "yetty/ychrome/chrome.h"
 #include <stdbool.h>

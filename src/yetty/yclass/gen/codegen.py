@@ -995,6 +995,32 @@ def default_return_for(ret: str) -> str:
     return f"({ret}){{0}}"
 
 
+def validate_class(c: dict):
+    """A class's data struct tag must be exactly `yetty_<domain>_<class>` —
+    the same identity its `class@<domain>:<class>` annotation declares. The
+    redundancy is intentional (the tag reads naturally in the .c), but the two
+    MUST agree so every generated public name (the `_from` downcast, the
+    `_ptr` result, property accessors) derives unambiguously from one identity.
+    A short private tag like `button_data` is rejected so the drift can't hide.
+
+    Returns an error string for a non-conforming class, or None when it is
+    fine — the caller collects every offender and reports them together rather
+    than aborting on the first."""
+    data = (c.get("data") or "").strip()
+    if not data:
+        return None  # marker class with no data slice — nothing to name
+    tag = re.sub(r"^struct\s+", "", data).strip()
+    expected = f"yetty_{c['domain']}_{c['name']}"
+    if tag != expected:
+        kind = "mixin" if c.get("type") == "mixin" else "class"
+        return (
+            f"error: {kind}@{c['domain']}:{c['name']} data struct is named "
+            f"'{tag}', but it must be '{expected}' (yetty_<domain>_<class>).\n"
+            f"  Rename the struct tag in {c.get('source_file')} so it matches\n"
+            f"  the annotation — every generated name derives from that identity.\n")
+    return None
+
+
 def validate_method(m: dict):
     args = m["args"]
     # Enforce the project Result-return contract on every slot impl.
@@ -1151,20 +1177,66 @@ def emit_methods_h(model: dict, module: str, out_path: Path):
 # ---------------- methods.gen.h (internal) ------------------------------
 
 def emit_methods_gen_h(model: dict, module: str, out_path: Path):
-    """Internal companion to methods.h. Lives at
-    src/yetty/<module>/methods.gen.h — keeps the `.gen.h` suffix
-    because it's NOT part of the public API surface; the `_fn` impl
-    typedefs are useful only inside the module (.gen.c files use
-    them to type-check the impl pointer when registering it on the
-    ops vtable).
+    """Internal companion header. Lives at src/yetty/<module>/methods.gen.h
+    — keeps the `.gen.h` suffix because it's NOT part of the public API
+    surface; the `_fn` impl typedefs are useful only inside the module
+    (.gen.c files use them to type-check the impl pointer when registering
+    it on the ops vtable, and methods.gen.c casts the dispatch target to
+    them).
 
-    Includes the sibling public methods.h so callers can include just
-    methods.gen.h and get both the typedefs and the declarations
-    they refer to."""
+    SELF-CONTAINED ON PURPOSE — it must NOT `#include` the per-class
+    public headers (`<class>.h`). This file is pulled into every
+    hand-written `<stem>.c`'s translation unit (the `<stem>.gen.c`
+    appended at the foot of the .c includes it). A migrated `<stem>.c`
+    declares its OWN `YETTY_YRESULT_DECLARE(<class>_ptr, …)`; the per-class
+    public header owns the matching definition, so importing that header
+    here would land a SECOND definition of `struct <class>_ptr_result` in
+    the same TU — a redefinition error. Instead we bring in only the
+    foundational types, forward-declare every struct named in a method
+    signature (pointers and result wrappers alike — a forward decl
+    coexists with the .c's later full definition), and emit the public
+    stub prototypes ourselves from the model. The ops tables only take a
+    stub's address as a method-id sentinel, so an incomplete result type
+    in those prototypes is fine; methods.gen.c, which actually defines the
+    stubs, pulls the per-class headers directly for the complete types."""
     guard = f"YETTY_YCLASSGEN_{module.upper()}_METHODS_GEN_H"
     parts = [HEADER]
     parts.append(f"#ifndef {guard}\n#define {guard}\n\n")
-    parts.append(f"#include <yetty/{module}/methods.h>\n\n")
+    parts.append('#include <yetty/yclass/class.h>\n')
+    # ycore/types.h carries the buffer struct codegen recognises as a blob
+    # arg; public-stub signatures use it by value, so its full definition
+    # must be in scope (a forward-decl isn't enough). No module-local
+    # types.h here: it is not always scaffolded, and the prototypes only
+    # need (incomplete) forward-decls of their result wrappers, emitted
+    # below.
+    parts.append('#include <yetty/ycore/result.h>\n')
+    parts.append('#include <yetty/ycore/types.h>\n\n')
+
+    structs = set()
+    for m in model["methods"]:
+        structs |= struct_names_in(m["return_type"])
+        # The wrapped result struct (e.g. yetty_yfigure_figure_ptr_result)
+        # is named indirectly via result_type_id — add it explicitly so the
+        # prototypes reference a declared (if incomplete) tag.
+        structs.add(f"{result_type_id(m['return_type'])}_result")
+        for a in m["args"]:
+            structs |= struct_names_in(a["type"])
+    # Already pulled in fully by the includes above — don't double up with a
+    # redundant forward-decl (harmless, but noisy).
+    for known in ("yetty_yclass_ctx", "yetty_yclass_object", "yetty_yclass",
+                  "yetty_ycore_buffer"):
+        structs.discard(known)
+    for s in sorted(structs):
+        parts.append(f"struct {s};\n")
+    parts.append("\n")
+
+    # Public stub prototypes — the per-class .gen.c ops tables reference
+    # these by name as method-id sentinels.
+    for m in model["methods"]:
+        params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
+        rt = result_type(m["return_type"])
+        parts.append(f"{rt} {qualified_slot(m)}({params});\n")
+    parts.append("\n")
 
     for m in model["methods"]:
         type_only = ", ".join(a["type"] for a in m["args"])
@@ -1343,13 +1415,24 @@ def emit_dispatch_body(m: dict) -> str:
 
 
 def emit_methods_c(model: dict, module: str, out_path: Path):
-    # methods.gen.h carries the `_fn` typedefs the dispatch body casts
-    # to; it itself includes the public methods.h for the matching
-    # function declarations. Absolute path (resolved via `-Isrc`) so
-    # the include also works from .gen.c files in subdirs.
+    # methods.gen.h carries the `_fn` typedefs the dispatch body casts to
+    # plus the stub prototypes, but it deliberately does NOT pull in the
+    # per-class public headers (see emit_methods_gen_h). This TU DEFINES
+    # the stubs, so it needs the complete `_ptr_result` types those
+    # headers own — and as a standalone .gen.c (never `#include`d into a
+    # hand-written .c) it can include every class header without risking a
+    # redefinition against a .c's manual declaration. Absolute paths
+    # (resolved via `-Isrc`) so the includes work from subdirs too.
     parts = [HEADER,
-             f'#include "yetty/{module}/methods.gen.h"\n',
-             '#include <yetty/yclass/rpc.h>\n',
+             f'#include "yetty/{module}/methods.gen.h"\n']
+    seen_headers = []
+    for c in model.get("classes", []):
+        h = class_header_for(c, module)
+        if h not in seen_headers:
+            seen_headers.append(h)
+    for h in seen_headers:
+        parts.append(f'#include "{h}"\n')
+    parts += ['#include <yetty/yclass/rpc.h>\n',
              '#include <yetty/ycore/result.h>\n',
              '#include <yetty/ycore/types.h>  /* container_of */\n',
              '#include <yetty/ytrace/ytrace.h>\n',
@@ -1504,18 +1587,26 @@ def emit_class_accessor(cls: dict) -> str:
     # so this works for any class whose body is a yclass data slice.
     property_block = ""
     property_fields = [f for f in cls.get("data_fields", []) if f.get("get") or f.get("set")]
-    if property_fields:
-        data_ptr_rid = f"{qcls}_data_ptr"
+    # Every regular class with a data slice gets the obj->typed-slice accessor
+    # `<class>_from` (the downcast built on yetty_yclass_object_data — it
+    # returns a Result because the object may not be of this class). Per-field
+    # getters/setters are added only for `property`-annotated members.
+    # ygui is excluded: its objects use a custom fat header (struct
+    # yetty_ygui_object), so yetty_yclass_object_data would miscompute the
+    # slice — ygui keeps its own `_data` family until #313 collapses that
+    # header onto yetty_yclass_object.
+    if cls.get("data") and cls.get("type") != "mixin" and cls["domain"] != "ygui":
+        data_ptr_rid = f"{qcls}_ptr"
         parts = [
-            f"\nstruct {data_ptr_rid}_result {qcls}_data_get(struct yetty_yclass_object *obj)\n"
+            f"\nstruct {data_ptr_rid}_result {qcls}_from(struct yetty_yclass_object *obj)\n"
             f"{{\n"
             f"    struct yetty_yclass_ptr_result class_r = {accessor}();\n"
             f"    if (YETTY_IS_ERR(class_r))\n"
-            f'        return YETTY_ERR({data_ptr_rid}, "{qcls}_data_get: class accessor", class_r);\n'
+            f'        return YETTY_ERR({data_ptr_rid}, "{qcls}_from: class accessor", class_r);\n'
             f"    struct yetty_yclass_void_ptr_result slice_r =\n"
             f"        yetty_yclass_object_data(obj, class_r.value);\n"
             f"    if (YETTY_IS_ERR(slice_r))\n"
-            f'        return YETTY_ERR({data_ptr_rid}, "{qcls}_data_get: object_data", slice_r);\n'
+            f'        return YETTY_ERR({data_ptr_rid}, "{qcls}_from: object_data", slice_r);\n'
             f"    return YETTY_OK({data_ptr_rid}, ({data} *)slice_r.value);\n"
             f"}}\n"
         ]
@@ -1528,7 +1619,7 @@ def emit_class_accessor(cls: dict) -> str:
                 parts.append(
                     f"\n{result_type(ftype)} {base}_get(struct yetty_yclass_object *obj)\n"
                     f"{{\n"
-                    f"    struct {data_ptr_rid}_result data = {qcls}_data_get(obj);\n"
+                    f"    struct {data_ptr_rid}_result data = {qcls}_from(obj);\n"
                     f"    if (YETTY_IS_ERR(data))\n"
                     f'        return YETTY_ERR({field_rid}, "{base}_get: data block", data);\n'
                     f"    return YETTY_OK({field_rid}, data.value->{fname});\n"
@@ -1539,7 +1630,7 @@ def emit_class_accessor(cls: dict) -> str:
                     f"\nstruct yetty_ycore_void_result {base}_set(struct yetty_yclass_object *obj, "
                     f"{ftype} value)\n"
                     f"{{\n"
-                    f"    struct {data_ptr_rid}_result data = {qcls}_data_get(obj);\n"
+                    f"    struct {data_ptr_rid}_result data = {qcls}_from(obj);\n"
                     f"    if (YETTY_IS_ERR(data))\n"
                     f'        return YETTY_ERR(yetty_ycore_void, "{base}_set: data block", data);\n'
                     f"    data.value->{fname} = value;\n"
@@ -1654,11 +1745,14 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
         property_decls = ""
         prop_blocks = []
         for c in classes:
-            pfields = [f for f in c.get("data_fields", []) if f.get("get") or f.get("set")]
-            if not pfields:
+            # ygui has its own `_data` family over yetty_ygui_object (see #313);
+            # the general `_from` would miscompute on ygui's fat header, so it
+            # is excluded until that header is collapsed onto yetty_yclass_object.
+            if c.get("type") == "mixin" or not c.get("data") or module == "ygui":
                 continue
+            pfields = [f for f in c.get("data_fields", []) if f.get("get") or f.get("set")]
             q = qualified_class(c)
-            rid = f"{q}_data_ptr"
+            rid = f"{q}_ptr"
             lines = [
                 "/* Data-block handle — opaque outside the owning .c. The struct\n"
                 " * stays private; only its pointer crosses here, in a Result so a\n"
@@ -1666,7 +1760,7 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
                 " * through the per-property getters/setters below. */",
                 f"{c['data']};",
                 f"YETTY_YRESULT_DECLARE({rid}, {c['data']} *);",
-                f"struct {rid}_result {q}_data_get(struct yetty_yclass_object *obj);",
+                f"struct {rid}_result {q}_from(struct yetty_yclass_object *obj);",
             ]
             for field in pfields:
                 base = f"{q}_{field['name']}"
@@ -1718,6 +1812,47 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             method_decls += "\n\n" + fwd_decls.rstrip()
         if exposed_protos:
             method_decls += "\n\n" + "\n".join(exposed_protos)
+
+        # Public method-dispatch stubs whose owning class is defined in THIS
+        # source. Folded in so the source's single header is its complete
+        # public interface — there is no module-wide methods.h.
+        group_class_names = {c["name"] for c in classes}
+        group_methods = [m for m in model["methods"]
+                         if m.get("owning_class") in group_class_names]
+        stub_struct_names = set()
+        for m in group_methods:
+            stub_struct_names |= struct_names_in(m["return_type"])
+            for a in m["args"]:
+                stub_struct_names |= struct_names_in(a["type"])
+        for known in ("yetty_yclass_ctx", "yetty_yclass_object", "yetty_yclass",
+                      "yetty_ycore_buffer"):
+            stub_struct_names.discard(known)
+        stub_struct_names -= exposed_type_names
+        stub_fwd = "".join(f"struct {n};\n" for n in sorted(stub_struct_names))
+        stub_decls = "".join(
+            f"{result_type(m['return_type'])} {qualified_slot(m)}("
+            + ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
+            + ");\n"
+            for m in group_methods)
+        # create() for each concrete (non-mixin) class in this source, plus
+        # the module's RPC-discovery installer. register() is module-level;
+        # an identical prototype in every source header is legal C and keeps
+        # each header self-sufficient (no module-wide rpc.h).
+        create_decls = "".join(
+            f"struct yetty_yclass_object_ptr_result {qualified_class(c)}_create("
+            f"struct yetty_yclass_ctx *ctx);\n"
+            for c in classes if c.get("type") != "mixin")
+        register_decl = (f"struct yetty_ycore_void_result "
+                         f"yetty_{module}_register(void);\n")
+        rpc_decls = ""
+        if stub_fwd:
+            rpc_decls += "\n\n" + stub_fwd.rstrip()
+        if stub_decls:
+            rpc_decls += "\n\n" + stub_decls.rstrip()
+        if create_decls:
+            rpc_decls += "\n\n" + create_decls.rstrip()
+        rpc_decls += "\n\n" + register_decl.rstrip()
+
         kind = "mixin" if all(c['type'] == "mixin" for c in classes) else "regular class"
         # Class-name list for the file header banner.
         name_list = ", ".join(c["name"] for c in classes)
@@ -1725,13 +1860,16 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             HEADER
             + f"/* Public interface for {kind}(es) `{name_list}` "
             + f"(module: {module}).\n"
-            + " * Fully generated from the source .c — do not edit. Function\n"
-            + " * and public-type APIs come from `expose` annotations; the\n"
-            + " * forward declarations are derived from the prototype types. */\n"
+            + " * Fully generated from the source .c — do not edit. This single\n"
+            + " * header is the source's complete public interface: class\n"
+            + " * accessors, method stubs, create()/register(), and any\n"
+            + " * `expose`d API. Public types come from `expose` annotations. */\n"
             + f"#ifndef {guard}\n#define {guard}\n\n"
             + '#include <yetty/yclass/class.h>\n'
-            + f'#include <yetty/{module}/methods.h>\n\n'
-            + decls + data_decls + property_decls + method_decls + "\n\n"
+            + '#include <yetty/yclass/rpc.h>\n'
+            + '#include <yetty/ycore/result.h>\n'
+            + '#include <yetty/ycore/types.h>\n\n'
+            + decls + data_decls + property_decls + rpc_decls + method_decls + "\n\n"
             + "#endif\n"
         )
         header_path.write_text(body)
@@ -2231,8 +2369,6 @@ def emit_rpc_c(model: dict, module: str, out_path: Path):
              '#include <yetty/yclass/rpc.h>\n',
              '#include <yetty/ycore/result.h>\n',
              '#include <yetty/ytrace/ytrace.h>\n',
-             f'#include "yetty/{module}/rpc.h"\n',
-             f'#include "yetty/{module}/methods.h"\n',
              '#include <yetty/yclass/class.h>\n',
              class_includes,
              '#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n'
@@ -2301,11 +2437,6 @@ def main():
             hdr = hdr_dir / (s.stem + ".h")
             if not hdr.exists():
                 hdr.write_text(placeholder_class_h)
-    # Public placeholders under include/yetty/<module>/.
-    for stub in ("methods.h", "rpc.h"):
-        p = include_module / stub
-        if not p.exists():
-            p.write_text(placeholder_class_h)
     # Internal placeholder under src/yetty/<module>/. The `.gen.h`
     # suffix marks it as codegen-output sitting inside the module's
     # private area (.gen.c files include it for the impl typedefs).
@@ -2313,36 +2444,27 @@ def main():
     if not p_internal.exists():
         p_internal.write_text(placeholder_class_h)
 
-    # Module-owned types.h carries module-specific YETTY_YRESULT_DECLAREs.
-    # Scaffold an empty (guard-only) one if missing so first-time AST
-    # parsing of the annotated sources resolves the include emitted from
-    # methods.h. Existing user content is never overwritten.
-    types_h = include_module / "types.h"
-    if not types_h.exists():
-        guard = f"YETTY_YCLASSGEN_{module.upper()}_TYPES_H"
-        types_h.write_text(
-            f"/* Module-owned result type declarations.\n"
-            f" * Add YETTY_YRESULT_DECLARE(<id>, <type>) lines here for any\n"
-            f" * struct/scalar return type used by {module}'s yclass methods.\n"
-            f" * Hand-written — codegen will NOT overwrite. */\n"
-            f"#ifndef {guard}\n#define {guard}\n\n"
-            f"#include <yetty/ycore/result.h>\n\n"
-            f"#endif /* {guard} */\n"
-        )
-
     # Clang search path: shared include/, the module's own generated-
     # header dir (include/<module>/), and the module src dir (for
     # any neighbour .h that might still exist transiently).
     model = parse_sources([include_base, include_module, module_src], sources, module)
+    # Collect every non-conforming class and report them all at once, rather
+    # than aborting on the first — a module like ygui has dozens to rename.
+    class_errors = [e for e in (validate_class(c) for c in model["classes"]) if e]
+    if class_errors:
+        for e in class_errors:
+            sys.stderr.write(e)
+        sys.stderr.write(
+            f"error: {len(class_errors)} non-conforming data struct tag(s) in "
+            f"module '{module}'.\n")
+        sys.exit(1)
     for m in model["methods"]:
         validate_method(m)
 
     emit_class_public_headers(model, module, include_module)
-    emit_methods_h(model, module, include_module / "methods.h")
     emit_methods_gen_h(model, module, module_src / "methods.gen.h")
     emit_methods_c(model, module, module_src / "methods.gen.c")
     emit_class_gen_c(model, module, module_src)
-    emit_rpc_h(model, module, include_module / "rpc.h")
     emit_rpc_c(model, module, module_src / "rpc.gen.c")
 
     (module_src / "model.yaml").write_text(yaml_dump(model) + "\n")

@@ -149,7 +149,7 @@ classes:
     source_file: src/yetty/yview/view.c
     parent: null
     mixins: []
-    data: struct view_data
+    data: struct yetty_yview_view
     data_fields:
       - name: fd
         type: int

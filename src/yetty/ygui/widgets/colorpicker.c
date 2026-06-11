@@ -1,7 +1,19 @@
 /* ygui-colorpicker.c — color swatch + hex label. */
 #include "paint-helpers.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * colorpicker.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_colorpicker_data_ptr, struct yetty_ygui_colorpicker *);
+struct yetty_yclass_ptr_result yetty_ygui_colorpicker_class_get(void);
+struct yetty_ygui_colorpicker_data_ptr_result yetty_ygui_colorpicker_data(
+    struct yetty_ygui_object *obj);
 #include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/colorpicker.h>
 #include <stdio.h>
 
 #define COLOR_BG 0xFF1F1A14u
@@ -9,7 +21,7 @@
 #define COLOR_TEXT 0xFFE4E5E0u
 
 struct [[clang::annotate("class@ygui:colorpicker")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] cp_data {
+    "parent@ygui:primitive_widget")]] yetty_ygui_colorpicker {
     uint32_t color;
 };
 
@@ -26,7 +38,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_colorpicker_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
-    struct cp_data *d = d_dr.value;
+    struct yetty_ygui_colorpicker *d = d_dr.value;
     d->color = 0xFF92A86Bu; /* brand accent default */
     return YETTY_OK_VOID();
 }
@@ -44,7 +56,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_colorpicker_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
-    struct cp_data *d = d_dr.value;
+    struct yetty_ygui_colorpicker *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {
@@ -75,7 +87,7 @@ struct yetty_ycore_void_result yetty_ygui_colorpicker_set_color(struct yetty_ygu
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_colorpicker_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_colorpicker_set_color: data_get");
-    struct cp_data *d = d_dr.value;
+    struct yetty_ygui_colorpicker *d = d_dr.value;
     d->color = c;
     return yetty_ygui_object_set_dirty(obj);
 }
@@ -91,7 +103,8 @@ struct yetty_ycore_uint32_result yetty_ygui_colorpicker_get_color(
         (struct yetty_ygui_object *)obj, yetty_ygui_colorpicker_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_uint32, data_result,
                         "yetty_ygui_colorpicker_get_color: data_get");
-    return YETTY_OK(yetty_ycore_uint32, ((struct cp_data *)data_result.value)->color);
+    return YETTY_OK(yetty_ycore_uint32,
+                    ((struct yetty_ygui_colorpicker *)data_result.value)->color);
 }
 
 #include "colorpicker.gen.c"

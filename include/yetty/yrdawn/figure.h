@@ -1,15 +1,30 @@
 /* GENERATED — do not edit. */
 /* Public interface for regular class(es) `figure` (module: yrdawn).
- * Fully generated from the source .c — do not edit. Function
- * and public-type APIs come from `expose` annotations; the
- * forward declarations are derived from the prototype types. */
+ * Fully generated from the source .c — do not edit. This single
+ * header is the source's complete public interface: class
+ * accessors, method stubs, create()/register(), and any
+ * `expose`d API. Public types come from `expose` annotations. */
 #ifndef YETTY_YCLASSGEN_YRDAWN_FIGURE_H
 #define YETTY_YCLASSGEN_YRDAWN_FIGURE_H
 
 #include <yetty/yclass/class.h>
-#include <yetty/yrdawn/methods.h>
+#include <yetty/yclass/rpc.h>
+#include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
 
 struct yetty_yclass_ptr_result yetty_yrdawn_figure_class_get(void);
+
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
+struct yetty_yrdawn_figure;
+YETTY_YRESULT_DECLARE(yetty_yrdawn_figure_ptr, struct yetty_yrdawn_figure *);
+struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_from(struct yetty_yclass_object *obj);
+
+struct yetty_yclass_object_ptr_result yetty_yrdawn_figure_create(struct yetty_yclass_ctx *ctx);
+
+struct yetty_ycore_void_result yetty_yrdawn_register(void);
 
 /* Header-destined content for the generated figure.h (skipped by the real build, which takes it from that header). */
 /*
@@ -50,7 +65,7 @@ struct yetty_yrdawn_figure;
 struct yetty_yrdawn_session;
 struct yetty_yfigure_registry;
 
-YETTY_YRESULT_DECLARE(yetty_yrdawn_figure_ptr, struct yetty_yrdawn_figure *);
+/* yetty_yrdawn_figure_ptr is generated (the `_from` downcast in figure.h). */
 
 /* Outbound OSC emit. The figure passes its self-tagged payload (which
  * already includes its figure_id in the wire struct), the host wraps
@@ -104,8 +119,8 @@ struct yetty_ycore_void_result yetty_yrdawn_register_factory(
 struct yetty_ycore_void_result yetty_yrdawn_factory_args_release(
     struct yetty_yrdawn_factory_args *args);
 
-/* Upcast. Stable pointer. */
-struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(struct yetty_yrdawn_figure *figure);
+/* Upcast: object → its figure-base slice. Stable pointer. */
+struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(struct yetty_yclass_object *obj);
 
 /* Downcast helper. Returns a NULL value when `base` isn't a yrdawn figure. */
 struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_from_base(

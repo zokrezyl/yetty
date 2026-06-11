@@ -1,7 +1,19 @@
 /* ygui-choicebox.c — multi-select list with check markers. */
 #include "paint-helpers.h"
+#include <yetty/ygui/widget.h>
+
+/* This TU deliberately does NOT include its own generated header — that
+ * header is a downstream artifact for other modules and would redefine
+ * the YETTY_YRESULT_DECLARE this TU declares manually below. The class
+ * handle Result wrapper plus the codegen accessor/downcast the appended
+ * choicebox.gen.c defines are declared here so the foot include and the impls
+ * have them in scope. The generated public header publishes the identical
+ * declarations for consumers. */
+YETTY_YRESULT_DECLARE(yetty_ygui_choicebox_data_ptr, struct yetty_ygui_choicebox *);
+struct yetty_yclass_ptr_result yetty_ygui_choicebox_class_get(void);
+struct yetty_ygui_choicebox_data_ptr_result yetty_ygui_choicebox_data(
+    struct yetty_ygui_object *obj);
 #include <yetty/ygui/primitive-widget.h>
-#include <yetty/ygui/widgets/choicebox.h>
 #include <stdlib.h>
 
 #define COLOR_BG 0xFF14100Bu
@@ -17,7 +29,7 @@ struct cb_row {
 };
 
 struct [[clang::annotate("class@ygui:choicebox")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] cb_data {
+    "parent@ygui:primitive_widget")]] yetty_ygui_choicebox {
     struct cb_row *rows;
     int n;
     int cap;
@@ -36,7 +48,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_choicebox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ctor: data_get");
-    struct cb_data *d = d_dr.value;
+    struct yetty_ygui_choicebox *d = d_dr.value;
     d->rows = NULL;
     d->n = 0;
     d->cap = 0;
@@ -52,7 +64,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_choicebox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
-    struct cb_data *d = d_dr.value;
+    struct yetty_ygui_choicebox *d = d_dr.value;
     for (int i = 0; i < d->n; i++) {
         free(d->rows[i].label);
     }
@@ -73,7 +85,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_choicebox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_press: data_get");
-    struct cb_data *d = d_dr.value;
+    struct yetty_ygui_choicebox *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     int idx = (int)((y - r.min.y) / ROW_H);
     if (idx < 0 || idx >= d->n) {
@@ -110,7 +122,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_choicebox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
-    struct cb_data *d = d_dr.value;
+    struct yetty_ygui_choicebox *d = d_dr.value;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {
@@ -139,7 +151,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     return YETTY_OK_VOID();
 }
 
-static int grow(struct cb_data *d, int n)
+static int grow(struct yetty_ygui_choicebox *d, int n)
 {
     if (n <= d->cap) {
         return 1;
@@ -167,7 +179,7 @@ struct yetty_ycore_void_result yetty_ygui_choicebox_add(struct yetty_ygui_object
     struct yetty_ygui_void_ptr_result d_dr =
         yetty_ygui_data_get_result(obj, yetty_ygui_choicebox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_choicebox_add: data_get");
-    struct cb_data *d = d_dr.value;
+    struct yetty_ygui_choicebox *d = d_dr.value;
     if (!grow(d, d->n + 1)) {
         return YETTY_ERR(yetty_ycore_void, "choicebox_add: realloc");
     }
@@ -192,7 +204,7 @@ struct yetty_ycore_int_result yetty_ygui_choicebox_is_selected(const struct yett
     struct yetty_ygui_void_ptr_result d_dr = yetty_ygui_data_get_result(
         (struct yetty_ygui_object *)obj, yetty_ygui_choicebox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yetty_ygui_choicebox_is_selected: data_get");
-    struct cb_data *d = d_dr.value;
+    struct yetty_ygui_choicebox *d = d_dr.value;
     if (idx < 0 || idx >= d->n) {
         return YETTY_OK(yetty_ycore_int, 0);
     }

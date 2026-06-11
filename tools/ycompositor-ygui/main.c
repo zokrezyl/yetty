@@ -36,7 +36,6 @@
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/rpc.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/ydraw-core/cmds.h>
@@ -46,7 +45,6 @@
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
-#include <yetty/ychrome/methods.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/ymgui/figure.h>
 #include <yetty/yface/yface.h>
@@ -88,11 +86,11 @@ struct ycomp_ygui_app {
     struct yetty_context ctx;
     struct yetty_yframework *yrt;
     struct yetty_ydraw_target *target;
-    struct yetty_yfigure_container *root;
-    /* The root container's yclass object — wired into the ygui
-     * framework via set_container_obj so framework_emit ships records
+    /* The root container's yclass object. The container public API takes
+     * the object (not the private body pointer); it's also wired into the
+     * ygui framework via set_container_obj so framework_emit ships records
      * straight in (in-process, no PTY). */
-    struct yetty_yclass_object *container_obj;
+    struct yetty_yclass_object *root;
     struct yetty_yfigure_registry *registry;
     struct yetty_ygui_framework *ygui;
     /* Window chrome host (draggable/resizable titlebar + min/max/close). */
@@ -434,9 +432,8 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
                 yerror("ycompositor-ygui[osc]: process_records failed: %s", pr.error.msg);
                 yetty_ycore_error_destroy(pr.error);
             }
-            struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
-            if (rf) {
-                yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
+            if (yetty_yfigure_container_as_figure(app->root)) {
+                yetty_yfigure_figure_dirty_set(app->root, 1);
             }
         }
     } else {
@@ -605,13 +602,11 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
         /* Root container's rect tracks the framebuffer. The producer
          * re-emits the scene at the new dims; child figures move via
          * SET_CHILD_RECT records embedded in that re-emit. */
-        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root);
-        yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf)-1,
-                                      (struct yetty_ycore_rectangle){
-                                          .min = {.x = 0.0f, .y = 0.0f},
-                                          .max = {.x = (float)w, .y = (float)h},
-                                      });
-        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
+        yetty_yfigure_figure_rect_set(app->root, (struct yetty_ycore_rectangle){
+                                                     .min = {.x = 0.0f, .y = 0.0f},
+                                                     .max = {.x = (float)w, .y = (float)h},
+                                                 });
+        yetty_yfigure_figure_dirty_set(app->root, 1);
         if (app->chrome) {
             struct yetty_ycore_void_result cr =
                 yetty_ychrome_host_resized(app->chrome, (float)w, (float)h);
@@ -778,8 +773,7 @@ static struct yetty_ycore_void_result ycomp_ygui_worker(struct yetty_yinit_runti
     struct yetty_yclass_ctx yclass_ctx = {0};
     struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "root_container create failed");
-    app->container_obj = obj_res.value;
-    app->root = yetty_yfigure_container_from(obj_res.value);
+    app->root = obj_res.value;
     yetty_yfigure_container_set_context(app->root, &app->ctx);
     yetty_yfigure_container_set_registry(app->root, app->registry);
     yetty_yfigure_container_set_rect(app->root, root_rect);
@@ -803,7 +797,7 @@ static struct yetty_ycore_void_result ycomp_ygui_worker(struct yetty_yinit_runti
         YETTY_RETURN_IF_ERR(yetty_ycore_void, eng_r, "ygui framework alloc failed");
         app->ygui = eng_r.value;
         struct yetty_ycore_void_result scr =
-            yetty_ygui_framework_set_container_obj(app->ygui, app->container_obj);
+            yetty_ygui_framework_set_container_obj(app->ygui, app->root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scr, "framework set_container_obj failed");
         build_scene(app);
         if (app->win) {
@@ -881,9 +875,8 @@ static struct yetty_ycore_void_result ycomp_ygui_worker(struct yetty_yinit_runti
         if (rt->instance) {
             wgpuInstanceProcessEvents((WGPUInstance)rt->instance);
         }
-        struct yetty_yfigure_figure *rrf = yetty_yfigure_container_as_figure(app->root);
         if (!(needs_render || had_events ||
-              yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rrf)-1).value)) {
+              yetty_yfigure_figure_dirty_get(app->root).value)) {
             continue;
         }
 
@@ -893,13 +886,12 @@ static struct yetty_ycore_void_result ycomp_ygui_worker(struct yetty_yinit_runti
             yerror("ycompositor-ygui: clear failed: %s", cl.error.msg);
             yetty_ycore_error_destroy(cl.error);
         }
-        struct yetty_ycore_void_result rr =
-            yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rrf - 1, target);
+        struct yetty_ycore_void_result rr = yetty_yfigure_render(NULL, app->root, target);
         if (YETTY_IS_ERR(rr)) {
             yerror("ycompositor-ygui: root render failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
         } else {
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rrf)-1, 0);
+            yetty_yfigure_figure_dirty_set(app->root, 0);
         }
         struct yetty_ycore_void_result pp = target->ops->present(target);
         if (YETTY_IS_ERR(pp)) {
@@ -922,9 +914,7 @@ static struct yetty_ycore_void_result ycomp_ygui_worker(struct yetty_yinit_runti
     /* Teardown — root container first so any pending GPU work bound
      * to the runtime's device flushes before yframework_destroy. */
     {
-        struct yetty_yfigure_figure *rrf = yetty_yfigure_container_as_figure(app->root);
-        struct yetty_ycore_void_result dr =
-            yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rrf - 1);
+        struct yetty_ycore_void_result dr = yetty_yfigure_destroy(NULL, app->root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "root destroy");
     }
     app->root = NULL;
