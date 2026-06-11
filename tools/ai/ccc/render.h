@@ -11,6 +11,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <yetty/ycore/result.h>
 #include <yyjson.h>
 
 /* ANSI styling — ccc owns its pane, so it styles its own output. */
@@ -48,9 +49,10 @@ void ccc_render_tool_call(const char *name, yyjson_val *input);
 /* One tool result: folded preview, or raw figure bytes when the yetty
  * MCP server handed the OSC envelope back via the parent-render
  * sentinel. `content` is the tool_result content field (string or
- * block list). */
-void ccc_render_tool_result(const struct ccc_renderer *renderer, yyjson_val *content, int is_error,
-                            const char *tool_name);
+ * block list). Fails on allocation failure. */
+struct yetty_ycore_void_result ccc_render_tool_result(const struct ccc_renderer *renderer,
+                                                      yyjson_val *content, int is_error,
+                                                      const char *tool_name);
 
 /* Best-effort one-liner for a hook lifecycle frame. */
 void ccc_render_hook(yyjson_val *event);
