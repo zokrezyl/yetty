@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include <yetty/yrdawn/client.h>
+#include <yetty/yrdawn/methods.gen.h>
 
 #define W 256u
 #define H 256u

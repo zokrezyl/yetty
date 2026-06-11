@@ -30,16 +30,29 @@ struct yetty_ycore_void_result yetty_ygui_register(void);
 typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_ctx *ctx,
                                                                   struct yetty_yclass_object *menu,
                                                                   int item_index, void *userdata);
-struct yetty_ycore_void_result yetty_ygui_popup_menu_add_item(struct yetty_yclass_object *obj, const char *label, yetty_ygui_menu_item_cb cb, void *userdata);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_add_item(struct yetty_yclass_object *obj,
+                                                              const char *label,
+                                                              yetty_ygui_menu_item_cb cb,
+                                                              void *userdata);
 struct yetty_ycore_void_result yetty_ygui_popup_menu_add_separator(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_popup_menu_open_at(struct yetty_yclass_object *obj, float x, float y);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_open_at(struct yetty_yclass_object *obj,
+                                                             float x, float y);
 struct yetty_ycore_void_result yetty_ygui_popup_menu_close(struct yetty_yclass_object *obj);
 struct yetty_ycore_int_result yetty_ygui_popup_menu_is_open(const struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_popup_menu_toggle_at(struct yetty_yclass_object *obj, float x, float y);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_toggle_at(struct yetty_yclass_object *obj,
+                                                               float x, float y);
 struct yetty_ycore_void_result yetty_ygui_popup_menu_clear(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_popup_menu_set_title(struct yetty_yclass_object *obj, const char *title);
-struct yetty_ycore_void_result yetty_ygui_popup_menu_set_back(struct yetty_yclass_object *obj, const char *label, yetty_ygui_menu_item_cb cb, void *userdata);
-struct yetty_ycore_void_result yetty_ygui_popup_menu_add_drill_item(struct yetty_yclass_object *obj, const char *label, yetty_ygui_menu_item_cb cb, void *userdata);
-struct yetty_ycore_void_result yetty_ygui_popup_menu_set_modal(struct yetty_yclass_object *obj, int modal);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_set_title(struct yetty_yclass_object *obj,
+                                                               const char *title);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_set_back(struct yetty_yclass_object *obj,
+                                                              const char *label,
+                                                              yetty_ygui_menu_item_cb cb,
+                                                              void *userdata);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_add_drill_item(struct yetty_yclass_object *obj,
+                                                                    const char *label,
+                                                                    yetty_ygui_menu_item_cb cb,
+                                                                    void *userdata);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_set_modal(struct yetty_yclass_object *obj,
+                                                               int modal);
 
 #endif

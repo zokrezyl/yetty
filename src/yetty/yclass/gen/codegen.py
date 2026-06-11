@@ -1445,38 +1445,29 @@ def emit_dispatch_body(m: dict) -> str:
 
 
 def emit_methods_c(model: dict, module: str, out_path: Path):
-    # Self-contained: this TU defines every public slot stub and casts the
-    # resolved impl to the slot's `<slot>_fn`. It does NOT include any
-    # per-class `<stem>.h` (that would re-define their `expose`d structs in
-    # one TU) and there is no module-wide methods header — so it forward-
-    # declares the structs its signatures name and emits the `_fn` typedefs
-    # itself. Slot signatures return core/result types (from result.h);
-    # pointer args only need a forward-decl.
-    parts = [HEADER,
-             '#include <yetty/yclass/class.h>\n',
-             '#include <yetty/yclass/rpc.h>\n',
-             '#include <yetty/ycore/result.h>\n',
-             '#include <yetty/ycore/types.h>  /* container_of */\n',
-             '#include <yetty/ytrace/ytrace.h>\n',
-             '#include <stdint.h>\n'
-             '#include <stdlib.h>  /* malloc/free for buffer-arg marshalling */\n'
-             '#include <string.h>\n\n']
-    structs = set()
-    for m in model["methods"]:
-        structs |= struct_names_in(m["return_type"])
-        structs.add(f"{result_type_id(m['return_type'])}_result")
-        for a in m["args"]:
-            structs |= struct_names_in(a["type"])
-    for known in ("yetty_yclass_ctx", "yetty_yclass_object", "yetty_yclass",
-                  "yetty_ycore_buffer"):
-        structs.discard(known)
-    parts.append("".join(f"struct {s};\n" for s in sorted(structs)))
-    parts.append("\n")
-    for m in model["methods"]:
-        type_only = ", ".join(a["type"] for a in m["args"])
-        rt = result_type(m["return_type"])
-        parts.append(f"typedef {rt} (*{qualified_slot(m)}_fn)({type_only});\n")
-    parts.append("\n")
+    # This TU DEFINES every public slot stub and casts the resolved impl to
+    # the slot's `<slot>_fn`. It is a STANDALONE .gen.c — never `#include`d
+    # into a hand-written .c — so it can pull in every per-class header
+    # without the "redefine an expose'd struct" hazard that the *appended*
+    # <stem>.gen.c has. And it needs them: the `<slot>_fn` typedefs it casts
+    # to, plus the COMPLETE result types its stubs return by value (some are
+    # foreign, e.g. a ydraw result), live in (or are reachable through) those
+    # headers. There is no module-wide methods header anymore.
+    parts = [HEADER]
+    seen_headers = []
+    for c in model.get("classes", []):
+        h = class_header_for(c, module)
+        if h not in seen_headers:
+            seen_headers.append(h)
+    for h in seen_headers:
+        parts.append(f'#include "{h}"\n')
+    parts += ['#include <yetty/yclass/rpc.h>\n',
+              '#include <yetty/ycore/result.h>\n',
+              '#include <yetty/ycore/types.h>  /* container_of */\n',
+              '#include <yetty/ytrace/ytrace.h>\n',
+              '#include <stdint.h>\n'
+              '#include <stdlib.h>  /* malloc/free for buffer-arg marshalling */\n'
+              '#include <string.h>\n\n']
     for m in model["methods"]:
         params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
         rt = result_type(m["return_type"])

@@ -20,10 +20,12 @@ struct yetty_yclass_ptr_result yetty_yvterm_shader_glyph_class_get(void);
  * through the per-property getters/setters below. */
 struct yetty_yvterm_shader_glyph;
 YETTY_YRESULT_DECLARE(yetty_yvterm_shader_glyph_ptr, struct yetty_yvterm_shader_glyph *);
-struct yetty_yvterm_shader_glyph_ptr_result yetty_yvterm_shader_glyph_from(struct yetty_yclass_object *obj);
+struct yetty_yvterm_shader_glyph_ptr_result yetty_yvterm_shader_glyph_from(
+    struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yvterm_shader_glyph_to(struct yetty_yvterm_shader_glyph *data);
 
-struct yetty_yclass_object_ptr_result yetty_yvterm_shader_glyph_create(struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_yvterm_shader_glyph_create(
+    struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_yvterm_register(void);
 

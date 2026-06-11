@@ -34,11 +34,17 @@ struct yetty_yrich_input_mods;
  * types, so the generated header must pull these in. */
 #include <yetty/yrich/yrich-document.h>
 #include <yetty/yrich/yrich-types.h>
-struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_yclass_object *obj, struct yetty_yrich_document *doc, int own);
+struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_yclass_object *obj,
+                                                                  struct yetty_yrich_document *doc,
+                                                                  int own);
 struct yetty_ycore_void_result yetty_ygui_yrich_view_invalidate(struct yetty_yclass_object *obj);
 struct yetty_yrich_document *yetty_ygui_yrich_view_document(const struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_yrich_view_content_size(const struct yetty_yclass_object *obj, float *w, float *h);
-struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_yclass_object *obj, uint32_t key, struct yetty_yrich_input_mods mods);
-struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_yclass_object *obj, const char *text, size_t len);
+struct yetty_ycore_void_result yetty_ygui_yrich_view_content_size(
+    const struct yetty_yclass_object *obj, float *w, float *h);
+struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_yclass_object *obj,
+                                                              uint32_t key,
+                                                              struct yetty_yrich_input_mods mods);
+struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_yclass_object *obj,
+                                                               const char *text, size_t len);
 
 #endif

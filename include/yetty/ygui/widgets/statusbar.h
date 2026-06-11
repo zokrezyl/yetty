@@ -27,7 +27,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_statusbar_create(struct yetty_y
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_statusbar_set_left(struct yetty_yclass_object *obj, const char *text);
-struct yetty_ycore_void_result yetty_ygui_statusbar_set_right(struct yetty_yclass_object *obj, const char *text);
+struct yetty_ycore_void_result yetty_ygui_statusbar_set_left(struct yetty_yclass_object *obj,
+                                                             const char *text);
+struct yetty_ycore_void_result yetty_ygui_statusbar_set_right(struct yetty_yclass_object *obj,
+                                                              const char *text);
 
 #endif

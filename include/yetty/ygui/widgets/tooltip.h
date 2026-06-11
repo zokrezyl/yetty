@@ -27,7 +27,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_tooltip_create(struct yetty_ycl
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_tooltip_set_text(struct yetty_yclass_object *obj, const char *text);
-struct yetty_ycore_const_char_ptr_result yetty_ygui_tooltip_get_text(const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_tooltip_set_text(struct yetty_yclass_object *obj,
+                                                           const char *text);
+struct yetty_ycore_const_char_ptr_result yetty_ygui_tooltip_get_text(
+    const struct yetty_yclass_object *obj);
 
 #endif
