@@ -57,6 +57,12 @@ endif()
 # Tools
 add_subdirectory(${YETTY_ROOT}/tools ${CMAKE_BINARY_DIR}/tools)
 
+# poc/yvterm — standalone text-grid performance probe (Linux + WebGPU only;
+# the subdir self-guards and returns early otherwise).
+if(EXISTS ${YETTY_ROOT}/poc/yvterm/CMakeLists.txt)
+    add_subdirectory(${YETTY_ROOT}/poc/yvterm ${CMAKE_BINARY_DIR}/poc/yvterm)
+endif()
+
 # Custom QA / static-analysis tools (Clang LibTooling-based)
 if(YETTY_ENABLE_TOOL_QA)
     add_subdirectory(${YETTY_ROOT}/qa-tools/lib/naming-convention
