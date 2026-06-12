@@ -1,5 +1,5 @@
 /*
- * interactive.c — the interactive yopenstreet client.
+ * interactive.c — the interactive ymap client.
  *
  * Ships the map as a positioned server figure via `yview`
  * (YCOMPOSITOR_BIN), then stays foreground and re-renders on input:
@@ -213,7 +213,7 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         if (mouse->kind == YETTY_YMGUI_INPUT_MOUSE_WHEEL) {
             bool ctrl = (mouse->mods & YMAP_MOD_CONTROL) != 0;
             bool shift = (mouse->mods & YMAP_MOD_SHIFT) != 0;
-            ydebug("yopenstreet wheel: dy=%.2f mods=%d at (%.1f,%.1f)", (double)mouse->wheel_dy,
+            ydebug("ymap wheel: dy=%.2f mods=%d at (%.1f,%.1f)", (double)mouse->wheel_dy,
                    mouse->mods, (double)mouse->x, (double)mouse->y);
             if (ctrl && shift && mouse->wheel_dy != 0.0f) {
                 zoom_at(ui, mouse->wheel_dy > 0.0f ? +1 : -1, mouse->x, mouse->y);
@@ -261,7 +261,7 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
             ui->dirty = true;
         }
     } else {
-        ydebug("yopenstreet osc: code=%d len=%zu (unhandled)", osc_code, payload_len);
+        ydebug("ymap osc: code=%d len=%zu (unhandled)", osc_code, payload_len);
     }
 }
 

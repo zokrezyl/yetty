@@ -11,7 +11,7 @@
  *   ymap --lat 51.5074 --lon -0.1278 -z 11 -w 100 -H 30
  */
 
-#include <yetty/yopenstreet/openstreet.h>
+#include <yetty/ymap/engine.h>
 #include <yetty/ymap/map.h>
 
 #include <yetty/yclass/class.h>
@@ -277,7 +277,7 @@ int main(int argc, char **argv)
         bool located = false;
         if (!no_geoip) {
             struct yetty_ycore_void_result geo_res =
-                yetty_yopenstreet_geolocate_public_ip(&latitude, &longitude);
+                yetty_ymap_geolocate_public_ip(&latitude, &longitude);
             if (YETTY_IS_OK(geo_res)) {
                 located = true;
                 fprintf(stderr,

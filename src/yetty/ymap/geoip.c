@@ -12,7 +12,7 @@
  * timeout keeps a dead endpoint from stalling tool startup.
  */
 
-#include <yetty/yopenstreet/openstreet.h>
+#include <yetty/ymap/engine.h>
 
 #include "tile-fetch.h"
 
@@ -58,22 +58,22 @@ static struct yetty_ycore_void_result parse_loc_field(const char *body, double *
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yopenstreet_geolocate_public_ip(double *out_latitude,
+struct yetty_ycore_void_result yetty_ymap_geolocate_public_ip(double *out_latitude,
                                                                      double *out_longitude)
 {
     if (!out_latitude || !out_longitude) {
         return YETTY_ERR(yetty_ycore_void, "geoip: NULL output argument");
     }
-    CURL *curl_handle = yetty_yopenstreet_curl_acquire();
+    CURL *curl_handle = yetty_ymap_curl_acquire();
     if (!curl_handle) {
         return YETTY_ERR(yetty_ycore_void, "geoip: curl init failed");
     }
 
     uint8_t *body_bytes = NULL;
     size_t body_len = 0;
-    struct yetty_ycore_void_result get_res = yetty_yopenstreet_http_get(
+    struct yetty_ycore_void_result get_res = yetty_ymap_http_get(
         curl_handle, GEOIP_URL, GEOIP_TIMEOUT_SECONDS, &body_bytes, &body_len);
-    yetty_yopenstreet_curl_release(curl_handle);
+    yetty_ymap_curl_release(curl_handle);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, get_res, "geoip: lookup request failed");
 
     if (body_len == 0 || body_len > GEOIP_MAX_BODY) {

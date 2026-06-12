@@ -1,28 +1,47 @@
-# ymap — yclass class `ymap:map`: a slippy-map client/model.
+# ymap — the slippy-map module: yclass model + tile engine in one lib.
 #
-# map.c is the hand-written annotated source (#includes map.gen.c at the
-# foot); methods.gen.c + rpc.gen.c are codegen output. It holds the view
-# (center / zoom / viewport / tile provider) and renders through the
-# yopenstreet engine (raster composite or vector SDF/MSDF drawables). The
-# yclass model.yaml drives the FFI / host-language bindings. GPU-less.
+#   map.c           the `ymap:map` yclass class (hand-written annotated
+#                   source; map.gen.c included at the foot). Provider
+#                   registry, view state, pan/zoom verbs, render dispatch.
+#                   methods.gen.c + rpc.gen.c + map.h are codegen output;
+#                   model.yaml drives the FFI / host-language bindings.
+#   engine.c        raster path: parallel tile fetch → RGBA composite →
+#                   one yimage prim. Plus the slippy projection helpers.
+#   vector-render.c vector path: shortbread MVT → SDF/MSDF drawables
+#                   (cased roads, fills, decluttered labels).
+#   vector-tile.c   minimal MVT (protobuf subset) decoder.
+#   tile-fetch.c    disk cache + curl-multi parallel download (HTTP/3
+#                   when the vendored curl has QUIC).
+#   geoip.c         public-IP geolocation for the default map center.
+#
+# GPU-less: everything renders to generic ydraw drawables; the receiving
+# terminal needs no ymap-specific code. Gated on libcurl + yimage (see
+# src/yetty/CMakeLists.txt).
 
 add_library(yetty_ymap STATIC
     map.c
     methods.gen.c
     rpc.gen.c
+    engine.c
+    tile-fetch.c
+    vector-tile.c
+    vector-render.c
+    geoip.c
 )
 
 target_include_directories(yetty_ymap PUBLIC
     ${YETTY_ROOT}/include
+    ${YETTY_ROOT}/src
 )
-# Codegen-emitted internal sources (*.gen.c) live under src/yetty/ymap/.
-target_include_directories(yetty_ymap PRIVATE ${YETTY_ROOT}/src)
 
 target_link_libraries(yetty_ymap PUBLIC
     yetty_ycore
     yetty_yclass
-    yetty_yopenstreet
+    yetty_yface
+    yetty_yimage_core
     yetty_yplatform_core
+    yetty_ysdf
+    CURL::libcurl
 )
 
 # map.c carries `[[clang::annotate(...)]]` (C23 attribute syntax) — same

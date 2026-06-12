@@ -131,7 +131,7 @@ option(YETTY_ENABLE_FEATURE_YPDF      "ypdf — PDF to ydraw buffer"          ON
 option(YETTY_ENABLE_FEATURE_YMARKDOWN "ymarkdown — Markdown to ydraw buffer" ON)
 option(YETTY_ENABLE_FEATURE_YSVG      "ysvg — SVG (Tiny 1.2) to ydraw buffer" ON)
 option(YETTY_ENABLE_FEATURE_YLOTTIE   "ylottie — Lottie (single frame) to ydraw buffer" ON)
-option(YETTY_ENABLE_FEATURE_YOPENSTREET "yopenstreet — OpenStreetMap snapshot to ydraw buffer" ON)
+option(YETTY_ENABLE_FEATURE_YMAP      "ymap — slippy-map model + tile engine" ON)
 
 # Build pipeline
 option(YETTY_ENABLE_FEATURE_ASSETS    "assets — runtime asset copying"       ON)

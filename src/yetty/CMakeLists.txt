@@ -288,14 +288,10 @@ if(YETTY_ENABLE_FEATURE_YIMAGE)
     add_subdirectory(yimage)
 endif()
 
-# yopenstreet — OSM snapshot → yimage prim. Client-side only; needs the
-# yimage wire serializer and libcurl for tile download.
-if(YETTY_ENABLE_FEATURE_YOPENSTREET AND YETTY_ENABLE_FEATURE_YIMAGE
+# ymap — the slippy-map module (yclass model + tile engine). Client-side
+# only; needs the yimage wire serializer and libcurl for tile download.
+if(YETTY_ENABLE_FEATURE_YMAP AND YETTY_ENABLE_FEATURE_YIMAGE
    AND YETTY_ENABLE_LIB_LIBCURL AND TARGET CURL::libcurl)
-    add_subdirectory(yopenstreet)
-
-    # ymap — yclass slippy-map model over the yopenstreet engine (tile
-    # provider registry, pan/zoom math, FFI/RPC surface via codegen).
     add_subdirectory(ymap)
 endif()
 
