@@ -32,7 +32,8 @@ struct yetty_ycore_size_result yetty_yshadertoy_prim_serialize(
         return YETTY_ERR(yetty_ycore_size, "yshadertoy prim serialize: out is NULL");
     }
     if (wgsl_len > 0u && !wgsl_source) {
-        return YETTY_ERR(yetty_ycore_size, "yshadertoy prim serialize: wgsl_len > 0 but source NULL");
+        return YETTY_ERR(yetty_ycore_size,
+                         "yshadertoy prim serialize: wgsl_len > 0 but source NULL");
     }
     if (wgsl_len > UINT32_MAX) {
         return YETTY_ERR(yetty_ycore_size, "yshadertoy prim serialize: shader text exceeds u32");

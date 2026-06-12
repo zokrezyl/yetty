@@ -1,9 +1,9 @@
 /* GENERATED — do not edit. */
 #include "yetty/yai/claude.h"
 #include "yetty/yai/codex.h"
-#include "yetty/yai/editor.h"
 #include "yetty/yai/editor-emacs.h"
 #include "yetty/yai/editor-vi.h"
+#include "yetty/yai/editor.h"
 #include "yetty/yai/engine.h"
 #include "yetty/yai/gemini.h"
 #include "yetty/yai/turn-engine.h"

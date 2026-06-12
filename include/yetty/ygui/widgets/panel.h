@@ -29,7 +29,10 @@ struct yetty_ycore_void_result yetty_ygui_register(void);
 
 struct yetty_ycore_rgba;
 
-struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_yclass_object *obj, struct yetty_ycore_rgba color);
-struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_yclass_object *obj, struct yetty_ycore_rgba color, float width_px);
+struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_yclass_object *obj,
+                                                       struct yetty_ycore_rgba color);
+struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_yclass_object *obj,
+                                                           struct yetty_ycore_rgba color,
+                                                           float width_px);
 
 #endif

@@ -239,23 +239,6 @@ classes:
       - slot: handle_event
         slot_domain: yai
         impl: codex_handle_event
-  - name: editor
-    domain: yai
-    accessor: yetty_yai_editor_class_get
-    type: regular
-    source_file: tools/ai/yai/editor.c
-    parent: null
-    mixins: []
-    data: struct yetty_yai_editor
-    data_fields:
-      - name: unused
-        type: char
-        get: false
-        set: false
-    ops:
-      - slot: feed_byte
-        slot_domain: yai
-        impl: editor_feed_byte
   - name: emacs
     domain: yai
     accessor: yetty_yai_emacs_class_get
@@ -314,6 +297,23 @@ classes:
       - slot: feed_byte
         slot_domain: yai
         impl: vi_feed_byte
+  - name: editor
+    domain: yai
+    accessor: yetty_yai_editor_class_get
+    type: regular
+    source_file: tools/ai/yai/editor.c
+    parent: null
+    mixins: []
+    data: struct yetty_yai_editor
+    data_fields:
+      - name: unused
+        type: char
+        get: false
+        set: false
+    ops:
+      - slot: feed_byte
+        slot_domain: yai
+        impl: editor_feed_byte
   - name: engine
     domain: yai
     accessor: yetty_yai_engine_class_get

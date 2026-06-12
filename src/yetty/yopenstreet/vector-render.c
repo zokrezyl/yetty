@@ -146,15 +146,24 @@ static uint32_t land_fill_for_kind(const char *kind)
         const char *kind;
         uint32_t color;
     } fills[] = {
-        {"forest", 0xffadd19eu},     {"wood", 0xffadd19eu},
-        {"grass", 0xffcdebb0u},      {"meadow", 0xffcdebb0u},
-        {"park", 0xffc8faccu},       {"garden", 0xffcdebb0u},
-        {"village_green", 0xffcdebb0u}, {"recreation_ground", 0xffcdebb0u},
-        {"cemetery", 0xffaacbafu},   {"allotments", 0xffc9e1bfu},
-        {"heath", 0xffd6d99fu},      {"scrub", 0xffc8d7abu},
-        {"golf_course", 0xffcdebb0u}, {"farmland", 0xffeef0d5u},
-        {"orchard", 0xffaedfa3u},    {"vineyard", 0xffaedfa3u},
-        {"sand", 0xfffff1bau},       {"beach", 0xfffff1bau},
+        {"forest", 0xffadd19eu},
+        {"wood", 0xffadd19eu},
+        {"grass", 0xffcdebb0u},
+        {"meadow", 0xffcdebb0u},
+        {"park", 0xffc8faccu},
+        {"garden", 0xffcdebb0u},
+        {"village_green", 0xffcdebb0u},
+        {"recreation_ground", 0xffcdebb0u},
+        {"cemetery", 0xffaacbafu},
+        {"allotments", 0xffc9e1bfu},
+        {"heath", 0xffd6d99fu},
+        {"scrub", 0xffc8d7abu},
+        {"golf_course", 0xffcdebb0u},
+        {"farmland", 0xffeef0d5u},
+        {"orchard", 0xffaedfa3u},
+        {"vineyard", 0xffaedfa3u},
+        {"sand", 0xfffff1bau},
+        {"beach", 0xfffff1bau},
         {NULL, 0},
     };
     if (!kind) {
@@ -333,8 +342,7 @@ static struct yetty_ycore_void_result emit_segment(struct osm_vector_emit *emit,
     if (!clip_segment(&x0, &y0, &x1, &y1, emit->viewport_w, emit->viewport_h)) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ysdf_segment geometry = {
-        .start_x = x0, .start_y = y0, .end_x = x1, .end_y = y1};
+    struct yetty_ysdf_segment geometry = {.start_x = x0, .start_y = y0, .end_x = x1, .end_y = y1};
     struct yetty_ycore_void_result add_res = yetty_ydraw_drawable_list_add_cmd_add_segment(
         emit->list, /*id=*/0, z_band, 0, color, width, &geometry);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, add_res, "osm vector: add segment");
@@ -442,8 +450,8 @@ static struct yetty_ycore_void_result emit_polygon_fill(struct osm_vector_emit *
             .vertex_c_x = points[indices[2]].x,
             .vertex_c_y = points[indices[2]].y,
         };
-        result = yetty_ydraw_drawable_list_add_cmd_add_triangle(emit->list, /*id=*/0, z_band,
-                                                                color, 0, 0.0f, &geometry);
+        result = yetty_ydraw_drawable_list_add_cmd_add_triangle(emit->list, /*id=*/0, z_band, color,
+                                                                0, 0.0f, &geometry);
         if (YETTY_IS_ERR(result)) {
             free(indices);
             return YETTY_ERR(yetty_ycore_void, "osm vector: add final triangle", result);
@@ -544,8 +552,7 @@ static struct yetty_ycore_void_result emit_polygon_feature(
         float area = 0.0f;
         for (uint32_t i = 0; i < ring->point_count; i++) {
             const struct yetty_yopenstreet_vt_point *a = &ring->points[i];
-            const struct yetty_yopenstreet_vt_point *b =
-                &ring->points[(i + 1) % ring->point_count];
+            const struct yetty_yopenstreet_vt_point *b = &ring->points[(i + 1) % ring->point_count];
             area += a->x * b->y - b->x * a->y;
         }
         if (fabsf(area) > fabsf(dominant_area)) {
@@ -565,8 +572,7 @@ static struct yetty_ycore_void_result emit_polygon_feature(
         float area = 0.0f;
         for (uint32_t i = 0; i < ring->point_count; i++) {
             const struct yetty_yopenstreet_vt_point *a = &ring->points[i];
-            const struct yetty_yopenstreet_vt_point *b =
-                &ring->points[(i + 1) % ring->point_count];
+            const struct yetty_yopenstreet_vt_point *b = &ring->points[(i + 1) % ring->point_count];
             area += a->x * b->y - b->x * a->y;
         }
         if ((area > 0.0f) != (dominant_area > 0.0f)) {
@@ -867,7 +873,8 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render_vector(
                          "yopenstreet vector: no tile could be fetched — offline and cold cache?");
     }
     if (!emit_budget_left(&emit)) {
-        ywarn("yopenstreet vector: prim budget (%u) exhausted — map truncated", OSM_VECTOR_MAX_PRIMS);
+        ywarn("yopenstreet vector: prim budget (%u) exhausted — map truncated",
+              OSM_VECTOR_MAX_PRIMS);
     }
     ydebug("yopenstreet vector: %u tiles, %u prims at z%u", tiles_rendered, emit.prim_count,
            config->zoom);

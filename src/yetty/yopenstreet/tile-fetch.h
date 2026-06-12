@@ -32,7 +32,7 @@ struct yetty_ycore_void_result yetty_yopenstreet_tile_fetch(
  * one-shot requests. timeout_seconds <= 0 falls back to the tile
  * default. Caller frees *out_bytes. */
 struct yetty_ycore_void_result yetty_yopenstreet_http_get(CURL *curl_handle, const char *url,
-                                                          long timeout_seconds,
-                                                          uint8_t **out_bytes, size_t *out_len);
+                                                          long timeout_seconds, uint8_t **out_bytes,
+                                                          size_t *out_len);
 
 #endif /* YETTY_YOPENSTREET_TILE_FETCH_H */

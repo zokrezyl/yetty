@@ -77,11 +77,16 @@ static const struct {
     enum yetty_ycat_type type;
     const char *name;
 } type_names[] = {
-    {YETTY_YCAT_TYPE_UNKNOWN, "unknown"},   {YETTY_YCAT_TYPE_TEXT, "text"},
-    {YETTY_YCAT_TYPE_MARKDOWN, "markdown"}, {YETTY_YCAT_TYPE_PDF, "pdf"},
-    {YETTY_YCAT_TYPE_IMAGE, "image"},       {YETTY_YCAT_TYPE_SVG, "svg"},
-    {YETTY_YCAT_TYPE_MERMAID, "mermaid"},   {YETTY_YCAT_TYPE_VIDEO, "video"},
-    {YETTY_YCAT_TYPE_LOTTIE, "lottie"},     {YETTY_YCAT_TYPE_MUSIC, "music"},
+    {YETTY_YCAT_TYPE_UNKNOWN, "unknown"},
+    {YETTY_YCAT_TYPE_TEXT, "text"},
+    {YETTY_YCAT_TYPE_MARKDOWN, "markdown"},
+    {YETTY_YCAT_TYPE_PDF, "pdf"},
+    {YETTY_YCAT_TYPE_IMAGE, "image"},
+    {YETTY_YCAT_TYPE_SVG, "svg"},
+    {YETTY_YCAT_TYPE_MERMAID, "mermaid"},
+    {YETTY_YCAT_TYPE_VIDEO, "video"},
+    {YETTY_YCAT_TYPE_LOTTIE, "lottie"},
+    {YETTY_YCAT_TYPE_MUSIC, "music"},
     {YETTY_YCAT_TYPE_SHADERTOY, "shadertoy"},
     /* alias rows — type_name() returns the first match above, from_name()
      * accepts either spelling for --card. */

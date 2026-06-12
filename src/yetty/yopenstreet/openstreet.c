@@ -114,8 +114,8 @@ static struct yetty_ycore_void_result validate_config(const struct yetty_yopenst
     if (config->zoom > YETTY_YOPENSTREET_MAX_ZOOM) {
         return YETTY_ERR(yetty_ycore_void, "yopenstreet: zoom exceeds maximum (19)");
     }
-    if (config->width_px == 0 || config->height_px == 0 ||
-        config->width_px > OSM_MAX_VIEWPORT_PX || config->height_px > OSM_MAX_VIEWPORT_PX) {
+    if (config->width_px == 0 || config->height_px == 0 || config->width_px > OSM_MAX_VIEWPORT_PX ||
+        config->height_px > OSM_MAX_VIEWPORT_PX) {
         return YETTY_ERR(yetty_ycore_void, "yopenstreet: viewport size out of range (1..4096 px)");
     }
     if (config->latitude < -85.06 || config->latitude > 85.06) {
@@ -153,15 +153,14 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render(
 
     /* Covering tile index range (y clamped to the map, x wraps). */
     int64_t tile_count = (int64_t)1 << config->zoom;
-    int64_t tile_x_first = origin_x >= 0 ? origin_x / OSM_TILE_SIZE
-                                         : (origin_x - (OSM_TILE_SIZE - 1)) / OSM_TILE_SIZE;
-    int64_t tile_y_first = origin_y >= 0 ? origin_y / OSM_TILE_SIZE
-                                         : (origin_y - (OSM_TILE_SIZE - 1)) / OSM_TILE_SIZE;
+    int64_t tile_x_first =
+        origin_x >= 0 ? origin_x / OSM_TILE_SIZE : (origin_x - (OSM_TILE_SIZE - 1)) / OSM_TILE_SIZE;
+    int64_t tile_y_first =
+        origin_y >= 0 ? origin_y / OSM_TILE_SIZE : (origin_y - (OSM_TILE_SIZE - 1)) / OSM_TILE_SIZE;
     int64_t tile_x_last = (origin_x + (int64_t)config->width_px - 1) / (int64_t)OSM_TILE_SIZE;
     int64_t tile_y_last = (origin_y + (int64_t)config->height_px - 1) / (int64_t)OSM_TILE_SIZE;
 
-    int64_t tiles_total =
-        (tile_x_last - tile_x_first + 1) * (tile_y_last - tile_y_first + 1);
+    int64_t tiles_total = (tile_x_last - tile_x_first + 1) * (tile_y_last - tile_y_first + 1);
     if (tiles_total > (int64_t)OSM_MAX_TILES_PER_RENDER) {
         return YETTY_ERR(yetty_ydraw_drawable_list,
                          "yopenstreet: viewport covers too many tiles — reduce size or zoom out");
@@ -193,10 +192,9 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render(
 
             uint8_t *png_bytes = NULL;
             size_t png_len = 0;
-            struct yetty_ycore_void_result tile_res =
-                yetty_yopenstreet_tile_fetch(curl_handle, url_template, cache_root, "png",
-                                             config->zoom, wrapped_x, (uint32_t)tile_y, &png_bytes,
-                                             &png_len);
+            struct yetty_ycore_void_result tile_res = yetty_yopenstreet_tile_fetch(
+                curl_handle, url_template, cache_root, "png", config->zoom, wrapped_x,
+                (uint32_t)tile_y, &png_bytes, &png_len);
             if (YETTY_IS_ERR(tile_res)) {
                 /* Best-effort by design: leave the background hole. */
                 ywarn("yopenstreet: tile %u/%u/%lld failed: %s", config->zoom, wrapped_x,
@@ -217,9 +215,8 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render(
                 continue;
             }
 
-            blit_tile(composite, config->width_px, config->height_px,
-                      (const uint32_t *)tile_pixels, tile_w, tile_h,
-                      tile_x * (int64_t)OSM_TILE_SIZE - origin_x,
+            blit_tile(composite, config->width_px, config->height_px, (const uint32_t *)tile_pixels,
+                      tile_w, tile_h, tile_x * (int64_t)OSM_TILE_SIZE - origin_x,
                       tile_y * (int64_t)OSM_TILE_SIZE - origin_y);
             stbi_image_free(tile_pixels);
             tiles_blitted++;

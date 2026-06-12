@@ -145,8 +145,8 @@ static void *vt_grow(void *array, uint32_t needed_count, uint32_t *capacity, siz
  * Geometry command stream → point rings
  *===========================================================================*/
 
-static struct yetty_ycore_void_result vt_parse_geometry(struct vt_reader *geometry,
-                                                        struct yetty_yopenstreet_vt_feature *feature)
+static struct yetty_ycore_void_result vt_parse_geometry(
+    struct vt_reader *geometry, struct yetty_yopenstreet_vt_feature *feature)
 {
     uint32_t ring_capacity = 0;
     uint32_t point_capacity = 0; /* capacity of the CURRENT ring */
@@ -186,9 +186,9 @@ static struct yetty_ycore_void_result vt_parse_geometry(struct vt_reader *geomet
             }
 
             if (command_id == 1 /* MoveTo */) {
-                struct yetty_yopenstreet_vt_ring *grown_rings = vt_grow(
-                    feature->rings, feature->ring_count + 1, &ring_capacity,
-                    sizeof(struct yetty_yopenstreet_vt_ring));
+                struct yetty_yopenstreet_vt_ring *grown_rings =
+                    vt_grow(feature->rings, feature->ring_count + 1, &ring_capacity,
+                            sizeof(struct yetty_yopenstreet_vt_ring));
                 if (!grown_rings) {
                     return YETTY_ERR(yetty_ycore_void, "mvt: ring array alloc failed");
                 }
@@ -481,7 +481,7 @@ static struct yetty_ycore_void_result vt_parse_layer(struct vt_reader *reader,
                 break;
             }
             layer->values[layer->value_count++] = value_string; /* may be NULL (non-string) */
-        } else if (field_number == 5 && wire_type == 0) { /* extent */
+        } else if (field_number == 5 && wire_type == 0) {       /* extent */
             uint64_t extent = 0;
             result = vt_read_varint(reader, &extent);
             if (YETTY_IS_ERR(result)) {
@@ -510,8 +510,7 @@ static struct yetty_ycore_void_result vt_parse_layer(struct vt_reader *reader,
                 break;
             }
             layer->features = grown_features;
-            struct yetty_yopenstreet_vt_feature *feature =
-                &layer->features[layer->feature_count];
+            struct yetty_yopenstreet_vt_feature *feature = &layer->features[layer->feature_count];
             memset(feature, 0, sizeof(*feature));
             result = vt_parse_feature(&feature_slices[i], layer, feature);
             if (YETTY_IS_ERR(result)) {

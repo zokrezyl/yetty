@@ -44,7 +44,7 @@ struct yetty_yopenstreet_config {
     double longitude; /* map center, degrees, -180..180 */
     uint32_t zoom;    /* slippy-map zoom level, 0..YETTY_YOPENSTREET_MAX_ZOOM */
 
-    uint32_t width_px;  /* viewport (and displayed) size in pixels */
+    uint32_t width_px; /* viewport (and displayed) size in pixels */
     uint32_t height_px;
 
     /* printf-style template with three unsigned slots in z, x, y order

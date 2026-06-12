@@ -233,8 +233,7 @@ static void yshadertoy_prim_populate_rs(struct yetty_yrender_gpu_resource_set *r
     rs->uniforms[U_TIME] = (struct yetty_yrender_uniform){"time", YETTY_YRENDER_UNIFORM_F32, {0}};
     rs->uniforms[U_TIME_DELTA] =
         (struct yetty_yrender_uniform){"time_delta", YETTY_YRENDER_UNIFORM_F32, {0}};
-    rs->uniforms[U_FRAME] =
-        (struct yetty_yrender_uniform){"frame", YETTY_YRENDER_UNIFORM_I32, {0}};
+    rs->uniforms[U_FRAME] = (struct yetty_yrender_uniform){"frame", YETTY_YRENDER_UNIFORM_I32, {0}};
     rs->uniforms[U_MOUSE] =
         (struct yetty_yrender_uniform){"mouse", YETTY_YRENDER_UNIFORM_VEC4, {0}};
     rs->uniform_count = U_COUNT;
@@ -513,9 +512,8 @@ static struct yetty_ydraw_composite_ptr_result yshadertoy_prim_create_instance(
     struct yetty_ydraw_concrete_factory *self, const void *buffer_data, size_t size,
     uint32_t rolling_row)
 {
-    if (!buffer_data ||
-        size < sizeof(struct yetty_ydraw_composite_header) +
-                   YSHADERTOY_PRIM_FIXED_WORDS * sizeof(uint32_t)) {
+    if (!buffer_data || size < sizeof(struct yetty_ydraw_composite_header) +
+                                   YSHADERTOY_PRIM_FIXED_WORDS * sizeof(uint32_t)) {
         return YETTY_ERR(yetty_ydraw_composite_ptr, "yshadertoy prim: wire record truncated");
     }
     struct yetty_yshadertoy_prim_factory *factory = yshadertoy_prim_factory_from_base(self);
@@ -592,8 +590,7 @@ static struct yetty_ydraw_composite_ptr_result yshadertoy_prim_create_instance(
 
     struct yetty_yrender_gpu_resource_binder_result binder_res =
         yetty_yrender_gpu_resource_binder_create_with_pipeline(factory->device, factory->queue,
-                                                               factory->allocator,
-                                                               state->pipeline);
+                                                               factory->allocator, state->pipeline);
     if (YETTY_IS_ERR(binder_res)) {
         yshadertoy_prim_instance_destroy(instance);
         return YETTY_ERR(yetty_ydraw_composite_ptr, "yshadertoy prim: binder create", binder_res);

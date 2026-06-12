@@ -2373,8 +2373,8 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 terminal, event->mouse_scroll.x, event->mouse_scroll.y, 0);
             if (hit.figure_id != 0) {
                 struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
-                    terminal, hit.figure_id, hit.local_x, hit.local_y, 0, 0,
-                    event->mouse_scroll.dy, wheel_mods);
+                    terminal, hit.figure_id, hit.local_x, hit.local_y, 0, 0, event->mouse_scroll.dy,
+                    wheel_mods);
                 YETTY_RETURN_IF_ERR(
                     yetty_ycore_int, mr,
                     "terminal_view_on_event: emit_card_mouse_button (wheel) failed");

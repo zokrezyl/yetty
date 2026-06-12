@@ -164,8 +164,8 @@ static struct yetty_ycore_void_result fetch_url(CURL *curl_handle, const char *u
 }
 
 struct yetty_ycore_void_result yetty_yopenstreet_http_get(CURL *curl_handle, const char *url,
-                                                          long timeout_seconds,
-                                                          uint8_t **out_bytes, size_t *out_len)
+                                                          long timeout_seconds, uint8_t **out_bytes,
+                                                          size_t *out_len)
 {
     if (!curl_handle || !url || !out_bytes || !out_len) {
         return YETTY_ERR(yetty_ycore_void, "yopenstreet http_get: NULL argument");
@@ -187,8 +187,7 @@ struct yetty_ycore_void_result yetty_yopenstreet_tile_fetch(
              cache_file_extension);
 
     if (yetty_yplatform_file_is_regular(cache_path)) {
-        struct yetty_ycore_void_result read_res =
-            read_entire_file(cache_path, out_bytes, out_len);
+        struct yetty_ycore_void_result read_res = read_entire_file(cache_path, out_bytes, out_len);
         if (YETTY_IS_OK(read_res)) {
             return YETTY_OK_VOID();
         }

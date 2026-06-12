@@ -20,7 +20,8 @@ struct yetty_yclass_ptr_result yetty_ygui_ydraw_embed_class_get(void);
  * through the per-property getters/setters below. */
 struct yetty_ygui_ydraw_embed;
 YETTY_YRESULT_DECLARE(yetty_ygui_ydraw_embed_ptr, struct yetty_ygui_ydraw_embed *);
-struct yetty_ygui_ydraw_embed_ptr_result yetty_ygui_ydraw_embed_from(struct yetty_yclass_object *obj);
+struct yetty_ygui_ydraw_embed_ptr_result yetty_ygui_ydraw_embed_from(
+    struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_ygui_ydraw_embed_to(struct yetty_ygui_ydraw_embed *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_ydraw_embed_create(struct yetty_yclass_ctx *ctx);
@@ -29,6 +30,7 @@ struct yetty_ycore_void_result yetty_ygui_register(void);
 
 struct yetty_ydraw_drawable_list;
 
-struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *buf);
+struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(
+    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *buf);
 
 #endif

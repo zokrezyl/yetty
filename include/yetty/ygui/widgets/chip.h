@@ -27,7 +27,8 @@ struct yetty_yclass_object_ptr_result yetty_ygui_chip_create(struct yetty_yclass
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_chip_set_label(struct yetty_yclass_object *obj, const char *label);
+struct yetty_ycore_void_result yetty_ygui_chip_set_label(struct yetty_yclass_object *obj,
+                                                         const char *label);
 struct yetty_ycore_void_result yetty_ygui_chip_set_closable(struct yetty_yclass_object *obj, int c);
 
 #endif
