@@ -152,6 +152,9 @@ target_link_libraries(ygreeter PRIVATE
     # widget, so it links on every target (client guest included), same as
     # ychrome above.
     yetty_ycircuit
+    # ymusic — GPU-free score engraver (same yclass → ydraw drawable list
+    # pattern as ycircuit). The Music scene hosts it in an ydraw_embed widget.
+    yetty_ymusic
     uv_a
     ${BROTLIDEC_LIBRARIES}
     Threads::Threads

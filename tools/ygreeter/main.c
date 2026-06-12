@@ -43,6 +43,7 @@
 #include <yetty/yfigure/producer.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ycircuit/circuit.h>
+#include <yetty/ymusic/music.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/yshadertoy/demo-shaders.h>
@@ -124,18 +125,19 @@ enum tab_kind {
     TAB_KIND_YNODES,     /* node-graph editor, rendered by the `ynodes` widget */
     TAB_KIND_YPDF,       /* PDF document, rendered by the `ypdf` widget */
     TAB_KIND_YCIRCUIT,   /* electric-circuit schematics (ycircuit → ydraw_embed) */
+    TAB_KIND_YMUSIC,     /* musical score notation (ymusic → ydraw_embed) */
 };
 
 /* Scenes — the leaf content panels. `tab_kind_for` / `tab_entry_*` are
  * keyed by these indices. A scene is shown either directly (its own
  * top-level tab) or under a top tab's sub-tabbar. */
-#define TAB_COUNT 16
+#define TAB_COUNT 17
 
 static const char *SCENE_LABELS[TAB_COUNT] = {
     "Welcome",  "Plots",    "Images",       "Code",        "Video",
     "Elements", "Markdown", "HTML/Browser", "Diagrams",    "YMaze",
     "YZoo",     "YJungle",  "Shadertoy",    "Node Editor", "PDF",
-    "Circuit"};
+    "Circuit",  "Music"};
 
 /* Top-level tabs. A tab with a single scene shows it directly; a tab with
  * several shows a sub-tabbar (same widget the Shadertoy gallery uses) that
@@ -143,14 +145,14 @@ static const char *SCENE_LABELS[TAB_COUNT] = {
 struct top_tab {
     const char *label;
     int n_subs;
-    int subs[6];
+    int subs[8];
 };
 
 static const struct top_tab TOP_TABS[] = {
     {"Welcome", 1, {0}},
     {"Plots", 1, {1}},
     {"Media", 2, {2, 4}},               /* Images, Video */
-    {"Rich content", 6, {6, 3, 14, 7, 8, 15}}, /* Markdown, Code, PDF, HTML/Browser, Diagrams, Circuit */
+    {"Rich content", 7, {6, 3, 14, 7, 8, 15, 16}}, /* Markdown, Code, PDF, HTML/Browser, Diagrams, Circuit, Music */
     {"YGUI Widgets", 1, {5}},           /* former Elements */
     {"Shadertoy", 1, {12}},             /* own tab — it already carries a gallery sub-tabbar */
     {"Ymazing", 4, {9, 10, 11, 13}},    /* YMaze, YZoo, YJungle, Node Editor */
@@ -972,6 +974,8 @@ static enum tab_kind tab_kind_for(int tab_index)
         return TAB_KIND_YPDF;
     case 15:
         return TAB_KIND_YCIRCUIT;
+    case 16:
+        return TAB_KIND_YMUSIC;
     case 0:
     case 3:
     default:
@@ -2051,6 +2055,141 @@ static struct yetty_ycore_void_result build_circuit_content(struct app *app,
 }
 
 /*=============================================================================
+ * Music tab — engraved musical scores. ymusic (the module ycircuit was
+ * modelled on) parses a LilyPond-subset score into a ydraw drawable list of
+ * staff lines / note heads / stems / beams plus Emmentaler glyph spans, which
+ * the generic `ydraw_embed` widget paints 1:1 — same hosting pattern as the
+ * Circuit tab. The Emmentaler music font ships as /data/msdf-fonts/
+ * Emmentaler.cdb (staged for webasm, installed on desktop). DSL reference:
+ * src/yetty/ymusic/README.md.
+ *===========================================================================*/
+
+/* System width (px) the engraver wraps measures into, and the staff-line gap
+ * (em = 4 × staff_space). Sized for the showcase's scrollarea — readable but
+ * compact enough that a few measures fit before wrapping. */
+#define YGREETER_MUSIC_WIDTH 760.0f
+#define YGREETER_MUSIC_STAFF 13.0f
+
+static void music_add(struct yetty_yclass_object *sec, const char *score)
+{
+    if (!sec) {
+        return;
+    }
+    struct yetty_yclass_object_ptr_result wr =
+        yetty_ygui_widget_add(sec, yetty_ygui_ydraw_embed_class_get().value);
+    if (YETTY_IS_ERR(wr)) {
+        yetty_ycore_error_destroy(wr.error);
+        return;
+    }
+    struct yetty_yclass_object *widget = wr.value;
+
+    /* create → configure(width, staff space) → parse(score) → render → drop
+     * model. The rendered list owns its bytes, so the model is freed at once
+     * and ydraw_embed takes ownership of the list. */
+    struct yetty_yclass_object_ptr_result mr = yetty_ymusic_music_create(NULL);
+    if (YETTY_IS_ERR(mr)) {
+        yetty_ycore_error_destroy(mr.error);
+        return;
+    }
+    struct yetty_yclass_object *music = mr.value;
+    yetty_ycore_error_destroy_safe(yetty_ymusic_configure(
+        NULL, music, YGREETER_MUSIC_WIDTH, YGREETER_MUSIC_STAFF, YETTY_YMUSIC_FLAG_NONE));
+    yetty_ycore_error_destroy_safe(yetty_ymusic_parse(NULL, music, score, strlen(score)));
+    struct yetty_ydraw_drawable_list_result lr = yetty_ymusic_render(NULL, music);
+    yetty_ycore_error_destroy_safe(yetty_ymusic_destroy(NULL, music));
+    if (YETTY_IS_ERR(lr)) {
+        yetty_ycore_error_destroy(lr.error);
+        return;
+    }
+
+    float w = yetty_ydraw_drawable_list_scene_max_x(lr.value) -
+              yetty_ydraw_drawable_list_scene_min_x(lr.value);
+    float h = yetty_ydraw_drawable_list_scene_max_y(lr.value) -
+              yetty_ydraw_drawable_list_scene_min_y(lr.value);
+    if (w > 0.0f && h > 0.0f) {
+        struct yetty_ygui_layout layout = *yetty_ygui_widget_layout_get(widget);
+        layout.width = w;
+        layout.height = h;
+        yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(widget, &layout));
+    }
+    yetty_ycore_error_destroy_safe(yetty_ygui_ydraw_embed_set_buffer(widget, lr.value));
+}
+
+static struct yetty_ycore_void_result build_music_content(struct app *app,
+                                                          struct yetty_yclass_object *root)
+{
+    (void)app;
+    /* Idempotent: registers the ymusic:music class on first call. */
+    yetty_ycore_error_destroy_safe(yetty_ymusic_register());
+
+    static const struct {
+        const char *title;
+        const char *src;
+    } sections[] = {
+        /* The canonical example shipped with the repo — treble clef, D major
+         * key signature, common time, octave changes and dotted rhythms. */
+        {"Ode to Joy — D major",
+         "\\relative c'' {\n"
+         "  \\clef treble\n"
+         "  \\key d \\major\n"
+         "  \\time 4/4\n"
+         "  fis4 fis g a    | a g fis e      | d d e fis      | fis4. e8 e2    |\n"
+         "  fis4 fis g a    | a g fis e      | d d e fis      | e4. d8 d2      |\n"
+         "  e4 e fis d      | e fis8 g fis4 d | e fis8 g fis4 e | d e a,2       |\n"
+         "}\n"},
+        /* Two-octave C-major scale up and down — the plainest staff, no
+         * accidentals, eighth-note runs that inherit their duration. */
+        {"C major scale (treble)",
+         "\\relative c' {\n"
+         "  \\clef treble \\key c \\major \\time 4/4\n"
+         "  c8 d e f g a b c | c b a g f e d c |\n"
+         "}\n"},
+        /* Bass clef — a descending line; exercises the second clef glyph and
+         * ledger-free notes below the treble range. */
+        {"Bass clef — descending line",
+         "\\relative c {\n"
+         "  \\clef bass \\key c \\major \\time 4/4\n"
+         "  c4 b a g | f e d c | g g c2 |\n"
+         "}\n"},
+        /* A flat key in compound time — B-flat major (two flats) in 6/8,
+         * arpeggiated, to show the key-signature accidentals and a non-4/4
+         * meter. */
+        {"B-flat major, 6/8",
+         "\\relative c' {\n"
+         "  \\clef treble \\key bes \\major \\time 6/8\n"
+         "  bes8 d f bes f d | c es g c g es | d f bes d bes f | bes4. bes,4. |\n"
+         "}\n"},
+        /* Stacked pitches — triads and a seventh built as chords inside angle
+         * brackets, then held as half notes. */
+        {"Chords & triads",
+         "\\relative c' {\n"
+         "  \\clef treble \\key c \\major \\time 4/4\n"
+         "  <c e g>4 <d f a> <e g b> <f a c> | <g b d f>2 <c, e g>2 |\n"
+         "}\n"},
+        /* Every accidental the engraver draws — single sharp/flat, double
+         * sharp (isis) and double flat (eses), against the natural key. */
+        {"Accidentals — sharps, flats, doubles",
+         "\\relative c' {\n"
+         "  \\clef treble \\time 4/4\n"
+         "  cis4 des e f | fis ges aisis beses | c1 |\n"
+         "}\n"},
+        /* The rhythmic vocabulary — whole through sixteenth, a dotted figure
+         * and a rest, so every note-head/flag/dot/rest glyph appears. */
+        {"Rhythms & rests",
+         "\\relative c' {\n"
+         "  \\clef treble \\key c \\major \\time 4/4\n"
+         "  c1 | c2 c2 | c4 c c c | c8 c c c c c c c | r4 c8. c16 c4 r4 |\n"
+         "}\n"},
+    };
+    for (size_t i = 0; i < sizeof(sections) / sizeof(sections[0]); i++) {
+        struct yetty_yclass_object *sec = el_section(root, sections[i].title);
+        music_add(sec, sections[i].src);
+        el_finalize_section(sec);
+    }
+    return YETTY_OK_VOID();
+}
+
+/*=============================================================================
  * Node-editor tab — the exact scene from demo/ygui/38_ynodes: a ynodes
  * editor filling the body, three nodes holding ordinary widgets, two
  * pre-wired links, and a palette the node context menu can insert.
@@ -2251,6 +2390,7 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
     case TAB_KIND_YNODES:
     case TAB_KIND_YPDF:
     case TAB_KIND_YCIRCUIT:
+    case TAB_KIND_YMUSIC:
         has_nav = false;
         break;
     default:
@@ -2326,7 +2466,8 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
     }
     case TAB_KIND_ELEMENTS:
     case TAB_KIND_DIAGRAMS:
-    case TAB_KIND_YCIRCUIT: {
+    case TAB_KIND_YCIRCUIT:
+    case TAB_KIND_YMUSIC: {
         struct yetty_yclass_object_ptr_result sr =
             yetty_ygui_widget_add(hr.value, yetty_ygui_scrollarea_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "rebuild: scrollarea");
@@ -2492,6 +2633,9 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
         break;
     case TAB_KIND_YCIRCUIT:
         yetty_ycore_error_destroy_safe(build_circuit_content(app, content));
+        break;
+    case TAB_KIND_YMUSIC:
+        yetty_ycore_error_destroy_safe(build_music_content(app, content));
         break;
     case TAB_KIND_YNODES:
         yetty_ycore_error_destroy_safe(build_ynodes_content(app, content));
