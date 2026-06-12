@@ -281,6 +281,13 @@ if(YETTY_ENABLE_FEATURE_YIMAGE)
     add_subdirectory(yimage)
 endif()
 
+# yopenstreet — OSM snapshot → yimage prim. Client-side only; needs the
+# yimage wire serializer and libcurl for tile download.
+if(YETTY_ENABLE_FEATURE_YOPENSTREET AND YETTY_ENABLE_FEATURE_YIMAGE
+   AND YETTY_ENABLE_LIB_LIBCURL AND TARGET CURL::libcurl)
+    add_subdirectory(yopenstreet)
+endif()
+
 if(YETTY_ENABLE_FEATURE_YMESH)
     add_subdirectory(ymesh)
 endif()

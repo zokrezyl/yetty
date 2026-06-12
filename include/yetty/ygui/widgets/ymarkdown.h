@@ -27,9 +27,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ymarkdown_create(struct yetty_y
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_ymarkdown_set_source(struct yetty_yclass_object *obj,
-                                                               const char *src, size_t len);
-struct yetty_ycore_void_result yetty_ygui_ymarkdown_set_file(struct yetty_yclass_object *obj,
-                                                             const char *path);
+struct yetty_ycore_void_result yetty_ygui_ymarkdown_set_source(struct yetty_yclass_object *obj, const char *src, size_t len);
+struct yetty_ycore_void_result yetty_ygui_ymarkdown_set_file(struct yetty_yclass_object *obj, const char *path);
 
 #endif

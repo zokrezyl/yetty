@@ -130,6 +130,7 @@ option(YETTY_ENABLE_FEATURE_YPDF      "ypdf — PDF to ydraw buffer"          ON
 option(YETTY_ENABLE_FEATURE_YMARKDOWN "ymarkdown — Markdown to ydraw buffer" ON)
 option(YETTY_ENABLE_FEATURE_YSVG      "ysvg — SVG (Tiny 1.2) to ydraw buffer" ON)
 option(YETTY_ENABLE_FEATURE_YLOTTIE   "ylottie — Lottie (single frame) to ydraw buffer" ON)
+option(YETTY_ENABLE_FEATURE_YOPENSTREET "yopenstreet — OpenStreetMap snapshot to ydraw buffer" ON)
 
 # Build pipeline
 option(YETTY_ENABLE_FEATURE_ASSETS    "assets — runtime asset copying"       ON)
@@ -156,8 +157,10 @@ option(YETTY_ENABLE_TOOL_YECHO           "yecho tool"                        ON)
 option(YETTY_ENABLE_TOOL_GEN_ERROR       "gen-error tool (malformed OSC test) " ON)
 option(YETTY_ENABLE_TOOL_YRDAWN_DEMO       "yrdawn-demo tool (bridge smoke test)" ON)
 option(YETTY_ENABLE_TOOL_YPLOT           "yplot tool"                        ON)
+option(YETTY_ENABLE_TOOL_YOPENSTREET     "yopenstreet tool (OSM map snapshot)" ON)
 option(YETTY_ENABLE_TOOL_YTOP            "ytop tool (CPU monitor)"           ON)
 option(YETTY_ENABLE_TOOL_CCC             "ccc tool (claude CLI loop)"        ON)
+option(YETTY_ENABLE_TOOL_YAI             "yai tool (AI engine loop)"         ON)
 option(YETTY_ENABLE_TOOL_YGREETER        "ygreeter first-contact tool"       ON)
 option(YETTY_ENABLE_TOOL_YINSTALL        "yinstall installer"                ON)
 

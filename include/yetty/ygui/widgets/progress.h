@@ -27,11 +27,8 @@ struct yetty_yclass_object_ptr_result yetty_ygui_progress_create(struct yetty_yc
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_yclass_object *obj,
-                                                             float value);
-struct yetty_ycore_float_result yetty_ygui_progress_get_value(
-    const struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_progress_set_accent(struct yetty_yclass_object *obj,
-                                                              uint32_t color);
+struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_yclass_object *obj, float value);
+struct yetty_ycore_float_result yetty_ygui_progress_get_value(const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_progress_set_accent(struct yetty_yclass_object *obj, uint32_t color);
 
 #endif

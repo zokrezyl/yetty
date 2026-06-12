@@ -515,7 +515,7 @@ static struct yetty_ycore_void_result terminal_emit_card_resize(
 
 static struct yetty_ycore_void_result terminal_emit_card_mouse_button(
     struct yetty_yterminal_terminal *terminal, uint32_t figure_id, float lx, float ly, int button,
-    int press, float wheel_dy)
+    int press, float wheel_dy, int mods)
 {
     struct yetty_client_input_mouse msg = {
         .magic = YETTY_CLIENT_INPUT_MOUSE_MAGIC,
@@ -523,6 +523,7 @@ static struct yetty_ycore_void_result terminal_emit_card_mouse_button(
         .figure_id = figure_id,
         .x = lx,
         .y = ly,
+        .mods = mods,
     };
     if (wheel_dy != 0.0f) {
         msg.kind = YETTY_YMGUI_INPUT_MOUSE_WHEEL;
@@ -2289,7 +2290,8 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             }
             if (hit.figure_id != 0) {
                 struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
-                    terminal, hit.figure_id, hit.local_x, hit.local_y, btn, press, 0.0f);
+                    terminal, hit.figure_id, hit.local_x, hit.local_y, btn, press, 0.0f,
+                    event->mouse.mods);
                 YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
                                     "terminal_view_on_event: emit_card_mouse_button failed");
             }
@@ -2364,19 +2366,29 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         /* Once in scrollback view, wheel always drives history. Otherwise
          * if a figure is under the cursor, the wheel goes outbound; else
          * scrollback. */
+        int wheel_mods = event->mouse_scroll.mods;
         if (!terminal->scrollback_active && terminal->mouse_click_subscribed) {
             /* Window coords, same reason as MOUSE_DOWN. */
             struct yetty_yfigure_hit hit = terminal_resolve_figure_hit(
                 terminal, event->mouse_scroll.x, event->mouse_scroll.y, 0);
             if (hit.figure_id != 0) {
-                struct yetty_ycore_void_result mr =
-                    terminal_emit_card_mouse_button(terminal, hit.figure_id, hit.local_x,
-                                                    hit.local_y, 0, 0, event->mouse_scroll.dy);
+                struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
+                    terminal, hit.figure_id, hit.local_x, hit.local_y, 0, 0,
+                    event->mouse_scroll.dy, wheel_mods);
                 YETTY_RETURN_IF_ERR(
                     yetty_ycore_int, mr,
                     "terminal_view_on_event: emit_card_mouse_button (wheel) failed");
                 return YETTY_OK(yetty_ycore_int, 1);
             }
+        }
+
+        /* Modifier'd wheels (Ctrl / Ctrl-Shift) belong to the app-level
+         * zoom gestures when no subscribed figure claimed them above —
+         * report unconsumed so yetty.c's fallback (visual / cell zoom)
+         * fires; scrollback must not eat them. Plain wheels reach yetty.c
+         * only modifier-free, so this branch never starves scrollback. */
+        if (wheel_mods & YETTY_MOD_CONTROL) {
+            return YETTY_OK(yetty_ycore_int, 0);
         }
 
         int lines = (int)(event->mouse_scroll.dy * YETTY_YTERMINAL_WHEEL_LINES_PER_TICK);

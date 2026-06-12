@@ -403,14 +403,20 @@ static struct yetty_ycore_void_result create_pipeline(struct yetty_yrender_pipel
     sd.label.length = 23;
     sd.nextInChain = &wgsl.chain;
 
-    yetty_ywebgpu_error_clear();
+    /* The WGSL may be untrusted (a user shader arriving over the wire —
+     * yshadertoy). Capture validation errors in a scope so a malformed
+     * shader surfaces as a Result error instead of hitting the fail-fast
+     * uncaptured-error callback and killing the terminal. */
+    yetty_ywebgpu_error_scope_push(p->device);
     p->shader_module = wgpuDeviceCreateShaderModule(p->device, &sd);
     free(merged);
 
-    if (!p->shader_module || yetty_ywebgpu_error_check()) {
-        return YETTY_ERR(yetty_ycore_void, yetty_ywebgpu_error.has_error
-                                               ? yetty_ywebgpu_error.message
-                                               : "shader compile failed");
+    char capture_message[512];
+    if (yetty_ywebgpu_error_scope_pop(p->device, capture_message, sizeof(capture_message))) {
+        return YETTY_ERR(yetty_ycore_void, capture_message);
+    }
+    if (!p->shader_module) {
+        return YETTY_ERR(yetty_ycore_void, "shader compile failed");
     }
 
     /* Pipeline layout */
@@ -478,7 +484,20 @@ static struct yetty_ycore_void_result create_pipeline(struct yetty_yrender_pipel
     pd.multisample.count = 1;
     pd.multisample.mask = ~0u;
 
+    /* Same untrusted-input concern as CreateShaderModule above: a shader
+     * that parses but lacks vs_main / fs_main (or mismatches the layout)
+     * only fails here. */
+    yetty_ywebgpu_error_scope_push(p->device);
     p->pipeline = wgpuDeviceCreateRenderPipeline(p->device, &pd);
+    if (yetty_ywebgpu_error_scope_pop(p->device, capture_message, sizeof(capture_message))) {
+        if (p->pipeline) {
+            /* Dawn returns an invalid object on validation failure —
+             * release it so destroy doesn't double-handle. */
+            wgpuRenderPipelineRelease(p->pipeline);
+            p->pipeline = NULL;
+        }
+        return YETTY_ERR(yetty_ycore_void, capture_message);
+    }
     if (!p->pipeline) {
         return YETTY_ERR(yetty_ycore_void, "createRenderPipeline failed");
     }

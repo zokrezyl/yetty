@@ -193,6 +193,21 @@ static struct yetty_ycore_int_result yetty_event_handler(
         bool shift = (mods & YETTY_MOD_SHIFT) != 0;
 
         if (ctrl && shift) {
+            /* A wheel-subscribed client figure under the cursor owns the
+             * gesture (interactive map zoom and friends) — offer the raw
+             * scroll to the workspace chain first. The terminal consumes
+             * a modifier'd wheel ONLY when it forwarded it to a figure
+             * (see terminal_view_on_event MOUSE_SCROLL); otherwise it
+             * reports unconsumed and the cell-size zoom below applies. */
+            if (yetty->tabbar) {
+                struct yetty_ycore_int_result fwd =
+                    yetty_yui_tabbar_model_on_event(yetty->tabbar, event);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, fwd,
+                                    "yetty: ctrl-shift wheel workspace forward");
+                if (fwd.value) {
+                    return YETTY_OK(yetty_ycore_int, 1);
+                }
+            }
             struct yetty_yui_event ev = {0};
             ev.type = YETTY_YCORE_ZOOM_CELL_SIZE;
             ev.zoom_cell_size.delta = event->mouse_scroll.dy * 0.04f;

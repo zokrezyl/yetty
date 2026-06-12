@@ -1,0 +1,473 @@
+methods:
+  - slot: resolve_permission
+    domain: yai
+    owning_class: engine
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: app
+        type: "struct yai_app *"
+      - name: allowed
+        type: int
+    local: true
+  - slot: handle_event
+    domain: yai
+    owning_class: engine
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: app
+        type: "struct yai_app *"
+      - name: event
+        type: "struct yyjson_val *"
+    local: true
+  - slot: send_user_message
+    domain: yai
+    owning_class: engine
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: app
+        type: "struct yai_app *"
+      - name: text
+        type: "const char *"
+    local: true
+  - slot: interrupt
+    domain: yai
+    owning_class: engine
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: app
+        type: "struct yai_app *"
+    local: true
+  - slot: start
+    domain: yai
+    owning_class: engine
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: app
+        type: "struct yai_app *"
+    local: true
+  - slot: describe_config
+    domain: yai
+    owning_class: engine
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: app
+        type: "struct yai_app *"
+      - name: out
+        type: "char *"
+      - name: out_size
+        type: size_t
+    local: true
+  - slot: config_knob
+    domain: yai
+    owning_class: engine
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: app
+        type: "struct yai_app *"
+      - name: out
+        type: "char *"
+      - name: out_size
+        type: size_t
+    local: true
+  - slot: apply_config
+    domain: yai
+    owning_class: engine
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: app
+        type: "struct yai_app *"
+      - name: key
+        type: "const char *"
+      - name: value
+        type: "const char *"
+    local: true
+  - slot: on_child_exit
+    domain: yai
+    owning_class: engine
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: app
+        type: "struct yai_app *"
+      - name: exit_status
+        type: int64_t
+    local: true
+  - slot: on_child_eof
+    domain: yai
+    owning_class: engine
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: app
+        type: "struct yai_app *"
+    local: true
+  - slot: feed_byte
+    domain: yai
+    owning_class: editor
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: app
+        type: "struct yai_app *"
+      - name: byte
+        type: int
+    local: true
+classes:
+  - name: claude
+    domain: yai
+    accessor: yetty_yai_claude_class_get
+    type: regular
+    source_file: tools/ai/yai/claude.c
+    parent:
+      domain: yai
+      name: engine
+    mixins: []
+    data: struct yetty_yai_claude
+    data_fields:
+      - name: tool_names
+        type: "struct yai_tool_name_entry[128]"
+        get: false
+        set: false
+      - name: tool_name_next
+        type: int
+        get: false
+        set: false
+      - name: interrupt_request_counter
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: resolve_permission
+        slot_domain: yai
+        impl: claude_resolve_permission
+      - slot: handle_event
+        slot_domain: yai
+        impl: claude_handle_event
+      - slot: send_user_message
+        slot_domain: yai
+        impl: claude_send_user_message
+      - slot: interrupt
+        slot_domain: yai
+        impl: claude_interrupt
+      - slot: start
+        slot_domain: yai
+        impl: claude_start
+      - slot: describe_config
+        slot_domain: yai
+        impl: claude_describe_config
+      - slot: config_knob
+        slot_domain: yai
+        impl: claude_config_knob
+      - slot: apply_config
+        slot_domain: yai
+        impl: claude_apply_config
+      - slot: on_child_exit
+        slot_domain: yai
+        impl: claude_on_child_exit
+      - slot: on_child_eof
+        slot_domain: yai
+        impl: claude_on_child_eof
+  - name: codex
+    domain: yai
+    accessor: yetty_yai_codex_class_get
+    type: regular
+    source_file: tools/ai/yai/codex.c
+    parent:
+      domain: yai
+      name: turn_engine
+    mixins: []
+    data: struct yetty_yai_codex
+    data_fields:
+      - name: unused
+        type: char
+        get: false
+        set: false
+    ops:
+      - slot: start
+        slot_domain: yai
+        impl: codex_start
+      - slot: send_user_message
+        slot_domain: yai
+        impl: codex_send_user_message
+      - slot: describe_config
+        slot_domain: yai
+        impl: codex_describe_config
+      - slot: config_knob
+        slot_domain: yai
+        impl: codex_config_knob
+      - slot: handle_event
+        slot_domain: yai
+        impl: codex_handle_event
+  - name: editor
+    domain: yai
+    accessor: yetty_yai_editor_class_get
+    type: regular
+    source_file: tools/ai/yai/editor.c
+    parent: null
+    mixins: []
+    data: struct yetty_yai_editor
+    data_fields:
+      - name: unused
+        type: char
+        get: false
+        set: false
+    ops:
+      - slot: feed_byte
+        slot_domain: yai
+        impl: editor_feed_byte
+  - name: emacs
+    domain: yai
+    accessor: yetty_yai_emacs_class_get
+    type: regular
+    source_file: tools/ai/yai/editor-emacs.c
+    parent:
+      domain: yai
+      name: editor
+    mixins: []
+    data: struct yetty_yai_emacs
+    data_fields:
+      - name: unused
+        type: char
+        get: false
+        set: false
+    ops:
+      - slot: feed_byte
+        slot_domain: yai
+        impl: emacs_feed_byte
+  - name: vi
+    domain: yai
+    accessor: yetty_yai_vi_class_get
+    type: regular
+    source_file: tools/ai/yai/editor-vi.c
+    parent:
+      domain: yai
+      name: editor
+    mixins: []
+    data: struct yetty_yai_vi
+    data_fields:
+      - name: normal
+        type: int
+        get: false
+        set: false
+      - name: pending_op
+        type: int
+        get: false
+        set: false
+      - name: acc
+        type: "char[16]"
+        get: false
+        set: false
+      - name: acc_len
+        type: int
+        get: false
+        set: false
+      - name: repeat
+        type: "char[16]"
+        get: false
+        set: false
+      - name: repeat_len
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: feed_byte
+        slot_domain: yai
+        impl: vi_feed_byte
+  - name: engine
+    domain: yai
+    accessor: yetty_yai_engine_class_get
+    type: regular
+    source_file: tools/ai/yai/engine.c
+    parent: null
+    mixins: []
+    data: struct yetty_yai_engine
+    data_fields:
+      - name: unused
+        type: char
+        get: false
+        set: false
+    ops:
+      - slot: start
+        slot_domain: yai
+        impl: engine_start
+      - slot: send_user_message
+        slot_domain: yai
+        impl: engine_send_user_message
+      - slot: handle_event
+        slot_domain: yai
+        impl: engine_handle_event
+      - slot: interrupt
+        slot_domain: yai
+        impl: engine_interrupt
+      - slot: on_child_exit
+        slot_domain: yai
+        impl: engine_on_child_exit
+      - slot: on_child_eof
+        slot_domain: yai
+        impl: engine_on_child_eof
+      - slot: describe_config
+        slot_domain: yai
+        impl: engine_describe_config
+      - slot: config_knob
+        slot_domain: yai
+        impl: engine_config_knob
+      - slot: apply_config
+        slot_domain: yai
+        impl: engine_apply_config
+      - slot: resolve_permission
+        slot_domain: yai
+        impl: engine_resolve_permission
+  - name: gemini
+    domain: yai
+    accessor: yetty_yai_gemini_class_get
+    type: regular
+    source_file: tools/ai/yai/gemini.c
+    parent:
+      domain: yai
+      name: turn_engine
+    mixins: []
+    data: struct yetty_yai_gemini
+    data_fields:
+      - name: unused
+        type: char
+        get: false
+        set: false
+    ops:
+      - slot: start
+        slot_domain: yai
+        impl: gemini_start
+      - slot: send_user_message
+        slot_domain: yai
+        impl: gemini_send_user_message
+      - slot: describe_config
+        slot_domain: yai
+        impl: gemini_describe_config
+      - slot: config_knob
+        slot_domain: yai
+        impl: gemini_config_knob
+      - slot: handle_event
+        slot_domain: yai
+        impl: gemini_handle_event
+  - name: turn_engine
+    domain: yai
+    accessor: yetty_yai_turn_engine_class_get
+    type: regular
+    source_file: tools/ai/yai/turn-engine.c
+    parent:
+      domain: yai
+      name: engine
+    mixins: []
+    data: struct yetty_yai_turn_engine
+    data_fields:
+      - name: unused
+        type: char
+        get: false
+        set: false
+    ops:
+      - slot: on_child_exit
+        slot_domain: yai
+        impl: turn_engine_on_child_exit
+      - slot: on_child_eof
+        slot_domain: yai
+        impl: turn_engine_on_child_eof
+      - slot: interrupt
+        slot_domain: yai
+        impl: turn_engine_interrupt
+types:
+  - name: yai_tool_name_entry
+    kind: struct
+    fields:
+      - name: id
+        type: "char[80]"
+      - name: name
+        type: "char[80]"
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error

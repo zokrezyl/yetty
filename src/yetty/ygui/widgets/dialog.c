@@ -30,15 +30,19 @@ struct yetty_ygui_dialog_ptr_result yetty_ygui_dialog_from(struct yetty_yclass_o
 
 #define DIALOG_TITLE_H 32.0f
 #define DIALOG_PAD 16.0f
+/* Width of the titlebar close (✕) button, when enabled. */
+#define DIALOG_CLOSE_W 32.0f
 #define COLOR_BG 0xFF1F1A14u /* BRAND_BG_LIFTED */
 #define COLOR_BORDER 0xFF474A36u
 #define COLOR_TITLE_BG 0xFF14100Bu /* BRAND_BG */
 #define COLOR_TITLE_TEXT 0xFFE4E5E0u
+#define COLOR_CLOSE 0xFF9FA7A8u /* BRAND_TEXT_SECONDARY */
 
 struct [[clang::annotate("class@ygui:dialog")]] [[clang::annotate("parent@ygui:vbox")]]
 yetty_ygui_dialog {
     char *title;
     int open;
+    int closable; /* draw a titlebar ✕ close button */
 };
 
 [[clang::annotate("override@ygui:dialog:constructor")]]
@@ -55,6 +59,7 @@ static struct yetty_ycore_void_result dialog_constructor(struct yetty_yclass_ctx
     struct yetty_ygui_dialog *d = d_dr.value;
     d->title = NULL;
     d->open = 0;
+    d->closable = 0;
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
     l.absolute = 1;
     l.width = 0.0f;
@@ -154,6 +159,17 @@ static struct yetty_ycore_void_result dialog_paint(struct yetty_yclass_ctx *ycla
                                                 &tb, fs, COLOR_TITLE_TEXT, 0, -1, 0.0f);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "dialog_paint: title");
     }
+    if (d->closable) {
+        float fs = 16.0f;
+        float ty = r.min.y + (DIALOG_TITLE_H + fs) * 0.5f - 3.0f;
+        char glyph[] = "\xE2\x9C\x95"; /* ✕ (U+2715) */
+        struct yetty_ycore_buffer cb = {
+            .data = (uint8_t *)glyph, .capacity = sizeof(glyph) - 1, .size = sizeof(glyph) - 1};
+        float cx = r.max.x - DIALOG_CLOSE_W + (DIALOG_CLOSE_W - fs) * 0.5f;
+        rr = yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, cx, ty, &cb, fs,
+                                                COLOR_CLOSE, 0, -1, 0.0f);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "dialog_paint: close button");
+    }
     return YETTY_OK_VOID();
 }
 
@@ -178,6 +194,22 @@ struct yetty_ycore_void_result yetty_ygui_dialog_set_title(struct yetty_yclass_o
         }
         memcpy(d->title, title, n + 1);
     }
+    return yetty_ygui_widget_set_dirty(obj);
+}
+
+/* Enable/disable the titlebar ✕ close button. The widget only draws it;
+ * the host hit-tests the top-right DIALOG_CLOSE_W square of the titlebar
+ * and calls yetty_ygui_dialog_close. */
+[[clang::annotate("expose")]]
+struct yetty_ycore_void_result yetty_ygui_dialog_set_closable(struct yetty_yclass_object *obj,
+                                                              int closable)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "dialog_set_closable: NULL obj");
+    }
+    struct yetty_ygui_dialog_ptr_result d_dr = yetty_ygui_dialog_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_dialog_set_closable: data_get");
+    d_dr.value->closable = closable ? 1 : 0;
     return yetty_ygui_widget_set_dirty(obj);
 }
 

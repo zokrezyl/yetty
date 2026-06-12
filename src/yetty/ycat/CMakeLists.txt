@@ -40,6 +40,11 @@ if(YETTY_ENABLE_FEATURE_YMUSIC AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_F
     list(APPEND YCAT_SOURCES handler-music.c)
 endif()
 
+# Shadertoy handler — WGSL mainImage text → animated yshadertoy prim. The
+# sender side only needs the CPU-only serializer (yetty_yshadertoy_core,
+# built unconditionally), so no feature gate.
+list(APPEND YCAT_SOURCES handler-shadertoy.c)
+
 #=============================================================================
 # Tree-sitter highlight queries are embedded at configure time. Each grammar
 # exports TS_QUERIES_DIR_<name> (see build-tools/yetty/libs/tree-sitter.cmake).
@@ -138,6 +143,9 @@ if(YETTY_ENABLE_FEATURE_YMUSIC AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_F
     target_link_libraries(yetty_ycat PUBLIC yetty_ymusic)
     target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_YMUSIC=1)
 endif()
+
+target_link_libraries(yetty_ycat PUBLIC yetty_yshadertoy_core)
+target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_YSHADERTOY=1)
 
 if(YETTY_ENABLE_LIB_LIBMAGIC AND TARGET magic)
     target_link_libraries(yetty_ycat PUBLIC magic)

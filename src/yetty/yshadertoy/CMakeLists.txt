@@ -46,3 +46,45 @@ if(NOT MSVC)
         C_STANDARD_REQUIRED ON
     )
 endif()
+
+#=============================================================================
+# yshadertoy prim — the low-level composite-prim sibling of the figure.
+# Rides the YDRAW_BIN drawable-list channel (cursor-anchored, scrolls with
+# text) instead of the figure-tree compositor wire. Two-tier build, same
+# split as yvideo:
+#
+#   yetty_yshadertoy_core — wire serializer + drawable-list builder.
+#                            CPU-only, no Dawn. Linked by client tools (ycat).
+#   yetty_yshadertoy_prim — receiving concrete factory (per-instance WGSL
+#                            compile + render). Linked by yetty_ydraw.
+#=============================================================================
+
+add_library(yetty_yshadertoy_core STATIC
+    prim-wire.c
+)
+
+target_include_directories(yetty_yshadertoy_core PUBLIC
+    ${YETTY_ROOT}/include
+)
+
+target_link_libraries(yetty_yshadertoy_core PUBLIC
+    yetty_ycore
+    yetty_ydraw_core
+)
+
+add_library(yetty_yshadertoy_prim STATIC
+    prim.c
+)
+
+target_include_directories(yetty_yshadertoy_prim PUBLIC
+    ${YETTY_ROOT}/include
+)
+
+target_link_libraries(yetty_yshadertoy_prim PUBLIC
+    yetty_yshadertoy_core
+    yetty_ydraw_factory
+    yetty_yrender
+    yetty_yevent
+    yetty_yplatform_core
+    webgpu
+)

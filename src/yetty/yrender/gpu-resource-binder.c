@@ -870,14 +870,21 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(
     shader_desc.label.length = 15;
     shader_desc.nextInChain = &wgsl_src.chain;
 
-    yetty_ywebgpu_error_clear();
+    /* The WGSL may be untrusted (a user shader arriving over the wire —
+     * the yshadertoy figure path compiles here). Capture validation
+     * errors in a scope so a malformed shader surfaces as a Result error
+     * instead of hitting the fail-fast uncaptured-error callback and
+     * killing the terminal. */
+    yetty_ywebgpu_error_scope_push(impl->device);
     impl->shader_module = wgpuDeviceCreateShaderModule(impl->device, &shader_desc);
     free(merged);
 
-    if (!impl->shader_module || yetty_ywebgpu_error_check()) {
-        return YETTY_ERR(yetty_ycore_void, yetty_ywebgpu_error.has_error
-                                               ? yetty_ywebgpu_error.message
-                                               : "failed to compile shader");
+    char capture_message[512];
+    if (yetty_ywebgpu_error_scope_pop(impl->device, capture_message, sizeof(capture_message))) {
+        return YETTY_ERR(yetty_ycore_void, capture_message);
+    }
+    if (!impl->shader_module) {
+        return YETTY_ERR(yetty_ycore_void, "failed to compile shader");
     }
 
     /* Quad vertex buffer — only create once */
@@ -965,7 +972,18 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(
     pipe_desc.multisample.count = 1;
     pipe_desc.multisample.mask = ~0u;
 
+    /* Same untrusted-input concern as CreateShaderModule above: a shader
+     * that parses but lacks vs_main / fs_main only fails here. */
+    yetty_ywebgpu_error_scope_push(impl->device);
     impl->pipeline = wgpuDeviceCreateRenderPipeline(impl->device, &pipe_desc);
+    if (yetty_ywebgpu_error_scope_pop(impl->device, capture_message, sizeof(capture_message))) {
+        if (impl->pipeline) {
+            /* Dawn returns an invalid object on validation failure. */
+            wgpuRenderPipelineRelease(impl->pipeline);
+            impl->pipeline = NULL;
+        }
+        return YETTY_ERR(yetty_ycore_void, capture_message);
+    }
     if (!impl->pipeline) {
         return YETTY_ERR(yetty_ycore_void, "failed to create pipeline");
     }

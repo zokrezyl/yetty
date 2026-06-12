@@ -27,10 +27,8 @@ struct yetty_yclass_object_ptr_result yetty_ygui_spinner_create(struct yetty_ycl
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_spinner_set_value(struct yetty_yclass_object *obj,
-                                                            float v);
-struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_yclass_object *obj,
-                                                            float mn, float mx, float step);
+struct yetty_ycore_void_result yetty_ygui_spinner_set_value(struct yetty_yclass_object *obj, float v);
+struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_yclass_object *obj, float mn, float mx, float step);
 struct yetty_ycore_float_result yetty_ygui_spinner_get_value(const struct yetty_yclass_object *obj);
 
 #endif

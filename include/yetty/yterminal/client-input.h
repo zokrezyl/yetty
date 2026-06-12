@@ -114,7 +114,12 @@ struct yetty_client_input_mouse {
     float x;
     float y;
     float wheel_dy; /* WHEEL */
-    uint32_t _pad0;
+    /* Modifier bitmask, GLFW-compatible (SHIFT=1, CTRL=2, ALT=4, SUPER=8)
+     * — same encoding as yetty_client_input_key.mods. Carried for BUTTON
+     * and WHEEL events (a Ctrl-Shift-wheel reaching a subscribed figure
+     * is the interactive-map zoom gesture); 0 from terminals that predate
+     * the field (it replaced a zero pad word — same struct size). */
+    int32_t mods;
 };
 
 /* Sent when a target's pixel size changes — for figure-tagged events when a

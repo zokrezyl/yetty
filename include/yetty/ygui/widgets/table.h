@@ -27,10 +27,8 @@ struct yetty_yclass_object_ptr_result yetty_ygui_table_create(struct yetty_yclas
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_table_set_columns(struct yetty_yclass_object *obj,
-                                                            int n_cols, const char *const *headers);
-struct yetty_ycore_void_result yetty_ygui_table_add_row(struct yetty_yclass_object *obj,
-                                                        const char *const *cells, int n_cells);
+struct yetty_ycore_void_result yetty_ygui_table_set_columns(struct yetty_yclass_object *obj, int n_cols, const char *const *headers);
+struct yetty_ycore_void_result yetty_ygui_table_add_row(struct yetty_yclass_object *obj, const char *const *cells, int n_cells);
 struct yetty_ycore_void_result yetty_ygui_table_clear_rows(struct yetty_yclass_object *obj);
 
 #endif

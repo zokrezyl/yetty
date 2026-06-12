@@ -15,6 +15,7 @@ target_link_libraries(yetty_ydraw PUBLIC
     yetty_ysdf
     yetty_yimage
     yetty_yplot
+    yetty_yshadertoy_prim
     lz4_static
     $<$<BOOL:${YETTY_ENABLE_FEATURE_YMESH}>:yetty_ymesh>
     $<$<BOOL:${YETTY_ENABLE_FEATURE_YMSDF_GEN}>:yetty_ymsdf_gen>
