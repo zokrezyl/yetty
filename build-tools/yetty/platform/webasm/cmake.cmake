@@ -262,6 +262,7 @@ target_link_libraries(ygreeter PRIVATE
     yetty_ygui
     yetty_ywire
     yetty_ychrome
+    yetty_ycircuit
     yetty_yfigure
     yetty_ygrid
     yetty_yshadertoy

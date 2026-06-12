@@ -42,6 +42,7 @@
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/producer.h>
 #include <yetty/yfigure/wire.h>
+#include <yetty/ycircuit/circuit.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/yshadertoy/demo-shaders.h>
@@ -122,17 +123,19 @@ enum tab_kind {
     TAB_KIND_YSHADERTOY, /* Shadertoy-style WGSL, rendered by the `yshadertoy` widget */
     TAB_KIND_YNODES,     /* node-graph editor, rendered by the `ynodes` widget */
     TAB_KIND_YPDF,       /* PDF document, rendered by the `ypdf` widget */
+    TAB_KIND_YCIRCUIT,   /* electric-circuit schematics (ycircuit → ydraw_embed) */
 };
 
 /* Scenes — the leaf content panels. `tab_kind_for` / `tab_entry_*` are
  * keyed by these indices. A scene is shown either directly (its own
  * top-level tab) or under a top tab's sub-tabbar. */
-#define TAB_COUNT 15
+#define TAB_COUNT 16
 
 static const char *SCENE_LABELS[TAB_COUNT] = {
     "Welcome",  "Plots",    "Images",       "Code",        "Video",
     "Elements", "Markdown", "HTML/Browser", "Diagrams",    "YMaze",
-    "YZoo",     "YJungle",  "Shadertoy",    "Node Editor", "PDF"};
+    "YZoo",     "YJungle",  "Shadertoy",    "Node Editor", "PDF",
+    "Circuit"};
 
 /* Top-level tabs. A tab with a single scene shows it directly; a tab with
  * several shows a sub-tabbar (same widget the Shadertoy gallery uses) that
@@ -147,7 +150,7 @@ static const struct top_tab TOP_TABS[] = {
     {"Welcome", 1, {0}},
     {"Plots", 1, {1}},
     {"Media", 2, {2, 4}},               /* Images, Video */
-    {"Rich text", 5, {6, 3, 14, 7, 8}}, /* Markdown, Code, PDF, HTML/Browser, Diagrams */
+    {"Rich content", 6, {6, 3, 14, 7, 8, 15}}, /* Markdown, Code, PDF, HTML/Browser, Diagrams, Circuit */
     {"YGUI Widgets", 1, {5}},           /* former Elements */
     {"Shadertoy", 1, {12}},             /* own tab — it already carries a gallery sub-tabbar */
     {"Ymazing", 4, {9, 10, 11, 13}},    /* YMaze, YZoo, YJungle, Node Editor */
@@ -472,12 +475,41 @@ static const struct welcome_nav welcome_nav_entries[] = {
      sizeof(welcome_caps_spans) / sizeof(welcome_caps_spans[0])},
 };
 
+/* yplot source grammar (see src/yetty/yplot/README.md):
+ *   - `name = expr` defines a named series; `@name.color = #RRGGBB` styles it.
+ *   - referencing `y` makes it a 2D field → rendered as a colormapped heatmap
+ *     (the y_min/y_max below become the field's vertical domain).
+ *   - referencing `time` (or `t`) makes it animate: a ~60 Hz timer feeds the
+ *     elapsed seconds in and re-renders each frame — a true f(t). */
 static const struct nav_entry plot_nav_entries[] = {
     {"sin / cos", "f = sin(x); g = cos(x); @f.color = #6BA892; @g.color = #74C5A5", -3.14159f,
      3.14159f, -1.5f, 1.5f},
     {"Polynomial", "f = x*x; g = 2*x + 1; @f.color = #FFD700; @g.color = #74C5A5", -5.0f, 5.0f,
      -2.0f, 12.0f},
     {"Damped wave", "f = exp(-x*x/4) * sin(3*x); @f.color = #74C0FC", -6.0f, 6.0f, -1.2f, 1.2f},
+    /* Fourier synthesis: an 11-term odd-harmonic partial sum converging on a
+     * square wave, drawn over its target. */
+    {"Fourier square",
+     "target = sign(sin(x)); "
+     "sum = 4/pi*(sin(x) + sin(3*x)/3 + sin(5*x)/5 + sin(7*x)/7 + sin(9*x)/9 + sin(11*x)/11); "
+     "@target.color = #556162; @sum.color = #FF6B6B",
+     -6.28318f, 6.28318f, -1.5f, 1.5f},
+    /* sinc / cardinal sine — a non-trivial single curve with a removable
+     * singularity at the origin. */
+    {"Cardinal sine", "f = sinc(x); @f.color = #74C5A5", -12.566f, 12.566f, -0.3f, 1.1f},
+    /* Heatmap: standing-wave checkerboard, f(x,y) = sin(x)·cos(y). */
+    {"Heatmap: sin·cos", "field = sin(x) * cos(y)", -6.28318f, 6.28318f, -6.28318f, 6.28318f},
+    /* Heatmap: concentric ripples radiating from the origin. */
+    {"Heatmap: ripples", "field = sin(3 * sqrt(x*x + y*y))", -6.0f, 6.0f, -6.0f, 6.0f},
+    /* Dynamic f(t): a wave packet travelling left→right as time advances. */
+    {"Traveling wave f(t)", "wave = sin(x - 2*time) * exp(-((x - 4*time - 6)^2)/8); "
+                            "@wave.color = #74C5A5",
+     0.0f, 12.566f, -1.2f, 1.2f},
+    /* Dynamic f(t): amplitude- and phase-modulated standing wave. */
+    {"Pulsing sine f(t)", "f = sin(x) * cos(time); @f.color = #6BA892", -6.28318f, 6.28318f, -1.5f,
+     1.5f},
+    /* Dynamic 2D field f(x,y,t): the standing wave above, now animated. */
+    {"Heatmap f(t)", "field = sin(x - time) * cos(y)", -6.28318f, 6.28318f, -6.28318f, 6.28318f},
 };
 
 static const struct nav_entry code_nav_entries[] = {
@@ -938,6 +970,8 @@ static enum tab_kind tab_kind_for(int tab_index)
         return TAB_KIND_YNODES;
     case 14:
         return TAB_KIND_YPDF;
+    case 15:
+        return TAB_KIND_YCIRCUIT;
     case 0:
     case 3:
     default:
@@ -1830,6 +1864,193 @@ static struct yetty_ycore_void_result build_diagrams_content(struct app *app,
 }
 
 /*=============================================================================
+ * Circuit tab — electric-circuit schematics. ycircuit parses a line-based
+ * netlist DSL into a ydraw drawable list (GPU-free SDF prims + MSDF text),
+ * exactly like ydiagram does for Mermaid, so the generic `ydraw_embed`
+ * widget paints it 1:1. One collapsing_header per example. DSL reference:
+ * src/yetty/ycircuit/README.md.
+ *===========================================================================*/
+
+/* Grid pitch (px per grid unit) for the showcase schematics. The DSL coords
+ * are in grid units; ~20 px keeps the examples readable without overflowing
+ * a collapsing section. */
+#define YGREETER_CIRCUIT_GRID_PX 20.0f
+
+static void circuit_add(struct yetty_yclass_object *sec, const char *dsl)
+{
+    if (!sec) {
+        return;
+    }
+    struct yetty_yclass_object_ptr_result wr =
+        yetty_ygui_widget_add(sec, yetty_ygui_ydraw_embed_class_get().value);
+    if (YETTY_IS_ERR(wr)) {
+        yetty_ycore_error_destroy(wr.error);
+        return;
+    }
+    struct yetty_yclass_object *widget = wr.value;
+
+    /* create → configure(grid pitch) → parse(DSL) → render → drop model.
+     * The rendered list owns its own bytes, so the circuit model is freed
+     * immediately and ydraw_embed takes ownership of the list below. */
+    struct yetty_yclass_object_ptr_result cr = yetty_ycircuit_circuit_create(NULL);
+    if (YETTY_IS_ERR(cr)) {
+        yetty_ycore_error_destroy(cr.error);
+        return;
+    }
+    struct yetty_yclass_object *circuit = cr.value;
+    yetty_ycore_error_destroy_safe(
+        yetty_ycircuit_configure(NULL, circuit, YGREETER_CIRCUIT_GRID_PX, YETTY_YCIRCUIT_FLAG_NONE));
+    yetty_ycore_error_destroy_safe(yetty_ycircuit_parse(NULL, circuit, dsl, strlen(dsl)));
+    struct yetty_ydraw_drawable_list_result lr = yetty_ycircuit_render(NULL, circuit);
+    yetty_ycore_error_destroy_safe(yetty_ycircuit_destroy(NULL, circuit));
+    if (YETTY_IS_ERR(lr)) {
+        yetty_ycore_error_destroy(lr.error);
+        return;
+    }
+
+    /* Size the widget to the schematic's intrinsic extent — ydraw_embed
+     * paints 1:1 with no scale-to-fit, so the layout must reserve exactly
+     * the drawable list's scene bounds (same negotiation ydiagram does). */
+    float w = yetty_ydraw_drawable_list_scene_max_x(lr.value) -
+              yetty_ydraw_drawable_list_scene_min_x(lr.value);
+    float h = yetty_ydraw_drawable_list_scene_max_y(lr.value) -
+              yetty_ydraw_drawable_list_scene_min_y(lr.value);
+    if (w > 0.0f && h > 0.0f) {
+        struct yetty_ygui_layout layout = *yetty_ygui_widget_layout_get(widget);
+        layout.width = w;
+        layout.height = h;
+        yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(widget, &layout));
+    }
+    yetty_ycore_error_destroy_safe(yetty_ygui_ydraw_embed_set_buffer(widget, lr.value));
+}
+
+static struct yetty_ycore_void_result build_circuit_content(struct app *app,
+                                                            struct yetty_yclass_object *root)
+{
+    (void)app;
+    /* Idempotent: registers the ycircuit:circuit class on first call. */
+    yetty_ycore_error_destroy_safe(yetty_ycircuit_register());
+
+    static const struct {
+        const char *title;
+        const char *src;
+    } sections[] = {
+        {"Resistive voltage divider",
+         "circuit Voltage divider\n"
+         "battery   2  7  r270  V1  9V\n"
+         "wire 2 4  8 4\n"
+         "resistor  8  7  v     R1  10k\n"
+         "dot 8 10\n"
+         "wire 8 10  11 10\n"
+         "label 11.5 10.3 Vout\n"
+         "resistor  8 13  v     R2  4.7k\n"
+         "wire 2 10  2 16  8 16\n"
+         "gnd 5 16\n"
+         "dot 5 16\n"},
+        {"RC low-pass filter",
+         "circuit RC low-pass filter\n"
+         "acsource  2  8  v  AC1\n"
+         "label 3 2.3 Vin\n"
+         "wire 2 5  2 3  5 3\n"
+         "resistor  8  3  h  R1  1k\n"
+         "wire 11 3  14 3\n"
+         "dot 14 3\n"
+         "capacitor 14  6  v  C1  100n\n"
+         "wire 14 3  17 3\n"
+         "label 17.5 3.3 Vout\n"
+         "wire 2 11  2 12  14 12\n"
+         "wire 14 9  14 12\n"
+         "gnd 8 12\n"
+         "dot 8 12\n"},
+        {"Half-wave rectifier",
+         "circuit Half-wave rectifier\n"
+         "acsource  2  8  v  AC1  50Hz\n"
+         "wire 2 5  2 3  5 3\n"
+         "diode     8  3  h  D1  1N4007\n"
+         "wire 11 3  17 3\n"
+         "dot 14 3\n"
+         "capacitor 14  6  v  C1  470u\n"
+         "resistor  17  6  v  R1  2.2k\n"
+         "label 18 2.4 Vdc\n"
+         "wire 2 11  2 12  17 12\n"
+         "wire 14 9  14 12\n"
+         "dot 14 12\n"
+         "wire 17 9  17 12\n"
+         "gnd 8 12\n"
+         "dot 8 12\n"},
+        {"Common-emitter amplifier",
+         "circuit Common-emitter amplifier\n"
+         "vcc 10 0\n"
+         "wire 4 0  16 0\n"
+         "dot 10 0\n"
+         "resistor  4  3  v  R1  47k\n"
+         "resistor  4  9  v  R2  10k\n"
+         "dot 4 6\n"
+         "wire 4 6  8 6  8 9  12 9\n"
+         "label 9 8.3 Vin\n"
+         "resistor 16  3  v  RC  2.2k\n"
+         "npn      15  9  h  Q1  BC547\n"
+         "dot 16 6\n"
+         "wire 16 6  19 6\n"
+         "label 19.5 6.3 Vout\n"
+         "resistor 16 15  v  RE  1k\n"
+         "wire 4 12  4 18  16 18\n"
+         "gnd 10 18\n"
+         "dot 10 18\n"},
+        {"Inverting op-amp",
+         "circuit Inverting amplifier\n"
+         "label 1 4.3 Vin\n"
+         "wire 1.5 5  3 5\n"
+         "resistor 6 5 h R1 10k\n"
+         "wire 9 5  11 5\n"
+         "dot 10 5\n"
+         "wire 10 5  10 1  11 1\n"
+         "resistor 14 1 h R2 100k\n"
+         "wire 17 1  18 1  18 6\n"
+         "dot 18 6\n"
+         "opamp 14 6 h U1\n"
+         "wire 11 7  10 7  10 9\n"
+         "gnd 10 9\n"
+         "wire 17 6  21 6\n"
+         "label 21.5 6.3 Vout\n"},
+        {"NE555 astable blinker",
+         "circuit 555 astable blinker\n"
+         "ic 14 8 h U1 NE555 l:GND,TRIG,OUT,RESET r:VCC,DIS,THR,CV\n"
+         "wire 8 2  25 2\n"
+         "vcc 13 2\n"
+         "dot 13 2\n"
+         "wire 4 21  25 21\n"
+         "gnd 14 21\n"
+         "dot 14 21\n"
+         "wire 17.8 5.6  22 5.6  22 2\n"
+         "dot 22 2\n"
+         "wire 10.2 10.4  8 10.4  8 2\n"
+         "wire 10.2 5.6  6 5.6  6 21\n"
+         "dot 6 21\n"
+         "resistor 25 5 v R1 10k\n"
+         "wire 17.8 7.2  21 7.2  21 8  25 8\n"
+         "dot 25 8\n"
+         "resistor 25 11 v R2 47k\n"
+         "wire 17.8 8.8  23 8.8  23 14\n"
+         "wire 10.2 7.2  9 7.2  9 12.5  23 12.5  23 14\n"
+         "dot 23 14\n"
+         "wire 23 14  25 14\n"
+         "dot 25 14\n"
+         "wire 25 14  25 15\n"
+         "capacitor 25 18 v C1 10u\n"
+         "wire 10.2 8.8  4 8.8  4 9\n"
+         "resistor 4 12 v R3 330\n"
+         "led 4 18 r90 D1 red\n"},
+    };
+    for (size_t i = 0; i < sizeof(sections) / sizeof(sections[0]); i++) {
+        struct yetty_yclass_object *sec = el_section(root, sections[i].title);
+        circuit_add(sec, sections[i].src);
+        el_finalize_section(sec);
+    }
+    return YETTY_OK_VOID();
+}
+
+/*=============================================================================
  * Node-editor tab — the exact scene from demo/ygui/38_ynodes: a ynodes
  * editor filling the body, three nodes holding ordinary widgets, two
  * pre-wired links, and a palette the node context menu can insert.
@@ -2021,6 +2242,7 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
     case TAB_KIND_YSHADERTOY:
     case TAB_KIND_YNODES:
     case TAB_KIND_YPDF:
+    case TAB_KIND_YCIRCUIT:
         has_nav = false;
         break;
     default:
@@ -2095,7 +2317,8 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
         break;
     }
     case TAB_KIND_ELEMENTS:
-    case TAB_KIND_DIAGRAMS: {
+    case TAB_KIND_DIAGRAMS:
+    case TAB_KIND_YCIRCUIT: {
         struct yetty_yclass_object_ptr_result sr =
             yetty_ygui_widget_add(hr.value, yetty_ygui_scrollarea_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "rebuild: scrollarea");
@@ -2258,6 +2481,9 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
         break;
     case TAB_KIND_DIAGRAMS:
         yetty_ycore_error_destroy_safe(build_diagrams_content(app, content));
+        break;
+    case TAB_KIND_YCIRCUIT:
+        yetty_ycore_error_destroy_safe(build_circuit_content(app, content));
         break;
     case TAB_KIND_YNODES:
         yetty_ycore_error_destroy_safe(build_ynodes_content(app, content));
