@@ -1,9 +1,8 @@
-# yvterm — the text-grid figure: libvterm text layer, scrollback, the ydraw
-# rich-content canvas, the content layer that composites them, and the
-# shader-glyph figure. Owned/driven by yterminal (the coordinator). Symbol
-# prefix: yetty_yvterm_.
+# yvterm — the text-grid figure: the yvterm:grid figure composites the
+# libvterm text layer, scrollback, and the ydraw rich-content canvas it owns,
+# plus the shader-glyph figure. Owned/driven by yterminal (the coordinator).
+# Symbol prefix: yetty_yvterm_.
 add_library(yetty_yvterm
-    content-layer.c
     grid.c
     text-layer.c
     text-scrollback.c
