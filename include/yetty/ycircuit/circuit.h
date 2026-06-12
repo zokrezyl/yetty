@@ -41,6 +41,12 @@ struct yetty_ycore_int_result yetty_ycircuit_add_component(struct yetty_yclass_c
                                                            const char *kind, float x, float y,
                                                            int32_t rotation_deg, const char *name,
                                                            const char *value);
+struct yetty_ycore_int_result yetty_ycircuit_add_ic(struct yetty_yclass_ctx *ctx,
+                                                    struct yetty_yclass_object *obj, float x,
+                                                    float y, int32_t rotation_deg, const char *name,
+                                                    const char *value, const char *pins_left,
+                                                    const char *pins_right, const char *pins_top,
+                                                    const char *pins_bottom);
 struct yetty_ycore_int_result yetty_ycircuit_add_wire(struct yetty_yclass_ctx *ctx,
                                                       struct yetty_yclass_object *obj, float x0,
                                                       float y0, float x1, float y1);
@@ -72,6 +78,9 @@ typedef struct yetty_ycore_void_result (*yetty_ycircuit_clear_fn)(struct yetty_y
 typedef struct yetty_ycore_int_result (*yetty_ycircuit_add_component_fn)(
     struct yetty_yclass_ctx *, struct yetty_yclass_object *, const char *, float, float, int32_t,
     const char *, const char *);
+typedef struct yetty_ycore_int_result (*yetty_ycircuit_add_ic_fn)(
+    struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, int32_t, const char *,
+    const char *, const char *, const char *, const char *, const char *);
 typedef struct yetty_ycore_int_result (*yetty_ycircuit_add_wire_fn)(struct yetty_yclass_ctx *,
                                                                     struct yetty_yclass_object *,
                                                                     float, float, float, float);

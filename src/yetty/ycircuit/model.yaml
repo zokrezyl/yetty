@@ -59,6 +59,34 @@ methods:
       - name: value
         type: "const char *"
     local: true
+  - slot: add_ic
+    domain: ycircuit
+    owning_class: circuit
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: rotation_deg
+        type: int32_t
+      - name: name
+        type: "const char *"
+      - name: value
+        type: "const char *"
+      - name: pins_left
+        type: "const char *"
+      - name: pins_right
+        type: "const char *"
+      - name: pins_top
+        type: "const char *"
+      - name: pins_bottom
+        type: "const char *"
+    local: true
   - slot: add_wire
     domain: ycircuit
     owning_class: circuit
@@ -216,6 +244,9 @@ classes:
       - slot: add_component
         slot_domain: ycircuit
         impl: circuit_add_component
+      - slot: add_ic
+        slot_domain: ycircuit
+        impl: circuit_add_ic
       - slot: add_wire
         slot_domain: ycircuit
         impl: circuit_add_wire

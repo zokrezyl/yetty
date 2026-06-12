@@ -126,6 +126,39 @@ struct yetty_ycore_int_result yetty_ycircuit_add_component(struct yetty_yclass_c
                                                                     rotation_deg, name, value);
 }
 
+struct yetty_ycore_int_result yetty_ycircuit_add_ic(struct yetty_yclass_ctx *ctx,
+                                                    struct yetty_yclass_object *obj, float x,
+                                                    float y, int32_t rotation_deg, const char *name,
+                                                    const char *value, const char *pins_left,
+                                                    const char *pins_right, const char *pins_top,
+                                                    const char *pins_bottom)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_ycircuit", (yetty_yclass_method_id_t)yetty_ycircuit_add_ic);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_int, "yetty_ycircuit_add_ic: method_slot_get failed",
+                             method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_int, "yetty_ycircuit_add_ic: NULL object");
+    }
+
+    struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, object_class_r,
+                        "yetty_ycircuit_add_ic: object_class failed");
+    struct yetty_yclass_impl_t_result dispatch_impl_r =
+        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
+                        "yetty_ycircuit_add_ic: dispatch_lookup failed");
+    return ((yetty_ycircuit_add_ic_fn)dispatch_impl_r.value)(
+        ctx, obj, x, y, rotation_deg, name, value, pins_left, pins_right, pins_top, pins_bottom);
+}
+
 struct yetty_ycore_int_result yetty_ycircuit_add_wire(struct yetty_yclass_ctx *ctx,
                                                       struct yetty_yclass_object *obj, float x0,
                                                       float y0, float x1, float y1)
