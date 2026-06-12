@@ -13,6 +13,7 @@
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty.h>
+#include <yetty/ynet/netstack.h>
 #include <yetty/ytrace/ytrace.h>
 #include <webgpu/webgpu.h>
 #include <emscripten/emscripten.h>
@@ -511,6 +512,22 @@ int main(int argc, char **argv)
     }
     config = config_result.value;
     ydebug("main: Config created");
+
+    /* Optional in-browser TCP/IP stack (lwIP over an L2 relay WebSocket).
+     * Brought up here, independent of the PTY session mode, when
+     * --net-relay / net/relay is set. Self-driving via emscripten
+     * websocket + interval callbacks; the program-lifetime pointer is
+     * intentionally not stored (the runtime outlives main() and the
+     * callbacks own it). */
+    const char *net_relay = config->ops->get_string(config, YETTY_YCONFIG_KEY_NET_RELAY, "");
+    if (net_relay && net_relay[0]) {
+        struct yetty_ynet_netstack_ptr_result netstack_result =
+            yetty_ynet_netstack_create(net_relay);
+        if (!YETTY_IS_OK(netstack_result)) {
+            ywarn("main: netstack create failed: %s", netstack_result.error.msg);
+            yetty_ycore_error_destroy(netstack_result.error);
+        }
+    }
 
     /* Window (canvas) */
     if (!yetty_yplatform_webasm_create_window(config)) {
