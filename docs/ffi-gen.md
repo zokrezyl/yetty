@@ -4,7 +4,7 @@ Design for the yetty FFI binding pipeline: parse an API model, then generate
 idiomatic bindings for any target language (Python, Rust, Go, TypeScript, …).
 
 Status: design draft; an initial parser + Python emitter live under
-`tools/ffi-codegen/`.
+`tools/ffi-codegen/<language>/`.
 
 > **Relationship to [yclass](../src/yclass/README.md).** There are two model sources that this
 > pipeline can emit bindings from:

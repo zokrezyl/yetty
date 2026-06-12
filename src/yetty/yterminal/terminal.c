@@ -105,6 +105,10 @@ struct yetty_yterminal_terminal {
     int shutting_down;
     struct yetty_ywire_wire_statemachine *sm;
 
+    /* yclass-RPC DCS server state attached to `sm`. The SM borrows it
+     * (handler userdata); we own it and free it after the SM is gone. */
+    struct yetty_yclass_rpc_dcs_server *dcs_rpc_server;
+
     /* Reusable read buffer handed back from terminal_pty_pipe_alloc.
      * Lazily allocated on the first read; freed in destroy. */
     char *pty_read_buf;
@@ -297,23 +301,25 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
         }
     } else if (nread < 0 && !terminal->shutting_down) {
         /* PTY closed (UV_EOF / read error): the child shell exited — typically
-     * Ctrl-D in the prompt, or the user typed `exit`. Trigger the same
-     * graceful teardown as window-close and SIGINT by posting SHUTDOWN
-     * through the platform input pipe.
+     * Ctrl-D in the prompt, or the user typed `exit`. Post CLOSE with this
+     * terminal's view id through the platform input pipe; the yetty event
+     * handler resolves the hosting pane and closes just that pane (or the
+     * workspace when it was the pane's only tab — and only when it is also
+     * the last workspace does this escalate to a full SHUTDOWN).
      *
-     * The shutting_down guard avoids re-posting if SHUTDOWN was already
-     * issued (e.g. fork_pty_stop closed the master while we were tearing
-     * down for another reason).
-     *
-     * NOTE: today there is exactly one terminal per yetty instance, so
-     * "PTY closed" is always "the last terminal closed". When multi-
-     * terminal support lands, this should walk the workspace tree and
-     * only post SHUTDOWN if no other live terminal remains. */
-        ydebug("terminal_pty_pipe_read: PTY EOF (nread=%ld), posting SHUTDOWN", nread);
+     * The shutting_down guard avoids re-posting if teardown already
+     * started (e.g. fork_pty_stop closed the master while we were tearing
+     * down for another reason). Setting it here also stops this terminal's
+     * render path from doing further GPU work while the close event is in
+     * flight. */
+        ydebug("terminal_pty_pipe_read: PTY EOF (nread=%ld), posting CLOSE for view %llu", nread,
+               (unsigned long long)terminal->view.id);
+        terminal->shutting_down = 1;
         struct yetty_ycore_xthread_event_pipe *pipe =
             terminal->context.yetty_context.runtime->platform_input_pipe;
         if (pipe && pipe->ops && pipe->ops->write) {
-            struct yetty_yui_event ev = {.type = YETTY_YCORE_SHUTDOWN};
+            struct yetty_yui_event ev = {.type = YETTY_YCORE_CLOSE};
+            ev.close.object_id = terminal->view.id;
             pipe->ops->write(pipe, &ev, sizeof(ev));
         }
     } else {
@@ -1321,18 +1327,22 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
         terminal->composite_factory = ffr.value;
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
+            yplot_f->destroy = yetty_yplot_factory_destroy;
             struct yetty_ycore_void_result rr =
                 yetty_ydraw_composite_factory_register(terminal->composite_factory, yplot_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
+                yetty_yplot_factory_destroy(yplot_f);
             }
         }
         struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
         if (yimage_f) {
+            yimage_f->destroy = yetty_yimage_factory_destroy;
             struct yetty_ycore_void_result rr =
                 yetty_ydraw_composite_factory_register(terminal->composite_factory, yimage_f);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
+                yetty_yimage_factory_destroy(yimage_f);
             }
         }
     }
@@ -1500,11 +1510,12 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * simplicity; switch to a per-envelope sniff if asymmetric
      * compression turns out to matter. */
     {
-        struct yetty_ycore_void_result dr =
+        struct yetty_yclass_rpc_dcs_server_ptr_result dr =
             yetty_yclass_rpc_dcs_server_attach(terminal->sm, YETTY_DCS_YCLASS_RPC, /*compressed=*/0,
                                                terminal_dcs_emit_response, terminal);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, dr,
                             "terminal_create: dcs_server_attach for YCLASS_RPC");
+        terminal->dcs_rpc_server = dr.value;
     }
     ydebug("terminal_create: yclass-rpc DCS handler registered (code=%d)", YETTY_DCS_YCLASS_RPC);
 
@@ -1598,6 +1609,11 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
             }
         }
     }
+
+    /* The DCS RPC server state was borrowed by the SM's handler — only
+     * safe to free now that the SM is destroyed. */
+    yetty_yclass_rpc_dcs_server_destroy(terminal->dcs_rpc_server);
+    terminal->dcs_rpc_server = NULL;
 
     if (terminal->context.pty && terminal->context.pty->ops &&
         terminal->context.pty->ops->destroy) {

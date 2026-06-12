@@ -140,6 +140,11 @@ struct yetty_yui_workspace *yetty_yui_tabbar_model_active_workspace(
 size_t yetty_yui_tabbar_model_count(const struct yetty_yui_tabbar_model *bar);
 size_t yetty_yui_tabbar_model_active_index(const struct yetty_yui_tabbar_model *bar);
 
+/* Workspace at slot idx (borrowed; the tabbar owns it). NULL when idx is
+ * out of range. */
+struct yetty_yui_workspace *yetty_yui_tabbar_model_workspace_at(
+    const struct yetty_yui_tabbar_model *bar, size_t idx);
+
 /* Model mutators usable from outside (ygui tab-widget callbacks). All
  * are no-ops when idx is out of range; switch_to additionally no-ops
  * when idx is already active. */

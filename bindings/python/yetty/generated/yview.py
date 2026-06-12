@@ -3,61 +3,92 @@ from __future__ import annotations
 from ctypes import (c_bool, c_char, c_char_p, c_double, c_float, c_int,
     c_int8, c_int16, c_int32, c_int64, c_long, c_size_t, c_ssize_t,
     c_uint, c_uint8, c_uint16, c_uint32, c_uint64, c_ulong, c_void_p)
+from typing import Any, ClassVar
 from .. import runtime as _rt
 from . import _types as _t
 
-class View:
+class View(_rt.YClass):
     """yclass yview:view"""
-    def __init__(self, _handle=None):
+    __yclass_domain__: ClassVar[str] = 'yview'
+    __yclass_name__: ClassVar[str] = 'view'
+    @classmethod
+    def yclass(cls) -> _rt.Result[Any]:
+        _fn = _rt.cfn("yetty_yview_view_class_get", _t.yetty_yclass_ptr_result, [])
+        return _rt.result_from_c(_fn())
+    def __init__(self, _handle: Any = None) -> None:
         if _handle is None:
             _fn = _rt.cfn("yetty_yview_view_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-            res = _fn(None)
-            _rt.check(res)
+            res = _rt.result_from_c(_fn(None))
+            if not res:
+                _rt.YClass.__init__(self, None, res.error)
+                return
             _handle = res.value
-        self._handle = _handle
-    def configure(self, fd, child_id, kind, bg_color, min_x, min_y, max_x, max_y):
+        super().__init__(_handle)
+    @classmethod
+    def create(cls) -> _rt.Result['View']:
+        obj = cls()
+        return obj.init_result
+    def configure(self, fd: int, child_id: int, kind: int, bg_color: int, min_x: float, min_y: float, max_x: float, max_y: float) -> _rt.Result[None]:
+        """Call `yetty_yview_configure`; returns Result, never raises for yclass errors."""
+        if self._handle is None:
+            return self._invalid_result()
         _fn = _rt.cfn("yetty_yview_configure", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_int, c_uint32, c_uint32, c_uint32, c_float, c_float, c_float, c_float])
         res = _fn(None, self._handle, fd, child_id, kind, bg_color, min_x, min_y, max_x, max_y)
-        _rt.check(res)
-        return None
-    def set_content(self, content):
+        return _rt.result_from_c(res)
+    def set_content(self, content: Any) -> _rt.Result[None]:
+        """Call `yetty_yview_set_content`; returns Result, never raises for yclass errors."""
+        if self._handle is None:
+            return self._invalid_result()
         _fn = _rt.cfn("yetty_yview_set_content", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
         res = _fn(None, self._handle, content)
-        _rt.check(res)
-        return None
-    def set_text(self, text, font_size):
+        return _rt.result_from_c(res)
+    def set_text(self, text: str | bytes | None, font_size: float) -> _rt.Result[None]:
+        """Call `yetty_yview_set_text`; returns Result, never raises for yclass errors."""
+        if self._handle is None:
+            return self._invalid_result()
         _fn = _rt.cfn("yetty_yview_set_text", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_char_p, c_float])
         res = _fn(None, self._handle, _rt.cstr(text), font_size)
-        _rt.check(res)
-        return None
-    def set_plot(self, expr, x_min, x_max, y_min, y_max):
+        return _rt.result_from_c(res)
+    def set_plot(self, expr: str | bytes | None, x_min: float, x_max: float, y_min: float, y_max: float) -> _rt.Result[None]:
+        """Call `yetty_yview_set_plot`; returns Result, never raises for yclass errors."""
+        if self._handle is None:
+            return self._invalid_result()
         _fn = _rt.cfn("yetty_yview_set_plot", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_char_p, c_float, c_float, c_float, c_float])
         res = _fn(None, self._handle, _rt.cstr(expr), x_min, x_max, y_min, y_max)
-        _rt.check(res)
-        return None
-    def set_content_size(self, content_w, content_h):
+        return _rt.result_from_c(res)
+    def set_content_size(self, content_w: float, content_h: float) -> _rt.Result[None]:
+        """Call `yetty_yview_set_content_size`; returns Result, never raises for yclass errors."""
+        if self._handle is None:
+            return self._invalid_result()
         _fn = _rt.cfn("yetty_yview_set_content_size", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_float, c_float])
         res = _fn(None, self._handle, content_w, content_h)
-        _rt.check(res)
-        return None
-    def scroll_to(self, scroll_x, scroll_y):
+        return _rt.result_from_c(res)
+    def scroll_to(self, scroll_x: float, scroll_y: float) -> _rt.Result[None]:
+        """Call `yetty_yview_scroll_to`; returns Result, never raises for yclass errors."""
+        if self._handle is None:
+            return self._invalid_result()
         _fn = _rt.cfn("yetty_yview_scroll_to", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_float, c_float])
         res = _fn(None, self._handle, scroll_x, scroll_y)
-        _rt.check(res)
-        return None
-    def scroll_by(self, delta_x, delta_y):
+        return _rt.result_from_c(res)
+    def scroll_by(self, delta_x: float, delta_y: float) -> _rt.Result[None]:
+        """Call `yetty_yview_scroll_by`; returns Result, never raises for yclass errors."""
+        if self._handle is None:
+            return self._invalid_result()
         _fn = _rt.cfn("yetty_yview_scroll_by", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_float, c_float])
         res = _fn(None, self._handle, delta_x, delta_y)
-        _rt.check(res)
-        return None
-    def set_rect(self, min_x, min_y, max_x, max_y):
+        return _rt.result_from_c(res)
+    def set_rect(self, min_x: float, min_y: float, max_x: float, max_y: float) -> _rt.Result[None]:
+        """Call `yetty_yview_set_rect`; returns Result, never raises for yclass errors."""
+        if self._handle is None:
+            return self._invalid_result()
         _fn = _rt.cfn("yetty_yview_set_rect", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_float, c_float, c_float, c_float])
         res = _fn(None, self._handle, min_x, min_y, max_x, max_y)
-        _rt.check(res)
-        return None
-    def destroy(self):
+        return _rt.result_from_c(res)
+    def destroy(self) -> _rt.Result[None]:
+        """Call `yetty_yview_destroy`; returns Result, never raises for yclass errors."""
+        if self._handle is None:
+            return self._invalid_result()
         _fn = _rt.cfn("yetty_yview_destroy", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
         res = _fn(None, self._handle)
-        _rt.check(res)
-        return None
+        return _rt.result_from_c(res)
 

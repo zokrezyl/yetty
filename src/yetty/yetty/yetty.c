@@ -727,6 +727,74 @@ static struct yetty_ycore_int_result yetty_event_handler(
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
+    /* A view reports that its backing process ended (terminal posts this
+     * on PTY EOF — Ctrl-D / `exit` in the shell). Close just the pane that
+     * hosts the view. When that pane is the workspace's only one, close
+     * the workspace (tab) instead — and only when it is also the LAST
+     * workspace does this escalate to the full SHUTDOWN below, preserving
+     * the "closing the last terminal closes the app" behavior. */
+    if (event->type == YETTY_YCORE_CLOSE) {
+        size_t workspace_count =
+            yetty->tabbar ? yetty_yui_tabbar_model_count(yetty->tabbar) : 0;
+        for (size_t i = 0; i < workspace_count; i++) {
+            struct yetty_yui_workspace *ws =
+                yetty_yui_tabbar_model_workspace_at(yetty->tabbar, i);
+            struct yetty_yui_tile *root = ws ? yetty_yui_workspace_root(ws) : NULL;
+            if (!root) {
+                continue;
+            }
+            struct yetty_yui_tile *pane =
+                yetty_yui_tile_find_pane_with_view(root, event->close.object_id);
+            if (!pane) {
+                continue;
+            }
+
+            if (pane == root) {
+                if (workspace_count > 1) {
+                    ydebug("yetty: CLOSE view=%llu — closing workspace %zu",
+                           (unsigned long long)event->close.object_id, i);
+                    struct yetty_ycore_void_result r =
+                        yetty_yui_tabbar_model_close_at(yetty->tabbar, i);
+                    if (YETTY_IS_ERR(r)) {
+                        yerror("yetty: CLOSE workspace failed: %s", r.error.msg);
+                        yetty_ycore_error_destroy(r.error);
+                    }
+                } else {
+                    ydebug("yetty: CLOSE view=%llu — last pane of last workspace, shutting down",
+                           (unsigned long long)event->close.object_id);
+                    struct yetty_yui_event ev = {.type = YETTY_YCORE_SHUTDOWN};
+                    yetty_yevent_post_async(yetty->context.runtime->platform_input_pipe, &ev);
+                }
+            } else {
+                ydebug("yetty: CLOSE view=%llu — closing pane %llu in workspace %zu",
+                       (unsigned long long)event->close.object_id,
+                       (unsigned long long)yetty_yui_tile_id(pane), i);
+                struct yetty_ycore_void_result r =
+                    yetty_yui_workspace_close_tile(ws, yetty_yui_tile_id(pane));
+                if (YETTY_IS_ERR(r)) {
+                    yerror("yetty: CLOSE pane failed: %s", r.error.msg);
+                    yetty_ycore_error_destroy(r.error);
+                }
+                /* Keep keyboard routing alive: if the closed pane held
+                 * focus, hand it to the first surviving pane. */
+                struct yetty_yui_tile *new_root = yetty_yui_workspace_root(ws);
+                if (new_root && !yetty_yui_tile_find_focused_pane(new_root)) {
+                    struct yetty_yui_tile *first_pane =
+                        yetty_yui_tile_find_first_pane(new_root);
+                    if (first_pane) {
+                        yetty_yui_tile_pane_set_focused(first_pane, 1);
+                    }
+                }
+            }
+            break;
+        }
+        if (yetty->event_loop && yetty->event_loop->ops &&
+            yetty->event_loop->ops->request_render) {
+            yetty->event_loop->ops->request_render(yetty->event_loop);
+        }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
+
     /* Graceful shutdown.
      *
      * Same handler for window-close (window_close_callback posts SHUTDOWN)

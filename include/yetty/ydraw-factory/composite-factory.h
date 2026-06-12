@@ -144,6 +144,13 @@ YETTY_YRESULT_DECLARE(yetty_ydraw_composite_ptr, struct yetty_ydraw_composite *)
 struct yetty_ydraw_concrete_factory {
     uint32_t type_id;
 
+    /* Destroy the concrete factory itself (shared pipeline + the factory
+     * allocation). Registration transfers ownership of the concrete
+     * factory to the composite factory, which invokes this from
+     * yetty_ydraw_composite_factory_destroy. Generated factories wire
+     * this to their yetty_<name>_factory_destroy. */
+    void (*destroy)(struct yetty_ydraw_concrete_factory *self);
+
     /* Event loop available to the factory's instances. Set by the
      * abstract factory at registration time (mirror of what's stashed
      * on the composite_factory). Concrete factories that need to register
@@ -226,7 +233,9 @@ struct yetty_ydraw_composite_factory_ptr_result yetty_ydraw_composite_factory_cr
 void yetty_ydraw_composite_factory_destroy(
     struct yetty_ydraw_composite_factory *factory YETTY_ANNOT_CALLEE_OWNED);
 
-// Register concrete factory
+// Register concrete factory. On success ownership of `concrete` transfers
+// to the composite factory (its `destroy` op runs at composite factory
+// destroy). On failure the caller still owns `concrete` and must destroy it.
 struct yetty_ycore_void_result yetty_ydraw_composite_factory_register(
     struct yetty_ydraw_composite_factory *factory, struct yetty_ydraw_concrete_factory *concrete);
 

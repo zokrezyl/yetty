@@ -67,6 +67,14 @@ class yetty_yclass_object_ptr_result(Structure):
 yetty_yclass_object_ptr_result._anonymous_ = ('_anon1',)
 yetty_yclass_object_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_yclass_object_ptr_result_u1)]
 
+class yetty_yclass_ptr_result_u1(Union):
+    pass
+yetty_yclass_ptr_result_u1._fields_ = [("value", c_void_p), ("error", yetty_ycore_error)]
+class yetty_yclass_ptr_result(Structure):
+    pass
+yetty_yclass_ptr_result._anonymous_ = ('_anon1',)
+yetty_yclass_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_yclass_ptr_result_u1)]
+
 class yetty_ycore_buffer(Structure):
     pass
 yetty_ycore_buffer._fields_ = [("data", c_void_p), ("capacity", c_size_t), ("size", c_size_t)]
@@ -182,18 +190,6 @@ yetty_yfigure_hit._fields_ = [("figure_id", c_uint32), ("local_x", c_float), ("l
 class yetty_ygui_layout(Structure):
     pass
 yetty_ygui_layout._fields_ = [("direction", c_int), ("justify", c_int), ("align", c_int), ("gap", c_float), ("padding_top", c_float), ("padding_right", c_float), ("padding_bottom", c_float), ("padding_left", c_float), ("width", c_float), ("height", c_float), ("flex_grow", c_float), ("flex_shrink", c_float), ("min_width", c_float), ("max_width", c_float), ("min_height", c_float), ("max_height", c_float), ("absolute", c_int), ("pos_x", c_float), ("pos_y", c_float), ("hidden", c_int)]
-
-class yetty_ygui_object_ptr_result_u1(Union):
-    pass
-yetty_ygui_object_ptr_result_u1._fields_ = [("value", c_void_p), ("error", yetty_ycore_error)]
-class yetty_ygui_object_ptr_result(Structure):
-    pass
-yetty_ygui_object_ptr_result._anonymous_ = ('_anon1',)
-yetty_ygui_object_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_ygui_object_ptr_result_u1)]
-
-class yetty_ygui_tree(Structure):
-    pass
-yetty_ygui_tree._fields_ = [("parent", c_void_p), ("first_child", c_void_p), ("next_sibling", c_void_p), ("id", c_uint32), ("figure_kind", c_uint32), ("figure_z", c_int32), ("floating", c_int), ("dirty", c_int), ("hovered", c_int), ("framework", c_void_p), ("subscriptions", c_void_p)]
 
 class yetty_ygui_yplot_config(Structure):
     pass

@@ -96,9 +96,11 @@ static struct yetty_ycore_void_result grid_figure_destroy_slot(struct yetty_ycla
 
     /* The content layer is BORROWED, not owned: the terminal created it and
      * destroys it directly (terminal->layer). We only drop our reference so a
-     * stray render after teardown can't touch freed memory. */
+     * stray render after teardown can't touch freed memory. The object itself
+     * is ours to release — every concrete figure kind frees via object_free
+     * in its destroy slot. */
     grid->content = NULL;
-    return YETTY_OK_VOID();
+    return yetty_yclass_object_free(obj);
 }
 
 /* ===========================================================================

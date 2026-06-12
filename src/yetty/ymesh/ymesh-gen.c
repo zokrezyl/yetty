@@ -1033,6 +1033,7 @@ struct yetty_ydraw_concrete_factory *yetty_ymesh_factory_create(void)
         return NULL;
     }
     f->base.type_id = YETTY_YMESH_TYPE_ID;
+    f->base.destroy = yetty_ymesh_factory_destroy;
     f->base.compile_pipeline = ymesh_compile_pipeline;
     f->base.get_pipeline = ymesh_get_pipeline;
     f->base.create_instance = ymesh_create_instance;

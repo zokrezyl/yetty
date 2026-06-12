@@ -550,6 +550,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
             free(c);
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "yplot factory create");
         }
+        f->destroy = yetty_yplot_factory_destroy;
         struct yetty_ycore_void_result rr =
             yetty_ydraw_composite_factory_register(c->composite_factory, f);
         if (YETTY_IS_ERR(rr)) {
@@ -572,6 +573,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
             free(c);
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "yimage factory create");
         }
+        f->destroy = yetty_yimage_factory_destroy;
         struct yetty_ycore_void_result rr =
             yetty_ydraw_composite_factory_register(c->composite_factory, f);
         if (YETTY_IS_ERR(rr)) {
@@ -595,6 +597,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
             free(c);
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "ymesh factory create");
         }
+        f->destroy = yetty_ymesh_factory_destroy;
         struct yetty_ycore_void_result rr =
             yetty_ydraw_composite_factory_register(c->composite_factory, f);
         if (YETTY_IS_ERR(rr)) {
@@ -619,6 +622,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
             free(c);
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "yvideo factory create");
         }
+        f->destroy = yetty_yvideo_factory_destroy;
         struct yetty_ycore_void_result rr =
             yetty_ydraw_composite_factory_register(c->composite_factory, f);
         if (YETTY_IS_ERR(rr)) {

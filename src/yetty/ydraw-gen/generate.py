@@ -1140,6 +1140,7 @@ struct yetty_ydraw_concrete_factory *yetty_{name}_factory_create(void)
         return NULL;
 
     factory->base.type_id = YETTY_{NAME}_TYPE_ID;
+    factory->base.destroy = yetty_{name}_factory_destroy;
     factory->base.compile_pipeline = {name}_compile_pipeline;
     factory->base.get_pipeline = {name}_get_pipeline;
     factory->base.create_instance = {name}_create_instance;

@@ -13,6 +13,6 @@ library once, then use the module classes:
 
 from __future__ import annotations
 
-from .runtime import YettyError, load
+from .runtime import Error, Result, YettyError, load
 
-__all__ = ["load", "YettyError"]
+__all__ = ["load", "Result", "Error", "YettyError"]

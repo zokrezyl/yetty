@@ -126,6 +126,11 @@ struct yetty_yui_tile *yetty_yui_tile_find_pane_at(struct yetty_yui_tile *root, 
 /* Find first pane in tree (depth-first) */
 struct yetty_yui_tile *yetty_yui_tile_find_first_pane(struct yetty_yui_tile *root);
 
+/* Find the pane whose view stack contains view_id (depth-first). NULL if
+ * no pane in the tree hosts that view. */
+struct yetty_yui_tile *yetty_yui_tile_find_pane_with_view(struct yetty_yui_tile *root,
+                                                          yetty_ycore_object_id view_id);
+
 /* Clear focus from all panes in tree */
 void yetty_yui_tile_clear_focus(struct yetty_yui_tile *root);
 

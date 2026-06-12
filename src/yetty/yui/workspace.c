@@ -374,6 +374,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_create_first_pane(struct yett
 struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_workspace *ws,
                                                               yetty_ycore_object_id tile_id)
 {
+    struct yetty_yui_tile *closed;
     struct yetty_yui_tile *parent_split;
     struct yetty_yui_tile *sibling;
     struct yetty_yui_tile *grandparent;
@@ -391,6 +392,11 @@ struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_w
         (void)yetty_yui_tile_destroy(ws->root);
         ws->root = NULL;
         return YETTY_OK_VOID();
+    }
+
+    closed = yetty_yui_tile_find_by_id(ws->root, tile_id);
+    if (!closed) {
+        return YETTY_ERR(yetty_ycore_void, "tile not found");
     }
 
     /* Find parent split */
@@ -420,6 +426,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_w
             YETTY_RETURN_IF_ERR(yetty_ycore_void, drop_r, "drop: yetty_yui_tile_split_set_second");
         }
         (void)yetty_yui_tile_destroy(parent_split);
+        (void)yetty_yui_tile_destroy(closed);
 
         ws->root = sibling;
         if (sibling && ws->width > 0 && ws->height > 0) {
@@ -452,6 +459,7 @@ struct yetty_ycore_void_result yetty_yui_workspace_close_tile(struct yetty_yui_w
     }
 
     (void)yetty_yui_tile_destroy(parent_split);
+    (void)yetty_yui_tile_destroy(closed);
 
     if (YETTY_IS_ERR(res)) {
         return res;

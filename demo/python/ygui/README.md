@@ -4,7 +4,7 @@ Native [ygui](../../../src/yetty/ygui) applications written entirely in Python,
 rendered inside a running yetty. No new C in the apps — they drive the real
 widget toolkit through the `libyetty_ffi.so` bindings.
 
-Two demos, sharing `ygui_ffi.py` (the FFI plumbing):
+Two demos using the package-level `yetty.ygui` helpers:
 
 | Demo | What it is |
 |------|------------|
@@ -84,7 +84,7 @@ Python ──ygui framework──▶ drawable records ──PTY──▶ yetty r
 
 ## Bindings used
 
-- Generated yclass result types from `bindings/python/yetty/generated/_types.py`
+- Generated yclass result types and exposed ygui functions from `bindings/python/yetty/generated/`
   (reused for every `*_ptr_result`).
 - The ygui engine API (`yetty_ygui_framework_*`, `yetty_ygui_add`,
   `yetty_ygui_<widget>_set_label`, …) and `yetty_yface_*`, declared on demand

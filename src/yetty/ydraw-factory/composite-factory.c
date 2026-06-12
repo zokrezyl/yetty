@@ -54,7 +54,16 @@ void yetty_ydraw_composite_factory_destroy(struct yetty_ydraw_composite_factory 
     if (!factory) {
         return;
     }
-    // Concrete factories are not owned by abstract factory - they are static
+    /* Registration transferred ownership of each concrete factory to us —
+     * tear them down through their destroy op (frees the shared pipeline
+     * and the factory allocation). */
+    for (uint32_t i = 0; i < factory->count; i++) {
+        struct yetty_ydraw_concrete_factory *concrete = factory->factories[i];
+        if (concrete && concrete->destroy) {
+            concrete->destroy(concrete);
+        }
+        factory->factories[i] = NULL;
+    }
     free(factory);
 }
 

@@ -905,6 +905,7 @@ struct yetty_yterminal_layer_result yetty_yvterm_text_layer_create(
     /* Get cell size from font */
     struct pixel_size_result cs_res = text_layer->font->ops->get_cell_size(text_layer->font);
     if (YETTY_IS_ERR(cs_res)) {
+        text_layer->font->ops->destroy(text_layer->font);
         free(text_layer);
         return YETTY_ERR(yetty_yterminal_layer, "text_layer_create: font get_cell_size failed",
                          cs_res);
@@ -915,6 +916,7 @@ struct yetty_yterminal_layer_result yetty_yvterm_text_layer_create(
 
     text_layer->vterm = vterm_new((int)rows, (int)cols);
     if (!text_layer->vterm) {
+        text_layer->font->ops->destroy(text_layer->font);
         free(text_layer);
         return YETTY_ERR(yetty_yterminal_layer, "failed to create vterm");
     }
@@ -1023,6 +1025,13 @@ static struct yetty_ycore_void_result text_layer_destroy(struct yetty_yrender_te
 
     yetty_yvterm_text_sb_arena_destroy(&text_layer->sb);
     free(text_layer->view_staging);
+
+    /* The font is created in text_layer_create and owned here (the
+     * terminal's compositor_font is a separate instance). */
+    if (text_layer->font && text_layer->font->ops && text_layer->font->ops->destroy) {
+        text_layer->font->ops->destroy(text_layer->font);
+        text_layer->font = NULL;
+    }
 
     free(text_layer->shader_code.data);
     free(text_layer);

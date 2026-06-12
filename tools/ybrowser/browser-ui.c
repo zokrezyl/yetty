@@ -2057,10 +2057,12 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
         s->composite_factory = ffr.value;
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
+            yplot_f->destroy = yetty_yplot_factory_destroy;
             err_ok(yetty_ydraw_composite_factory_register(s->composite_factory, yplot_f));
         }
         struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
         if (yimage_f) {
+            yimage_f->destroy = yetty_yimage_factory_destroy;
             err_ok(yetty_ydraw_composite_factory_register(s->composite_factory, yimage_f));
         }
     }

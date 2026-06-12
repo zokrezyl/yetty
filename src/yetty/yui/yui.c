@@ -672,13 +672,23 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
         yui->composite_factory = ffr.value;
         struct yetty_ydraw_concrete_factory *yplot_f = yetty_yplot_factory_create();
         if (yplot_f) {
-            yetty_ycore_error_destroy_safe(
-                yetty_ydraw_composite_factory_register(yui->composite_factory, yplot_f));
+            yplot_f->destroy = yetty_yplot_factory_destroy;
+            struct yetty_ycore_void_result rr =
+                yetty_ydraw_composite_factory_register(yui->composite_factory, yplot_f);
+            if (YETTY_IS_ERR(rr)) {
+                yetty_ycore_error_destroy(rr.error);
+                yetty_yplot_factory_destroy(yplot_f);
+            }
         }
         struct yetty_ydraw_concrete_factory *yimage_f = yetty_yimage_factory_create();
         if (yimage_f) {
-            yetty_ycore_error_destroy_safe(
-                yetty_ydraw_composite_factory_register(yui->composite_factory, yimage_f));
+            yimage_f->destroy = yetty_yimage_factory_destroy;
+            struct yetty_ycore_void_result rr =
+                yetty_ydraw_composite_factory_register(yui->composite_factory, yimage_f);
+            if (YETTY_IS_ERR(rr)) {
+                yetty_ycore_error_destroy(rr.error);
+                yetty_yimage_factory_destroy(yimage_f);
+            }
         }
         yui->figure_args.default_font = yui->font;
         yui->figure_args.composite_factory = yui->composite_factory;

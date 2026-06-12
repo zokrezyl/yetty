@@ -20,7 +20,7 @@
 
 #define DCS_SERVER_BUF_MAX 65536
 
-struct dcs_server_state {
+struct yetty_yclass_rpc_dcs_server {
     int dcs_code;
     int compressed;
     yetty_yclass_rpc_dcs_emit_fn emit;
@@ -37,7 +37,7 @@ static struct yetty_ycore_void_result on_request_envelope(void *userdata,
     (void)code;
     (void)args;
     (void)args_len;
-    struct dcs_server_state *st = userdata;
+    struct yetty_yclass_rpc_dcs_server *st = userdata;
 
     if (payload_len < 8) {
         ywarn("rpc-dcs-server: short request frame: %zu bytes (<8 header)", payload_len);
@@ -93,31 +93,39 @@ static struct yetty_ycore_void_result on_request_envelope(void *userdata,
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yclass_rpc_dcs_server_attach(
+struct yetty_yclass_rpc_dcs_server_ptr_result yetty_yclass_rpc_dcs_server_attach(
     struct yetty_ywire_wire_statemachine *sm, int dcs_code, int compressed,
     yetty_yclass_rpc_dcs_emit_fn emit, void *user)
 {
     if (!sm) {
-        return YETTY_ERR(yetty_ycore_void, "rpc_dcs_server_attach: NULL sm");
+        return YETTY_ERR(yetty_yclass_rpc_dcs_server_ptr, "rpc_dcs_server_attach: NULL sm");
     }
     if (!emit) {
-        return YETTY_ERR(yetty_ycore_void, "rpc_dcs_server_attach: NULL emit");
+        return YETTY_ERR(yetty_yclass_rpc_dcs_server_ptr, "rpc_dcs_server_attach: NULL emit");
     }
-    struct dcs_server_state *st = calloc(1, sizeof(*st));
+    struct yetty_yclass_rpc_dcs_server *st = calloc(1, sizeof(*st));
     if (!st) {
-        return YETTY_ERR(yetty_ycore_void, "rpc_dcs_server_attach: calloc");
+        return YETTY_ERR(yetty_yclass_rpc_dcs_server_ptr, "rpc_dcs_server_attach: calloc");
     }
     st->dcs_code = dcs_code;
     st->compressed = compressed ? 1 : 0;
     st->emit = emit;
     st->user = user;
 
-    /* Leaks st on register failure — the SM destroy path frees its
-     * buffered_handler wrapper but not user state. Acceptable: attach
-     * is called once at init; a failure here means the terminal is
-     * not going to come up anyway. */
+    /* The SM destroy path frees its buffered_handler wrapper but not
+     * handler userdata — the returned handle keeps ownership with the
+     * caller, who frees it via _destroy after tearing down the SM. */
     struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register_buffered(
         sm, YETTY_YWIRE_ENVELOPE_DCS, dcs_code, /*has_args=*/0, on_request_envelope, st);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "rpc_dcs_server_attach: register_buffered");
-    return YETTY_OK_VOID();
+    if (YETTY_IS_ERR(rr)) {
+        free(st);
+        return YETTY_ERR(yetty_yclass_rpc_dcs_server_ptr,
+                         "rpc_dcs_server_attach: register_buffered", rr);
+    }
+    return YETTY_OK(yetty_yclass_rpc_dcs_server_ptr, st);
+}
+
+void yetty_yclass_rpc_dcs_server_destroy(struct yetty_yclass_rpc_dcs_server *server)
+{
+    free(server);
 }
