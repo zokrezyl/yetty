@@ -37,35 +37,6 @@ struct yetty_ycore_void_result yetty_ymusic_configure(struct yetty_yclass_ctx *c
     return ((yetty_ymusic_configure_fn)dispatch_impl_r.value)(ctx, obj, width, staff_space, flags);
 }
 
-struct yetty_ycore_void_result yetty_ymusic_set_font_path(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
-                                                          const char *path)
-{
-    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
-    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
-        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
-            "yetty_ymusic", (yetty_yclass_method_id_t)yetty_ymusic_set_font_path);
-        if (YETTY_IS_ERR(method_slot_r)) {
-            return YETTY_ERR(yetty_ycore_void, "yetty_ymusic_set_font_path: method_slot_get failed",
-                             method_slot_r);
-        }
-        method_slot = method_slot_r.value;
-    }
-
-    if (!obj) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ymusic_set_font_path: NULL object");
-    }
-
-    struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
-                        "yetty_ymusic_set_font_path: object_class failed");
-    struct yetty_yclass_impl_t_result dispatch_impl_r =
-        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
-                        "yetty_ymusic_set_font_path: dispatch_lookup failed");
-    return ((yetty_ymusic_set_font_path_fn)dispatch_impl_r.value)(ctx, obj, path);
-}
-
 struct yetty_ycore_void_result yetty_ymusic_parse(struct yetty_yclass_ctx *ctx,
                                                   struct yetty_yclass_object *obj,
                                                   const char *input, size_t len)

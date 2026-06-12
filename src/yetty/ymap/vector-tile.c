@@ -145,8 +145,8 @@ static void *vt_grow(void *array, uint32_t needed_count, uint32_t *capacity, siz
  * Geometry command stream → point rings
  *===========================================================================*/
 
-static struct yetty_ycore_void_result vt_parse_geometry(
-    struct vt_reader *geometry, struct yetty_ymap_vt_feature *feature)
+static struct yetty_ycore_void_result vt_parse_geometry(struct vt_reader *geometry,
+                                                        struct yetty_ymap_vt_feature *feature)
 {
     uint32_t ring_capacity = 0;
     uint32_t point_capacity = 0; /* capacity of the CURRENT ring */
@@ -524,8 +524,8 @@ static struct yetty_ycore_void_result vt_parse_layer(struct vt_reader *reader,
     return result;
 }
 
-struct yetty_ycore_void_result yetty_ymap_vt_parse(
-    const uint8_t *bytes, size_t len, struct yetty_ymap_vt_tile *out_tile)
+struct yetty_ycore_void_result yetty_ymap_vt_parse(const uint8_t *bytes, size_t len,
+                                                   struct yetty_ymap_vt_tile *out_tile)
 {
     if (!bytes || len == 0 || !out_tile) {
         return YETTY_ERR(yetty_ycore_void, "mvt: NULL input");

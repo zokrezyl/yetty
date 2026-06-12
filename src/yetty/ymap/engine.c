@@ -51,7 +51,7 @@
  *===========================================================================*/
 
 void yetty_ymap_lonlat_to_global_pixel(double longitude, double latitude, uint32_t zoom,
-                                              double *out_pixel_x, double *out_pixel_y)
+                                       double *out_pixel_x, double *out_pixel_y)
 {
     double tile_count = (double)(1u << zoom);
     double tile_x = (longitude + 180.0) / 360.0 * tile_count;
@@ -66,7 +66,7 @@ void yetty_ymap_lonlat_to_global_pixel(double longitude, double latitude, uint32
 }
 
 void yetty_ymap_global_pixel_to_lonlat(double pixel_x, double pixel_y, uint32_t zoom,
-                                              double *out_longitude, double *out_latitude)
+                                       double *out_longitude, double *out_latitude)
 {
     double world_px = (double)(1u << zoom) * (double)OSM_TILE_SIZE;
     double normalized_x = pixel_x / world_px;
@@ -147,7 +147,7 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_raster(
     double center_pixel_x = 0.0;
     double center_pixel_y = 0.0;
     yetty_ymap_lonlat_to_global_pixel(config->longitude, config->latitude, config->zoom,
-                                             &center_pixel_x, &center_pixel_y);
+                                      &center_pixel_x, &center_pixel_y);
     int64_t origin_x = (int64_t)llround(center_pixel_x) - (int64_t)config->width_px / 2;
     int64_t origin_y = (int64_t)llround(center_pixel_y) - (int64_t)config->height_px / 2;
 
@@ -313,4 +313,3 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_raster(
     }
     return YETTY_OK(yetty_ydraw_drawable_list, list_res.value);
 }
-

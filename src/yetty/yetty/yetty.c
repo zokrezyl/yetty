@@ -749,11 +749,9 @@ static struct yetty_ycore_int_result yetty_event_handler(
      * workspace does this escalate to the full SHUTDOWN below, preserving
      * the "closing the last terminal closes the app" behavior. */
     if (event->type == YETTY_YCORE_CLOSE) {
-        size_t workspace_count =
-            yetty->tabbar ? yetty_yui_tabbar_model_count(yetty->tabbar) : 0;
+        size_t workspace_count = yetty->tabbar ? yetty_yui_tabbar_model_count(yetty->tabbar) : 0;
         for (size_t i = 0; i < workspace_count; i++) {
-            struct yetty_yui_workspace *ws =
-                yetty_yui_tabbar_model_workspace_at(yetty->tabbar, i);
+            struct yetty_yui_workspace *ws = yetty_yui_tabbar_model_workspace_at(yetty->tabbar, i);
             struct yetty_yui_tile *root = ws ? yetty_yui_workspace_root(ws) : NULL;
             if (!root) {
                 continue;
@@ -794,8 +792,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
                  * focus, hand it to the first surviving pane. */
                 struct yetty_yui_tile *new_root = yetty_yui_workspace_root(ws);
                 if (new_root && !yetty_yui_tile_find_focused_pane(new_root)) {
-                    struct yetty_yui_tile *first_pane =
-                        yetty_yui_tile_find_first_pane(new_root);
+                    struct yetty_yui_tile *first_pane = yetty_yui_tile_find_first_pane(new_root);
                     if (first_pane) {
                         yetty_yui_tile_pane_set_focused(first_pane, 1);
                     }
@@ -803,8 +800,7 @@ static struct yetty_ycore_int_result yetty_event_handler(
             }
             break;
         }
-        if (yetty->event_loop && yetty->event_loop->ops &&
-            yetty->event_loop->ops->request_render) {
+        if (yetty->event_loop && yetty->event_loop->ops && yetty->event_loop->ops->request_render) {
             yetty->event_loop->ops->request_render(yetty->event_loop);
         }
         return YETTY_OK(yetty_ycore_int, 1);

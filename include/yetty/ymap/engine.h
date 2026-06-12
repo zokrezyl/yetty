@@ -71,17 +71,17 @@ struct yetty_ymap_config {
  * Exposed for tools and tests — the interactive tool pans/zooms by
  * shifting the center in pixel space and projecting back. */
 void yetty_ymap_lonlat_to_global_pixel(double longitude, double latitude, uint32_t zoom,
-                                              double *out_pixel_x, double *out_pixel_y);
+                                       double *out_pixel_x, double *out_pixel_y);
 
 void yetty_ymap_global_pixel_to_lonlat(double pixel_x, double pixel_y, uint32_t zoom,
-                                              double *out_longitude, double *out_latitude);
+                                       double *out_longitude, double *out_latitude);
 
 /* Geolocate this machine's public IP (one keyless HTTPS request to
  * ipinfo.io, short timeout). City-level accuracy at best — meant only to
  * pick a sensible default map center. Best-effort by contract: callers
  * fall back on error, the lookup must never gate a render. */
 struct yetty_ycore_void_result yetty_ymap_geolocate_public_ip(double *out_latitude,
-                                                                     double *out_longitude);
+                                                              double *out_longitude);
 
 /* Download + composite the configured viewport and return a fresh
  * drawable list holding ONE yimage prim. Caller frees the list with

@@ -452,6 +452,44 @@ static struct yetty_yfont_cache_ref_result resolve_blob_font_handle(struct scrol
     return yetty_yfont_cache_get_font(c->font_cache, hex, cdb_path);
 }
 
+/* True when name is exactly 16 lowercase/uppercase hex digits — the shape of a
+ * content-addressed FONT-ref hash, as opposed to an installed font name. */
+static bool font_name_is_hash16(const char *name, uint32_t name_len)
+{
+    if (name_len != 16) {
+        return false;
+    }
+    for (uint32_t i = 0; i < 16; i++) {
+        char ch = name[i];
+        bool ok = (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
+        if (!ok) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/* Resolve a FONT prim that names an installed font (ttf_len==0, name not a
+ * hash). The font ships with the install as a pre-generated MSDF CDB next to
+ * the default font: <fonts_dir>/../msdf-fonts/<name>.cdb. ymusic references
+ * "Emmentaler" this way so it never has to embed the 200 KB music font in
+ * every score envelope. Same resolution shape as get_default_font_ref, minus
+ * the implicit "-Regular" style suffix (named fonts are single-style). */
+static struct yetty_yfont_cache_ref_result resolve_named_font_handle(struct scrolling_canvas *c,
+                                                                     const char *name)
+{
+    if (c->font_render_method == 1) {
+        return YETTY_ERR(yetty_yfont_cache_ref,
+                         "raster named font not yet wired through font cache");
+    }
+    char cdb_path[1024];
+    snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s.cdb", c->fonts_dir, name);
+    char ns[128];
+    sanitize_identifier(ns, sizeof(ns), name);
+    ydebug("scrolling-canvas: named msdf font cdb='%s' key='%s'", cdb_path, ns);
+    return yetty_yfont_cache_get_font(c->font_cache, ns, cdb_path);
+}
+
 /*===========================================================================
  * Lifecycle
  *===========================================================================*/
@@ -1296,6 +1334,28 @@ static struct yetty_ycore_void_result dispatch_one(
             return YETTY_OK_VOID();
         }
         char hex[17];
+        /* Named installed-font form: ttf_len==0 with a name that is NOT a
+         * 16-char hash. The font ships with the install (a pre-generated MSDF
+         * CDB beside the default font); resolve it by name and bind it
+         * eagerly. ymusic uses this so a score never carries the music font's
+         * bytes. */
+        if (fv.ttf_len == 0 && !font_name_is_hash16(fv.name, fv.name_len)) {
+            char name[YETTY_YCORE_NAMED_BUFFER_MAX_NAME_LENGTH];
+            size_t nl = fv.name_len < sizeof(name) - 1 ? fv.name_len : sizeof(name) - 1;
+            memcpy(name, fv.name, nl);
+            name[nl] = '\0';
+            struct yetty_yfont_cache_ref_result nr = resolve_named_font_handle(c, name);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, nr, "dispatch: resolve_named_font_handle");
+            struct yetty_ycore_void_result gr =
+                font_map_grow(&env->fonts_map, (uint32_t)fv.font_id + 1);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "dispatch: font_map_grow");
+            struct font_map_entry *e = &env->fonts_map.entries[fv.font_id];
+            e->font = nr.value.font;
+            e->handle = nr.value.handle;
+            e->declared = true;
+            e->resolved = true;
+            return YETTY_OK_VOID();
+        }
         /* Hash-ref form: producers (ypdf streaming, future ymarkdown
          * streaming) ship a FONT prim with no TTF bytes when the same
          * font was already sent in a prior envelope. The on-disk MSDF
@@ -1303,19 +1363,6 @@ static struct yetty_ycore_void_result dispatch_one(
          * lives in `name` as 16 hex chars. Resolve directly from the
          * name without re-running the bytes path. */
         if (fv.ttf_len == 0) {
-            if (fv.name_len != 16) {
-                return YETTY_ERR(yetty_ycore_void,
-                                 "FONT prim: ttf_len=0 but name is not a 16-char hex hash");
-            }
-            for (uint32_t i = 0; i < 16; i++) {
-                char ch = fv.name[i];
-                bool ok = (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') ||
-                          (ch >= 'A' && ch <= 'F');
-                if (!ok) {
-                    return YETTY_ERR(yetty_ycore_void,
-                                     "FONT prim: ttf_len=0 name has non-hex char");
-                }
-            }
             memcpy(hex, fv.name, 16);
             hex[16] = '\0';
         } else {

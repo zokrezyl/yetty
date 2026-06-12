@@ -273,16 +273,6 @@ static struct yetty_ydraw_drawable_list *render_content(const uint8_t *bytes, si
  * single scrollable drawable list.
  *===========================================================================*/
 
-static bool file_exists(const char *path)
-{
-    FILE *probe = fopen(path, "rb");
-    if (!probe) {
-        return false;
-    }
-    fclose(probe);
-    return true;
-}
-
 static bool ends_with_ci(const char *text, const char *suffix)
 {
     size_t text_len = strlen(text);
@@ -336,43 +326,6 @@ static bool is_lilypond(const uint8_t *bytes, size_t len, const char *path)
         }
     }
     return false;
-}
-
-/* Locate the Emmentaler music font: explicit override, then the runtime fonts
- * dir the parent yetty exports, then dev-tree fallbacks. Returns out on
- * success (a readable path), or NULL. */
-static const char *resolve_music_font(char *out, size_t cap)
-{
-    const char *env_font = getenv("YETTY_YMUSIC_FONT");
-    if (env_font && env_font[0] && file_exists(env_font)) {
-        snprintf(out, cap, "%s", env_font);
-        return out;
-    }
-    const char *fonts_dir = getenv("YETTY_FONTS_DIR");
-    if (fonts_dir && fonts_dir[0]) {
-        snprintf(out, cap, "%s/Emmentaler-20.otf", fonts_dir);
-        if (file_exists(out)) {
-            return out;
-        }
-    }
-    const char *data_dir = getenv("YETTY_DATA_DIR");
-    if (data_dir && data_dir[0]) {
-        snprintf(out, cap, "%s/fonts/Emmentaler-20.otf", data_dir);
-        if (file_exists(out)) {
-            return out;
-        }
-    }
-    static const char *dev_paths[] = {
-        "assets/fonts/Emmentaler-20.otf",
-        "build-desktop-ytrace-release/assets/fonts/Emmentaler-20.otf",
-    };
-    for (size_t i = 0; i < sizeof(dev_paths) / sizeof(dev_paths[0]); i++) {
-        if (file_exists(dev_paths[i])) {
-            snprintf(out, cap, "%s", dev_paths[i]);
-            return out;
-        }
-    }
-    return NULL;
 }
 
 /* Pack an 0xRRGGBB colour + opacity into the ABGR word (byte0=R, byte1=G,
@@ -453,13 +406,6 @@ static uint32_t music_bg_rgb_from_config(void)
 static struct yetty_ydraw_drawable_list *render_lilypond(const uint8_t *bytes, size_t len,
                                                          float width_px, float cell_h)
 {
-    char font_path[1024];
-    if (!resolve_music_font(font_path, sizeof(font_path))) {
-        fprintf(stderr, "yless: music font not found; set YETTY_YMUSIC_FONT to an "
-                        "Emmentaler/SMuFL .otf\n");
-        return NULL;
-    }
-
     struct yetty_ycore_void_result reg = yetty_ymusic_register();
     if (YETTY_IS_ERR(reg)) {
         fprintf(stderr, "yless: ymusic register failed: %s\n", reg.error.msg);
@@ -479,7 +425,6 @@ static struct yetty_ydraw_drawable_list *render_lilypond(const uint8_t *bytes, s
         staff_space = 8.0f;
     }
     (void)yetty_ymusic_configure(NULL, music, width_px, staff_space, 0);
-    (void)yetty_ymusic_set_font_path(NULL, music, font_path);
 
     struct yetty_ycore_void_result pr = yetty_ymusic_parse(NULL, music, (const char *)bytes, len);
     if (YETTY_IS_ERR(pr)) {
@@ -490,8 +435,8 @@ static struct yetty_ydraw_drawable_list *render_lilypond(const uint8_t *bytes, s
     }
 
     struct yetty_ydraw_drawable_list_result rr = yetty_ymusic_render(NULL, music);
-    /* The rendered list owns its own bytes (font + primitives), so the model
-     * can go now. */
+    /* The rendered list owns its own bytes (primitives + a font-name ref, not
+     * the font itself), so the model can go now. */
     (void)yetty_ymusic_destroy(NULL, music);
     if (YETTY_IS_ERR(rr)) {
         fprintf(stderr, "yless: lilypond render failed: %s\n", rr.error.msg);

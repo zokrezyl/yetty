@@ -97,8 +97,8 @@ static void websocket_pty_overflow_append(struct yetty_ypty_websocket_pty *pty, 
         }
         uint8_t *grown = realloc(pty->tx_overflow, newcap);
         if (!grown) {
-            ywarn("websocket-pty: overflow realloc to %zu bytes failed; dropping %zu bytes",
-                  newcap, len);
+            ywarn("websocket-pty: overflow realloc to %zu bytes failed; dropping %zu bytes", newcap,
+                  len);
             return;
         }
         pty->tx_overflow = grown;
@@ -215,8 +215,8 @@ static void websocket_pty_on_disconnect(void *ctx)
 
 /* ---- PTY ops ------------------------------------------------------ */
 
-static struct yetty_ycore_size_result websocket_pty_read(struct yetty_platform_pty *self,
-                                                         char *buf, size_t max_len)
+static struct yetty_ycore_size_result websocket_pty_read(struct yetty_platform_pty *self, char *buf,
+                                                         size_t max_len)
 {
     struct yetty_ypty_websocket_pty *pty = (struct yetty_ypty_websocket_pty *)self;
 

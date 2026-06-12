@@ -35,13 +35,6 @@ class Music(_rt.YClass):
         _fn = _rt.cfn("yetty_ymusic_configure", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_float, c_float, c_uint32])
         res = _fn(None, self._handle, width, staff_space, flags)
         return _rt.result_from_c(res)
-    def set_font_path(self, path: str | bytes | None) -> _rt.Result[None]:
-        """Call `yetty_ymusic_set_font_path`; returns Result, never raises for yclass errors."""
-        if self._handle is None:
-            return self._invalid_result()
-        _fn = _rt.cfn("yetty_ymusic_set_font_path", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_char_p])
-        res = _fn(None, self._handle, _rt.cstr(path))
-        return _rt.result_from_c(res)
     def parse(self, input: str | bytes | None, len: int) -> _rt.Result[None]:
         """Call `yetty_ymusic_parse`; returns Result, never raises for yclass errors."""
         if self._handle is None:

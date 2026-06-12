@@ -43,8 +43,8 @@ struct yetty_ynet_netstack {
     char *relay_url;
     long timer_id;
     uint8_t mac[6];
-    int link_up;   /* relay socket open */
-    int bound;     /* DHCP has given us an address */
+    int link_up; /* relay socket open */
+    int bound;   /* DHCP has given us an address */
 };
 
 /* ---- lwIP netif glue --------------------------------------------- */
@@ -73,7 +73,7 @@ static err_t netstack_netif_init(struct netif *netif)
     struct yetty_ynet_netstack *netstack = netif->state;
     netif->name[0] = 'y';
     netif->name[1] = '0';
-    netif->output = etharp_output;       /* IP → ARP → linkoutput */
+    netif->output = etharp_output; /* IP → ARP → linkoutput */
     netif->linkoutput = netstack_linkoutput;
     netif->mtu = 1500;
     netif->hwaddr_len = ETH_HWADDR_LEN;
@@ -116,7 +116,7 @@ static void netstack_status_callback(struct netif *netif)
 
 YETTY_EXTERNAL_CALLBACK
 static EM_BOOL netstack_on_open(int event_type, const EmscriptenWebSocketOpenEvent *event,
-                               void *user_data)
+                                void *user_data)
 {
     (void)event_type;
     (void)event;
@@ -133,7 +133,7 @@ static EM_BOOL netstack_on_open(int event_type, const EmscriptenWebSocketOpenEve
 
 YETTY_EXTERNAL_CALLBACK
 static EM_BOOL netstack_on_message(int event_type, const EmscriptenWebSocketMessageEvent *event,
-                                  void *user_data)
+                                   void *user_data)
 {
     (void)event_type;
     struct yetty_ynet_netstack *netstack = user_data;
@@ -142,8 +142,7 @@ static EM_BOOL netstack_on_message(int event_type, const EmscriptenWebSocketMess
     }
     struct pbuf *frame = pbuf_alloc(PBUF_RAW, (u16_t)event->numBytes, PBUF_POOL);
     if (!frame) {
-        ywarn("ynet: out of pbufs, dropping inbound frame (%u bytes)",
-              (unsigned)event->numBytes);
+        ywarn("ynet: out of pbufs, dropping inbound frame (%u bytes)", (unsigned)event->numBytes);
         return EM_TRUE;
     }
     pbuf_take(frame, event->data, (u16_t)event->numBytes);
@@ -155,7 +154,7 @@ static EM_BOOL netstack_on_message(int event_type, const EmscriptenWebSocketMess
 
 YETTY_EXTERNAL_CALLBACK
 static EM_BOOL netstack_on_error(int event_type, const EmscriptenWebSocketErrorEvent *event,
-                                void *user_data)
+                                 void *user_data)
 {
     (void)event_type;
     (void)event;
@@ -166,12 +165,11 @@ static EM_BOOL netstack_on_error(int event_type, const EmscriptenWebSocketErrorE
 
 YETTY_EXTERNAL_CALLBACK
 static EM_BOOL netstack_on_close(int event_type, const EmscriptenWebSocketCloseEvent *event,
-                                void *user_data)
+                                 void *user_data)
 {
     (void)event_type;
     struct yetty_ynet_netstack *netstack = user_data;
-    yinfo("ynet: relay disconnected (code=%d clean=%d)", (int)event->code,
-          (int)event->wasClean);
+    yinfo("ynet: relay disconnected (code=%d clean=%d)", (int)event->code, (int)event->wasClean);
     netstack->link_up = 0;
     netif_set_link_down(&netstack->netif);
     return EM_TRUE;

@@ -46,13 +46,11 @@ struct yetty_yvideo_buffers {
 // Serialization API
 //=============================================================================
 
-size_t yetty_yvideo_uniforms_serialized_size(
-    const struct yetty_yvideo_uniforms *uniforms,
-    const struct yetty_yvideo_buffers *buffers);
+size_t yetty_yvideo_uniforms_serialized_size(const struct yetty_yvideo_uniforms *uniforms,
+                                             const struct yetty_yvideo_buffers *buffers);
 
 struct yetty_ycore_size_result yetty_yvideo_uniforms_serialize(
-    const struct yetty_yvideo_uniforms *uniforms,
-    const struct yetty_yvideo_buffers *buffers,
+    const struct yetty_yvideo_uniforms *uniforms, const struct yetty_yvideo_buffers *buffers,
     uint8_t *out, size_t out_capacity);
 
 //=============================================================================
@@ -65,4 +63,3 @@ void yetty_yvideo_factory_destroy(struct yetty_ydraw_concrete_factory *factory);
 #ifdef __cplusplus
 }
 #endif
-

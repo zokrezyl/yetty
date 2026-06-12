@@ -59,7 +59,7 @@ static struct yetty_ycore_void_result parse_loc_field(const char *body, double *
 }
 
 struct yetty_ycore_void_result yetty_ymap_geolocate_public_ip(double *out_latitude,
-                                                                     double *out_longitude)
+                                                              double *out_longitude)
 {
     if (!out_latitude || !out_longitude) {
         return YETTY_ERR(yetty_ycore_void, "geoip: NULL output argument");
@@ -71,8 +71,8 @@ struct yetty_ycore_void_result yetty_ymap_geolocate_public_ip(double *out_latitu
 
     uint8_t *body_bytes = NULL;
     size_t body_len = 0;
-    struct yetty_ycore_void_result get_res = yetty_ymap_http_get(
-        curl_handle, GEOIP_URL, GEOIP_TIMEOUT_SECONDS, &body_bytes, &body_len);
+    struct yetty_ycore_void_result get_res =
+        yetty_ymap_http_get(curl_handle, GEOIP_URL, GEOIP_TIMEOUT_SECONDS, &body_bytes, &body_len);
     yetty_ymap_curl_release(curl_handle);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, get_res, "geoip: lookup request failed");
 

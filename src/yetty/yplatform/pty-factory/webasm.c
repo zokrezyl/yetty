@@ -105,8 +105,7 @@ static struct yetty_yplatform_pty_ptr_result factory_create_temu_pty(
     struct yetty_ytransport_conn_transport *transport =
         yetty_ytransport_iframe_transport_create(YETTY_VM_TELNET_PORT);
     if (!transport) {
-        return YETTY_ERR(yetty_yplatform_pty_ptr,
-                         "webasm factory: iframe_transport_create failed");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "webasm factory: iframe_transport_create failed");
     }
     yinfo("webasm: pty = telnet-over-iframe-transport (port=%d)", YETTY_VM_TELNET_PORT);
     /* telnet_pty_create takes ownership of the transport — it will
@@ -205,8 +204,7 @@ struct yetty_yplatform_pty_factory_ptr_result yetty_yplatform_pty_factory_create
 
     struct webasm_pty_factory *factory = calloc(1, sizeof(*factory));
     if (!factory) {
-        return YETTY_ERR(yetty_yplatform_pty_factory_ptr,
-                         "failed to allocate webasm pty factory");
+        return YETTY_ERR(yetty_yplatform_pty_factory_ptr, "failed to allocate webasm pty factory");
     }
     static const struct yetty_yplatform_pty_factory_ops factory_ops = {
         .destroy = factory_destroy,

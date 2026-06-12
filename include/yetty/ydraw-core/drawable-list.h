@@ -262,6 +262,20 @@ struct yetty_ycore_int_result yetty_ydraw_drawable_list_add_font(
 struct yetty_ycore_int_result yetty_ydraw_drawable_list_add_font_ref(
     struct yetty_ydraw_drawable_list *buf, const char *hex16 YETTY_ANNOT_CSTRING);
 
+/* Pack a FONT primitive that references an installed font by NAME instead of
+ * shipping its TTF bytes. The named font ships with the yetty install as a
+ * pre-generated MSDF CDB beside the default font (msdf-fonts/<name>.cdb), so
+ * the receiver resolves it without ever receiving the bytes. ymusic uses this
+ * to reference "Emmentaler" — keeping each score envelope tiny instead of
+ * embedding the ~200 KB music font every time.
+ *
+ * Wire shape: FONT prim with ttf_len = 0 and a name that is NOT a 16-char hex
+ * hash (which is how the receiver tells a named reference apart from a
+ * content-hash reference). Returns the producer-assigned envelope-local
+ * font_id, same numbering as yetty_ydraw_drawable_list_add_font. */
+struct yetty_ycore_int_result yetty_ydraw_drawable_list_add_font_named(
+    struct yetty_ydraw_drawable_list *buf, const char *name YETTY_ANNOT_CSTRING);
+
 /* Pack a TEXT_DRAWABLE_LIST primitive (text-drawable-list.h). font_id must match a
  * previously-added FONT prim's id, or be -1 to use the canvas default. */
 struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_text(
