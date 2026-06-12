@@ -119,6 +119,9 @@ struct yetty_yconfig_config {
 #define YETTY_YCONFIG_KEY_TELNET "telnet/enabled"
 #define YETTY_YCONFIG_KEY_TELNET_HOST "telnet/host"
 #define YETTY_YCONFIG_KEY_TELNET_PORT "telnet/port"
+#define YETTY_YCONFIG_KEY_WEBSOCKET "websocket/enabled"
+#define YETTY_YCONFIG_KEY_WEBSOCKET_URL "websocket/url"
+#define YETTY_YCONFIG_KEY_NET_RELAY "net/relay"
 
 /* Create config */
 struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[],

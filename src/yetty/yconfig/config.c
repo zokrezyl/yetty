@@ -1174,7 +1174,11 @@ enum {
     OPT_TEMU,
     OPT_QEMU,
     OPT_SSH,
+    OPT_SSH_PASSWORD,
     OPT_TELNET,
+    OPT_WEBSOCKET,
+    OPT_WEBSOCKET_URL,
+    OPT_NET_RELAY,
     OPT_YDVNC_CLIENT,
     OPT_YDVNC_PASSWORD,
     OPT_CMD,
@@ -1207,7 +1211,11 @@ static struct yetty_yplatform_option long_options[] = {
     {"temu", no_argument, 0, OPT_TEMU},
     {"qemu", no_argument, 0, OPT_QEMU},
     {"ssh", optional_argument, 0, OPT_SSH},
+    {"ssh-password", required_argument, 0, OPT_SSH_PASSWORD},
     {"telnet", optional_argument, 0, OPT_TELNET},
+    {"websocket", optional_argument, 0, OPT_WEBSOCKET},
+    {"websocket-url", required_argument, 0, OPT_WEBSOCKET_URL},
+    {"net-relay", required_argument, 0, OPT_NET_RELAY},
     {"cmd", no_argument, 0, OPT_CMD},
     {"powershell", no_argument, 0, OPT_POWERSHELL},
     {"pwsh", no_argument, 0, OPT_PWSH},
@@ -1256,8 +1264,14 @@ static void print_usage(FILE *out, const char *prog)
     fprintf(out, "      --temu                         Run in-process TinyEMU RISC-V VM\n");
     fprintf(out, "      --qemu                         Run external QEMU RISC-V VM (via telnet)\n");
     fprintf(out, "      --ssh [USER@HOST[:PORT]]       Connect to SSH remote shell\n");
+    fprintf(out, "      --ssh-password=PASSWORD        SSH password (webasm; desktop can also "
+                 "use keys)\n");
     fprintf(out, "      --telnet [[HOST]:PORT]         Connect to a telnet server (default host "
                  "127.0.0.1)\n");
+    fprintf(out, "      --websocket [URL]              Connect to a websocket PTY server "
+                 "(webasm; ws://HOST:PORT)\n");
+    fprintf(out, "      --websocket-url=URL            Websocket endpoint for --telnet on webasm "
+                 "(no mode change)\n");
     fprintf(out, "      --cmd                          Launch cmd.exe as the shell (Windows)\n");
     fprintf(out,
             "      --powershell                   Launch Windows PowerShell 5.x as the shell\n");
@@ -1269,7 +1283,8 @@ static void print_usage(FILE *out, const char *prog)
     fprintf(out, "  -h, --help                         Show this help\n");
     fprintf(out, "\n");
     fprintf(out, "Session-mode flags are mutually exclusive:\n");
-    fprintf(out, "  --cmd, --powershell, --pwsh, --wsl, --ssh, --telnet, --temu, --qemu\n");
+    fprintf(out,
+            "  --cmd, --powershell, --pwsh, --wsl, --ssh, --telnet, --websocket, --temu, --qemu\n");
 }
 
 static void set_config(struct config_impl *impl, const char *path, const char *value)
@@ -1283,8 +1298,8 @@ static void set_config(struct config_impl *impl, const char *path, const char *v
 
 /* Reject more than one session-mode flag in a single invocation.
  * The mutually-exclusive set is: --cmd, --powershell, --pwsh, --wsl, --ssh,
- * --telnet, --temu, --qemu. The first one parsed wins; any second one prints
- * a clear diagnostic naming both flags and exits non-zero. */
+ * --telnet, --websocket, --temu, --qemu. The first one parsed wins; any
+ * second one prints a clear diagnostic naming both flags and exits non-zero. */
 static void claim_session_mode(const char **slot, const char *flag)
 {
     if (*slot) {
@@ -1296,8 +1311,9 @@ static void claim_session_mode(const char **slot, const char *flag)
 
 /* Parse the command line into config. Recognises -c/--config (already loaded
  * by try_load_config_file before we get here), -e command, VNC flags, RPC
- * host/port, --temu/--qemu, --ssh [user@host[:port]], --telnet, and the
- * Windows session-mode flags --cmd / --powershell / --pwsh / --wsl.
+ * host/port, --temu/--qemu, --ssh [user@host[:port]], --telnet,
+ * --websocket [url] / --websocket-url, and the Windows session-mode flags
+ * --cmd / --powershell / --pwsh / --wsl.
  *
  * On -h/--help or unknown args, prints usage and exits. */
 static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
@@ -1377,12 +1393,30 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             claim_session_mode(&session_mode, "qemu");
             set_config(impl, YETTY_YCONFIG_KEY_QEMU, "true");
             break;
-        case OPT_SSH:
+        case OPT_SSH: {
             claim_session_mode(&session_mode, "ssh");
-            if (yetty_yplatform_optarg) {
-                parse_ssh_target(impl, yetty_yplatform_optarg);
+            /* getopt's optional_argument only binds `--ssh=USER@HOST`. Also
+             * accept the natural `--ssh USER@HOST` by peeking the next argv
+             * (same pattern as --telnet / --websocket). Bare --ssh keeps the
+             * desktop behaviour of reading host/user from ssh config. */
+            const char *target = yetty_yplatform_optarg;
+            if (!target && yetty_yplatform_optind < argc) {
+                const char *next = argv[yetty_yplatform_optind];
+                if (next && next[0] != '-') {
+                    target = next;
+                    yetty_yplatform_optind++;
+                }
+            }
+            if (target) {
+                parse_ssh_target(impl, target);
             }
             set_config(impl, YETTY_YCONFIG_KEY_SSH, "true");
+            break;
+        }
+        case OPT_SSH_PASSWORD:
+            /* Endpoint credential only — no session-mode claim, rides
+             * along with --ssh. */
+            set_config(impl, "ssh/password", yetty_yplatform_optarg);
             break;
         case OPT_TELNET: {
             claim_session_mode(&session_mode, "telnet");
@@ -1405,6 +1439,35 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             set_config(impl, YETTY_YCONFIG_KEY_TELNET, "true");
             break;
         }
+        case OPT_WEBSOCKET: {
+            claim_session_mode(&session_mode, "websocket");
+            /* Accept both --websocket=URL and --websocket URL (same
+             * peek-next-argv pattern as --telnet). Bare --websocket
+             * leaves websocket/url to the platform default. */
+            const char *url = yetty_yplatform_optarg;
+            if (!url && yetty_yplatform_optind < argc) {
+                const char *next = argv[yetty_yplatform_optind];
+                if (next && next[0] != '-') {
+                    url = next;
+                    yetty_yplatform_optind++;
+                }
+            }
+            if (url) {
+                set_config(impl, YETTY_YCONFIG_KEY_WEBSOCKET_URL, url);
+            }
+            set_config(impl, YETTY_YCONFIG_KEY_WEBSOCKET, "true");
+            break;
+        }
+        case OPT_WEBSOCKET_URL:
+            /* Endpoint only — no session-mode claim, so it can ride
+             * along with --telnet (webasm telnet-over-websocket). */
+            set_config(impl, YETTY_YCONFIG_KEY_WEBSOCKET_URL, yetty_yplatform_optarg);
+            break;
+        case OPT_NET_RELAY:
+            /* Brings up the in-browser lwIP netstack against an L2 frame
+             * relay (webasm). Independent of session mode. */
+            set_config(impl, YETTY_YCONFIG_KEY_NET_RELAY, yetty_yplatform_optarg);
+            break;
         case OPT_CMD:
             claim_session_mode(&session_mode, "cmd");
             set_config(impl, "shell/command", "cmd.exe");

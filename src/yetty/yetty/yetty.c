@@ -1372,13 +1372,18 @@ struct yetty_yetty_yetty_result yetty_create(struct yetty_yframework *runtime,
      * create_pty call and (b) on its second; opening a second tab here
      * gives the user both views of the same VM out of the box.
      *
-     * On webasm there is no flag — the only PTY backend is the in-iframe
-     * TinyEMU VM (its factory is the only one compiled in), so the same
-     * console+telnet pair is the default shape regardless of config. */
+     * On webasm the in-iframe TinyEMU VM is the default backend (no
+     * flag needed), so the console+telnet pair is the default shape
+     * there too — unless a websocket-based session mode (--websocket,
+     * --telnet, --ssh) was selected, where each tab is its own
+     * connection and one tab is the right default, same as desktop. */
     bool is_temu = config->ops->get_bool(config, YETTY_YCONFIG_KEY_TEMU, 0);
     bool is_qemu = config->ops->get_bool(config, YETTY_YCONFIG_KEY_QEMU, 0);
 #ifdef __EMSCRIPTEN__
-    bool needs_console_telnet_pair = true;
+    bool is_remote_session = config->ops->get_bool(config, YETTY_YCONFIG_KEY_WEBSOCKET, 0) ||
+                             config->ops->get_bool(config, YETTY_YCONFIG_KEY_TELNET, 0) ||
+                             config->ops->get_bool(config, YETTY_YCONFIG_KEY_SSH, 0);
+    bool needs_console_telnet_pair = !is_remote_session;
     const char *which = "webasm";
 #else
     bool needs_console_telnet_pair = is_temu || is_qemu;

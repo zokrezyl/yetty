@@ -27,7 +27,13 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/webasm.c
     ${YETTY_ROOT}/src/yetty/ypty/iframepty.c
     ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
+    ${YETTY_ROOT}/src/yetty/ypty/websocket-pty.c
     ${YETTY_ROOT}/src/yetty/ytransport/iframe-transport.c
+    ${YETTY_ROOT}/src/yetty/ytransport/websocket-transport.c
+    ${YETTY_ROOT}/src/yetty/ytransport/lwip-transport.c
+    ${YETTY_ROOT}/src/yetty/yssh/ssh-websocket-pty.c
+    ${YETTY_ROOT}/src/yetty/ynet/netstack.c
+    ${YETTY_ROOT}/src/yetty/ynet/lwip-port.c
     ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/brotli-glue.c
     ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
@@ -131,10 +137,26 @@ target_compile_options(yetty PRIVATE --use-port=emdawnwebgpu -fexceptions)
 target_link_options(yetty PRIVATE -fexceptions)
 set_target_properties(yetty PROPERTIES SUFFIX ".js")
 
+# The pre-js is baked INTO yetty.js at link time — without this, editing
+# yetty-assets-preload.js leaves ninja thinking yetty.js is up to date
+# and the change silently never ships.
+set_target_properties(yetty PROPERTIES
+    LINK_DEPENDS ${YETTY_ROOT}/build-tools/web/yetty-assets-preload.js)
+
 # brotli decoder is consumed by webasm/brotli-glue.c, exported as
 # _yetty_brotli_decode for the asset preload shim. Single-threaded
 # webasm prebuilt — see build-tools/yetty/libs/brotli.cmake.
 include(${YETTY_ROOT}/build-tools/yetty/libs/brotli.cmake)
+
+# libssh2 (mbedTLS backend) — consumed by yssh/ssh-websocket-pty.c for
+# the --ssh-over-websocket session mode. From-source emscripten build.
+include(${YETTY_ROOT}/build-tools/yetty/libs/libssh2-webasm.cmake)
+
+# lwIP — userspace TCP/IP stack for the in-browser netstack (ynet). Gives
+# real TCP connectivity over an L2 relay WebSocket, no VM. FetchContent
+# source build with yetty's toolchain; PUBLIC include dirs propagate to
+# the ynet sources compiled into the yetty target.
+include(${YETTY_ROOT}/build-tools/yetty/libs/lwip-webasm.cmake)
 
 target_link_libraries(yetty PRIVATE
     ${YETTY_LIBS}
@@ -142,6 +164,8 @@ target_link_libraries(yetty PRIVATE
     Freetype::Freetype
     brotlidec
     brotlicommon
+    libssh2_webasm
+    lwip_webasm
     yetty_yplatform_core
 )
 

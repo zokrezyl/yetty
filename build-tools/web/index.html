@@ -176,6 +176,119 @@
             color: #fff;
             border-color: #e94560;
         }
+        /* Transport picker — shown before anything heavy loads unless
+         * the URL pins a mode (?mode=temu|websocket|telnet). Colors
+         * follow the brand palette (BRAND_BG ladder + mint accent). */
+        #yetty-mode-dialog {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(11, 16, 20, 0.85);
+            z-index: 300;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+        }
+        #yetty-mode-dialog.visible { display: flex; }
+        #yetty-mode-box {
+            width: min(560px, calc(100vw - 32px));
+            background: #141A1F;
+            border: 1px solid #364A47;
+            border-radius: 8px;
+            padding: 20px 22px;
+            color: #E0E5E4;
+        }
+        #yetty-mode-box h1 {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 4px;
+            color: #E0E5E4;
+        }
+        #yetty-mode-box h1 .accent { color: #6BA892; }
+        #yetty-mode-box .subtitle {
+            font-size: 12px;
+            color: #9FA7A8;
+            margin-bottom: 14px;
+        }
+        .mode-option {
+            display: block;
+            width: 100%;
+            text-align: left;
+            background: #1E262C;
+            border: 1px solid #364A47;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            color: #E0E5E4;
+            font-family: inherit;
+            font-size: 13px;
+        }
+        .mode-option:hover:not(:disabled) { border-color: #6BA892; }
+        .mode-option.selected {
+            border-color: #6BA892;
+            outline: 1px solid #6BA892;
+        }
+        .mode-option:disabled {
+            cursor: not-allowed;
+            opacity: 0.45;
+        }
+        .mode-option .mode-name { color: #74C5A5; font-weight: bold; }
+        .mode-option .mode-desc {
+            display: block;
+            margin-top: 2px;
+            font-size: 11px;
+            color: #9FA7A8;
+        }
+        #yetty-mode-url-row, .ssh-row {
+            display: none;
+            margin: 4px 0 12px 0;
+        }
+        #yetty-mode-url-row.visible, .ssh-row.visible { display: block; }
+        #yetty-mode-url-row label, .ssh-row label {
+            display: block;
+            font-size: 11px;
+            color: #9FA7A8;
+            margin-bottom: 4px;
+        }
+        #yetty-mode-url, .ssh-row input {
+            width: 100%;
+            background: #0B1014;
+            border: 1px solid #364A47;
+            border-radius: 4px;
+            color: #E0E5E4;
+            font-family: inherit;
+            font-size: 13px;
+            padding: 7px 9px;
+        }
+        #yetty-mode-url:focus, .ssh-row input:focus {
+            outline: 1px solid #6BA892;
+            border-color: #6BA892;
+        }
+        #yetty-mode-start {
+            display: block;
+            width: 100%;
+            background: #6BA892;
+            border: none;
+            border-radius: 6px;
+            color: #0B1014;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 10px;
+            cursor: pointer;
+        }
+        #yetty-mode-start:hover { background: #74C5A5; }
+        #yetty-mode-hint {
+            margin-top: 10px;
+            font-size: 11px;
+            color: #556162;
+            line-height: 1.5;
+        }
+        #yetty-mode-hint code { color: #9FA7A8; }
         #loading .spinner {
             width: 40px;
             height: 40px;
@@ -211,6 +324,66 @@
         <div id="yetty-status" style="display: none;"><button id="yetty-status-minimize" type="button" title="Minimize boot console">&minus;</button><div id="yetty-status-header">Booting Alpine Linux on RISC-V inside your browser. The log below streams every step — kernel download, decode, boot, telnetd startup. Once you see <span class="hint-key">[vm] session 1 guest TCP established (first rx)</span> the connection is live; click <strong>&minus;</strong> in the top-right corner to minimize this overlay and start using yetty.</div><div id="yetty-status-log"></div></div>
         <button id="yetty-status-restore" type="button"
                 title="Show boot console">&#9707; console</button>
+        <!-- Transport picker. Hidden when ?mode= pins the choice. -->
+        <div id="yetty-mode-dialog">
+            <div id="yetty-mode-box">
+                <h1><span class="accent">yetty</span> — choose a session</h1>
+                <div class="subtitle">How should this terminal connect?</div>
+                <button class="mode-option selected" type="button" data-mode="temu">
+                    <span class="mode-name">TinyEMU VM</span>
+                    <span class="mode-desc">Alpine Linux on RISC-V, fully in your browser.
+                        No server needed — large download, slow boot.</span>
+                </button>
+                <button class="mode-option" type="button" data-mode="websocket">
+                    <span class="mode-name">WebSocket shell</span>
+                    <span class="mode-desc">Raw PTY over WebSocket. Run
+                        tools/websocket-pty-server/websocket-pty-server.py on the host.</span>
+                </button>
+                <button class="mode-option" type="button" data-mode="telnet">
+                    <span class="mode-name">Telnet</span>
+                    <span class="mode-desc">Telnet over a WebSocket bridge. Run
+                        tools/telnet-websocket.sh in front of a telnetd.</span>
+                </button>
+                <button class="mode-option" type="button" data-mode="ssh">
+                    <span class="mode-name">SSH</span>
+                    <span class="mode-desc">Real SSH, crypto in the browser. The bridge only
+                        relays encrypted bytes: tools/telnet-websocket.sh HOST:22 8025</span>
+                </button>
+                <button class="mode-option" type="button" data-mode="relay">
+                    <span class="mode-name">In-browser networking (lwIP relay)</span>
+                    <span class="mode-desc">Experimental. Runs a real TCP/IP stack (lwIP) in
+                        the browser over an L2 relay — DHCP + DNS, the basis for reaching any
+                        host with no per-host bridge. For now: gets a DHCP lease (watch the
+                        boot log). SSH-over-relay is the next step.</span>
+                </button>
+                <div id="yetty-mode-url-row">
+                    <label for="yetty-mode-url">WebSocket URL</label>
+                    <input type="text" id="yetty-mode-url" spellcheck="false">
+                </div>
+                <div id="yetty-relay-target-row" class="ssh-row">
+                    <label for="yetty-relay-target">Connect to (host:port) — telnet over the relay</label>
+                    <input type="text" id="yetty-relay-target" spellcheck="false"
+                           value="telehack.com:23">
+                </div>
+                <div id="yetty-ssh-user-row" class="ssh-row">
+                    <label for="yetty-ssh-user">SSH username</label>
+                    <input type="text" id="yetty-ssh-user" spellcheck="false"
+                           autocomplete="username">
+                </div>
+                <div id="yetty-ssh-password-row" class="ssh-row">
+                    <label for="yetty-ssh-password">SSH password</label>
+                    <input type="password" id="yetty-ssh-password"
+                           autocomplete="current-password">
+                </div>
+                <button id="yetty-mode-start" type="button">Start</button>
+                <div id="yetty-mode-hint">Skip this dialog with
+                    <code>?mode=temu</code>,
+                    <code>?mode=websocket&amp;url=ws://host:8090</code>,
+                    <code>?mode=telnet&amp;url=ws://host:8024</code>,
+                    <code>?mode=ssh&amp;user=you</code> or
+                    <code>?mode=relay&amp;url=wss://host/</code>.</div>
+            </div>
+        </div>
         <div id="loading" style="display: none;">
             <div class="spinner"></div>
             <div>Loading WebGPU...</div>
@@ -599,11 +772,130 @@
             return iframe;
         }
 
-        async function launchYetty() {
+        // ---- Transport / session-mode selection --------------------------
+        // Three working modes:
+        //   temu      → --temu              (in-browser TinyEMU VM, default)
+        //   websocket → --websocket URL     (raw PTY over WebSocket;
+        //                                    tools/websocket-pty-server/)
+        //   telnet    → --telnet --websocket-url URL
+        //                                   (telnet over a ws↔TCP bridge;
+        //                                    tools/telnet-websocket.sh)
+        // The flags travel to wasm main() via Module.arguments, which
+        // Module.callMain() (yetty-assets-preload.js) picks up.
+        const MODE_DEFAULT_URLS = {
+            websocket: 'ws://' + (location.hostname || '127.0.0.1') + ':8090',
+            telnet:    'ws://' + (location.hostname || '127.0.0.1') + ':8024',
+            ssh:       'ws://' + (location.hostname || '127.0.0.1') + ':8025',
+            relay:     'wss://relay.widgetry.org/',
+        };
+
+        function buildModuleArguments(mode, wsUrl, sshUser, sshPassword, relayTarget) {
+            if (mode === 'websocket') {
+                return wsUrl ? ['--websocket', wsUrl] : ['--websocket'];
+            }
+            if (mode === 'telnet') {
+                return wsUrl ? ['--telnet', '--websocket-url', wsUrl] : ['--telnet'];
+            }
+            if (mode === 'ssh') {
+                // The host part of USER@HOST is informational on webasm —
+                // the bridge owns the TCP endpoint; libssh2 in the
+                // browser terminates the crypto.
+                const args = ['--ssh', (sshUser || 'root') + '@websocket',
+                              '--ssh-password', sshPassword || ''];
+                if (wsUrl) args.push('--websocket-url', wsUrl);
+                return args;
+            }
+            if (mode === 'relay') {
+                // Bring up the in-browser lwIP netstack against the relay
+                // (wsUrl) and telnet to the target host:port over it —
+                // yetty's own TCP stack dials out through the relay's NAT,
+                // no per-host bridge. relayTarget is "host:port".
+                const args = ['--net-relay', wsUrl];
+                if (relayTarget) args.push('--telnet', relayTarget);
+                return args;
+            }
+            return ['--temu'];
+        }
+
+        // Show the picker and resolve {mode, wsUrl, sshUser, sshPassword}
+        // on Start.
+        function askSessionMode() {
+            return new Promise(function (resolve) {
+                const dialog = document.getElementById('yetty-mode-dialog');
+                const urlRow = document.getElementById('yetty-mode-url-row');
+                const urlInput = document.getElementById('yetty-mode-url');
+                const sshUserRow = document.getElementById('yetty-ssh-user-row');
+                const sshUserInput = document.getElementById('yetty-ssh-user');
+                const sshPasswordRow = document.getElementById('yetty-ssh-password-row');
+                const sshPasswordInput = document.getElementById('yetty-ssh-password');
+                const relayTargetRow = document.getElementById('yetty-relay-target-row');
+                const relayTargetInput = document.getElementById('yetty-relay-target');
+                const startBtn = document.getElementById('yetty-mode-start');
+                const options = Array.from(
+                    document.querySelectorAll('.mode-option:not(:disabled)'));
+                let selected = 'temu';
+                const urlLabel = urlRow.querySelector('label');
+
+                function select(mode) {
+                    selected = mode;
+                    options.forEach(function (option) {
+                        option.classList.toggle('selected',
+                                                option.dataset.mode === mode);
+                    });
+                    const needsUrl = mode === 'websocket' || mode === 'telnet' ||
+                                     mode === 'ssh' || mode === 'relay';
+                    const needsSsh = mode === 'ssh';
+                    const isRelay = mode === 'relay';
+                    urlRow.classList.toggle('visible', needsUrl);
+                    sshUserRow.classList.toggle('visible', needsSsh);
+                    sshPasswordRow.classList.toggle('visible', needsSsh);
+                    relayTargetRow.classList.toggle('visible', isRelay);
+                    if (urlLabel) {
+                        urlLabel.textContent = isRelay ? 'Relay URL' : 'WebSocket URL';
+                    }
+                    if (needsUrl) {
+                        urlInput.value = MODE_DEFAULT_URLS[mode] || '';
+                        (needsSsh ? sshUserInput : urlInput).focus();
+                    }
+                }
+                options.forEach(function (option) {
+                    option.addEventListener('click', function () {
+                        select(option.dataset.mode);
+                    });
+                });
+                function start() {
+                    const needsUrl = selected === 'websocket' || selected === 'telnet' ||
+                                     selected === 'ssh' || selected === 'relay';
+                    if (selected === 'ssh' && !sshUserInput.value.trim()) {
+                        sshUserInput.focus();
+                        return;
+                    }
+                    dialog.classList.remove('visible');
+                    resolve({
+                        mode: selected,
+                        wsUrl: needsUrl ? urlInput.value.trim() : '',
+                        sshUser: sshUserInput.value.trim(),
+                        sshPassword: sshPasswordInput.value,
+                        relayTarget: relayTargetInput.value.trim()
+                    });
+                }
+                startBtn.addEventListener('click', start);
+                [urlInput, sshUserInput, sshPasswordInput].forEach(function (input) {
+                    input.addEventListener('keydown', function (event) {
+                        if (event.key === 'Enter') start();
+                    });
+                });
+                dialog.classList.add('visible');
+            });
+        }
+
+        async function launchYetty(mode, wsUrl, sshUser, sshPassword, relayTarget) {
             const loading = document.getElementById('loading');
             loading.style.display = 'block';
 
             resizeCanvas();
+            window.yettyStatus.append('session mode: ' + mode +
+                (wsUrl ? ' (' + wsUrl + ')' : ''), 'phase');
             window.yettyStatus.append('checking WebGPU…');
             const hasWebGPU = await checkWebGPU();
             if (!hasWebGPU) {
@@ -612,27 +904,46 @@
             }
             window.yettyStatus.append('WebGPU ready', 'ok');
 
-            // Bring the VM iframe up FIRST and only start yetty once the
-            // VM signals ready. Avoids yetty rendering an empty terminal
-            // for 30+ seconds while the rootfs streams down.
-            const PTY_ID = 1;
-            window.yettyStatus.append(
-                'spawning VM iframe (pty ' + PTY_ID + ')…', 'phase');
-            spawnVMIframe(PTY_ID, 80, 24);
-            window.yettyStatus.append(
-                'waiting for VM to be ready (kernel+rootfs download + boot)…');
-            try {
-                // 10 minutes is ridiculous but the rootfs is ~250 MB
-                // brotli'd over potentially-slow links + the brotli
-                // decode itself takes seconds. Better an eventual
-                // success than a spurious timeout.
-                await awaitVmReady(PTY_ID, 10 * 60 * 1000);
-            } catch (e) {
+            Module.arguments = buildModuleArguments(mode, wsUrl, sshUser, sshPassword, relayTarget);
+            // Don't echo the password into the visible boot log.
+            window.yettyStatus.append('yetty args: ' +
+                Module.arguments.map(function (arg, index) {
+                    return Module.arguments[index - 1] === '--ssh-password'
+                        ? '***' : arg;
+                }).join(' '), 'dim');
+
+            if (mode === 'temu') {
+                // Bring the VM iframe up FIRST and only start yetty once the
+                // VM signals ready. Avoids yetty rendering an empty terminal
+                // for 30+ seconds while the rootfs streams down.
+                const PTY_ID = 1;
                 window.yettyStatus.append(
-                    'VM never signaled ready: ' + e.message, 'err');
-                return;
+                    'spawning VM iframe (pty ' + PTY_ID + ')…', 'phase');
+                spawnVMIframe(PTY_ID, 80, 24);
+                window.yettyStatus.append(
+                    'waiting for VM to be ready (kernel+rootfs download + boot)…');
+                try {
+                    // 10 minutes is ridiculous but the rootfs is ~250 MB
+                    // brotli'd over potentially-slow links + the brotli
+                    // decode itself takes seconds. Better an eventual
+                    // success than a spurious timeout.
+                    await awaitVmReady(PTY_ID, 10 * 60 * 1000);
+                } catch (e) {
+                    window.yettyStatus.append(
+                        'VM never signaled ready: ' + e.message, 'err');
+                    return;
+                }
+                window.yettyStatus.append('VM is ready', 'ok');
+            } else {
+                // No VM download/boot phase — retitle the boot console
+                // header (its default text narrates the TinyEMU boot).
+                const header = document.getElementById('yetty-status-header');
+                if (header) {
+                    header.textContent = 'Connecting over WebSocket (' +
+                        (wsUrl || 'default endpoint') + '). Click − in the ' +
+                        'top-right corner to minimize this log.';
+                }
             }
-            window.yettyStatus.append('VM is ready', 'ok');
 
             window.yettyStatus.append('loading yetty.js…');
             await initYetty();
@@ -640,7 +951,33 @@
 
         async function init() {
             resizeCanvas();
-            await launchYetty();
+            // ?mode= pins the choice and skips the dialog; ?url= (alias
+            // ?wsurl=) overrides the endpoint for websocket/telnet/ssh.
+            // ssh additionally reads ?user= and ?password= (the latter
+            // mainly for automated testing — prefer the dialog, which
+            // keeps the password out of the URL/history).
+            const KNOWN_MODES = ['temu', 'websocket', 'telnet', 'ssh', 'relay'];
+            let mode = (urlParams.mode || '').toLowerCase();
+            // ?relay=URL is shorthand for the relay mode with that URL.
+            if (!mode && urlParams.relay) { mode = 'relay'; }
+            let wsUrl = urlParams.url || urlParams.wsurl || urlParams.relay || '';
+            let sshUser = urlParams.user || '';
+            let sshPassword = urlParams.password || '';
+            let relayTarget = urlParams.target || '';
+            const dialogNeeded = KNOWN_MODES.indexOf(mode) === -1 ||
+                                 (mode === 'ssh' && !sshUser) ||
+                                 (mode === 'relay' && !relayTarget);
+            if (dialogNeeded) {
+                const choice = await askSessionMode();
+                mode = choice.mode;
+                wsUrl = choice.wsUrl;
+                sshUser = choice.sshUser;
+                sshPassword = choice.sshPassword;
+                relayTarget = choice.relayTarget;
+            } else if (!wsUrl && MODE_DEFAULT_URLS[mode]) {
+                wsUrl = MODE_DEFAULT_URLS[mode];
+            }
+            await launchYetty(mode, wsUrl, sshUser, sshPassword, relayTarget);
         }
 
         init();

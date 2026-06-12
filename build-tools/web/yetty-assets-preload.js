@@ -157,7 +157,13 @@ Module.noInitialRun = true;
             console.log('[yetty] preload complete; calling main()');
             status('starting yetty terminal…', 'phase');
             try {
-                Module.callMain();
+                // Pass Module.arguments explicitly: the generated
+                // yetty.js only honors it when 'arguments' is in
+                // INCOMING_MODULE_JS_API, which the release build
+                // strips — a bare callMain() would run main() with
+                // an empty argv and silently drop the session-mode
+                // flags index.html set (--temu / --websocket / …).
+                Module.callMain(Module.arguments || []);
                 // Console stays visible — user wants to see the full
                 // boot log without it disappearing under the terminal.
                 // Manual dismiss path could be added later; for now
