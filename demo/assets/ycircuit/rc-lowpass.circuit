@@ -1,0 +1,18 @@
+# First-order RC low-pass filter driven by an AC source. Exercises the
+# acsource symbol, a horizontal resistor, a vertical capacitor and the
+# Vin/Vout labelling of a two-port.
+circuit RC low-pass filter
+
+acsource  2  8  v  AC1
+label 3 2.3 Vin
+wire 2 5  2 3  5 3
+resistor  8  3  h  R1  1k
+wire 11 3  14 3
+dot 14 3
+capacitor 14  6  v  C1  100n
+wire 14 3  17 3
+label 17.5 3.3 Vout
+wire 2 11  2 12  14 12
+wire 14 9  14 12
+gnd 8 12
+dot 8 12

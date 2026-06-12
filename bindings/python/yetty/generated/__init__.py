@@ -1,5 +1,6 @@
 """GENERATED package — do not edit."""
 from . import ychrome as ychrome
+from . import ycircuit as ycircuit
 from . import yfigure as yfigure
 from . import yflame as yflame
 from . import ygrid as ygrid

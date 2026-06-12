@@ -261,6 +261,13 @@ if(YETTY_ENABLE_FEATURE_YMUSIC AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_F
     add_subdirectory(ymusic)
 endif()
 
+# ycircuit — electronic circuit schematic renderer. Same dependency set as
+# ymusic: the ydraw-core record builder, the SDF primitives and the yface
+# envelope encoder.
+if(YETTY_ENABLE_FEATURE_YCIRCUIT AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)
+    add_subdirectory(ycircuit)
+endif()
+
 if(YETTY_ENABLE_FEATURE_YPDF)
     add_subdirectory(ypdf)
 endif()

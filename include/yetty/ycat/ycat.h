@@ -42,6 +42,7 @@ enum yetty_ycat_type {
     YETTY_YCAT_TYPE_LOTTIE,    /* Lottie (Bodymovin) JSON — single-frame render */
     YETTY_YCAT_TYPE_MUSIC,     /* LilyPond score (.ly) — engraved via ymusic */
     YETTY_YCAT_TYPE_SHADERTOY, /* WGSL mainImage shader — animated yshadertoy prim */
+    YETTY_YCAT_TYPE_CIRCUIT,   /* circuit schematic DSL — drawn via ycircuit */
 };
 
 const char *yetty_ycat_type_name(enum yetty_ycat_type type);

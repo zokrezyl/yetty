@@ -25,21 +25,13 @@ struct yetty_yclass_object *yetty_ygrid_grid_to(struct yetty_ygrid_grid *data);
 
 struct yetty_ycore_void_result;
 
-struct yetty_ycore_void_result yetty_ygrid_add_record(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj,
-                                                      struct yetty_ycore_buffer record);
-struct yetty_ycore_void_result yetty_ygrid_clear(struct yetty_yclass_ctx *ctx,
-                                                 struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygrid_destroy(struct yetty_yclass_ctx *ctx,
-                                                   struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygrid_add_record(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yetty_ycore_buffer record);
+struct yetty_ycore_void_result yetty_ygrid_clear(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj);
+struct yetty_ycore_void_result yetty_ygrid_destroy(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj);
 
-typedef struct yetty_ycore_void_result (*yetty_ygrid_add_record_fn)(struct yetty_yclass_ctx *,
-                                                                    struct yetty_yclass_object *,
-                                                                    struct yetty_ycore_buffer);
-typedef struct yetty_ycore_void_result (*yetty_ygrid_clear_fn)(struct yetty_yclass_ctx *,
-                                                               struct yetty_yclass_object *);
-typedef struct yetty_ycore_void_result (*yetty_ygrid_destroy_fn)(struct yetty_yclass_ctx *,
-                                                                 struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_ygrid_add_record_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ycore_buffer);
+typedef struct yetty_ycore_void_result (*yetty_ygrid_clear_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_ygrid_destroy_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
 
 struct yetty_yclass_object_ptr_result yetty_ygrid_grid_create(struct yetty_yclass_ctx *ctx);
 

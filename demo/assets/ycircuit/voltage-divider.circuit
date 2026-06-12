@@ -1,0 +1,15 @@
+# Resistive voltage divider — the smallest "real" schematic: one source,
+# two resistors, ground and a tapped output node. Exercises vertical
+# components, junction dots and a free label.
+circuit Voltage divider
+
+battery   2  7  r270  V1  9V       # + pole up
+wire 2 4  8 4
+resistor  8  7  v     R1  10k
+dot 8 10
+wire 8 10  11 10
+label 11.5 10.3 Vout
+resistor  8 13  v     R2  4.7k
+wire 2 10  2 16  8 16
+gnd 5 16
+dot 5 16

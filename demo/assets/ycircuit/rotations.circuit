@@ -1,0 +1,14 @@
+# Rotation coverage — the same polarised symbol in all four quarter
+# turns (the value label spells the rotation), plus a few vertical
+# two-terminal bodies and a rotated transistor.
+circuit Rotations
+
+diode  4  3  r0    D1  r0
+diode 12  3  r90   D2  r90
+diode 20  3  r180  D3  r180
+diode 28  3  r270  D4  r270
+
+resistor   4 11  v  R1  vertical
+capacitor 12 11  v  C1  vertical
+inductor  20 11  v  L1  vertical
+npn       28 11  v  Q1  r90

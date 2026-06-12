@@ -1,0 +1,318 @@
+methods:
+  - slot: configure
+    domain: ycircuit
+    owning_class: circuit
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: grid_px
+        type: float
+      - name: flags
+        type: uint32_t
+    local: true
+  - slot: parse
+    domain: ycircuit
+    owning_class: circuit
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: input
+        type: "const char *"
+      - name: len
+        type: size_t
+    local: true
+  - slot: clear
+    domain: ycircuit
+    owning_class: circuit
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: add_component
+    domain: ycircuit
+    owning_class: circuit
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: kind
+        type: "const char *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: rotation_deg
+        type: int32_t
+      - name: name
+        type: "const char *"
+      - name: value
+        type: "const char *"
+    local: true
+  - slot: add_wire
+    domain: ycircuit
+    owning_class: circuit
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x0
+        type: float
+      - name: y0
+        type: float
+      - name: x1
+        type: float
+      - name: y1
+        type: float
+    local: true
+  - slot: add_junction
+    domain: ycircuit
+    owning_class: circuit
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+    local: true
+  - slot: add_label
+    domain: ycircuit
+    owning_class: circuit
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: text
+        type: "const char *"
+    local: true
+  - slot: render
+    domain: ycircuit
+    owning_class: circuit
+    return_type: struct yetty_ydraw_drawable_list_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: hit_test
+    domain: ycircuit
+    owning_class: circuit
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+    local: true
+  - slot: set_highlight
+    domain: ycircuit
+    owning_class: circuit
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: element_id
+        type: int32_t
+    local: true
+  - slot: destroy
+    domain: ycircuit
+    owning_class: circuit
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+classes:
+  - name: circuit
+    domain: ycircuit
+    accessor: yetty_ycircuit_circuit_class_get
+    type: regular
+    source_file: src/yetty/ycircuit/circuit.c
+    parent: null
+    mixins: []
+    data: struct yetty_ycircuit_circuit
+    data_fields:
+      - name: grid
+        type: float
+        get: false
+        set: false
+      - name: flags
+        type: uint32_t
+        get: false
+        set: false
+      - name: grid_hint
+        type: float
+        get: false
+        set: false
+      - name: title
+        type: "char *"
+        get: false
+        set: false
+      - name: elements
+        type: "struct ycircuit_element *"
+        get: false
+        set: false
+      - name: count
+        type: size_t
+        get: false
+        set: false
+      - name: cap
+        type: size_t
+        get: false
+        set: false
+      - name: highlight_id_plus_one
+        type: int32_t
+        get: false
+        set: false
+      - name: content_w
+        type: float
+        get: false
+        set: false
+      - name: content_h
+        type: float
+        get: false
+        set: false
+    ops:
+      - slot: configure
+        slot_domain: ycircuit
+        impl: circuit_configure
+      - slot: parse
+        slot_domain: ycircuit
+        impl: circuit_parse
+      - slot: clear
+        slot_domain: ycircuit
+        impl: circuit_clear
+      - slot: add_component
+        slot_domain: ycircuit
+        impl: circuit_add_component
+      - slot: add_wire
+        slot_domain: ycircuit
+        impl: circuit_add_wire
+      - slot: add_junction
+        slot_domain: ycircuit
+        impl: circuit_add_junction
+      - slot: add_label
+        slot_domain: ycircuit
+        impl: circuit_add_label
+      - slot: render
+        slot_domain: ycircuit
+        impl: circuit_render
+      - slot: hit_test
+        slot_domain: ycircuit
+        impl: circuit_hit_test
+      - slot: set_highlight
+        slot_domain: ycircuit
+        impl: circuit_set_highlight
+      - slot: destroy
+        slot_domain: ycircuit
+        impl: circuit_obj_destroy
+exposed:
+  - source_file: src/yetty/ycircuit/circuit.c
+    verbatim: "/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
+ * generated circuit.h (and the dispatch TU that includes it) needs the
+ * complete type — pull its defining header into the public header. */
+#include <yetty/ydraw-core/drawable-list.h>
+/* Public constants — copied verbatim into the generated circuit.h. */
+#define YETTY_YCIRCUIT_NO_ELEMENT (-1) /* hit_test: no element under the point */
+#define YETTY_YCIRCUIT_FLAG_NONE 0x0u  /* reserved render flags */"
+  - source_file: src/yetty/ycircuit/circuit.c
+    name: yetty_ycircuit_emit_osc
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: list
+        type: "const struct yetty_ydraw_drawable_list *"
+      - name: fd
+        type: int
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ydraw_drawable_list_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ydraw_drawable_list *"
+          - name: error
+            type: struct yetty_ycore_error

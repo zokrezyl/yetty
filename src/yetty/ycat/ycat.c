@@ -59,6 +59,12 @@ extern struct yetty_ydraw_drawable_list_result yetty_ycat_handler_shadertoy(
     const struct yetty_ycat_config *config);
 #endif
 
+#ifdef YETTY_YCAT_HAS_YCIRCUIT
+extern struct yetty_ydraw_drawable_list_result yetty_ycat_handler_circuit(
+    const uint8_t *bytes, size_t len, const char *path_hint,
+    const struct yetty_ycat_config *config);
+#endif
+
 /* Streaming handlers (multi-envelope: PDF page-per-envelope, markdown
  * screen-height-tile-per-envelope). */
 extern struct yetty_ycore_void_result yetty_ycat_handler_markdown_streaming(
@@ -88,10 +94,12 @@ static const struct {
     {YETTY_YCAT_TYPE_LOTTIE, "lottie"},
     {YETTY_YCAT_TYPE_MUSIC, "music"},
     {YETTY_YCAT_TYPE_SHADERTOY, "shadertoy"},
+    {YETTY_YCAT_TYPE_CIRCUIT, "circuit"},
     /* alias rows — type_name() returns the first match above, from_name()
      * accepts either spelling for --card. */
     {YETTY_YCAT_TYPE_MUSIC, "lilypond"},
     {YETTY_YCAT_TYPE_SHADERTOY, "wgsl"},
+    {YETTY_YCAT_TYPE_CIRCUIT, "schematic"},
 };
 
 const char *yetty_ycat_type_name(enum yetty_ycat_type type)
@@ -149,6 +157,9 @@ static void init_handlers(void)
 #endif
 #ifdef YETTY_YCAT_HAS_YSHADERTOY
     handlers[YETTY_YCAT_TYPE_SHADERTOY] = yetty_ycat_handler_shadertoy;
+#endif
+#ifdef YETTY_YCAT_HAS_YCIRCUIT
+    handlers[YETTY_YCAT_TYPE_CIRCUIT] = yetty_ycat_handler_circuit;
 #endif
     handlers_streaming[YETTY_YCAT_TYPE_MARKDOWN] = yetty_ycat_handler_markdown_streaming;
     handlers_streaming[YETTY_YCAT_TYPE_PDF] = yetty_ycat_handler_pdf_streaming;
