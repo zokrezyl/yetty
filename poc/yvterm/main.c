@@ -34,9 +34,11 @@
 #include <yetty/yfont/ms-msdf-font.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yinit/yinit.h>
+#include <yetty/yclass/class.h>
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/time.h>
+#include <yetty/yplatform/window-manager.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yetty/yetty.h>
@@ -506,6 +508,8 @@ static struct yetty_ycore_void_result render_frame(struct poc_app *app)
         lines[line_index].dirty = 0;
         app->lines_uploaded++;
     }
+    /* All dirty lines consumed — the grid is clean until the next feed. */
+    poc_yvterm_grid_clear_dirty(app->grid);
 
     /* Uniforms. root_row stays 0 in this probe. */
     app->uniforms.grid_size[0] = (float)cols;
@@ -731,8 +735,10 @@ static struct yetty_ycore_void_result poc_worker(struct yetty_yinit_runtime *run
             {.fd = app->pty_master, .events = POLLIN},
             {.fd = pipe_fd, .events = POLLIN},
         };
-        /* Stress wants to render flat-out; interactive can sleep until input. */
-        int timeout_ms = app->stress ? 0 : 8;
+        /* Stress wants to render flat-out; interactive blocks until the PTY or
+         * the window pipe has something, so an idle terminal uses ~no CPU. The
+         * finite (not infinite) timeout is only a safety wakeup. */
+        int timeout_ms = app->stress ? 0 : 1000;
         int ready = poll(pfds, 2, timeout_ms);
         if (ready < 0 && errno != EINTR) {
             break;
@@ -770,6 +776,18 @@ static struct yetty_ycore_void_result poc_worker(struct yetty_yinit_runtime *run
                 }
                 if (ev.type == YETTY_YCORE_SHUTDOWN || ev.type == YETTY_YCORE_WINDOW_CLOSE) {
                     app->quit = 1;
+                } else if (ev.type == YETTY_YCORE_MOUSE_DOUBLE_CLICK) {
+                    /* Double-click anywhere toggles window maximize — the only
+                     * way to maximize on a 4K screen with no usable titlebar. */
+                    if (app->framework->window_manager) {
+                        struct yetty_yclass_ctx ctx = {0};
+                        struct yetty_ycore_void_result mr =
+                            yetty_yplatform_window_manager_toggle_maximize(
+                                &ctx, app->framework->window_manager);
+                        if (YETTY_IS_ERR(mr)) {
+                            yetty_ycore_error_destroy(mr.error);
+                        }
+                    }
                 } else if (ev.type == YETTY_YCORE_RESIZE) {
                     uint32_t width = (uint32_t)ev.resize.width;
                     uint32_t height = (uint32_t)ev.resize.height;
@@ -789,19 +807,22 @@ static struct yetty_ycore_void_result poc_worker(struct yetty_yinit_runtime *run
         if (app->quit) {
             break;
         }
-        if (runtime->instance) {
-            wgpuInstanceProcessEvents((WGPUInstance)runtime->instance);
-        }
 
         if (app->stress) {
             poc_yvterm_grid_force_full_dirty(app->grid);
         }
 
+        /* Render ONLY when the grid is dirty. Dawn's event pump runs only after
+         * a present (to settle the async surface work) — pumping it every idle
+         * iteration is what was burning a core. */
         if (poc_yvterm_grid_is_dirty(app->grid)) {
             double frame_begin = yetty_yplatform_ytime_monotonic_sec();
             struct yetty_ycore_void_result fr = render_frame(app);
             if (YETTY_IS_ERR(fr)) {
                 yetty_ycore_error_destroy(fr.error);
+            }
+            if (runtime->instance) {
+                wgpuInstanceProcessEvents((WGPUInstance)runtime->instance);
             }
             frame_time_accum += yetty_yplatform_ytime_monotonic_sec() - frame_begin;
             frames++;

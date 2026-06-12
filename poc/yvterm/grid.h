@@ -68,6 +68,10 @@ int poc_yvterm_grid_is_dirty(const struct poc_yvterm_grid *grid);
 /* --stress: mark every line dirty so the next frame re-uploads all of them. */
 void poc_yvterm_grid_force_full_dirty(struct poc_yvterm_grid *grid);
 
+/* Renderer calls this after uploading all dirty lines, so the grid goes clean
+ * again and the loop stops re-rendering an unchanged frame. */
+void poc_yvterm_grid_clear_dirty(struct poc_yvterm_grid *grid);
+
 #ifdef __cplusplus
 }
 #endif

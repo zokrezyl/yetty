@@ -484,3 +484,13 @@ void poc_yvterm_grid_force_full_dirty(struct poc_yvterm_grid *grid)
         mark_dirty_all(grid);
     }
 }
+
+/* The renderer calls this once it has uploaded every dirty line, so the grid
+ * reports clean again until the next feed/cursor move marks a row. Without it
+ * the grid stays dirty forever and the loop re-renders an unchanged frame. */
+void poc_yvterm_grid_clear_dirty(struct poc_yvterm_grid *grid)
+{
+    if (grid) {
+        grid->has_dirty = 0;
+    }
+}
