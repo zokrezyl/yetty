@@ -21,6 +21,7 @@ void yetty_yplatform_input_pipe_webasm_platform_input_pipe_process(
     struct yetty_ycore_xthread_event_pipe *self);
 
 #define MAX_LISTENERS_PER_TYPE 64
+#define MAX_LISTENERS_PER_TIMER 16
 #define MAX_PTY_PIPES 16
 #define MAX_TIMERS 64
 
@@ -40,8 +41,20 @@ struct yetty_yplatform_timer_handle {
     int id;
     int timeout_ms;
     int active;
+    /* Slot occupancy, independent of `active`: a created-but-stopped timer
+     * is !active yet still `used`. create_timer reuses !used slots so a
+     * create/destroy churn (e.g. animated yplot/yvideo figures cycling as
+     * the user switches scenes) doesn't monotonically exhaust the table. */
+    int used;
     double last_fire;
-    struct yetty_yevent_event_listener *listener;
+    /* A timer fans out to several listeners (the shared yplot/yvideo
+     * animation timer is subscribed by every animated instance). A single
+     * pointer cannot track them: a departing instance could not clear
+     * itself, so a freed listener stayed referenced and the next tick
+     * dereferenced it. Match the desktop loop — an array + count, with a
+     * real deregister. */
+    struct yetty_yevent_event_listener *listeners[MAX_LISTENERS_PER_TIMER];
+    int listener_count;
     struct yetty_yplatform_webasm_event_loop *impl;
 };
 
@@ -104,6 +117,9 @@ static struct yetty_ycore_void_result webasm_destroy_timer(struct yetty_yevent_e
 static struct yetty_ycore_void_result webasm_register_timer_listener(
     struct yetty_yevent_event_loop *self, yetty_yevent_timer_id id,
     struct yetty_yevent_event_listener *listener);
+static struct yetty_ycore_void_result webasm_deregister_timer_listener(
+    struct yetty_yevent_event_loop *self, yetty_yevent_timer_id id,
+    struct yetty_yevent_event_listener *listener);
 YETTY_EXTERNAL_CALLBACK
 static void webasm_request_render(struct yetty_yevent_event_loop *self);
 static void webasm_post_fatal_error(struct yetty_yevent_event_loop *self,
@@ -126,6 +142,7 @@ static const struct yetty_yevent_event_loop_ops webasm_ops = {
     .stop_timer = webasm_stop_timer,
     .destroy_timer = webasm_destroy_timer,
     .register_timer_listener = webasm_register_timer_listener,
+    .deregister_timer_listener = webasm_deregister_timer_listener,
     .request_render = webasm_request_render,
     .post_fatal_error = webasm_post_fatal_error,
 };
@@ -174,8 +191,23 @@ static void main_loop_tick(void *arg)
             event.type = YETTY_YCORE_TIMER;
             event.timer.timer_id = th->id;
 
-            if (th->listener) {
-                th->listener->handler(th->listener, &event);
+            /* Snapshot the listener array first: a handler may
+             * register/deregister a timer listener (often itself, e.g. an
+             * animated figure detaching on the same tick it is destroyed),
+             * which would otherwise mutate the array mid-iteration and
+             * leave us calling through a freed listener. */
+            struct yetty_yevent_event_listener *snapshot[MAX_LISTENERS_PER_TIMER];
+            int n = th->listener_count;
+            if (n > MAX_LISTENERS_PER_TIMER) {
+                n = MAX_LISTENERS_PER_TIMER;
+            }
+            for (int j = 0; j < n; j++) {
+                snapshot[j] = th->listeners[j];
+            }
+            for (int j = 0; j < n; j++) {
+                if (snapshot[j] && snapshot[j]->handler) {
+                    snapshot[j]->handler(snapshot[j], &event);
+                }
             }
         }
     }
@@ -458,17 +490,34 @@ static struct yetty_yevent_timer_id_result webasm_create_timer(struct yetty_yeve
 {
     struct yetty_yplatform_webasm_event_loop *impl =
         container_of(self, struct yetty_yplatform_webasm_event_loop, base);
-    int id = impl->next_timer_id++;
     struct yetty_yplatform_timer_handle *th;
 
-    if (id >= MAX_TIMERS) {
+    /* Reuse a freed slot rather than only ever bumping next_timer_id —
+     * otherwise a steady create/destroy churn (animated figures cycling as
+     * scenes switch) walks past MAX_TIMERS and create starts failing while
+     * most of the table sits idle. */
+    int id = -1;
+    for (int i = 0; i < MAX_TIMERS; i++) {
+        if (!impl->timers[i].used) {
+            id = i;
+            break;
+        }
+    }
+    if (id < 0) {
         return YETTY_ERR(yetty_yevent_timer_id, "too many timers");
     }
 
     th = &impl->timers[id];
     memset(th, 0, sizeof(*th));
     th->id = id;
+    th->used = 1;
     th->impl = impl;
+
+    /* next_timer_id is the fire-loop's high-water bound — keep it one past
+     * the highest live slot. */
+    if (id + 1 > impl->next_timer_id) {
+        impl->next_timer_id = id + 1;
+    }
 
     ydebug("webasm_event_loop: create_timer id=%d", id);
 
@@ -538,7 +587,8 @@ static struct yetty_ycore_void_result webasm_destroy_timer(struct yetty_yevent_e
     }
 
     impl->timers[id].active = 0;
-    impl->timers[id].listener = NULL;
+    impl->timers[id].used = 0;
+    impl->timers[id].listener_count = 0;
 
     return YETTY_OK_VOID();
 }
@@ -549,13 +599,47 @@ static struct yetty_ycore_void_result webasm_register_timer_listener(
 {
     struct yetty_yplatform_webasm_event_loop *impl =
         container_of(self, struct yetty_yplatform_webasm_event_loop, base);
+    struct yetty_yplatform_timer_handle *th;
 
     if (id < 0 || id >= MAX_TIMERS || !listener) {
         return YETTY_ERR(yetty_ycore_void, "invalid timer id or listener");
     }
 
-    impl->timers[id].listener = listener;
+    th = &impl->timers[id];
+    if (th->listener_count >= MAX_LISTENERS_PER_TIMER) {
+        return YETTY_ERR(yetty_ycore_void, "too many timer listeners");
+    }
+    th->listeners[th->listener_count++] = listener;
 
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result webasm_deregister_timer_listener(
+    struct yetty_yevent_event_loop *self, yetty_yevent_timer_id id,
+    struct yetty_yevent_event_listener *listener)
+{
+    struct yetty_yplatform_webasm_event_loop *impl =
+        container_of(self, struct yetty_yplatform_webasm_event_loop, base);
+    struct yetty_yplatform_timer_handle *th;
+
+    if (id < 0 || id >= MAX_TIMERS || !listener) {
+        return YETTY_ERR(yetty_ycore_void, "invalid timer id or listener");
+    }
+
+    th = &impl->timers[id];
+    /* Linear scan, shift-on-remove. Per-timer listener counts are small
+     * (≤ MAX_LISTENERS_PER_TIMER). Removing the departing listener is what
+     * keeps a freed instance from staying referenced in the fire loop. */
+    for (int i = 0; i < th->listener_count; i++) {
+        if (th->listeners[i] == listener) {
+            for (int j = i + 1; j < th->listener_count; j++) {
+                th->listeners[j - 1] = th->listeners[j];
+            }
+            th->listener_count--;
+            return YETTY_OK_VOID();
+        }
+    }
+    /* Not registered — quiet no-op (callers may be over-eager on teardown). */
     return YETTY_OK_VOID();
 }
 
