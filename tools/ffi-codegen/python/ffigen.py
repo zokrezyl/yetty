@@ -20,7 +20,7 @@ The emitter only ever writes inside `generated/`; the hand-written runtime
 (library load, Result decode, foundational handles) lives outside it.
 
 Usage:
-    tools/ffi-codegen/ffigen.py python [module ...]   # default: all modules
+    tools/ffi-codegen/python/ffigen.py [module ...]   # default: all modules
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ import sys
 
 import yaml
 
-REPO = pathlib.Path(__file__).resolve().parents[2]
+REPO = pathlib.Path(__file__).resolve().parents[3]
 SRC = REPO / "src" / "yetty"
 
 
@@ -248,81 +248,284 @@ def py_method_pyname(slot: str) -> str:
     return slot
 
 
+PY_ANNOT_PRIM = {
+    "int": "int", "unsigned int": "int", "unsigned": "int", "char": "bytes",
+    "_Bool": "bool", "bool": "bool", "float": "float", "double": "float",
+    "long": "int", "unsigned long": "int", "int8_t": "int", "uint8_t": "int",
+    "int16_t": "int", "uint16_t": "int", "int32_t": "int", "uint32_t": "int",
+    "int64_t": "int", "uint64_t": "int", "size_t": "int", "ssize_t": "int",
+    "intptr_t": "int", "uintptr_t": "int",
+}
+
+
+def py_arg_annot(type_str: str, type_names: set[str]) -> str:
+    import re
+    if is_char_ptr(type_str):
+        return "str | bytes | None"
+    category, tag = classify(type_str)
+    if category == "ptr":
+        return "Any"
+    if category in ("struct", "union"):
+        return f"_t.{tag}" if tag in type_names else "Any"
+    if category == "enum":
+        return "int"
+    base = re.sub(r"^(const|volatile)\s+", "", (type_str or "").strip()).strip()
+    return PY_ANNOT_PRIM.get(base, "Any")
+
+
+def py_result_value_annot(return_type: str) -> str:
+    _, tag = classify(return_type)
+    name = tag or ""
+    if name.endswith("void_result"):
+        return "None"
+    if name.endswith("char_ptr_result") or name.endswith("const_char_ptr_result"):
+        return "str | None"
+    if name.endswith("int_result") or name.endswith("size_result") or name.endswith("uint32_result") or name == "uint32_result":
+        return "int"
+    if name.endswith("float_result"):
+        return "float"
+    return "Any"
+
+
+def py_result_converter(return_type: str) -> str | None:
+    _, tag = classify(return_type)
+    name = tag or ""
+    if name.endswith("char_ptr_result") or name.endswith("const_char_ptr_result"):
+        return "_rt.decode_cstr"
+    return None
+
+
+def py_is_result(return_type: str) -> bool:
+    category, tag = classify(return_type)
+    return category == "struct" and bool(tag and tag.endswith("_result"))
+
+
+def py_return_ctype(return_type: str, type_names: set[str]) -> str:
+    if return_type == "void":
+        return "None"
+    category, tag = classify(return_type)
+    if category in ("struct", "union") and tag in type_names:
+        return f"_t.{tag}"
+    return py_ctype(return_type, type_names, prefix="_t.")
+
+
+def py_plain_return_annot(return_type: str, type_names: set[str]) -> str:
+    import re
+    if return_type == "void":
+        return "None"
+    if is_char_ptr(return_type):
+        return "bytes | None"
+    category, tag = classify(return_type)
+    if category == "ptr":
+        return "Any"
+    if category in ("struct", "union"):
+        return f"_t.{tag}" if tag in type_names else "Any"
+    if category == "enum":
+        return "int"
+    base = re.sub(r"^(const|volatile)\s+", "", (return_type or "").strip()).strip()
+    return PY_ANNOT_PRIM.get(base, "Any")
+
+
+def py_exposed_name(module: str, symbol: str) -> str:
+    prefix = f"yetty_{module}_"
+    return symbol[len(prefix):] if symbol.startswith(prefix) else symbol
+
+
+def py_arg_name(arg: dict, index: int = 0) -> str:
+    name = arg.get("name")
+    if isinstance(name, str) and name.isidentifier() and name not in {"class", "def", "from", "pass"}:
+        return name
+    return f"arg{index}"
+
+
+def py_class_name(name: str) -> str:
+    return "".join(w.capitalize() for w in name.split("_"))
+
+
+def py_regular_classes_in_base_order(model: dict) -> list[dict]:
+    """Order regular classes so same-module Python bases are defined before
+    subclasses. Cross-module bases are imported and do not constrain this file."""
+    regular = [c for c in model.get("classes", []) if c.get("type") == "regular"]
+    by_name = {c["name"]: c for c in regular}
+    ordered: list[dict] = []
+    placed: set[str] = set()
+    visiting: set[str] = set()
+
+    def visit(cls: dict):
+        name = cls["name"]
+        if name in placed:
+            return
+        if name in visiting:
+            raise RuntimeError(f"cycle in Python yclass hierarchy near {name}")
+        visiting.add(name)
+        parent = cls.get("parent")
+        if parent and parent.get("domain") == cls.get("domain"):
+            pcls = by_name.get(parent.get("name"))
+            if pcls:
+                visit(pcls)
+        visiting.remove(name)
+        placed.add(name)
+        ordered.append(cls)
+
+    for cls in regular:
+        visit(cls)
+    return ordered
+
+
 def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pathlib.Path):
     methods = {m["slot"]: m for m in model.get("methods", [])}
+    classes = py_regular_classes_in_base_order(model)
+    imports = sorted({
+        c["parent"]["domain"]
+        for c in classes
+        if c.get("parent") and c["parent"].get("domain") != module
+    })
     parts = [
         f'"""yetty.{module} bindings — GENERATED from model.yaml, do not edit."""',
         "from __future__ import annotations",
         "from ctypes import (c_bool, c_char, c_char_p, c_double, c_float, c_int,",
         "    c_int8, c_int16, c_int32, c_int64, c_long, c_size_t, c_ssize_t,",
         "    c_uint, c_uint8, c_uint16, c_uint32, c_uint64, c_ulong, c_void_p)",
+        "from typing import Any, ClassVar",
         "from .. import runtime as _rt",
         "from . import _types as _t",
-        "",
     ]
+    for parent_module in imports:
+        parts.append(f"from . import {parent_module} as _{parent_module}")
+    parts.append("")
 
     def argtypes_expr(args: list[dict]) -> str:
         items = [py_ctype(a["type"], type_names, prefix="_t.") for a in args]
         return "[" + ", ".join(items) + "]"
 
-    def call_args(args: list[dict]) -> list[str]:
+    def call_params(args: list[dict]) -> list[str]:
         # args[0]=ctx -> None, args[1]=obj -> self._handle, rest -> params
-        names = []
-        for a in args[2:]:
-            names.append(a["name"])
-        return names
+        return [f"{py_arg_name(a, i + 2)}: {py_arg_annot(a['type'], type_names)}" for i, a in enumerate(args[2:])]
 
     def return_expr(return_type: str) -> str:
-        cat, tag = classify(return_type)
-        rname = (tag or "")
-        if rname.endswith("void_result"):
-            return "        _rt.check(res)\n        return None"
-        # _ptr_result and value results both carry res.value
-        return "        _rt.check(res)\n        return res.value"
+        converter = py_result_converter(return_type)
+        if converter:
+            return f"        return _rt.result_from_c(res, {converter})"
+        return "        return _rt.result_from_c(res)"
 
-    for cls in model.get("classes", []):
-        if cls.get("type") != "regular":
-            continue
-        cname = "".join(w.capitalize() for w in cls["name"].split("_"))
-        parts.append(f"class {cname}:")
+    def base_expr(cls: dict) -> str:
+        parent = cls.get("parent")
+        if not parent:
+            return "_rt.YClass"
+        pname = py_class_name(parent["name"])
+        if parent.get("domain") == module:
+            return pname
+        return f"_{parent['domain']}.{pname}"
+
+    def class_introduces_slot(cls: dict, method: dict) -> bool:
+        return (method.get("domain") == cls.get("domain") and
+                method.get("owning_class") == cls.get("name"))
+
+    for cls in classes:
+        cname = py_class_name(cls["name"])
+        parts.append(f"class {cname}({base_expr(cls)}):")
         parts.append(f'    """yclass {cls["domain"]}:{cls["name"]}"""')
-        # constructor → generated <module>_<class>_create
+        parts.append(f'    __yclass_domain__: ClassVar[str] = {cls["domain"]!r}')
+        parts.append(f'    __yclass_name__: ClassVar[str] = {cls["name"]!r}')
+        accessor_sym = cls.get("accessor")
+        if accessor_sym:
+            parts.append("    @classmethod")
+            parts.append("    def yclass(cls) -> _rt.Result[Any]:")
+            parts.append(f'        _fn = _rt.cfn("{accessor_sym}", _t.yetty_yclass_ptr_result, [])')
+            parts.append("        return _rt.result_from_c(_fn())")
+        # constructor -> generated <module>_<class>_create
         create_sym = f"yetty_{cls['domain']}_{cls['name']}_create"
-        parts.append("    def __init__(self, _handle=None):")
+        parts.append("    def __init__(self, _handle: Any = None) -> None:")
         parts.append("        if _handle is None:")
         parts.append(
             f'            _fn = _rt.cfn("{create_sym}", _t.yetty_yclass_object_ptr_result, [c_void_p])')
-        parts.append("            res = _fn(None)")
-        parts.append("            _rt.check(res)")
+        parts.append("            res = _rt.result_from_c(_fn(None))")
+        parts.append("            if not res:")
+        parts.append("                _rt.YClass.__init__(self, None, res.error)")
+        parts.append("                return")
         parts.append("            _handle = res.value")
-        parts.append("        self._handle = _handle")
-        # methods (this class's ops whose slot is owned by this module)
+        parts.append("        super().__init__(_handle)")
+        parts.append("    @classmethod")
+        parts.append(f"    def create(cls) -> _rt.Result[{cname!r}]:")
+        parts.append("        obj = cls()")
+        parts.append("        return obj.init_result")
+        # methods introduced by this class. Inherited slots remain inherited
+        # Python methods; the C public stub still dispatches dynamically through
+        # the yclass vtable using this instance's handle.
+        emitted_slots: set[str] = set()
         for op in cls.get("ops", []):
             slot = op["slot"]
+            if slot in emitted_slots:
+                continue
             m = methods.get(slot)
-            if not m:
-                continue  # slot owned by another module; bound there
+            if not m or not class_introduces_slot(cls, m):
+                continue
+            emitted_slots.add(slot)
             args = m["args"]
-            params = ", ".join(call_args(args))
+            params = ", ".join(call_params(args))
+            ret_ann = py_result_value_annot(m["return_type"])
             sig = f"self, {params}" if params else "self"
             sym = f"yetty_{m['domain']}_{slot}"
-            parts.append(f"    def {py_method_pyname(slot)}({sig}):")
+            parts.append(f"    def {py_method_pyname(slot)}({sig}) -> _rt.Result[{ret_ann}]:")
+            parts.append(f'        """Call `{sym}`; returns Result, never raises for yclass errors."""')
+            parts.append("        if self._handle is None:")
+            parts.append("            return self._invalid_result()")
             parts.append(
                 f'        _fn = _rt.cfn("{sym}", _t.{classify(m["return_type"])[1]}, {argtypes_expr(args)})')
 
             def pass_expr(arg):
                 # str -> bytes for char* params; everything else passes through.
                 if py_ctype(arg["type"], type_names) == "c_char_p":
-                    return f"_rt.cstr({arg['name']})"
-                return arg["name"]
+                    return f"_rt.cstr({py_arg_name(arg)})"
+                return py_arg_name(arg)
 
             passed = ["None", "self._handle"] + [pass_expr(a) for a in args[2:]]
             parts.append(f"        res = _fn({', '.join(passed)})")
             parts.append(return_expr(m["return_type"]))
         parts.append("")
 
-    out_path.write_text("\n".join(parts) + "\n")
+    for fn in model.get("exposed", []) or []:
+        if not isinstance(fn, dict) or "name" not in fn or "return_type" not in fn:
+            continue
+        symbol = fn["name"]
+        pyname = py_exposed_name(module, symbol)
+        args = fn.get("args", []) or []
+        params = ", ".join(f"{py_arg_name(a, i)}: {py_arg_annot(a['type'], type_names)}" for i, a in enumerate(args))
+        return_type = fn.get("return_type", "void")
+        if py_is_result(return_type):
+            ret_ann = f"_rt.Result[{py_result_value_annot(return_type)}]"
+        else:
+            ret_ann = py_plain_return_annot(return_type, type_names)
+        parts.append(f"def {pyname}({params}) -> {ret_ann}:")
+        parts.append(f'    """Call `{symbol}`."""')
+        restype = py_return_ctype(return_type, type_names)
+        parts.append(f'    _fn = _rt.cfn("{symbol}", {restype}, {argtypes_expr(args)})')
 
+        def exposed_pass_expr(arg):
+            ctype = py_ctype(arg["type"], type_names)
+            if ctype == "c_char_p":
+                return f"_rt.cstr({py_arg_name(arg)})"
+            if ctype == "c_void_p":
+                return f"_rt.handle({py_arg_name(arg)})"
+            return py_arg_name(arg)
+
+        passed = ", ".join(exposed_pass_expr(a) for a in args)
+        call = f"_fn({passed})" if passed else "_fn()"
+        if py_is_result(return_type):
+            parts.append(f"    res = {call}")
+            converter = py_result_converter(return_type)
+            if converter:
+                parts.append(f"    return _rt.result_from_c(res, {converter})")
+            else:
+                parts.append("    return _rt.result_from_c(res)")
+        elif return_type == "void":
+            parts.append(f"    {call}")
+            parts.append("    return None")
+        else:
+            parts.append(f"    return {call}")
+        parts.append("")
+
+    out_path.write_text("\n".join(parts) + "\n")
 
 def emit_python(models: dict[str, dict]):
     root = REPO / "bindings" / "python" / "yetty"
@@ -346,217 +549,11 @@ def emit_python(models: dict[str, dict]):
           f"under bindings/python/yetty/generated/")
 
 
-# ===========================================================================
-# Lua (LuaJIT ffi) emitter — for neovim. cdef takes C declarations verbatim,
-# so types/prototypes are reproduced straight from the model's C strings.
-# ===========================================================================
-
-def lua_class_name(name: str) -> str:
-    return "".join(w.capitalize() for w in name.split("_"))
-
-
-def lua_c_field(field: dict, indent: str = "  ") -> str:
-    if "fields" in field:  # inlined anonymous union/struct
-        kind = field.get("kind", "struct")
-        inner = "\n".join(lua_c_field(sf, indent + "  ") for sf in field["fields"])
-        member = field.get("name") or ""
-        tail = f" {member}" if member else ""
-        return f"{indent}{kind} {{\n{inner}\n{indent}}}{tail};"
-    base, arr = split_array(field["type"])
-    # Enums aren't cdef'd (their constants live in the Lua table); a field of
-    # `enum X` would have unknown size, so emit it as int (enum's storage type).
-    if classify(base)[0] == "enum":
-        base = "int"
-    n = field["name"] or "_pad"
-    sep = "" if base.endswith("*") else " "
-    return f"{indent}{base}{sep}{n}{arr};"
-
-
-def lua_opaque_forward_decls(models: dict, types: list) -> list:
-    """`struct X;` forward declarations for pointer-target tags that are never
-    defined as a `types` entry (ctx, object, drawable_list, …). LuaJIT tolerates
-    incomplete pointers, but declaring them keeps the cdef unambiguous."""
-    import re
-    type_names = {t["name"] for t in types}
-    tags: set[str] = set()
-
-    def scan_type(type_str: str):
-        m = re.search(r"struct\s+(\w+)\s*\*", type_str or "")
-        if m and m.group(1) not in type_names:
-            tags.add(m.group(1))
-
-    for t in types:
-        def walk(fields):
-            for f in fields:
-                if "fields" in f:
-                    walk(f["fields"])
-                elif "type" in f:
-                    scan_type(f["type"])
-        if t["kind"] in ("struct", "result"):
-            walk(t["fields"])
-    for model in models.values():
-        for m in model.get("methods", []):
-            scan_type(m.get("return_type", ""))
-            for a in m.get("args", []):
-                scan_type(a.get("type", ""))
-    return [f"struct {tag};" for tag in sorted(tags)]
-
-
-# Scalar types LuaJIT's cdef predefines. Anything else seen in a field (e.g.
-# glibc-internal __time_t / __syscall_slong_t from struct timespec) gets a
-# `typedef long …;` shim — those are all `long` on LP64, so the struct layout
-# stays correct.
-LUA_KNOWN_SCALARS = {
-    "int", "unsigned int", "unsigned", "char", "signed char", "unsigned char",
-    "short", "unsigned short", "long", "unsigned long", "long long",
-    "unsigned long long", "float", "double", "bool", "_Bool", "void",
-    "int8_t", "int16_t", "int32_t", "int64_t", "uint8_t", "uint16_t", "uint32_t",
-    "uint64_t", "size_t", "ssize_t", "ptrdiff_t", "intptr_t", "uintptr_t", "wchar_t",
-}
-
-
-def lua_unknown_scalars(types: list) -> list:
-    import re
-    found: set[str] = set()
-
-    def walk(fields):
-        for f in fields:
-            if "fields" in f:
-                walk(f["fields"])
-            elif "type" in f and classify(f["type"])[0] == "scalar":
-                elem, _ = split_array(f["type"])
-                base = re.sub(r"^(const|volatile)\s+", "", elem).strip()
-                if base and base not in LUA_KNOWN_SCALARS:
-                    found.add(base)
-
-    for t in types:
-        if t["kind"] in ("struct", "result"):
-            walk(t["fields"])
-    return sorted(found)
-
-
-def lua_emit_types(models: dict, types: list, out_path: pathlib.Path):
-    cdef = [f"typedef long {name};" for name in lua_unknown_scalars(types)]
-    cdef += lua_opaque_forward_decls(models, types)
-    for entry in py_topo([t for t in types if t["kind"] in ("struct", "result")]):
-        cdef.append(f"struct {entry['name']} {{")
-        for f in entry.get("fields", []):
-            cdef.append(lua_c_field(f))
-        cdef.append("};")
-    parts = [
-        "-- Foundational + shared ABI types — GENERATED, do not edit.",
-        'local ffi = require("ffi")',
-        "ffi.cdef[[",
-        "\n".join(cdef),
-        "]]",
-        "local M = {}",
-    ]
-    for entry in (t for t in types if t["kind"] == "enum"):
-        parts.append(f"M.{entry['name']} = {{")
-        for v in entry.get("values", []):
-            parts.append(f"  {v['name']} = {v['value']},")
-        parts.append("}")
-    parts.append("return M")
-    out_path.write_text("\n".join(parts) + "\n")
-
-
-def lua_cdef_param(type_str: str) -> str:
-    """A function-parameter type for cdef: enum → int (enums aren't cdef'd)."""
-    base, arr = split_array(type_str)
-    if classify(base)[0] == "enum":
-        base = "int"
-    return f"{base}{arr}"
-
-
-def lua_proto(return_type: str, name: str, args: list) -> str:
-    params = ", ".join(lua_cdef_param(a["type"]) for a in args) if args else "void"
-    sep = "" if return_type.endswith("*") else " "
-    return f"{return_type}{sep}{name}({params});"
-
-
-def lua_emit_module(module: str, model: dict, out_path: pathlib.Path):
-    methods = {m["slot"]: m for m in model.get("methods", [])}
-    protos: list[str] = []
-    for cls in model.get("classes", []):
-        if cls.get("type") == "regular":
-            protos.append(lua_proto("struct yetty_yclass_object_ptr_result",
-                                    f"yetty_{cls['domain']}_{cls['name']}_create",
-                                    [{"type": "struct yetty_yclass_ctx *"}]))
-    for m in model.get("methods", []):
-        protos.append(lua_proto(m["return_type"], f"yetty_{m['domain']}_{m['slot']}", m["args"]))
-
-    parts = [
-        f"-- yetty.{module} bindings — GENERATED from model.yaml, do not edit.",
-        'local ffi = require("ffi")',
-        'local rt = require("yetty.runtime")',
-        'require("yetty.generated._types")',
-        "ffi.cdef[[",
-        "\n".join(protos),
-        "]]",
-        "local M = {}",
-    ]
-
-    def returns_value(return_type: str) -> bool:
-        _, tag = classify(return_type)
-        return not (tag or "").endswith("void_result")
-
-    for cls in model.get("classes", []):
-        if cls.get("type") != "regular":
-            continue
-        cname = lua_class_name(cls["name"])
-        create_sym = f"yetty_{cls['domain']}_{cls['name']}_create"
-        parts.append(f"local {cname} = {{}}")
-        parts.append(f"{cname}.__index = {cname}")
-        parts.append(f"function {cname}.new()")
-        parts.append("  local res = rt.C()." + create_sym + "(nil)")
-        parts.append("  rt.check(res)")
-        parts.append(f"  return setmetatable({{ handle = res.value }}, {cname})")
-        parts.append("end")
-        for op in cls.get("ops", []):
-            m = methods.get(op["slot"])
-            if not m:
-                continue
-            params = [a["name"] for a in m["args"][2:]]
-            # `:` already binds self implicitly — do NOT list it in params.
-            sig = ", ".join(params)
-            sym = f"yetty_{m['domain']}_{op['slot']}"
-            call_args = ", ".join(["nil", "self.handle"] + params)
-            parts.append(f"function {cname}:{op['slot']}({sig})")
-            parts.append(f"  local res = rt.C().{sym}({call_args})")
-            parts.append("  rt.check(res)")
-            if returns_value(m["return_type"]):
-                parts.append("  return res.value")
-            parts.append("end")
-        parts.append(f"M.{cname} = {cname}")
-    parts.append("return M")
-    out_path.write_text("\n".join(parts) + "\n")
-
-
-def emit_lua(models: dict[str, dict]):
-    gen = REPO / "bindings" / "lua" / "yetty" / "generated"
-    gen.mkdir(parents=True, exist_ok=True)
-    types = global_types(models)
-    lua_emit_types(models, types, gen / "_types.lua")
-    count = 0
-    for module, model in models.items():
-        if not model.get("classes"):
-            continue
-        lua_emit_module(module, model, gen / f"{module}.lua")
-        count += 1
-    print(f"ffigen: lua → {count} modules, {len(types)} types "
-          f"under bindings/lua/yetty/generated/")
-
-
-EMITTERS = {"python": emit_python, "lua": emit_lua}
 
 
 def main():
-    if len(sys.argv) < 2 or sys.argv[1] not in EMITTERS:
-        sys.stderr.write(f"usage: ffigen.py <{'|'.join(EMITTERS)}> [module ...]\n")
-        sys.exit(2)
-    lang = sys.argv[1]
-    models = discover_models(sys.argv[2:])
-    EMITTERS[lang](models)
+    models = discover_models(sys.argv[1:])
+    emit_python(models)
 
 
 if __name__ == "__main__":

@@ -1030,6 +1030,15 @@ size_t yetty_yui_tabbar_model_active_index(const struct yetty_yui_tabbar_model *
     return bar ? bar->active : 0;
 }
 
+struct yetty_yui_workspace *yetty_yui_tabbar_model_workspace_at(
+    const struct yetty_yui_tabbar_model *bar, size_t idx)
+{
+    if (!bar || idx >= bar->count) {
+        return NULL;
+    }
+    return bar->workspaces[idx];
+}
+
 struct yetty_ycore_void_result yetty_yui_tabbar_model_switch_to(struct yetty_yui_tabbar_model *bar,
                                                                 size_t idx)
 {

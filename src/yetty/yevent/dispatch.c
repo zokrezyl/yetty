@@ -57,6 +57,10 @@ struct yetty_ycore_void_result yetty_yevent_register_default_listeners(
         YETTY_YCORE_PANE_CREATE,
         YETTY_YCORE_PANE_SPLIT,
         YETTY_YCORE_SPLIT_RESIZE,
+        /* View-initiated pane close — posted by a terminal on PTY EOF
+         * (Ctrl-D / `exit`); yetty resolves the hosting pane and closes
+         * it (or the workspace / the app when it was the last one). */
+        YETTY_YCORE_CLOSE,
     };
 
     for (size_t i = 0; i < sizeof(kTypes) / sizeof(kTypes[0]); ++i) {

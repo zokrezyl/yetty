@@ -190,8 +190,8 @@ codegen: ## Run yclass codegen for all annotated modules (output committed to gi
 
 .PHONY: ffi
 ffi: ## Generate FFI language bindings from the per-module model.yaml (run after codegen)
-	uv run tools/ffi-codegen/ffigen.py python
-	uv run tools/ffi-codegen/ffigen.py lua
+	uv run tools/ffi-codegen/python/ffigen.py
+	uv run tools/ffi-codegen/lua/ffigen.py
 
 .PHONY: format-code
 format-code: ## clang-format all C/H sources under include/ src/ tools/ (parallel, in place)

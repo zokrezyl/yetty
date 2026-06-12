@@ -834,6 +834,29 @@ struct yetty_yui_tile *yetty_yui_tile_find_first_pane(struct yetty_yui_tile *roo
     return yetty_yui_tile_find_first_pane(split->second);
 }
 
+struct yetty_yui_tile *yetty_yui_tile_find_pane_with_view(struct yetty_yui_tile *root,
+                                                          yetty_ycore_object_id view_id)
+{
+    struct yetty_yui_split *split;
+    struct yetty_yui_tile *found;
+
+    if (!root) {
+        return NULL;
+    }
+
+    if (root->type == YETTY_YUI_TILE_PANE) {
+        return yetty_yui_tile_pane_has_view(root, view_id) ? root : NULL;
+    }
+
+    split = (struct yetty_yui_split *)root;
+    found = yetty_yui_tile_find_pane_with_view(split->first, view_id);
+    if (found) {
+        return found;
+    }
+
+    return yetty_yui_tile_find_pane_with_view(split->second, view_id);
+}
+
 void yetty_yui_tile_clear_focus(struct yetty_yui_tile *root)
 {
     struct yetty_yui_split *split;
