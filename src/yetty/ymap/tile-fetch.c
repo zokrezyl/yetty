@@ -17,7 +17,7 @@
 #include <string.h>
 
 /* OSM tile policy requires an identifying User-Agent. */
-#define OSM_USER_AGENT "yetty-yopenstreet/0.1 (+https://github.com/zokrezyl/yetty)"
+#define OSM_USER_AGENT "yetty-ymap/0.1 (+https://github.com/zokrezyl/yetty)"
 #define OSM_FETCH_TIMEOUT_SECONDS 20L
 
 /* Newest HTTP version this libcurl can attempt. yetty's vendored curl is
@@ -33,7 +33,7 @@ static long osm_preferred_http_version(void)
         const curl_version_info_data *info = curl_version_info(CURLVERSION_NOW);
         if (info && (info->features & CURL_VERSION_HTTP3)) {
             preferred_version = CURL_HTTP_VERSION_3;
-            yinfo("yopenstreet: libcurl %s has HTTP/3 — racing QUIC with TCP fallback",
+            yinfo("ymap: libcurl %s has HTTP/3 — racing QUIC with TCP fallback",
                   info->version);
         } else {
             preferred_version = CURL_HTTP_VERSION_2TLS;
@@ -49,7 +49,7 @@ static long osm_preferred_http_version(void)
  * curl lifecycle
  *===========================================================================*/
 
-CURL *yetty_yopenstreet_curl_acquire(void)
+CURL *yetty_ymap_curl_acquire(void)
 {
     /* curl global init is once-per-process. */
     static int curl_initialized = 0;
@@ -60,7 +60,7 @@ CURL *yetty_yopenstreet_curl_acquire(void)
     return curl_easy_init();
 }
 
-void yetty_yopenstreet_curl_release(CURL *curl_handle)
+void yetty_ymap_curl_release(CURL *curl_handle)
 {
     if (curl_handle) {
         curl_easy_cleanup(curl_handle);
@@ -76,28 +76,28 @@ static struct yetty_ycore_void_result read_entire_file(const char *path, uint8_t
 {
     FILE *file = fopen(path, "rb");
     if (!file) {
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet: fopen for read failed");
+        return YETTY_ERR(yetty_ycore_void, "ymap: fopen for read failed");
     }
     if (fseek(file, 0, SEEK_END) != 0) {
         fclose(file);
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet: fseek failed");
+        return YETTY_ERR(yetty_ycore_void, "ymap: fseek failed");
     }
     long file_size = ftell(file);
     if (file_size <= 0) {
         fclose(file);
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet: empty or unreadable file");
+        return YETTY_ERR(yetty_ycore_void, "ymap: empty or unreadable file");
     }
     rewind(file);
     uint8_t *bytes = malloc((size_t)file_size);
     if (!bytes) {
         fclose(file);
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet: file buffer alloc failed");
+        return YETTY_ERR(yetty_ycore_void, "ymap: file buffer alloc failed");
     }
     size_t bytes_read = fread(bytes, 1, (size_t)file_size, file);
     fclose(file);
     if (bytes_read != (size_t)file_size) {
         free(bytes);
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet: short read");
+        return YETTY_ERR(yetty_ycore_void, "ymap: short read");
     }
     *out_bytes = bytes;
     *out_len = (size_t)file_size;
@@ -109,12 +109,12 @@ static struct yetty_ycore_void_result write_entire_file(const char *path, const 
 {
     FILE *file = fopen(path, "wb");
     if (!file) {
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet: fopen for write failed");
+        return YETTY_ERR(yetty_ycore_void, "ymap: fopen for write failed");
     }
     size_t bytes_written = fwrite(bytes, 1, len, file);
     fclose(file);
     if (bytes_written != len) {
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet: short write");
+        return YETTY_ERR(yetty_ycore_void, "ymap: short write");
     }
     return YETTY_OK_VOID();
 }
@@ -178,23 +178,23 @@ static struct yetty_ycore_void_result fetch_url(CURL *curl_handle, const char *u
     curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &http_status);
     if (http_status >= 400) {
         free(body.data);
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet: HTTP error status");
+        return YETTY_ERR(yetty_ycore_void, "ymap: HTTP error status");
     }
     if (body.len == 0) {
         free(body.data);
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet: empty HTTP body");
+        return YETTY_ERR(yetty_ycore_void, "ymap: empty HTTP body");
     }
     *out_bytes = body.data;
     *out_len = body.len;
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_void_result yetty_yopenstreet_http_get(CURL *curl_handle, const char *url,
+struct yetty_ycore_void_result yetty_ymap_http_get(CURL *curl_handle, const char *url,
                                                           long timeout_seconds, uint8_t **out_bytes,
                                                           size_t *out_len)
 {
     if (!curl_handle || !url || !out_bytes || !out_len) {
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet http_get: NULL argument");
+        return YETTY_ERR(yetty_ycore_void, "ymap http_get: NULL argument");
     }
     return fetch_url(curl_handle, url, timeout_seconds, out_bytes, out_len);
 }
@@ -203,7 +203,7 @@ struct yetty_ycore_void_result yetty_yopenstreet_http_get(CURL *curl_handle, con
  * Tile fetch with disk cache
  *===========================================================================*/
 
-struct yetty_ycore_void_result yetty_yopenstreet_tile_fetch(
+struct yetty_ycore_void_result yetty_ymap_tile_fetch(
     CURL *curl_handle, const char *url_template, const char *cache_root,
     const char *cache_file_extension, uint32_t zoom, uint32_t tile_x, uint32_t tile_y,
     uint8_t **out_bytes, size_t *out_len)
@@ -219,13 +219,13 @@ struct yetty_ycore_void_result yetty_yopenstreet_tile_fetch(
         }
         /* Corrupt / unreadable cache entry — fall through to re-download. */
         yetty_ycore_error_destroy(read_res.error);
-        ywarn("yopenstreet: unreadable cache entry %s; re-downloading", cache_path);
+        ywarn("ymap: unreadable cache entry %s; re-downloading", cache_path);
     }
 
     char url[1024];
     snprintf(url, sizeof(url), url_template, zoom, tile_x, tile_y);
     struct yetty_ycore_void_result fetch_res = fetch_url(curl_handle, url, 0, out_bytes, out_len);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, fetch_res, "yopenstreet: tile download failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, fetch_res, "ymap: tile download failed");
 
     /* Cache write is best-effort — a read-only cache dir must not fail
      * the render. */
@@ -234,7 +234,7 @@ struct yetty_ycore_void_result yetty_yopenstreet_tile_fetch(
     yetty_yplatform_mkdir_p(cache_tile_dir);
     struct yetty_ycore_void_result write_res = write_entire_file(cache_path, *out_bytes, *out_len);
     if (YETTY_IS_ERR(write_res)) {
-        ywarn("yopenstreet: cache write failed for %s: %s", cache_path, write_res.error.msg);
+        ywarn("ymap: cache write failed for %s: %s", cache_path, write_res.error.msg);
         yetty_ycore_error_destroy(write_res.error);
     }
     return YETTY_OK_VOID();
@@ -254,7 +254,7 @@ struct yetty_ycore_void_result yetty_yopenstreet_tile_fetch(
 #define OSM_MAX_TOTAL_CONNECTIONS 4L
 
 struct osm_tile_transfer {
-    struct yetty_yopenstreet_tile_request *request;
+    struct yetty_ymap_tile_request *request;
     struct osm_growable_buffer body;
     char url[1024];
 };
@@ -287,11 +287,11 @@ static void tile_transfer_finish(CURL *easy_handle, CURLcode curl_result, const 
     curl_easy_getinfo(easy_handle, CURLINFO_RESPONSE_CODE, &http_status);
     long negotiated_version = 0;
     curl_easy_getinfo(easy_handle, CURLINFO_HTTP_VERSION, &negotiated_version);
-    ydebug("yopenstreet: tile %u/%u done, HTTP version code %ld (30=h3 20=h2)",
+    ydebug("ymap: tile %u/%u done, HTTP version code %ld (30=h3 20=h2)",
            transfer->request->tile_x, transfer->request->tile_y, negotiated_version);
 
     if (curl_result != CURLE_OK || http_status >= 400 || transfer->body.len == 0) {
-        ywarn("yopenstreet: tile %u/%u/%u download failed (%s, HTTP %ld)", zoom,
+        ywarn("ymap: tile %u/%u/%u download failed (%s, HTTP %ld)", zoom,
               transfer->request->tile_x, transfer->request->tile_y, curl_easy_strerror(curl_result),
               http_status);
         free(transfer->body.data);
@@ -314,17 +314,17 @@ static void tile_transfer_finish(CURL *easy_handle, CURLcode curl_result, const 
     struct yetty_ycore_void_result write_res =
         write_entire_file(cache_path, transfer->request->bytes, transfer->request->len);
     if (YETTY_IS_ERR(write_res)) {
-        ywarn("yopenstreet: cache write failed for %s: %s", cache_path, write_res.error.msg);
+        ywarn("ymap: cache write failed for %s: %s", cache_path, write_res.error.msg);
         yetty_ycore_error_destroy(write_res.error);
     }
 }
 
-struct yetty_ycore_void_result yetty_yopenstreet_tiles_fetch(
+struct yetty_ycore_void_result yetty_ymap_tiles_fetch(
     const char *url_template, const char *cache_root, const char *cache_file_extension,
-    uint32_t zoom, struct yetty_yopenstreet_tile_request *requests, uint32_t request_count)
+    uint32_t zoom, struct yetty_ymap_tile_request *requests, uint32_t request_count)
 {
     if (!url_template || !cache_root || !cache_file_extension || (!requests && request_count)) {
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet tiles_fetch: NULL argument");
+        return YETTY_ERR(yetty_ycore_void, "ymap tiles_fetch: NULL argument");
     }
     if (request_count == 0) {
         return YETTY_OK_VOID();
@@ -333,7 +333,7 @@ struct yetty_ycore_void_result yetty_yopenstreet_tiles_fetch(
     /* Pass 1: serve cache hits, collect the misses. */
     uint32_t miss_count = 0;
     for (uint32_t i = 0; i < request_count; i++) {
-        struct yetty_yopenstreet_tile_request *request = &requests[i];
+        struct yetty_ymap_tile_request *request = &requests[i];
         request->bytes = NULL;
         request->len = 0;
         char cache_path[1280];
@@ -346,7 +346,7 @@ struct yetty_ycore_void_result yetty_yopenstreet_tiles_fetch(
                 continue;
             }
             yetty_ycore_error_destroy(read_res.error);
-            ywarn("yopenstreet: unreadable cache entry %s; re-downloading", cache_path);
+            ywarn("ymap: unreadable cache entry %s; re-downloading", cache_path);
         }
         miss_count++;
     }
@@ -355,15 +355,15 @@ struct yetty_ycore_void_result yetty_yopenstreet_tiles_fetch(
     }
 
     /* curl global init guard (shared with the easy-handle path). */
-    CURL *probe_handle = yetty_yopenstreet_curl_acquire();
+    CURL *probe_handle = yetty_ymap_curl_acquire();
     if (!probe_handle) {
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet tiles_fetch: curl init failed");
+        return YETTY_ERR(yetty_ycore_void, "ymap tiles_fetch: curl init failed");
     }
-    yetty_yopenstreet_curl_release(probe_handle);
+    yetty_ymap_curl_release(probe_handle);
 
     CURLM *multi_handle = curl_multi_init();
     if (!multi_handle) {
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet tiles_fetch: curl_multi_init failed");
+        return YETTY_ERR(yetty_ycore_void, "ymap tiles_fetch: curl_multi_init failed");
     }
     curl_multi_setopt(multi_handle, CURLMOPT_MAX_HOST_CONNECTIONS, OSM_MAX_HOST_CONNECTIONS);
     curl_multi_setopt(multi_handle, CURLMOPT_MAX_TOTAL_CONNECTIONS, OSM_MAX_TOTAL_CONNECTIONS);
@@ -375,7 +375,7 @@ struct yetty_ycore_void_result yetty_yopenstreet_tiles_fetch(
         free(transfers);
         free(easy_handles);
         curl_multi_cleanup(multi_handle);
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet tiles_fetch: transfer alloc failed");
+        return YETTY_ERR(yetty_ycore_void, "ymap tiles_fetch: transfer alloc failed");
     }
 
     uint32_t transfer_count = 0;
@@ -389,7 +389,7 @@ struct yetty_ycore_void_result yetty_yopenstreet_tiles_fetch(
                  requests[i].tile_y);
         CURL *easy_handle = curl_easy_init();
         if (!easy_handle) {
-            ywarn("yopenstreet: easy handle alloc failed for tile %u/%u — skipped",
+            ywarn("ymap: easy handle alloc failed for tile %u/%u — skipped",
                   requests[i].tile_x, requests[i].tile_y);
             continue;
         }
@@ -403,7 +403,7 @@ struct yetty_ycore_void_result yetty_yopenstreet_tiles_fetch(
     do {
         CURLMcode multi_result = curl_multi_perform(multi_handle, &still_running);
         if (multi_result != CURLM_OK) {
-            ywarn("yopenstreet: curl_multi_perform: %s", curl_multi_strerror(multi_result));
+            ywarn("ymap: curl_multi_perform: %s", curl_multi_strerror(multi_result));
             break;
         }
         if (still_running) {

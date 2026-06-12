@@ -1,8 +1,11 @@
-#ifndef YETTY_YOPENSTREET_OPENSTREET_H
-#define YETTY_YOPENSTREET_OPENSTREET_H
+#ifndef YETTY_YMAP_ENGINE_H
+#define YETTY_YMAP_ENGINE_H
 
 /*
- * yopenstreet — OpenStreetMap snapshot rendering for the scrolling grid.
+ * ymap engine — tile download, caching and map rendering primitives.
+ *
+ * The plain-C lower half of the ymap module: the `ymap:map` yclass model
+ * (map.c) drives these; together they form one library.
  *
  * Downloads the slippy-map raster tiles covering a lat/lon-centered
  * viewport, composites them into one RGBA8 image, and packs it as a
@@ -20,7 +23,7 @@
  *   - requests carry an identifying User-Agent;
  *   - the disk cache avoids repeat downloads;
  *   - displayed maps require the attribution "© OpenStreetMap
- *     contributors" — the yopenstreet tool prints it under the map; any
+ *     contributors" — the ymap engine tool prints it under the map; any
  *     other frontend embedding this library must do the equivalent.
  */
 
@@ -35,14 +38,14 @@ extern "C" {
 #endif
 
 /* Highest zoom the default openstreetmap.org raster servers carry. */
-#define YETTY_YOPENSTREET_MAX_ZOOM 19u
+#define YETTY_YMAP_MAX_ZOOM 19u
 /* Highest zoom of the shortbread vector tile set (z15+ is overzoom). */
-#define YETTY_YOPENSTREET_MAX_VECTOR_ZOOM 14u
+#define YETTY_YMAP_MAX_VECTOR_ZOOM 14u
 
-struct yetty_yopenstreet_config {
+struct yetty_ymap_config {
     double latitude;  /* map center, degrees (WGS84), -85.05..85.05 */
     double longitude; /* map center, degrees, -180..180 */
-    uint32_t zoom;    /* slippy-map zoom level, 0..YETTY_YOPENSTREET_MAX_ZOOM */
+    uint32_t zoom;    /* slippy-map zoom level, 0..YETTY_YMAP_MAX_ZOOM */
 
     uint32_t width_px; /* viewport (and displayed) size in pixels */
     uint32_t height_px;
@@ -67,42 +70,37 @@ struct yetty_yopenstreet_config {
  * at `zoom` (256 px per tile, origin at the map's north-west corner).
  * Exposed for tools and tests — the interactive tool pans/zooms by
  * shifting the center in pixel space and projecting back. */
-void yetty_yopenstreet_lonlat_to_global_pixel(double longitude, double latitude, uint32_t zoom,
+void yetty_ymap_lonlat_to_global_pixel(double longitude, double latitude, uint32_t zoom,
                                               double *out_pixel_x, double *out_pixel_y);
 
-void yetty_yopenstreet_global_pixel_to_lonlat(double pixel_x, double pixel_y, uint32_t zoom,
+void yetty_ymap_global_pixel_to_lonlat(double pixel_x, double pixel_y, uint32_t zoom,
                                               double *out_longitude, double *out_latitude);
 
 /* Geolocate this machine's public IP (one keyless HTTPS request to
  * ipinfo.io, short timeout). City-level accuracy at best — meant only to
  * pick a sensible default map center. Best-effort by contract: callers
  * fall back on error, the lookup must never gate a render. */
-struct yetty_ycore_void_result yetty_yopenstreet_geolocate_public_ip(double *out_latitude,
+struct yetty_ycore_void_result yetty_ymap_geolocate_public_ip(double *out_latitude,
                                                                      double *out_longitude);
 
 /* Download + composite the configured viewport and return a fresh
  * drawable list holding ONE yimage prim. Caller frees the list with
  * yetty_ydraw_drawable_list_destroy. */
-struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render(
-    const struct yetty_yopenstreet_config *config);
+struct yetty_ydraw_drawable_list_result yetty_ymap_render_raster(
+    const struct yetty_ymap_config *config);
 
 /* Vector variant: fetches Mapbox-Vector-Tile (shortbread schema) tiles
  * and emits the map as native drawables — SDF triangles/segments for
  * polygons and lines, MSDF text runs for labels — instead of pixels.
  * Crisp under cell zoom and far smaller on the wire. zoom is capped at
- * YETTY_YOPENSTREET_MAX_VECTOR_ZOOM; tile_url_template defaults to
+ * YETTY_YMAP_MAX_VECTOR_ZOOM; tile_url_template defaults to
  * vector.openstreetmap.org/shortbread_v1 (.mvt), the cache to
  * <yetty cache dir>/osm-vector-tiles. */
-struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render_vector(
-    const struct yetty_yopenstreet_config *config);
-
-/* OSC envelope (YETTY_DCS_YDRAW_BIN, same wire format as ycat / yimage).
- * Returns bytes written. */
-struct yetty_ycore_size_result yetty_yopenstreet_osc_bin_emit(
-    const struct yetty_ydraw_drawable_list *buffer, FILE *out);
+struct yetty_ydraw_drawable_list_result yetty_ymap_render_vector(
+    const struct yetty_ymap_config *config);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* YETTY_YOPENSTREET_OPENSTREET_H */
+#endif /* YETTY_YMAP_ENGINE_H */

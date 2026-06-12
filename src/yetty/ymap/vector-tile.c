@@ -146,11 +146,11 @@ static void *vt_grow(void *array, uint32_t needed_count, uint32_t *capacity, siz
  *===========================================================================*/
 
 static struct yetty_ycore_void_result vt_parse_geometry(
-    struct vt_reader *geometry, struct yetty_yopenstreet_vt_feature *feature)
+    struct vt_reader *geometry, struct yetty_ymap_vt_feature *feature)
 {
     uint32_t ring_capacity = 0;
     uint32_t point_capacity = 0; /* capacity of the CURRENT ring */
-    struct yetty_yopenstreet_vt_ring *current_ring = NULL;
+    struct yetty_ymap_vt_ring *current_ring = NULL;
     int64_t cursor_x = 0;
     int64_t cursor_y = 0;
     uint32_t total_points = 0;
@@ -186,9 +186,9 @@ static struct yetty_ycore_void_result vt_parse_geometry(
             }
 
             if (command_id == 1 /* MoveTo */) {
-                struct yetty_yopenstreet_vt_ring *grown_rings =
+                struct yetty_ymap_vt_ring *grown_rings =
                     vt_grow(feature->rings, feature->ring_count + 1, &ring_capacity,
-                            sizeof(struct yetty_yopenstreet_vt_ring));
+                            sizeof(struct yetty_ymap_vt_ring));
                 if (!grown_rings) {
                     return YETTY_ERR(yetty_ycore_void, "mvt: ring array alloc failed");
                 }
@@ -200,9 +200,9 @@ static struct yetty_ycore_void_result vt_parse_geometry(
             if (!current_ring) {
                 return YETTY_ERR(yetty_ycore_void, "mvt: LineTo before MoveTo");
             }
-            struct yetty_yopenstreet_vt_point *grown_points =
+            struct yetty_ymap_vt_point *grown_points =
                 vt_grow(current_ring->points, current_ring->point_count + 1, &point_capacity,
-                        sizeof(struct yetty_yopenstreet_vt_point));
+                        sizeof(struct yetty_ymap_vt_point));
             if (!grown_points) {
                 return YETTY_ERR(yetty_ycore_void, "mvt: point array alloc failed");
             }
@@ -219,7 +219,7 @@ static struct yetty_ycore_void_result vt_parse_geometry(
  * Feature / Value / Layer / Tile
  *===========================================================================*/
 
-static void vt_feature_free(struct yetty_yopenstreet_vt_feature *feature)
+static void vt_feature_free(struct yetty_ymap_vt_feature *feature)
 {
     for (uint32_t i = 0; i < feature->ring_count; i++) {
         free(feature->rings[i].points);
@@ -229,9 +229,9 @@ static void vt_feature_free(struct yetty_yopenstreet_vt_feature *feature)
 
 /* Tags are (key index, value index) pairs into the layer tables; resolve
  * just "kind" and "name". */
-static void vt_resolve_feature_tags(const struct yetty_yopenstreet_vt_layer *layer,
+static void vt_resolve_feature_tags(const struct yetty_ymap_vt_layer *layer,
                                     const uint32_t *tag_pairs, uint32_t tag_pair_count,
-                                    struct yetty_yopenstreet_vt_feature *feature)
+                                    struct yetty_ymap_vt_feature *feature)
 {
     for (uint32_t i = 0; i + 1 < tag_pair_count * 2; i += 2) {
         uint32_t key_index = tag_pairs[i];
@@ -253,8 +253,8 @@ static void vt_resolve_feature_tags(const struct yetty_yopenstreet_vt_layer *lay
 }
 
 static struct yetty_ycore_void_result vt_parse_feature(struct vt_reader *reader,
-                                                       struct yetty_yopenstreet_vt_layer *layer,
-                                                       struct yetty_yopenstreet_vt_feature *feature)
+                                                       struct yetty_ymap_vt_layer *layer,
+                                                       struct yetty_ymap_vt_feature *feature)
 {
     uint32_t *tag_pairs = NULL;
     uint32_t tag_pair_words = 0;
@@ -360,7 +360,7 @@ static struct yetty_ycore_void_result vt_parse_value(struct vt_reader *reader, c
     return YETTY_OK_VOID();
 }
 
-static void vt_layer_free(struct yetty_yopenstreet_vt_layer *layer)
+static void vt_layer_free(struct yetty_ymap_vt_layer *layer)
 {
     for (uint32_t i = 0; i < layer->feature_count; i++) {
         vt_feature_free(&layer->features[i]);
@@ -378,7 +378,7 @@ static void vt_layer_free(struct yetty_yopenstreet_vt_layer *layer)
 }
 
 static struct yetty_ycore_void_result vt_parse_layer(struct vt_reader *reader,
-                                                     struct yetty_yopenstreet_vt_layer *layer)
+                                                     struct yetty_ymap_vt_layer *layer)
 {
     layer->extent = 4096;
     uint32_t feature_capacity = 0;
@@ -502,15 +502,15 @@ static struct yetty_ycore_void_result vt_parse_layer(struct vt_reader *reader,
 
     if (YETTY_IS_OK(result)) {
         for (uint32_t i = 0; i < feature_slice_count; i++) {
-            struct yetty_yopenstreet_vt_feature *grown_features =
+            struct yetty_ymap_vt_feature *grown_features =
                 vt_grow(layer->features, layer->feature_count + 1, &feature_capacity,
-                        sizeof(struct yetty_yopenstreet_vt_feature));
+                        sizeof(struct yetty_ymap_vt_feature));
             if (!grown_features) {
                 result = YETTY_ERR(yetty_ycore_void, "mvt: feature array alloc failed");
                 break;
             }
             layer->features = grown_features;
-            struct yetty_yopenstreet_vt_feature *feature = &layer->features[layer->feature_count];
+            struct yetty_ymap_vt_feature *feature = &layer->features[layer->feature_count];
             memset(feature, 0, sizeof(*feature));
             result = vt_parse_feature(&feature_slices[i], layer, feature);
             if (YETTY_IS_ERR(result)) {
@@ -524,8 +524,8 @@ static struct yetty_ycore_void_result vt_parse_layer(struct vt_reader *reader,
     return result;
 }
 
-struct yetty_ycore_void_result yetty_yopenstreet_vt_parse(
-    const uint8_t *bytes, size_t len, struct yetty_yopenstreet_vt_tile *out_tile)
+struct yetty_ycore_void_result yetty_ymap_vt_parse(
+    const uint8_t *bytes, size_t len, struct yetty_ymap_vt_tile *out_tile)
 {
     if (!bytes || len == 0 || !out_tile) {
         return YETTY_ERR(yetty_ycore_void, "mvt: NULL input");
@@ -555,15 +555,15 @@ struct yetty_ycore_void_result yetty_yopenstreet_vt_parse(
                 result = YETTY_ERR(yetty_ycore_void, "mvt: layer count over cap");
                 break;
             }
-            struct yetty_yopenstreet_vt_layer *grown_layers =
+            struct yetty_ymap_vt_layer *grown_layers =
                 vt_grow(out_tile->layers, out_tile->layer_count + 1, &layer_capacity,
-                        sizeof(struct yetty_yopenstreet_vt_layer));
+                        sizeof(struct yetty_ymap_vt_layer));
             if (!grown_layers) {
                 result = YETTY_ERR(yetty_ycore_void, "mvt: layer array alloc failed");
                 break;
             }
             out_tile->layers = grown_layers;
-            struct yetty_yopenstreet_vt_layer *layer = &out_tile->layers[out_tile->layer_count];
+            struct yetty_ymap_vt_layer *layer = &out_tile->layers[out_tile->layer_count];
             memset(layer, 0, sizeof(*layer));
             /* Count the slot immediately so an error inside the layer
              * parse still frees the partial layer in vt_free. */
@@ -581,13 +581,13 @@ struct yetty_ycore_void_result yetty_yopenstreet_vt_parse(
     }
 
     if (YETTY_IS_ERR(result)) {
-        yetty_yopenstreet_vt_free(out_tile);
+        yetty_ymap_vt_free(out_tile);
         return YETTY_ERR(yetty_ycore_void, "mvt: tile parse failed", result);
     }
     return YETTY_OK_VOID();
 }
 
-void yetty_yopenstreet_vt_free(struct yetty_yopenstreet_vt_tile *tile)
+void yetty_ymap_vt_free(struct yetty_ymap_vt_tile *tile)
 {
     if (!tile) {
         return;

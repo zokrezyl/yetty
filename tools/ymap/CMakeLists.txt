@@ -17,7 +17,6 @@ target_include_directories(ymap PRIVATE
 find_package(Threads REQUIRED)
 target_link_libraries(ymap PRIVATE
     yetty_ymap
-    yetty_yopenstreet
     yetty_yview
     Threads::Threads
     yetty_yplatform_core

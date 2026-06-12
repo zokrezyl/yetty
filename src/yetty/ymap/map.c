@@ -3,7 +3,7 @@
  *
  * `map` is a client-side object: it holds a view (center lat/lon, zoom,
  * viewport pixels) over a named TILE PROVIDER and renders the visible map
- * to a ydraw drawable list via the yopenstreet engine — raster providers
+ * to a ydraw drawable list via the ymap engine — raster providers
  * composite PNG/JPEG tiles into one yimage prim, vector providers
  * (shortbread MVT) emit native SDF/MSDF drawables. It does not display
  * itself: one-shot callers ship the list into the scrolling layer
@@ -34,7 +34,7 @@
 #include <yetty/ycore/types.h>
 
 #include <yetty/yface/yface.h>
-#include <yetty/yopenstreet/openstreet.h>
+#include <yetty/ymap/engine.h>
 #include <yetty/yplatform/paths.h>
 #include <yetty/yterminal/dcs-codes.h>
 #include <yetty/ytrace/ytrace.h>
@@ -357,7 +357,7 @@ static struct yetty_ycore_void_result map_pan_by_pixels(struct yetty_yclass_ctx 
 
     double center_x = 0.0;
     double center_y = 0.0;
-    yetty_yopenstreet_lonlat_to_global_pixel(map->longitude, map->latitude, map->zoom, &center_x,
+    yetty_ymap_lonlat_to_global_pixel(map->longitude, map->latitude, map->zoom, &center_x,
                                              &center_y);
     center_x -= delta_x;
     center_y -= delta_y;
@@ -369,7 +369,7 @@ static struct yetty_ycore_void_result map_pan_by_pixels(struct yetty_yclass_ctx 
     if (center_y > world_px - half_h) {
         center_y = world_px - half_h;
     }
-    yetty_yopenstreet_global_pixel_to_lonlat(center_x, center_y, map->zoom, &map->longitude,
+    yetty_ymap_global_pixel_to_lonlat(center_x, center_y, map->zoom, &map->longitude,
                                              &map->latitude);
     return YETTY_OK_VOID();
 }
@@ -394,7 +394,7 @@ static struct yetty_ycore_int_result map_zoom_by_at(struct yetty_yclass_ctx *ctx
 
     double center_x = 0.0;
     double center_y = 0.0;
-    yetty_yopenstreet_lonlat_to_global_pixel(map->longitude, map->latitude, map->zoom, &center_x,
+    yetty_ymap_lonlat_to_global_pixel(map->longitude, map->latitude, map->zoom, &center_x,
                                              &center_y);
     double origin_x = center_x - (double)map->width_px / 2.0;
     double origin_y = center_y - (double)map->height_px / 2.0;
@@ -407,7 +407,7 @@ static struct yetty_ycore_int_result map_zoom_by_at(struct yetty_yclass_ctx *ctx
     double new_center_y = anchor_gpx_y * scale - anchor_y + (double)map->height_px / 2.0;
 
     map->zoom = new_zoom;
-    yetty_yopenstreet_global_pixel_to_lonlat(new_center_x, new_center_y, map->zoom, &map->longitude,
+    yetty_ymap_global_pixel_to_lonlat(new_center_x, new_center_y, map->zoom, &map->longitude,
                                              &map->latitude);
     return YETTY_OK(yetty_ycore_int, (int)map->zoom);
 }
@@ -425,7 +425,7 @@ static struct yetty_ycore_int_result map_get_zoom(struct yetty_yclass_ctx *ctx,
 }
 
 /* geolocate: center the view on this machine's public-IP location (one
- * HTTPS request, city-level accuracy, see yopenstreet's geoip notes).
+ * HTTPS request, city-level accuracy, see ymap's geoip notes).
  * Best-effort: on error the view is unchanged and the caller decides. */
 [[clang::annotate("virtual@ymap:map:geolocate")]] [[clang::annotate("local@ymap:geolocate")]]
 static struct yetty_ycore_void_result map_geolocate(struct yetty_yclass_ctx *ctx,
@@ -438,7 +438,7 @@ static struct yetty_ycore_void_result map_geolocate(struct yetty_yclass_ctx *ctx
     double latitude = 0.0;
     double longitude = 0.0;
     struct yetty_ycore_void_result geo_res =
-        yetty_yopenstreet_geolocate_public_ip(&latitude, &longitude);
+        yetty_ymap_geolocate_public_ip(&latitude, &longitude);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, geo_res, "ymap geolocate: lookup");
     map->latitude = latitude;
     map->longitude = longitude;
@@ -510,7 +510,7 @@ static struct yetty_ydraw_drawable_list_result map_render(struct yetty_yclass_ct
     snprintf(cache_dir, sizeof(cache_dir), "%s/ymap/%s", yetty_yplatform_get_cache_dir(),
              provider_name);
 
-    struct yetty_yopenstreet_config engine_config = {
+    struct yetty_ymap_config engine_config = {
         .latitude = map->latitude,
         .longitude = map->longitude,
         .zoom = map->zoom,
@@ -520,8 +520,8 @@ static struct yetty_ydraw_drawable_list_result map_render(struct yetty_yclass_ct
         .cache_dir = cache_dir,
         .tile_file_extension = extension,
     };
-    return vector ? yetty_yopenstreet_render_vector(&engine_config)
-                  : yetty_yopenstreet_render(&engine_config);
+    return vector ? yetty_ymap_render_vector(&engine_config)
+                  : yetty_ymap_render_raster(&engine_config);
 }
 
 /* destroy: free owned strings + the yclass allocation. */

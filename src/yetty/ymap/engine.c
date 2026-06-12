@@ -1,9 +1,9 @@
 /*
- * openstreet.c — OpenStreetMap tile download + composite → yimage prim.
+ * engine.c — raster tile download + composite → yimage prim.
  *
- * See include/yetty/yopenstreet/openstreet.h for the contract. The module
+ * See include/yetty/ymap/engine.h for the contract. The module
  * is deliberately GPU-less: everything ends in the existing yimage wire
- * serializer, so the receiving terminal needs no yopenstreet-specific
+ * serializer, so the receiving terminal needs no ymap-specific
  * code at all.
  *
  * Pipeline:
@@ -18,7 +18,7 @@
  * failure (bad config, allocation, serialization) bails immediately.
  */
 
-#include <yetty/yopenstreet/openstreet.h>
+#include <yetty/ymap/engine.h>
 
 #include "tile-fetch.h"
 
@@ -50,7 +50,7 @@
  * Projection
  *===========================================================================*/
 
-void yetty_yopenstreet_lonlat_to_global_pixel(double longitude, double latitude, uint32_t zoom,
+void yetty_ymap_lonlat_to_global_pixel(double longitude, double latitude, uint32_t zoom,
                                               double *out_pixel_x, double *out_pixel_y)
 {
     double tile_count = (double)(1u << zoom);
@@ -65,7 +65,7 @@ void yetty_yopenstreet_lonlat_to_global_pixel(double longitude, double latitude,
     }
 }
 
-void yetty_yopenstreet_global_pixel_to_lonlat(double pixel_x, double pixel_y, uint32_t zoom,
+void yetty_ymap_global_pixel_to_lonlat(double pixel_x, double pixel_y, uint32_t zoom,
                                               double *out_longitude, double *out_latitude)
 {
     double world_px = (double)(1u << zoom) * (double)OSM_TILE_SIZE;
@@ -106,32 +106,32 @@ static void blit_tile(uint32_t *composite, uint32_t viewport_w, uint32_t viewpor
     }
 }
 
-static struct yetty_ycore_void_result validate_config(const struct yetty_yopenstreet_config *config)
+static struct yetty_ycore_void_result validate_config(const struct yetty_ymap_config *config)
 {
     if (!config) {
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet: config is NULL");
+        return YETTY_ERR(yetty_ycore_void, "ymap: config is NULL");
     }
-    if (config->zoom > YETTY_YOPENSTREET_MAX_ZOOM) {
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet: zoom exceeds maximum (19)");
+    if (config->zoom > YETTY_YMAP_MAX_ZOOM) {
+        return YETTY_ERR(yetty_ycore_void, "ymap: zoom exceeds maximum (19)");
     }
     if (config->width_px == 0 || config->height_px == 0 || config->width_px > OSM_MAX_VIEWPORT_PX ||
         config->height_px > OSM_MAX_VIEWPORT_PX) {
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet: viewport size out of range (1..4096 px)");
+        return YETTY_ERR(yetty_ycore_void, "ymap: viewport size out of range (1..4096 px)");
     }
     if (config->latitude < -85.06 || config->latitude > 85.06) {
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet: latitude outside Web-Mercator range");
+        return YETTY_ERR(yetty_ycore_void, "ymap: latitude outside Web-Mercator range");
     }
     if (config->longitude < -180.0 || config->longitude > 180.0) {
-        return YETTY_ERR(yetty_ycore_void, "yopenstreet: longitude out of range");
+        return YETTY_ERR(yetty_ycore_void, "ymap: longitude out of range");
     }
     return YETTY_OK_VOID();
 }
 
-struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render(
-    const struct yetty_yopenstreet_config *config)
+struct yetty_ydraw_drawable_list_result yetty_ymap_render_raster(
+    const struct yetty_ymap_config *config)
 {
     struct yetty_ycore_void_result valid_res = validate_config(config);
-    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, valid_res, "yopenstreet: invalid config");
+    YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, valid_res, "ymap: invalid config");
 
     const char *url_template =
         config->tile_url_template ? config->tile_url_template : OSM_DEFAULT_TILE_URL;
@@ -146,7 +146,7 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render(
     /* Viewport in global pixel space, centered on lat/lon. */
     double center_pixel_x = 0.0;
     double center_pixel_y = 0.0;
-    yetty_yopenstreet_lonlat_to_global_pixel(config->longitude, config->latitude, config->zoom,
+    yetty_ymap_lonlat_to_global_pixel(config->longitude, config->latitude, config->zoom,
                                              &center_pixel_x, &center_pixel_y);
     int64_t origin_x = (int64_t)llround(center_pixel_x) - (int64_t)config->width_px / 2;
     int64_t origin_y = (int64_t)llround(center_pixel_y) - (int64_t)config->height_px / 2;
@@ -163,13 +163,13 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render(
     int64_t tiles_total = (tile_x_last - tile_x_first + 1) * (tile_y_last - tile_y_first + 1);
     if (tiles_total > (int64_t)OSM_MAX_TILES_PER_RENDER) {
         return YETTY_ERR(yetty_ydraw_drawable_list,
-                         "yopenstreet: viewport covers too many tiles — reduce size or zoom out");
+                         "ymap: viewport covers too many tiles — reduce size or zoom out");
     }
 
     size_t pixel_count = (size_t)config->width_px * (size_t)config->height_px;
     uint32_t *composite = malloc(pixel_count * sizeof(uint32_t));
     if (!composite) {
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yopenstreet: composite alloc failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymap: composite alloc failed");
     }
     for (size_t i = 0; i < pixel_count; i++) {
         composite[i] = OSM_BACKGROUND_PIXEL;
@@ -183,13 +183,13 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render(
         uint32_t request_index;
     };
     struct osm_blit_slot *slots = malloc((size_t)tiles_total * sizeof(struct osm_blit_slot));
-    struct yetty_yopenstreet_tile_request *requests =
-        calloc((size_t)tiles_total, sizeof(struct yetty_yopenstreet_tile_request));
+    struct yetty_ymap_tile_request *requests =
+        calloc((size_t)tiles_total, sizeof(struct yetty_ymap_tile_request));
     if (!slots || !requests) {
         free(slots);
         free(requests);
         free(composite);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yopenstreet: tile set alloc failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymap: tile set alloc failed");
     }
     uint32_t slot_count = 0;
     uint32_t request_count = 0;
@@ -218,19 +218,19 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render(
     }
 
     const char *tile_extension = config->tile_file_extension ? config->tile_file_extension : "png";
-    struct yetty_ycore_void_result fetch_res = yetty_yopenstreet_tiles_fetch(
+    struct yetty_ycore_void_result fetch_res = yetty_ymap_tiles_fetch(
         url_template, cache_root, tile_extension, config->zoom, requests, request_count);
     if (YETTY_IS_ERR(fetch_res)) {
         free(slots);
         free(requests);
         free(composite);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yopenstreet: batch fetch", fetch_res);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymap: batch fetch", fetch_res);
     }
 
     uint32_t tiles_blitted = 0;
     for (uint32_t i = 0; i < slot_count; i++) {
         const struct osm_blit_slot *slot = &slots[i];
-        const struct yetty_yopenstreet_tile_request *request = &requests[slot->request_index];
+        const struct yetty_ymap_tile_request *request = &requests[slot->request_index];
         if (!request->bytes) {
             continue; /* best-effort: background hole stays */
         }
@@ -240,7 +240,7 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render(
         stbi_uc *tile_pixels = stbi_load_from_memory(request->bytes, (int)request->len, &tile_w,
                                                      &tile_h, &channels, 4);
         if (!tile_pixels) {
-            ywarn("yopenstreet: tile %u/%u/%lld decode failed: %s", config->zoom, request->tile_x,
+            ywarn("ymap: tile %u/%u/%lld decode failed: %s", config->zoom, request->tile_x,
                   (long long)slot->tile_y, stbi_failure_reason());
             continue;
         }
@@ -259,9 +259,9 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render(
     if (tiles_blitted == 0) {
         free(composite);
         return YETTY_ERR(yetty_ydraw_drawable_list,
-                         "yopenstreet: no tile could be fetched — offline and cold cache?");
+                         "ymap: no tile could be fetched — offline and cold cache?");
     }
-    ydebug("yopenstreet: composited %u/%lld tiles for %ux%u px at z%u", tiles_blitted,
+    ydebug("ymap: composited %u/%lld tiles for %ux%u px at z%u", tiles_blitted,
            (long long)tiles_total, config->width_px, config->height_px, config->zoom);
 
     /* Pack as ONE yimage prim — identical path to yetty_yimage_render,
@@ -282,14 +282,14 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render(
     uint8_t *prim_buf = malloc(required);
     if (!prim_buf) {
         free(composite);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yopenstreet: prim alloc failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymap: prim alloc failed");
     }
     struct yetty_ycore_size_result serialize_res =
         yetty_yimage_uniforms_serialize(&uniforms, &buffers, prim_buf, required);
     free(composite);
     if (YETTY_IS_ERR(serialize_res)) {
         free(prim_buf);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yopenstreet: serialize failed", serialize_res);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymap: serialize failed", serialize_res);
     }
 
     struct yetty_ydraw_drawable_list_config list_config = {
@@ -302,22 +302,15 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render(
         yetty_ydraw_drawable_list_config_buffer_create(&list_config);
     if (YETTY_IS_ERR(list_res)) {
         free(prim_buf);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yopenstreet: list create failed", list_res);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymap: list create failed", list_res);
     }
     struct yetty_ydraw_id_result add_res =
         yetty_ydraw_drawable_list_add_prim(list_res.value, prim_buf, required);
     free(prim_buf);
     if (YETTY_IS_ERR(add_res)) {
         yetty_ydraw_drawable_list_destroy(list_res.value);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yopenstreet: add_prim failed", add_res);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymap: add_prim failed", add_res);
     }
     return YETTY_OK(yetty_ydraw_drawable_list, list_res.value);
 }
 
-struct yetty_ycore_size_result yetty_yopenstreet_osc_bin_emit(
-    const struct yetty_ydraw_drawable_list *buffer, FILE *out)
-{
-    /* The list holds a generic yimage prim — yimage's emitter is the
-     * single source of truth for the envelope shape. */
-    return yetty_yimage_osc_bin_emit(buffer, out);
-}
