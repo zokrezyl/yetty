@@ -81,7 +81,20 @@ static struct yetty_ycore_void_result codex_send_user_message(struct yetty_yclas
         sandbox_mode = "workspace-write";
     }
 
-    const char *args[16];
+    /* Reasoning effort for the OpenAI model — codex's model_reasoning_effort
+     * config key (minimal / low / medium / high). Off by default (the
+     * model's own default applies); opt in via YAI_CODEX_EFFORT. */
+    const char *effort = getenv("YAI_CODEX_EFFORT");
+    char effort_override[64] = "";
+    if (effort && effort[0] && strcmp(effort, "default") != 0) {
+        int written =
+            snprintf(effort_override, sizeof(effort_override), "model_reasoning_effort=%s", effort);
+        if (written < 0 || (size_t)written >= sizeof(effort_override)) {
+            return YETTY_ERR(yetty_ycore_void, "codex send_user_message: YAI_CODEX_EFFORT too long");
+        }
+    }
+
+    const char *args[20];
     int arg_count = 0;
     args[arg_count++] = "codex";
     args[arg_count++] = "exec";
@@ -92,6 +105,10 @@ static struct yetty_ycore_void_result codex_send_user_message(struct yetty_yclas
     if (model_override[0]) {
         args[arg_count++] = "-c";
         args[arg_count++] = model_override;
+    }
+    if (effort_override[0]) {
+        args[arg_count++] = "-c";
+        args[arg_count++] = effort_override;
     }
     if (app->session_id[0]) {
         args[arg_count++] = "resume";
@@ -268,6 +285,8 @@ static struct yetty_ycore_void_result codex_config_knob(struct yetty_yclass_ctx 
     if (!sandbox_mode || !sandbox_mode[0]) {
         sandbox_mode = "workspace-write";
     }
+    /* Reasoning effort is a model parameter — it lives on the model tab
+     * (main.c build_effort_knob), not here. */
     int written = snprintf(out, out_size,
                            "YAI_CODEX_SANDBOX|sandbox|"
                            "read-only,workspace-write,danger-full-access|%s",

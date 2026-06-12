@@ -1,0 +1,385 @@
+methods:
+  - slot: configure
+    domain: ymap
+    owning_class: map
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: latitude
+        type: double
+      - name: longitude
+        type: double
+      - name: zoom
+        type: uint32_t
+      - name: width_px
+        type: uint32_t
+      - name: height_px
+        type: uint32_t
+    local: true
+  - slot: set_provider
+    domain: ymap
+    owning_class: map
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "const char *"
+    local: true
+  - slot: set_custom_provider
+    domain: ymap
+    owning_class: map
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: url_template
+        type: "const char *"
+      - name: is_vector
+        type: int
+      - name: file_extension
+        type: "const char *"
+      - name: max_zoom
+        type: uint32_t
+      - name: attribution
+        type: "const char *"
+    local: true
+  - slot: set_center
+    domain: ymap
+    owning_class: map
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: latitude
+        type: double
+      - name: longitude
+        type: double
+    local: true
+  - slot: set_zoom
+    domain: ymap
+    owning_class: map
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: zoom
+        type: uint32_t
+    local: true
+  - slot: set_viewport
+    domain: ymap
+    owning_class: map
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: width_px
+        type: uint32_t
+      - name: height_px
+        type: uint32_t
+    local: true
+  - slot: pan_by_pixels
+    domain: ymap
+    owning_class: map
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: delta_x
+        type: double
+      - name: delta_y
+        type: double
+    local: true
+  - slot: zoom_by_at
+    domain: ymap
+    owning_class: map
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: step
+        type: int32_t
+      - name: anchor_x
+        type: double
+      - name: anchor_y
+        type: double
+    local: true
+  - slot: get_zoom
+    domain: ymap
+    owning_class: map
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: geolocate
+    domain: ymap
+    owning_class: map
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: attribution
+    domain: ymap
+    owning_class: map
+    return_type: struct yetty_ycore_const_char_ptr_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: is_vector
+    domain: ymap
+    owning_class: map
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: render
+    domain: ymap
+    owning_class: map
+    return_type: struct yetty_ydraw_drawable_list_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: destroy
+    domain: ymap
+    owning_class: map
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+classes:
+  - name: map
+    domain: ymap
+    accessor: yetty_ymap_map_class_get
+    type: regular
+    source_file: src/yetty/ymap/map.c
+    parent: null
+    mixins: []
+    data: struct yetty_ymap_map
+    data_fields:
+      - name: latitude
+        type: double
+        get: false
+        set: false
+      - name: longitude
+        type: double
+        get: false
+        set: false
+      - name: zoom
+        type: uint32_t
+        get: false
+        set: false
+      - name: width_px
+        type: uint32_t
+        get: false
+        set: false
+      - name: height_px
+        type: uint32_t
+        get: false
+        set: false
+      - name: provider
+        type: "const struct ymap_provider *"
+        get: false
+        set: false
+      - name: custom_url_template
+        type: "char *"
+        get: false
+        set: false
+      - name: custom_attribution
+        type: "char *"
+        get: false
+        set: false
+      - name: custom_extension
+        type: "char[16]"
+        get: false
+        set: false
+      - name: custom_max_zoom
+        type: uint32_t
+        get: false
+        set: false
+      - name: custom_vector
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: configure
+        slot_domain: ymap
+        impl: map_configure
+      - slot: set_provider
+        slot_domain: ymap
+        impl: map_set_provider
+      - slot: set_custom_provider
+        slot_domain: ymap
+        impl: map_set_custom_provider
+      - slot: set_center
+        slot_domain: ymap
+        impl: map_set_center
+      - slot: set_zoom
+        slot_domain: ymap
+        impl: map_set_zoom
+      - slot: set_viewport
+        slot_domain: ymap
+        impl: map_set_viewport
+      - slot: pan_by_pixels
+        slot_domain: ymap
+        impl: map_pan_by_pixels
+      - slot: zoom_by_at
+        slot_domain: ymap
+        impl: map_zoom_by_at
+      - slot: get_zoom
+        slot_domain: ymap
+        impl: map_get_zoom
+      - slot: geolocate
+        slot_domain: ymap
+        impl: map_geolocate
+      - slot: attribution
+        slot_domain: ymap
+        impl: map_attribution
+      - slot: is_vector
+        slot_domain: ymap
+        impl: map_is_vector
+      - slot: render
+        slot_domain: ymap
+        impl: map_render
+      - slot: destroy
+        slot_domain: ymap
+        impl: map_destroy
+exposed:
+  - source_file: src/yetty/ymap/map.c
+    verbatim: "/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
+ * generated map.h needs the complete type. */
+#include <yetty/ydraw-core/drawable-list.h>"
+  - source_file: src/yetty/ymap/map.c
+    name: yetty_ymap_provider_count
+    return_type: uint32_t
+    args: []
+  - source_file: src/yetty/ymap/map.c
+    name: yetty_ymap_provider_info
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: index
+        type: uint32_t
+      - name: out_name
+        type: "const char **"
+      - name: out_attribution
+        type: "const char **"
+      - name: out_max_zoom
+        type: "uint32_t *"
+      - name: out_is_vector
+        type: "int *"
+  - source_file: src/yetty/ymap/map.c
+    name: yetty_ymap_emit_osc
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: list
+        type: "const struct yetty_ydraw_drawable_list *"
+      - name: fd
+        type: int
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_const_char_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const char *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ydraw_drawable_list_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ydraw_drawable_list *"
+          - name: error
+            type: struct yetty_ycore_error

@@ -53,6 +53,11 @@
 #define YAI_HUD_CONFIG_INFO_HEIGHT 20.0f
 #define YAI_HUD_CONFIG_CONTROL_HEIGHT 24.0f
 #define YAI_HUD_CONFIG_TABBAR_HEIGHT 28.0f
+/* Mirrors the ygui tabbar's pill metrics (tabbar.c TABBAR_PILL_PREF_W /
+ * TABBAR_PILL_GAP): each tab is a fixed-width pill, so the dialog must be
+ * at least wide enough to hold the whole strip or the tabs overflow it. */
+#define YAI_HUD_CONFIG_TAB_PILL_WIDTH 160.0f
+#define YAI_HUD_CONFIG_TAB_PILL_GAP 4.0f
 /* Shared across all tabs (only the active tab's rows are visible), so it
  * must cover the SUM of every tab's read-only rows. */
 #define YAI_HUD_CONFIG_MAX_INFO_ROWS 36
@@ -890,7 +895,16 @@ struct yetty_ycore_void_result yai_hud_toggle_config(struct yai_hud *hud,
     float dialog_height = YAI_HUD_CONFIG_TOP_PAD + YAI_HUD_CONFIG_TABBAR_HEIGHT +
                           YAI_HUD_CONFIG_GAP + max_content - YAI_HUD_CONFIG_GAP +
                           YAI_HUD_CONFIG_BOTTOM_PAD;
-    float dialog_x = (hud->viewport_width - YAI_HUD_CONFIG_WIDTH) / 2.0f;
+    /* Widen the dialog so the fixed-width tab pills always fit (the strip
+     * is tab_count pills + gaps inside the dialog's L/R padding). */
+    float tabs_width = (float)tab_count * YAI_HUD_CONFIG_TAB_PILL_WIDTH +
+                       (float)(tab_count - 1) * YAI_HUD_CONFIG_TAB_PILL_GAP +
+                       2.0f * YAI_HUD_CONFIG_BOTTOM_PAD;
+    float dialog_width = YAI_HUD_CONFIG_WIDTH;
+    if (tabs_width > dialog_width) {
+        dialog_width = tabs_width;
+    }
+    float dialog_x = (hud->viewport_width - dialog_width) / 2.0f;
     float dialog_y = (hud->viewport_height - dialog_height) / 2.0f;
     if (dialog_x < 0.0f) {
         dialog_x = 0.0f;
@@ -899,7 +913,7 @@ struct yetty_ycore_void_result yai_hud_toggle_config(struct yai_hud *hud,
         dialog_y = 0.0f;
     }
     struct yetty_ycore_void_result open_res = yetty_ygui_dialog_open_at(
-        hud->config_dialog, dialog_x, dialog_y, YAI_HUD_CONFIG_WIDTH, dialog_height);
+        hud->config_dialog, dialog_x, dialog_y, dialog_width, dialog_height);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, open_res, "yai_hud_toggle_config: open");
     yetty_ygui_framework_mark_dirty(hud->framework);
     struct yetty_ycore_void_result flush_res = yai_hud_flush(hud);

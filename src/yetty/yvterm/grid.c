@@ -93,8 +93,8 @@ static struct yetty_ycore_void_result grid_figure_render_slot(struct yetty_yclas
     float inset_right = grid->content->content_inset_right;
     float inset_top = grid->content->content_inset_top;
     float inset_bottom = grid->content->content_inset_bottom;
-    int inset_active = (inset_left > 0.0f || inset_right > 0.0f || inset_top > 0.0f ||
-                        inset_bottom > 0.0f);
+    int inset_active =
+        (inset_left > 0.0f || inset_right > 0.0f || inset_top > 0.0f || inset_bottom > 0.0f);
     if (inset_active) {
         struct yetty_yrender_viewport content = {
             .x = saved_viewport.x + inset_left,

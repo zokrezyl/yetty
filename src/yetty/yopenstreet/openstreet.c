@@ -175,13 +175,24 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render(
         composite[i] = OSM_BACKGROUND_PIXEL;
     }
 
-    CURL *curl_handle = yetty_yopenstreet_curl_acquire();
-    if (!curl_handle) {
+    /* Collect the covering tile set (wrapped duplicates deduped), fetch
+     * everything in one parallel batch, then decode + blit. */
+    struct osm_blit_slot {
+        int64_t tile_x; /* unwrapped — blit position */
+        int64_t tile_y;
+        uint32_t request_index;
+    };
+    struct osm_blit_slot *slots = malloc((size_t)tiles_total * sizeof(struct osm_blit_slot));
+    struct yetty_yopenstreet_tile_request *requests =
+        calloc((size_t)tiles_total, sizeof(struct yetty_yopenstreet_tile_request));
+    if (!slots || !requests) {
+        free(slots);
+        free(requests);
         free(composite);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yopenstreet: curl_easy_init failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yopenstreet: tile set alloc failed");
     }
-
-    uint32_t tiles_blitted = 0;
+    uint32_t slot_count = 0;
+    uint32_t request_count = 0;
     for (int64_t tile_y = tile_y_first; tile_y <= tile_y_last; tile_y++) {
         if (tile_y < 0 || tile_y >= tile_count) {
             continue; /* north/south of the map — background stays */
@@ -189,40 +200,61 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render(
         for (int64_t tile_x = tile_x_first; tile_x <= tile_x_last; tile_x++) {
             /* Longitude wraps. */
             uint32_t wrapped_x = (uint32_t)(((tile_x % tile_count) + tile_count) % tile_count);
-
-            uint8_t *png_bytes = NULL;
-            size_t png_len = 0;
-            struct yetty_ycore_void_result tile_res = yetty_yopenstreet_tile_fetch(
-                curl_handle, url_template, cache_root, "png", config->zoom, wrapped_x,
-                (uint32_t)tile_y, &png_bytes, &png_len);
-            if (YETTY_IS_ERR(tile_res)) {
-                /* Best-effort by design: leave the background hole. */
-                ywarn("yopenstreet: tile %u/%u/%lld failed: %s", config->zoom, wrapped_x,
-                      (long long)tile_y, tile_res.error.msg);
-                yetty_ycore_error_destroy(tile_res.error);
-                continue;
+            uint32_t request_index = request_count;
+            for (uint32_t i = 0; i < request_count; i++) {
+                if (requests[i].tile_x == wrapped_x && requests[i].tile_y == (uint32_t)tile_y) {
+                    request_index = i;
+                    break;
+                }
             }
-
-            int tile_w = 0;
-            int tile_h = 0;
-            int channels = 0;
-            stbi_uc *tile_pixels =
-                stbi_load_from_memory(png_bytes, (int)png_len, &tile_w, &tile_h, &channels, 4);
-            free(png_bytes);
-            if (!tile_pixels) {
-                ywarn("yopenstreet: tile %u/%u/%lld decode failed: %s", config->zoom, wrapped_x,
-                      (long long)tile_y, stbi_failure_reason());
-                continue;
+            if (request_index == request_count) {
+                requests[request_count].tile_x = wrapped_x;
+                requests[request_count].tile_y = (uint32_t)tile_y;
+                request_count++;
             }
-
-            blit_tile(composite, config->width_px, config->height_px, (const uint32_t *)tile_pixels,
-                      tile_w, tile_h, tile_x * (int64_t)OSM_TILE_SIZE - origin_x,
-                      tile_y * (int64_t)OSM_TILE_SIZE - origin_y);
-            stbi_image_free(tile_pixels);
-            tiles_blitted++;
+            slots[slot_count++] = (struct osm_blit_slot){
+                .tile_x = tile_x, .tile_y = tile_y, .request_index = request_index};
         }
     }
-    yetty_yopenstreet_curl_release(curl_handle);
+
+    const char *tile_extension = config->tile_file_extension ? config->tile_file_extension : "png";
+    struct yetty_ycore_void_result fetch_res = yetty_yopenstreet_tiles_fetch(
+        url_template, cache_root, tile_extension, config->zoom, requests, request_count);
+    if (YETTY_IS_ERR(fetch_res)) {
+        free(slots);
+        free(requests);
+        free(composite);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yopenstreet: batch fetch", fetch_res);
+    }
+
+    uint32_t tiles_blitted = 0;
+    for (uint32_t i = 0; i < slot_count; i++) {
+        const struct osm_blit_slot *slot = &slots[i];
+        const struct yetty_yopenstreet_tile_request *request = &requests[slot->request_index];
+        if (!request->bytes) {
+            continue; /* best-effort: background hole stays */
+        }
+        int tile_w = 0;
+        int tile_h = 0;
+        int channels = 0;
+        stbi_uc *tile_pixels = stbi_load_from_memory(request->bytes, (int)request->len, &tile_w,
+                                                     &tile_h, &channels, 4);
+        if (!tile_pixels) {
+            ywarn("yopenstreet: tile %u/%u/%lld decode failed: %s", config->zoom, request->tile_x,
+                  (long long)slot->tile_y, stbi_failure_reason());
+            continue;
+        }
+        blit_tile(composite, config->width_px, config->height_px, (const uint32_t *)tile_pixels,
+                  tile_w, tile_h, slot->tile_x * (int64_t)OSM_TILE_SIZE - origin_x,
+                  slot->tile_y * (int64_t)OSM_TILE_SIZE - origin_y);
+        stbi_image_free(tile_pixels);
+        tiles_blitted++;
+    }
+    for (uint32_t i = 0; i < request_count; i++) {
+        free(requests[i].bytes);
+    }
+    free(requests);
+    free(slots);
 
     if (tiles_blitted == 0) {
         free(composite);

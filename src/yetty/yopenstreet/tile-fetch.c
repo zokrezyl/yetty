@@ -20,6 +20,31 @@
 #define OSM_USER_AGENT "yetty-yopenstreet/0.1 (+https://github.com/zokrezyl/yetty)"
 #define OSM_FETCH_TIMEOUT_SECONDS 20L
 
+/* Newest HTTP version this libcurl can attempt. yetty's vendored curl is
+ * built with ngtcp2/nghttp3 (HTTP/3 + QUIC) on Linux; curl never tries
+ * h3 unless asked, so ask — CURL_HTTP_VERSION_3 races QUIC against
+ * TCP+h2/h1.1 and falls back automatically (curl >= 8.4 semantics). On
+ * builds without the QUIC stack the default stands: h2 via TLS ALPN. */
+static long osm_preferred_http_version(void)
+{
+    static long preferred_version; /* 0 = not probed yet */
+    if (preferred_version == 0) {
+#ifdef CURL_VERSION_HTTP3
+        const curl_version_info_data *info = curl_version_info(CURLVERSION_NOW);
+        if (info && (info->features & CURL_VERSION_HTTP3)) {
+            preferred_version = CURL_HTTP_VERSION_3;
+            yinfo("yopenstreet: libcurl %s has HTTP/3 — racing QUIC with TCP fallback",
+                  info->version);
+        } else {
+            preferred_version = CURL_HTTP_VERSION_2TLS;
+        }
+#else
+        preferred_version = CURL_HTTP_VERSION_2TLS;
+#endif
+    }
+    return preferred_version;
+}
+
 /*=============================================================================
  * curl lifecycle
  *===========================================================================*/
@@ -132,6 +157,7 @@ static struct yetty_ycore_void_result fetch_url(CURL *curl_handle, const char *u
 {
     struct osm_growable_buffer body = {0};
     curl_easy_setopt(curl_handle, CURLOPT_URL, url);
+    curl_easy_setopt(curl_handle, CURLOPT_HTTP_VERSION, osm_preferred_http_version());
     curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl_handle, CURLOPT_MAXREDIRS, 5L);
     curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT,
@@ -211,5 +237,199 @@ struct yetty_ycore_void_result yetty_yopenstreet_tile_fetch(
         ywarn("yopenstreet: cache write failed for %s: %s", cache_path, write_res.error.msg);
         yetty_ycore_error_destroy(write_res.error);
     }
+    return YETTY_OK_VOID();
+}
+
+/*=============================================================================
+ * Parallel batch fetch (curl-multi)
+ *
+ * Cache hits are read synchronously up front; the remaining tiles
+ * download concurrently. Parallelism is bounded politely: the OSM tile
+ * usage policy allows at most two simultaneous connections per host, so
+ * the multi handle is capped there and HTTP/2 multiplexing carries the
+ * rest of the concurrency on those two connections.
+ *===========================================================================*/
+
+#define OSM_MAX_HOST_CONNECTIONS 2L
+#define OSM_MAX_TOTAL_CONNECTIONS 4L
+
+struct osm_tile_transfer {
+    struct yetty_yopenstreet_tile_request *request;
+    struct osm_growable_buffer body;
+    char url[1024];
+};
+
+static void tile_transfer_configure(CURL *easy_handle, struct osm_tile_transfer *transfer)
+{
+    curl_easy_setopt(easy_handle, CURLOPT_URL, transfer->url);
+    curl_easy_setopt(easy_handle, CURLOPT_HTTP_VERSION, osm_preferred_http_version());
+    curl_easy_setopt(easy_handle, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(easy_handle, CURLOPT_MAXREDIRS, 5L);
+    curl_easy_setopt(easy_handle, CURLOPT_TIMEOUT, OSM_FETCH_TIMEOUT_SECONDS);
+    curl_easy_setopt(easy_handle, CURLOPT_USERAGENT, OSM_USER_AGENT);
+    curl_easy_setopt(easy_handle, CURLOPT_ACCEPT_ENCODING, "");
+    curl_easy_setopt(easy_handle, CURLOPT_WRITEFUNCTION, osm_curl_write_callback);
+    curl_easy_setopt(easy_handle, CURLOPT_WRITEDATA, &transfer->body);
+    curl_easy_setopt(easy_handle, CURLOPT_PRIVATE, transfer);
+}
+
+/* Completion of one transfer: success keeps the body in the request slot
+ * and writes the cache back; failure logs and leaves the slot NULL. */
+static void tile_transfer_finish(CURL *easy_handle, CURLcode curl_result, const char *cache_root,
+                                 const char *cache_file_extension, uint32_t zoom)
+{
+    struct osm_tile_transfer *transfer = NULL;
+    curl_easy_getinfo(easy_handle, CURLINFO_PRIVATE, &transfer);
+    if (!transfer) {
+        return;
+    }
+    long http_status = 0;
+    curl_easy_getinfo(easy_handle, CURLINFO_RESPONSE_CODE, &http_status);
+    long negotiated_version = 0;
+    curl_easy_getinfo(easy_handle, CURLINFO_HTTP_VERSION, &negotiated_version);
+    ydebug("yopenstreet: tile %u/%u done, HTTP version code %ld (30=h3 20=h2)",
+           transfer->request->tile_x, transfer->request->tile_y, negotiated_version);
+
+    if (curl_result != CURLE_OK || http_status >= 400 || transfer->body.len == 0) {
+        ywarn("yopenstreet: tile %u/%u/%u download failed (%s, HTTP %ld)", zoom,
+              transfer->request->tile_x, transfer->request->tile_y, curl_easy_strerror(curl_result),
+              http_status);
+        free(transfer->body.data);
+        transfer->body.data = NULL;
+        return;
+    }
+
+    transfer->request->bytes = transfer->body.data;
+    transfer->request->len = transfer->body.len;
+    transfer->body.data = NULL;
+
+    /* Best-effort cache write-back, same as the serial path. */
+    char cache_tile_dir[1024];
+    char cache_path[1280];
+    snprintf(cache_tile_dir, sizeof(cache_tile_dir), "%s/%u/%u", cache_root, zoom,
+             transfer->request->tile_x);
+    snprintf(cache_path, sizeof(cache_path), "%s/%u.%s", cache_tile_dir, transfer->request->tile_y,
+             cache_file_extension);
+    yetty_yplatform_mkdir_p(cache_tile_dir);
+    struct yetty_ycore_void_result write_res =
+        write_entire_file(cache_path, transfer->request->bytes, transfer->request->len);
+    if (YETTY_IS_ERR(write_res)) {
+        ywarn("yopenstreet: cache write failed for %s: %s", cache_path, write_res.error.msg);
+        yetty_ycore_error_destroy(write_res.error);
+    }
+}
+
+struct yetty_ycore_void_result yetty_yopenstreet_tiles_fetch(
+    const char *url_template, const char *cache_root, const char *cache_file_extension,
+    uint32_t zoom, struct yetty_yopenstreet_tile_request *requests, uint32_t request_count)
+{
+    if (!url_template || !cache_root || !cache_file_extension || (!requests && request_count)) {
+        return YETTY_ERR(yetty_ycore_void, "yopenstreet tiles_fetch: NULL argument");
+    }
+    if (request_count == 0) {
+        return YETTY_OK_VOID();
+    }
+
+    /* Pass 1: serve cache hits, collect the misses. */
+    uint32_t miss_count = 0;
+    for (uint32_t i = 0; i < request_count; i++) {
+        struct yetty_yopenstreet_tile_request *request = &requests[i];
+        request->bytes = NULL;
+        request->len = 0;
+        char cache_path[1280];
+        snprintf(cache_path, sizeof(cache_path), "%s/%u/%u/%u.%s", cache_root, zoom,
+                 request->tile_x, request->tile_y, cache_file_extension);
+        if (yetty_yplatform_file_is_regular(cache_path)) {
+            struct yetty_ycore_void_result read_res =
+                read_entire_file(cache_path, &request->bytes, &request->len);
+            if (YETTY_IS_OK(read_res)) {
+                continue;
+            }
+            yetty_ycore_error_destroy(read_res.error);
+            ywarn("yopenstreet: unreadable cache entry %s; re-downloading", cache_path);
+        }
+        miss_count++;
+    }
+    if (miss_count == 0) {
+        return YETTY_OK_VOID();
+    }
+
+    /* curl global init guard (shared with the easy-handle path). */
+    CURL *probe_handle = yetty_yopenstreet_curl_acquire();
+    if (!probe_handle) {
+        return YETTY_ERR(yetty_ycore_void, "yopenstreet tiles_fetch: curl init failed");
+    }
+    yetty_yopenstreet_curl_release(probe_handle);
+
+    CURLM *multi_handle = curl_multi_init();
+    if (!multi_handle) {
+        return YETTY_ERR(yetty_ycore_void, "yopenstreet tiles_fetch: curl_multi_init failed");
+    }
+    curl_multi_setopt(multi_handle, CURLMOPT_MAX_HOST_CONNECTIONS, OSM_MAX_HOST_CONNECTIONS);
+    curl_multi_setopt(multi_handle, CURLMOPT_MAX_TOTAL_CONNECTIONS, OSM_MAX_TOTAL_CONNECTIONS);
+    curl_multi_setopt(multi_handle, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
+
+    struct osm_tile_transfer *transfers = calloc(miss_count, sizeof(struct osm_tile_transfer));
+    CURL **easy_handles = calloc(miss_count, sizeof(CURL *));
+    if (!transfers || !easy_handles) {
+        free(transfers);
+        free(easy_handles);
+        curl_multi_cleanup(multi_handle);
+        return YETTY_ERR(yetty_ycore_void, "yopenstreet tiles_fetch: transfer alloc failed");
+    }
+
+    uint32_t transfer_count = 0;
+    for (uint32_t i = 0; i < request_count; i++) {
+        if (requests[i].bytes) {
+            continue; /* cache hit */
+        }
+        struct osm_tile_transfer *transfer = &transfers[transfer_count];
+        transfer->request = &requests[i];
+        snprintf(transfer->url, sizeof(transfer->url), url_template, zoom, requests[i].tile_x,
+                 requests[i].tile_y);
+        CURL *easy_handle = curl_easy_init();
+        if (!easy_handle) {
+            ywarn("yopenstreet: easy handle alloc failed for tile %u/%u — skipped",
+                  requests[i].tile_x, requests[i].tile_y);
+            continue;
+        }
+        tile_transfer_configure(easy_handle, transfer);
+        curl_multi_add_handle(multi_handle, easy_handle);
+        easy_handles[transfer_count] = easy_handle;
+        transfer_count++;
+    }
+
+    int still_running = 0;
+    do {
+        CURLMcode multi_result = curl_multi_perform(multi_handle, &still_running);
+        if (multi_result != CURLM_OK) {
+            ywarn("yopenstreet: curl_multi_perform: %s", curl_multi_strerror(multi_result));
+            break;
+        }
+        if (still_running) {
+            curl_multi_poll(multi_handle, NULL, 0, 1000, NULL);
+        }
+        /* Drain completions as they arrive so cache write-back overlaps
+         * the remaining transfers. */
+        int messages_left = 0;
+        CURLMsg *message;
+        while ((message = curl_multi_info_read(multi_handle, &messages_left))) {
+            if (message->msg == CURLMSG_DONE) {
+                tile_transfer_finish(message->easy_handle, message->data.result, cache_root,
+                                     cache_file_extension, zoom);
+                curl_multi_remove_handle(multi_handle, message->easy_handle);
+            }
+        }
+    } while (still_running);
+
+    for (uint32_t i = 0; i < transfer_count; i++) {
+        if (easy_handles[i]) {
+            curl_easy_cleanup(easy_handles[i]);
+        }
+        free(transfers[i].body.data); /* leftovers of aborted transfers */
+    }
+    free(easy_handles);
+    free(transfers);
+    curl_multi_cleanup(multi_handle);
     return YETTY_OK_VOID();
 }

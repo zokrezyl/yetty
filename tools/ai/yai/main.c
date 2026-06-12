@@ -78,6 +78,7 @@
 #include <yetty/ytrace/ytrace.h>
 
 #include <errno.h>
+#include <poll.h>
 #include <fcntl.h>
 #include <signal.h>
 #include <stdint.h>
@@ -279,6 +280,47 @@ static struct yetty_ycore_void_result leave_raw_input(struct yai_app *app)
  * Pane-wide mouse subscription (client-input OSC envelopes on stdin)
  *---------------------------------------------------------------------------*/
 
+/* Emit a yface envelope to stdout, tolerating EAGAIN. yai's stdout is
+ * non-blocking (it shares the tty file description with the polled stdin),
+ * so the straight yetty_yface_emit_to_fd — which retries only EINTR —
+ * fails mid-write when the master pipe is briefly full (a resize storm, or
+ * a fast mouse-drag spewing reinject envelopes). Build the bytes, then
+ * drain them with a POLLOUT wait, the discipline the HUD pty shim uses.
+ * Pending stdio is flushed first so the envelope serialises after buffered
+ * text (yai is the single PTY writer). */
+static struct yetty_ycore_void_result yai_emit_stdout_envelope(int wire_code, const void *payload,
+                                                               size_t payload_len)
+{
+    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "yai_emit_stdout_envelope: flush");
+    struct yetty_ycore_buffer buffer = {0};
+    struct yetty_ycore_void_result emit_res =
+        yetty_yface_emit(wire_code, 0, NULL, 0, payload, payload_len, &buffer);
+    if (YETTY_IS_ERR(emit_res)) {
+        yetty_ycore_buffer_destroy(&buffer);
+        return YETTY_ERR(yetty_ycore_void, "yai_emit_stdout_envelope: encode", emit_res);
+    }
+    size_t written = 0;
+    while (written < buffer.size) {
+        ssize_t chunk = write(STDOUT_FILENO, buffer.data + written, buffer.size - written);
+        if (chunk < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                struct pollfd ready = {.fd = STDOUT_FILENO, .events = POLLOUT};
+                (void)poll(&ready, 1, -1);
+                continue;
+            }
+            yetty_ycore_buffer_destroy(&buffer);
+            return YETTY_ERR(yetty_ycore_void, "yai_emit_stdout_envelope: write failed");
+        }
+        written += (size_t)chunk;
+    }
+    yetty_ycore_buffer_destroy(&buffer);
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result emit_mouse_sub(uint32_t flags)
 {
     struct yetty_client_input_sub sub = {
@@ -286,11 +328,9 @@ static struct yetty_ycore_void_result emit_mouse_sub(uint32_t flags)
         .version = YMGUI_WIRE_VERSION,
         .flags = flags,
     };
-    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "emit_mouse_sub: flush");
-    struct yetty_ycore_void_result emit_res = yetty_yface_emit_to_fd(
-        STDOUT_FILENO, YETTY_OSC_CS_CLIENT_INPUT_SUB, 0, NULL, 0, &sub, sizeof(sub));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "emit_mouse_sub: emit_to_fd");
+    struct yetty_ycore_void_result emit_res =
+        yai_emit_stdout_envelope(YETTY_OSC_CS_CLIENT_INPUT_SUB, &sub, sizeof(sub));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "emit_mouse_sub: emit");
     return YETTY_OK_VOID();
 }
 
@@ -473,11 +513,9 @@ static struct yetty_ycore_void_result run_shell(struct yai_app *app, const char 
  * forward everything; this is the return path for the rest. */
 static struct yetty_ycore_void_result reinject_mouse(const struct yetty_client_input_mouse *mouse)
 {
-    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "reinject_mouse: flush");
-    struct yetty_ycore_void_result emit_res = yetty_yface_emit_to_fd(
-        STDOUT_FILENO, YETTY_OSC_CS_CLIENT_INPUT_REINJECT, 0, NULL, 0, mouse, sizeof(*mouse));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "reinject_mouse: emit_to_fd");
+    struct yetty_ycore_void_result emit_res =
+        yai_emit_stdout_envelope(YETTY_OSC_CS_CLIENT_INPUT_REINJECT, mouse, sizeof(*mouse));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "reinject_mouse: emit");
     return YETTY_OK_VOID();
 }
 
@@ -830,17 +868,13 @@ static struct yetty_ycore_void_result yai_apply_dock_reservation(struct yai_app 
     if (dock_px <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    /* Flush pending text first so the envelope serializes after it (single
-     * writer over the shared tty file description). */
-    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "yai_apply_dock_reservation: flush");
     struct yetty_content_inset inset = {
         .magic = YETTY_CONTENT_INSET_MAGIC,
         .version = YMGUI_WIRE_VERSION,
         .bottom = dock_px,
     };
-    struct yetty_ycore_void_result emit_res = yetty_yface_emit_to_fd(
-        STDOUT_FILENO, YETTY_OSC_CS_CONTENT_INSET, 0, NULL, 0, &inset, sizeof(inset));
+    struct yetty_ycore_void_result emit_res =
+        yai_emit_stdout_envelope(YETTY_OSC_CS_CONTENT_INSET, &inset, sizeof(inset));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "yai_apply_dock_reservation: emit");
     return YETTY_OK_VOID();
 }
@@ -851,14 +885,12 @@ static struct yetty_ycore_void_result yai_release_dock_reservation(struct yai_ap
     if (!app->renderer.pin_enabled) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "yai_release_dock_reservation: flush");
     struct yetty_content_inset inset = {
         .magic = YETTY_CONTENT_INSET_MAGIC,
         .version = YMGUI_WIRE_VERSION,
     };
-    struct yetty_ycore_void_result emit_res = yetty_yface_emit_to_fd(
-        STDOUT_FILENO, YETTY_OSC_CS_CONTENT_INSET, 0, NULL, 0, &inset, sizeof(inset));
+    struct yetty_ycore_void_result emit_res =
+        yai_emit_stdout_envelope(YETTY_OSC_CS_CONTENT_INSET, &inset, sizeof(inset));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "yai_release_dock_reservation: emit");
     return YETTY_OK_VOID();
 }
@@ -1050,7 +1082,8 @@ static void build_editmode_knob(struct yai_app *app, int tab, struct yai_hud_con
  * `tab`. The model is the YAI_MODEL env var; "default" means unset (the
  * CLI's own default). These are the common choices — any other value
  * still works by exporting YAI_MODEL directly. */
-static void build_model_knob(struct yai_app *app, int tab, struct yai_hud_config_knob *out)
+static void build_model_knob(struct yai_app *app, int knob_index, int tab,
+                             struct yai_hud_config_knob *out)
 {
     static const char *const claude_models[] = {"default", "opus", "sonnet", "haiku"};
     static const char *const codex_models[] = {"default", "gpt-5", "gpt-5-codex", "o3"};
@@ -1072,23 +1105,81 @@ static void build_model_knob(struct yai_app *app, int tab, struct yai_hud_config
         current = "";
     }
     int selected = 0; /* "default" */
-    app->config_knobs[2].is_edit_mode = 0;
-    app->config_knobs[2].is_model = 1;
-    snprintf(app->config_knobs[2].key, sizeof(app->config_knobs[2].key), "YAI_MODEL");
+    app->config_knobs[knob_index].is_edit_mode = 0;
+    app->config_knobs[knob_index].is_model = 1;
+    snprintf(app->config_knobs[knob_index].key, sizeof(app->config_knobs[knob_index].key),
+             "YAI_MODEL");
     for (int option = 0; option < count; option++) {
-        snprintf(app->config_knobs[2].options[option], sizeof(app->config_knobs[2].options[option]),
-                 "%s", list[option]);
+        snprintf(app->config_knobs[knob_index].options[option],
+                 sizeof(app->config_knobs[knob_index].options[option]), "%s", list[option]);
         if (option > 0 && current[0] && strcmp(list[option], current) == 0) {
             selected = option;
         }
-        out->options[option] = app->config_knobs[2].options[option];
+        out->options[option] = app->config_knobs[knob_index].options[option];
     }
-    app->config_knobs[2].option_count = count;
-    app->config_knobs[2].selected = selected;
+    app->config_knobs[knob_index].option_count = count;
+    app->config_knobs[knob_index].selected = selected;
     out->label = "model";
     out->option_count = count;
     out->selected = selected;
     out->tab = tab;
+}
+
+/* Fill the reasoning-effort knob for the active backend, on tab `tab`.
+ * Effort is a MODEL parameter, so it sits on the model tab next to the
+ * model knob. Returns 1 if the engine has an effort control, 0 if not
+ * (gemini). claude reads CLAUDE_CODE_EFFORT_LEVEL from env directly;
+ * codex maps YAI_CODEX_EFFORT → `-c model_reasoning_effort` at spawn.
+ * Applied through the generic engine knob path (plain setenv of key). */
+static int build_effort_knob(struct yai_app *app, int knob_index, int tab,
+                             struct yai_hud_config_knob *out)
+{
+    static const char *const claude_efforts[] = {"auto", "low", "medium", "high", "xhigh", "max"};
+    static const char *const codex_efforts[] = {"default", "minimal", "low", "medium", "high"};
+    const char *const *list;
+    int count;
+    const char *key;
+    const char *fallback;
+    if (strcmp(app->engine_name, "codex") == 0) {
+        list = codex_efforts;
+        count = 5;
+        key = "YAI_CODEX_EFFORT";
+        fallback = "default";
+    } else if (strcmp(app->engine_name, "claude") == 0) {
+        list = claude_efforts;
+        count = 6;
+        key = "CLAUDE_CODE_EFFORT_LEVEL";
+        fallback = "auto";
+    } else {
+        return 0; /* gemini: no effort control */
+    }
+    if (count > YAI_HUD_CONFIG_KNOB_MAX_OPTIONS) {
+        count = YAI_HUD_CONFIG_KNOB_MAX_OPTIONS;
+    }
+    const char *current = getenv(key);
+    if (!current || !current[0]) {
+        current = fallback;
+    }
+    int selected = 0;
+    app->config_knobs[knob_index].is_edit_mode = 0;
+    app->config_knobs[knob_index].is_model = 0;
+    snprintf(app->config_knobs[knob_index].key, sizeof(app->config_knobs[knob_index].key), "%s",
+             key);
+    for (int option = 0; option < count; option++) {
+        snprintf(app->config_knobs[knob_index].options[option],
+                 sizeof(app->config_knobs[knob_index].options[option]), "%s", list[option]);
+        if (strcmp(list[option], current) == 0) {
+            selected = option;
+        }
+        out->options[option] = app->config_knobs[knob_index].options[option];
+    }
+    app->config_knobs[knob_index].option_count = count;
+    app->config_knobs[knob_index].selected = selected;
+    out->label = "effort";
+    out->option_count = count;
+    out->selected = selected;
+    out->tab = tab;
+    return 1;
 }
 
 /* The friendly backend page title (claude → "claude code"). */
@@ -1145,7 +1236,9 @@ static struct yetty_ycore_void_result show_config(struct yai_app *app)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, describe_res, "show_config: engine rows");
 
     if (app->hud) {
-        char knob_spec[256];
+        /* Holds the engine's knob specs — several newline-separated lines
+         * for an engine that exposes multiple knobs (claude: 3). */
+        char knob_spec[512];
         struct yetty_ycore_void_result knob_res =
             yetty_yai_config_knob(NULL, app->engine, app, knob_spec, sizeof(knob_spec));
         YETTY_RETURN_IF_ERR(yetty_ycore_void, knob_res, "show_config: knob spec");
@@ -1216,19 +1309,46 @@ static struct yetty_ycore_void_result show_config(struct yai_app *app)
         setup.show_thinking = app->renderer.show_thinking;
         setup.fold_lines = (float)app->renderer.fold_lines;
 
-        /* knob 0 = edit mode (yai tab); knob 1 = engine knob (backend
-         * tab, if any); knob 2 = model (model tab). */
+        /* knob 0 = edit mode (yai tab); knobs 1..N = the engine's knobs
+         * (backend tab; config_knob may return several, newline-separated);
+         * the last knob = model (model tab). */
         build_editmode_knob(app, TAB_YAI, &setup.knobs[0]);
-        char engine_knob_label[64];
-        struct yetty_ycore_int_result engine_knob_res = parse_engine_knob(
-            app, 1, knob_spec, engine_knob_label, sizeof(engine_knob_label), &setup.knobs[1]);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, engine_knob_res, "show_config: engine knob");
-        if (engine_knob_res.value > 0) {
-            setup.knobs[1].tab = TAB_BACKEND;
+        int knob_index = 1;
+        char engine_labels[YAI_HUD_CONFIG_MAX_KNOBS][64];
+        const char *spec_cursor = knob_spec;
+        /* Reserve the last two slots for the model tab's model + effort knobs. */
+        while (*spec_cursor && knob_index < YAI_HUD_CONFIG_MAX_KNOBS - 2) {
+            const char *line_end = strchr(spec_cursor, '\n');
+            size_t line_len = line_end ? (size_t)(line_end - spec_cursor) : strlen(spec_cursor);
+            if (line_len > 0) {
+                char one_spec[256];
+                if (line_len >= sizeof(one_spec)) {
+                    line_len = sizeof(one_spec) - 1;
+                }
+                memcpy(one_spec, spec_cursor, line_len);
+                one_spec[line_len] = '\0';
+                struct yetty_ycore_int_result knob_res =
+                    parse_engine_knob(app, knob_index, one_spec, engine_labels[knob_index],
+                                      sizeof(engine_labels[knob_index]), &setup.knobs[knob_index]);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, knob_res, "show_config: engine knob");
+                if (knob_res.value > 0) {
+                    setup.knobs[knob_index].tab = TAB_BACKEND;
+                    knob_index++;
+                }
+            }
+            if (!line_end) {
+                break;
+            }
+            spec_cursor = line_end + 1;
         }
-        build_model_knob(app, TAB_MODEL, &setup.knobs[2]);
-        setup.knob_count = YAI_HUD_CONFIG_MAX_KNOBS;
-        app->config_knob_count = YAI_HUD_CONFIG_MAX_KNOBS;
+        build_model_knob(app, knob_index, TAB_MODEL, &setup.knobs[knob_index]);
+        knob_index++;
+        /* Effort is a model parameter — same tab, right under the model. */
+        if (build_effort_knob(app, knob_index, TAB_MODEL, &setup.knobs[knob_index])) {
+            knob_index++;
+        }
+        setup.knob_count = knob_index;
+        app->config_knob_count = knob_index;
         app->config_show_thinking_applied = app->renderer.show_thinking;
         app->config_fold_lines_applied = app->renderer.fold_lines;
 
@@ -1764,7 +1884,7 @@ static struct yetty_ycore_void_result handle_mouse_envelope(struct yai_app *app,
             yai_hud_mouse_button(app->hud, mouse.x, mouse.y, mouse.button, mouse.pressed);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, press_res, "mouse envelope: button");
         if (mouse.pressed) {
-            /* Client-side focus: the press decides who owns input. */
+            /* Client-side focus: the press decides who owns the gesture. */
             app->focus_gui = press_res.value;
             ydebug("yai: focus -> %s", app->focus_gui ? "gui" : "terminal");
         }
@@ -1772,12 +1892,32 @@ static struct yetty_ycore_void_result handle_mouse_envelope(struct yai_app *app,
          * release, a checkbox/radio flips on the press. */
         struct yetty_ycore_void_result sync_res = config_dialog_sync(app);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sync_res, "mouse envelope: config sync");
+        /* When the GUI does not own the gesture, bounce the click back so
+         * the terminal runs its native behaviour — text selection (drag),
+         * middle-click paste. The press sets focus; the matching release
+         * follows the same owner. */
+        if (!app->focus_gui) {
+            struct yetty_ycore_void_result reinject_res = reinject_mouse(&mouse);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, reinject_res, "mouse envelope: button reinject");
+        }
         return YETTY_OK_VOID();
     }
     case YETTY_YMGUI_INPUT_MOUSE_POS: {
-        struct yetty_ycore_void_result motion_res =
-            yai_hud_mouse_motion(app->hud, mouse.x, mouse.y);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, motion_res, "mouse envelope: motion");
+        /* GUI owns the pointer (a titlebar/resize/slider drag in flight) →
+         * feed the framework. Otherwise the terminal owns it: bounce motion
+         * back ONLY while a button is held, so a drag extends the terminal's
+         * text selection. A plain hover needs no terminal action and would
+         * otherwise double the wire traffic on every pixel of movement. */
+        if (app->focus_gui) {
+            struct yetty_ycore_void_result motion_res =
+                yai_hud_mouse_motion(app->hud, mouse.x, mouse.y);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, motion_res, "mouse envelope: motion");
+            return YETTY_OK_VOID();
+        }
+        if (mouse.buttons_held != 0) {
+            struct yetty_ycore_void_result reinject_res = reinject_mouse(&mouse);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, reinject_res, "mouse envelope: motion reinject");
+        }
         return YETTY_OK_VOID();
     }
     case YETTY_YMGUI_INPUT_MOUSE_WHEEL: {

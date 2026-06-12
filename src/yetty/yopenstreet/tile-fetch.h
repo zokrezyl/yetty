@@ -35,4 +35,22 @@ struct yetty_ycore_void_result yetty_yopenstreet_http_get(CURL *curl_handle, con
                                                           long timeout_seconds, uint8_t **out_bytes,
                                                           size_t *out_len);
 
+/* One slot of a batch fetch. Caller fills tile_x / tile_y; bytes/len are
+ * the result (heap, caller frees) — NULL/0 when that tile failed. */
+struct yetty_yopenstreet_tile_request {
+    uint32_t tile_x;
+    uint32_t tile_y;
+    uint8_t *bytes;
+    size_t len;
+};
+
+/* Fetch a whole tile set: cache hits fill synchronously, the misses
+ * download IN PARALLEL via curl-multi (HTTP/2 multiplexing, capped at 2
+ * connections per host per the OSM tile usage policy). Per-tile failures
+ * are best-effort — the slot stays NULL and the call still returns OK;
+ * only setup-level failures error. */
+struct yetty_ycore_void_result yetty_yopenstreet_tiles_fetch(
+    const char *url_template, const char *cache_root, const char *cache_file_extension,
+    uint32_t zoom, struct yetty_yopenstreet_tile_request *requests, uint32_t request_count);
+
 #endif /* YETTY_YOPENSTREET_TILE_FETCH_H */

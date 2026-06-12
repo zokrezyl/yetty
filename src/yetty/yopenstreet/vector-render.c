@@ -126,10 +126,10 @@ static const struct osm_line_style *street_style_for_kind(const char *kind)
          0, 12},
         {"unclassified", 0xffffffffu, 3.0f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffbbbbbbu, 1.6f, 0,
          0, 12},
-        {"living_street", 0xffededecu, 3.0f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffc5c5c5u, 1.5f,
-         0, 0, 13},
-        {"pedestrian", 0xffdddde9u, 2.5f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffa9a9bcu, 1.4f, 0,
+        {"living_street", 0xffededecu, 3.0f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffc5c5c5u, 1.5f, 0,
          0, 13},
+        {"pedestrian", 0xffdddde9u, 2.5f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffa9a9bcu, 1.4f, 0, 0,
+         13},
         {"service", 0xffffffffu, 1.8f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffccccccu, 1.2f, 0, 0,
          14},
         {"track", 0xffac8331u, 1.2f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 6.0f, 4.0f, 14},
@@ -547,11 +547,9 @@ static struct yetty_ycore_void_result emit_polygon_fill(struct osm_vector_emit *
             .vertex_c_x = points[indices[2]].x,
             .vertex_c_y = points[indices[2]].y,
         };
-        result = yetty_ydraw_drawable_list_add_cmd_add_triangle(emit->list, /*id=*/0, z_band,
-                                                                osm_color_to_wire(color),
-                                                                osm_color_to_wire(color),
-                                                                OSM_TRIANGLE_SEAM_STROKE_PX,
-                                                                &geometry);
+        result = yetty_ydraw_drawable_list_add_cmd_add_triangle(
+            emit->list, /*id=*/0, z_band, osm_color_to_wire(color), osm_color_to_wire(color),
+            OSM_TRIANGLE_SEAM_STROKE_PX, &geometry);
         if (YETTY_IS_ERR(result)) {
             free(indices);
             return YETTY_ERR(yetty_ycore_void, "osm vector: add final triangle", result);
@@ -570,8 +568,8 @@ static int street_label_rank(const char *kind)
     if (!kind) {
         return -1;
     }
-    static const char *const ranked[] = {"motorway",    "trunk",        "primary",
-                                         "secondary",   "tertiary",     "residential",
+    static const char *const ranked[] = {"motorway",     "trunk",         "primary",
+                                         "secondary",    "tertiary",      "residential",
                                          "unclassified", "living_street", "pedestrian"};
     for (size_t i = 0; i < sizeof(ranked) / sizeof(ranked[0]); i++) {
         if (strcmp(ranked[i], kind) == 0) {
@@ -737,12 +735,12 @@ static struct yetty_ycore_void_result emit_polyline_dashed(
             float in_period = fmodf(phase + walked, period);
             if (in_period < dash_px) {
                 float dash_left = dash_px - in_period;
-                float draw_len = dash_left < segment_len - walked ? dash_left
-                                                                  : segment_len - walked;
-                struct yetty_ycore_void_result dash_res = emit_segment(
-                    emit, previous.x + unit_x * walked, previous.y + unit_y * walked,
-                    previous.x + unit_x * (walked + draw_len),
-                    previous.y + unit_y * (walked + draw_len), color, width, z_band);
+                float draw_len =
+                    dash_left < segment_len - walked ? dash_left : segment_len - walked;
+                struct yetty_ycore_void_result dash_res =
+                    emit_segment(emit, previous.x + unit_x * walked, previous.y + unit_y * walked,
+                                 previous.x + unit_x * (walked + draw_len),
+                                 previous.y + unit_y * (walked + draw_len), color, width, z_band);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, dash_res, "osm vector: dash segment");
                 walked += draw_len;
             } else {
@@ -772,8 +770,7 @@ static struct yetty_ycore_void_result emit_street_feature(
                                      width + style->casing_extra_px * width_factor,
                                      casing_band_for_fill_band(style->z_band));
             if (YETTY_IS_OK(ring_res)) {
-                ring_res = emit_polyline(emit, transform, ring, style->color, width,
-                                         style->z_band);
+                ring_res = emit_polyline(emit, transform, ring, style->color, width, style->z_band);
             }
             break;
         case OSM_LINE_DASHED:
@@ -785,9 +782,8 @@ static struct yetty_ycore_void_result emit_street_feature(
              * railway signature. */
             ring_res = emit_polyline(emit, transform, ring, style->color, width, style->z_band);
             if (YETTY_IS_OK(ring_res)) {
-                ring_res = emit_polyline_dashed(emit, transform, ring, 0xfffafafau,
-                                                width * 0.6f, OSM_Z_RAIL_DASH, style->dash_px,
-                                                style->gap_px);
+                ring_res = emit_polyline_dashed(emit, transform, ring, 0xfffafafau, width * 0.6f,
+                                                OSM_Z_RAIL_DASH, style->dash_px, style->gap_px);
             }
             break;
         case OSM_LINE_SOLID:
@@ -1001,19 +997,16 @@ static struct yetty_ycore_void_result emit_tile(struct osm_vector_emit *emit,
                        feature->geom_type == YETTY_YOPENSTREET_VT_LINESTRING &&
                        feature->ring_count > 0) {
                 int rank = street_label_rank(feature->kind);
-                if (rank >= 0 &&
-                    (emit->zoom >= 14 || rank <= OSM_STREET_LABEL_MAX_RANK_LOW_ZOOM)) {
+                if (rank >= 0 && (emit->zoom >= 14 || rank <= OSM_STREET_LABEL_MAX_RANK_LOW_ZOOM)) {
                     const struct yetty_yopenstreet_vt_ring *ring = &feature->rings[0];
                     if (ring->point_count > 0) {
-                        struct yetty_yopenstreet_vt_point mid =
-                            ring->points[ring->point_count / 2];
+                        struct yetty_yopenstreet_vt_point mid = ring->points[ring->point_count / 2];
                         if (mid.x >= 0.0f && mid.x < (float)layer->extent && mid.y >= 0.0f &&
                             mid.y < (float)layer->extent) {
                             struct osm_point anchor = transform_point(&transform, mid);
-                            feature_res = push_label_candidate(emit, anchor.x, anchor.y,
-                                                               feature->name, 9.0f, 0.0f,
-                                                               0xff4a4a4au, OSM_Z_STREET_LABELS,
-                                                               10 + rank);
+                            feature_res = push_label_candidate(
+                                emit, anchor.x, anchor.y, feature->name, 9.0f, 0.0f, 0xff4a4a4au,
+                                OSM_Z_STREET_LABELS, 10 + rank);
                         }
                     }
                 }
@@ -1029,12 +1022,12 @@ static struct yetty_ycore_void_result emit_tile(struct osm_vector_emit *emit,
                     /* Bigger font = more important place = lower priority value.
                      * Letter-spacing scales with importance — the classic
                      * cartographic treatment for settlement names. */
-                    float char_spacing = font_size >= 16.0f ? 2.0f
+                    float char_spacing = font_size >= 16.0f   ? 2.0f
                                          : font_size >= 13.0f ? 1.2f
                                                               : 0.5f;
-                    feature_res = push_label_candidate(emit, anchor.x, anchor.y, feature->name,
-                                                       font_size, char_spacing, 0xff30303cu,
-                                                       OSM_Z_PLACE_LABELS, (int)(20.0f - font_size));
+                    feature_res = push_label_candidate(
+                        emit, anchor.x, anchor.y, feature->name, font_size, char_spacing,
+                        0xff30303cu, OSM_Z_PLACE_LABELS, (int)(20.0f - font_size));
                 }
             }
             YETTY_RETURN_IF_ERR(yetty_ycore_void, feature_res, "osm vector: feature emit");
@@ -1114,8 +1107,8 @@ static struct yetty_ycore_void_result place_labels(struct osm_vector_emit *emit)
                 blocked = 1; /* one label per name per render */
                 break;
             }
-            if (box.min_x < other->max_x && box.max_x > other->min_x &&
-                box.min_y < other->max_y && box.max_y > other->min_y) {
+            if (box.min_x < other->max_x && box.max_x > other->min_x && box.min_y < other->max_y &&
+                box.max_y > other->min_y) {
                 blocked = 1;
                 break;
             }
@@ -1123,9 +1116,8 @@ static struct yetty_ycore_void_result place_labels(struct osm_vector_emit *emit)
         if (blocked) {
             continue;
         }
-        result = emit_text(emit, candidate->x, candidate->y, candidate->text,
-                           candidate->font_size, candidate->char_spacing, candidate->color,
-                           candidate->z_band);
+        result = emit_text(emit, candidate->x, candidate->y, candidate->text, candidate->font_size,
+                           candidate->char_spacing, candidate->color, candidate->z_band);
         if (YETTY_IS_ERR(result)) {
             break;
         }
@@ -1240,61 +1232,91 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render_vector(
         }
     }
 
-    CURL *curl_handle = yetty_yopenstreet_curl_acquire();
-    if (!curl_handle) {
+    /* Collect the covering tile set (wrapped duplicates deduped), fetch
+     * everything in one parallel batch, then decode + emit per tile. */
+    struct osm_emit_slot {
+        int64_t tile_x; /* unwrapped — transform position */
+        int64_t tile_y;
+        uint32_t request_index;
+    };
+    struct osm_emit_slot *slots = malloc((size_t)tiles_total * sizeof(struct osm_emit_slot));
+    struct yetty_yopenstreet_tile_request *requests =
+        calloc((size_t)tiles_total, sizeof(struct yetty_yopenstreet_tile_request));
+    if (!slots || !requests) {
+        free(slots);
+        free(requests);
         yetty_ydraw_drawable_list_destroy(emit.list);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yopenstreet vector: curl init failed");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yopenstreet vector: tile set alloc failed");
+    }
+    uint32_t slot_count = 0;
+    uint32_t request_count = 0;
+    for (int64_t tile_y = tile_y_first; tile_y <= tile_y_last; tile_y++) {
+        if (tile_y < 0 || tile_y >= tile_count) {
+            continue;
+        }
+        for (int64_t tile_x = tile_x_first; tile_x <= tile_x_last; tile_x++) {
+            uint32_t wrapped_x = (uint32_t)(((tile_x % tile_count) + tile_count) % tile_count);
+            uint32_t request_index = request_count;
+            for (uint32_t i = 0; i < request_count; i++) {
+                if (requests[i].tile_x == wrapped_x && requests[i].tile_y == (uint32_t)tile_y) {
+                    request_index = i;
+                    break;
+                }
+            }
+            if (request_index == request_count) {
+                requests[request_count].tile_x = wrapped_x;
+                requests[request_count].tile_y = (uint32_t)tile_y;
+                request_count++;
+            }
+            slots[slot_count++] = (struct osm_emit_slot){
+                .tile_x = tile_x, .tile_y = tile_y, .request_index = request_index};
+        }
+    }
+
+    const char *tile_extension = config->tile_file_extension ? config->tile_file_extension : "mvt";
+    struct yetty_ycore_void_result fetch_res = yetty_yopenstreet_tiles_fetch(
+        url_template, cache_root, tile_extension, config->zoom, requests, request_count);
+    if (YETTY_IS_ERR(fetch_res)) {
+        free(slots);
+        free(requests);
+        yetty_ydraw_drawable_list_destroy(emit.list);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yopenstreet vector: batch fetch", fetch_res);
     }
 
     uint32_t tiles_rendered = 0;
     struct yetty_ycore_void_result emit_result = YETTY_OK_VOID();
-    for (int64_t tile_y = tile_y_first; tile_y <= tile_y_last && YETTY_IS_OK(emit_result);
-         tile_y++) {
-        if (tile_y < 0 || tile_y >= tile_count) {
+    for (uint32_t i = 0; i < slot_count && YETTY_IS_OK(emit_result); i++) {
+        const struct osm_emit_slot *slot = &slots[i];
+        const struct yetty_yopenstreet_tile_request *request = &requests[slot->request_index];
+        if (!request->bytes) {
+            continue; /* best-effort — hole stays background-colored */
+        }
+        struct yetty_yopenstreet_vt_tile tile = {0};
+        struct yetty_ycore_void_result parse_res =
+            yetty_yopenstreet_vt_parse(request->bytes, request->len, &tile);
+        if (YETTY_IS_ERR(parse_res)) {
+            ywarn("yopenstreet vector: tile %u/%u/%lld parse failed: %s", config->zoom,
+                  request->tile_x, (long long)slot->tile_y, parse_res.error.msg);
+            yetty_ycore_error_destroy(parse_res.error);
             continue;
         }
-        for (int64_t tile_x = tile_x_first; tile_x <= tile_x_last && YETTY_IS_OK(emit_result);
-             tile_x++) {
-            uint32_t wrapped_x = (uint32_t)(((tile_x % tile_count) + tile_count) % tile_count);
-
-            uint8_t *tile_bytes = NULL;
-            size_t tile_len = 0;
-            struct yetty_ycore_void_result fetch_res = yetty_yopenstreet_tile_fetch(
-                curl_handle, url_template, cache_root, "mvt", config->zoom, wrapped_x,
-                (uint32_t)tile_y, &tile_bytes, &tile_len);
-            if (YETTY_IS_ERR(fetch_res)) {
-                /* Best-effort by design — hole stays background-colored. */
-                ywarn("yopenstreet vector: tile %u/%u/%lld fetch failed: %s", config->zoom,
-                      wrapped_x, (long long)tile_y, fetch_res.error.msg);
-                yetty_ycore_error_destroy(fetch_res.error);
-                continue;
-            }
-
-            struct yetty_yopenstreet_vt_tile tile = {0};
-            struct yetty_ycore_void_result parse_res =
-                yetty_yopenstreet_vt_parse(tile_bytes, tile_len, &tile);
-            free(tile_bytes);
-            if (YETTY_IS_ERR(parse_res)) {
-                ywarn("yopenstreet vector: tile %u/%u/%lld parse failed: %s", config->zoom,
-                      wrapped_x, (long long)tile_y, parse_res.error.msg);
-                yetty_ycore_error_destroy(parse_res.error);
-                continue;
-            }
-
-            struct osm_tile_transform transform = {
-                .offset_x = (float)(tile_x * tile_size - origin_x),
-                .offset_y = (float)(tile_y * tile_size - origin_y),
-                .scale = 1.0f,  /* per-layer: 256 / extent */
-                .extent = 4096, /* per-layer override */
-            };
-            emit_result = emit_tile(&emit, &tile, &transform);
-            yetty_yopenstreet_vt_free(&tile);
-            if (YETTY_IS_OK(emit_result)) {
-                tiles_rendered++;
-            }
+        struct osm_tile_transform transform = {
+            .offset_x = (float)(slot->tile_x * tile_size - origin_x),
+            .offset_y = (float)(slot->tile_y * tile_size - origin_y),
+            .scale = 1.0f,  /* per-layer: 256 / extent */
+            .extent = 4096, /* per-layer override */
+        };
+        emit_result = emit_tile(&emit, &tile, &transform);
+        yetty_yopenstreet_vt_free(&tile);
+        if (YETTY_IS_OK(emit_result)) {
+            tiles_rendered++;
         }
     }
-    yetty_yopenstreet_curl_release(curl_handle);
+    for (uint32_t i = 0; i < request_count; i++) {
+        free(requests[i].bytes);
+    }
+    free(requests);
+    free(slots);
 
     if (YETTY_IS_OK(emit_result) && tiles_rendered > 0) {
         emit_result = place_labels(&emit);

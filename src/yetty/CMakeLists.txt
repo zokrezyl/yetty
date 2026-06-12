@@ -286,6 +286,10 @@ endif()
 if(YETTY_ENABLE_FEATURE_YOPENSTREET AND YETTY_ENABLE_FEATURE_YIMAGE
    AND YETTY_ENABLE_LIB_LIBCURL AND TARGET CURL::libcurl)
     add_subdirectory(yopenstreet)
+
+    # ymap — yclass slippy-map model over the yopenstreet engine (tile
+    # provider registry, pan/zoom math, FFI/RPC surface via codegen).
+    add_subdirectory(ymap)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YMESH)

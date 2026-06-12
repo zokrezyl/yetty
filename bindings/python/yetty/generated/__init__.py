@@ -4,6 +4,7 @@ from . import yfigure as yfigure
 from . import yflame as yflame
 from . import ygrid as ygrid
 from . import ygui as ygui
+from . import ymap as ymap
 from . import ymgui as ymgui
 from . import ymusic as ymusic
 from . import yplatform as yplatform

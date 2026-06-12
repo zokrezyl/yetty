@@ -55,6 +55,12 @@ struct yetty_yopenstreet_config {
 
     /* Tile cache directory. NULL → <yetty cache dir>/osm-tiles. */
     const char *cache_dir;
+
+    /* Tile file extension for cache names AND implied content type
+     * (raster decodes via stb_image: png/jpg/jpeg all fine). NULL →
+     * "png" for raster, "mvt" for vector. Satellite providers (NASA
+     * GIBS, EOX Sentinel-2) serve jpeg. */
+    const char *tile_file_extension;
 };
 
 /* Forward/inverse slippy projection: degrees ↔ global pixel coordinates

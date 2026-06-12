@@ -63,6 +63,18 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                                                             const struct yetty_yui_event *event);
 static struct yetty_ycore_void_result terminal_apply_pane_geometry(
     struct yetty_yterminal_terminal *terminal, float pane_w, float pane_h);
+/* Selection helpers (defined below) — reached early by the reinject path,
+ * which drives cell selection from a subscriber's bounced mouse events. */
+static void terminal_cell_from_local(const struct yetty_yterminal_terminal *terminal, float lx,
+                                     float ly, uint32_t *out_row, uint32_t *out_col);
+static struct yetty_ycore_void_result terminal_push_selection(
+    struct yetty_yterminal_terminal *terminal);
+static struct yetty_ycore_void_result terminal_copy_selection(
+    struct yetty_yterminal_terminal *terminal);
+static struct yetty_ycore_void_result terminal_clear_selection(
+    struct yetty_yterminal_terminal *terminal);
+static struct yetty_ycore_void_result terminal_paste_clipboard(
+    struct yetty_yterminal_terminal *terminal);
 
 static const struct yetty_yui_view_ops terminal_view_ops = {
     .destroy = terminal_view_destroy,
@@ -780,8 +792,67 @@ static struct yetty_ycore_void_result terminal_reinject_apply(
         }
         return YETTY_OK_VOID();
     }
+    case YETTY_YMGUI_INPUT_MOUSE_BUTTON: {
+        /* The subscriber bounced a button it did not consume — run the
+         * same default the unsubscribed terminal would: left button drives
+         * cell selection, middle button pastes. Coords are already
+         * pane-local (the subscriber computed them). Scrollback view owns
+         * the wheel but not clicks, so selection still works while paused. */
+        if (msg->button == 2 && msg->pressed) {
+            return terminal_paste_clipboard(terminal);
+        }
+        if (msg->button != 0) {
+            return YETTY_OK_VOID();
+        }
+        uint32_t row = 0;
+        uint32_t col = 0;
+        terminal_cell_from_local(terminal, msg->x, msg->y, &row, &col);
+        if (msg->pressed) {
+            terminal->sel_anchor_row = row;
+            terminal->sel_anchor_col = col;
+            terminal->sel_head_row = row;
+            terminal->sel_head_col = col;
+            terminal->sel_active = 1;
+            terminal->sel_dragging = 1;
+            return terminal_push_selection(terminal);
+        }
+        /* Release: finalise. A pure click (anchor == head) clears the
+         * highlight; a real drag pushes it and auto-copies when enabled. */
+        if (!terminal->sel_dragging) {
+            return YETTY_OK_VOID();
+        }
+        terminal->sel_dragging = 0;
+        if (terminal->sel_anchor_row == terminal->sel_head_row &&
+            terminal->sel_anchor_col == terminal->sel_head_col) {
+            return terminal_clear_selection(terminal);
+        }
+        struct yetty_ycore_void_result psr = terminal_push_selection(terminal);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, psr, "terminal_reinject_apply: push_selection final");
+        struct yetty_yconfig_config *cfg = terminal->context.yetty_context.runtime->config;
+        int auto_copy = 1;
+        if (cfg && cfg->ops && cfg->ops->get_bool) {
+            auto_copy = cfg->ops->get_bool(cfg, "terminal/selection/auto-copy", 1);
+        }
+        if (auto_copy) {
+            struct yetty_ycore_void_result cs = terminal_copy_selection(terminal);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, cs, "terminal_reinject_apply: auto-copy");
+        }
+        return YETTY_OK_VOID();
+    }
+    case YETTY_YMGUI_INPUT_MOUSE_POS: {
+        /* Drag tracking — extend the selection head while a button-1 drag
+         * is in flight (the press set sel_dragging). */
+        if (!terminal->sel_dragging) {
+            return YETTY_OK_VOID();
+        }
+        uint32_t row = 0;
+        uint32_t col = 0;
+        terminal_cell_from_local(terminal, msg->x, msg->y, &row, &col);
+        terminal->sel_head_row = row;
+        terminal->sel_head_col = col;
+        return terminal_push_selection(terminal);
+    }
     default:
-        /* BUTTON / POS defaults (selection, …) not yet rerouted. */
         ydebug("terminal: reinject kind=%u ignored", msg->kind);
         return YETTY_OK_VOID();
     }
@@ -937,8 +1008,7 @@ static struct yetty_ycore_void_result terminal_content_inset_process_input(
     /* userdata is &terminal->inset_handler_self (a distinct pointer so the SM
      * spawns a coroutine for THIS fn rather than sharing the reinject coro,
      * which the bare-terminal userdata already owns). Recover the terminal. */
-    struct yetty_yterminal_terminal *terminal =
-        *(struct yetty_yterminal_terminal **)userdata;
+    struct yetty_yterminal_terminal *terminal = *(struct yetty_yterminal_terminal **)userdata;
     for (;;) {
         struct yetty_ycore_void_result envelope_res =
             terminal_content_inset_consume_envelope(terminal, sm);
@@ -1596,12 +1666,10 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * handler coroutine instead of sharing the reinject one (both would
      * otherwise key off the bare-terminal pointer). */
     terminal->inset_handler_self = terminal;
-    rr = yetty_ywire_wire_statemachine_register(terminal->sm, YETTY_YWIRE_ENVELOPE_DCS,
-                                                YETTY_OSC_CS_CONTENT_INSET, /*has_args=*/1,
-                                                terminal_content_inset_process_input,
-                                                &terminal->inset_handler_self);
-    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr,
-                        "terminal_create: register content inset");
+    rr = yetty_ywire_wire_statemachine_register(
+        terminal->sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CONTENT_INSET, /*has_args=*/1,
+        terminal_content_inset_process_input, &terminal->inset_handler_self);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: register content inset");
     ydebug("terminal_create: content inset registered for DCS %d", YETTY_OSC_CS_CONTENT_INSET);
 
     /* This process is about to act as a yclass RPC / remote-object

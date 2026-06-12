@@ -805,10 +805,20 @@ static struct yetty_ycore_void_result claude_config_knob(struct yetty_yclass_ctx
     if (!permission_mode || !permission_mode[0]) {
         permission_mode = "default";
     }
+    const char *tools_preset = getenv("YAI_ALLOWED_PRESET");
+    if (!tools_preset || !tools_preset[0]) {
+        tools_preset = "curated";
+    }
+    /* One knob spec per line. "tools" is a preset over the YAI_ALLOWED_TOOLS
+     * string (apply_config maps the preset name → the concrete tool list);
+     * radio option values must stay comma-free, hence the preset names.
+     * Reasoning effort is a model parameter, so it lives on the model tab
+     * (main.c build_effort_knob), not here. */
     int written = snprintf(out, out_size,
                            "YAI_PERMISSION_MODE|permission mode|"
-                           "default,acceptEdits,plan,bypassPermissions|%s",
-                           permission_mode);
+                           "default,acceptEdits,plan,bypassPermissions|%s\n"
+                           "YAI_ALLOWED_PRESET|tools|curated,readonly,edit,full|%s",
+                           permission_mode, tools_preset);
     if (written < 0 || (size_t)written >= out_size) {
         return YETTY_ERR(yetty_ycore_void, "claude config_knob: spec truncated");
     }
@@ -832,6 +842,22 @@ static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_ct
     }
     if (setenv(key, value, 1) != 0) {
         return YETTY_ERR(yetty_ycore_void, "claude apply_config: setenv failed");
+    }
+    /* The tools knob is a preset name; expand it into the concrete
+     * YAI_ALLOWED_TOOLS list claude_start reads at the next session spawn. */
+    if (strcmp(key, "YAI_ALLOWED_PRESET") == 0) {
+        const char *tools = "Read,Bash(git *),mcp__yetty"; /* curated */
+        if (strcmp(value, "readonly") == 0) {
+            tools = "Read,mcp__yetty";
+        } else if (strcmp(value, "edit") == 0) {
+            tools = "Read,Edit,Write,Bash(git *),mcp__yetty";
+        } else if (strcmp(value, "full") == 0) {
+            tools = "Read,Edit,Write,Bash,mcp__yetty";
+        }
+        if (setenv("YAI_ALLOWED_TOOLS", tools, 1) != 0) {
+            return YETTY_ERR(yetty_ycore_void, "claude apply_config: setenv tools failed");
+        }
+        return YETTY_OK_VOID();
     }
     if (strcmp(key, "YAI_PERMISSION_MODE") != 0 || !app->child_alive || !app->child_stdin_open) {
         return YETTY_OK_VOID();
