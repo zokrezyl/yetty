@@ -213,6 +213,17 @@ struct yetty_yrender_terminal_layer {
     struct yetty_ycore_grid_size grid_size;
     struct yetty_ycore_pixel_size cell_size;
 
+    /* Content insets in pane-local pixels — a client reserves a band of the
+   * pane (e.g. a docked status bar) via YETTY_OSC_CS_CONTENT_INSET. The grid
+   * figure narrows the render viewport to (pane − insets) so the text grid
+   * and ydraw rich-content figures stay inside the content rect; the terminal
+   * derives the grid rows/cols from the same reduced rect. All zero (the
+   * default) means the content fills the whole pane. */
+    float content_inset_top;
+    float content_inset_right;
+    float content_inset_bottom;
+    float content_inset_left;
+
     int dirty;
     int in_external_scroll; /* Set when receiving scroll from another layer */
     /* PTY write callback - set by creator */

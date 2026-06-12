@@ -36,10 +36,18 @@ YETTY_YRESULT_DECLARE(yai_hud_ptr, struct yai_hud *);
  * real init failure. */
 struct yai_hud_ptr_result yai_hud_create(void);
 
-/* Update one line. Cheap; nothing is written until yai_hud_flush. */
+/* Update one line. Cheap; nothing is written until yai_hud_flush.
+ *
+ * The HUD body is split into two columns. The LEFT column carries the
+ * live conversation status (set_state / set_turn / set_session); the
+ * RIGHT column carries the lower-priority reference info — the active
+ * model (set_model) and the session statistics (set_stats, two rows). */
 struct yetty_ycore_void_result yai_hud_set_state(struct yai_hud *hud, const char *text);
 struct yetty_ycore_void_result yai_hud_set_turn(struct yai_hud *hud, const char *text);
 struct yetty_ycore_void_result yai_hud_set_session(struct yai_hud *hud, const char *text);
+struct yetty_ycore_void_result yai_hud_set_model(struct yai_hud *hud, const char *text);
+struct yetty_ycore_void_result yai_hud_set_stats(struct yai_hud *hud, const char *primary,
+                                                 const char *secondary);
 
 /* Emit a frame if anything changed. Flushes stdout first so the
  * envelope serializes after pending text (single-writer discipline). */
@@ -51,37 +59,59 @@ struct yetty_ycore_void_result yai_hud_flush(struct yai_hud *hud);
 float yai_hud_dock_height(const struct yai_hud *hud);
 
 /*---------------------------------------------------------------------------
- * Config dialog — an EDITABLE floating panel toggled by /config.
+ * Config dialog — an EDITABLE, TABBED floating panel toggled by /config.
  *
- * Layout: read-only info rows ("## " lines render as accent section
- * headers), then the yai controls (show-thinking checkbox, fold-lines
- * slider), then the engine's one knob as a radio group. The widgets
- * carry their own state; main polls it after every GUI-owned click
+ * A tab strip across the top selects which page is shown; every page's
+ * widgets are pre-built and only the active page's are visible. Pages:
+ *   - "yai"      yai settings: show-thinking checkbox, fold-lines slider,
+ *                edit-mode knob, plus read-only info rows.
+ *   - "<engine>" backend settings: the engine's knob (sandbox / permission
+ *                / approval) + its describe rows.
+ *   - "model"    model selection knob for the active backend.
+ *   - "stats"    read-only session statistics (like Claude Code /stats).
+ *
+ * Each widget is tagged with the tab index it belongs to. Read-only rows
+ * ("## " lines render as accent section headers) and knobs both carry a
+ * tab. main polls widget state after every GUI-owned click
  * (yai_hud_config_poll) and applies the diff.
  *---------------------------------------------------------------------------*/
 
-#define YAI_HUD_CONFIG_KNOB_MAX_OPTIONS 6
+#define YAI_HUD_CONFIG_KNOB_MAX_OPTIONS 8
 #define YAI_HUD_CONFIG_MAX_KNOBS 3
+#define YAI_HUD_CONFIG_TAB_MAX 4
 
-/* One editable choice rendered as a radio group: the yai edit-mode
- * knob, the engine knob (sandbox / permission / approval mode), … */
+/* One editable choice rendered as a radio group on tab `tab`: the yai
+ * edit-mode knob, the engine knob (sandbox / permission / approval), the
+ * model knob, … */
 struct yai_hud_config_knob {
     const char *label; /* NULL/"" = unused slot */
     const char *options[YAI_HUD_CONFIG_KNOB_MAX_OPTIONS];
     int option_count;
     int selected;
+    int tab; /* which tab (0..tab_count-1) hosts this knob */
 };
 
 struct yai_hud_config_setup {
-    const char *info_text; /* newline-separated read-only rows */
+    /* Tab strip: titles[i] for i in [0,tab_count). NULL titles end it. */
+    const char *tab_titles[YAI_HUD_CONFIG_TAB_MAX];
+    /* Per-tab read-only rows (newline-separated; "## " = section header).
+     * NULL/"" for a tab with no info rows. */
+    const char *tab_info[YAI_HUD_CONFIG_TAB_MAX];
+    int tab_count;
+
+    /* The show-thinking checkbox + fold-lines slider live on this tab.
+     * -1 = do not show them at all. */
+    int controls_tab;
     int show_thinking;
     float fold_lines;
+
     struct yai_hud_config_knob knobs[YAI_HUD_CONFIG_MAX_KNOBS];
     int knob_count;
 };
 
 struct yai_hud_config_values {
     int open; /* 0 = dialog not on screen; other fields invalid */
+    int active_tab;
     int show_thinking;
     float fold_lines;
     int knob_count;

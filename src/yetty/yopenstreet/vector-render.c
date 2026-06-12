@@ -54,6 +54,10 @@
 #define OSM_VECTOR_DECIMATE_PX 0.75f
 /* Clipped polygon rings are capped here before triangulation. */
 #define OSM_VECTOR_MAX_RING_POINTS 8192u
+/* Rings larger than this are clipped into square patches before
+ * triangulation so triangle AABBs stay bucket-local (see
+ * emit_polygon_feature). */
+#define OSM_FILL_PATCH_PX 128u
 
 /* Z bands — fixed per class so layering is stable regardless of tile
  * arrival order. */
@@ -100,6 +104,7 @@ struct osm_line_style {
     float casing_extra_px; /* added to width for the casing stroke */
     float dash_px;
     float gap_px;
+    uint32_t min_zoom; /* kind hidden below this zoom — declutters low zooms */
 };
 
 /* Streets layer (also carries rail kinds), osm-carto palette: cased
@@ -108,31 +113,36 @@ struct osm_line_style {
 static const struct osm_line_style *street_style_for_kind(const char *kind)
 {
     static const struct osm_line_style styles[] = {
-        {"motorway", 0xffe892a2u, 6.0f, OSM_Z_FILL_MAJOR, OSM_LINE_CASED, 0xffc24e6bu, 2.0f, 0, 0},
-        {"trunk", 0xfff9b29cu, 5.5f, OSM_Z_FILL_MAJOR, OSM_LINE_CASED, 0xffcf6649u, 2.0f, 0, 0},
-        {"primary", 0xfffcd6a4u, 5.0f, OSM_Z_FILL_MAJOR, OSM_LINE_CASED, 0xffb88a32u, 2.0f, 0, 0},
-        {"secondary", 0xfff7fabfu, 4.5f, OSM_Z_FILL_MID, OSM_LINE_CASED, 0xff9aa11fu, 1.8f, 0, 0},
-        {"tertiary", 0xffffffffu, 4.0f, OSM_Z_FILL_MID, OSM_LINE_CASED, 0xffa8a8a8u, 1.8f, 0, 0},
+        {"motorway", 0xffe892a2u, 6.0f, OSM_Z_FILL_MAJOR, OSM_LINE_CASED, 0xffc24e6bu, 2.0f, 0, 0,
+         0},
+        {"trunk", 0xfff9b29cu, 5.5f, OSM_Z_FILL_MAJOR, OSM_LINE_CASED, 0xffcf6649u, 2.0f, 0, 0, 0},
+        {"primary", 0xfffcd6a4u, 5.0f, OSM_Z_FILL_MAJOR, OSM_LINE_CASED, 0xffb88a32u, 2.0f, 0, 0,
+         0},
+        {"secondary", 0xfff7fabfu, 4.5f, OSM_Z_FILL_MID, OSM_LINE_CASED, 0xff9aa11fu, 1.8f, 0, 0,
+         9},
+        {"tertiary", 0xffffffffu, 4.0f, OSM_Z_FILL_MID, OSM_LINE_CASED, 0xffa8a8a8u, 1.8f, 0, 0,
+         10},
         {"residential", 0xffffffffu, 3.0f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffbbbbbbu, 1.6f, 0,
-         0},
+         0, 12},
         {"unclassified", 0xffffffffu, 3.0f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffbbbbbbu, 1.6f, 0,
-         0},
+         0, 12},
         {"living_street", 0xffededecu, 3.0f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffc5c5c5u, 1.5f,
-         0, 0},
+         0, 0, 13},
         {"pedestrian", 0xffdddde9u, 2.5f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffa9a9bcu, 1.4f, 0,
-         0},
-        {"service", 0xffffffffu, 1.8f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffccccccu, 1.2f, 0, 0},
-        {"track", 0xffac8331u, 1.2f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 6.0f, 4.0f},
-        {"footway", 0xfffa8072u, 1.0f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 3.5f, 3.0f},
-        {"path", 0xfffa8072u, 1.0f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 3.5f, 3.0f},
-        {"cycleway", 0xff7070fau, 1.0f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 5.0f, 3.0f},
-        {"steps", 0xfffa8072u, 1.6f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 1.5f, 1.5f},
-        {"rail", 0xff707070u, 1.8f, OSM_Z_RAIL, OSM_LINE_RAIL, 0, 0, 6.0f, 6.0f},
-        {"light_rail", 0xff6e6e6eu, 1.4f, OSM_Z_RAIL, OSM_LINE_RAIL, 0, 0, 4.0f, 4.0f},
-        {"subway", 0xff999999u, 1.4f, OSM_Z_RAIL, OSM_LINE_DASHED, 0, 0, 5.0f, 3.0f},
-        {"tram", 0xff6b6b6bu, 1.0f, OSM_Z_RAIL, OSM_LINE_SOLID, 0, 0, 0, 0},
-        {"narrow_gauge", 0xff707070u, 1.2f, OSM_Z_RAIL, OSM_LINE_RAIL, 0, 0, 5.0f, 5.0f},
-        {NULL, 0, 0.0f, 0, OSM_LINE_SOLID, 0, 0, 0, 0},
+         0, 13},
+        {"service", 0xffffffffu, 1.8f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffccccccu, 1.2f, 0, 0,
+         14},
+        {"track", 0xffac8331u, 1.2f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 6.0f, 4.0f, 14},
+        {"footway", 0xfffa8072u, 1.0f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 3.5f, 3.0f, 14},
+        {"path", 0xfffa8072u, 1.0f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 3.5f, 3.0f, 14},
+        {"cycleway", 0xff9393eau, 1.0f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 5.0f, 3.0f, 14},
+        {"steps", 0xfffa8072u, 1.6f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 1.5f, 1.5f, 14},
+        {"rail", 0xff707070u, 1.8f, OSM_Z_RAIL, OSM_LINE_RAIL, 0, 0, 6.0f, 6.0f, 9},
+        {"light_rail", 0xff6e6e6eu, 1.4f, OSM_Z_RAIL, OSM_LINE_RAIL, 0, 0, 4.0f, 4.0f, 13},
+        {"subway", 0xff999999u, 1.4f, OSM_Z_RAIL, OSM_LINE_DASHED, 0, 0, 5.0f, 3.0f, 13},
+        {"tram", 0xff6b6b6bu, 1.0f, OSM_Z_RAIL, OSM_LINE_SOLID, 0, 0, 0, 0, 13},
+        {"narrow_gauge", 0xff707070u, 1.2f, OSM_Z_RAIL, OSM_LINE_RAIL, 0, 0, 5.0f, 5.0f, 12},
+        {NULL, 0, 0.0f, 0, OSM_LINE_SOLID, 0, 0, 0, 0, 0},
     };
     if (!kind) {
         return NULL;
@@ -171,11 +181,11 @@ static uint32_t casing_band_for_fill_band(uint32_t fill_band)
 static const struct osm_line_style *water_line_style_for_kind(const char *kind)
 {
     static const struct osm_line_style styles[] = {
-        {"river", 0xffaad3dfu, 3.0f, OSM_Z_WATER},
-        {"canal", 0xffaad3dfu, 2.0f, OSM_Z_WATER},
-        {"stream", 0xffaad3dfu, 1.2f, OSM_Z_WATER},
-        {"ditch", 0xffaad3dfu, 1.0f, OSM_Z_WATER},
-        {NULL, 0, 0.0f, 0},
+        {"river", 0xffaad3dfu, 3.0f, OSM_Z_WATER, OSM_LINE_SOLID, 0, 0, 0, 0, 0},
+        {"canal", 0xffaad3dfu, 2.0f, OSM_Z_WATER, OSM_LINE_SOLID, 0, 0, 0, 0, 9},
+        {"stream", 0xffaad3dfu, 1.2f, OSM_Z_WATER, OSM_LINE_SOLID, 0, 0, 0, 0, 12},
+        {"ditch", 0xffaad3dfu, 1.0f, OSM_Z_WATER, OSM_LINE_SOLID, 0, 0, 0, 0, 14},
+        {NULL, 0, 0.0f, 0, OSM_LINE_SOLID, 0, 0, 0, 0, 0},
     };
     if (!kind) {
         return NULL;
@@ -331,15 +341,16 @@ static uint32_t clip_polygon_edge(const struct osm_point *in, uint32_t in_count,
     return out_count;
 }
 
-/* Clip a ring against the viewport rect. Returns the clipped point count
+/* Clip a ring against an arbitrary rect. Returns the clipped point count
  * in `work_a` (the caller's primary scratch buffer). */
-static uint32_t clip_polygon(struct osm_point *work_a, struct osm_point *work_b,
-                             uint32_t point_count, uint32_t cap, float clip_w, float clip_h)
+static uint32_t clip_polygon_rect(struct osm_point *work_a, struct osm_point *work_b,
+                                  uint32_t point_count, uint32_t cap, float min_x, float min_y,
+                                  float max_x, float max_y)
 {
-    point_count = clip_polygon_edge(work_a, point_count, work_b, cap, 0, 0.0f, 1);
-    point_count = clip_polygon_edge(work_b, point_count, work_a, cap, 0, clip_w, 0);
-    point_count = clip_polygon_edge(work_a, point_count, work_b, cap, 1, 0.0f, 1);
-    point_count = clip_polygon_edge(work_b, point_count, work_a, cap, 1, clip_h, 0);
+    point_count = clip_polygon_edge(work_a, point_count, work_b, cap, 0, min_x, 1);
+    point_count = clip_polygon_edge(work_b, point_count, work_a, cap, 0, max_x, 0);
+    point_count = clip_polygon_edge(work_a, point_count, work_b, cap, 1, min_y, 1);
+    point_count = clip_polygon_edge(work_b, point_count, work_a, cap, 1, max_y, 0);
     return point_count;
 }
 
@@ -420,11 +431,20 @@ static struct yetty_ycore_void_result emit_segment(struct osm_vector_emit *emit,
     }
     struct yetty_ysdf_segment geometry = {.start_x = x0, .start_y = y0, .end_x = x1, .end_y = y1};
     struct yetty_ycore_void_result add_res = yetty_ydraw_drawable_list_add_cmd_add_segment(
-        emit->list, /*id=*/0, z_band, 0, color, width, &geometry);
+        emit->list, /*id=*/0, z_band, 0, osm_color_to_wire(color), width, &geometry);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, add_res, "osm vector: add segment");
     emit->prim_count++;
     return YETTY_OK_VOID();
 }
+
+/* Adjacent SDF triangles each anti-alias their edges, so a shared edge
+ * gets ~half coverage from both sides and composites as a visible seam —
+ * the whole triangulation skeleton shows through large fills. Stroking
+ * every triangle's edges in its own fill color covers the AA falloff
+ * from both sides; the overlap is invisible (same color, opaque) and
+ * works for arbitrarily thin ear-clip slivers, where centroid-based
+ * inflation barely moves the long edges. */
+#define OSM_TRIANGLE_SEAM_STROKE_PX 1.2f
 
 /* Ear-clip triangulate `points` (a simple, possibly concave ring) and
  * emit each triangle as a filled SDF prim. Degenerate input is skipped
@@ -495,7 +515,8 @@ static struct yetty_ycore_void_result emit_polygon_fill(struct osm_vector_emit *
                 .vertex_c_y = next->y,
             };
             result = yetty_ydraw_drawable_list_add_cmd_add_triangle(
-                emit->list, /*id=*/0, z_band, osm_color_to_wire(color), 0, 0.0f, &geometry);
+                emit->list, /*id=*/0, z_band, osm_color_to_wire(color), osm_color_to_wire(color),
+                OSM_TRIANGLE_SEAM_STROKE_PX, &geometry);
             if (YETTY_IS_ERR(result)) {
                 free(indices);
                 return YETTY_ERR(yetty_ycore_void, "osm vector: add triangle", result);
@@ -526,8 +547,11 @@ static struct yetty_ycore_void_result emit_polygon_fill(struct osm_vector_emit *
             .vertex_c_x = points[indices[2]].x,
             .vertex_c_y = points[indices[2]].y,
         };
-        result = yetty_ydraw_drawable_list_add_cmd_add_triangle(emit->list, /*id=*/0, z_band, color,
-                                                                0, 0.0f, &geometry);
+        result = yetty_ydraw_drawable_list_add_cmd_add_triangle(emit->list, /*id=*/0, z_band,
+                                                                osm_color_to_wire(color),
+                                                                osm_color_to_wire(color),
+                                                                OSM_TRIANGLE_SEAM_STROKE_PX,
+                                                                &geometry);
         if (YETTY_IS_ERR(result)) {
             free(indices);
             return YETTY_ERR(yetty_ycore_void, "osm vector: add final triangle", result);
@@ -802,6 +826,7 @@ static struct yetty_ycore_void_result emit_polygon_feature(
 
     struct osm_point *work_a = NULL;
     struct osm_point *work_b = NULL;
+    struct osm_point *work_base = NULL;
     struct yetty_ycore_void_result result = YETTY_OK_VOID();
 
     for (uint32_t ring_index = 0; ring_index < feature->ring_count; ring_index++) {
@@ -820,32 +845,83 @@ static struct yetty_ycore_void_result emit_polygon_feature(
         }
 
         /* Transform, then clip to the viewport (+ slack for intersection
-         * points the clip inserts). */
+         * points the clip inserts). `base` keeps the viewport-clipped ring
+         * intact across the patch loop below. */
         uint32_t cap = ring->point_count * 2 + 8;
         struct osm_point *grown_a = realloc(work_a, cap * sizeof(struct osm_point));
         struct osm_point *grown_b = realloc(work_b, cap * sizeof(struct osm_point));
+        struct osm_point *grown_base = realloc(work_base, cap * sizeof(struct osm_point));
         if (grown_a) {
             work_a = grown_a;
         }
         if (grown_b) {
             work_b = grown_b;
         }
-        if (!grown_a || !grown_b) {
+        if (grown_base) {
+            work_base = grown_base;
+        }
+        if (!grown_a || !grown_b || !grown_base) {
             result = YETTY_ERR(yetty_ycore_void, "osm vector: clip scratch alloc failed");
             break;
         }
         for (uint32_t i = 0; i < ring->point_count; i++) {
             work_a[i] = transform_point(transform, ring->points[i]);
         }
-        uint32_t clipped_count = clip_polygon(work_a, work_b, ring->point_count, cap,
-                                              emit->viewport_w, emit->viewport_h);
-        result = emit_polygon_fill(emit, work_a, clipped_count, color, z_band);
+        uint32_t clipped_count = clip_polygon_rect(work_a, work_b, ring->point_count, cap, 0.0f,
+                                                   0.0f, emit->viewport_w, emit->viewport_h);
+        if (clipped_count < 3) {
+            continue;
+        }
+
+        /* Triangle AABBs must stay LOCAL: the spatial buckets register a
+         * prim in every cell its AABB overlaps, and ear-clip fans from a
+         * large ring produce sliver triangles spanning hundreds of px —
+         * each occupying hundreds of cells and blowing the shader's
+         * per-cell loop cap (which silently drops whatever lands after,
+         * labels first). Rings bigger than one patch are clipped into
+         * OSM_FILL_PATCH_PX windows and triangulated per patch; patch
+         * borders are invisible (same color + edge stroke). */
+        float ring_min_x = work_a[0].x;
+        float ring_min_y = work_a[0].y;
+        float ring_max_x = work_a[0].x;
+        float ring_max_y = work_a[0].y;
+        for (uint32_t i = 1; i < clipped_count; i++) {
+            ring_min_x = work_a[i].x < ring_min_x ? work_a[i].x : ring_min_x;
+            ring_min_y = work_a[i].y < ring_min_y ? work_a[i].y : ring_min_y;
+            ring_max_x = work_a[i].x > ring_max_x ? work_a[i].x : ring_max_x;
+            ring_max_y = work_a[i].y > ring_max_y ? work_a[i].y : ring_max_y;
+        }
+        if (ring_max_x - ring_min_x <= (float)OSM_FILL_PATCH_PX * 1.25f &&
+            ring_max_y - ring_min_y <= (float)OSM_FILL_PATCH_PX * 1.25f) {
+            result = emit_polygon_fill(emit, work_a, clipped_count, color, z_band);
+            if (YETTY_IS_ERR(result)) {
+                break;
+            }
+            continue;
+        }
+
+        memcpy(work_base, work_a, clipped_count * sizeof(struct osm_point));
+        uint32_t base_count = clipped_count;
+        for (float patch_y = ring_min_y; patch_y < ring_max_y && YETTY_IS_OK(result);
+             patch_y += (float)OSM_FILL_PATCH_PX) {
+            for (float patch_x = ring_min_x; patch_x < ring_max_x && YETTY_IS_OK(result);
+                 patch_x += (float)OSM_FILL_PATCH_PX) {
+                memcpy(work_a, work_base, base_count * sizeof(struct osm_point));
+                uint32_t patch_count = clip_polygon_rect(
+                    work_a, work_b, base_count, cap, patch_x, patch_y,
+                    patch_x + (float)OSM_FILL_PATCH_PX, patch_y + (float)OSM_FILL_PATCH_PX);
+                if (patch_count >= 3) {
+                    result = emit_polygon_fill(emit, work_a, patch_count, color, z_band);
+                }
+            }
+        }
         if (YETTY_IS_ERR(result)) {
             break;
         }
     }
     free(work_a);
     free(work_b);
+    free(work_base);
     return result;
 }
 
@@ -897,7 +973,7 @@ static struct yetty_ycore_void_result emit_tile(struct osm_vector_emit *emit,
                     emit_polygon_feature(emit, &transform, feature, 0xffd9d0c9u, OSM_Z_BUILDINGS);
             } else if (is_water_lines && feature->geom_type == YETTY_YOPENSTREET_VT_LINESTRING) {
                 const struct osm_line_style *style = water_line_style_for_kind(feature->kind);
-                if (style) {
+                if (style && emit->zoom >= style->min_zoom) {
                     for (uint32_t ring = 0; ring < feature->ring_count; ring++) {
                         feature_res = emit_polyline(emit, &transform, &feature->rings[ring],
                                                     style->color, style->width_px, style->z_band);
@@ -908,7 +984,7 @@ static struct yetty_ycore_void_result emit_tile(struct osm_vector_emit *emit,
                 }
             } else if (is_streets && feature->geom_type == YETTY_YOPENSTREET_VT_LINESTRING) {
                 const struct osm_line_style *style = street_style_for_kind(feature->kind);
-                if (style) {
+                if (style && emit->zoom >= style->min_zoom) {
                     feature_res = emit_street_feature(emit, &transform, feature, style,
                                                       street_width_zoom_factor(emit->zoom));
                 }

@@ -168,8 +168,9 @@ struct yai_app {
      * edit-mode knob swaps the editor, an engine knob goes through the
      * engine's apply_config slot. */
     struct {
-        int is_edit_mode; /* 1 = yai edit mode, 0 = engine env knob */
-        char key[64];     /* engine env knob key (engine knobs only) */
+        int is_edit_mode; /* 1 = yai edit mode (swap editor object) */
+        int is_model;     /* 1 = model knob (setenv YAI_MODEL) */
+        char key[64];     /* env knob key (engine + model knobs) */
         char options[YAI_HUD_CONFIG_KNOB_MAX_OPTIONS][48];
         int option_count;
         int selected;
@@ -202,6 +203,12 @@ void yai_report_error(struct yai_app *app, const char *context,
  * the pinned prompt row and, when present, the HUD state text. */
 struct yetty_ycore_void_result yai_set_activity(struct yai_app *app, const char *glyph_name,
                                                 const char *state_text);
+
+/* Refresh the HUD's right column — the active model line and the
+ * cumulative session statistics (app->usage). Cheap; nothing is written
+ * until yai_hud_flush. A no-op when the HUD is absent. Call it after
+ * usage changes (each turn) and whenever the model changes. */
+struct yetty_ycore_void_result yai_refresh_hud_stats(struct yai_app *app);
 
 /* Engine-neutral turn boundary: render the failed state if the turn
  * failed, then pump the queue or re-prompt. */

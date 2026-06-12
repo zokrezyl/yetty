@@ -214,6 +214,8 @@ static struct yetty_ycore_void_result codex_render_usage(struct yai_app *app, yy
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "codex_render_usage: hud session line");
         hud_res = yai_hud_set_state(app->hud, "idle");
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "codex_render_usage: hud state");
+        hud_res = yai_refresh_hud_stats(app);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "codex_render_usage: hud stats");
         hud_res = yai_hud_flush(app->hud);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "codex_render_usage: hud flush");
         return YETTY_OK_VOID();

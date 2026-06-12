@@ -8,9 +8,11 @@
 #include <yetty/ygui/widget.h>
 #include <yetty/ygui/widgets/checkbox.h>
 #include <yetty/ygui/widgets/dialog.h>
+#include <yetty/ygui/widgets/hbox.h>
 #include <yetty/ygui/widgets/label.h>
 #include <yetty/ygui/widgets/radio.h>
 #include <yetty/ygui/widgets/slider.h>
+#include <yetty/ygui/widgets/tabbar.h>
 #include <yetty/ygui/widgets/vbox.h>
 #include <yetty/ygui/widgets/window.h>
 #include <yetty/yplatform/pty.h>
@@ -50,7 +52,10 @@
 #define YAI_HUD_CONFIG_GAP 8.0f
 #define YAI_HUD_CONFIG_INFO_HEIGHT 20.0f
 #define YAI_HUD_CONFIG_CONTROL_HEIGHT 24.0f
-#define YAI_HUD_CONFIG_MAX_INFO_ROWS 16
+#define YAI_HUD_CONFIG_TABBAR_HEIGHT 28.0f
+/* Shared across all tabs (only the active tab's rows are visible), so it
+ * must cover the SUM of every tab's read-only rows. */
+#define YAI_HUD_CONFIG_MAX_INFO_ROWS 36
 #define YAI_HUD_CONFIG_FOLD_MIN 1.0f
 #define YAI_HUD_CONFIG_FOLD_MAX 40.0f
 /* Matches the ygui dialog widget's title strip height + close button
@@ -147,24 +152,37 @@ struct yai_hud {
     struct yetty_ygui_framework *framework;
     struct yetty_yclass_object *root;
     struct yetty_yclass_object *window;
+    /* Left column — live conversation status. */
     struct yetty_yclass_object *state_label;
     struct yetty_yclass_object *turn_label;
     struct yetty_yclass_object *session_label;
+    /* Right column — lower-priority reference (model + statistics). */
+    struct yetty_yclass_object *model_label;
+    struct yetty_yclass_object *stats_label;
+    struct yetty_yclass_object *stats2_label;
 
-    /* Floating EDITABLE config dialog (built lazily on the first
-     * /config). Widget pools are fixed; unused entries collapse to
-     * zero height. Radio exclusivity is enforced in the poll. */
+    /* Floating EDITABLE, TABBED config dialog (built lazily on the first
+     * /config). Widget pools are fixed; every page's widgets are
+     * pre-built and tagged with their tab, and only the active tab's are
+     * visible. Radio exclusivity is enforced in the poll. */
     struct yetty_yclass_object *config_dialog;
+    struct yetty_yclass_object *config_tabbar;
+    int config_active_tab;
+    int config_tab_count;
     struct yetty_yclass_object *config_info_rows[YAI_HUD_CONFIG_MAX_INFO_ROWS];
+    int config_info_tab[YAI_HUD_CONFIG_MAX_INFO_ROWS]; /* tab of each used row */
+    int config_info_used;
     struct yetty_yclass_object *config_thinking_checkbox;
     struct yetty_yclass_object *config_fold_label;
     struct yetty_yclass_object *config_fold_slider;
-    /* One radio group per knob (label + option pool). */
+    int config_controls_tab; /* tab hosting checkbox+slider; -1 = none */
+    /* One radio group per knob (label + option pool), placed on a tab. */
     struct {
         struct yetty_yclass_object *label;
         struct yetty_yclass_object *radios[YAI_HUD_CONFIG_KNOB_MAX_OPTIONS];
         int active_options;
         int last_selected; /* exclusivity anchor */
+        int tab;           /* tab hosting this knob */
     } config_knobs[YAI_HUD_CONFIG_MAX_KNOBS];
     int config_knob_count;
     /* Client-side titlebar drag for the config dialog (the dialog
@@ -234,15 +252,14 @@ static struct yetty_yclass_object_ptr_result hud_add(struct yetty_yclass_object 
     return yetty_ygui_widget_add(parent, class_result.value);
 }
 
-static struct yetty_yclass_object_ptr_result hud_add_label(struct yai_hud *hud,
+static struct yetty_yclass_object_ptr_result hud_add_label(struct yetty_yclass_object *parent,
                                                          const char *initial_text,
                                                          struct yetty_ycore_rgba color)
 {
-    struct yetty_yclass_object *body = yetty_ygui_window_body(hud->window);
-    if (!body) {
-        return YETTY_ERR(yetty_yclass_object_ptr, "hud_add_label: window has no body");
+    if (!parent) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "hud_add_label: NULL parent");
     }
-    struct yetty_yclass_object_ptr_result label_res = hud_add(body, yetty_ygui_label_class_get());
+    struct yetty_yclass_object_ptr_result label_res = hud_add(parent, yetty_ygui_label_class_get());
     YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, label_res, "hud_add_label: add label");
     struct yetty_yclass_object *label = label_res.value;
 
@@ -356,16 +373,57 @@ static struct yetty_ycore_void_result hud_build(struct yai_hud *hud)
 
     struct yetty_ycore_rgba accent = {.r = 107, .g = 168, .b = 146, .a = 255};
     struct yetty_ycore_rgba secondary = {.r = 159, .g = 167, .b = 168, .a = 255};
-    struct yetty_yclass_object_ptr_result state_res = hud_add_label(hud, "idle", accent);
+    struct yetty_ycore_rgba muted = {.r = 133, .g = 141, .b = 143, .a = 255};
+
+    /* Two-column body: left = live status, right = model + statistics.
+     * An hbox splits the window body; each column flex-grows so the bar
+     * tracks pane width without per-resize re-layout of the columns. */
+    struct yetty_yclass_object *body = yetty_ygui_window_body(hud->window);
+    if (!body) {
+        return YETTY_ERR(yetty_ycore_void, "hud_build: window has no body");
+    }
+    struct yetty_yclass_object_ptr_result split_res = hud_add(body, yetty_ygui_hbox_class_get());
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, split_res, "hud_build: split hbox");
+    struct yetty_ycore_void_result split_css_res =
+        yetty_ygui_widget_apply_css(split_res.value, "gap: 14; flex-grow: 1");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, split_css_res, "hud_build: split css");
+
+    struct yetty_yclass_object_ptr_result left_res =
+        hud_add(split_res.value, yetty_ygui_vbox_class_get());
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, left_res, "hud_build: left column");
+    struct yetty_ycore_void_result left_css_res =
+        yetty_ygui_widget_apply_css(left_res.value, "flex-grow: 3");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, left_css_res, "hud_build: left css");
+    struct yetty_yclass_object *left = left_res.value;
+
+    struct yetty_yclass_object_ptr_result right_res =
+        hud_add(split_res.value, yetty_ygui_vbox_class_get());
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, right_res, "hud_build: right column");
+    struct yetty_ycore_void_result right_css_res =
+        yetty_ygui_widget_apply_css(right_res.value, "flex-grow: 2");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, right_css_res, "hud_build: right css");
+    struct yetty_yclass_object *right = right_res.value;
+
+    struct yetty_yclass_object_ptr_result state_res = hud_add_label(left, "idle", accent);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, state_res, "hud_build: state label");
     hud->state_label = state_res.value;
     struct yetty_yclass_object_ptr_result turn_res =
-        hud_add_label(hud, "waiting for first turn…", secondary);
+        hud_add_label(left, "waiting for first turn…", secondary);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, turn_res, "hud_build: turn label");
     hud->turn_label = turn_res.value;
-    struct yetty_yclass_object_ptr_result session_res = hud_add_label(hud, "", secondary);
+    struct yetty_yclass_object_ptr_result session_res = hud_add_label(left, "", secondary);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, session_res, "hud_build: session label");
     hud->session_label = session_res.value;
+
+    struct yetty_yclass_object_ptr_result model_res = hud_add_label(right, "", accent);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, model_res, "hud_build: model label");
+    hud->model_label = model_res.value;
+    struct yetty_yclass_object_ptr_result stats_res = hud_add_label(right, "", secondary);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, stats_res, "hud_build: stats label");
+    hud->stats_label = stats_res.value;
+    struct yetty_yclass_object_ptr_result stats2_res = hud_add_label(right, "", muted);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, stats2_res, "hud_build: stats2 label");
+    hud->stats2_label = stats2_res.value;
 
     float window_min_x = 0.0f;
     float window_min_y = 0.0f;
@@ -448,6 +506,29 @@ struct yetty_ycore_void_result yai_hud_set_session(struct yai_hud *hud, const ch
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_void_result yai_hud_set_model(struct yai_hud *hud, const char *text)
+{
+    if (!hud) {
+        return YETTY_ERR(yetty_ycore_void, "yai_hud_set_model: NULL hud");
+    }
+    struct yetty_ycore_void_result res = yetty_ygui_label_set_text(hud->model_label, text);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "yai_hud_set_model: set_text");
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yai_hud_set_stats(struct yai_hud *hud, const char *primary,
+                                                 const char *secondary)
+{
+    if (!hud) {
+        return YETTY_ERR(yetty_ycore_void, "yai_hud_set_stats: NULL hud");
+    }
+    struct yetty_ycore_void_result res = yetty_ygui_label_set_text(hud->stats_label, primary);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "yai_hud_set_stats: primary");
+    res = yetty_ygui_label_set_text(hud->stats2_label, secondary);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "yai_hud_set_stats: secondary");
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ycore_void_result yai_hud_flush(struct yai_hud *hud)
 {
     if (!hud) {
@@ -489,6 +570,43 @@ static struct yetty_ycore_void_result hud_config_show(struct yetty_yclass_object
     return YETTY_OK_VOID();
 }
 
+/* Show only the widgets tagged with `active`; hide every other page's.
+ * Sizes were authored at open time, so flipping `visible` is enough — a
+ * restored widget keeps its height. The tabbar itself stays visible. */
+static struct yetty_ycore_void_result hud_config_apply_active_tab(struct yai_hud *hud, int active)
+{
+    hud->config_active_tab = active;
+    for (int row = 0; row < hud->config_info_used; row++) {
+        struct yetty_ycore_void_result res = yetty_ygui_widget_set_visible(
+            hud->config_info_rows[row], hud->config_info_tab[row] == active);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "apply_active_tab: info row");
+    }
+    int show_controls = (hud->config_controls_tab == active);
+    struct yetty_ycore_void_result checkbox_res =
+        yetty_ygui_widget_set_visible(hud->config_thinking_checkbox, show_controls);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, checkbox_res, "apply_active_tab: checkbox");
+    struct yetty_ycore_void_result fold_label_res =
+        yetty_ygui_widget_set_visible(hud->config_fold_label, show_controls);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, fold_label_res, "apply_active_tab: fold label");
+    struct yetty_ycore_void_result slider_res =
+        yetty_ygui_widget_set_visible(hud->config_fold_slider, show_controls);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, slider_res, "apply_active_tab: slider");
+    for (int knob = 0; knob < YAI_HUD_CONFIG_MAX_KNOBS; knob++) {
+        int show = (hud->config_knobs[knob].active_options > 0 &&
+                    hud->config_knobs[knob].tab == active);
+        struct yetty_ycore_void_result label_res =
+            yetty_ygui_widget_set_visible(hud->config_knobs[knob].label, show);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, label_res, "apply_active_tab: knob label");
+        for (int option = 0; option < YAI_HUD_CONFIG_KNOB_MAX_OPTIONS; option++) {
+            int radio_show = show && option < hud->config_knobs[knob].active_options;
+            struct yetty_ycore_void_result radio_res =
+                yetty_ygui_widget_set_visible(hud->config_knobs[knob].radios[option], radio_show);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, radio_res, "apply_active_tab: knob radio");
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
 /* Build the dialog + its fixed widget pools once; every open fills the
  * needed entries and collapses the rest. */
 static struct yetty_ycore_void_result hud_config_dialog_build(struct yai_hud *hud)
@@ -503,6 +621,16 @@ static struct yetty_ycore_void_result hud_config_dialog_build(struct yai_hud *hu
     struct yetty_ycore_void_result closable_res =
         yetty_ygui_dialog_set_closable(hud->config_dialog, 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, closable_res, "config dialog: closable");
+
+    /* Tab strip — the FIRST dialog child so it pins to the top, above
+     * every page's widgets. Always visible; the pages below it toggle. */
+    struct yetty_yclass_object_ptr_result tabbar_res =
+        hud_add(hud->config_dialog, yetty_ygui_tabbar_class_get());
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, tabbar_res, "config dialog: tabbar");
+    hud->config_tabbar = tabbar_res.value;
+    struct yetty_ycore_void_result tabbar_size_res =
+        yetty_ygui_widget_set_size(hud->config_tabbar, 0.0f, YAI_HUD_CONFIG_TABBAR_HEIGHT);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, tabbar_size_res, "config dialog: tabbar size");
 
     for (int row = 0; row < YAI_HUD_CONFIG_MAX_INFO_ROWS; row++) {
         struct yetty_yclass_object_ptr_result label_res =
@@ -551,8 +679,8 @@ struct yetty_ycore_void_result yai_hud_toggle_config(struct yai_hud *hud,
     if (!hud) {
         return YETTY_ERR(yetty_ycore_void, "yai_hud_toggle_config: NULL hud");
     }
-    if (!setup || !setup->info_text) {
-        return YETTY_ERR(yetty_ycore_void, "yai_hud_toggle_config: NULL setup");
+    if (!setup || setup->tab_count <= 0) {
+        return YETTY_ERR(yetty_ycore_void, "yai_hud_toggle_config: NULL/empty setup");
     }
     if (hud->config_dialog) {
         struct yetty_ycore_int_result open_res = yetty_ygui_dialog_is_open(hud->config_dialog);
@@ -573,75 +701,121 @@ struct yetty_ycore_void_result yai_hud_toggle_config(struct yai_hud *hud,
 
     struct yetty_ycore_rgba accent = {.r = 107, .g = 168, .b = 146, .a = 255};
     struct yetty_ycore_rgba secondary = {.r = 159, .g = 167, .b = 168, .a = 255};
-    float content_height = 0.0f;
 
-    /* Info rows: "## " lines are accent section headers. */
-    const char *cursor = setup->info_text;
-    int used_rows = 0;
-    while (*cursor && used_rows < YAI_HUD_CONFIG_MAX_INFO_ROWS) {
-        const char *line_end = strchr(cursor, '\n');
-        size_t line_len = line_end ? (size_t)(line_end - cursor) : strlen(cursor);
-        int is_header = line_len > 3 && strncmp(cursor, "## ", 3) == 0;
-        const char *body = is_header ? cursor + 3 : cursor;
-        size_t body_len = is_header ? line_len - 3 : line_len;
-        char row_text[192];
-        if (body_len >= sizeof(row_text)) {
-            body_len = sizeof(row_text) - 1;
-        }
-        memcpy(row_text, body, body_len);
-        row_text[body_len] = '\0';
-        struct yetty_yclass_object *row_label = hud->config_info_rows[used_rows];
-        struct yetty_ycore_void_result text_res = yetty_ygui_label_set_text(row_label, row_text);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, text_res, "yai_hud_toggle_config: row text");
-        struct yetty_ycore_void_result color_res =
-            yetty_ygui_label_set_color(row_label, is_header ? accent : secondary);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, color_res, "yai_hud_toggle_config: row color");
-        struct yetty_ycore_void_result show_res =
-            hud_config_show(row_label, YAI_HUD_CONFIG_INFO_HEIGHT);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, show_res, "yai_hud_toggle_config: row show");
-        content_height += YAI_HUD_CONFIG_INFO_HEIGHT + YAI_HUD_CONFIG_GAP;
-        used_rows++;
-        if (!line_end) {
-            break;
-        }
-        cursor = line_end + 1;
+    int tab_count = setup->tab_count;
+    if (tab_count > YAI_HUD_CONFIG_TAB_MAX) {
+        tab_count = YAI_HUD_CONFIG_TAB_MAX;
     }
+    hud->config_tab_count = tab_count;
+
+    /* Sync the tab strip to the requested titles (the tabbar persists
+     * across opens; the page set can change when the engine changes). */
+    int have_tabs = yetty_ygui_tabbar_count(hud->config_tabbar);
+    while (have_tabs > tab_count) {
+        struct yetty_ycore_void_result rm =
+            yetty_ygui_tabbar_remove_tab(hud->config_tabbar, have_tabs - 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rm, "yai_hud_toggle_config: remove tab");
+        have_tabs--;
+    }
+    while (have_tabs < tab_count) {
+        struct yetty_yclass_object_ptr_result add =
+            yetty_ygui_tabbar_add_tab(hud->config_tabbar, "");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, add, "yai_hud_toggle_config: add tab");
+        have_tabs++;
+    }
+    for (int tab = 0; tab < tab_count; tab++) {
+        const char *title = setup->tab_titles[tab] ? setup->tab_titles[tab] : "";
+        struct yetty_ycore_void_result lbl =
+            yetty_ygui_tabbar_set_label(hud->config_tabbar, tab, title);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, lbl, "yai_hud_toggle_config: tab label");
+    }
+    struct yetty_ycore_void_result active_res = yetty_ygui_tabbar_set_active(hud->config_tabbar, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, active_res, "yai_hud_toggle_config: set active");
+
+    /* Content height per tab (only one page is visible at a time, but the
+     * dialog is sized to the tallest so a tab switch never resizes it). */
+    float tab_content[YAI_HUD_CONFIG_TAB_MAX] = {0};
+
+    /* 1. Read-only info rows — one shared pool, each row tagged with its
+     * tab. "## " lines are accent section headers. */
+    int used_rows = 0;
+    for (int tab = 0; tab < tab_count; tab++) {
+        const char *cursor = setup->tab_info[tab];
+        while (cursor && *cursor && used_rows < YAI_HUD_CONFIG_MAX_INFO_ROWS) {
+            const char *line_end = strchr(cursor, '\n');
+            size_t line_len = line_end ? (size_t)(line_end - cursor) : strlen(cursor);
+            int is_header = line_len > 3 && strncmp(cursor, "## ", 3) == 0;
+            const char *body = is_header ? cursor + 3 : cursor;
+            size_t body_len = is_header ? line_len - 3 : line_len;
+            char row_text[192];
+            if (body_len >= sizeof(row_text)) {
+                body_len = sizeof(row_text) - 1;
+            }
+            memcpy(row_text, body, body_len);
+            row_text[body_len] = '\0';
+            struct yetty_yclass_object *row_label = hud->config_info_rows[used_rows];
+            struct yetty_ycore_void_result text_res =
+                yetty_ygui_label_set_text(row_label, row_text);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, text_res, "yai_hud_toggle_config: row text");
+            struct yetty_ycore_void_result color_res =
+                yetty_ygui_label_set_color(row_label, is_header ? accent : secondary);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, color_res, "yai_hud_toggle_config: row color");
+            struct yetty_ycore_void_result show_res =
+                hud_config_show(row_label, YAI_HUD_CONFIG_INFO_HEIGHT);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, show_res, "yai_hud_toggle_config: row show");
+            hud->config_info_tab[used_rows] = tab;
+            tab_content[tab] += YAI_HUD_CONFIG_INFO_HEIGHT + YAI_HUD_CONFIG_GAP;
+            used_rows++;
+            if (!line_end) {
+                break;
+            }
+            cursor = line_end + 1;
+        }
+    }
+    hud->config_info_used = used_rows;
     for (int row = used_rows; row < YAI_HUD_CONFIG_MAX_INFO_ROWS; row++) {
         struct yetty_ycore_void_result hide_res =
             yetty_ygui_widget_set_visible(hud->config_info_rows[row], 0);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hide_res, "yai_hud_toggle_config: hide row");
     }
 
-    /* yai controls. */
-    struct yetty_ycore_void_result checked_res =
-        yetty_ygui_checkbox_set_checked(hud->config_thinking_checkbox, setup->show_thinking);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, checked_res, "yai_hud_toggle_config: checkbox state");
-    struct yetty_ycore_void_result checkbox_show_res =
-        hud_config_show(hud->config_thinking_checkbox, YAI_HUD_CONFIG_CONTROL_HEIGHT);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, checkbox_show_res, "yai_hud_toggle_config: checkbox");
-    content_height += YAI_HUD_CONFIG_CONTROL_HEIGHT + YAI_HUD_CONFIG_GAP;
+    /* 2. yai controls (show-thinking checkbox + fold-lines slider) on the
+     * controls tab. */
+    hud->config_controls_tab = setup->controls_tab;
+    if (setup->controls_tab >= 0 && setup->controls_tab < tab_count) {
+        int controls_tab = setup->controls_tab;
+        struct yetty_ycore_void_result checked_res =
+            yetty_ygui_checkbox_set_checked(hud->config_thinking_checkbox, setup->show_thinking);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, checked_res, "yai_hud_toggle_config: checkbox state");
+        struct yetty_ycore_void_result checkbox_show_res =
+            hud_config_show(hud->config_thinking_checkbox, YAI_HUD_CONFIG_CONTROL_HEIGHT);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, checkbox_show_res, "yai_hud_toggle_config: checkbox");
 
-    char fold_text[64];
-    snprintf(fold_text, sizeof(fold_text), "fold lines: %d", (int)(setup->fold_lines + 0.5f));
-    struct yetty_ycore_void_result fold_text_res =
-        yetty_ygui_label_set_text(hud->config_fold_label, fold_text);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, fold_text_res, "yai_hud_toggle_config: fold text");
-    struct yetty_ycore_void_result fold_color_res =
-        yetty_ygui_label_set_color(hud->config_fold_label, secondary);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, fold_color_res, "yai_hud_toggle_config: fold color");
-    struct yetty_ycore_void_result fold_show_res =
-        hud_config_show(hud->config_fold_label, YAI_HUD_CONFIG_INFO_HEIGHT);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, fold_show_res, "yai_hud_toggle_config: fold show");
-    struct yetty_ycore_void_result slider_value_res =
-        yetty_ygui_slider_set_value(hud->config_fold_slider, setup->fold_lines);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, slider_value_res, "yai_hud_toggle_config: slider value");
-    struct yetty_ycore_void_result slider_show_res =
-        hud_config_show(hud->config_fold_slider, YAI_HUD_CONFIG_CONTROL_HEIGHT);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, slider_show_res, "yai_hud_toggle_config: slider show");
-    content_height += YAI_HUD_CONFIG_INFO_HEIGHT + YAI_HUD_CONFIG_GAP;
-    content_height += YAI_HUD_CONFIG_CONTROL_HEIGHT + YAI_HUD_CONFIG_GAP;
+        char fold_text[64];
+        snprintf(fold_text, sizeof(fold_text), "fold lines: %d", (int)(setup->fold_lines + 0.5f));
+        struct yetty_ycore_void_result fold_text_res =
+            yetty_ygui_label_set_text(hud->config_fold_label, fold_text);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, fold_text_res, "yai_hud_toggle_config: fold text");
+        struct yetty_ycore_void_result fold_color_res =
+            yetty_ygui_label_set_color(hud->config_fold_label, secondary);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, fold_color_res, "yai_hud_toggle_config: fold color");
+        struct yetty_ycore_void_result fold_show_res =
+            hud_config_show(hud->config_fold_label, YAI_HUD_CONFIG_INFO_HEIGHT);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, fold_show_res, "yai_hud_toggle_config: fold show");
+        struct yetty_ycore_void_result slider_value_res =
+            yetty_ygui_slider_set_value(hud->config_fold_slider, setup->fold_lines);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, slider_value_res,
+                            "yai_hud_toggle_config: slider value");
+        struct yetty_ycore_void_result slider_show_res =
+            hud_config_show(hud->config_fold_slider, YAI_HUD_CONFIG_CONTROL_HEIGHT);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, slider_show_res, "yai_hud_toggle_config: slider show");
+        tab_content[controls_tab] += YAI_HUD_CONFIG_CONTROL_HEIGHT + YAI_HUD_CONFIG_GAP;
+        tab_content[controls_tab] += YAI_HUD_CONFIG_INFO_HEIGHT + YAI_HUD_CONFIG_GAP;
+        tab_content[controls_tab] += YAI_HUD_CONFIG_CONTROL_HEIGHT + YAI_HUD_CONFIG_GAP;
+    }
 
-    /* Knob radio groups (yai edit-mode, engine knob, …). */
+    /* 3. Knob radio groups (edit-mode, engine knob, model), each on its
+     * own tab. */
     int knob_count = setup->knob_count;
     if (knob_count > YAI_HUD_CONFIG_MAX_KNOBS) {
         knob_count = YAI_HUD_CONFIG_MAX_KNOBS;
@@ -649,12 +823,15 @@ struct yetty_ycore_void_result yai_hud_toggle_config(struct yai_hud *hud,
     hud->config_knob_count = knob_count;
     for (int knob = 0; knob < YAI_HUD_CONFIG_MAX_KNOBS; knob++) {
         const struct yai_hud_config_knob *spec = &setup->knobs[knob];
-        int active = (knob < knob_count && spec->label && spec->option_count > 0)
+        int knob_tab = spec->tab;
+        int active = (knob < knob_count && spec->label && spec->option_count > 0 && knob_tab >= 0 &&
+                      knob_tab < tab_count)
                          ? spec->option_count
                          : 0;
         if (active > YAI_HUD_CONFIG_KNOB_MAX_OPTIONS) {
             active = YAI_HUD_CONFIG_KNOB_MAX_OPTIONS;
         }
+        hud->config_knobs[knob].tab = knob_tab;
         if (active > 0) {
             struct yetty_ycore_void_result knob_text_res =
                 yetty_ygui_label_set_text(hud->config_knobs[knob].label, spec->label);
@@ -666,7 +843,7 @@ struct yetty_ycore_void_result yai_hud_toggle_config(struct yai_hud *hud,
             struct yetty_ycore_void_result knob_show_res =
                 hud_config_show(hud->config_knobs[knob].label, YAI_HUD_CONFIG_INFO_HEIGHT);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, knob_show_res, "yai_hud_toggle_config: knob show");
-            content_height += YAI_HUD_CONFIG_INFO_HEIGHT + YAI_HUD_CONFIG_GAP;
+            tab_content[knob_tab] += YAI_HUD_CONFIG_INFO_HEIGHT + YAI_HUD_CONFIG_GAP;
             for (int option = 0; option < active; option++) {
                 struct yetty_yclass_object *radio = hud->config_knobs[knob].radios[option];
                 struct yetty_ycore_void_result radio_label_res =
@@ -681,7 +858,7 @@ struct yetty_ycore_void_result yai_hud_toggle_config(struct yai_hud *hud,
                     hud_config_show(radio, YAI_HUD_CONFIG_CONTROL_HEIGHT);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, radio_show_res,
                                     "yai_hud_toggle_config: radio show");
-                content_height += YAI_HUD_CONFIG_CONTROL_HEIGHT + YAI_HUD_CONFIG_GAP;
+                tab_content[knob_tab] += YAI_HUD_CONFIG_CONTROL_HEIGHT + YAI_HUD_CONFIG_GAP;
             }
         } else {
             struct yetty_ycore_void_result knob_hide_res =
@@ -699,8 +876,19 @@ struct yetty_ycore_void_result yai_hud_toggle_config(struct yai_hud *hud,
         }
     }
 
-    /* Open centered; never off-viewport. */
-    float dialog_height = YAI_HUD_CONFIG_TOP_PAD + content_height - YAI_HUD_CONFIG_GAP +
+    /* Show tab 0; every other page stays built but hidden. */
+    struct yetty_ycore_void_result tab_apply_res = hud_config_apply_active_tab(hud, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, tab_apply_res, "yai_hud_toggle_config: apply tab");
+
+    /* Open centered, sized to the tallest page; never off-viewport. */
+    float max_content = 0.0f;
+    for (int tab = 0; tab < tab_count; tab++) {
+        if (tab_content[tab] > max_content) {
+            max_content = tab_content[tab];
+        }
+    }
+    float dialog_height = YAI_HUD_CONFIG_TOP_PAD + YAI_HUD_CONFIG_TABBAR_HEIGHT +
+                          YAI_HUD_CONFIG_GAP + max_content - YAI_HUD_CONFIG_GAP +
                           YAI_HUD_CONFIG_BOTTOM_PAD;
     float dialog_x = (hud->viewport_width - YAI_HUD_CONFIG_WIDTH) / 2.0f;
     float dialog_y = (hud->viewport_height - dialog_height) / 2.0f;
@@ -738,6 +926,18 @@ struct yetty_ycore_void_result yai_hud_config_poll(struct yai_hud *hud,
         return YETTY_OK_VOID();
     }
     out->open = 1;
+
+    /* Tab strip: if the user clicked a different tab, swap the visible
+     * page. The widget state of the now-hidden page is retained. */
+    struct yetty_ycore_int_result active_res = yetty_ygui_tabbar_active(hud->config_tabbar);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, active_res, "yai_hud_config_poll: tabbar active");
+    int active_tab = active_res.value;
+    if (active_tab >= 0 && active_tab < hud->config_tab_count &&
+        active_tab != hud->config_active_tab) {
+        struct yetty_ycore_void_result apply_res = hud_config_apply_active_tab(hud, active_tab);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "yai_hud_config_poll: switch tab");
+    }
+    out->active_tab = hud->config_active_tab;
 
     struct yetty_ycore_int_result checked_res =
         yetty_ygui_checkbox_get_checked(hud->config_thinking_checkbox);

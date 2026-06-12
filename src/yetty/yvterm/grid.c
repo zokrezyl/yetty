@@ -78,9 +78,48 @@ static struct yetty_ycore_void_result grid_figure_render_slot(struct yetty_yclas
     if (!grid->content || !grid->content->ops || !grid->content->ops->render) {
         return YETTY_OK_VOID();
     }
+
+    /* Content insets: a client reserved a band of the pane (a docked status
+     * bar / HUD) via YETTY_OSC_CS_CONTENT_INSET. The terminal already shrank
+     * the grid rows/cols to the inset content rect; here we narrow the render
+     * viewport (and the scissor clip) to the same rect so the text grid lands
+     * at the inset origin and any tall ydraw figure clips at the content edge
+     * instead of bleeding into the reserved band. render_layer maps the grid
+     * into target->viewport (SetViewport + SetScissorRect), and figure passes
+     * intersect their scissor with target->clip — set both. */
+    struct yetty_yrender_viewport saved_viewport = target->viewport;
+    struct yetty_yrender_viewport saved_clip = target->clip;
+    float inset_left = grid->content->content_inset_left;
+    float inset_right = grid->content->content_inset_right;
+    float inset_top = grid->content->content_inset_top;
+    float inset_bottom = grid->content->content_inset_bottom;
+    int inset_active = (inset_left > 0.0f || inset_right > 0.0f || inset_top > 0.0f ||
+                        inset_bottom > 0.0f);
+    if (inset_active) {
+        struct yetty_yrender_viewport content = {
+            .x = saved_viewport.x + inset_left,
+            .y = saved_viewport.y + inset_top,
+            .w = saved_viewport.w - inset_left - inset_right,
+            .h = saved_viewport.h - inset_top - inset_bottom,
+        };
+        if (content.w < 1.0f) {
+            content.w = 1.0f;
+        }
+        if (content.h < 1.0f) {
+            content.h = 1.0f;
+        }
+        target->viewport = content;
+        target->clip = content;
+    }
+
     /* Bottom-most child: force a full repaint so figures composited above it
      * (every pass uses LoadOp_Load) always sit on freshly-drawn content. */
     struct yetty_ycore_int_result render_res = grid->content->ops->render(grid->content, target, 1);
+
+    if (inset_active) {
+        target->viewport = saved_viewport;
+        target->clip = saved_clip;
+    }
     YETTY_RETURN_IF_ERR(yetty_ycore_void, render_res, "grid_figure_render: content render");
     return YETTY_OK_VOID();
 }

@@ -812,9 +812,14 @@ void yai_arm_child_kill_timer(struct yai_app *app)
     uv_timer_start(&app->kill_timer, on_kill_timer, YAI_KILL_TIMEOUT_MS, 0);
 }
 
-/* Reserve the bottom rows for the docked HUD via the terminal scroll
- * region (DECSTBM), so conversation text never scrolls under the bar.
- * Re-applied on every resize; reset with yai_release_dock_reservation.
+/* Reserve the bottom band for the docked HUD by asking yetty to inset the
+ * terminal content surface (YETTY_OSC_CS_CONTENT_INSET). yetty owns the real
+ * cell metrics, so it converts the px to whole rows, shrinks the libvterm grid
+ * (text reflows, we get SIGWINCH with fewer rows) and clips terminal content
+ * to the inset rect — so neither conversation text nor a tall figure (sheet
+ * music, a plot) renders under the bar. This is the honest "take from the
+ * terminal size" reservation, unlike a DECSTBM scroll region which figures
+ * ignore. Re-applied on every resize; reset with yai_release_dock_reservation.
  * A no-op when the HUD floats or stdout is not a tty. */
 static struct yetty_ycore_void_result yai_apply_dock_reservation(struct yai_app *app)
 {
@@ -825,37 +830,36 @@ static struct yetty_ycore_void_result yai_apply_dock_reservation(struct yai_app 
     if (dock_px <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    struct winsize size = {0};
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) != 0 || size.ws_row == 0) {
-        return YETTY_OK_VOID();
-    }
-    float cell_height =
-        (size.ws_ypixel && size.ws_row) ? (float)size.ws_ypixel / (float)size.ws_row : 19.0f;
-    int dock_rows = (int)((dock_px + cell_height - 1.0f) / cell_height); /* ceil */
-    if (dock_rows < 1) {
-        dock_rows = 1;
-    }
-    if (dock_rows >= size.ws_row) {
-        dock_rows = size.ws_row - 1;
-    }
-    int region_bottom = size.ws_row - dock_rows;
-    /* Scroll region rows 1..region_bottom; park the cursor at the
-     * region's bottom so the pinned prompt sits just above the bar. */
-    printf("\033[1;%dr\033[%d;1H", region_bottom, region_bottom);
+    /* Flush pending text first so the envelope serializes after it (single
+     * writer over the shared tty file description). */
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "yai_apply_dock_reservation: flush");
+    struct yetty_content_inset inset = {
+        .magic = YETTY_CONTENT_INSET_MAGIC,
+        .version = YMGUI_WIRE_VERSION,
+        .bottom = dock_px,
+    };
+    struct yetty_ycore_void_result emit_res = yetty_yface_emit_to_fd(
+        STDOUT_FILENO, YETTY_OSC_CS_CONTENT_INSET, 0, NULL, 0, &inset, sizeof(inset));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "yai_apply_dock_reservation: emit");
     return YETTY_OK_VOID();
 }
 
-/* Restore the full-screen scroll region (drop the HUD reservation). */
+/* Drop the HUD reservation: zero insets restore the full-pane grid. */
 static struct yetty_ycore_void_result yai_release_dock_reservation(struct yai_app *app)
 {
     if (!app->renderer.pin_enabled) {
         return YETTY_OK_VOID();
     }
-    fputs("\033[r", stdout);
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "yai_release_dock_reservation: flush");
+    struct yetty_content_inset inset = {
+        .magic = YETTY_CONTENT_INSET_MAGIC,
+        .version = YMGUI_WIRE_VERSION,
+    };
+    struct yetty_ycore_void_result emit_res = yetty_yface_emit_to_fd(
+        STDOUT_FILENO, YETTY_OSC_CS_CONTENT_INSET, 0, NULL, 0, &inset, sizeof(inset));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "yai_release_dock_reservation: emit");
     return YETTY_OK_VOID();
 }
 
@@ -976,6 +980,7 @@ static struct yetty_ycore_int_result parse_engine_knob(struct yai_app *app, int 
         return YETTY_ERR(yetty_ycore_int, "parse_engine_knob: key too long");
     }
     app->config_knobs[knob_index].is_edit_mode = 0;
+    app->config_knobs[knob_index].is_model = 0;
     memcpy(app->config_knobs[knob_index].key, spec, key_len);
     app->config_knobs[knob_index].key[key_len] = '\0';
     size_t label_len = (size_t)(options_start - label_start - 1);
@@ -1023,10 +1028,11 @@ static struct yetty_ycore_int_result parse_engine_knob(struct yai_app *app, int 
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-/* Fill knob 0: the yai edit-mode (emacs / vi) radio group. */
-static void build_editmode_knob(struct yai_app *app, struct yai_hud_config_knob *out)
+/* Fill knob 0: the yai edit-mode (emacs / vi) radio group, on tab `tab`. */
+static void build_editmode_knob(struct yai_app *app, int tab, struct yai_hud_config_knob *out)
 {
     app->config_knobs[0].is_edit_mode = 1;
+    app->config_knobs[0].is_model = 0;
     app->config_knobs[0].key[0] = '\0';
     snprintf(app->config_knobs[0].options[0], sizeof(app->config_knobs[0].options[0]), "emacs");
     snprintf(app->config_knobs[0].options[1], sizeof(app->config_knobs[0].options[1]), "vi");
@@ -1037,6 +1043,92 @@ static void build_editmode_knob(struct yai_app *app, struct yai_hud_config_knob 
     out->options[1] = app->config_knobs[0].options[1];
     out->option_count = 2;
     out->selected = app->config_knobs[0].selected;
+    out->tab = tab;
+}
+
+/* Fill knob 2: the model radio group for the active backend, on tab
+ * `tab`. The model is the YAI_MODEL env var; "default" means unset (the
+ * CLI's own default). These are the common choices — any other value
+ * still works by exporting YAI_MODEL directly. */
+static void build_model_knob(struct yai_app *app, int tab, struct yai_hud_config_knob *out)
+{
+    static const char *const claude_models[] = {"default", "opus", "sonnet", "haiku"};
+    static const char *const codex_models[] = {"default", "gpt-5", "gpt-5-codex", "o3"};
+    static const char *const gemini_models[] = {"default", "gemini-2.5-pro", "gemini-2.5-flash"};
+    const char *const *list = claude_models;
+    int count = 4;
+    if (strcmp(app->engine_name, "codex") == 0) {
+        list = codex_models;
+        count = 4;
+    } else if (strcmp(app->engine_name, "gemini") == 0) {
+        list = gemini_models;
+        count = 3;
+    }
+    if (count > YAI_HUD_CONFIG_KNOB_MAX_OPTIONS) {
+        count = YAI_HUD_CONFIG_KNOB_MAX_OPTIONS;
+    }
+    const char *current = getenv("YAI_MODEL");
+    if (!current) {
+        current = "";
+    }
+    int selected = 0; /* "default" */
+    app->config_knobs[2].is_edit_mode = 0;
+    app->config_knobs[2].is_model = 1;
+    snprintf(app->config_knobs[2].key, sizeof(app->config_knobs[2].key), "YAI_MODEL");
+    for (int option = 0; option < count; option++) {
+        snprintf(app->config_knobs[2].options[option], sizeof(app->config_knobs[2].options[option]),
+                 "%s", list[option]);
+        if (option > 0 && current[0] && strcmp(list[option], current) == 0) {
+            selected = option;
+        }
+        out->options[option] = app->config_knobs[2].options[option];
+    }
+    app->config_knobs[2].option_count = count;
+    app->config_knobs[2].selected = selected;
+    out->label = "model";
+    out->option_count = count;
+    out->selected = selected;
+    out->tab = tab;
+}
+
+/* The friendly backend page title (claude → "claude code"). */
+static const char *backend_tab_title(const char *engine_name)
+{
+    if (strcmp(engine_name, "claude") == 0) {
+        return "claude code";
+    }
+    return engine_name;
+}
+
+/* Refresh the HUD right column: active model + cumulative session usage. */
+struct yetty_ycore_void_result yai_refresh_hud_stats(struct yai_app *app)
+{
+    if (!app->hud) {
+        return YETTY_OK_VOID();
+    }
+    const char *model = getenv("YAI_MODEL");
+    if (!model || !model[0]) {
+        model = "default";
+    }
+    char model_line[96];
+    snprintf(model_line, sizeof(model_line), "%s · %s", app->engine_name, model);
+    struct yetty_ycore_void_result model_res = yai_hud_set_model(app->hud, model_line);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, model_res, "yai_refresh_hud_stats: model");
+
+    char input_text[16];
+    char output_text[16];
+    char cache_text[16];
+    yai_format_tokens(app->usage.input, input_text, sizeof(input_text));
+    yai_format_tokens(app->usage.output, output_text, sizeof(output_text));
+    yai_format_tokens(app->usage.cache_read, cache_text, sizeof(cache_text));
+    char primary[96];
+    char secondary[96];
+    snprintf(primary, sizeof(primary), "Σ ↑%s ↓%s", input_text, output_text);
+    snprintf(secondary, sizeof(secondary), "cache %s · $%.4f · %d turn%s", cache_text,
+             app->usage.cost, app->usage.turns, app->usage.turns == 1 ? "" : "s");
+    struct yetty_ycore_void_result stats_res = yai_hud_set_stats(app->hud, primary, secondary);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, stats_res, "yai_refresh_hud_stats: stats");
+    return YETTY_OK_VOID();
 }
 
 /* /config — an EDITABLE floating ygui dialog when the HUD is up (a
@@ -1058,35 +1150,85 @@ static struct yetty_ycore_void_result show_config(struct yai_app *app)
             yetty_yai_config_knob(NULL, app->engine, app, knob_spec, sizeof(knob_spec));
         YETTY_RETURN_IF_ERR(yetty_ycore_void, knob_res, "show_config: knob spec");
 
-        char info_text[2048];
-        int written = snprintf(info_text, sizeof(info_text),
-                               "## yai\n"
-                               "engine: %s · session: %s\n"
-                               "transcript: %s\n"
-                               "edit mode: %s · turn in flight: %s · queued %d/%d\n"
-                               "## %s\n"
-                               "%s",
-                               app->engine_name,
-                               app->session_id[0] ? app->session_id : "(none yet)",
-                               app->transcript_file ? app->transcript_path : "(disabled)",
-                               app->editor_mode_name, app->waiting ? "yes" : "no", app->queue_len,
-                               YAI_QUEUE_MAX, app->engine_name, engine_rows);
-        if (written < 0 || (size_t)written >= sizeof(info_text)) {
-            return YETTY_ERR(yetty_ycore_void, "show_config: info text truncated");
+        /* Reset the apply-side knob mapping; show_config fully rebuilds it. */
+        memset(app->config_knobs, 0, sizeof(app->config_knobs));
+
+        /* Tabs: 0 yai · 1 backend · 2 model · 3 stats. */
+        enum { TAB_YAI = 0, TAB_BACKEND = 1, TAB_MODEL = 2, TAB_STATS = 3 };
+
+        char yai_info[512];
+        int yai_written = snprintf(
+            yai_info, sizeof(yai_info),
+            "engine: %s · session: %s\n"
+            "transcript: %s\n"
+            "edit mode: %s · turn in flight: %s · queued %d/%d",
+            app->engine_name, app->session_id[0] ? app->session_id : "(none yet)",
+            app->transcript_file ? app->transcript_path : "(disabled)", app->editor_mode_name,
+            app->waiting ? "yes" : "no", app->queue_len, YAI_QUEUE_MAX);
+        if (yai_written < 0 || (size_t)yai_written >= sizeof(yai_info)) {
+            return YETTY_ERR(yetty_ycore_void, "show_config: yai info truncated");
+        }
+
+        const char *current_model = getenv("YAI_MODEL");
+        if (!current_model || !current_model[0]) {
+            current_model = "(CLI default)";
+        }
+        char model_info[256];
+        int model_written = snprintf(
+            model_info, sizeof(model_info),
+            "current: %s\n"
+            "sets YAI_MODEL · applies next turn (claude: next session)", current_model);
+        if (model_written < 0 || (size_t)model_written >= sizeof(model_info)) {
+            return YETTY_ERR(yetty_ycore_void, "show_config: model info truncated");
+        }
+
+        char input_text[16];
+        char output_text[16];
+        char cache_read_text[16];
+        char cache_write_text[16];
+        yai_format_tokens(app->usage.input, input_text, sizeof(input_text));
+        yai_format_tokens(app->usage.output, output_text, sizeof(output_text));
+        yai_format_tokens(app->usage.cache_read, cache_read_text, sizeof(cache_read_text));
+        yai_format_tokens(app->usage.cache_creation, cache_write_text, sizeof(cache_write_text));
+        char stats_info[384];
+        int stats_written = snprintf(stats_info, sizeof(stats_info),
+                                     "turns: %d\n"
+                                     "input: %s · output: %s\n"
+                                     "cache read: %s · cache write: %s\n"
+                                     "cost: $%.4f",
+                                     app->usage.turns, input_text, output_text, cache_read_text,
+                                     cache_write_text, app->usage.cost);
+        if (stats_written < 0 || (size_t)stats_written >= sizeof(stats_info)) {
+            return YETTY_ERR(yetty_ycore_void, "show_config: stats info truncated");
         }
 
         struct yai_hud_config_setup setup = {0};
-        setup.info_text = info_text;
+        setup.tab_count = 4;
+        setup.tab_titles[TAB_YAI] = "yai";
+        setup.tab_titles[TAB_BACKEND] = backend_tab_title(app->engine_name);
+        setup.tab_titles[TAB_MODEL] = "model";
+        setup.tab_titles[TAB_STATS] = "stats";
+        setup.tab_info[TAB_YAI] = yai_info;
+        setup.tab_info[TAB_BACKEND] = engine_rows;
+        setup.tab_info[TAB_MODEL] = model_info;
+        setup.tab_info[TAB_STATS] = stats_info;
+        setup.controls_tab = TAB_YAI;
         setup.show_thinking = app->renderer.show_thinking;
         setup.fold_lines = (float)app->renderer.fold_lines;
-        /* knob 0: yai edit mode; knob 1: the engine's knob (if any). */
-        build_editmode_knob(app, &setup.knobs[0]);
+
+        /* knob 0 = edit mode (yai tab); knob 1 = engine knob (backend
+         * tab, if any); knob 2 = model (model tab). */
+        build_editmode_knob(app, TAB_YAI, &setup.knobs[0]);
         char engine_knob_label[64];
         struct yetty_ycore_int_result engine_knob_res = parse_engine_knob(
             app, 1, knob_spec, engine_knob_label, sizeof(engine_knob_label), &setup.knobs[1]);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, engine_knob_res, "show_config: engine knob");
-        app->config_knob_count = 1 + engine_knob_res.value;
-        setup.knob_count = app->config_knob_count;
+        if (engine_knob_res.value > 0) {
+            setup.knobs[1].tab = TAB_BACKEND;
+        }
+        build_model_knob(app, TAB_MODEL, &setup.knobs[2]);
+        setup.knob_count = YAI_HUD_CONFIG_MAX_KNOBS;
+        app->config_knob_count = YAI_HUD_CONFIG_MAX_KNOBS;
         app->config_show_thinking_applied = app->renderer.show_thinking;
         app->config_fold_lines_applied = app->renderer.fold_lines;
 
@@ -1580,6 +1722,17 @@ static struct yetty_ycore_void_result config_dialog_sync(struct yai_app *app)
             struct yetty_ycore_void_result mode_res = yai_set_edit_mode(app, value);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, mode_res, "config_dialog_sync: edit mode");
             struct yetty_ycore_void_result note_res = config_note(app, "edit mode", value);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, note_res, "config_dialog_sync: note");
+        } else if (app->config_knobs[knob].is_model) {
+            /* "default" clears the override; any other value sets it. The
+             * engines read YAI_MODEL at the next spawn. */
+            const char *model = strcmp(value, "default") == 0 ? "" : value;
+            if (setenv("YAI_MODEL", model, 1) != 0) {
+                return YETTY_ERR(yetty_ycore_void, "config_dialog_sync: setenv YAI_MODEL");
+            }
+            struct yetty_ycore_void_result stats_res = yai_refresh_hud_stats(app);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, stats_res, "config_dialog_sync: hud model");
+            struct yetty_ycore_void_result note_res = config_note(app, "model", value);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, note_res, "config_dialog_sync: note");
         } else {
             struct yetty_ycore_void_result apply_res = yetty_yai_apply_config(
@@ -2082,6 +2235,9 @@ int main(int argc, char **argv)
     } else {
         app->hud = hud_res.value;
     }
+    /* Seed the HUD right column with the model + zeroed stats so it reads
+     * sensibly before the first turn lands. */
+    yai_report_error(app, "hud stats", yai_refresh_hud_stats(app));
 
     struct yetty_yface_ptr_result yface_res = yetty_yface_create();
     if (YETTY_IS_ERR(yface_res)) {
