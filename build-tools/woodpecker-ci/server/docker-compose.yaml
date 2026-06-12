@@ -1,6 +1,7 @@
 services:
   woodpecker-server:
     image: woodpeckerci/woodpecker-server:v3
+    restart: unless-stopped
     ports:
       - 8000:8000
       - 9000:9000
