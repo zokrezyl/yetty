@@ -8,6 +8,7 @@ struct yetty_ycore_void_result yetty_ycircuit_configure(struct yetty_yclass_ctx 
 struct yetty_ycore_void_result yetty_ycircuit_parse(struct yetty_yclass_ctx *, struct yetty_yclass_object *, const char *, size_t);
 struct yetty_ycore_void_result yetty_ycircuit_clear(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
 struct yetty_ycore_int_result yetty_ycircuit_add_component(struct yetty_yclass_ctx *, struct yetty_yclass_object *, const char *, float, float, int32_t, const char *, const char *);
+struct yetty_ycore_int_result yetty_ycircuit_add_ic(struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, int32_t, const char *, const char *, const char *, const char *, const char *, const char *);
 struct yetty_ycore_int_result yetty_ycircuit_add_wire(struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, float, float);
 struct yetty_ycore_int_result yetty_ycircuit_add_junction(struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float);
 struct yetty_ycore_int_result yetty_ycircuit_add_label(struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, const char *);
@@ -38,6 +39,11 @@ function Circuit:clear()
 end
 function Circuit:add_component(kind, x, y, rotation_deg, name, value)
   local res = rt.C().yetty_ycircuit_add_component(nil, self.handle, kind, x, y, rotation_deg, name, value)
+  rt.check(res)
+  return res.value
+end
+function Circuit:add_ic(x, y, rotation_deg, name, value, pins_left, pins_right, pins_top, pins_bottom)
+  local res = rt.C().yetty_ycircuit_add_ic(nil, self.handle, x, y, rotation_deg, name, value, pins_left, pins_right, pins_top, pins_bottom)
   rt.check(res)
   return res.value
 end

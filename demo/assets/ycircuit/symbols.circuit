@@ -19,5 +19,8 @@ switch    12 13  h  S1   SPST
 npn       20 13  h  Q1   BC547
 pnp       28 13  h  Q2   BC557
 
-gnd  4 17  h  GND
-vcc 12 19  h  VCC
+opamp  4 18  h  U1
+ic    14 18  h  U2  LM393  l:IN+,IN-,GND  r:VCC,OUT
+
+gnd 24 17  h  GND
+vcc 30 19  h  VCC

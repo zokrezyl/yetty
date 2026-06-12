@@ -13,10 +13,12 @@ makes the same content sniffable when piped through stdin.
 | `rc-lowpass.circuit`     | acsource, horizontal R / vertical C two-port, Vin/Vout labels |
 | `rectifier.circuit`      | diode direction, multi-node rail, parallel C‖R branches |
 | `common-emitter.circuit` | npn (three pins), vcc, bias divider, L-shaped base route |
+| `555-blinker.circuit`    | generic `ic` body with named pins both sides, wire crossings, LED output stage |
+| `inverting-amp.circuit`  | opamp symbol, feedback loop routed over the body, grounded + input |
 
 ## Coverage galleries
 
 | file                 | covers                                                  |
 |----------------------|---------------------------------------------------------|
-| `symbols.circuit`    | every component kind once, with name + value labels; the `grid` directive |
+| `symbols.circuit`    | every component kind once (incl. opamp and a small `ic`), with name + value labels; the `grid` directive |
 | `rotations.circuit`  | a polarised symbol (diode) in all four quarter turns; vertical bodies; rotated npn |

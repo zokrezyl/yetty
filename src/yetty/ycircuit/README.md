@@ -57,6 +57,25 @@ label 15.5 2 Vout                # free text (rest of line, quotes optional)
 | `vcc` | | stem + bar (connection point at the element position) |
 | `npn` / `pnp` | | circle, base bar, emitter arrow (base pin at `(-3,0)` local) |
 | `switch` | `sw` | pivot dots + blade |
+| `opamp` | | triangle, inverting input top `(-3,-1)`, non-inverting bottom `(-3,1)`, output `(3,0)` |
+| `ic` | `chip` | DIP-style box with named pins per side |
+
+### Generic ICs
+
+The `ic` kind takes per-side pin lists as extra `l:`/`r:`/`t:`/`b:` tokens
+(comma-separated names, in pin order):
+
+```
+ic 14 8 h U1 NE555 l:GND,TRIG,OUT,RESET r:VCC,DIS,THR,CV
+```
+
+The body grows to fit the longest side (pin pitch 1.6 grid units, leads
+1.2 units long); pin tips therefore sit at `±(half_width + 1.2)` /
+`±(half_height + 1.2)` from the centre. Pin names render inside the body
+next to their pin, the designator above the body, the part number centred
+inside it. Labels stay horizontal, so ICs read best unrotated. The FFI
+counterpart is `add_ic(x, y, rotation_deg, name, value, pins_left,
+pins_right, pins_top, pins_bottom)`.
 
 Two-terminal components span 6 grid units pin-to-pin (pins at local
 `(±3, 0)`, rotated in quarter turns around the centre; screen y grows
@@ -66,6 +85,7 @@ downward, so `v`/`r90` turns the `+x` pin axis to point down).
 
 `configure(grid_px, flags)`, `parse(input, len)`, `clear()`,
 `add_component(kind, x, y, rotation_deg, name, value)`,
+`add_ic(x, y, rotation_deg, name, value, pins_left, pins_right, pins_top, pins_bottom)`,
 `add_wire(x0, y0, x1, y1)`, `add_junction(x, y)`, `add_label(x, y, text)`,
 `render()` → drawable list (caller owns), `hit_test(x, y)` → element id,
 `set_highlight(id)` (−1 clears), `destroy()`. The exposed

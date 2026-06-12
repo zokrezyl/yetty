@@ -56,6 +56,13 @@ class Circuit(_rt.YClass):
         _fn = _rt.cfn("yetty_ycircuit_add_component", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_char_p, c_float, c_float, c_int32, c_char_p, c_char_p])
         res = _fn(None, self._handle, _rt.cstr(kind), x, y, rotation_deg, _rt.cstr(name), _rt.cstr(value))
         return _rt.result_from_c(res)
+    def add_ic(self, x: float, y: float, rotation_deg: int, name: str | bytes | None, value: str | bytes | None, pins_left: str | bytes | None, pins_right: str | bytes | None, pins_top: str | bytes | None, pins_bottom: str | bytes | None) -> _rt.Result[int]:
+        """Call `yetty_ycircuit_add_ic`; returns Result, never raises for yclass errors."""
+        if self._handle is None:
+            return self._invalid_result()
+        _fn = _rt.cfn("yetty_ycircuit_add_ic", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float, c_int32, c_char_p, c_char_p, c_char_p, c_char_p, c_char_p, c_char_p])
+        res = _fn(None, self._handle, x, y, rotation_deg, _rt.cstr(name), _rt.cstr(value), _rt.cstr(pins_left), _rt.cstr(pins_right), _rt.cstr(pins_top), _rt.cstr(pins_bottom))
+        return _rt.result_from_c(res)
     def add_wire(self, x0: float, y0: float, x1: float, y1: float) -> _rt.Result[int]:
         """Call `yetty_ycircuit_add_wire`; returns Result, never raises for yclass errors."""
         if self._handle is None:

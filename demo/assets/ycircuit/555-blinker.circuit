@@ -1,0 +1,39 @@
+# NE555 astable multivibrator blinking an LED — the classic first IC
+# circuit. Exercises the generic `ic` body with named pins on both sides,
+# wire crossings (no dot = no connection) and a three-branch ground rail.
+circuit 555 astable blinker
+
+ic 14 8 h U1 NE555 l:GND,TRIG,OUT,RESET r:VCC,DIS,THR,CV
+
+# supply rails
+wire 8 2  25 2
+vcc 13 2
+dot 13 2
+wire 4 21  25 21
+gnd 14 21
+dot 14 21
+
+# supply pins: VCC and RESET up to the rail, GND down
+wire 17.8 5.6  22 5.6  22 2
+dot 22 2
+wire 10.2 10.4  8 10.4  8 2
+wire 10.2 5.6  6 5.6  6 21
+dot 6 21
+
+# timing network: VCC -> R1 -> DIS -> R2 -> THR/TRIG -> C1 -> GND
+resistor 25 5 v R1 10k
+wire 17.8 7.2  21 7.2  21 8  25 8
+dot 25 8
+resistor 25 11 v R2 47k
+wire 17.8 8.8  23 8.8  23 14
+wire 10.2 7.2  9 7.2  9 12.5  23 12.5  23 14
+dot 23 14
+wire 23 14  25 14
+dot 25 14
+wire 25 14  25 15
+capacitor 25 18 v C1 10u
+
+# output stage: OUT -> series resistor -> LED -> ground rail
+wire 10.2 8.8  4 8.8  4 9
+resistor 4 12 v R3 330
+led 4 18 r90 D1 red

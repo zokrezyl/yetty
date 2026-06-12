@@ -37,6 +37,16 @@ echo '$ ycat demo/assets/ycircuit/rectifier.circuit'
 "$YCAT" "$ASSETS/rectifier.circuit"
 p
 
+echo
+echo '$ ycat demo/assets/ycircuit/inverting-amp.circuit'
+"$YCAT" "$ASSETS/inverting-amp.circuit"
+p
+
+echo
+echo '$ ycat demo/assets/ycircuit/555-blinker.circuit'
+"$YCAT" "$ASSETS/555-blinker.circuit"
+p
+
 # Piped through stdin — no extension hint; the leading `circuit` keyword
 # is sniffed by ycat's content detector.
 echo
