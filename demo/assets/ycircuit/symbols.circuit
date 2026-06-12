@@ -1,0 +1,26 @@
+# Symbol gallery — every component kind ycircuit draws, one per cell,
+# with designator + value labels. Also demonstrates the `grid` directive
+# (overrides the cell-derived pitch).
+circuit Symbol gallery
+grid 16
+
+resistor   4  3  h  R1   10k
+capacitor 12  3  h  C1   100n
+inductor  20  3  h  L1   10mH
+diode     28  3  h  D1   1N4148
+
+led        4  8  h  D2   red
+battery   12  8  h  B1   9V
+vsource   20  8  h  V1   5V
+isource   28  8  h  I1   1mA
+
+acsource   4 13  h  AC1  50Hz
+switch    12 13  h  S1   SPST
+npn       20 13  h  Q1   BC547
+pnp       28 13  h  Q2   BC557
+
+opamp  4 18  h  U1
+ic    14 18  h  U2  LM393  l:IN+,IN-,GND  r:VCC,OUT
+
+gnd 24 17  h  GND
+vcc 30 19  h  VCC

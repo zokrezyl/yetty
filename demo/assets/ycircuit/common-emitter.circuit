@@ -1,0 +1,25 @@
+# Common-emitter NPN amplifier stage with a bias divider, collector and
+# emitter resistors. Exercises the transistor symbol (three pins), vcc,
+# an L-shaped base route and tapped output.
+circuit Common-emitter amplifier
+
+vcc 10 0
+wire 4 0  16 0
+dot 10 0
+
+resistor  4  3  v  R1  47k
+resistor  4  9  v  R2  10k
+dot 4 6
+wire 4 6  8 6  8 9  12 9
+label 9 8.3 Vin
+
+resistor 16  3  v  RC  2.2k
+npn      15  9  h  Q1  BC547
+dot 16 6
+wire 16 6  19 6
+label 19.5 6.3 Vout
+
+resistor 16 15  v  RE  1k
+wire 4 12  4 18  16 18
+gnd 10 18
+dot 10 18

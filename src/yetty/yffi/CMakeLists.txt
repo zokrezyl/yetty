@@ -26,6 +26,7 @@ find_package(Threads REQUIRED)
 # their bindings are validated.
 target_link_libraries(yetty_ffi PRIVATE
     -Wl,--whole-archive
+    yetty_ycircuit
     yetty_yfigure
     yetty_ygrid
     yetty_ygui

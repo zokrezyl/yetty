@@ -1,0 +1,19 @@
+# Half-wave rectifier with a smoothing capacitor and a load resistor.
+# Exercises the diode (conduction direction matters), a multi-node top
+# rail with junction dots, and parallel vertical branches.
+circuit Half-wave rectifier
+
+acsource  2  8  v  AC1  50Hz
+wire 2 5  2 3  5 3
+diode     8  3  h  D1  1N4007
+wire 11 3  17 3
+dot 14 3
+capacitor 14  6  v  C1  470u
+resistor  17  6  v  R1  2.2k
+label 18 2.4 Vdc
+wire 2 11  2 12  17 12
+wire 14 9  14 12
+dot 14 12
+wire 17 9  17 12
+gnd 8 12
+dot 8 12

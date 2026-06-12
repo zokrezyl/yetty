@@ -145,6 +145,10 @@ enum yetty_ycat_type yetty_ycat_type_from_extension(const char *ext)
     if (strcasecmp(noleading, "wgsl") == 0) {
         return YETTY_YCAT_TYPE_SHADERTOY;
     }
+    /* ycircuit schematic DSL. */
+    if (strcasecmp(noleading, "circuit") == 0 || strcasecmp(noleading, "yct") == 0) {
+        return YETTY_YCAT_TYPE_CIRCUIT;
+    }
     if (strcasecmp(noleading, "txt") == 0) {
         return YETTY_YCAT_TYPE_TEXT;
     }
@@ -312,6 +316,47 @@ static int looks_like_lilypond(const uint8_t *bytes, size_t len)
 }
 #endif
 
+#ifdef YETTY_YCAT_HAS_YCIRCUIT
+/* The ycircuit DSL has no libmagic signature, but (like mermaid's `graph`)
+ * it opens with a required keyword: the first non-blank, non-comment line
+ * starts with `circuit`. Only compiled in when the circuit handler is, so a
+ * handler-less build never classifies text as CIRCUIT. */
+static int looks_like_ycircuit(const uint8_t *bytes, size_t len)
+{
+    if (!bytes || len == 0) {
+        return 0;
+    }
+    size_t scan = len < 4096u ? len : 4096u;
+    size_t pos = 0;
+    while (pos < scan) {
+        /* Skip leading blanks on the line. */
+        while (pos < scan && (bytes[pos] == ' ' || bytes[pos] == '\t' || bytes[pos] == '\r')) {
+            pos++;
+        }
+        if (pos < scan && bytes[pos] == '\n') {
+            pos++;
+            continue;
+        }
+        if (pos < scan && bytes[pos] == '#') {
+            while (pos < scan && bytes[pos] != '\n') {
+                pos++;
+            }
+            continue;
+        }
+        /* First content line: must be `circuit` followed by EOL/blank. */
+        static const char keyword[] = "circuit";
+        size_t keyword_len = sizeof(keyword) - 1;
+        if (pos + keyword_len > scan || memcmp(bytes + pos, keyword, keyword_len) != 0) {
+            return 0;
+        }
+        size_t after = pos + keyword_len;
+        return after >= len || bytes[after] == ' ' || bytes[after] == '\t' ||
+               bytes[after] == '\r' || bytes[after] == '\n';
+    }
+    return 0;
+}
+#endif
+
 enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const char *path)
 {
     /* Extension first on types libmagic generalises away (markdown,
@@ -320,7 +365,8 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
     if (by_ext == YETTY_YCAT_TYPE_MARKDOWN || by_ext == YETTY_YCAT_TYPE_PDF ||
         by_ext == YETTY_YCAT_TYPE_SVG || by_ext == YETTY_YCAT_TYPE_MERMAID ||
         by_ext == YETTY_YCAT_TYPE_VIDEO || by_ext == YETTY_YCAT_TYPE_LOTTIE ||
-        by_ext == YETTY_YCAT_TYPE_MUSIC || by_ext == YETTY_YCAT_TYPE_SHADERTOY) {
+        by_ext == YETTY_YCAT_TYPE_MUSIC || by_ext == YETTY_YCAT_TYPE_SHADERTOY ||
+        by_ext == YETTY_YCAT_TYPE_CIRCUIT) {
         return by_ext;
     }
 
@@ -365,6 +411,13 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
     /* WGSL mainImage sniff — covers piped stdin with no .wgsl extension. */
     if (looks_like_wgsl_main_image(bytes, len)) {
         return YETTY_YCAT_TYPE_SHADERTOY;
+    }
+#endif
+
+#ifdef YETTY_YCAT_HAS_YCIRCUIT
+    /* ycircuit sniff — covers piped stdin with no .circuit extension. */
+    if (looks_like_ycircuit(bytes, len)) {
+        return YETTY_YCAT_TYPE_CIRCUIT;
     }
 #endif
 

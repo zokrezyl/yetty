@@ -1,0 +1,23 @@
+# Inverting opamp amplifier (gain = -R2/R1). Exercises the opamp symbol
+# (inverting input top, non-inverting bottom), a feedback loop routed
+# over the body, and a grounded reference input.
+circuit Inverting amplifier
+
+label 1 4.3 Vin
+wire 1.5 5  3 5
+resistor 6 5 h R1 10k
+wire 9 5  11 5
+dot 10 5
+
+# feedback: R2 from the inverting input over the top to the output
+wire 10 5  10 1  11 1
+resistor 14 1 h R2 100k
+wire 17 1  18 1  18 6
+dot 18 6
+
+opamp 14 6 h U1
+wire 11 7  10 7  10 9
+gnd 10 9
+
+wire 17 6  21 6
+label 21.5 6.3 Vout

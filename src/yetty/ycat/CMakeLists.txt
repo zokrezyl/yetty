@@ -45,6 +45,13 @@ endif()
 # built unconditionally), so no feature gate.
 list(APPEND YCAT_SOURCES handler-shadertoy.c)
 
+# Circuit handler — draws ycircuit schematic DSL files. Same gate as the
+# ycircuit library itself (src/yetty/CMakeLists.txt). detect.c's content
+# sniffer is guarded by the same compile-time flag.
+if(YETTY_ENABLE_FEATURE_YCIRCUIT AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)
+    list(APPEND YCAT_SOURCES handler-circuit.c)
+endif()
+
 #=============================================================================
 # Tree-sitter highlight queries are embedded at configure time. Each grammar
 # exports TS_QUERIES_DIR_<name> (see build-tools/yetty/libs/tree-sitter.cmake).
@@ -146,6 +153,11 @@ endif()
 
 target_link_libraries(yetty_ycat PUBLIC yetty_yshadertoy_core)
 target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_YSHADERTOY=1)
+
+if(YETTY_ENABLE_FEATURE_YCIRCUIT AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)
+    target_link_libraries(yetty_ycat PUBLIC yetty_ycircuit)
+    target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_YCIRCUIT=1)
+endif()
 
 if(YETTY_ENABLE_LIB_LIBMAGIC AND TARGET magic)
     target_link_libraries(yetty_ycat PUBLIC magic)
