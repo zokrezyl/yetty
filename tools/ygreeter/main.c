@@ -2217,6 +2217,14 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_destroy(c));
     }
 
+    /* Recycle the row_link arena. Every row_link belongs to a nav button
+     * that was just destroyed above (widget_destroy is synchronous), so no
+     * live click handler still points into the arena. Resetting here stops
+     * it growing without bound across scene switches AND keeps it from ever
+     * reallocating (a scene has only a handful of nav rows), which would
+     * otherwise dangle the interior pointers handed to live buttons. */
+    g_row_links.count = 0;
+
     struct tab_state *t = &app->tabs[tab_index];
     t->kind = tab_kind_for(tab_index);
     int n = tab_entry_count(app, tab_index);
