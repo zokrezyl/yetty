@@ -358,7 +358,7 @@ static struct yetty_ycore_void_result map_pan_by_pixels(struct yetty_yclass_ctx 
     double center_x = 0.0;
     double center_y = 0.0;
     yetty_ymap_lonlat_to_global_pixel(map->longitude, map->latitude, map->zoom, &center_x,
-                                             &center_y);
+                                      &center_y);
     center_x -= delta_x;
     center_y -= delta_y;
     double world_px = (double)(1u << map->zoom) * 256.0;
@@ -370,7 +370,7 @@ static struct yetty_ycore_void_result map_pan_by_pixels(struct yetty_yclass_ctx 
         center_y = world_px - half_h;
     }
     yetty_ymap_global_pixel_to_lonlat(center_x, center_y, map->zoom, &map->longitude,
-                                             &map->latitude);
+                                      &map->latitude);
     return YETTY_OK_VOID();
 }
 
@@ -395,7 +395,7 @@ static struct yetty_ycore_int_result map_zoom_by_at(struct yetty_yclass_ctx *ctx
     double center_x = 0.0;
     double center_y = 0.0;
     yetty_ymap_lonlat_to_global_pixel(map->longitude, map->latitude, map->zoom, &center_x,
-                                             &center_y);
+                                      &center_y);
     double origin_x = center_x - (double)map->width_px / 2.0;
     double origin_y = center_y - (double)map->height_px / 2.0;
     double anchor_gpx_x = origin_x + anchor_x;
@@ -408,7 +408,7 @@ static struct yetty_ycore_int_result map_zoom_by_at(struct yetty_yclass_ctx *ctx
 
     map->zoom = new_zoom;
     yetty_ymap_global_pixel_to_lonlat(new_center_x, new_center_y, map->zoom, &map->longitude,
-                                             &map->latitude);
+                                      &map->latitude);
     return YETTY_OK(yetty_ycore_int, (int)map->zoom);
 }
 
@@ -437,8 +437,7 @@ static struct yetty_ycore_void_result map_geolocate(struct yetty_yclass_ctx *ctx
     struct yetty_ymap_map *map = map_r.value;
     double latitude = 0.0;
     double longitude = 0.0;
-    struct yetty_ycore_void_result geo_res =
-        yetty_ymap_geolocate_public_ip(&latitude, &longitude);
+    struct yetty_ycore_void_result geo_res = yetty_ymap_geolocate_public_ip(&latitude, &longitude);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, geo_res, "ymap geolocate: lookup");
     map->latitude = latitude;
     map->longitude = longitude;

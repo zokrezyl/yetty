@@ -147,7 +147,7 @@ endif()
 
 # msdf-gen tool
 add_executable(yetty-ymsdf-gen
-    ${YETTY_ROOT}/tools/gen-msdf/main.c
+    ${YETTY_ROOT}/tools/msdf/gen-msdf/main.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
     ${YETTY_HOST_PLATFORM_SOURCES}
 )

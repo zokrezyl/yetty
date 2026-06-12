@@ -23,17 +23,19 @@ void yetty_ymap_curl_release(CURL *curl_handle);
  * <cache_root>/<zoom>/<x>/<y>.<cache_file_extension> first, else HTTP GET
  * of the printf-style `url_template` (three unsigned slots, z/x/y order)
  * with a best-effort cache write-back. Caller frees *out_bytes. */
-struct yetty_ycore_void_result yetty_ymap_tile_fetch(
-    CURL *curl_handle, const char *url_template, const char *cache_root,
-    const char *cache_file_extension, uint32_t zoom, uint32_t tile_x, uint32_t tile_y,
-    uint8_t **out_bytes, size_t *out_len);
+struct yetty_ycore_void_result yetty_ymap_tile_fetch(CURL *curl_handle, const char *url_template,
+                                                     const char *cache_root,
+                                                     const char *cache_file_extension,
+                                                     uint32_t zoom, uint32_t tile_x,
+                                                     uint32_t tile_y, uint8_t **out_bytes,
+                                                     size_t *out_len);
 
 /* Plain GET into a fresh buffer (no cache) — geoip lookup and other
  * one-shot requests. timeout_seconds <= 0 falls back to the tile
  * default. Caller frees *out_bytes. */
 struct yetty_ycore_void_result yetty_ymap_http_get(CURL *curl_handle, const char *url,
-                                                          long timeout_seconds, uint8_t **out_bytes,
-                                                          size_t *out_len);
+                                                   long timeout_seconds, uint8_t **out_bytes,
+                                                   size_t *out_len);
 
 /* One slot of a batch fetch. Caller fills tile_x / tile_y; bytes/len are
  * the result (heap, caller frees) — NULL/0 when that tile failed. */

@@ -662,8 +662,8 @@ static struct yetty_ycore_void_result parse_circuit_text(struct yetty_ycircuit_c
 
 struct emit_geom {
     struct yetty_ydraw_drawable_list *buf;
-    float grid;      /* px per grid unit */
-    float origin_x;  /* scene-px offset applied to all model coordinates */
+    float grid;     /* px per grid unit */
+    float origin_x; /* scene-px offset applied to all model coordinates */
     float origin_y;
     float font_size; /* label font in px (IC pin labels derive from it) */
     uint32_t *z_order;
@@ -1187,13 +1187,13 @@ static struct ic_geom ic_geometry_of(const struct ycircuit_element *element)
     };
     int side_max = ic.left_count > ic.right_count ? ic.left_count : ic.right_count;
     int topbot_max = ic.top_count > ic.bottom_count ? ic.top_count : ic.bottom_count;
-    ic.half_height = (float)(side_max - 1) * (YCIRCUIT_IC_PIN_PITCH * 0.5f) +
-                     YCIRCUIT_IC_BODY_MARGIN;
+    ic.half_height =
+        (float)(side_max - 1) * (YCIRCUIT_IC_PIN_PITCH * 0.5f) + YCIRCUIT_IC_BODY_MARGIN;
     if (ic.half_height < YCIRCUIT_IC_MIN_HALF_HEIGHT) {
         ic.half_height = YCIRCUIT_IC_MIN_HALF_HEIGHT;
     }
-    ic.half_width = (float)(topbot_max - 1) * (YCIRCUIT_IC_PIN_PITCH * 0.5f) +
-                    YCIRCUIT_IC_BODY_MARGIN;
+    ic.half_width =
+        (float)(topbot_max - 1) * (YCIRCUIT_IC_PIN_PITCH * 0.5f) + YCIRCUIT_IC_BODY_MARGIN;
     if (ic.half_width < YCIRCUIT_IC_MIN_HALF_WIDTH) {
         ic.half_width = YCIRCUIT_IC_MIN_HALF_WIDTH;
     }
@@ -1287,8 +1287,8 @@ static struct yetty_ycore_void_result emit_ic(const struct emit_geom *geom,
         .corner_radius = 0.2f * geom->grid,
     };
     struct yetty_ycore_void_result body_res = yetty_ydraw_drawable_list_add_cmd_add_box(
-        geom->buf, /*id=*/0, /*z_order=*/(*geom->z_order)++, /*fill=*/0u, ink,
-        line_thickness(geom), &body);
+        geom->buf, /*id=*/0, /*z_order=*/(*geom->z_order)++, /*fill=*/0u, ink, line_thickness(geom),
+        &body);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, body_res, "ycircuit: ic body");
 
     struct yetty_ycore_void_result left_res =
@@ -1451,10 +1451,9 @@ static struct yetty_ycore_void_result emit_component_labels(const struct emit_ge
                              (ic.top_count > 0 ? YCIRCUIT_IC_PIN_LEAD : 0.0f);
         if (element->name) {
             float width = estimate_text_width(element->name, font_size);
-            struct yetty_ycore_void_result name_res =
-                emit_scene_text(geom, element->name, center_x - width * 0.5f,
-                                center_y - (body_half_up + 0.5f) * geom->grid, font_size,
-                                YCIRCUIT_LABEL_INK);
+            struct yetty_ycore_void_result name_res = emit_scene_text(
+                geom, element->name, center_x - width * 0.5f,
+                center_y - (body_half_up + 0.5f) * geom->grid, font_size, YCIRCUIT_LABEL_INK);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, name_res, "ycircuit: ic name");
         }
         if (element->value) {

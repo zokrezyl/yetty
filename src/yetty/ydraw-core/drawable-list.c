@@ -899,6 +899,71 @@ struct yetty_ycore_int_result yetty_ydraw_drawable_list_add_font_ref(
     return YETTY_OK(yetty_ycore_int, next_id);
 }
 
+struct yetty_ycore_int_result yetty_ydraw_drawable_list_add_font_named(
+    struct yetty_ydraw_drawable_list *buf, const char *name)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_int, "buf is NULL");
+    }
+    if (!name || !name[0]) {
+        return YETTY_ERR(yetty_ycore_int, "name is NULL or empty");
+    }
+
+    /* The receiver tells a named reference apart from a content-hash reference
+   * by the name's shape: a 16-char hex string is a hash. A font whose name
+   * happens to be exactly 16 hex chars would be ambiguous, so reject it. */
+    uint32_t name_len = (uint32_t)strlen(name);
+    if (name_len == 16) {
+        bool all_hex = true;
+        for (uint32_t i = 0; i < 16; i++) {
+            char ch = name[i];
+            bool ok =
+                (ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f') || (ch >= 'A' && ch <= 'F');
+            if (!ok) {
+                all_hex = false;
+                break;
+            }
+        }
+        if (all_hex) {
+            return YETTY_ERR(
+                yetty_ycore_int,
+                "named font must not be exactly 16 hex chars (ambiguous with hash ref)");
+        }
+    }
+
+    size_t drawable_size = yetty_ydraw_font_resource_size_for(name_len, 0);
+    uint8_t *staging = malloc(drawable_size);
+    if (!staging) {
+        return YETTY_ERR(yetty_ycore_int, "alloc failed");
+    }
+
+    /* Same envelope-local id discovery as add_font: count existing FONTs. */
+    int next_id = 0;
+    const uint8_t *p = buf->primitives.buf.data;
+    const uint8_t *end = p + buf->primitives.buf.size;
+    while (p + 8 <= end) {
+        uint32_t t, ps;
+        memcpy(&t, p, 4);
+        memcpy(&ps, p + 4, 4);
+        if (t == YETTY_YDRAW_RESOURCE_FONT) {
+            next_id++;
+        }
+        if (t >= 0x40000000u) {
+            p += 8 + ps;
+        } else {
+            break;
+        }
+    }
+
+    yetty_ydraw_font_resource_write(staging, (int32_t)next_id, name, name_len, NULL, 0);
+
+    struct yetty_ydraw_id_result r =
+        yetty_ydraw_drawable_list_add_prim(buf, staging, drawable_size);
+    free(staging);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "add_font_named: add_prim failed");
+    return YETTY_OK(yetty_ycore_int, next_id);
+}
+
 struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_text_full(
     struct yetty_ydraw_drawable_list *buf, float x, float y, const struct yetty_ycore_buffer *text,
     float font_size, uint32_t color, uint32_t layer, int32_t font_id, float rotation,

@@ -176,10 +176,9 @@ struct [[clang::annotate("class@ymusic:music")]] yetty_ymusic_music {
     float staff_space;
     uint32_t flags;
 
-    /* Music font (Emmentaler): path set by the caller, bytes lazily loaded. */
-    char *font_path;
-    uint8_t *font_bytes;
-    size_t font_len;
+    /* The music font (Emmentaler) is referenced by name at render time and
+     * resolved from the install by the receiver — ymusic never loads or ships
+     * the font itself. */
 
     /* The score (single staff for now; the tree is shaped to grow). */
     struct ymusic_staff staff;
@@ -1246,48 +1245,6 @@ static struct yetty_ycore_void_result emit_element(struct yetty_ydraw_drawable_l
 }
 
 /*=============================================================================
- * Font loading
- *===========================================================================*/
-
-static struct yetty_ycore_void_result music_load_font(struct yetty_ymusic_music *music)
-{
-    if (music->font_bytes) {
-        return YETTY_OK_VOID();
-    }
-    if (!music->font_path) {
-        return YETTY_ERR(yetty_ycore_void, "ymusic: no font path set (call set_font_path)");
-    }
-    FILE *file = fopen(music->font_path, "rb");
-    if (!file) {
-        return YETTY_ERR(yetty_ycore_void, "ymusic: cannot open music font");
-    }
-    if (fseek(file, 0, SEEK_END) != 0) {
-        fclose(file);
-        return YETTY_ERR(yetty_ycore_void, "ymusic: font seek failed");
-    }
-    long size = ftell(file);
-    if (size <= 0) {
-        fclose(file);
-        return YETTY_ERR(yetty_ycore_void, "ymusic: font is empty");
-    }
-    rewind(file);
-    uint8_t *bytes = malloc((size_t)size);
-    if (!bytes) {
-        fclose(file);
-        return YETTY_ERR(yetty_ycore_void, "ymusic: font alloc failed");
-    }
-    size_t read = fread(bytes, 1, (size_t)size, file);
-    fclose(file);
-    if (read != (size_t)size) {
-        free(bytes);
-        return YETTY_ERR(yetty_ycore_void, "ymusic: font read short");
-    }
-    music->font_bytes = bytes;
-    music->font_len = (size_t)size;
-    return YETTY_OK_VOID();
-}
-
-/*=============================================================================
  * Method slots
  *===========================================================================*/
 
@@ -1305,33 +1262,6 @@ static struct yetty_ycore_void_result music_configure(struct yetty_yclass_ctx *c
     music->width = width;
     music->staff_space = staff_space;
     music->flags = flags;
-    return YETTY_OK_VOID();
-}
-
-/* set_font_path: point the renderer at the Emmentaler (or any SMuFL) OTF/TTF on
- * disk. The bytes are loaded lazily on the first render and shipped via the
- * drawable list's FONT primitive (the receiver compiles the MSDF atlas). */
-[[clang::annotate("virtual@ymusic:music:set_font_path")]] [[clang::annotate(
-    "local@ymusic:set_font_path")]]
-static struct yetty_ycore_void_result music_set_font_path(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
-                                                          const char *path)
-{
-    (void)ctx;
-    struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, music_r, "ymusic set_font_path: from_obj");
-    struct yetty_ymusic_music *music = music_r.value;
-    free(music->font_path);
-    music->font_path = NULL;
-    free(music->font_bytes);
-    music->font_bytes = NULL;
-    music->font_len = 0;
-    if (path) {
-        music->font_path = strdup(path);
-        if (!music->font_path) {
-            return YETTY_ERR(yetty_ycore_void, "ymusic set_font_path: strdup failed");
-        }
-    }
     return YETTY_OK_VOID();
 }
 
@@ -1497,11 +1427,6 @@ static struct yetty_ydraw_drawable_list_result music_render(struct yetty_yclass_
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, music_r, "ymusic render: from_obj");
     struct yetty_ymusic_music *music = music_r.value;
 
-    struct yetty_ycore_void_result font_r = music_load_font(music);
-    if (YETTY_IS_ERR(font_r)) {
-        return YETTY_ERR(yetty_ydraw_drawable_list, "ymusic render: font", font_r);
-    }
-
     float staff_space =
         music->staff_space > 0.0f ? music->staff_space : (float)YMUSIC_DEFAULT_STAFF_SPACE;
     float width = music->width > 0.0f ? music->width : (float)YMUSIC_DEFAULT_WIDTH;
@@ -1556,17 +1481,15 @@ static struct yetty_ydraw_drawable_list_result music_render(struct yetty_yclass_
     struct yetty_ydraw_drawable_list *buf = list_r.value;
     uint32_t z = 0;
 
-    /* Ship the music font once; text spans reference it by id. */
-    struct yetty_ycore_buffer font_view = {
-        .data = music->font_bytes,
-        .capacity = music->font_len,
-        .size = music->font_len,
-    };
+    /* Reference the Emmentaler music font by name — it ships with the install
+     * as a pre-generated MSDF atlas (msdf-fonts/Emmentaler.cdb), so a score
+     * never carries the font's ~200 KB of bytes. Text spans reference it by
+     * the returned id. */
     struct yetty_ycore_int_result font_id_r =
-        yetty_ydraw_drawable_list_add_font(buf, &font_view, "Emmentaler");
+        yetty_ydraw_drawable_list_add_font_named(buf, "Emmentaler");
     if (YETTY_IS_ERR(font_id_r)) {
         yetty_ydraw_drawable_list_destroy(buf);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "ymusic render: add_font", font_id_r);
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymusic render: add_font_named", font_id_r);
     }
     int32_t font_id = (int32_t)font_id_r.value;
 
@@ -1675,7 +1598,7 @@ static struct yetty_ycore_void_result music_set_highlight(struct yetty_yclass_ct
     return YETTY_OK_VOID();
 }
 
-/* destroy: free the score model, the font bytes and the object. */
+/* destroy: free the score model and the object. */
 [[clang::annotate("virtual@ymusic:music:destroy")]] [[clang::annotate("local@ymusic:destroy")]]
 static struct yetty_ycore_void_result music_obj_destroy(struct yetty_yclass_ctx *ctx,
                                                         struct yetty_yclass_object *obj)
@@ -1688,12 +1611,7 @@ static struct yetty_ycore_void_result music_obj_destroy(struct yetty_yclass_ctx 
         struct yetty_ymusic_music *music = music_r.value;
         staff_clear(&music->staff);
         free(music->index);
-        free(music->font_path);
-        free(music->font_bytes);
         music->index = NULL;
-        music->font_path = NULL;
-        music->font_bytes = NULL;
-        music->font_len = 0;
         music->element_count = 0;
     }
     return yetty_yclass_object_free(obj);

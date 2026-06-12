@@ -66,8 +66,8 @@ struct yetty_ymap_vt_tile {
 /* Parse `len` bytes of MVT protobuf into *out_tile (caller-zeroed).
  * On error the partially-built tile is freed; *out_tile is valid (possibly
  * empty) only on OK. */
-struct yetty_ycore_void_result yetty_ymap_vt_parse(
-    const uint8_t *bytes, size_t len, struct yetty_ymap_vt_tile *out_tile);
+struct yetty_ycore_void_result yetty_ymap_vt_parse(const uint8_t *bytes, size_t len,
+                                                   struct yetty_ymap_vt_tile *out_tile);
 
 void yetty_ymap_vt_free(struct yetty_ymap_vt_tile *tile);
 

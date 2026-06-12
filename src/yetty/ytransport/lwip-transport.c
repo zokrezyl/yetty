@@ -142,8 +142,7 @@ static err_t lwip_transport_sent_cb(void *arg, struct tcp_pcb *pcb, u16_t len)
 }
 
 YETTY_EXTERNAL_CALLBACK
-static err_t lwip_transport_recv_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *segment,
-                                    err_t err)
+static err_t lwip_transport_recv_cb(void *arg, struct tcp_pcb *pcb, struct pbuf *segment, err_t err)
 {
     struct lwip_transport *transport = arg;
 

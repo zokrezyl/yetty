@@ -35,10 +35,10 @@
 struct websocket_transport {
     struct yetty_ytransport_conn_transport base;
 
-    char *url;                       /* owned copy of the ws:// / wss:// URL */
-    EMSCRIPTEN_WEBSOCKET_T socket;   /* 0 until open() */
-    int opened;                      /* open() succeeded */
-    int connected;                   /* onopen fired */
+    char *url;                     /* owned copy of the ws:// / wss:// URL */
+    EMSCRIPTEN_WEBSOCKET_T socket; /* 0 until open() */
+    int opened;                    /* open() succeeded */
+    int connected;                 /* onopen fired */
 
     /* Caller-supplied callbacks. Stored verbatim; .ctx is opaque to us. */
     struct yetty_yevent_tcp_client_callbacks cb;

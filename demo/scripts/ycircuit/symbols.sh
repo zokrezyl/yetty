@@ -10,7 +10,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../../.." && pwd)"
 YCAT="${YCAT:-$ROOT/build-desktop-ytrace-release/tools/ycat/ycat}"
 ASSETS="$ROOT/demo/assets/ycircuit"
-PAUSE="${DEMO_PAUSE:-2}"
+PAUSE="${DEMO_PAUSE:-0}"
 
 if [ ! -x "$YCAT" ]; then
     echo "ycat binary not found at $YCAT — set YCAT=path/to/ycat" >&2

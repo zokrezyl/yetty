@@ -15,18 +15,6 @@ methods:
       - name: flags
         type: uint32_t
     local: true
-  - slot: set_font_path
-    domain: ymusic
-    owning_class: music
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: path
-        type: "const char *"
-    local: true
   - slot: parse
     domain: ymusic
     owning_class: music
@@ -109,18 +97,6 @@ classes:
         type: uint32_t
         get: false
         set: false
-      - name: font_path
-        type: "char *"
-        get: false
-        set: false
-      - name: font_bytes
-        type: "uint8_t *"
-        get: false
-        set: false
-      - name: font_len
-        type: size_t
-        get: false
-        set: false
       - name: staff
         type: struct ymusic_staff
         get: false
@@ -149,9 +125,6 @@ classes:
       - slot: configure
         slot_domain: ymusic
         impl: music_configure
-      - slot: set_font_path
-        slot_domain: ymusic
-        impl: music_set_font_path
       - slot: parse
         slot_domain: ymusic
         impl: music_parse

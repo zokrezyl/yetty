@@ -23,60 +23,60 @@
  * ynet sources (via the lwIP public headers), so the definitions,
  * lwIP's internal references, and our call sites all rename together.
  * slirp keeps the original names — it never includes lwipopts.h. */
-#define icmp_input  lwip_icmp_input
-#define tcp_close   lwip_tcp_close
+#define icmp_input lwip_icmp_input
+#define tcp_close lwip_tcp_close
 #define tcp_connect lwip_tcp_connect
-#define tcp_init    lwip_tcp_init
-#define tcp_input   lwip_tcp_input
-#define tcp_output  lwip_tcp_output
-#define udp_init    lwip_udp_init
-#define udp_input   lwip_udp_input
+#define tcp_init lwip_tcp_init
+#define tcp_input lwip_tcp_input
+#define tcp_output lwip_tcp_output
+#define udp_init lwip_udp_init
+#define udp_input lwip_udp_input
 
 /* ---- No OS: raw API only ----------------------------------------- */
-#define NO_SYS                       1
-#define SYS_LIGHTWEIGHT_PROT         0
-#define LWIP_NETCONN                 0
-#define LWIP_SOCKET                  0
-#define LWIP_NETIF_API               0
+#define NO_SYS 1
+#define SYS_LIGHTWEIGHT_PROT 0
+#define LWIP_NETCONN 0
+#define LWIP_SOCKET 0
+#define LWIP_NETIF_API 0
 
 /* ---- Protocol surface -------------------------------------------- */
-#define LWIP_IPV4                    1
-#define LWIP_IPV6                    0
-#define LWIP_ARP                     1
-#define LWIP_ETHERNET                1
-#define LWIP_DHCP                    1
-#define LWIP_DNS                     1
-#define LWIP_TCP                     1
-#define LWIP_UDP                     1
-#define LWIP_ICMP                    1
+#define LWIP_IPV4 1
+#define LWIP_IPV6 0
+#define LWIP_ARP 1
+#define LWIP_ETHERNET 1
+#define LWIP_DHCP 1
+#define LWIP_DNS 1
+#define LWIP_TCP 1
+#define LWIP_UDP 1
+#define LWIP_ICMP 1
 
 /* ---- Callbacks we rely on ---------------------------------------- */
-#define LWIP_NETIF_STATUS_CALLBACK   1
-#define LWIP_NETIF_LINK_CALLBACK     1
-#define LWIP_NETIF_HOSTNAME          1
+#define LWIP_NETIF_STATUS_CALLBACK 1
+#define LWIP_NETIF_LINK_CALLBACK 1
+#define LWIP_NETIF_HOSTNAME 1
 
 /* ---- Memory / sizing --------------------------------------------- */
-#define MEM_ALIGNMENT                4
-#define MEM_SIZE                     (512 * 1024)
-#define MEMP_NUM_TCP_PCB             16
-#define MEMP_NUM_TCP_PCB_LISTEN      4
-#define MEMP_NUM_TCP_SEG             64
-#define PBUF_POOL_SIZE               64
-#define TCP_MSS                      1460
-#define TCP_WND                      (16 * TCP_MSS)
-#define TCP_SND_BUF                  (16 * TCP_MSS)
+#define MEM_ALIGNMENT 4
+#define MEM_SIZE (512 * 1024)
+#define MEMP_NUM_TCP_PCB 16
+#define MEMP_NUM_TCP_PCB_LISTEN 4
+#define MEMP_NUM_TCP_SEG 64
+#define PBUF_POOL_SIZE 64
+#define TCP_MSS 1460
+#define TCP_WND (16 * TCP_MSS)
+#define TCP_SND_BUF (16 * TCP_MSS)
 /* Keep the send queue >= 4*SND_BUF/MSS or lwIP's sanity check errors. */
-#define TCP_SND_QUEUELEN             ((4 * TCP_SND_BUF + TCP_MSS - 1) / TCP_MSS)
+#define TCP_SND_QUEUELEN ((4 * TCP_SND_BUF + TCP_MSS - 1) / TCP_MSS)
 
 /* ---- Checksums: done in software (no NIC offload in the browser) -- */
-#define CHECKSUM_GEN_IP              1
-#define CHECKSUM_GEN_TCP             1
-#define CHECKSUM_GEN_UDP             1
-#define CHECKSUM_CHECK_IP            1
-#define CHECKSUM_CHECK_TCP           1
-#define CHECKSUM_CHECK_UDP           1
+#define CHECKSUM_GEN_IP 1
+#define CHECKSUM_GEN_TCP 1
+#define CHECKSUM_GEN_UDP 1
+#define CHECKSUM_CHECK_IP 1
+#define CHECKSUM_CHECK_TCP 1
+#define CHECKSUM_CHECK_UDP 1
 
-#define LWIP_STATS                   0
-#define LWIP_DEBUG                   0
+#define LWIP_STATS 0
+#define LWIP_DEBUG 0
 
 #endif /* LWIP_LWIPOPTS_H */

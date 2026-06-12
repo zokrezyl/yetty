@@ -955,8 +955,7 @@ static struct yetty_ycore_void_result emit_tile(struct osm_vector_emit *emit,
             const struct yetty_ymap_vt_feature *feature = &layer->features[feature_index];
             struct yetty_ycore_void_result feature_res = YETTY_OK_VOID();
 
-            if ((is_ocean || is_water_polygons) &&
-                feature->geom_type == YETTY_YMAP_VT_POLYGON) {
+            if ((is_ocean || is_water_polygons) && feature->geom_type == YETTY_YMAP_VT_POLYGON) {
                 feature_res =
                     emit_polygon_feature(emit, &transform, feature, 0xffaad3dfu, OSM_Z_WATER);
             } else if (is_land && feature->geom_type == YETTY_YMAP_VT_POLYGON) {
@@ -994,8 +993,7 @@ static struct yetty_ycore_void_result emit_tile(struct osm_vector_emit *emit,
                     }
                 }
             } else if (is_street_labels && feature->name &&
-                       feature->geom_type == YETTY_YMAP_VT_LINESTRING &&
-                       feature->ring_count > 0) {
+                       feature->geom_type == YETTY_YMAP_VT_LINESTRING && feature->ring_count > 0) {
                 int rank = street_label_rank(feature->kind);
                 if (rank >= 0 && (emit->zoom >= 14 || rank <= OSM_STREET_LABEL_MAX_RANK_LOW_ZOOM)) {
                     const struct yetty_ymap_vt_ring *ring = &feature->rings[0];
@@ -1011,8 +1009,8 @@ static struct yetty_ycore_void_result emit_tile(struct osm_vector_emit *emit,
                     }
                 }
             } else if (is_place_labels && feature->name &&
-                       feature->geom_type == YETTY_YMAP_VT_POINT &&
-                       feature->ring_count > 0 && feature->rings[0].point_count > 0) {
+                       feature->geom_type == YETTY_YMAP_VT_POINT && feature->ring_count > 0 &&
+                       feature->rings[0].point_count > 0) {
                 float font_size = place_label_size_for_kind(feature->kind);
                 struct yetty_ymap_vt_point anchor_point = feature->rings[0].points[0];
                 if (font_size > 0.0f && anchor_point.x >= 0.0f &&
@@ -1157,8 +1155,7 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_vector(
     if (config->width_px == 0 || config->height_px == 0 ||
         config->width_px > OSM_VECTOR_MAX_VIEWPORT_PX ||
         config->height_px > OSM_VECTOR_MAX_VIEWPORT_PX) {
-        return YETTY_ERR(yetty_ydraw_drawable_list,
-                         "ymap vector: viewport size out of range");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymap vector: viewport size out of range");
     }
     if (config->latitude < -85.06 || config->latitude > 85.06 || config->longitude < -180.0 ||
         config->longitude > 180.0) {
@@ -1178,7 +1175,7 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_vector(
     double center_pixel_x = 0.0;
     double center_pixel_y = 0.0;
     yetty_ymap_lonlat_to_global_pixel(config->longitude, config->latitude, config->zoom,
-                                             &center_pixel_x, &center_pixel_y);
+                                      &center_pixel_x, &center_pixel_y);
     int64_t origin_x = (int64_t)llround(center_pixel_x) - (int64_t)config->width_px / 2;
     int64_t origin_y = (int64_t)llround(center_pixel_y) - (int64_t)config->height_px / 2;
 
@@ -1192,8 +1189,7 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_vector(
     int64_t tile_y_last = (origin_y + (int64_t)config->height_px - 1) / tile_size;
     int64_t tiles_total = (tile_x_last - tile_x_first + 1) * (tile_y_last - tile_y_first + 1);
     if (tiles_total > (int64_t)OSM_VECTOR_MAX_TILES) {
-        return YETTY_ERR(yetty_ydraw_drawable_list,
-                         "ymap vector: viewport covers too many tiles");
+        return YETTY_ERR(yetty_ydraw_drawable_list, "ymap vector: viewport covers too many tiles");
     }
 
     struct yetty_ydraw_drawable_list_config list_config = {
@@ -1295,8 +1291,8 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_vector(
         struct yetty_ycore_void_result parse_res =
             yetty_ymap_vt_parse(request->bytes, request->len, &tile);
         if (YETTY_IS_ERR(parse_res)) {
-            ywarn("ymap vector: tile %u/%u/%lld parse failed: %s", config->zoom,
-                  request->tile_x, (long long)slot->tile_y, parse_res.error.msg);
+            ywarn("ymap vector: tile %u/%u/%lld parse failed: %s", config->zoom, request->tile_x,
+                  (long long)slot->tile_y, parse_res.error.msg);
             yetty_ycore_error_destroy(parse_res.error);
             continue;
         }
@@ -1333,10 +1329,8 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_vector(
                          "ymap vector: no tile could be fetched — offline and cold cache?");
     }
     if (!emit_budget_left(&emit)) {
-        ywarn("ymap vector: prim budget (%u) exhausted — map truncated",
-              OSM_VECTOR_MAX_PRIMS);
+        ywarn("ymap vector: prim budget (%u) exhausted — map truncated", OSM_VECTOR_MAX_PRIMS);
     }
-    ydebug("ymap vector: %u tiles, %u prims at z%u", tiles_rendered, emit.prim_count,
-           config->zoom);
+    ydebug("ymap vector: %u tiles, %u prims at z%u", tiles_rendered, emit.prim_count, config->zoom);
     return YETTY_OK(yetty_ydraw_drawable_list, emit.list);
 }

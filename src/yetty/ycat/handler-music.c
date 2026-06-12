@@ -7,66 +7,15 @@
  * card width, so the score flows inline in the scrollback like any other
  * ycat card.
  *
- * The Emmentaler font is resolved at render time: YETTY_YMUSIC_FONT
- * override first, then the runtime fonts dir the parent yetty exports
- * (YETTY_FONTS_DIR / YETTY_DATA_DIR), then dev-tree fallbacks — the same
- * order the yless pager uses.
+ * The Emmentaler font is referenced by name in the rendered drawable list;
+ * the receiver resolves it from the install (a pre-generated MSDF atlas
+ * shipped beside the default font). ymusic never opens or ships the font, so
+ * this handler does not locate it on disk.
  */
 
 #include <yetty/ycat/ycat.h>
 
 #include <yetty/ymusic/music.h>
-
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-
-static bool file_exists(const char *path)
-{
-    FILE *probe = fopen(path, "rb");
-    if (!probe) {
-        return false;
-    }
-    fclose(probe);
-    return true;
-}
-
-/* Locate the Emmentaler music font: explicit override, then the runtime fonts
- * dir the parent yetty exports, then dev-tree fallbacks. Returns out on
- * success (a readable path), or NULL. */
-static const char *resolve_music_font(char *out, size_t cap)
-{
-    const char *env_font = getenv("YETTY_YMUSIC_FONT");
-    if (env_font && env_font[0] && file_exists(env_font)) {
-        snprintf(out, cap, "%s", env_font);
-        return out;
-    }
-    const char *fonts_dir = getenv("YETTY_FONTS_DIR");
-    if (fonts_dir && fonts_dir[0]) {
-        snprintf(out, cap, "%s/Emmentaler-20.otf", fonts_dir);
-        if (file_exists(out)) {
-            return out;
-        }
-    }
-    const char *data_dir = getenv("YETTY_DATA_DIR");
-    if (data_dir && data_dir[0]) {
-        snprintf(out, cap, "%s/fonts/Emmentaler-20.otf", data_dir);
-        if (file_exists(out)) {
-            return out;
-        }
-    }
-    static const char *const dev_paths[] = {
-        "assets/fonts/Emmentaler-20.otf",
-        "build-desktop-ytrace-release/assets/fonts/Emmentaler-20.otf",
-    };
-    for (size_t i = 0; i < sizeof(dev_paths) / sizeof(dev_paths[0]); i++) {
-        if (file_exists(dev_paths[i])) {
-            snprintf(out, cap, "%s", dev_paths[i]);
-            return out;
-        }
-    }
-    return NULL;
-}
 
 /* Error-path teardown is best-effort — absorb a failed destroy so the
  * original error is the one that surfaces. */
@@ -82,13 +31,6 @@ struct yetty_ydraw_drawable_list_result yetty_ycat_handler_music(
     const uint8_t *bytes, size_t len, const char *path_hint, const struct yetty_ycat_config *config)
 {
     (void)path_hint;
-
-    char font_path[1024];
-    if (!resolve_music_font(font_path, sizeof(font_path))) {
-        return YETTY_ERR(yetty_ydraw_drawable_list,
-                         "music font not found; set YETTY_YMUSIC_FONT to an "
-                         "Emmentaler/SMuFL .otf");
-    }
 
     struct yetty_ycore_void_result register_res = yetty_ymusic_register();
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, register_res, "ymusic register failed");
@@ -116,12 +58,6 @@ struct yetty_ydraw_drawable_list_result yetty_ycat_handler_music(
         return YETTY_ERR(yetty_ydraw_drawable_list, "ymusic configure failed", configure_res);
     }
 
-    struct yetty_ycore_void_result font_res = yetty_ymusic_set_font_path(NULL, music, font_path);
-    if (YETTY_IS_ERR(font_res)) {
-        music_destroy_best_effort(music);
-        return YETTY_ERR(yetty_ydraw_drawable_list, "ymusic set_font_path failed", font_res);
-    }
-
     struct yetty_ycore_void_result parse_res =
         yetty_ymusic_parse(NULL, music, (const char *)bytes, len);
     if (YETTY_IS_ERR(parse_res)) {
@@ -130,7 +66,8 @@ struct yetty_ydraw_drawable_list_result yetty_ycat_handler_music(
     }
 
     struct yetty_ydraw_drawable_list_result render_res = yetty_ymusic_render(NULL, music);
-    /* The rendered list owns its own bytes (font + primitives) — the score
+    /* The rendered list owns its own bytes (primitives + a font-name ref, not
+     * the font itself) — the score
      * model can go regardless of the render outcome. */
     music_destroy_best_effort(music);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, render_res, "lilypond render failed");

@@ -89,6 +89,9 @@ include(${YETTY_ROOT}/build-tools/yetty/3rdparty-fetch.cmake)
 # msdf-fonts (cdb): pre-brotli'd, embedded directly by incbin.
 if(YETTY_ENABLE_FEATURE_CDB_GEN OR YETTY_ENABLE_FEATURE_MSDF_GEN)
     yetty_3rdparty_fetch(cdb _CDB_DIR)
+    # Engrave the Emmentaler music-font CDB into the same dir so it ships with
+    # the install; ymusic references it by name (see emmentaler-cdb.cmake).
+    include(${YETTY_ROOT}/build-tools/yetty/emmentaler-cdb.cmake)
 endif()
 
 # yemu runtime (kernel + opensbi + alpine + unified yetty rootfs):

@@ -33,8 +33,7 @@ static long osm_preferred_http_version(void)
         const curl_version_info_data *info = curl_version_info(CURLVERSION_NOW);
         if (info && (info->features & CURL_VERSION_HTTP3)) {
             preferred_version = CURL_HTTP_VERSION_3;
-            yinfo("ymap: libcurl %s has HTTP/3 — racing QUIC with TCP fallback",
-                  info->version);
+            yinfo("ymap: libcurl %s has HTTP/3 — racing QUIC with TCP fallback", info->version);
         } else {
             preferred_version = CURL_HTTP_VERSION_2TLS;
         }
@@ -190,8 +189,8 @@ static struct yetty_ycore_void_result fetch_url(CURL *curl_handle, const char *u
 }
 
 struct yetty_ycore_void_result yetty_ymap_http_get(CURL *curl_handle, const char *url,
-                                                          long timeout_seconds, uint8_t **out_bytes,
-                                                          size_t *out_len)
+                                                   long timeout_seconds, uint8_t **out_bytes,
+                                                   size_t *out_len)
 {
     if (!curl_handle || !url || !out_bytes || !out_len) {
         return YETTY_ERR(yetty_ycore_void, "ymap http_get: NULL argument");
@@ -203,10 +202,12 @@ struct yetty_ycore_void_result yetty_ymap_http_get(CURL *curl_handle, const char
  * Tile fetch with disk cache
  *===========================================================================*/
 
-struct yetty_ycore_void_result yetty_ymap_tile_fetch(
-    CURL *curl_handle, const char *url_template, const char *cache_root,
-    const char *cache_file_extension, uint32_t zoom, uint32_t tile_x, uint32_t tile_y,
-    uint8_t **out_bytes, size_t *out_len)
+struct yetty_ycore_void_result yetty_ymap_tile_fetch(CURL *curl_handle, const char *url_template,
+                                                     const char *cache_root,
+                                                     const char *cache_file_extension,
+                                                     uint32_t zoom, uint32_t tile_x,
+                                                     uint32_t tile_y, uint8_t **out_bytes,
+                                                     size_t *out_len)
 {
     char cache_path[1024];
     snprintf(cache_path, sizeof(cache_path), "%s/%u/%u/%u.%s", cache_root, zoom, tile_x, tile_y,
@@ -287,13 +288,12 @@ static void tile_transfer_finish(CURL *easy_handle, CURLcode curl_result, const 
     curl_easy_getinfo(easy_handle, CURLINFO_RESPONSE_CODE, &http_status);
     long negotiated_version = 0;
     curl_easy_getinfo(easy_handle, CURLINFO_HTTP_VERSION, &negotiated_version);
-    ydebug("ymap: tile %u/%u done, HTTP version code %ld (30=h3 20=h2)",
-           transfer->request->tile_x, transfer->request->tile_y, negotiated_version);
+    ydebug("ymap: tile %u/%u done, HTTP version code %ld (30=h3 20=h2)", transfer->request->tile_x,
+           transfer->request->tile_y, negotiated_version);
 
     if (curl_result != CURLE_OK || http_status >= 400 || transfer->body.len == 0) {
-        ywarn("ymap: tile %u/%u/%u download failed (%s, HTTP %ld)", zoom,
-              transfer->request->tile_x, transfer->request->tile_y, curl_easy_strerror(curl_result),
-              http_status);
+        ywarn("ymap: tile %u/%u/%u download failed (%s, HTTP %ld)", zoom, transfer->request->tile_x,
+              transfer->request->tile_y, curl_easy_strerror(curl_result), http_status);
         free(transfer->body.data);
         transfer->body.data = NULL;
         return;
@@ -389,8 +389,8 @@ struct yetty_ycore_void_result yetty_ymap_tiles_fetch(
                  requests[i].tile_y);
         CURL *easy_handle = curl_easy_init();
         if (!easy_handle) {
-            ywarn("ymap: easy handle alloc failed for tile %u/%u — skipped",
-                  requests[i].tile_x, requests[i].tile_y);
+            ywarn("ymap: easy handle alloc failed for tile %u/%u — skipped", requests[i].tile_x,
+                  requests[i].tile_y);
             continue;
         }
         tile_transfer_configure(easy_handle, transfer);

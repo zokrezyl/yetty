@@ -9,9 +9,6 @@ struct yetty_ydraw_drawable_list_result;
 struct yetty_ycore_void_result yetty_ymusic_configure(struct yetty_yclass_ctx *ctx,
                                                       struct yetty_yclass_object *obj, float width,
                                                       float staff_space, uint32_t flags);
-struct yetty_ycore_void_result yetty_ymusic_set_font_path(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
-                                                          const char *path);
 struct yetty_ycore_void_result yetty_ymusic_parse(struct yetty_yclass_ctx *ctx,
                                                   struct yetty_yclass_object *obj,
                                                   const char *input, size_t len);
@@ -28,8 +25,6 @@ struct yetty_ycore_void_result yetty_ymusic_destroy(struct yetty_yclass_ctx *ctx
 typedef struct yetty_ycore_void_result (*yetty_ymusic_configure_fn)(struct yetty_yclass_ctx *,
                                                                     struct yetty_yclass_object *,
                                                                     float, float, uint32_t);
-typedef struct yetty_ycore_void_result (*yetty_ymusic_set_font_path_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, const char *);
 typedef struct yetty_ycore_void_result (*yetty_ymusic_parse_fn)(struct yetty_yclass_ctx *,
                                                                 struct yetty_yclass_object *,
                                                                 const char *, size_t);
@@ -45,9 +40,6 @@ typedef struct yetty_ycore_void_result (*yetty_ymusic_destroy_fn)(struct yetty_y
 
 [[maybe_unused]]
 static yetty_ymusic_configure_fn yetty_ymusic_music_yetty_ymusic_configure_check = music_configure;
-[[maybe_unused]]
-static yetty_ymusic_set_font_path_fn yetty_ymusic_music_yetty_ymusic_set_font_path_check =
-    music_set_font_path;
 [[maybe_unused]]
 static yetty_ymusic_parse_fn yetty_ymusic_music_yetty_ymusic_parse_check = music_parse;
 [[maybe_unused]]
@@ -77,8 +69,6 @@ struct yetty_yclass_ptr_result yetty_ymusic_music_class_get(void)
     static const struct yetty_yclass_op ops[] = {
         {"yetty_ymusic", "configure", (yetty_yclass_method_id_t)yetty_ymusic_configure,
          (yetty_yclass_impl_t)music_configure},
-        {"yetty_ymusic", "set_font_path", (yetty_yclass_method_id_t)yetty_ymusic_set_font_path,
-         (yetty_yclass_impl_t)music_set_font_path},
         {"yetty_ymusic", "parse", (yetty_yclass_method_id_t)yetty_ymusic_parse,
          (yetty_yclass_impl_t)music_parse},
         {"yetty_ymusic", "render", (yetty_yclass_method_id_t)yetty_ymusic_render,

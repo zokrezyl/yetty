@@ -30,9 +30,6 @@ struct yetty_ydraw_drawable_list_result;
 struct yetty_ycore_void_result yetty_ymusic_configure(struct yetty_yclass_ctx *ctx,
                                                       struct yetty_yclass_object *obj, float width,
                                                       float staff_space, uint32_t flags);
-struct yetty_ycore_void_result yetty_ymusic_set_font_path(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
-                                                          const char *path);
 struct yetty_ycore_void_result yetty_ymusic_parse(struct yetty_yclass_ctx *ctx,
                                                   struct yetty_yclass_object *obj,
                                                   const char *input, size_t len);
@@ -50,8 +47,6 @@ struct yetty_ycore_void_result yetty_ymusic_destroy(struct yetty_yclass_ctx *ctx
 typedef struct yetty_ycore_void_result (*yetty_ymusic_configure_fn)(struct yetty_yclass_ctx *,
                                                                     struct yetty_yclass_object *,
                                                                     float, float, uint32_t);
-typedef struct yetty_ycore_void_result (*yetty_ymusic_set_font_path_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, const char *);
 typedef struct yetty_ycore_void_result (*yetty_ymusic_parse_fn)(struct yetty_yclass_ctx *,
                                                                 struct yetty_yclass_object *,
                                                                 const char *, size_t);

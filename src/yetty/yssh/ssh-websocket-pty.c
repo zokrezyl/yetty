@@ -236,9 +236,8 @@ static void ssh_websocket_pty_emit_message(struct yetty_yssh_ssh_websocket_pty *
 static void ssh_websocket_pty_fail(struct yetty_yssh_ssh_websocket_pty *pty, const char *what)
 {
     char *error_msg = NULL;
-    int error_code = pty->session
-                         ? libssh2_session_last_error(pty->session, &error_msg, NULL, 0)
-                         : 0;
+    int error_code =
+        pty->session ? libssh2_session_last_error(pty->session, &error_msg, NULL, 0) : 0;
     char detail[384];
     snprintf(detail, sizeof(detail), "%s failed (libssh2 rc=%d: %s)", what, error_code,
              error_msg && error_msg[0] ? error_msg : "no detail");
@@ -385,10 +384,9 @@ static void ssh_websocket_pty_pump(struct yetty_yssh_ssh_websocket_pty *pty)
         /* fallthrough */
 
     case SSH_STATE_PTY_REQUEST:
-        rc = libssh2_channel_request_pty_ex(pty->channel, pty->term_type,
-                                            (unsigned int)strlen(pty->term_type), NULL, 0,
-                                            (int)pty->cols, (int)pty->rows, (int)pty->pixel_w,
-                                            (int)pty->pixel_h);
+        rc = libssh2_channel_request_pty_ex(
+            pty->channel, pty->term_type, (unsigned int)strlen(pty->term_type), NULL, 0,
+            (int)pty->cols, (int)pty->rows, (int)pty->pixel_w, (int)pty->pixel_h);
         if (rc == LIBSSH2_ERROR_EAGAIN) {
             return;
         }
@@ -634,17 +632,14 @@ struct yetty_yplatform_pty_ptr_result yetty_yssh_ssh_websocket_pty_create(
         return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh_websocket_pty_create: transport required");
     }
 
-    const char *username =
-        config ? config->ops->get_string(config, "ssh/username", "") : "";
-    const char *password =
-        config ? config->ops->get_string(config, "ssh/password", "") : "";
-    const char *term_type =
-        config ? config->ops->get_string(config, "ssh/term-type", "xterm-256color")
-               : "xterm-256color";
+    const char *username = config ? config->ops->get_string(config, "ssh/username", "") : "";
+    const char *password = config ? config->ops->get_string(config, "ssh/password", "") : "";
+    const char *term_type = config
+                                ? config->ops->get_string(config, "ssh/term-type", "xterm-256color")
+                                : "xterm-256color";
     if (!username[0]) {
         transport->ops->destroy(transport);
-        return YETTY_ERR(yetty_yplatform_pty_ptr,
-                         "ssh: username required (--ssh USER@HOST)");
+        return YETTY_ERR(yetty_yplatform_pty_ptr, "ssh: username required (--ssh USER@HOST)");
     }
     if (!password[0]) {
         transport->ops->destroy(transport);
