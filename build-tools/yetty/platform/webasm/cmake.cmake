@@ -19,6 +19,7 @@ set(YETTY_SHADERS_DIR "/assets/shaders" CACHE STRING "Shader directory path")
 # Platform sources
 set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yinit/webasm.c
+    ${YETTY_ROOT}/src/yetty/yinit/webasm-run.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/window/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/webasm.c
@@ -174,6 +175,122 @@ target_link_libraries(yetty PRIVATE
 # without it. The Makefile's `cmake --build … --target yetty` invocation
 # walks this dependency.
 add_dependencies(yetty tinyemu_vm)
+
+# ============================================================================
+# ygreeter.wasm — the ygui feature-showcase app, standalone in the browser.
+#
+# Reuses ygreeter's existing standalone mode wholesale: main() →
+# run_standalone_mode → yetty_yinit_run(..., standalone_worker, ...). The
+# only thing that was missing for the web was the webasm yetty_yinit_run
+# (yinit/webasm-run.c), now shared. ygreeter renders the ygui figure tree
+# into its own WebGPU canvas with no terminal, no shell, no VM.
+#
+# Assets: reuses yetty's --pre-js asset preload (fonts / shaders /
+# msdf-fonts staged into /data); ygreeter's own incbin path is compiled
+# out (embedded-assets.c is a no-op without HAS_DATA_MANIFEST). The GPU
+# device is handed in from JS (ygreeter.html), same as yetty.
+# ============================================================================
+add_executable(ygreeter
+    ${YETTY_ROOT}/tools/ygreeter/main.c
+    ${YETTY_ROOT}/tools/ygreeter/embedded-assets.c
+    ${YETTY_ROOT}/src/yetty/yshadertoy/demo-shaders.c
+    # Core sources ygreeter compiles directly (not provided as libs) —
+    # mirrors tools/ygreeter/CMakeLists.txt's YGREETER_SOURCES.
+    ${YETTY_ROOT}/src/yetty/yframework/yframework.c
+    ${YETTY_ROOT}/src/yetty/yconfig/config.c
+    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
+    ${YETTY_ROOT}/src/yetty/ynotify/ynotify.c
+    ${YETTY_ROOT}/src/yetty/yinit/webasm-run.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/webasm.c
+    ${YETTY_ROOT}/src/yetty/yplatform/window/webasm.c
+    ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/webasm.c
+    ${YETTY_ROOT}/src/yetty/yplatform/pipe/webasm.c
+    ${YETTY_ROOT}/src/yetty/yplatform/coroutine/webasm.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webgpu/webasm.c
+    ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
+    ${YETTY_ROOT}/src/yetty/yplatform/webasm/brotli-glue.c
+)
+
+target_include_directories(ygreeter BEFORE PRIVATE
+    ${YETTY_ROOT}/src
+    ${YETTY_ROOT}/include
+    ${YETTY_RENDERER_INCLUDES}
+)
+
+target_compile_definitions(ygreeter PRIVATE
+    ${YETTY_DEFINITIONS}
+    YETTY_WEB=1
+    YETTY_ANDROID=0
+    YETTY_USE_PREBUILT_ATLAS=1
+    YETTY_YGREETER_HAS_STANDALONE
+    YETTY_YGREETER_HAS_CHROME
+    YTRACE_ENABLED=1
+    YTRACE_NO_CONTROL_SOCKET=1
+    YTRACE_USE_SPDLOG=1
+    YETTY_ASSETS_DIR="/assets"
+    YETTY_SHADERS_DIR="/assets/shaders"
+)
+
+target_compile_options(ygreeter PRIVATE --use-port=emdawnwebgpu -fexceptions)
+
+target_link_options(ygreeter PRIVATE
+    -sUSE_GLFW=3
+    --use-port=emdawnwebgpu
+    -sASYNCIFY
+    -sASYNCIFY_STACK_SIZE=65536
+    -sSTACK_SIZE=1048576
+    -sWASM_BIGINT
+    -sFILESYSTEM=1
+    -sALLOW_MEMORY_GROWTH=1
+    -sINITIAL_MEMORY=256MB
+    -sASSERTIONS=2
+    --emit-symbol-map
+    -fexceptions
+    "--pre-js=${YETTY_ROOT}/build-tools/web/yetty-assets-preload.js"
+    "-sEXPORTED_RUNTIME_METHODS=['ccall','cwrap','UTF8ToString','stringToUTF8','FS','ENV','HEAPU8','HEAPU32','callMain']"
+    "-sEXPORTED_FUNCTIONS=['_main','_malloc','_free','_yetty_brotli_decode']"
+)
+set_target_properties(ygreeter PROPERTIES SUFFIX ".js" LINKER_LANGUAGE CXX)
+set_target_properties(ygreeter PROPERTIES
+    LINK_DEPENDS ${YETTY_ROOT}/build-tools/web/yetty-assets-preload.js)
+
+# Standalone ygreeter's lib set (mirrors tools/ygreeter/CMakeLists.txt's
+# webgpu link line). move_resize / window_manager are desktop-only — on
+# webasm the window_manager symbols resolve via stubs in
+# yetty_yplatform_core (window_manager is NULL, the stubs early-return).
+target_link_libraries(ygreeter PRIVATE
+    yetty_ygui
+    yetty_ywire
+    yetty_ychrome
+    yetty_yfigure
+    yetty_ygrid
+    yetty_yshadertoy
+    yetty_yfont_core
+    yetty_ydraw_factory
+    yetty_yimage
+    yetty_yplot
+    ${YETTY_LIBS}
+    Freetype::Freetype
+    brotlidec
+    brotlicommon
+    yetty_yplatform_core
+)
+
+# Copy ygreeter's loader page next to ygreeter.{js,wasm}. It reuses the
+# same yetty-assets/ preload directory (already staged alongside, see
+# yetty_stage_webasm_assets) for fonts/shaders/msdf-fonts.
+add_custom_command(TARGET ygreeter POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy
+            ${YETTY_ROOT}/build-tools/web/ygreeter.html
+            ${CMAKE_BINARY_DIR}/ygreeter.html
+    COMMENT "Copy web/ygreeter.html → build dir")
+set_property(DIRECTORY "${CMAKE_SOURCE_DIR}" APPEND PROPERTY
+    CMAKE_CONFIGURE_DEPENDS "${YETTY_ROOT}/build-tools/web/ygreeter.html")
+
+# Build ygreeter whenever yetty is built (the Makefile only names the
+# `yetty` target), so `make build-webasm-*` produces ygreeter.{js,wasm}
+# + ygreeter.html for the picker's showcase option.
+add_dependencies(yetty ygreeter)
 
 # Copy demo and source tree to build directory for preloading
 if(YETTY_ENABLE_FEATURE_DEMO)

@@ -64,6 +64,12 @@ struct yetty_yplatform_webasm_event_loop {
 
     struct yetty_ycore_xthread_event_pipe *platform_input_pipe;
     int running;
+    /* Coalesced render request. request_render() only SETS this; the
+     * next main_loop_tick drains it and dispatches exactly one RENDER.
+     * Dispatching synchronously from request_render() would re-enter the
+     * render handler — e.g. a frame's emit writes to a memory-pty whose
+     * wake callback is request_render — and recurse without bound. */
+    int render_pending;
 };
 
 /* Forward declarations */
@@ -172,6 +178,17 @@ static void main_loop_tick(void *arg)
                 th->listener->handler(th->listener, &event);
             }
         }
+    }
+
+    /* Drain a coalesced render request exactly once per tick. Clear the
+     * flag FIRST so a request_render() made from within the render
+     * handler schedules the NEXT tick's frame rather than re-entering
+     * this one (see render_pending). */
+    if (impl->render_pending) {
+        impl->render_pending = 0;
+        struct yetty_yui_event render_event = {0};
+        render_event.type = YETTY_YCORE_RENDER;
+        webasm_dispatch(&impl->base, &render_event);
     }
 }
 
@@ -549,12 +566,14 @@ static void webasm_request_render(struct yetty_yevent_event_loop *self)
 {
     struct yetty_yplatform_webasm_event_loop *impl =
         container_of(self, struct yetty_yplatform_webasm_event_loop, base);
-    struct yetty_yui_event event = {0};
 
-    event.type = YETTY_YCORE_RENDER;
-    webasm_dispatch(self, &event);
-
-    (void)impl;
+    /* Coalesce only — do NOT dispatch synchronously. The next
+     * main_loop_tick drains render_pending and dispatches one RENDER.
+     * Synchronous dispatch here re-enters the render handler when
+     * request_render is called from within a frame (e.g. the ygui
+     * memory-pty wake callback fires during emit), recursing without
+     * bound until the stack overflows. */
+    impl->render_pending = 1;
 }
 
 /* Surface a callback-boundary error as a user-visible notification. The

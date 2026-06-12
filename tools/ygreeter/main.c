@@ -261,6 +261,15 @@ struct app {
      * event_listener) pull in webgpu transitively, so the whole block
      * is gated. */
     struct yetty_yframework *yframework;
+    /* The yetty_context handed to the root container (set_context stores
+     * the pointer, not a copy) and to the chrome host. It MUST outlive the
+     * worker: on webasm standalone_worker returns immediately after the
+     * emscripten main loop is registered, and the container mints its
+     * ygrid figures lazily on the first render tick — long after the
+     * worker's stack frame is gone. A stack-local context would dangle and
+     * the lazy ygrid_create would read freed memory (OOB). Living on the
+     * heap-allocated, program-lifetime `app` keeps it valid. */
+    struct yetty_context ctx;
     struct yetty_yplatform_memory_pty_pair pty_pair;
     int has_pty_pair;
     struct yetty_yclass_object *root_container;
@@ -3560,7 +3569,10 @@ static struct yetty_ycore_int_result standalone_event_handler(
                 yetty_ycore_error_destroy(er.error);
             }
         }
-        /* Drain consumer-side bytes through the wire SM → container. */
+        /* Drain consumer-side bytes through the wire SM → container. On
+         * webasm there is no wire SM — the framework dispatches records
+         * straight into root_container (set_container_obj), so this is
+         * skipped (app->wire_sm is NULL). */
         if (app->wire_sm) {
             struct yetty_ycore_void_result pr = yetty_ywire_wire_statemachine_process(app->wire_sm);
             if (YETTY_IS_ERR(pr)) {
@@ -3823,9 +3835,11 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sfr, "standalone: yshadertoy_register_factory");
     }
 
-    /* Local container. */
-    struct yetty_context ctx = {.runtime = app->yframework,
-                                .event_loop = app->yframework->event_loop};
+    /* Local container. The context lives on `app` (program-lifetime) so it
+     * outlives this worker — the container stores the pointer and mints its
+     * ygrid figures lazily, after the worker has returned on webasm. */
+    app->ctx = (struct yetty_context){.runtime = app->yframework,
+                                      .event_loop = app->yframework->event_loop};
     {
         struct yetty_ycore_rectangle root_rect = {
             .min = {0, 0}, .max = {(float)rt->surface_width, (float)rt->surface_height}};
@@ -3833,11 +3847,39 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "standalone: container_create");
         app->root_container = obj_res.value;
-        yetty_yfigure_container_set_context(app->root_container, &ctx);
+        yetty_yfigure_container_set_context(app->root_container, &app->ctx);
         yetty_yfigure_container_set_registry(app->root_container, app->figure_registry);
         yetty_yfigure_container_set_rect(app->root_container, root_rect);
     }
 
+#ifdef __EMSCRIPTEN__
+    /* Webasm: in-process DIRECT dispatch (same path yui.c uses) — the
+     * framework ships its records straight into root_container via the
+     * yclass slot path, with NO memory-pty and NO wire-statemachine.
+     *
+     * The pty+wire_sm route used on desktop is unusable here: the webasm
+     * wire-statemachine runs on a degenerate setjmp/longjmp coroutine
+     * (yplatform/coroutine/webasm.c) that abandons its stack on every
+     * yield and re-enters from the top. That survives the terminal's
+     * small per-envelope payloads but not ygreeter's large figure
+     * envelope, whose multi-yield parse corrupts memory (out-of-bounds
+     * in wire_statemachine_process). Direct dispatch sidesteps it
+     * entirely and is also a frame faster (no serialize/parse). */
+    {
+        struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(NULL);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "standalone: framework_create");
+        app->engine = fr.value;
+        struct yetty_ycore_void_result scr =
+            yetty_ygui_framework_set_container_obj(app->engine, app->root_container);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, scr, "standalone: set_container_obj");
+        float cs = app_content_scale(app);
+        struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
+            app->engine, (float)rt->surface_width / cs, (float)rt->surface_height / cs);
+        if (YETTY_IS_ERR(vr)) {
+            yetty_ycore_error_destroy(vr.error);
+        }
+    }
+#else
     /* Memory pty pair: producer.a = ygui output, consumer.b = wire SM. */
     {
         struct yetty_yplatform_memory_pty_pair_result pr =
@@ -3873,6 +3915,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
             yetty_ycore_error_destroy(vr.error);
         }
     }
+#endif
 
     struct key_ctx kc = {.app = app, .stop_cb = standalone_stop};
     app->stop_cb = standalone_stop;
@@ -3885,7 +3928,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
      * font), composited as a pinned figure over the greeter UI. */
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
-            app->root_container, app->font, &ctx, app->yframework->window_manager,
+            app->root_container, app->font, &app->ctx, app->yframework->window_manager,
             (float)rt->surface_width, (float)rt->surface_height, 36.0f, 8.0f,
             YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
@@ -3896,9 +3939,12 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         }
     }
 
+#ifndef __EMSCRIPTEN__
     /* Wire memory-pty wake → request_render so producer writes drive the
      * event loop. Without this, ygui_framework_emit appends bytes to the
-     * mem-pty but the consumer side never schedules a render. */
+     * mem-pty but the consumer side never schedules a render. (Webasm
+     * uses direct dispatch + the 33 ms frame timer, so there is no pty
+     * pair to wake from here.) */
     yetty_yplatform_memory_pty_set_wake(
         app->pty_pair.b,
         (yetty_yplatform_memory_pty_wake_fn)app->yframework->event_loop->ops->request_render,
@@ -3907,6 +3953,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     /* Window-size changes reach the compositor end the same way bytes do:
      * the producer endpoint is resized, the pair delivers it to this peer. */
     yetty_yplatform_memory_pty_set_resize(app->pty_pair.b, standalone_pty_resize_cb, app);
+#endif
 
     app->listener.handler = standalone_event_handler;
     struct yetty_ycore_void_result rel =
@@ -3947,6 +3994,22 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     if (YETTY_IS_ERR(run_res)) {
         yetty_ycore_error_destroy(run_res.error);
     }
+
+#ifdef __EMSCRIPTEN__
+    /* CRITICAL webasm difference: event_loop->start() registers the
+     * emscripten main loop (emscripten_set_main_loop_arg) and returns
+     * IMMEDIATELY — it does not block like the desktop/libuv loop. The
+     * teardown below is desktop shutdown code; running it now would
+     * destroy the ygui engine, render target and GPU device microseconds
+     * after creation, so the browser-driven frames render nothing. The
+     * app must stay alive for program lifetime (the browser owns the
+     * loop after we return), so bail out before teardown — same as
+     * yetty's own webasm worker, which intentionally leaks. */
+    yinfo("ygreeter: standalone running on webasm — leaving app alive, "
+          "browser drives frames (engine=%p render_target=%p)",
+          (void *)app->engine, (void *)app->render_target);
+    return YETTY_OK_VOID();
+#endif
 
     if (app->chrome) {
         struct yetty_ycore_void_result dc = yetty_ychrome_host_destroy(app->chrome);
@@ -4058,9 +4121,22 @@ static struct yetty_ycore_void_result ygreeter_verify_assets(const char *data_di
         missing++;
     }
     if (missing > 0) {
+#ifdef __EMSCRIPTEN__
+        /* On the web build the logos / intro video / pdf samples aren't
+         * bundled yet (ygreeter's incbin path is compiled out; only the
+         * shared font/shader assets are preloaded). Those drive the
+         * Images / Video / PDF tabs, which already degrade to blank
+         * rather than crash — so warn and continue instead of aborting
+         * the whole showcase. The rest of the tabs render normally. */
+        ywarn("ygreeter: %d showcase asset(s) missing on web — Images/Video/PDF "
+              "tabs will be blank; the rest of the showcase still renders",
+              missing);
+        return YETTY_OK_VOID();
+#else
         return YETTY_ERR(yetty_ycore_void,
                          "ygreeter: required runtime assets are missing from the data dir "
                          "(embedded-asset extraction produced none) — see log for the list");
+#endif
     }
     return YETTY_OK_VOID();
 }
@@ -4085,10 +4161,29 @@ static struct yetty_ycore_void_result ygreeter_extract_assets_cb(void)
 
 static int run_standalone_mode(int argc, char **argv)
 {
-    struct app app = {0};
+#ifdef __EMSCRIPTEN__
+    /* On webasm the worker returns immediately (event_loop->start()
+     * registers the emscripten main loop and does NOT block), so this
+     * function returns too — but the browser keeps driving frames
+     * afterward, dereferencing `app` via the callbacks the worker
+     * registered (the 33 ms frame timer's listener &app->frame_listener,
+     * the input listener &app->listener, and app->engine /
+     * app->render_target read in standalone_event_handler). A stack
+     * `app` would be freed on return → use-after-free → "null function"
+     * crash on the very next tick. Heap-allocate and leak it for
+     * program lifetime (same reason the worker skips teardown above). */
+    struct app *app = calloc(1, sizeof(*app));
+    if (!app) {
+        fprintf(stderr, "ygreeter: out of memory allocating app\n");
+        return 1;
+    }
+#else
+    struct app app_storage = {0};
+    struct app *app = &app_storage;
+#endif
     struct yetty_yinit_app_config cfg = {.extract_assets_fn = ygreeter_extract_assets_cb};
     struct yetty_ycore_int_result run_result =
-        yetty_yinit_run(argc, argv, &cfg, standalone_worker, &app);
+        yetty_yinit_run(argc, argv, &cfg, standalone_worker, app);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "ygreeter: run", run_result.error);
         yetty_ycore_error_destroy(run_result.error);
