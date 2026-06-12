@@ -1,12 +1,16 @@
 /*
- * poc/yvterm/grid.h — the text grid as a contiguous collection of lines,
- * driven from the libvterm STATE layer.
+ * poc/yvterm/grid.h — the text grid as a collection of lines, driven from the
+ * libvterm STATE layer.
  *
- * This is the heart of the yvterm-new probe: no VTermScreen, no parallel
- * scrollback. One contiguous cell ring is both the model and the GPU upload
- * source; the layer plugs into the production render-target via the standard
- * yetty_yrender_terminal_layer interface so it goes through the real
- * MSDF/cdb text shader.
+ * This is the heart of the yvterm performance probe. No VTermScreen, no
+ * parallel scrollback. The model is a collection of independent lines, each
+ * owning its own row of 16-byte cells. The renderer (main.c) walks the lines,
+ * uploads each dirty line individually into one pinned GPU storage buffer, and
+ * issues a single full-screen-quad draw. No yrender binder / resource-set /
+ * render-target.
+ *
+ * The vterm-state -> cell logic and the 16-byte (4 u32) cell packing are kept
+ * verbatim from the original probe; only the storage and rendering changed.
  */
 #ifndef POC_YVTERM_GRID_H
 #define POC_YVTERM_GRID_H
@@ -16,50 +20,53 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yfont/ms-font.h>
-#include <yetty/yterminal/terminal.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/* Four u32 words per cell — the stride text.wgsl assumes. */
+enum { POC_YVTERM_WORDS_PER_CELL = 4 };
+
+/* One terminal line: its own contiguous row of `cols * 4` u32 cells, plus a
+ * dirty flag the renderer clears once it has uploaded the row. */
+struct poc_line {
+    uint32_t *cells; /* cols * POC_YVTERM_WORDS_PER_CELL u32, one row */
+    int dirty;
+};
 
 struct poc_yvterm_grid;
 
 YETTY_YRESULT_DECLARE(poc_yvterm_grid_ptr, struct poc_yvterm_grid *);
 
 /* Create the grid. Borrows `font` (caller keeps ownership / destroys it after
- * the grid). `text_shader_path` is the path to text-layer.wgsl. The cell size
- * is taken from the font. */
-struct poc_yvterm_grid_ptr_result poc_yvterm_grid_create(uint32_t cols, uint32_t rows,
-                                                         struct yetty_yfont_ms_font *font,
-                                                         const char *text_shader_path);
+ * the grid). `cols` x `visible_rows` is the vterm size; `total_rows` is the
+ * number of line objects backing the GPU buffer (>= visible_rows; the extra
+ * rows let --rows N inflate the per-frame upload count). The cell size is
+ * taken from the font. */
+struct poc_yvterm_grid_ptr_result poc_yvterm_grid_create(uint32_t cols, uint32_t visible_rows,
+                                                         uint32_t total_rows,
+                                                         struct yetty_yfont_ms_font *font);
 
 struct yetty_ycore_void_result poc_yvterm_grid_destroy(struct poc_yvterm_grid *grid);
 
-/* Upcast to the render-layer base (first member) — pass to
- * target->ops->render_layer. */
-struct yetty_yrender_terminal_layer *poc_yvterm_grid_as_layer(struct poc_yvterm_grid *grid);
-
-/* Feed raw PTY bytes through the vterm state machine; updates the line ring
- * and the dirty span. Surfaces the first error raised inside a state
- * callback. */
+/* Feed raw PTY bytes through the vterm state machine; updates the lines and
+ * marks the touched ones dirty. Surfaces the first error raised inside a
+ * state callback. */
 struct yetty_ycore_void_result poc_yvterm_grid_feed(struct poc_yvterm_grid *grid,
                                                     const char *bytes, size_t len);
 
-/* True if anything changed since the last render. */
+/* Accessors for the renderer. */
+uint32_t poc_yvterm_grid_cols(const struct poc_yvterm_grid *grid);
+uint32_t poc_yvterm_grid_visible_rows(const struct poc_yvterm_grid *grid);
+uint32_t poc_yvterm_grid_total_rows(const struct poc_yvterm_grid *grid);
+struct poc_line *poc_yvterm_grid_lines(struct poc_yvterm_grid *grid);
+
+/* True if any line is dirty since the last render. */
 int poc_yvterm_grid_is_dirty(const struct poc_yvterm_grid *grid);
 
-/* --stress: mark the entire grid dirty so the next frame re-uploads and
- * re-shades everything (worst case). */
+/* --stress: mark every line dirty so the next frame re-uploads all of them. */
 void poc_yvterm_grid_force_full_dirty(struct poc_yvterm_grid *grid);
-
-/* Perf counters, read once per stats interval. */
-struct poc_yvterm_grid_stats {
-    uint64_t scroll_fastpath;  /* whole-screen scrolls served by root_row slide */
-    uint64_t scroll_memmove;   /* scrolls that fell back to content memmove */
-    uint64_t cells_uploaded;   /* cells handed to the GPU buffer this interval */
-    uint32_t dirty_rows_last;  /* dirty row span width on the last frame */
-};
-struct poc_yvterm_grid_stats poc_yvterm_grid_stats_take(struct poc_yvterm_grid *grid);
 
 #ifdef __cplusplus
 }

@@ -37,6 +37,7 @@ set(POC_YVTERM_PLATFORM_SOURCES
 add_executable(poc-yvterm
     main.c
     grid.c
+    shader.c
     ${POC_YVTERM_PLATFORM_SOURCES}
 )
 
