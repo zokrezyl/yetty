@@ -42,6 +42,8 @@
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/producer.h>
 #include <yetty/yfigure/wire.h>
+#include <yetty/ycircuit/circuit.h>
+#include <yetty/ymusic/music.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/yshadertoy/demo-shaders.h>
@@ -122,17 +124,20 @@ enum tab_kind {
     TAB_KIND_YSHADERTOY, /* Shadertoy-style WGSL, rendered by the `yshadertoy` widget */
     TAB_KIND_YNODES,     /* node-graph editor, rendered by the `ynodes` widget */
     TAB_KIND_YPDF,       /* PDF document, rendered by the `ypdf` widget */
+    TAB_KIND_YCIRCUIT,   /* electric-circuit schematics (ycircuit → ydraw_embed) */
+    TAB_KIND_YMUSIC,     /* musical score notation (ymusic → ydraw_embed) */
 };
 
 /* Scenes — the leaf content panels. `tab_kind_for` / `tab_entry_*` are
  * keyed by these indices. A scene is shown either directly (its own
  * top-level tab) or under a top tab's sub-tabbar. */
-#define TAB_COUNT 15
+#define TAB_COUNT 17
 
 static const char *SCENE_LABELS[TAB_COUNT] = {
     "Welcome",  "Plots",    "Images",       "Code",        "Video",
     "Elements", "Markdown", "HTML/Browser", "Diagrams",    "YMaze",
-    "YZoo",     "YJungle",  "Shadertoy",    "Node Editor", "PDF"};
+    "YZoo",     "YJungle",  "Shadertoy",    "Node Editor", "PDF",
+    "Circuit",  "Music"};
 
 /* Top-level tabs. A tab with a single scene shows it directly; a tab with
  * several shows a sub-tabbar (same widget the Shadertoy gallery uses) that
@@ -140,14 +145,14 @@ static const char *SCENE_LABELS[TAB_COUNT] = {
 struct top_tab {
     const char *label;
     int n_subs;
-    int subs[6];
+    int subs[8];
 };
 
 static const struct top_tab TOP_TABS[] = {
     {"Welcome", 1, {0}},
     {"Plots", 1, {1}},
     {"Media", 2, {2, 4}},               /* Images, Video */
-    {"Rich text", 5, {6, 3, 14, 7, 8}}, /* Markdown, Code, PDF, HTML/Browser, Diagrams */
+    {"Rich content", 7, {6, 3, 14, 7, 8, 15, 16}}, /* Markdown, Code, PDF, HTML/Browser, Diagrams, Circuit, Music */
     {"YGUI Widgets", 1, {5}},           /* former Elements */
     {"Shadertoy", 1, {12}},             /* own tab — it already carries a gallery sub-tabbar */
     {"Ymazing", 4, {9, 10, 11, 13}},    /* YMaze, YZoo, YJungle, Node Editor */
@@ -261,6 +266,15 @@ struct app {
      * event_listener) pull in webgpu transitively, so the whole block
      * is gated. */
     struct yetty_yframework *yframework;
+    /* The yetty_context handed to the root container (set_context stores
+     * the pointer, not a copy) and to the chrome host. It MUST outlive the
+     * worker: on webasm standalone_worker returns immediately after the
+     * emscripten main loop is registered, and the container mints its
+     * ygrid figures lazily on the first render tick — long after the
+     * worker's stack frame is gone. A stack-local context would dangle and
+     * the lazy ygrid_create would read freed memory (OOB). Living on the
+     * heap-allocated, program-lifetime `app` keeps it valid. */
+    struct yetty_context ctx;
     struct yetty_yplatform_memory_pty_pair pty_pair;
     int has_pty_pair;
     struct yetty_yclass_object *root_container;
@@ -463,12 +477,41 @@ static const struct welcome_nav welcome_nav_entries[] = {
      sizeof(welcome_caps_spans) / sizeof(welcome_caps_spans[0])},
 };
 
+/* yplot source grammar (see src/yetty/yplot/README.md):
+ *   - `name = expr` defines a named series; `@name.color = #RRGGBB` styles it.
+ *   - referencing `y` makes it a 2D field → rendered as a colormapped heatmap
+ *     (the y_min/y_max below become the field's vertical domain).
+ *   - referencing `time` (or `t`) makes it animate: a ~60 Hz timer feeds the
+ *     elapsed seconds in and re-renders each frame — a true f(t). */
 static const struct nav_entry plot_nav_entries[] = {
     {"sin / cos", "f = sin(x); g = cos(x); @f.color = #6BA892; @g.color = #74C5A5", -3.14159f,
      3.14159f, -1.5f, 1.5f},
     {"Polynomial", "f = x*x; g = 2*x + 1; @f.color = #FFD700; @g.color = #74C5A5", -5.0f, 5.0f,
      -2.0f, 12.0f},
     {"Damped wave", "f = exp(-x*x/4) * sin(3*x); @f.color = #74C0FC", -6.0f, 6.0f, -1.2f, 1.2f},
+    /* Fourier synthesis: an 11-term odd-harmonic partial sum converging on a
+     * square wave, drawn over its target. */
+    {"Fourier square",
+     "target = sign(sin(x)); "
+     "sum = 4/pi*(sin(x) + sin(3*x)/3 + sin(5*x)/5 + sin(7*x)/7 + sin(9*x)/9 + sin(11*x)/11); "
+     "@target.color = #556162; @sum.color = #FF6B6B",
+     -6.28318f, 6.28318f, -1.5f, 1.5f},
+    /* sinc / cardinal sine — a non-trivial single curve with a removable
+     * singularity at the origin. */
+    {"Cardinal sine", "f = sinc(x); @f.color = #74C5A5", -12.566f, 12.566f, -0.3f, 1.1f},
+    /* Heatmap: standing-wave checkerboard, f(x,y) = sin(x)·cos(y). */
+    {"Heatmap: sin·cos", "field = sin(x) * cos(y)", -6.28318f, 6.28318f, -6.28318f, 6.28318f},
+    /* Heatmap: concentric ripples radiating from the origin. */
+    {"Heatmap: ripples", "field = sin(3 * sqrt(x*x + y*y))", -6.0f, 6.0f, -6.0f, 6.0f},
+    /* Dynamic f(t): a wave packet travelling left→right as time advances. */
+    {"Traveling wave f(t)", "wave = sin(x - 2*time) * exp(-((x - 4*time - 6)^2)/8); "
+                            "@wave.color = #74C5A5",
+     0.0f, 12.566f, -1.2f, 1.2f},
+    /* Dynamic f(t): amplitude- and phase-modulated standing wave. */
+    {"Pulsing sine f(t)", "f = sin(x) * cos(time); @f.color = #6BA892", -6.28318f, 6.28318f, -1.5f,
+     1.5f},
+    /* Dynamic 2D field f(x,y,t): the standing wave above, now animated. */
+    {"Heatmap f(t)", "field = sin(x - time) * cos(y)", -6.28318f, 6.28318f, -6.28318f, 6.28318f},
 };
 
 static const struct nav_entry code_nav_entries[] = {
@@ -929,6 +972,10 @@ static enum tab_kind tab_kind_for(int tab_index)
         return TAB_KIND_YNODES;
     case 14:
         return TAB_KIND_YPDF;
+    case 15:
+        return TAB_KIND_YCIRCUIT;
+    case 16:
+        return TAB_KIND_YMUSIC;
     case 0:
     case 3:
     default:
@@ -1821,6 +1868,328 @@ static struct yetty_ycore_void_result build_diagrams_content(struct app *app,
 }
 
 /*=============================================================================
+ * Circuit tab — electric-circuit schematics. ycircuit parses a line-based
+ * netlist DSL into a ydraw drawable list (GPU-free SDF prims + MSDF text),
+ * exactly like ydiagram does for Mermaid, so the generic `ydraw_embed`
+ * widget paints it 1:1. One collapsing_header per example. DSL reference:
+ * src/yetty/ycircuit/README.md.
+ *===========================================================================*/
+
+/* Grid pitch (px per grid unit) for the showcase schematics. The DSL coords
+ * are in grid units; ~20 px keeps the examples readable without overflowing
+ * a collapsing section. */
+#define YGREETER_CIRCUIT_GRID_PX 20.0f
+
+static void circuit_add(struct yetty_yclass_object *sec, const char *dsl)
+{
+    if (!sec) {
+        return;
+    }
+    struct yetty_yclass_object_ptr_result wr =
+        yetty_ygui_widget_add(sec, yetty_ygui_ydraw_embed_class_get().value);
+    if (YETTY_IS_ERR(wr)) {
+        yetty_ycore_error_destroy(wr.error);
+        return;
+    }
+    struct yetty_yclass_object *widget = wr.value;
+
+    /* create → configure(grid pitch) → parse(DSL) → render → drop model.
+     * The rendered list owns its own bytes, so the circuit model is freed
+     * immediately and ydraw_embed takes ownership of the list below. */
+    struct yetty_yclass_object_ptr_result cr = yetty_ycircuit_circuit_create(NULL);
+    if (YETTY_IS_ERR(cr)) {
+        yetty_ycore_error_destroy(cr.error);
+        return;
+    }
+    struct yetty_yclass_object *circuit = cr.value;
+    yetty_ycore_error_destroy_safe(
+        yetty_ycircuit_configure(NULL, circuit, YGREETER_CIRCUIT_GRID_PX, YETTY_YCIRCUIT_FLAG_NONE));
+    yetty_ycore_error_destroy_safe(yetty_ycircuit_parse(NULL, circuit, dsl, strlen(dsl)));
+    struct yetty_ydraw_drawable_list_result lr = yetty_ycircuit_render(NULL, circuit);
+    yetty_ycore_error_destroy_safe(yetty_ycircuit_destroy(NULL, circuit));
+    if (YETTY_IS_ERR(lr)) {
+        yetty_ycore_error_destroy(lr.error);
+        return;
+    }
+
+    /* Size the widget to the schematic's intrinsic extent — ydraw_embed
+     * paints 1:1 with no scale-to-fit, so the layout must reserve exactly
+     * the drawable list's scene bounds (same negotiation ydiagram does). */
+    float w = yetty_ydraw_drawable_list_scene_max_x(lr.value) -
+              yetty_ydraw_drawable_list_scene_min_x(lr.value);
+    float h = yetty_ydraw_drawable_list_scene_max_y(lr.value) -
+              yetty_ydraw_drawable_list_scene_min_y(lr.value);
+    if (w > 0.0f && h > 0.0f) {
+        struct yetty_ygui_layout layout = *yetty_ygui_widget_layout_get(widget);
+        layout.width = w;
+        layout.height = h;
+        yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(widget, &layout));
+    }
+    yetty_ycore_error_destroy_safe(yetty_ygui_ydraw_embed_set_buffer(widget, lr.value));
+}
+
+static struct yetty_ycore_void_result build_circuit_content(struct app *app,
+                                                            struct yetty_yclass_object *root)
+{
+    (void)app;
+    /* Idempotent: registers the ycircuit:circuit class on first call. */
+    yetty_ycore_error_destroy_safe(yetty_ycircuit_register());
+
+    static const struct {
+        const char *title;
+        const char *src;
+    } sections[] = {
+        {"Resistive voltage divider",
+         "circuit Voltage divider\n"
+         "battery   2  7  r270  V1  9V\n"
+         "wire 2 4  8 4\n"
+         "resistor  8  7  v     R1  10k\n"
+         "dot 8 10\n"
+         "wire 8 10  11 10\n"
+         "label 11.5 10.3 Vout\n"
+         "resistor  8 13  v     R2  4.7k\n"
+         "wire 2 10  2 16  8 16\n"
+         "gnd 5 16\n"
+         "dot 5 16\n"},
+        {"RC low-pass filter",
+         "circuit RC low-pass filter\n"
+         "acsource  2  8  v  AC1\n"
+         "label 3 2.3 Vin\n"
+         "wire 2 5  2 3  5 3\n"
+         "resistor  8  3  h  R1  1k\n"
+         "wire 11 3  14 3\n"
+         "dot 14 3\n"
+         "capacitor 14  6  v  C1  100n\n"
+         "wire 14 3  17 3\n"
+         "label 17.5 3.3 Vout\n"
+         "wire 2 11  2 12  14 12\n"
+         "wire 14 9  14 12\n"
+         "gnd 8 12\n"
+         "dot 8 12\n"},
+        {"Half-wave rectifier",
+         "circuit Half-wave rectifier\n"
+         "acsource  2  8  v  AC1  50Hz\n"
+         "wire 2 5  2 3  5 3\n"
+         "diode     8  3  h  D1  1N4007\n"
+         "wire 11 3  17 3\n"
+         "dot 14 3\n"
+         "capacitor 14  6  v  C1  470u\n"
+         "resistor  17  6  v  R1  2.2k\n"
+         "label 18 2.4 Vdc\n"
+         "wire 2 11  2 12  17 12\n"
+         "wire 14 9  14 12\n"
+         "dot 14 12\n"
+         "wire 17 9  17 12\n"
+         "gnd 8 12\n"
+         "dot 8 12\n"},
+        {"Common-emitter amplifier",
+         "circuit Common-emitter amplifier\n"
+         "vcc 10 0\n"
+         "wire 4 0  16 0\n"
+         "dot 10 0\n"
+         "resistor  4  3  v  R1  47k\n"
+         "resistor  4  9  v  R2  10k\n"
+         "dot 4 6\n"
+         "wire 4 6  8 6  8 9  12 9\n"
+         "label 9 8.3 Vin\n"
+         "resistor 16  3  v  RC  2.2k\n"
+         "npn      15  9  h  Q1  BC547\n"
+         "dot 16 6\n"
+         "wire 16 6  19 6\n"
+         "label 19.5 6.3 Vout\n"
+         "resistor 16 15  v  RE  1k\n"
+         "wire 4 12  4 18  16 18\n"
+         "gnd 10 18\n"
+         "dot 10 18\n"},
+        {"Inverting op-amp",
+         "circuit Inverting amplifier\n"
+         "label 1 4.3 Vin\n"
+         "wire 1.5 5  3 5\n"
+         "resistor 6 5 h R1 10k\n"
+         "wire 9 5  11 5\n"
+         "dot 10 5\n"
+         "wire 10 5  10 1  11 1\n"
+         "resistor 14 1 h R2 100k\n"
+         "wire 17 1  18 1  18 6\n"
+         "dot 18 6\n"
+         "opamp 14 6 h U1\n"
+         "wire 11 7  10 7  10 9\n"
+         "gnd 10 9\n"
+         "wire 17 6  21 6\n"
+         "label 21.5 6.3 Vout\n"},
+        {"NE555 astable blinker",
+         "circuit 555 astable blinker\n"
+         "ic 14 8 h U1 NE555 l:GND,TRIG,OUT,RESET r:VCC,DIS,THR,CV\n"
+         "wire 8 2  25 2\n"
+         "vcc 13 2\n"
+         "dot 13 2\n"
+         "wire 4 21  25 21\n"
+         "gnd 14 21\n"
+         "dot 14 21\n"
+         "wire 17.8 5.6  22 5.6  22 2\n"
+         "dot 22 2\n"
+         "wire 10.2 10.4  8 10.4  8 2\n"
+         "wire 10.2 5.6  6 5.6  6 21\n"
+         "dot 6 21\n"
+         "resistor 25 5 v R1 10k\n"
+         "wire 17.8 7.2  21 7.2  21 8  25 8\n"
+         "dot 25 8\n"
+         "resistor 25 11 v R2 47k\n"
+         "wire 17.8 8.8  23 8.8  23 14\n"
+         "wire 10.2 7.2  9 7.2  9 12.5  23 12.5  23 14\n"
+         "dot 23 14\n"
+         "wire 23 14  25 14\n"
+         "dot 25 14\n"
+         "wire 25 14  25 15\n"
+         "capacitor 25 18 v C1 10u\n"
+         "wire 10.2 8.8  4 8.8  4 9\n"
+         "resistor 4 12 v R3 330\n"
+         "led 4 18 r90 D1 red\n"},
+    };
+    for (size_t i = 0; i < sizeof(sections) / sizeof(sections[0]); i++) {
+        struct yetty_yclass_object *sec = el_section(root, sections[i].title);
+        circuit_add(sec, sections[i].src);
+        el_finalize_section(sec);
+    }
+    return YETTY_OK_VOID();
+}
+
+/*=============================================================================
+ * Music tab — engraved musical scores. ymusic (the module ycircuit was
+ * modelled on) parses a LilyPond-subset score into a ydraw drawable list of
+ * staff lines / note heads / stems / beams plus Emmentaler glyph spans, which
+ * the generic `ydraw_embed` widget paints 1:1 — same hosting pattern as the
+ * Circuit tab. The Emmentaler music font ships as /data/msdf-fonts/
+ * Emmentaler.cdb (staged for webasm, installed on desktop). DSL reference:
+ * src/yetty/ymusic/README.md.
+ *===========================================================================*/
+
+/* System width (px) the engraver wraps measures into, and the staff-line gap
+ * (em = 4 × staff_space). Sized for the showcase's scrollarea — readable but
+ * compact enough that a few measures fit before wrapping. */
+#define YGREETER_MUSIC_WIDTH 760.0f
+#define YGREETER_MUSIC_STAFF 13.0f
+
+static void music_add(struct yetty_yclass_object *sec, const char *score)
+{
+    if (!sec) {
+        return;
+    }
+    struct yetty_yclass_object_ptr_result wr =
+        yetty_ygui_widget_add(sec, yetty_ygui_ydraw_embed_class_get().value);
+    if (YETTY_IS_ERR(wr)) {
+        yetty_ycore_error_destroy(wr.error);
+        return;
+    }
+    struct yetty_yclass_object *widget = wr.value;
+
+    /* create → configure(width, staff space) → parse(score) → render → drop
+     * model. The rendered list owns its bytes, so the model is freed at once
+     * and ydraw_embed takes ownership of the list. */
+    struct yetty_yclass_object_ptr_result mr = yetty_ymusic_music_create(NULL);
+    if (YETTY_IS_ERR(mr)) {
+        yetty_ycore_error_destroy(mr.error);
+        return;
+    }
+    struct yetty_yclass_object *music = mr.value;
+    yetty_ycore_error_destroy_safe(yetty_ymusic_configure(
+        NULL, music, YGREETER_MUSIC_WIDTH, YGREETER_MUSIC_STAFF, YETTY_YMUSIC_FLAG_NONE));
+    yetty_ycore_error_destroy_safe(yetty_ymusic_parse(NULL, music, score, strlen(score)));
+    struct yetty_ydraw_drawable_list_result lr = yetty_ymusic_render(NULL, music);
+    yetty_ycore_error_destroy_safe(yetty_ymusic_destroy(NULL, music));
+    if (YETTY_IS_ERR(lr)) {
+        yetty_ycore_error_destroy(lr.error);
+        return;
+    }
+
+    float w = yetty_ydraw_drawable_list_scene_max_x(lr.value) -
+              yetty_ydraw_drawable_list_scene_min_x(lr.value);
+    float h = yetty_ydraw_drawable_list_scene_max_y(lr.value) -
+              yetty_ydraw_drawable_list_scene_min_y(lr.value);
+    if (w > 0.0f && h > 0.0f) {
+        struct yetty_ygui_layout layout = *yetty_ygui_widget_layout_get(widget);
+        layout.width = w;
+        layout.height = h;
+        yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(widget, &layout));
+    }
+    yetty_ycore_error_destroy_safe(yetty_ygui_ydraw_embed_set_buffer(widget, lr.value));
+}
+
+static struct yetty_ycore_void_result build_music_content(struct app *app,
+                                                          struct yetty_yclass_object *root)
+{
+    (void)app;
+    /* Idempotent: registers the ymusic:music class on first call. */
+    yetty_ycore_error_destroy_safe(yetty_ymusic_register());
+
+    static const struct {
+        const char *title;
+        const char *src;
+    } sections[] = {
+        /* The canonical example shipped with the repo — treble clef, D major
+         * key signature, common time, octave changes and dotted rhythms. */
+        {"Ode to Joy — D major",
+         "\\relative c'' {\n"
+         "  \\clef treble\n"
+         "  \\key d \\major\n"
+         "  \\time 4/4\n"
+         "  fis4 fis g a    | a g fis e      | d d e fis      | fis4. e8 e2    |\n"
+         "  fis4 fis g a    | a g fis e      | d d e fis      | e4. d8 d2      |\n"
+         "  e4 e fis d      | e fis8 g fis4 d | e fis8 g fis4 e | d e a,2       |\n"
+         "}\n"},
+        /* Two-octave C-major scale up and down — the plainest staff, no
+         * accidentals, eighth-note runs that inherit their duration. */
+        {"C major scale (treble)",
+         "\\relative c' {\n"
+         "  \\clef treble \\key c \\major \\time 4/4\n"
+         "  c8 d e f g a b c | c b a g f e d c |\n"
+         "}\n"},
+        /* Bass clef — a descending line; exercises the second clef glyph and
+         * ledger-free notes below the treble range. */
+        {"Bass clef — descending line",
+         "\\relative c {\n"
+         "  \\clef bass \\key c \\major \\time 4/4\n"
+         "  c4 b a g | f e d c | g g c2 |\n"
+         "}\n"},
+        /* A flat key in compound time — B-flat major (two flats) in 6/8,
+         * arpeggiated, to show the key-signature accidentals and a non-4/4
+         * meter. */
+        {"B-flat major, 6/8",
+         "\\relative c' {\n"
+         "  \\clef treble \\key bes \\major \\time 6/8\n"
+         "  bes8 d f bes f d | c es g c g es | d f bes d bes f | bes4. bes,4. |\n"
+         "}\n"},
+        /* Stacked pitches — triads and a seventh built as chords inside angle
+         * brackets, then held as half notes. */
+        {"Chords & triads",
+         "\\relative c' {\n"
+         "  \\clef treble \\key c \\major \\time 4/4\n"
+         "  <c e g>4 <d f a> <e g b> <f a c> | <g b d f>2 <c, e g>2 |\n"
+         "}\n"},
+        /* Every accidental the engraver draws — single sharp/flat, double
+         * sharp (isis) and double flat (eses), against the natural key. */
+        {"Accidentals — sharps, flats, doubles",
+         "\\relative c' {\n"
+         "  \\clef treble \\time 4/4\n"
+         "  cis4 des e f | fis ges aisis beses | c1 |\n"
+         "}\n"},
+        /* The rhythmic vocabulary — whole through sixteenth, a dotted figure
+         * and a rest, so every note-head/flag/dot/rest glyph appears. */
+        {"Rhythms & rests",
+         "\\relative c' {\n"
+         "  \\clef treble \\key c \\major \\time 4/4\n"
+         "  c1 | c2 c2 | c4 c c c | c8 c c c c c c c | r4 c8. c16 c4 r4 |\n"
+         "}\n"},
+    };
+    for (size_t i = 0; i < sizeof(sections) / sizeof(sections[0]); i++) {
+        struct yetty_yclass_object *sec = el_section(root, sections[i].title);
+        music_add(sec, sections[i].src);
+        el_finalize_section(sec);
+    }
+    return YETTY_OK_VOID();
+}
+
+/*=============================================================================
  * Node-editor tab — the exact scene from demo/ygui/38_ynodes: a ynodes
  * editor filling the body, three nodes holding ordinary widgets, two
  * pre-wired links, and a palette the node context menu can insert.
@@ -1987,6 +2356,14 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_destroy(c));
     }
 
+    /* Recycle the row_link arena. Every row_link belongs to a nav button
+     * that was just destroyed above (widget_destroy is synchronous), so no
+     * live click handler still points into the arena. Resetting here stops
+     * it growing without bound across scene switches AND keeps it from ever
+     * reallocating (a scene has only a handful of nav rows), which would
+     * otherwise dangle the interior pointers handed to live buttons. */
+    g_row_links.count = 0;
+
     struct tab_state *t = &app->tabs[tab_index];
     t->kind = tab_kind_for(tab_index);
     int n = tab_entry_count(app, tab_index);
@@ -2012,6 +2389,8 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
     case TAB_KIND_YSHADERTOY:
     case TAB_KIND_YNODES:
     case TAB_KIND_YPDF:
+    case TAB_KIND_YCIRCUIT:
+    case TAB_KIND_YMUSIC:
         has_nav = false;
         break;
     default:
@@ -2086,7 +2465,9 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
         break;
     }
     case TAB_KIND_ELEMENTS:
-    case TAB_KIND_DIAGRAMS: {
+    case TAB_KIND_DIAGRAMS:
+    case TAB_KIND_YCIRCUIT:
+    case TAB_KIND_YMUSIC: {
         struct yetty_yclass_object_ptr_result sr =
             yetty_ygui_widget_add(hr.value, yetty_ygui_scrollarea_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "rebuild: scrollarea");
@@ -2249,6 +2630,12 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
         break;
     case TAB_KIND_DIAGRAMS:
         yetty_ycore_error_destroy_safe(build_diagrams_content(app, content));
+        break;
+    case TAB_KIND_YCIRCUIT:
+        yetty_ycore_error_destroy_safe(build_circuit_content(app, content));
+        break;
+    case TAB_KIND_YMUSIC:
+        yetty_ycore_error_destroy_safe(build_music_content(app, content));
         break;
     case TAB_KIND_YNODES:
         yetty_ycore_error_destroy_safe(build_ynodes_content(app, content));
@@ -3560,7 +3947,10 @@ static struct yetty_ycore_int_result standalone_event_handler(
                 yetty_ycore_error_destroy(er.error);
             }
         }
-        /* Drain consumer-side bytes through the wire SM → container. */
+        /* Drain consumer-side bytes through the wire SM → container. On
+         * webasm there is no wire SM — the framework dispatches records
+         * straight into root_container (set_container_obj), so this is
+         * skipped (app->wire_sm is NULL). */
         if (app->wire_sm) {
             struct yetty_ycore_void_result pr = yetty_ywire_wire_statemachine_process(app->wire_sm);
             if (YETTY_IS_ERR(pr)) {
@@ -3823,9 +4213,11 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sfr, "standalone: yshadertoy_register_factory");
     }
 
-    /* Local container. */
-    struct yetty_context ctx = {.runtime = app->yframework,
-                                .event_loop = app->yframework->event_loop};
+    /* Local container. The context lives on `app` (program-lifetime) so it
+     * outlives this worker — the container stores the pointer and mints its
+     * ygrid figures lazily, after the worker has returned on webasm. */
+    app->ctx = (struct yetty_context){.runtime = app->yframework,
+                                      .event_loop = app->yframework->event_loop};
     {
         struct yetty_ycore_rectangle root_rect = {
             .min = {0, 0}, .max = {(float)rt->surface_width, (float)rt->surface_height}};
@@ -3833,11 +4225,39 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "standalone: container_create");
         app->root_container = obj_res.value;
-        yetty_yfigure_container_set_context(app->root_container, &ctx);
+        yetty_yfigure_container_set_context(app->root_container, &app->ctx);
         yetty_yfigure_container_set_registry(app->root_container, app->figure_registry);
         yetty_yfigure_container_set_rect(app->root_container, root_rect);
     }
 
+#ifdef __EMSCRIPTEN__
+    /* Webasm: in-process DIRECT dispatch (same path yui.c uses) — the
+     * framework ships its records straight into root_container via the
+     * yclass slot path, with NO memory-pty and NO wire-statemachine.
+     *
+     * The pty+wire_sm route used on desktop is unusable here: the webasm
+     * wire-statemachine runs on a degenerate setjmp/longjmp coroutine
+     * (yplatform/coroutine/webasm.c) that abandons its stack on every
+     * yield and re-enters from the top. That survives the terminal's
+     * small per-envelope payloads but not ygreeter's large figure
+     * envelope, whose multi-yield parse corrupts memory (out-of-bounds
+     * in wire_statemachine_process). Direct dispatch sidesteps it
+     * entirely and is also a frame faster (no serialize/parse). */
+    {
+        struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(NULL);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "standalone: framework_create");
+        app->engine = fr.value;
+        struct yetty_ycore_void_result scr =
+            yetty_ygui_framework_set_container_obj(app->engine, app->root_container);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, scr, "standalone: set_container_obj");
+        float cs = app_content_scale(app);
+        struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
+            app->engine, (float)rt->surface_width / cs, (float)rt->surface_height / cs);
+        if (YETTY_IS_ERR(vr)) {
+            yetty_ycore_error_destroy(vr.error);
+        }
+    }
+#else
     /* Memory pty pair: producer.a = ygui output, consumer.b = wire SM. */
     {
         struct yetty_yplatform_memory_pty_pair_result pr =
@@ -3873,6 +4293,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
             yetty_ycore_error_destroy(vr.error);
         }
     }
+#endif
 
     struct key_ctx kc = {.app = app, .stop_cb = standalone_stop};
     app->stop_cb = standalone_stop;
@@ -3885,7 +4306,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
      * font), composited as a pinned figure over the greeter UI. */
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
-            app->root_container, app->font, &ctx, app->yframework->window_manager,
+            app->root_container, app->font, &app->ctx, app->yframework->window_manager,
             (float)rt->surface_width, (float)rt->surface_height, 36.0f, 8.0f,
             YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
@@ -3896,9 +4317,12 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         }
     }
 
+#ifndef __EMSCRIPTEN__
     /* Wire memory-pty wake → request_render so producer writes drive the
      * event loop. Without this, ygui_framework_emit appends bytes to the
-     * mem-pty but the consumer side never schedules a render. */
+     * mem-pty but the consumer side never schedules a render. (Webasm
+     * uses direct dispatch + the 33 ms frame timer, so there is no pty
+     * pair to wake from here.) */
     yetty_yplatform_memory_pty_set_wake(
         app->pty_pair.b,
         (yetty_yplatform_memory_pty_wake_fn)app->yframework->event_loop->ops->request_render,
@@ -3907,6 +4331,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     /* Window-size changes reach the compositor end the same way bytes do:
      * the producer endpoint is resized, the pair delivers it to this peer. */
     yetty_yplatform_memory_pty_set_resize(app->pty_pair.b, standalone_pty_resize_cb, app);
+#endif
 
     app->listener.handler = standalone_event_handler;
     struct yetty_ycore_void_result rel =
@@ -3947,6 +4372,22 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
     if (YETTY_IS_ERR(run_res)) {
         yetty_ycore_error_destroy(run_res.error);
     }
+
+#ifdef __EMSCRIPTEN__
+    /* CRITICAL webasm difference: event_loop->start() registers the
+     * emscripten main loop (emscripten_set_main_loop_arg) and returns
+     * IMMEDIATELY — it does not block like the desktop/libuv loop. The
+     * teardown below is desktop shutdown code; running it now would
+     * destroy the ygui engine, render target and GPU device microseconds
+     * after creation, so the browser-driven frames render nothing. The
+     * app must stay alive for program lifetime (the browser owns the
+     * loop after we return), so bail out before teardown — same as
+     * yetty's own webasm worker, which intentionally leaks. */
+    yinfo("ygreeter: standalone running on webasm — leaving app alive, "
+          "browser drives frames (engine=%p render_target=%p)",
+          (void *)app->engine, (void *)app->render_target);
+    return YETTY_OK_VOID();
+#endif
 
     if (app->chrome) {
         struct yetty_ycore_void_result dc = yetty_ychrome_host_destroy(app->chrome);
@@ -4058,9 +4499,22 @@ static struct yetty_ycore_void_result ygreeter_verify_assets(const char *data_di
         missing++;
     }
     if (missing > 0) {
+#ifdef __EMSCRIPTEN__
+        /* On the web build the logos / intro video / pdf samples aren't
+         * bundled yet (ygreeter's incbin path is compiled out; only the
+         * shared font/shader assets are preloaded). Those drive the
+         * Images / Video / PDF tabs, which already degrade to blank
+         * rather than crash — so warn and continue instead of aborting
+         * the whole showcase. The rest of the tabs render normally. */
+        ywarn("ygreeter: %d showcase asset(s) missing on web — Images/Video/PDF "
+              "tabs will be blank; the rest of the showcase still renders",
+              missing);
+        return YETTY_OK_VOID();
+#else
         return YETTY_ERR(yetty_ycore_void,
                          "ygreeter: required runtime assets are missing from the data dir "
                          "(embedded-asset extraction produced none) — see log for the list");
+#endif
     }
     return YETTY_OK_VOID();
 }
@@ -4085,10 +4539,29 @@ static struct yetty_ycore_void_result ygreeter_extract_assets_cb(void)
 
 static int run_standalone_mode(int argc, char **argv)
 {
-    struct app app = {0};
+#ifdef __EMSCRIPTEN__
+    /* On webasm the worker returns immediately (event_loop->start()
+     * registers the emscripten main loop and does NOT block), so this
+     * function returns too — but the browser keeps driving frames
+     * afterward, dereferencing `app` via the callbacks the worker
+     * registered (the 33 ms frame timer's listener &app->frame_listener,
+     * the input listener &app->listener, and app->engine /
+     * app->render_target read in standalone_event_handler). A stack
+     * `app` would be freed on return → use-after-free → "null function"
+     * crash on the very next tick. Heap-allocate and leak it for
+     * program lifetime (same reason the worker skips teardown above). */
+    struct app *app = calloc(1, sizeof(*app));
+    if (!app) {
+        fprintf(stderr, "ygreeter: out of memory allocating app\n");
+        return 1;
+    }
+#else
+    struct app app_storage = {0};
+    struct app *app = &app_storage;
+#endif
     struct yetty_yinit_app_config cfg = {.extract_assets_fn = ygreeter_extract_assets_cb};
     struct yetty_ycore_int_result run_result =
-        yetty_yinit_run(argc, argv, &cfg, standalone_worker, &app);
+        yetty_yinit_run(argc, argv, &cfg, standalone_worker, app);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "ygreeter: run", run_result.error);
         yetty_ycore_error_destroy(run_result.error);

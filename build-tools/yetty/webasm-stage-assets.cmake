@@ -178,6 +178,28 @@ function(yetty_stage_webasm_assets)
                     "data/msdf-fonts" TRUE "/data")
     endif()
 
+    # ygreeter media assets — the showcase's Media (Images + Video), PDF and
+    # Markdown tabs read these straight from <data_dir>/ (i.e. /data/...) via
+    # discover_logo_images / discover_video_files / discover_pdf /
+    # discover_readme. On desktop ygreeter self-extracts them from its own
+    # incbin "data/" section; on webasm that path is compiled out, so they
+    # must be staged here or the tabs report "no images/videos found".
+    # Stage EVERY logo (assets/logo-*.jpeg), not just the four the desktop
+    # incbin embeds. JPEG / MP4 / PDF are already compressed — copy them
+    # uncompressed (brotli q11 on them only burns build CPU for no win).
+    _stage_glob("${YETTY_ROOT}/assets/logo-*.jpeg" "data" FALSE "/data")
+    if(EXISTS "${YETTY_ROOT}/assets/yetty-unchained-2.mp4")
+        _stage_one("${YETTY_ROOT}/assets/yetty-unchained-2.mp4"
+                   "data" "yetty-unchained-2.mp4" FALSE "/data")
+    endif()
+    if(EXISTS "${YETTY_ROOT}/test/ut/ypdf/pdf-sample.pdf")
+        _stage_one("${YETTY_ROOT}/test/ut/ypdf/pdf-sample.pdf"
+                   "data" "pdf-sample.pdf" FALSE "/data")
+    endif()
+    if(EXISTS "${YETTY_ROOT}/README.md")
+        _stage_one("${YETTY_ROOT}/README.md" "data" "README.md" FALSE "/data")
+    endif()
+
     # Config: pick platform-specific default if it exists, else the generic one.
     set(_CFG "${YETTY_ROOT}/build-tools/yetty/platform/${YETTY_PLATFORM}/config.yaml")
     if(NOT EXISTS "${_CFG}")

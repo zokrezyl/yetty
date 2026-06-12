@@ -147,6 +147,14 @@ target_link_libraries(ygreeter PRIVATE
     # symbols it references resolve via yetty_yplatform_core above (NULL object
     # in client mode → the stubs early-return).
     yetty_ychrome
+    # ycircuit — GPU-free schematic renderer (SDF prims + MSDF text → a ydraw
+    # drawable list). The Circuit scene hosts it in a generic ydraw_embed
+    # widget, so it links on every target (client guest included), same as
+    # ychrome above.
+    yetty_ycircuit
+    # ymusic — GPU-free score engraver (same yclass → ydraw drawable list
+    # pattern as ycircuit). The Music scene hosts it in an ydraw_embed widget.
+    yetty_ymusic
     uv_a
     ${BROTLIDEC_LIBRARIES}
     Threads::Threads

@@ -1268,22 +1268,49 @@ static struct yetty_ycore_void_result ygrid_install_wire_font(
         return YETTY_ERR(yetty_ycore_void, "ygrid wire font: no cache dir");
     }
 
-    char hex[17];
-    if (fv->ttf_len == 0) {
+    /* Resolve the font's cache key + on-disk CDB path by reference shape:
+     *   - any non-hash name  → a PRE-INSTALLED font (e.g. ymusic's
+     *                          "Emmentaler") resolved from <data>/msdf-fonts/
+     *                          <name>.cdb. The ycat/terminal receiver already
+     *                          supports this; the figure receiver needs it too
+     *                          or named-font figures (scores, …) render blank.
+     *   - 16-hex name        → hash-ref to a font cached in a prior envelope.
+     *   - embedded TTF bytes → generate an MSDF CDB into the ydraw-fonts cache,
+     *                          keyed by the TTF's content hash. */
+    char cache_key[128];
+    char cdb_path[1024];
+    if (fv->ttf_len == 0 && fv->name_len != 16) {
+        /* Pre-installed named font. A missing CDB is non-fatal: drop the font
+         * and keep processing the rest of the list rather than aborting the
+         * whole figure (which would blank the entire drawable). */
+        if (fv->name_len == 0 || fv->name_len >= sizeof(cache_key)) {
+            return YETTY_OK_VOID();
+        }
+        memcpy(cache_key, fv->name, fv->name_len);
+        cache_key[fv->name_len] = '\0';
+        const char *data_dir = yetty_yplatform_get_data_dir();
+        if (!data_dir || !*data_dir) {
+            return YETTY_OK_VOID();
+        }
+        snprintf(cdb_path, sizeof(cdb_path), "%s/msdf-fonts/%s.cdb", data_dir, cache_key);
+        if (!yetty_yplatform_file_exists(cdb_path)) {
+            ydebug("ygrid wire font: named font '%s' not installed (%s) — dropped", cache_key,
+                   cdb_path);
+            return YETTY_OK_VOID();
+        }
+    } else if (fv->ttf_len == 0) {
         /* Hash-ref form: name carries the 16-hex FNV1a64 of a font already
          * shipped (and cached) in a prior envelope. */
-        if (fv->name_len != 16) {
-            return YETTY_ERR(yetty_ycore_void, "ygrid wire font: hash-ref name not 16 hex chars");
-        }
-        memcpy(hex, fv->name, 16);
-        hex[16] = '\0';
+        memcpy(cache_key, fv->name, 16);
+        cache_key[16] = '\0';
+        snprintf(cdb_path, sizeof(cdb_path), "%s/ydraw-fonts/pdf_%s.cdb", cache_dir, cache_key);
     } else {
-        snprintf(hex, sizeof(hex), "%016llx",
+        snprintf(cache_key, sizeof(cache_key), "%016llx",
                  (unsigned long long)ygrid_fnv1a64(fv->ttf, fv->ttf_len));
-        char fonts_dir[768], ttf_path[1024], cdb_path[1024];
+        char fonts_dir[768], ttf_path[1024];
         snprintf(fonts_dir, sizeof(fonts_dir), "%s/ydraw-fonts", cache_dir);
-        snprintf(ttf_path, sizeof(ttf_path), "%s/pdf_%s.ttf", fonts_dir, hex);
-        snprintf(cdb_path, sizeof(cdb_path), "%s/pdf_%s.cdb", fonts_dir, hex);
+        snprintf(ttf_path, sizeof(ttf_path), "%s/pdf_%s.ttf", fonts_dir, cache_key);
+        snprintf(cdb_path, sizeof(cdb_path), "%s/pdf_%s.cdb", fonts_dir, cache_key);
         if (!yetty_yplatform_file_exists(cdb_path)) {
             if (!g->msdf_generator) {
                 return YETTY_ERR(yetty_ycore_void, "ygrid wire font: no MSDF generator");
@@ -1311,10 +1338,8 @@ static struct yetty_ycore_void_result ygrid_install_wire_font(
         }
     }
 
-    char cdb_path[1024];
-    snprintf(cdb_path, sizeof(cdb_path), "%s/ydraw-fonts/pdf_%s.cdb", cache_dir, hex);
     struct yetty_yfont_cache_ref_result ref =
-        yetty_yfont_cache_get_font(g->font_cache, hex, cdb_path);
+        yetty_yfont_cache_get_font(g->font_cache, cache_key, cdb_path);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ref, "ygrid wire font: cache get_font");
 
     uint32_t slot = g->next_font_slot;
@@ -1329,7 +1354,7 @@ static struct yetty_ycore_void_result ygrid_install_wire_font(
     }
     g->wire_font_slot[fv->font_id] = (int32_t)slot;
     g->next_font_slot = slot + 1u;
-    ydebug("ygrid: installed wire font_id=%d -> slot=%u hex=%s", fv->font_id, slot, hex);
+    ydebug("ygrid: installed wire font_id=%d -> slot=%u key=%s", fv->font_id, slot, cache_key);
     return YETTY_OK_VOID();
 }
 

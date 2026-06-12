@@ -349,6 +349,12 @@
                     <span class="mode-desc">Real SSH, crypto in the browser. The bridge only
                         relays encrypted bytes: tools/telnet-websocket.sh HOST:22 8025</span>
                 </button>
+                <button class="mode-option" type="button" data-mode="ygreeter">
+                    <span class="mode-name">ygreeter — feature showcase</span>
+                    <span class="mode-desc">The ygui showcase app (plots, images, diagrams,
+                        shadertoys, …) rendered straight to the canvas — no terminal, no shell.
+                        Loads as its own wasm module.</span>
+                </button>
                 <button class="mode-option" type="button" data-mode="relay">
                     <span class="mode-name">In-browser networking (lwIP relay)</span>
                     <span class="mode-desc">Experimental. Runs a real TCP/IP stack (lwIP) in
@@ -956,7 +962,7 @@
             // ssh additionally reads ?user= and ?password= (the latter
             // mainly for automated testing — prefer the dialog, which
             // keeps the password out of the URL/history).
-            const KNOWN_MODES = ['temu', 'websocket', 'telnet', 'ssh', 'relay'];
+            const KNOWN_MODES = ['temu', 'websocket', 'telnet', 'ssh', 'relay', 'ygreeter'];
             let mode = (urlParams.mode || '').toLowerCase();
             // ?relay=URL is shorthand for the relay mode with that URL.
             if (!mode && urlParams.relay) { mode = 'relay'; }
@@ -976,6 +982,12 @@
                 relayTarget = choice.relayTarget;
             } else if (!wsUrl && MODE_DEFAULT_URLS[mode]) {
                 wsUrl = MODE_DEFAULT_URLS[mode];
+            }
+            // ygreeter is a separate wasm module with no terminal — hand
+            // off to its own page rather than launching a yetty session.
+            if (mode === 'ygreeter') {
+                window.location.href = 'ygreeter.html' + window.location.search;
+                return;
             }
             await launchYetty(mode, wsUrl, sshUser, sshPassword, relayTarget);
         }

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>yetty — ygreeter showcase</title>
+    <link rel="icon" type="image/x-icon" href="favicon.ico">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #0B1014; }
+        body { display: flex; flex-direction: column; }
+        #canvas-container { flex: 1 1 auto; min-height: 0; width: 100%; position: relative; }
+        canvas { display: block; }
+        #loading {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-align: center; color: #9FA7A8;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+        }
+        #loading .spinner {
+            width: 40px; height: 40px; border: 3px solid #1E262C; border-top-color: #6BA892;
+            border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 15px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #status { font-size: 0.9em; color: #556162; margin-top: 10px; }
+    </style>
+</head>
+<body>
+    <div id="canvas-container">
+        <canvas id="canvas" width="1024" height="768" tabindex="0"></canvas>
+        <div id="loading">
+            <div class="spinner"></div>
+            <div>Loading ygreeter…</div>
+            <div id="status"></div>
+        </div>
+    </div>
+
+    <script>
+        // ygreeter is yetty's ygui feature showcase compiled to its own
+        // wasm module (reuses ygreeter's standalone mode via the shared
+        // webasm yetty_yinit_run). No terminal, no shell — it renders the
+        // ygui figure tree straight into this WebGPU canvas. The asset
+        // preload (fonts / shaders / msdf-fonts, baked in via --pre-js)
+        // runs before main(); the WebGPU device is handed in below.
+        async function checkWebGPU() {
+            const status = document.getElementById('status');
+            if (!navigator.gpu) {
+                status.textContent = 'WebGPU not supported — try Chrome/Edge 113+';
+                return false;
+            }
+            try {
+                const adapter = await navigator.gpu.requestAdapter();
+                if (!adapter) { status.textContent = 'No WebGPU adapter'; return false; }
+                const device = await adapter.requestDevice({
+                    requiredLimits: {
+                        maxStorageBuffersPerShaderStage: 8,
+                        maxTextureDimension2D: Math.min(16384, adapter.limits.maxTextureDimension2D),
+                    }
+                });
+                if (!device) { status.textContent = 'No WebGPU device'; return false; }
+                Module.preinitializedWebGPUDevice = device;
+                return true;
+            } catch (err) {
+                status.textContent = 'WebGPU error: ' + err.message;
+                return false;
+            }
+        }
+
+        function resizeCanvas() {
+            const container = document.getElementById('canvas-container');
+            const canvas = document.getElementById('canvas');
+            if (!container || !canvas) return;
+            const rect = container.getBoundingClientRect();
+            const width = Math.floor(rect.width), height = Math.floor(rect.height);
+            if (width > 0 && height > 0 && (canvas.width !== width || canvas.height !== height)) {
+                canvas.width = width;
+                canvas.height = height;
+                if (typeof Module !== 'undefined' && Module._yetty_handle_resize) {
+                    Module._yetty_handle_resize(width, height);
+                }
+            }
+        }
+
+        // ?trace=1 turns on YTRACE_DEFAULT_ON so the C-side checkpoints reach
+        // the console (the headless verifier asserts those, since WebGPU
+        // canvas content isn't captured in headless screenshots).
+        var traceOn = /(?:^|[?&])(?:trace|ytrace)=(?:1|on|yes|true)\b/i.test(
+            window.location.search);
+
+        var Module = {
+            canvas: document.getElementById('canvas'),
+            arguments: [],
+            print: function (text) { console.log(text); },
+            printErr: function (text) { console.log(text); },
+            preRun: [function () {
+                if (traceOn && typeof ENV !== 'undefined') {
+                    ENV.YTRACE_DEFAULT_ON = 'yes';
+                }
+            }],
+            onRuntimeInitialized: function () {
+                const loading = document.getElementById('loading');
+                setTimeout(function () {
+                    if (loading) loading.style.display = 'none';
+                    const c = document.getElementById('canvas');
+                    if (c) c.focus();
+                }, 500);
+                resizeCanvas();
+                setTimeout(resizeCanvas, 1000);
+                setTimeout(resizeCanvas, 2000);
+            }
+        };
+
+        window.addEventListener('resize', resizeCanvas);
+        const container = document.getElementById('canvas-container');
+        if (container && typeof ResizeObserver !== 'undefined') {
+            new ResizeObserver(resizeCanvas).observe(container);
+        }
+        document.getElementById('canvas').addEventListener('click', function () { this.focus(); });
+
+        async function init() {
+            const status = document.getElementById('status');
+            resizeCanvas();
+            status.textContent = 'initializing WebGPU…';
+            if (!(await checkWebGPU())) return;
+            status.textContent = 'loading ygreeter.js…';
+            const script = document.createElement('script');
+            script.src = 'ygreeter.js';
+            script.onerror = function () { status.textContent = 'failed to load ygreeter.js'; };
+            document.head.appendChild(script);
+        }
+        init();
+    </script>
+</body>
+</html>
