@@ -51,6 +51,10 @@ yetty_ygui_window {
      * The framework owns the button; the app decides what closing
      * means (quit, hide, …). */
     int closable;
+    /* Chromeless: no title strip, title text, or buttons — just the
+     * framed body. Used for docked/anchored panels (e.g. a status bar)
+     * where a titlebar is wasted space; the window is not draggable. */
+    int chromeless;
     /* Title-bar drag state — a press on the title strip (not on a
      * button) moves the window. Captured by the framework on the
      * consumed press; pos is updated against the press anchor. */
@@ -130,6 +134,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
     d->body = NULL;
     d->menu = NULL;
     d->closable = 0;
+    d->chromeless = 0;
     d->dragging = 0;
     /* Reserve the title strip; stretch the body across the width. */
     struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
@@ -182,10 +187,15 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
     if (w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    /* Frame + title strip. */
+    /* Frame. */
     struct yetty_ycore_void_result result_174 =
         win_rounded(ctx, r.min.x, r.min.y, w, h, WIN_BG, WIN_BORDER, 1.0f, WINDOW_RADIUS);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_174, "window: frame");
+    if (d->chromeless) {
+        /* No title strip / title / buttons — just the framed body. */
+        return YETTY_OK_VOID();
+    }
+    /* Title strip. */
     struct yetty_ycore_void_result result_178 =
         win_rounded(ctx, r.min.x, r.min.y, w, WINDOW_TITLE_H, WIN_TITLE_BG, 0, 0.0f, WINDOW_RADIUS);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, result_178, "window: titlebar");
@@ -232,6 +242,9 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
     struct yetty_ygui_window_ptr_result d_dr = yetty_ygui_window_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_press: data_get");
     struct yetty_ygui_window *d = d_dr.value;
+    if (d->chromeless) {
+        return YETTY_OK(yetty_ycore_int, 0); /* no titlebar = nothing to grab */
+    }
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     float by = r.min.y + (WINDOW_TITLE_H - WINDOW_BTN) * 0.5f;
 
@@ -379,6 +392,27 @@ struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_yclas
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_window_set_closable: data_get");
     struct yetty_ygui_window *d = d_dr.value;
     d->closable = closable ? 1 : 0;
+    return yetty_ygui_widget_set_dirty(obj);
+}
+
+/* Chromeless: drop the title strip and shrink the top padding so the
+ * body fills the frame. For docked/anchored panels (a status bar) the
+ * titlebar is wasted space and the window isn't meant to be dragged. */
+[[clang::annotate("expose")]]
+struct yetty_ycore_void_result yetty_ygui_window_set_chromeless(struct yetty_yclass_object *obj,
+                                                                int chromeless)
+{
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "window_set_chromeless: NULL");
+    }
+    struct yetty_ygui_window_ptr_result d_dr = yetty_ygui_window_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_window_set_chromeless: data_get");
+    struct yetty_ygui_window *d = d_dr.value;
+    d->chromeless = chromeless ? 1 : 0;
+    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    l.padding_top = chromeless ? 8.0f : WINDOW_TITLE_H;
+    struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "window_set_chromeless: layout");
     return yetty_ygui_widget_set_dirty(obj);
 }
 

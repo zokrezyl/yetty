@@ -42,6 +42,12 @@ if(YETTY_ENABLE_TOOL_YVIDEO AND YETTY_ENABLE_FEATURE_YVIDEO)
     add_subdirectory(yvideo)
 endif()
 
+# Tool gate mirrors the library gate in src/yetty/CMakeLists.txt — the
+# yetty_ymap target only exists when curl + yimage are on.
+if(YETTY_ENABLE_TOOL_YMAP AND TARGET yetty_ymap)
+    add_subdirectory(ymap)
+endif()
+
 if(YETTY_ENABLE_TOOL_YAUDIO_INTERVALS AND YETTY_ENABLE_FEATURE_YAUDIO)
     add_subdirectory(yaudio-intervals)
 endif()
@@ -64,6 +70,11 @@ endif()
 # Linux-only for the moment — macOS likely works but is unverified.
 if(YETTY_ENABLE_TOOL_CCC AND YETTY_PLATFORM STREQUAL "linux")
     add_subdirectory(ai/ccc)
+endif()
+
+# yai shares ccc's POSIX requirements (fork/execl, termios, poll, ioctl).
+if(YETTY_ENABLE_TOOL_YAI AND YETTY_PLATFORM STREQUAL "linux")
+    add_subdirectory(ai/yai)
 endif()
 
 if(YETTY_ENABLE_TOOL_YGREETER)

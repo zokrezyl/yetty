@@ -45,6 +45,18 @@ extern "C" {
  * yetty_client_input_mouse. */
 #define YETTY_OSC_CS_CLIENT_INPUT_REINJECT 610011 /* yetty_client_input_mouse, comp=0 */
 
+/* Client → server: reserve content insets (per-edge pixels). A client that
+ * wants to dock its own overlay (status bar, HUD) on a band of the pane
+ * sends this; yetty owns the real cell metrics, converts the px insets to
+ * whole rows/cols, and shrinks the actual libvterm surface through its
+ * normal resize path. The logical grid genuinely loses rows/cols — text
+ * reflows into the inset rect, the PTY winsize shrinks and the child gets
+ * SIGWINCH — and the terminal content figure (text + ydraw rich content)
+ * clips to the same rect, leaving the reserved band free for the client's
+ * overlay. All-zero insets restore the full pane. Payload:
+ * yetty_content_inset. */
+#define YETTY_OSC_CS_CONTENT_INSET 610012 /* yetty_content_inset, comp=0 */
+
 /* Server → client, figure-tagged variants. figure_id != 0; (x, y) are
  * card-local pixels. */
 #define YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE 700000  /* yetty_client_input_mouse,  comp=0 */
@@ -67,6 +79,7 @@ extern "C" {
 #define YETTY_CLIENT_INPUT_RESIZE_MAGIC 0x4D52534Du /* "MSRM" reversed: "MRSM" */
 #define YETTY_CLIENT_INPUT_FOCUS_MAGIC 0x4D434F46u  /* "FOCM" */
 #define YETTY_CLIENT_INPUT_KEY_MAGIC 0x4D59454Bu    /* "KEYM" */
+#define YETTY_CONTENT_INSET_MAGIC 0x54534E49u       /* "INST" */
 
 /*=============================================================================
  * Pane-wide subscription bitmask (YETTY_OSC_CS_CLIENT_INPUT_SUB).
@@ -84,6 +97,21 @@ struct yetty_client_input_sub {
     uint32_t version; /* YMGUI_WIRE_VERSION (shared with ymgui wire) */
     uint32_t flags;   /* bitmask of YETTY_CLIENT_INPUT_SUB_* */
     uint32_t _pad0;
+};
+
+/* Per-edge content insets in pane-local pixels (YETTY_OSC_CS_CONTENT_INSET).
+ * yetty subtracts these from the pane before deriving the text grid, so the
+ * terminal surface (text + ydraw figures) is confined to the inset rect and
+ * the reserved band is free for the client's own overlay. All zero (the
+ * default) means the content fills the whole pane. Negative values are
+ * clamped to zero by the receiver. */
+struct yetty_content_inset {
+    uint32_t magic;   /* YETTY_CONTENT_INSET_MAGIC */
+    uint32_t version; /* YMGUI_WIRE_VERSION */
+    float top;
+    float right;
+    float bottom;
+    float left;
 };
 
 /*=============================================================================
@@ -114,7 +142,12 @@ struct yetty_client_input_mouse {
     float x;
     float y;
     float wheel_dy; /* WHEEL */
-    uint32_t _pad0;
+    /* Modifier bitmask, GLFW-compatible (SHIFT=1, CTRL=2, ALT=4, SUPER=8)
+     * — same encoding as yetty_client_input_key.mods. Carried for BUTTON
+     * and WHEEL events (a Ctrl-Shift-wheel reaching a subscribed figure
+     * is the interactive-map zoom gesture); 0 from terminals that predate
+     * the field (it replaced a zero pad word — same struct size). */
+    int32_t mods;
 };
 
 /* Sent when a target's pixel size changes — for figure-tagged events when a

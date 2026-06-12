@@ -34,5 +34,7 @@ struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_yclass_ob
                                                           struct yetty_yclass_object *menu);
 struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_yclass_object *obj,
                                                               int closable);
+struct yetty_ycore_void_result yetty_ygui_window_set_chromeless(struct yetty_yclass_object *obj,
+                                                                int chromeless);
 
 #endif

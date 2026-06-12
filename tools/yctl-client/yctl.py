@@ -208,6 +208,10 @@ class RpcClient:
         """Tell yetty to stop its event loop and exit cleanly."""
         await self.notify(Channel.EventLoop, "shutdown", {})
 
+    async def screenshot(self, path: str = "") -> None:
+        """Capture the current frame to a PPM file (empty path = default)."""
+        await self.notify(Channel.EventLoop, "screenshot", {"path": path})
+
     async def ui_tree(self) -> str:
         """Get UI tree (request, returns string)."""
         return await self.request(Channel.EventLoop, "ui_tree", {})
@@ -584,6 +588,16 @@ if click:
         async def _run():
             async with RpcClient(ctx.obj["host"], ctx.obj["port"]) as client:
                 await client.resize(width, height)
+        run_async(_run())
+
+    @cli.command("screenshot")
+    @click.argument("path", default="")
+    @click.pass_context
+    def screenshot_cmd(ctx, path):
+        """Capture the current frame to a PPM file."""
+        async def _run():
+            async with RpcClient(ctx.obj["host"], ctx.obj["port"]) as client:
+                await client.screenshot(path)
         run_async(_run())
 
     @cli.command()

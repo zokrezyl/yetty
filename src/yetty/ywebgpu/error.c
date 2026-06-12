@@ -78,6 +78,72 @@ WGPUUncapturedErrorCallbackInfo yetty_ywebgpu_get_error_callback_info(void)
     return info;
 }
 
+/*=============================================================================
+ * Captured-error scope — see error.h. Validation errors raised between
+ * push and pop never reach the fail-fast uncaptured callback above.
+ *===========================================================================*/
+
+struct yetty_ywebgpu_error_scope_capture {
+    int completed;
+    int has_error;
+    char message[512];
+};
+
+static void error_scope_pop_callback(WGPUPopErrorScopeStatus status, WGPUErrorType type,
+                                     WGPUStringView message, void *userdata1, void *userdata2)
+{
+    (void)userdata2;
+    struct yetty_ywebgpu_error_scope_capture *capture = userdata1;
+    capture->completed = 1;
+    if (status != WGPUPopErrorScopeStatus_Success || type == WGPUErrorType_NoError) {
+        return;
+    }
+    capture->has_error = 1;
+    size_t len = message.length < sizeof(capture->message) - 1 ? message.length
+                                                               : sizeof(capture->message) - 1;
+    if (message.data && len > 0) {
+        memcpy(capture->message, message.data, len);
+    }
+    capture->message[len] = '\0';
+}
+
+void yetty_ywebgpu_error_scope_push(WGPUDevice device)
+{
+    wgpuDevicePushErrorScope(device, WGPUErrorFilter_Validation);
+}
+
+int yetty_ywebgpu_error_scope_pop(WGPUDevice device, char *message_out, size_t message_capacity)
+{
+    struct yetty_ywebgpu_error_scope_capture capture = {0};
+    WGPUPopErrorScopeCallbackInfo info = {0};
+    info.mode = WGPUCallbackMode_AllowSpontaneous;
+    info.callback = error_scope_pop_callback;
+    info.userdata1 = &capture;
+    (void)wgpuDevicePopErrorScope(device, info);
+    if (!capture.completed) {
+        /* Should not happen on Dawn native: synchronously-validated calls
+         * have the scope result resolved before pop returns, and
+         * AllowSpontaneous fires the callback inline. Log so a backend
+         * where this assumption breaks is visible. */
+        ywarn("ywebgpu: PopErrorScope did not complete inline; "
+              "captured error (if any) is lost");
+        return 0;
+    }
+    if (!capture.has_error) {
+        return 0;
+    }
+    yerror("WebGPU captured validation error: %s", capture.message);
+    if (message_out && message_capacity > 0) {
+        size_t len = strlen(capture.message);
+        if (len > message_capacity - 1) {
+            len = message_capacity - 1;
+        }
+        memcpy(message_out, capture.message, len);
+        message_out[len] = '\0';
+    }
+    return 1;
+}
+
 void yetty_ywebgpu_device_lost_callback(WGPUDevice const *device, WGPUDeviceLostReason reason,
                                         WGPUStringView message, void *userdata1, void *userdata2)
 {

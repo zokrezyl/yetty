@@ -622,6 +622,10 @@ classes:
         type: int
         get: false
         set: false
+      - name: closable
+        type: int
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -1584,6 +1588,10 @@ classes:
         get: false
         set: false
       - name: closable
+        type: int
+        get: false
+        set: false
+      - name: chromeless
         type: int
         get: false
         set: false
@@ -2818,6 +2826,14 @@ struct yetty_ycore_void_result yetty_ygui_layout_compute(struct yetty_yclass_obj
       - name: title
         type: "const char *"
   - source_file: src/yetty/ygui/widgets/dialog.c
+    name: yetty_ygui_dialog_set_closable
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: closable
+        type: int
+  - source_file: src/yetty/ygui/widgets/dialog.c
     name: yetty_ygui_dialog_open_at
     return_type: struct yetty_ycore_void_result
     args:
@@ -3521,6 +3537,14 @@ typedef void (*yetty_ygui_tab_new_cb)(struct yetty_yclass_object *tabbar, void *
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: closable
+        type: int
+  - source_file: src/yetty/ygui/widgets/window.c
+    name: yetty_ygui_window_set_chromeless
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: chromeless
         type: int
   - source_file: src/yetty/ygui/widgets/ybrowser.c
     name: yetty_ygui_ybrowser_set_html

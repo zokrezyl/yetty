@@ -156,7 +156,9 @@ all: help
 # Codegen's clang -fsyntax-only step tolerates missing third-party
 # headers — it needs the annotation AST nodes, not a clean compile.
 
-YCLASS_MODULES := yfigure ygrid ygui ymgui yrdawn yshadertoy yvterm yflame yview yplatform ychrome ymusic
+# A module entry is either a bare name (sources under src/yetty/<name>/)
+# or <name>=<path> for yclass modules living elsewhere (yclass-based tools).
+YCLASS_MODULES := yfigure ygrid ygui ymgui yrdawn yshadertoy yvterm yflame ymap yview yplatform ychrome ymusic yai=tools/ai/yai
 
 .PHONY: codegen
 codegen: ## Run yclass codegen for all annotated modules (output committed to git)
@@ -168,8 +170,12 @@ codegen: ## Run yclass codegen for all annotated modules (output committed to gi
 	@for pass in 1 2; do \
 		echo "==> yclass codegen: pass $$pass"; \
 		fail=0; \
-		for mod in $(YCLASS_MODULES); do \
-			src_dir="src/yetty/$$mod"; \
+		for spec in $(YCLASS_MODULES); do \
+			mod=$${spec%%=*}; \
+			case "$$spec" in \
+				*=*) src_dir=$${spec#*=};; \
+				*) src_dir="src/yetty/$$mod";; \
+			esac; \
 			sources=$$(grep -lrE 'clang::annotate\("(class|mixin)@'"$$mod"':' "$$src_dir" --include='*.c' --exclude='*.gen.c' | LC_ALL=C sort); \
 			if [ -z "$$sources" ]; then \
 				echo "ERROR: no annotated sources found under $$src_dir"; \

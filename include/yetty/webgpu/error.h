@@ -31,6 +31,31 @@ void yetty_ywebgpu_uncaptured_error_callback(WGPUDevice const *device, WGPUError
 /* Get callback info struct ready to use in device descriptor */
 WGPUUncapturedErrorCallbackInfo yetty_ywebgpu_get_error_callback_info(void);
 
+/*
+ * Captured-error scope — for WebGPU calls fed by UNTRUSTED input (e.g. a
+ * user-supplied WGSL shader arriving over the wire). Errors raised inside
+ * the scope are captured and reported to the caller as data instead of
+ * reaching the uncaptured-error callback, whose fail-fast _Exit would let
+ * a malformed shader kill the whole terminal.
+ *
+ * Usage:
+ *   yetty_ywebgpu_error_scope_push(device);
+ *   ... wgpu calls validating untrusted input ...
+ *   char message[512];
+ *   if (yetty_ywebgpu_error_scope_pop(device, message, sizeof(message))) {
+ *       // captured — surface `message` as a Result error
+ *   }
+ *
+ * Captures validation errors (filter = Validation). The pop callback runs
+ * spontaneously inside wgpuDevicePopErrorScope on Dawn native — the scope
+ * result for synchronously-validated calls is already resolved by then.
+ */
+void yetty_ywebgpu_error_scope_push(WGPUDevice device);
+
+/* Returns 1 and fills message_out if a validation error was captured in
+ * the matching push; 0 otherwise. message_out may be NULL. */
+int yetty_ywebgpu_error_scope_pop(WGPUDevice device, char *message_out, size_t message_capacity);
+
 /* Assert that no uncaptured wgpu error fired during the preceding call.
  * Logs a short tag identifying the call site, exits to stderr on first
  * hit. Use immediately after every wgpu API call we care about — the

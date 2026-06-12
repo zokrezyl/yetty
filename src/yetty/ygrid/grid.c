@@ -1204,7 +1204,10 @@ static struct yetty_ycore_void_result expand_text_span(
          * the caller passed in a heap-stable text copy. */
         uint32_t glyph_record[7];
         glyph_record[0] = YGRID_GLYPH_TYPE;
-        glyph_record[1] = 0u; /* z_order */
+        /* Carry the span's layer through — a hardcoded 0 here buried
+         * every label under content with non-zero z (the map case:
+         * fills at z 10..47 painted over labels at z 0). */
+        glyph_record[1] = span->layer;
         memcpy(&glyph_record[2], &glyph_x, sizeof(float));
         memcpy(&glyph_record[3], &glyph_y, sizeof(float));
         memcpy(&glyph_record[4], &span->font_size, sizeof(float));
@@ -1596,11 +1599,15 @@ static struct yetty_ycore_void_result rebuild_grid_staging(struct yetty_ygrid_gr
     g->grid_staging[sentinel_off] = 0u; /* count = 0 */
     uint32_t cursor = sentinel_off + 1u;
 
+    uint32_t max_cell_count = 0;
     for (size_t i = 0; i < num_cells; ++i) {
         const struct ygrid_cell *cell = &g->cells[i];
         if (cell->count == 0) {
             g->grid_staging[i] = sentinel_off;
             continue;
+        }
+        if (cell->count > max_cell_count) {
+            max_cell_count = cell->count;
         }
         g->grid_staging[i] = cursor;
         g->grid_staging[cursor++] = cell->count;
@@ -1609,6 +1616,10 @@ static struct yetty_ycore_void_result rebuild_grid_staging(struct yetty_ygrid_gr
         }
     }
     g->grid_staging_words = need;
+    /* The shader's per-cell loop is capped (see ygrid.wgsl loop_count) —
+     * a max above that cap means prims are silently invisible in the
+     * densest cells. Surface it so overflow is diagnosable from the log. */
+    ydebug("ygrid: grid staging rebuilt, max prims/cell = %u", max_cell_count);
     return YETTY_OK_VOID();
 }
 

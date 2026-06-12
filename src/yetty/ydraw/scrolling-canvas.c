@@ -47,6 +47,7 @@
 #include <yetty/yplatform/paths.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/ysdf/types.gen.h>
+#include <yetty/yshadertoy/prim.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/ytrace/ytrace.h>
 #if YETTY_HAS_YMESH
@@ -584,6 +585,28 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
             }
             free(c);
             return YETTY_ERR(yetty_ydraw_canvas_ptr, "yimage register", rr);
+        }
+    }
+    {
+        struct yetty_ydraw_concrete_factory *f = yetty_yshadertoy_prim_factory_create();
+        if (!f) {
+            struct yetty_ycore_void_result teardown_res = scrolling_canvas_destroy_internals(c);
+            if (YETTY_IS_ERR(teardown_res)) {
+                yetty_ycore_error_destroy(teardown_res.error);
+            }
+            free(c);
+            return YETTY_ERR(yetty_ydraw_canvas_ptr, "yshadertoy prim factory create");
+        }
+        struct yetty_ycore_void_result rr =
+            yetty_ydraw_composite_factory_register(c->composite_factory, f);
+        if (YETTY_IS_ERR(rr)) {
+            yetty_yshadertoy_prim_factory_destroy(f);
+            struct yetty_ycore_void_result teardown_res = scrolling_canvas_destroy_internals(c);
+            if (YETTY_IS_ERR(teardown_res)) {
+                yetty_ycore_error_destroy(teardown_res.error);
+            }
+            free(c);
+            return YETTY_ERR(yetty_ydraw_canvas_ptr, "yshadertoy prim register", rr);
         }
     }
 #if YETTY_HAS_YMESH

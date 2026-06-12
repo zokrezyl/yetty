@@ -746,6 +746,50 @@ static struct yetty_rpc_handler_result handle_mouse_scroll(const struct yetty_yc
     return YETTY_YCTL_HANDLER_OK_BOOL(1);
 }
 
+/* Notification: capture the current frame to disk. Posts the same
+ * YETTY_YCORE_SCREENSHOT event the test harness uses; yetty's handler
+ * reads the last-rendered texture back and writes a PPM. Params:
+ * optional "path" string (empty/missing → yetty's default location). */
+static struct yetty_rpc_handler_result handle_screenshot(const struct yetty_yctl_message *msg,
+                                                         void *userdata)
+{
+    struct yetty_yctl_server *server = userdata;
+    struct yetty_yui_event event = {.type = YETTY_YCORE_SCREENSHOT};
+
+    if (!server->event_loop) {
+        return YETTY_YCTL_HANDLER_ERR("no event loop");
+    }
+
+    if (msg->params && msg->params_len > 0) {
+        msgpack_unpacked unpacked;
+        msgpack_unpacked_init(&unpacked);
+        if (msgpack_unpack_next(&unpacked, (const char *)msg->params, msg->params_len, NULL) ==
+            MSGPACK_UNPACK_SUCCESS) {
+            const msgpack_object *params = &unpacked.data;
+            if (params->type == MSGPACK_OBJECT_MAP) {
+                size_t key_len = strlen("path");
+                for (uint32_t i = 0; i < params->via.map.size; i++) {
+                    const msgpack_object_kv *kv = &params->via.map.ptr[i];
+                    if (kv->key.type == MSGPACK_OBJECT_STR && kv->key.via.str.size == key_len &&
+                        memcmp(kv->key.via.str.ptr, "path", key_len) == 0 &&
+                        kv->val.type == MSGPACK_OBJECT_STR) {
+                        size_t copy_len = kv->val.via.str.size;
+                        if (copy_len > sizeof(event.screenshot.path) - 1) {
+                            copy_len = sizeof(event.screenshot.path) - 1;
+                        }
+                        memcpy(event.screenshot.path, kv->val.via.str.ptr, copy_len);
+                        event.screenshot.path[copy_len] = '\0';
+                    }
+                }
+            }
+        }
+        msgpack_unpacked_destroy(&unpacked);
+    }
+
+    server->event_loop->ops->dispatch(server->event_loop, &event);
+    return YETTY_YCTL_HANDLER_OK_BOOL(1);
+}
+
 /* Notification: tear yetty down. Dispatches the same SHUTDOWN event the
  * SIGINT/SIGTERM signal handler uses (see libuv-event-loop.c on_signal),
  * which the top-level listener handles by stopping the event loop —
@@ -820,6 +864,7 @@ static struct yetty_ycore_void_result register_builtin_handlers(struct yetty_yct
     REG("mouse_move", handle_mouse_move);
     REG("mouse_scroll", handle_mouse_scroll);
     REG("resize", handle_resize);
+    REG("screenshot", handle_screenshot);
     REG("shutdown", handle_shutdown);
 
 #undef REG

@@ -141,6 +141,10 @@ enum yetty_ycat_type yetty_ycat_type_from_extension(const char *ext)
     if (strcasecmp(noleading, "ly") == 0 || strcasecmp(noleading, "ily") == 0) {
         return YETTY_YCAT_TYPE_MUSIC;
     }
+    /* WGSL shader text — rendered as an animated yshadertoy prim. */
+    if (strcasecmp(noleading, "wgsl") == 0) {
+        return YETTY_YCAT_TYPE_SHADERTOY;
+    }
     if (strcasecmp(noleading, "txt") == 0) {
         return YETTY_YCAT_TYPE_TEXT;
     }
@@ -254,6 +258,32 @@ static int looks_like_h264_annex_b(const uint8_t *bytes, size_t len)
     return 0;
 }
 
+#ifdef YETTY_YCAT_HAS_YSHADERTOY
+/* WGSL has no libmagic signature; the Shadertoy contract makes the sniff
+ * trivial — a `fn mainImage(` definition somewhere in the first few KB.
+ * Covers piped stdin with no .wgsl extension. Only compiled in when the
+ * shadertoy handler is, so a handler-less build never classifies text as
+ * SHADERTOY. */
+static int looks_like_wgsl_main_image(const uint8_t *bytes, size_t len)
+{
+    if (!bytes || len == 0u) {
+        return 0;
+    }
+    size_t scan = len < 4096u ? len : 4096u;
+    static const char marker[] = "fn mainImage(";
+    size_t needle_len = sizeof(marker) - 1u;
+    if (needle_len > scan) {
+        return 0;
+    }
+    for (size_t i = 0; i + needle_len <= scan; i++) {
+        if (memcmp(bytes + i, marker, needle_len) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+#endif
+
 #ifdef YETTY_YCAT_HAS_YMUSIC
 /* LilyPond has no libmagic signature, but its leading commands are
  * distinctive. Scan the first few KB for a telltale command — the same
@@ -290,7 +320,7 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
     if (by_ext == YETTY_YCAT_TYPE_MARKDOWN || by_ext == YETTY_YCAT_TYPE_PDF ||
         by_ext == YETTY_YCAT_TYPE_SVG || by_ext == YETTY_YCAT_TYPE_MERMAID ||
         by_ext == YETTY_YCAT_TYPE_VIDEO || by_ext == YETTY_YCAT_TYPE_LOTTIE ||
-        by_ext == YETTY_YCAT_TYPE_MUSIC) {
+        by_ext == YETTY_YCAT_TYPE_MUSIC || by_ext == YETTY_YCAT_TYPE_SHADERTOY) {
         return by_ext;
     }
 
@@ -328,6 +358,13 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
     /* LilyPond sniff — covers piped stdin with no .ly extension. */
     if (looks_like_lilypond(bytes, len)) {
         return YETTY_YCAT_TYPE_MUSIC;
+    }
+#endif
+
+#ifdef YETTY_YCAT_HAS_YSHADERTOY
+    /* WGSL mainImage sniff — covers piped stdin with no .wgsl extension. */
+    if (looks_like_wgsl_main_image(bytes, len)) {
+        return YETTY_YCAT_TYPE_SHADERTOY;
     }
 #endif
 

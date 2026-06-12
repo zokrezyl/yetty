@@ -208,7 +208,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // Read cell's primitive list from grid
     let cell_start = storage_buffer[grid_offset + cell_index];
     let cell_count = storage_buffer[grid_offset + cell_start];
-    let loop_count = min(cell_count, 64u);  // Safety cap — prims are spatially bucketed across cells so this is plenty
+    // Safety cap. 64 proved far too low for map-like content: a measured
+    // dense-city 32 px cell holds ~800 prims (fill triangles + cased
+    // roads + dash segments + label glyphs), and prims past the cap —
+    // labels first, since they are appended last — silently vanish.
+    // grid.c logs "max prims/cell" at staging rebuild; keep this above it.
+    let loop_count = min(cell_count, 1024u);
 
     var result_color = vec3<f32>(0.0);
     var result_alpha = 0.0;

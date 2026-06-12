@@ -61,6 +61,20 @@ static struct yetty_ycore_void_result terminal_view_set_bounds(struct yetty_yui_
                                                                struct yetty_yui_rect bounds);
 static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_view *view,
                                                             const struct yetty_yui_event *event);
+static struct yetty_ycore_void_result terminal_apply_pane_geometry(
+    struct yetty_yterminal_terminal *terminal, float pane_w, float pane_h);
+/* Selection helpers (defined below) — reached early by the reinject path,
+ * which drives cell selection from a subscriber's bounced mouse events. */
+static void terminal_cell_from_local(const struct yetty_yterminal_terminal *terminal, float lx,
+                                     float ly, uint32_t *out_row, uint32_t *out_col);
+static struct yetty_ycore_void_result terminal_push_selection(
+    struct yetty_yterminal_terminal *terminal);
+static struct yetty_ycore_void_result terminal_copy_selection(
+    struct yetty_yterminal_terminal *terminal);
+static struct yetty_ycore_void_result terminal_clear_selection(
+    struct yetty_yterminal_terminal *terminal);
+static struct yetty_ycore_void_result terminal_paste_clipboard(
+    struct yetty_yterminal_terminal *terminal);
 
 static const struct yetty_yui_view_ops terminal_view_ops = {
     .destroy = terminal_view_destroy,
@@ -108,6 +122,14 @@ struct yetty_yterminal_terminal {
     /* yclass-RPC DCS server state attached to `sm`. The SM borrows it
      * (handler userdata); we own it and free it after the SM is gone. */
     struct yetty_yclass_rpc_dcs_server *dcs_rpc_server;
+
+    /* Distinct userdata for the content-inset wire handler. The SM dedups
+     * handler coroutines by userdata pointer (one coro per pointer, running
+     * the first-registered fn), and the reinject handler already owns the
+     * bare-terminal pointer. Registering the inset handler with the address
+     * of this self-back-pointer hands it its own coroutine running its own
+     * fn; the handler recovers the terminal by dereferencing it. */
+    struct yetty_yterminal_terminal *inset_handler_self;
 
     /* Reusable read buffer handed back from terminal_pty_pipe_alloc.
      * Lazily allocated on the first read; freed in destroy. */
@@ -515,7 +537,7 @@ static struct yetty_ycore_void_result terminal_emit_card_resize(
 
 static struct yetty_ycore_void_result terminal_emit_card_mouse_button(
     struct yetty_yterminal_terminal *terminal, uint32_t figure_id, float lx, float ly, int button,
-    int press, float wheel_dy)
+    int press, float wheel_dy, int mods)
 {
     struct yetty_client_input_mouse msg = {
         .magic = YETTY_CLIENT_INPUT_MOUSE_MAGIC,
@@ -523,6 +545,7 @@ static struct yetty_ycore_void_result terminal_emit_card_mouse_button(
         .figure_id = figure_id,
         .x = lx,
         .y = ly,
+        .mods = mods,
     };
     if (wheel_dy != 0.0f) {
         msg.kind = YETTY_YMGUI_INPUT_MOUSE_WHEEL;
@@ -769,8 +792,67 @@ static struct yetty_ycore_void_result terminal_reinject_apply(
         }
         return YETTY_OK_VOID();
     }
+    case YETTY_YMGUI_INPUT_MOUSE_BUTTON: {
+        /* The subscriber bounced a button it did not consume — run the
+         * same default the unsubscribed terminal would: left button drives
+         * cell selection, middle button pastes. Coords are already
+         * pane-local (the subscriber computed them). Scrollback view owns
+         * the wheel but not clicks, so selection still works while paused. */
+        if (msg->button == 2 && msg->pressed) {
+            return terminal_paste_clipboard(terminal);
+        }
+        if (msg->button != 0) {
+            return YETTY_OK_VOID();
+        }
+        uint32_t row = 0;
+        uint32_t col = 0;
+        terminal_cell_from_local(terminal, msg->x, msg->y, &row, &col);
+        if (msg->pressed) {
+            terminal->sel_anchor_row = row;
+            terminal->sel_anchor_col = col;
+            terminal->sel_head_row = row;
+            terminal->sel_head_col = col;
+            terminal->sel_active = 1;
+            terminal->sel_dragging = 1;
+            return terminal_push_selection(terminal);
+        }
+        /* Release: finalise. A pure click (anchor == head) clears the
+         * highlight; a real drag pushes it and auto-copies when enabled. */
+        if (!terminal->sel_dragging) {
+            return YETTY_OK_VOID();
+        }
+        terminal->sel_dragging = 0;
+        if (terminal->sel_anchor_row == terminal->sel_head_row &&
+            terminal->sel_anchor_col == terminal->sel_head_col) {
+            return terminal_clear_selection(terminal);
+        }
+        struct yetty_ycore_void_result psr = terminal_push_selection(terminal);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, psr, "terminal_reinject_apply: push_selection final");
+        struct yetty_yconfig_config *cfg = terminal->context.yetty_context.runtime->config;
+        int auto_copy = 1;
+        if (cfg && cfg->ops && cfg->ops->get_bool) {
+            auto_copy = cfg->ops->get_bool(cfg, "terminal/selection/auto-copy", 1);
+        }
+        if (auto_copy) {
+            struct yetty_ycore_void_result cs = terminal_copy_selection(terminal);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, cs, "terminal_reinject_apply: auto-copy");
+        }
+        return YETTY_OK_VOID();
+    }
+    case YETTY_YMGUI_INPUT_MOUSE_POS: {
+        /* Drag tracking — extend the selection head while a button-1 drag
+         * is in flight (the press set sel_dragging). */
+        if (!terminal->sel_dragging) {
+            return YETTY_OK_VOID();
+        }
+        uint32_t row = 0;
+        uint32_t col = 0;
+        terminal_cell_from_local(terminal, msg->x, msg->y, &row, &col);
+        terminal->sel_head_row = row;
+        terminal->sel_head_col = col;
+        return terminal_push_selection(terminal);
+    }
     default:
-        /* BUTTON / POS defaults (selection, …) not yet rerouted. */
         ydebug("terminal: reinject kind=%u ignored", msg->kind);
         return YETTY_OK_VOID();
     }
@@ -828,6 +910,109 @@ static struct yetty_ycore_void_result terminal_reinject_process_input(
         struct yetty_ycore_void_result envelope_res =
             terminal_reinject_consume_envelope(terminal, sm);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, envelope_res, "terminal_reinject_process_input");
+        yetty_yplatform_coro_yield();
+    }
+}
+
+/*-------------------------------------------------------------------------
+ * Content insets — YETTY_OSC_CS_CONTENT_INSET.
+ *
+ * A client reserves a band of the pane (a docked status bar / HUD) by
+ * sending per-edge insets in pixels. We own the real cell metrics, so we
+ * convert px → whole rows/cols and shrink the actual libvterm surface
+ * through the normal resize path: text reflows into the inset rect, the
+ * PTY winsize shrinks, the child sees SIGWINCH, and the grid figure clips
+ * its render to the same rect (grid.c). The reserved band is then free for
+ * the client's own overlay figure.
+ *-----------------------------------------------------------------------*/
+
+/* Store a parsed inset on the content layer and reflow the grid at the
+ * current pane size so the libvterm surface tracks the new content rect. */
+static struct yetty_ycore_void_result terminal_content_inset_apply(
+    struct yetty_yterminal_terminal *terminal, const struct yetty_content_inset *inset)
+{
+    if (!terminal->layer) {
+        return YETTY_OK_VOID();
+    }
+    /* Clamp negatives to zero — a malformed client must never invert the rect. */
+    float top = inset->top > 0.0f ? inset->top : 0.0f;
+    float right = inset->right > 0.0f ? inset->right : 0.0f;
+    float bottom = inset->bottom > 0.0f ? inset->bottom : 0.0f;
+    float left = inset->left > 0.0f ? inset->left : 0.0f;
+
+    terminal->layer->content_inset_top = top;
+    terminal->layer->content_inset_right = right;
+    terminal->layer->content_inset_bottom = bottom;
+    terminal->layer->content_inset_left = left;
+    ydebug("terminal: content inset t=%.0f r=%.0f b=%.0f l=%.0f", top, right, bottom, left);
+
+    /* Reflow at the last applied pane size; the grid figure picks the new
+     * insets up on its next render. applied_w/h is 0 before the first
+     * layout — the first RESIZE then applies the stored insets for free. */
+    if (terminal->applied_w > 0.0f && terminal->applied_h > 0.0f) {
+        struct yetty_ycore_void_result gr =
+            terminal_apply_pane_geometry(terminal, terminal->applied_w, terminal->applied_h);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "terminal_content_inset_apply: reflow");
+    }
+    terminal->context.yetty_context.event_loop->ops->request_render(
+        terminal->context.yetty_context.event_loop);
+    return YETTY_OK_VOID();
+}
+
+/* Read one content-inset envelope off the SM: exactly one
+ * yetty_content_inset, draining any trailing bytes a future revision adds. */
+static struct yetty_ycore_void_result terminal_content_inset_consume_envelope(
+    struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_content_inset msg;
+    uint8_t *cursor = (uint8_t *)&msg;
+    size_t have = 0;
+    while (have < sizeof(msg)) {
+        struct yetty_ycore_size_result read_res =
+            yetty_ywire_wire_statemachine_read(sm, cursor + have, sizeof(msg) - have);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, read_res, "terminal_content_inset: sm read");
+        if (read_res.value == 0) {
+            if (yetty_ywire_wire_statemachine_at_end(sm)) {
+                if (have == 0) {
+                    return YETTY_OK_VOID(); /* empty envelope: nothing to do */
+                }
+                return YETTY_ERR(yetty_ycore_void, "terminal_content_inset: short payload at EOE");
+            }
+            yetty_yplatform_coro_yield();
+            continue;
+        }
+        have += read_res.value;
+    }
+    /* Drain any excess to keep the stream aligned. */
+    for (;;) {
+        uint8_t scratch[256];
+        struct yetty_ycore_size_result drain_res =
+            yetty_ywire_wire_statemachine_read(sm, scratch, sizeof(scratch));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, drain_res, "terminal_content_inset: sm drain");
+        if (drain_res.value == 0) {
+            if (yetty_ywire_wire_statemachine_at_end(sm)) {
+                break;
+            }
+            yetty_yplatform_coro_yield();
+        }
+    }
+    if (msg.magic != YETTY_CONTENT_INSET_MAGIC) {
+        return YETTY_ERR(yetty_ycore_void, "terminal_content_inset: bad payload magic");
+    }
+    return terminal_content_inset_apply(terminal, &msg);
+}
+
+static struct yetty_ycore_void_result terminal_content_inset_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+{
+    /* userdata is &terminal->inset_handler_self (a distinct pointer so the SM
+     * spawns a coroutine for THIS fn rather than sharing the reinject coro,
+     * which the bare-terminal userdata already owns). Recover the terminal. */
+    struct yetty_yterminal_terminal *terminal = *(struct yetty_yterminal_terminal **)userdata;
+    for (;;) {
+        struct yetty_ycore_void_result envelope_res =
+            terminal_content_inset_consume_envelope(terminal, sm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, envelope_res, "terminal_content_inset_process_input");
         yetty_yplatform_coro_yield();
     }
 }
@@ -1474,6 +1659,19 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     ydebug("terminal_create: client-input reinject registered for DCS %d",
            YETTY_OSC_CS_CLIENT_INPUT_REINJECT);
 
+    /* Content inset — a client reserves a band of the pane for its own
+     * overlay; we shrink the libvterm surface to the inset content rect.
+     * Same DCS transport as every client→server yface emit (has_args=1).
+     * Distinct userdata (&inset_handler_self) so the SM gives this its own
+     * handler coroutine instead of sharing the reinject one (both would
+     * otherwise key off the bare-terminal pointer). */
+    terminal->inset_handler_self = terminal;
+    rr = yetty_ywire_wire_statemachine_register(
+        terminal->sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_OSC_CS_CONTENT_INSET, /*has_args=*/1,
+        terminal_content_inset_process_input, &terminal->inset_handler_self);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: register content inset");
+    ydebug("terminal_create: content inset registered for DCS %d", YETTY_OSC_CS_CONTENT_INSET);
+
     /* This process is about to act as a yclass RPC / remote-object
      * server, so bring up the per-module discovery hooks explicitly.
      * The accessor lookups feed yetty_yclass_by_name()'s registry-miss
@@ -1717,6 +1915,64 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
     return YETTY_OK_VOID();
 }
 
+/* Derive the text grid from a pane pixel size, honoring the content insets a
+ * client reserved (YETTY_OSC_CS_CONTENT_INSET), and drive the resize. The grid
+ * is sized to exactly fill the inset content rect — cols*cell_w == content_w
+ * and rows*cell_h == content_h — so the grid figure's viewport-narrowing in
+ * grid.c lines up with the libvterm surface to the pixel. Shared by the RESIZE
+ * event and the content-inset OSC handler so both paths reflow identically. */
+static struct yetty_ycore_void_result terminal_apply_pane_geometry(
+    struct yetty_yterminal_terminal *terminal, float pane_w, float pane_h)
+{
+    if (!terminal->layer || pane_w <= 0.0f || pane_h <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_yrender_terminal_layer *layer = terminal->layer;
+
+    float cell_w_target = layer->cell_size.width > 0 ? layer->cell_size.width : 10.0f;
+    float cell_h_target = layer->cell_size.height > 0 ? layer->cell_size.height : 20.0f;
+
+    /* Subtract the reserved insets; never let the content rect collapse below a
+     * single cell in either axis (a client could reserve more than the pane). */
+    float content_w = pane_w - layer->content_inset_left - layer->content_inset_right;
+    float content_h = pane_h - layer->content_inset_top - layer->content_inset_bottom;
+    if (content_w < cell_w_target) {
+        content_w = cell_w_target;
+    }
+    if (content_h < cell_h_target) {
+        content_h = cell_h_target;
+    }
+
+    uint32_t new_cols = (uint32_t)(content_w / cell_w_target + 0.5f);
+    uint32_t new_rows = (uint32_t)(content_h / cell_h_target + 0.5f);
+    if (new_cols == 0) {
+        new_cols = 1;
+    }
+    if (new_rows == 0) {
+        new_rows = 1;
+    }
+    struct yetty_ycore_pixel_size new_cell = {
+        .width = content_w / (float)new_cols,
+        .height = content_h / (float)new_rows,
+    };
+    struct yetty_ycore_void_result rgr = yetty_yterminal_terminal_resize_grid(
+        terminal, (struct yetty_ycore_grid_size){.cols = new_cols, .rows = new_rows}, new_cell);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rgr, "terminal_apply_pane_geometry: resize_grid");
+
+    /* Push the FULL pane pixel size to a subscribed figure client so it can
+     * place its overlay in the reserved band — it needs the whole pane, not
+     * the inset content rect. Telnet/guest clients have no TIOCGWINSZ pixels,
+     * so this OSC is their only resize signal. Best-effort (drop the error). */
+    if (terminal->mouse_move_subscribed || terminal->mouse_click_subscribed) {
+        struct yetty_ycore_void_result er =
+            terminal_emit_card_resize(terminal, terminal->focused_figure_id, pane_w, pane_h);
+        if (YETTY_IS_ERR(er)) {
+            yetty_ycore_error_destroy(er.error);
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
 /* Terminal state */
 
 uint32_t yetty_yterminal_terminal_get_cols(const struct yetty_yterminal_terminal *terminal)
@@ -1956,51 +2212,16 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
 
         /* Grid + cell stride: rows are derived from the desired target
          * stride (the font's natural cell height, or a sensible fallback),
-         * then cell_w/cell_h are re-derived as workspace / rows so the
-         * canvas's `cols * cell_w x rows * cell_h` equals the workspace
-         * exactly. Without that, the shader's NDC-to-pixel map shifts /
-         * scales by a few px against the framebuffer and primitives
-         * pinned to the bottom edge (yui statusbar at H-22, terminal
-         * cells at the bottom row) end up cut or stretched. */
-        if (terminal->layer) {
-            struct yetty_yrender_terminal_layer *layer = terminal->layer;
-            float cell_w_target = layer->cell_size.width > 0 ? layer->cell_size.width : 10.0f;
-            float cell_h_target = layer->cell_size.height > 0 ? layer->cell_size.height : 20.0f;
-            uint32_t new_cols = (uint32_t)(width / cell_w_target + 0.5f);
-            uint32_t new_rows = (uint32_t)(height / cell_h_target + 0.5f);
-            if (new_cols == 0) {
-                new_cols = 1;
-            }
-            if (new_rows == 0) {
-                new_rows = 1;
-            }
-            struct yetty_ycore_pixel_size new_cell = {
-                .width = width / (float)new_cols,
-                .height = height / (float)new_rows,
-            };
-            struct yetty_ycore_void_result rgr = yetty_yterminal_terminal_resize_grid(
-                terminal, (struct yetty_ycore_grid_size){.cols = new_cols, .rows = new_rows},
-                new_cell);
-            YETTY_RETURN_IF_ERR(yetty_ycore_int, rgr,
-                                "terminal_view_on_event: terminal_resize_grid failed");
-            if (terminal->context.pty->ops->resize) {
-                struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
-                    terminal->context.pty, new_cols, new_rows, new_cols * (uint32_t)new_cell.width,
-                    new_rows * (uint32_t)new_cell.height);
-                YETTY_RETURN_IF_ERR(yetty_ycore_int, pr,
-                                    "terminal_view_on_event: pty resize failed");
-            }
-        }
-        /* Push the new pane pixel size to a subscribed figure client so it
-         * relays out. Telnet/guest clients have no TIOCGWINSZ pixels, so
-         * this OSC is their only resize signal. */
-        if (terminal->mouse_move_subscribed || terminal->mouse_click_subscribed) {
-            struct yetty_ycore_void_result er =
-                terminal_emit_card_resize(terminal, terminal->focused_figure_id, width, height);
-            if (YETTY_IS_ERR(er)) {
-                yetty_ycore_error_destroy(er.error);
-            }
-        }
+         * then cell_w/cell_h are re-derived as content-rect / rows so the
+         * canvas's `cols * cell_w x rows * cell_h` equals the content rect
+         * (pane minus reserved insets) exactly. Without that, the shader's
+         * NDC-to-pixel map shifts / scales by a few px against the
+         * framebuffer and primitives pinned to the bottom edge end up cut
+         * or stretched. The shared helper applies the content insets and
+         * pushes the new grid into both the layers and the PTY. */
+        struct yetty_ycore_void_result gr = terminal_apply_pane_geometry(terminal, width, height);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, gr,
+                            "terminal_view_on_event: apply_pane_geometry failed");
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
@@ -2289,7 +2510,8 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             }
             if (hit.figure_id != 0) {
                 struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
-                    terminal, hit.figure_id, hit.local_x, hit.local_y, btn, press, 0.0f);
+                    terminal, hit.figure_id, hit.local_x, hit.local_y, btn, press, 0.0f,
+                    event->mouse.mods);
                 YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
                                     "terminal_view_on_event: emit_card_mouse_button failed");
             }
@@ -2364,19 +2586,29 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         /* Once in scrollback view, wheel always drives history. Otherwise
          * if a figure is under the cursor, the wheel goes outbound; else
          * scrollback. */
+        int wheel_mods = event->mouse_scroll.mods;
         if (!terminal->scrollback_active && terminal->mouse_click_subscribed) {
             /* Window coords, same reason as MOUSE_DOWN. */
             struct yetty_yfigure_hit hit = terminal_resolve_figure_hit(
                 terminal, event->mouse_scroll.x, event->mouse_scroll.y, 0);
             if (hit.figure_id != 0) {
-                struct yetty_ycore_void_result mr =
-                    terminal_emit_card_mouse_button(terminal, hit.figure_id, hit.local_x,
-                                                    hit.local_y, 0, 0, event->mouse_scroll.dy);
+                struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
+                    terminal, hit.figure_id, hit.local_x, hit.local_y, 0, 0, event->mouse_scroll.dy,
+                    wheel_mods);
                 YETTY_RETURN_IF_ERR(
                     yetty_ycore_int, mr,
                     "terminal_view_on_event: emit_card_mouse_button (wheel) failed");
                 return YETTY_OK(yetty_ycore_int, 1);
             }
+        }
+
+        /* Modifier'd wheels (Ctrl / Ctrl-Shift) belong to the app-level
+         * zoom gestures when no subscribed figure claimed them above —
+         * report unconsumed so yetty.c's fallback (visual / cell zoom)
+         * fires; scrollback must not eat them. Plain wheels reach yetty.c
+         * only modifier-free, so this branch never starves scrollback. */
+        if (wheel_mods & YETTY_MOD_CONTROL) {
+            return YETTY_OK(yetty_ycore_int, 0);
         }
 
         int lines = (int)(event->mouse_scroll.dy * YETTY_YTERMINAL_WHEEL_LINES_PER_TICK);

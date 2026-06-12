@@ -1535,6 +1535,12 @@ def dialog_set_title(obj: Any, title: str | bytes | None) -> _rt.Result[None]:
     res = _fn(_rt.handle(obj), _rt.cstr(title))
     return _rt.result_from_c(res)
 
+def dialog_set_closable(obj: Any, closable: int) -> _rt.Result[None]:
+    """Call `yetty_ygui_dialog_set_closable`."""
+    _fn = _rt.cfn("yetty_ygui_dialog_set_closable", _t.yetty_ycore_void_result, [c_void_p, c_int])
+    res = _fn(_rt.handle(obj), closable)
+    return _rt.result_from_c(res)
+
 def dialog_open_at(obj: Any, x: float, y: float, width: float, height: float) -> _rt.Result[None]:
     """Call `yetty_ygui_dialog_open_at`."""
     _fn = _rt.cfn("yetty_ygui_dialog_open_at", _t.yetty_ycore_void_result, [c_void_p, c_float, c_float, c_float, c_float])
@@ -2052,6 +2058,12 @@ def window_set_closable(obj: Any, closable: int) -> _rt.Result[None]:
     """Call `yetty_ygui_window_set_closable`."""
     _fn = _rt.cfn("yetty_ygui_window_set_closable", _t.yetty_ycore_void_result, [c_void_p, c_int])
     res = _fn(_rt.handle(obj), closable)
+    return _rt.result_from_c(res)
+
+def window_set_chromeless(obj: Any, chromeless: int) -> _rt.Result[None]:
+    """Call `yetty_ygui_window_set_chromeless`."""
+    _fn = _rt.cfn("yetty_ygui_window_set_chromeless", _t.yetty_ycore_void_result, [c_void_p, c_int])
+    res = _fn(_rt.handle(obj), chromeless)
     return _rt.result_from_c(res)
 
 def ybrowser_set_html(obj: Any, html: str | bytes | None, len: int) -> _rt.Result[None]:

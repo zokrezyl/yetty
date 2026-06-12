@@ -76,8 +76,8 @@ function PrimitiveWidget.new()
   rt.check(res)
   return setmetatable({ handle = res.value }, PrimitiveWidget)
 end
-function PrimitiveWidget:widget_emit_body(ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, ctx)
+function PrimitiveWidget:widget_emit_body(emit_ctx)
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
   rt.check(res)
 end
 M.PrimitiveWidget = PrimitiveWidget
@@ -124,8 +124,8 @@ function Widget:widget_emit_container(emit_ctx)
   local res = rt.C().yetty_ygui_widget_emit_container(nil, self.handle, emit_ctx)
   rt.check(res)
 end
-function Widget:widget_emit_body(ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, ctx)
+function Widget:widget_emit_body(emit_ctx)
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
   rt.check(res)
 end
 M.Widget = Widget
@@ -937,8 +937,8 @@ function Ybrowser:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Ybrowser:widget_emit_body(ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, ctx)
+function Ybrowser:widget_emit_body(emit_ctx)
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
   rt.check(res)
 end
 M.Ybrowser = Ybrowser
@@ -997,8 +997,8 @@ function Yimage:widget_emit_container(emit_ctx)
   local res = rt.C().yetty_ygui_widget_emit_container(nil, self.handle, emit_ctx)
   rt.check(res)
 end
-function Yimage:widget_emit_body(ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, ctx)
+function Yimage:widget_emit_body(emit_ctx)
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
   rt.check(res)
 end
 M.Yimage = Yimage
@@ -1017,8 +1017,8 @@ function Yjungle:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Yjungle:widget_emit_body(ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, ctx)
+function Yjungle:widget_emit_body(emit_ctx)
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
   rt.check(res)
 end
 M.Yjungle = Yjungle
@@ -1037,8 +1037,8 @@ function Ymarkdown:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Ymarkdown:widget_emit_body(ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, ctx)
+function Ymarkdown:widget_emit_body(emit_ctx)
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
   rt.check(res)
 end
 M.Ymarkdown = Ymarkdown
@@ -1057,8 +1057,8 @@ function Ymaze:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Ymaze:widget_emit_body(ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, ctx)
+function Ymaze:widget_emit_body(emit_ctx)
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
   rt.check(res)
 end
 M.Ymaze = Ymaze
@@ -1164,8 +1164,8 @@ function Yplot:widget_emit_container(emit_ctx)
   local res = rt.C().yetty_ygui_widget_emit_container(nil, self.handle, emit_ctx)
   rt.check(res)
 end
-function Yplot:widget_emit_body(ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, ctx)
+function Yplot:widget_emit_body(emit_ctx)
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
   rt.check(res)
 end
 M.Yplot = Yplot
@@ -1184,8 +1184,8 @@ function YrichView:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function YrichView:widget_emit_body(ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, ctx)
+function YrichView:widget_emit_body(emit_ctx)
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
   rt.check(res)
 end
 function YrichView:widget_on_press(x, y, button)
@@ -1223,8 +1223,8 @@ function Yshadertoy:widget_emit_container(emit_ctx)
   local res = rt.C().yetty_ygui_widget_emit_container(nil, self.handle, emit_ctx)
   rt.check(res)
 end
-function Yshadertoy:widget_emit_body(ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, ctx)
+function Yshadertoy:widget_emit_body(emit_ctx)
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
   rt.check(res)
 end
 M.Yshadertoy = Yshadertoy
@@ -1247,8 +1247,8 @@ function Yvideo:widget_emit_container(emit_ctx)
   local res = rt.C().yetty_ygui_widget_emit_container(nil, self.handle, emit_ctx)
   rt.check(res)
 end
-function Yvideo:widget_emit_body(ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, ctx)
+function Yvideo:widget_emit_body(emit_ctx)
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
   rt.check(res)
 end
 M.Yvideo = Yvideo
@@ -1267,8 +1267,8 @@ function Yzoo:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Yzoo:widget_emit_body(ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, ctx)
+function Yzoo:widget_emit_body(emit_ctx)
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
   rt.check(res)
 end
 M.Yzoo = Yzoo
