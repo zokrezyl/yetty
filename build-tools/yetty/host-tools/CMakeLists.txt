@@ -112,6 +112,24 @@ if(howerj_cdb_ADDED)
     target_compile_options(cdb PRIVATE -w)
 endif()
 
+# MSVC: the yetty C sources compiled below (ycdb, ytrace, yplatform/*/windows)
+# need the same opt-ins the main Windows build sets (platform/windows/cmake.cmake):
+#   - /Zc:preprocessor — YETTY_ERR(...) uses __VA_ARGS__ count-based dispatch,
+#     which MSVC's traditional preprocessor mishandles (it can't expand
+#     __VA_ARGS__ before counting, so YETTY_ERR_DISPATCH gets "not enough
+#     arguments" and the macro silently mis-expands → C2065/C2440 in ycdb.c).
+#   - /std:clatest + /experimental:c11atomics — clears __STDC_NO_ATOMICS__ for
+#     TUs that pull in <stdatomic.h>.
+# Scoped here (just before the yetty targets) so the third-party CPM builds
+# above are untouched. Without this the host yetty-ymsdf-gen build — invoked at
+# configure time by emmentaler-cdb.cmake — fails to compile ycdb.c on Windows.
+if(MSVC)
+    add_compile_options(/Zc:preprocessor)
+    add_compile_options(
+        $<$<COMPILE_LANGUAGE:C>:/std:clatest>
+        $<$<COMPILE_LANGUAGE:C>:/experimental:c11atomics>)
+endif()
+
 # ycdb (C wrapper for CDB)
 add_library(yetty_ycdb STATIC ${YETTY_ROOT}/src/yetty/ycdb/ycdb.c)
 target_include_directories(yetty_ycdb PUBLIC ${YETTY_ROOT}/include)

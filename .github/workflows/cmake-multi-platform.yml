@@ -531,6 +531,15 @@ jobs:
 
     - name: Set up Android SDK
       uses: android-actions/setup-android@v3
+      with:
+        # Build jobs only need platform-tools + the NDK installed below; the
+        # gradle build provisions compileSdk/build-tools itself. Pinning the
+        # package set drops the action's default `tools` package, which pulls
+        # the large Android Emulator download — that download intermittently
+        # ships a corrupt archive ("Error on ZipFile unknown archive") and
+        # fails the job, even though a headless NDK build never needs an
+        # emulator. The emulator lives only in the test-android job.
+        packages: 'platform-tools'
 
     - name: Install Android NDK ${{ env.ANDROID_NDK_VERSION }}
       run: |
@@ -599,6 +608,15 @@ jobs:
 
     - name: Set up Android SDK
       uses: android-actions/setup-android@v3
+      with:
+        # Build jobs only need platform-tools + the NDK installed below; the
+        # gradle build provisions compileSdk/build-tools itself. Pinning the
+        # package set drops the action's default `tools` package, which pulls
+        # the large Android Emulator download — that download intermittently
+        # ships a corrupt archive ("Error on ZipFile unknown archive") and
+        # fails the job, even though a headless NDK build never needs an
+        # emulator. The emulator lives only in the test-android job.
+        packages: 'platform-tools'
 
     - name: Install Android NDK ${{ env.ANDROID_NDK_VERSION }}
       run: |
