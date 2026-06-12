@@ -62,10 +62,18 @@ enum osm_vector_z_band {
     OSM_Z_LAND = 10,
     OSM_Z_WATER = 20,
     OSM_Z_BUILDINGS = 30,
-    OSM_Z_STREET_MINOR = 40,
-    OSM_Z_STREET_MID = 42,
-    OSM_Z_STREET_MAJOR = 44,
-    OSM_Z_RAIL = 46,
+    /* Cased roads: every casing under every fill, classes stacked
+     * minor → major inside each band — the osm-carto layering that makes
+     * junctions read as connected surfaces instead of overlapping
+     * strokes. */
+    OSM_Z_CASING_MINOR = 40,
+    OSM_Z_CASING_MID = 41,
+    OSM_Z_CASING_MAJOR = 42,
+    OSM_Z_FILL_MINOR = 45,
+    OSM_Z_FILL_MID = 46,
+    OSM_Z_FILL_MAJOR = 47,
+    OSM_Z_RAIL = 50,
+    OSM_Z_RAIL_DASH = 51,
     OSM_Z_BOUNDARY = 60,
     OSM_Z_STREET_LABELS = 100,
     OSM_Z_PLACE_LABELS = 110,
@@ -75,38 +83,56 @@ enum osm_vector_z_band {
  * Styling — shortbread schema, palette borrowed from osm-carto.
  *===========================================================================*/
 
+enum osm_line_render {
+    OSM_LINE_SOLID = 0, /* fill stroke only */
+    OSM_LINE_CASED,     /* casing stroke under the fill stroke */
+    OSM_LINE_DASHED,    /* dashes of the fill color, no casing */
+    OSM_LINE_RAIL,      /* solid dark base + white dash ladder on top */
+};
+
 struct osm_line_style {
     const char *kind;
     uint32_t color; /* 0xAARRGGBB */
     float width_px;
     uint32_t z_band;
+    enum osm_line_render render;
+    uint32_t casing_color;
+    float casing_extra_px; /* added to width for the casing stroke */
+    float dash_px;
+    float gap_px;
 };
 
-/* Streets layer (also carries rail kinds). NULL-kind row terminates. */
+/* Streets layer (also carries rail kinds), osm-carto palette: cased
+ * majors in warm tones, white minors with gray casings, dashed paths,
+ * ladder rails. NULL-kind row terminates. */
 static const struct osm_line_style *street_style_for_kind(const char *kind)
 {
     static const struct osm_line_style styles[] = {
-        {"motorway", 0xffe892a2u, 6.0f, OSM_Z_STREET_MAJOR},
-        {"trunk", 0xfff9b29cu, 5.5f, OSM_Z_STREET_MAJOR},
-        {"primary", 0xfffcd6a4u, 5.0f, OSM_Z_STREET_MAJOR},
-        {"secondary", 0xfff7fabfu, 4.0f, OSM_Z_STREET_MID},
-        {"tertiary", 0xffffffffu, 3.5f, OSM_Z_STREET_MID},
-        {"residential", 0xffffffffu, 2.5f, OSM_Z_STREET_MINOR},
-        {"unclassified", 0xffffffffu, 2.5f, OSM_Z_STREET_MINOR},
-        {"living_street", 0xffffffffu, 2.5f, OSM_Z_STREET_MINOR},
-        {"pedestrian", 0xffededecu, 2.0f, OSM_Z_STREET_MINOR},
-        {"service", 0xffffffffu, 1.5f, OSM_Z_STREET_MINOR},
-        {"track", 0xffb08a5au, 1.0f, OSM_Z_STREET_MINOR},
-        {"footway", 0xffbbbbbbu, 1.0f, OSM_Z_STREET_MINOR},
-        {"path", 0xffbbbbbbu, 1.0f, OSM_Z_STREET_MINOR},
-        {"cycleway", 0xff9c9cfcu, 1.0f, OSM_Z_STREET_MINOR},
-        {"steps", 0xffbbbbbbu, 1.0f, OSM_Z_STREET_MINOR},
-        {"rail", 0xff888888u, 1.3f, OSM_Z_RAIL},
-        {"light_rail", 0xff999999u, 1.2f, OSM_Z_RAIL},
-        {"subway", 0xff999999u, 1.2f, OSM_Z_RAIL},
-        {"tram", 0xffaaaaaau, 1.0f, OSM_Z_RAIL},
-        {"narrow_gauge", 0xff999999u, 1.0f, OSM_Z_RAIL},
-        {NULL, 0, 0.0f, 0},
+        {"motorway", 0xffe892a2u, 6.0f, OSM_Z_FILL_MAJOR, OSM_LINE_CASED, 0xffc24e6bu, 2.0f, 0, 0},
+        {"trunk", 0xfff9b29cu, 5.5f, OSM_Z_FILL_MAJOR, OSM_LINE_CASED, 0xffcf6649u, 2.0f, 0, 0},
+        {"primary", 0xfffcd6a4u, 5.0f, OSM_Z_FILL_MAJOR, OSM_LINE_CASED, 0xffb88a32u, 2.0f, 0, 0},
+        {"secondary", 0xfff7fabfu, 4.5f, OSM_Z_FILL_MID, OSM_LINE_CASED, 0xff9aa11fu, 1.8f, 0, 0},
+        {"tertiary", 0xffffffffu, 4.0f, OSM_Z_FILL_MID, OSM_LINE_CASED, 0xffa8a8a8u, 1.8f, 0, 0},
+        {"residential", 0xffffffffu, 3.0f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffbbbbbbu, 1.6f, 0,
+         0},
+        {"unclassified", 0xffffffffu, 3.0f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffbbbbbbu, 1.6f, 0,
+         0},
+        {"living_street", 0xffededecu, 3.0f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffc5c5c5u, 1.5f,
+         0, 0},
+        {"pedestrian", 0xffdddde9u, 2.5f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffa9a9bcu, 1.4f, 0,
+         0},
+        {"service", 0xffffffffu, 1.8f, OSM_Z_FILL_MINOR, OSM_LINE_CASED, 0xffccccccu, 1.2f, 0, 0},
+        {"track", 0xffac8331u, 1.2f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 6.0f, 4.0f},
+        {"footway", 0xfffa8072u, 1.0f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 3.5f, 3.0f},
+        {"path", 0xfffa8072u, 1.0f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 3.5f, 3.0f},
+        {"cycleway", 0xff7070fau, 1.0f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 5.0f, 3.0f},
+        {"steps", 0xfffa8072u, 1.6f, OSM_Z_FILL_MINOR, OSM_LINE_DASHED, 0, 0, 1.5f, 1.5f},
+        {"rail", 0xff707070u, 1.8f, OSM_Z_RAIL, OSM_LINE_RAIL, 0, 0, 6.0f, 6.0f},
+        {"light_rail", 0xff6e6e6eu, 1.4f, OSM_Z_RAIL, OSM_LINE_RAIL, 0, 0, 4.0f, 4.0f},
+        {"subway", 0xff999999u, 1.4f, OSM_Z_RAIL, OSM_LINE_DASHED, 0, 0, 5.0f, 3.0f},
+        {"tram", 0xff6b6b6bu, 1.0f, OSM_Z_RAIL, OSM_LINE_SOLID, 0, 0, 0, 0},
+        {"narrow_gauge", 0xff707070u, 1.2f, OSM_Z_RAIL, OSM_LINE_RAIL, 0, 0, 5.0f, 5.0f},
+        {NULL, 0, 0.0f, 0, OSM_LINE_SOLID, 0, 0, 0, 0},
     };
     if (!kind) {
         return NULL;
@@ -117,6 +143,29 @@ static const struct osm_line_style *street_style_for_kind(const char *kind)
         }
     }
     return NULL;
+}
+
+/* Roads narrow as the camera pulls back — constant pixel widths look
+ * cartoonish below city zoom. */
+static float street_width_zoom_factor(uint32_t zoom)
+{
+    if (zoom >= 13) {
+        return 1.0f;
+    }
+    if (zoom == 12) {
+        return 0.8f;
+    }
+    if (zoom == 11) {
+        return 0.62f;
+    }
+    return 0.45f;
+}
+
+/* The casing band sits exactly one fill-band step below; relies on the
+ * CASING/FILL enum spacing above. */
+static uint32_t casing_band_for_fill_band(uint32_t fill_band)
+{
+    return fill_band - (OSM_Z_FILL_MINOR - OSM_Z_CASING_MINOR);
 }
 
 static const struct osm_line_style *water_line_style_for_kind(const char *kind)
@@ -320,11 +369,38 @@ static int point_in_triangle(const struct osm_point *p, const struct osm_point *
  * Emission context
  *===========================================================================*/
 
+/* Style tables above are written in natural 0xAARRGGBB. The SDF wire
+ * stores RGBA bytes little-endian — word 0xAABBGGRR (the shader's
+ * yetty_ysdf_unpack_color maps the LSB to red) — so every color crossing
+ * into add_cmd_add_* gets its R and B lanes swapped here. Grays are
+ * swap-invariant, which is how the mismatch stayed invisible in other
+ * producers; the Danube rendering khaki instead of water-blue is what
+ * exposed it. */
+static uint32_t osm_color_to_wire(uint32_t argb)
+{
+    return (argb & 0xff00ff00u) | ((argb & 0x00ff0000u) >> 16) | ((argb & 0x000000ffu) << 16);
+}
+
+struct osm_label_candidate {
+    char *text; /* owned copy — outlives the per-tile parse */
+    float x;
+    float y;
+    float font_size;
+    float char_spacing; /* cartographic letter-spacing for place names */
+    uint32_t color;
+    uint32_t z_band;
+    int priority; /* lower places first (city < town < ... < minor street) */
+};
+
 struct osm_vector_emit {
     struct yetty_ydraw_drawable_list *list;
     float viewport_w;
     float viewport_h;
+    uint32_t zoom;
     uint32_t prim_count;
+    struct osm_label_candidate *labels;
+    uint32_t label_count;
+    uint32_t label_capacity;
 };
 
 static int emit_budget_left(struct osm_vector_emit *emit)
@@ -418,8 +494,8 @@ static struct yetty_ycore_void_result emit_polygon_fill(struct osm_vector_emit *
                 .vertex_c_x = next->x,
                 .vertex_c_y = next->y,
             };
-            result = yetty_ydraw_drawable_list_add_cmd_add_triangle(emit->list, /*id=*/0, z_band,
-                                                                    color, 0, 0.0f, &geometry);
+            result = yetty_ydraw_drawable_list_add_cmd_add_triangle(
+                emit->list, /*id=*/0, z_band, osm_color_to_wire(color), 0, 0.0f, &geometry);
             if (YETTY_IS_ERR(result)) {
                 free(indices);
                 return YETTY_ERR(yetty_ycore_void, "osm vector: add triangle", result);
@@ -462,27 +538,98 @@ static struct yetty_ycore_void_result emit_polygon_fill(struct osm_vector_emit *
     return YETTY_OK_VOID();
 }
 
+/* Street kinds worth a name, by importance. -1 = never labeled
+ * (service ways, footpaths, rails). At z13 and below only ranks up to
+ * secondary are collected — minor-street names are z14+ detail. */
+static int street_label_rank(const char *kind)
+{
+    if (!kind) {
+        return -1;
+    }
+    static const char *const ranked[] = {"motorway",    "trunk",        "primary",
+                                         "secondary",   "tertiary",     "residential",
+                                         "unclassified", "living_street", "pedestrian"};
+    for (size_t i = 0; i < sizeof(ranked) / sizeof(ranked[0]); i++) {
+        if (strcmp(ranked[i], kind) == 0) {
+            return (int)i;
+        }
+    }
+    return -1;
+}
+
+#define OSM_STREET_LABEL_MAX_RANK_LOW_ZOOM 3 /* ..secondary below z14 */
+#define OSM_VECTOR_MAX_LABEL_CANDIDATES 8192u
+#define OSM_VECTOR_MAX_PLACED_LABELS 96u
+#define OSM_LABEL_COLLISION_PAD_PX 6.0f
+/* Same advance estimate emit_text uses for centering. */
+#define OSM_LABEL_ADVANCE_EM 0.55f
+
+static struct yetty_ycore_void_result push_label_candidate(struct osm_vector_emit *emit, float x,
+                                                           float y, const char *text,
+                                                           float font_size, float char_spacing,
+                                                           uint32_t color, uint32_t z_band,
+                                                           int priority)
+{
+    if (!text || !text[0] || emit->label_count >= OSM_VECTOR_MAX_LABEL_CANDIDATES) {
+        return YETTY_OK_VOID();
+    }
+    if (emit->label_count + 1 > emit->label_capacity) {
+        uint32_t new_capacity = emit->label_capacity ? emit->label_capacity * 2 : 256;
+        struct osm_label_candidate *grown =
+            realloc(emit->labels, new_capacity * sizeof(struct osm_label_candidate));
+        if (!grown) {
+            return YETTY_ERR(yetty_ycore_void, "osm vector: label pool alloc failed");
+        }
+        emit->labels = grown;
+        emit->label_capacity = new_capacity;
+    }
+    char *text_copy = strdup(text);
+    if (!text_copy) {
+        return YETTY_ERR(yetty_ycore_void, "osm vector: label text alloc failed");
+    }
+    emit->labels[emit->label_count++] = (struct osm_label_candidate){
+        .text = text_copy,
+        .x = x,
+        .y = y,
+        .font_size = font_size,
+        .char_spacing = char_spacing,
+        .color = color,
+        .z_band = z_band,
+        .priority = priority,
+    };
+    return YETTY_OK_VOID();
+}
+
+static float label_width_estimate(const char *text, float font_size, float char_spacing)
+{
+    size_t text_len = strlen(text);
+    /* The default mono-ish font advance is ~0.55 em. */
+    float width = (float)text_len * font_size * OSM_LABEL_ADVANCE_EM;
+    if (text_len > 1) {
+        width += char_spacing * (float)(text_len - 1);
+    }
+    return width;
+}
+
 static struct yetty_ycore_void_result emit_text(struct osm_vector_emit *emit, float x, float y,
-                                                const char *text, float font_size, uint32_t color,
-                                                uint32_t z_band)
+                                                const char *text, float font_size,
+                                                float char_spacing, uint32_t color, uint32_t z_band)
 {
     if (!text || !text[0] || !emit_budget_left(emit)) {
         return YETTY_OK_VOID();
     }
-    size_t text_len = strlen(text);
-    /* Rough centering: the default mono-ish font advance is ~0.55 em. */
-    float approx_width = (float)text_len * font_size * 0.55f;
-    float anchor_x = x - approx_width * 0.5f;
+    float anchor_x = x - label_width_estimate(text, font_size, char_spacing) * 0.5f;
     if (anchor_x < 0.0f) {
         anchor_x = 0.0f;
     }
     if (x < 0.0f || x > emit->viewport_w || y < font_size || y > emit->viewport_h) {
         return YETTY_OK_VOID();
     }
+    size_t text_len = strlen(text);
     struct yetty_ycore_buffer view = {
         .data = (uint8_t *)(uintptr_t)text, .capacity = text_len, .size = text_len};
-    struct yetty_ycore_void_result add_res = yetty_ydraw_drawable_list_add_text(
-        emit->list, anchor_x, y, &view, font_size, color, z_band, -1, 0.0f);
+    struct yetty_ycore_void_result add_res = yetty_ydraw_drawable_list_add_text_full(
+        emit->list, anchor_x, y, &view, font_size, color, z_band, -1, 0.0f, char_spacing, 0.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, add_res, "osm vector: add text");
     emit->prim_count++;
     return YETTY_OK_VOID();
@@ -532,6 +679,99 @@ static struct yetty_ycore_void_result emit_polyline(struct osm_vector_emit *emit
             emit_segment(emit, previous.x, previous.y, current.x, current.y, color, width, z_band);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, seg_res, "osm vector: polyline segment");
         previous = current;
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Dashed polyline: the dash phase runs continuously across vertices so
+ * the pattern flows through bends instead of restarting per segment. */
+static struct yetty_ycore_void_result emit_polyline_dashed(
+    struct osm_vector_emit *emit, const struct osm_tile_transform *transform,
+    const struct yetty_yopenstreet_vt_ring *ring, uint32_t color, float width, uint32_t z_band,
+    float dash_px, float gap_px)
+{
+    if (ring->point_count < 2 || dash_px <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+    float period = dash_px + gap_px;
+    float phase = 0.0f; /* distance into the current period */
+    struct osm_point previous = transform_point(transform, ring->points[0]);
+
+    for (uint32_t i = 1; i < ring->point_count; i++) {
+        struct osm_point current = transform_point(transform, ring->points[i]);
+        float delta_x = current.x - previous.x;
+        float delta_y = current.y - previous.y;
+        float segment_len = sqrtf(delta_x * delta_x + delta_y * delta_y);
+        if (segment_len < 0.01f) {
+            continue;
+        }
+        float unit_x = delta_x / segment_len;
+        float unit_y = delta_y / segment_len;
+
+        float walked = 0.0f;
+        while (walked < segment_len) {
+            float in_period = fmodf(phase + walked, period);
+            if (in_period < dash_px) {
+                float dash_left = dash_px - in_period;
+                float draw_len = dash_left < segment_len - walked ? dash_left
+                                                                  : segment_len - walked;
+                struct yetty_ycore_void_result dash_res = emit_segment(
+                    emit, previous.x + unit_x * walked, previous.y + unit_y * walked,
+                    previous.x + unit_x * (walked + draw_len),
+                    previous.y + unit_y * (walked + draw_len), color, width, z_band);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, dash_res, "osm vector: dash segment");
+                walked += draw_len;
+            } else {
+                walked += period - in_period; /* skip the gap remainder */
+            }
+        }
+        phase = fmodf(phase + segment_len, period);
+        previous = current;
+    }
+    return YETTY_OK_VOID();
+}
+
+/* One street feature, styled: casing under fill, dash patterns, rail
+ * ladders. `width_factor` is the zoom narrowing. */
+static struct yetty_ycore_void_result emit_street_feature(
+    struct osm_vector_emit *emit, const struct osm_tile_transform *transform,
+    const struct yetty_yopenstreet_vt_feature *feature, const struct osm_line_style *style,
+    float width_factor)
+{
+    float width = style->width_px * width_factor;
+    for (uint32_t ring_index = 0; ring_index < feature->ring_count; ring_index++) {
+        const struct yetty_yopenstreet_vt_ring *ring = &feature->rings[ring_index];
+        struct yetty_ycore_void_result ring_res = YETTY_OK_VOID();
+        switch (style->render) {
+        case OSM_LINE_CASED:
+            ring_res = emit_polyline(emit, transform, ring, style->casing_color,
+                                     width + style->casing_extra_px * width_factor,
+                                     casing_band_for_fill_band(style->z_band));
+            if (YETTY_IS_OK(ring_res)) {
+                ring_res = emit_polyline(emit, transform, ring, style->color, width,
+                                         style->z_band);
+            }
+            break;
+        case OSM_LINE_DASHED:
+            ring_res = emit_polyline_dashed(emit, transform, ring, style->color, width,
+                                            style->z_band, style->dash_px, style->gap_px);
+            break;
+        case OSM_LINE_RAIL:
+            /* Dark base with a white dash ladder on top — the classic
+             * railway signature. */
+            ring_res = emit_polyline(emit, transform, ring, style->color, width, style->z_band);
+            if (YETTY_IS_OK(ring_res)) {
+                ring_res = emit_polyline_dashed(emit, transform, ring, 0xfffafafau,
+                                                width * 0.6f, OSM_Z_RAIL_DASH, style->dash_px,
+                                                style->gap_px);
+            }
+            break;
+        case OSM_LINE_SOLID:
+        default:
+            ring_res = emit_polyline(emit, transform, ring, style->color, width, style->z_band);
+            break;
+        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, ring_res, "osm vector: street ring");
     }
     return YETTY_OK_VOID();
 }
@@ -669,18 +909,14 @@ static struct yetty_ycore_void_result emit_tile(struct osm_vector_emit *emit,
             } else if (is_streets && feature->geom_type == YETTY_YOPENSTREET_VT_LINESTRING) {
                 const struct osm_line_style *style = street_style_for_kind(feature->kind);
                 if (style) {
-                    for (uint32_t ring = 0; ring < feature->ring_count; ring++) {
-                        feature_res = emit_polyline(emit, &transform, &feature->rings[ring],
-                                                    style->color, style->width_px, style->z_band);
-                        if (YETTY_IS_ERR(feature_res)) {
-                            break;
-                        }
-                    }
+                    feature_res = emit_street_feature(emit, &transform, feature, style,
+                                                      street_width_zoom_factor(emit->zoom));
                 }
             } else if (is_boundaries && feature->geom_type == YETTY_YOPENSTREET_VT_LINESTRING) {
                 for (uint32_t ring = 0; ring < feature->ring_count; ring++) {
-                    feature_res = emit_polyline(emit, &transform, &feature->rings[ring],
-                                                0xffaf9aafu, 1.5f, OSM_Z_BOUNDARY);
+                    feature_res =
+                        emit_polyline_dashed(emit, &transform, &feature->rings[ring], 0xff9e7bb5u,
+                                             1.3f, OSM_Z_BOUNDARY, 7.0f, 4.0f);
                     if (YETTY_IS_ERR(feature_res)) {
                         break;
                     }
@@ -688,14 +924,21 @@ static struct yetty_ycore_void_result emit_tile(struct osm_vector_emit *emit,
             } else if (is_street_labels && feature->name &&
                        feature->geom_type == YETTY_YOPENSTREET_VT_LINESTRING &&
                        feature->ring_count > 0) {
-                const struct yetty_yopenstreet_vt_ring *ring = &feature->rings[0];
-                if (ring->point_count > 0) {
-                    struct yetty_yopenstreet_vt_point mid = ring->points[ring->point_count / 2];
-                    if (mid.x >= 0.0f && mid.x < (float)layer->extent && mid.y >= 0.0f &&
-                        mid.y < (float)layer->extent) {
-                        struct osm_point anchor = transform_point(&transform, mid);
-                        feature_res = emit_text(emit, anchor.x, anchor.y, feature->name, 9.0f,
-                                                0xff555555u, OSM_Z_STREET_LABELS);
+                int rank = street_label_rank(feature->kind);
+                if (rank >= 0 &&
+                    (emit->zoom >= 14 || rank <= OSM_STREET_LABEL_MAX_RANK_LOW_ZOOM)) {
+                    const struct yetty_yopenstreet_vt_ring *ring = &feature->rings[0];
+                    if (ring->point_count > 0) {
+                        struct yetty_yopenstreet_vt_point mid =
+                            ring->points[ring->point_count / 2];
+                        if (mid.x >= 0.0f && mid.x < (float)layer->extent && mid.y >= 0.0f &&
+                            mid.y < (float)layer->extent) {
+                            struct osm_point anchor = transform_point(&transform, mid);
+                            feature_res = push_label_candidate(emit, anchor.x, anchor.y,
+                                                               feature->name, 9.0f, 0.0f,
+                                                               0xff4a4a4au, OSM_Z_STREET_LABELS,
+                                                               10 + rank);
+                        }
                     }
                 }
             } else if (is_place_labels && feature->name &&
@@ -707,14 +950,126 @@ static struct yetty_ycore_void_result emit_tile(struct osm_vector_emit *emit,
                     anchor_point.x < (float)layer->extent && anchor_point.y >= 0.0f &&
                     anchor_point.y < (float)layer->extent) {
                     struct osm_point anchor = transform_point(&transform, anchor_point);
-                    feature_res = emit_text(emit, anchor.x, anchor.y, feature->name, font_size,
-                                            0xff222222u, OSM_Z_PLACE_LABELS);
+                    /* Bigger font = more important place = lower priority value.
+                     * Letter-spacing scales with importance — the classic
+                     * cartographic treatment for settlement names. */
+                    float char_spacing = font_size >= 16.0f ? 2.0f
+                                         : font_size >= 13.0f ? 1.2f
+                                                              : 0.5f;
+                    feature_res = push_label_candidate(emit, anchor.x, anchor.y, feature->name,
+                                                       font_size, char_spacing, 0xff30303cu,
+                                                       OSM_Z_PLACE_LABELS, (int)(20.0f - font_size));
                 }
             }
             YETTY_RETURN_IF_ERR(yetty_ycore_void, feature_res, "osm vector: feature emit");
         }
     }
     return YETTY_OK_VOID();
+}
+
+/*=============================================================================
+ * Label placement — collected candidates from every tile compete here.
+ * Priority order (places before streets, majors before minors), greedy
+ * collision culling against already-placed boxes, and one label per
+ * distinct name per render (kills the per-tile duplicates of long
+ * streets and the per-feature repeats of split ways). Without this pass
+ * a z13 city center draws hundreds of overprinting names — unreadable.
+ *===========================================================================*/
+
+static int label_priority_compare(const void *first, const void *second)
+{
+    const struct osm_label_candidate *a = first;
+    const struct osm_label_candidate *b = second;
+    if (a->priority != b->priority) {
+        return a->priority < b->priority ? -1 : 1;
+    }
+    /* Stable-ish tiebreak so placement doesn't flicker between renders. */
+    if (a->y != b->y) {
+        return a->y < b->y ? -1 : 1;
+    }
+    return a->x < b->x ? -1 : (a->x > b->x ? 1 : 0);
+}
+
+struct osm_label_box {
+    float min_x;
+    float min_y;
+    float max_x;
+    float max_y;
+    const char *text; /* borrowed from the candidate */
+};
+
+static struct yetty_ycore_void_result place_labels(struct osm_vector_emit *emit)
+{
+    if (emit->label_count == 0) {
+        return YETTY_OK_VOID();
+    }
+    qsort(emit->labels, emit->label_count, sizeof(struct osm_label_candidate),
+          label_priority_compare);
+
+    struct osm_label_box *placed =
+        malloc(OSM_VECTOR_MAX_PLACED_LABELS * sizeof(struct osm_label_box));
+    if (!placed) {
+        return YETTY_ERR(yetty_ycore_void, "osm vector: placement scratch alloc failed");
+    }
+    uint32_t placed_count = 0;
+    struct yetty_ycore_void_result result = YETTY_OK_VOID();
+
+    for (uint32_t i = 0; i < emit->label_count && placed_count < OSM_VECTOR_MAX_PLACED_LABELS;
+         i++) {
+        const struct osm_label_candidate *candidate = &emit->labels[i];
+        float half_width =
+            label_width_estimate(candidate->text, candidate->font_size, candidate->char_spacing) *
+            0.5f;
+        struct osm_label_box box = {
+            .min_x = candidate->x - half_width - OSM_LABEL_COLLISION_PAD_PX,
+            .min_y = candidate->y - candidate->font_size - OSM_LABEL_COLLISION_PAD_PX,
+            .max_x = candidate->x + half_width + OSM_LABEL_COLLISION_PAD_PX,
+            .max_y = candidate->y + OSM_LABEL_COLLISION_PAD_PX,
+            .text = candidate->text,
+        };
+        if (box.max_x < 0.0f || box.min_x > emit->viewport_w || box.max_y < 0.0f ||
+            box.min_y > emit->viewport_h) {
+            continue;
+        }
+        int blocked = 0;
+        for (uint32_t j = 0; j < placed_count; j++) {
+            const struct osm_label_box *other = &placed[j];
+            if (strcmp(other->text, candidate->text) == 0) {
+                blocked = 1; /* one label per name per render */
+                break;
+            }
+            if (box.min_x < other->max_x && box.max_x > other->min_x &&
+                box.min_y < other->max_y && box.max_y > other->min_y) {
+                blocked = 1;
+                break;
+            }
+        }
+        if (blocked) {
+            continue;
+        }
+        result = emit_text(emit, candidate->x, candidate->y, candidate->text,
+                           candidate->font_size, candidate->char_spacing, candidate->color,
+                           candidate->z_band);
+        if (YETTY_IS_ERR(result)) {
+            break;
+        }
+        placed[placed_count++] = box;
+    }
+    free(placed);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, result, "osm vector: label placement emit");
+    ydebug("yopenstreet vector: placed %u/%u labels", placed_count, emit->label_count);
+    return YETTY_OK_VOID();
+}
+
+static void free_label_candidates(struct osm_vector_emit *emit)
+{
+    for (uint32_t i = 0; i < emit->label_count; i++) {
+        free(emit->labels[i].text);
+    }
+    free(emit->labels);
+    emit->labels = NULL;
+    emit->label_count = 0;
+    emit->label_capacity = 0;
 }
 
 /*=============================================================================
@@ -787,6 +1142,7 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render_vector(
         .list = list_res.value,
         .viewport_w = (float)config->width_px,
         .viewport_h = (float)config->height_px,
+        .zoom = config->zoom,
         .prim_count = 0,
     };
 
@@ -800,7 +1156,8 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render_vector(
             .corner_radius = 0.0f,
         };
         struct yetty_ycore_void_result bg_res = yetty_ydraw_drawable_list_add_cmd_add_box(
-            emit.list, /*id=*/0, OSM_Z_BACKGROUND, 0xfff2efe9u, 0, 0.0f, &background);
+            emit.list, /*id=*/0, OSM_Z_BACKGROUND, osm_color_to_wire(0xfff2efe9u), 0, 0.0f,
+            &background);
         if (YETTY_IS_ERR(bg_res)) {
             yetty_ydraw_drawable_list_destroy(emit.list);
             return YETTY_ERR(yetty_ydraw_drawable_list, "yopenstreet vector: background", bg_res);
@@ -862,6 +1219,11 @@ struct yetty_ydraw_drawable_list_result yetty_yopenstreet_render_vector(
         }
     }
     yetty_yopenstreet_curl_release(curl_handle);
+
+    if (YETTY_IS_OK(emit_result) && tiles_rendered > 0) {
+        emit_result = place_labels(&emit);
+    }
+    free_label_candidates(&emit);
 
     if (YETTY_IS_ERR(emit_result)) {
         yetty_ydraw_drawable_list_destroy(emit.list);
