@@ -12,14 +12,27 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
+struct yetty_ygui_ynodes;
+
+typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(struct yetty_yclass_object *,
+                                                                    struct yetty_yclass_object *,
+                                                                    int,
+                                                                    struct yetty_yclass_object *,
+                                                                    int, void *);
+
+struct yetty_ygui_ynodes_ptr_result {
+    int ok;
+    union {
+        struct yetty_ygui_ynodes *value;
+        struct yetty_ycore_error error;
+    };
+};
+
 struct yetty_yclass_ptr_result yetty_ygui_ynodes_class_get(void);
 
-/* Data-block handle — opaque outside the owning .c. The struct
- * stays private; only its pointer crosses here, in a Result so a
- * bad object surfaces rather than corrupting. Reach members
+/* Data-block accessors. The data struct stays private (only a
+ * forward declaration crosses into the header); reach members
  * through the per-property getters/setters below. */
-struct yetty_ygui_ynodes;
-YETTY_YRESULT_DECLARE(yetty_ygui_ynodes_ptr, struct yetty_ygui_ynodes *);
 struct yetty_ygui_ynodes_ptr_result yetty_ygui_ynodes_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_ygui_ynodes_to(struct yetty_ygui_ynodes *data);
 
@@ -27,11 +40,6 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ynodes_create(struct yetty_ycla
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-#include <yetty/ycore/result.h>
-#include <yetty/ygui/widget.h>
-typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(
-    struct yetty_yclass_object *editor, struct yetty_yclass_object *from, int out_idx,
-    struct yetty_yclass_object *to, int in_idx, void *userdata);
 void yetty_ygui_ynodes_view(const struct yetty_yclass_object *editor, float *pan_x, float *pan_y,
                             float *zoom);
 float yetty_ygui_ynodes_zoom(const struct yetty_yclass_object *editor);

@@ -7,8 +7,6 @@
 
 add_library(yetty_yview STATIC
     view.c
-    methods.gen.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_yview PUBLIC

@@ -25,22 +25,13 @@
 YETTY_YRESULT_DECLARE(yetty_ygui_popup_menu_ptr, struct yetty_ygui_popup_menu *);
 struct yetty_yclass_ptr_result yetty_ygui_popup_menu_class_get(void);
 struct yetty_ygui_popup_menu_ptr_result yetty_ygui_popup_menu_from(struct yetty_yclass_object *obj);
-/* Menu-item callback typedef. Header-destined: codegen copies the
- * `#ifdef YCLASS_CODEGEN` block verbatim into the generated header (it must
- * appear BEFORE the exposed functions that take it, so they resolve to it
- * rather than an unrelated visible typedef). The real build gets its own
- * copy from the parallel `#ifndef YCLASS_CODEGEN` block. The two never
- * coexist in one parse. */
-#ifdef YCLASS_CODEGEN
+/* Header-destined menu-item callback typedef: authored once and `expose`d so
+ * codegen reproduces it in the generated header (before the exposed functions
+ * that take it). */
+[[clang::annotate("expose")]]
 typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_ctx *ctx,
                                                                   struct yetty_yclass_object *menu,
                                                                   int item_index, void *userdata);
-#endif
-#ifndef YCLASS_CODEGEN
-typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_ctx *ctx,
-                                                                  struct yetty_yclass_object *menu,
-                                                                  int item_index, void *userdata);
-#endif
 
 /* Forward declarations of this TU's own exposed helpers that are called
  * before their definitions below (the generated header — which this TU no

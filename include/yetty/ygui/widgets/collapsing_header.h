@@ -12,14 +12,23 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
+struct yetty_yclass_object;
+
+struct yetty_ygui_collapsing_header;
+
+struct yetty_ygui_collapsing_header_ptr_result {
+    int ok;
+    union {
+        struct yetty_ygui_collapsing_header *value;
+        struct yetty_ycore_error error;
+    };
+};
+
 struct yetty_yclass_ptr_result yetty_ygui_collapsing_header_class_get(void);
 
-/* Data-block handle — opaque outside the owning .c. The struct
- * stays private; only its pointer crosses here, in a Result so a
- * bad object surfaces rather than corrupting. Reach members
+/* Data-block accessors. The data struct stays private (only a
+ * forward declaration crosses into the header); reach members
  * through the per-property getters/setters below. */
-struct yetty_ygui_collapsing_header;
-YETTY_YRESULT_DECLARE(yetty_ygui_collapsing_header_ptr, struct yetty_ygui_collapsing_header *);
 struct yetty_ygui_collapsing_header_ptr_result yetty_ygui_collapsing_header_from(
     struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_ygui_collapsing_header_to(

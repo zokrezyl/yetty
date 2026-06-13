@@ -12,14 +12,25 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
+struct yetty_ygui_tabbar;
+
+typedef void (*yetty_ygui_tab_close_cb)(struct yetty_yclass_object *, int, void *);
+
+typedef void (*yetty_ygui_tab_new_cb)(struct yetty_yclass_object *, void *);
+
+struct yetty_ygui_tabbar_ptr_result {
+    int ok;
+    union {
+        struct yetty_ygui_tabbar *value;
+        struct yetty_ycore_error error;
+    };
+};
+
 struct yetty_yclass_ptr_result yetty_ygui_tabbar_class_get(void);
 
-/* Data-block handle — opaque outside the owning .c. The struct
- * stays private; only its pointer crosses here, in a Result so a
- * bad object surfaces rather than corrupting. Reach members
+/* Data-block accessors. The data struct stays private (only a
+ * forward declaration crosses into the header); reach members
  * through the per-property getters/setters below. */
-struct yetty_ygui_tabbar;
-YETTY_YRESULT_DECLARE(yetty_ygui_tabbar_ptr, struct yetty_ygui_tabbar *);
 struct yetty_ygui_tabbar_ptr_result yetty_ygui_tabbar_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_ygui_tabbar_to(struct yetty_ygui_tabbar *data);
 
@@ -27,10 +38,6 @@ struct yetty_yclass_object_ptr_result yetty_ygui_tabbar_create(struct yetty_ycla
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_yclass_object;
-typedef void (*yetty_ygui_tab_close_cb)(struct yetty_yclass_object *tabbar, int index,
-                                        void *userdata);
-typedef void (*yetty_ygui_tab_new_cb)(struct yetty_yclass_object *tabbar, void *userdata);
 struct yetty_yclass_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_yclass_object *tabbar,
                                                                 const char *label);
 struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_yclass_object *tabbar,

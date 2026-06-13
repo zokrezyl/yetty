@@ -1,6 +1,7 @@
 #include <yetty/yframework/yframework.h>
 #include <yetty/yvterm/text-layer.h>
 #include <yetty/yvterm/text-scrollback.h>
+#include <yetty/yvterm/shader-glyph-codepoint.h>
 #include <yetty/yvterm/shader-glyph-figure.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yfont/ms-font.h>

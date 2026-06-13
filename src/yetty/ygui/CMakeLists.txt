@@ -84,8 +84,6 @@ set(YGUI_SOURCES
     layout.c
     theme.c
     ${YGUI_ANNOTATED}
-    methods.gen.c
-    rpc.gen.c
 )
 
 add_library(yetty_ygui STATIC ${YGUI_SOURCES})

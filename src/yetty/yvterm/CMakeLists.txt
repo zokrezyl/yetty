@@ -9,8 +9,6 @@ add_library(yetty_yvterm
     ydraw-content.c
     shader-glyph-figure.c
     osc-args.c
-    methods.gen.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_yvterm BEFORE PUBLIC

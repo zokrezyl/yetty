@@ -2,6 +2,18 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stddef.h> /* NULL, size_t */
+/* The folded-in public stubs, rpc skeletons + create() and the
+ * registration hooks (formerly methods.gen.c / rpc.gen.c) need
+ * these. All header-guarded, so re-including what the hand-written
+ * .c already pulled in is harmless; the class's OWN header is
+ * still never included (that would redefine its expose'd types). */
+#include <yetty/yclass/class.h>
+#include <yetty/yclass/rpc.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h> /* malloc/free for buffer-arg marshalling */
+#include <string.h>
 
 struct yetty_ycore_int_result;
 struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_ctx *ctx,
@@ -15,6 +27,8 @@ typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct ye
                                                                        float, float, int);
 typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_release_fn)(
     struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, int);
+
+/* ===== class accessors ===== */
 
 [[maybe_unused]]
 static yetty_ygui_widget_on_press_fn yetty_ygui_clickable_yetty_ygui_widget_on_press_check =
@@ -68,4 +82,24 @@ struct yetty_ygui_clickable_ptr_result yetty_ygui_clickable_from(struct yetty_yc
                          slice_r);
     }
     return YETTY_OK(yetty_ygui_clickable_ptr, (struct yetty_ygui_clickable *)slice_r.value);
+}
+
+/* ===== rpc skeletons + create (was rpc.gen.c) ===== */
+
+/* ---- ygui/clickable: class name -> accessor ---------------------- */
+static struct yetty_yclass_ptr_result yetty_ygui_clickable_accessor_lookup(const char *name)
+{
+    if (strcmp(name, "yetty_ygui_clickable") == 0) {
+        return yetty_ygui_clickable_mixin_get();
+    }
+    return YETTY_OK(yetty_yclass_ptr, NULL);
+}
+
+struct yetty_ycore_void_result yetty_ygui_clickable_register_hooks(void)
+{
+    struct yetty_ycore_void_result add_accessor_r =
+        yetty_yclass_add_accessor_lookup(yetty_ygui_clickable_accessor_lookup);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_accessor_r,
+                        "yetty_ygui_clickable_register_hooks: accessor");
+    return YETTY_OK_VOID();
 }

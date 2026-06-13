@@ -17,23 +17,12 @@
 #include "../internal.h"
 #include <yetty/ygui/widget.h>
 
-/* The click callback typedef is header-destined: codegen copies the
- * `#ifdef YCLASS_CODEGEN` block verbatim into the generated header. The
- * real build no longer pulls that generated header in, so it gets its own
- * copy from the separate `#ifndef YCLASS_CODEGEN` block. The two never
- * coexist in one parse. (They are kept as two independent blocks rather
- * than one `#ifdef/#else` — the verbatim-block extractor only understands
- * a plain `#ifdef YCLASS_CODEGEN … #endif`.) */
-#ifdef YCLASS_CODEGEN
+/* Header-destined callback typedef: authored once and `expose`d so codegen
+ * reproduces it in the generated header for other modules. */
+[[clang::annotate("expose")]]
 typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_ctx *ctx,
                                                               struct yetty_yclass_object *obj,
                                                               void *userdata);
-#endif
-#ifndef YCLASS_CODEGEN
-typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj,
-                                                              void *userdata);
-#endif
 
 struct [[clang::annotate("mixin@ygui:clickable")]] yetty_ygui_clickable {
     int pressed;

@@ -11,8 +11,6 @@
 
 add_library(yetty_ycircuit STATIC
     circuit.c
-    methods.gen.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_ycircuit PUBLIC

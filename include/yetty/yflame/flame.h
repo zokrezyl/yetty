@@ -11,21 +11,32 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ydraw-core/drawable-list.h>
+
+struct yetty_yflame_flame;
+
+struct yetty_yflame_flame_ptr_result {
+    int ok;
+    union {
+        struct yetty_yflame_flame *value;
+        struct yetty_ycore_error error;
+    };
+};
+
+enum yetty_yflame_constant {
+    YETTY_YFLAME_FLAG_LABELS = 1,
+    YETTY_YFLAME_FLAG_ICICLE = 2,
+    YETTY_YFLAME_HIT_UP = -2,
+    YETTY_YFLAME_HIT_ROOT = -3,
+};
 
 struct yetty_yclass_ptr_result yetty_yflame_flame_class_get(void);
 
-/* Data-block handle — opaque outside the owning .c. The struct
- * stays private; only its pointer crosses here, in a Result so a
- * bad object surfaces rather than corrupting. Reach members
+/* Data-block accessors. The data struct stays private (only a
+ * forward declaration crosses into the header); reach members
  * through the per-property getters/setters below. */
-struct yetty_yflame_flame;
-YETTY_YRESULT_DECLARE(yetty_yflame_flame_ptr, struct yetty_yflame_flame *);
 struct yetty_yflame_flame_ptr_result yetty_yflame_flame_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yflame_flame_to(struct yetty_yflame_flame *data);
-
-struct yetty_ycore_int_result;
-struct yetty_ycore_void_result;
-struct yetty_ydraw_drawable_list_result;
 
 struct yetty_ycore_void_result yetty_yflame_configure(struct yetty_yclass_ctx *ctx,
                                                       struct yetty_yclass_object *obj, float width,
@@ -78,19 +89,6 @@ struct yetty_yclass_object_ptr_result yetty_yflame_flame_create(struct yetty_ycl
 
 struct yetty_ycore_void_result yetty_yflame_register(void);
 
-struct yetty_ydraw_drawable_list;
-
-/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated flame.h (and the dispatch TU that includes it) needs the complete
- * type — pull its defining header into the public header. */
-#include <yetty/ydraw-core/drawable-list.h>
-/* Public flags — copied verbatim into the generated flame.h. */
-#define YETTY_YFLAME_FLAG_LABELS 0x1u /* draw truncated frame-name labels */
-#define YETTY_YFLAME_FLAG_ICICLE 0x2u /* root at top, growing down (vs flame: bottom-up) */
-/* hit_test returns these (in place of a node id) when a navigation button is
- * under the point: the caller should focus the parent / reset to root. */
-#define YETTY_YFLAME_HIT_UP (-2)
-#define YETTY_YFLAME_HIT_ROOT (-3)
 struct yetty_ycore_void_result yetty_yflame_emit_osc(const struct yetty_ydraw_drawable_list *list,
                                                      int fd);
 

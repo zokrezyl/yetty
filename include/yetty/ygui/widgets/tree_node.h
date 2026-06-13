@@ -11,15 +11,25 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ygui/mixins/clickable.h>
+
+struct yetty_yclass_object;
+
+struct yetty_ygui_tree_node;
+
+struct yetty_ygui_tree_node_ptr_result {
+    int ok;
+    union {
+        struct yetty_ygui_tree_node *value;
+        struct yetty_ycore_error error;
+    };
+};
 
 struct yetty_yclass_ptr_result yetty_ygui_tree_node_class_get(void);
 
-/* Data-block handle — opaque outside the owning .c. The struct
- * stays private; only its pointer crosses here, in a Result so a
- * bad object surfaces rather than corrupting. Reach members
+/* Data-block accessors. The data struct stays private (only a
+ * forward declaration crosses into the header); reach members
  * through the per-property getters/setters below. */
-struct yetty_ygui_tree_node;
-YETTY_YRESULT_DECLARE(yetty_ygui_tree_node_ptr, struct yetty_ygui_tree_node *);
 struct yetty_ygui_tree_node_ptr_result yetty_ygui_tree_node_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_ygui_tree_node_to(struct yetty_ygui_tree_node *data);
 

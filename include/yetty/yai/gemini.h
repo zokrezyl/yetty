@@ -12,14 +12,21 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
+struct yetty_yai_gemini;
+
+struct yetty_yai_gemini_ptr_result {
+    int ok;
+    union {
+        struct yetty_yai_gemini *value;
+        struct yetty_ycore_error error;
+    };
+};
+
 struct yetty_yclass_ptr_result yetty_yai_gemini_class_get(void);
 
-/* Data-block handle — opaque outside the owning .c. The struct
- * stays private; only its pointer crosses here, in a Result so a
- * bad object surfaces rather than corrupting. Reach members
+/* Data-block accessors. The data struct stays private (only a
+ * forward declaration crosses into the header); reach members
  * through the per-property getters/setters below. */
-struct yetty_yai_gemini;
-YETTY_YRESULT_DECLARE(yetty_yai_gemini_ptr, struct yetty_yai_gemini *);
 struct yetty_yai_gemini_ptr_result yetty_yai_gemini_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yai_gemini_to(struct yetty_yai_gemini *data);
 

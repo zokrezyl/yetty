@@ -12,21 +12,28 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
+struct yetty_ygui_clickable;
+
+struct yetty_ygui_clickable_ptr_result {
+    int ok;
+    union {
+        struct yetty_ygui_clickable *value;
+        struct yetty_ycore_error error;
+    };
+};
+
+typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_ctx *,
+                                                              struct yetty_yclass_object *, void *);
+
 struct yetty_yclass_ptr_result yetty_ygui_clickable_mixin_get(void);
 
-/* Data-block handle — opaque outside the owning .c. The struct
- * stays private; only its pointer crosses here, in a Result so a
- * bad object surfaces rather than corrupting. Reach members
+/* Data-block accessors. The data struct stays private (only a
+ * forward declaration crosses into the header); reach members
  * through the per-property getters/setters below. */
-struct yetty_ygui_clickable;
-YETTY_YRESULT_DECLARE(yetty_ygui_clickable_ptr, struct yetty_ygui_clickable *);
 struct yetty_ygui_clickable_ptr_result yetty_ygui_clickable_from(struct yetty_yclass_object *obj);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj,
-                                                              void *userdata);
 struct yetty_ycore_void_result yetty_ygui_clickable_on_click_set(struct yetty_yclass_object *obj,
                                                                  yetty_ygui_click_cb cb,
                                                                  void *userdata);

@@ -73,7 +73,6 @@ add_library(yetty_yplatform_core STATIC
     # GLFW impl (window-manager.c) is desktop-only, but yui calls these stub
     # symbols on every platform, so they must link everywhere (they early-return
     # on the NULL object that non-desktop platforms always have).
-    methods.gen.c
     ${_core_per_os}
 )
 

@@ -1,7 +1,5 @@
 add_library(yetty_ygrid STATIC
     grid.c
-    methods.gen.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_ygrid PUBLIC

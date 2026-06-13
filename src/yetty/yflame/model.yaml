@@ -193,17 +193,22 @@ classes:
         impl: flame_obj_destroy
 exposed:
   - source_file: src/yetty/yflame/flame.c
-    verbatim: "/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated flame.h (and the dispatch TU that includes it) needs the complete
- * type — pull its defining header into the public header. */
-#include <yetty/ydraw-core/drawable-list.h>
-/* Public flags — copied verbatim into the generated flame.h. */
-#define YETTY_YFLAME_FLAG_LABELS 0x1u /* draw truncated frame-name labels */
-#define YETTY_YFLAME_FLAG_ICICLE 0x2u /* root at top, growing down (vs flame: bottom-up) */
-/* hit_test returns these (in place of a node id) when a navigation button is
- * under the point: the caller should focus the parent / reset to root. */
-#define YETTY_YFLAME_HIT_UP (-2)
-#define YETTY_YFLAME_HIT_ROOT (-3)"
+    type_text: struct yetty_yflame_flame;
+  - source_file: src/yetty/yflame/flame.c
+    type_text: "struct yetty_yflame_flame_ptr_result {
+    int ok;
+    union {
+        struct yetty_yflame_flame * value;
+        struct yetty_ycore_error error;
+    };
+};"
+  - source_file: src/yetty/yflame/flame.c
+    type_text: "enum yetty_yflame_constant {
+    YETTY_YFLAME_FLAG_LABELS = 1,
+    YETTY_YFLAME_FLAG_ICICLE = 2,
+    YETTY_YFLAME_HIT_UP = -2,
+    YETTY_YFLAME_HIT_ROOT = -3,
+};"
   - source_file: src/yetty/yflame/flame.c
     name: yetty_yflame_emit_osc
     return_type: struct yetty_ycore_void_result

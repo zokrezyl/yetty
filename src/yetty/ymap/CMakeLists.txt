@@ -20,8 +20,6 @@
 
 add_library(yetty_ymap STATIC
     map.c
-    methods.gen.c
-    rpc.gen.c
     engine.c
     tile-fetch.c
     vector-tile.c

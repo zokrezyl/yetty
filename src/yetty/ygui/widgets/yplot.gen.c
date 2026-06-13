@@ -3,6 +3,18 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stddef.h> /* NULL, size_t */
+/* The folded-in public stubs, rpc skeletons + create() and the
+ * registration hooks (formerly methods.gen.c / rpc.gen.c) need
+ * these. All header-guarded, so re-including what the hand-written
+ * .c already pulled in is harmless; the class's OWN header is
+ * still never included (that would redefine its expose'd types). */
+#include <yetty/yclass/class.h>
+#include <yetty/yclass/rpc.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h> /* malloc/free for buffer-arg marshalling */
+#include <string.h>
 
 struct yetty_ycore_void_result;
 struct yetty_ygui_emit_ctx;
@@ -24,6 +36,8 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_container_fn)(
     struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(
     struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
+
+/* ===== class accessors ===== */
 
 [[maybe_unused]]
 static yetty_ygui_constructor_fn yetty_ygui_yplot_yetty_ygui_constructor_check = yplot_constructor;
@@ -108,4 +122,100 @@ struct yetty_yclass_object *yetty_ygui_yplot_to(struct yetty_ygui_yplot *data)
         return NULL;
     }
     return (struct yetty_yclass_object *)((char *)data - offset_r.value);
+}
+
+/* ===== rpc skeletons + create (was rpc.gen.c) ===== */
+
+struct yetty_yclass_object_ptr_result yetty_ygui_yplot_create(struct yetty_yclass_ctx *ctx)
+{
+    ydebug("class=yetty_ygui_yplot");
+    /* Touch the local accessor first — registers the class's slots in
+     * slot_table so subsequent name→local-slot lookups succeed.
+     * Without this, translate_class on a fresh remote-only session
+     * would have no local slots to map remote ids onto. */
+    struct yetty_yclass_ptr_result class_accessor_r = yetty_ygui_yplot_class_get();
+    if (YETTY_IS_ERR(class_accessor_r)) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_yplot_create: class accessor failed",
+                         class_accessor_r);
+    }
+    const struct yetty_yclass *klass = class_accessor_r.value;
+
+    if (!ctx || !ctx->session) {
+        struct yetty_yclass_object_ptr_result alloc_r = yetty_yclass_object_alloc(klass);
+        if (YETTY_IS_ERR(alloc_r)) {
+            return alloc_r;
+        }
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        if (YETTY_IS_ERR(ctor_r)) {
+            struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
+            if (YETTY_IS_ERR(free_r)) {
+                yetty_ycore_error_destroy(free_r.error);
+            }
+            return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_yplot_create: constructor failed",
+                             ctor_r);
+        }
+        return alloc_r;
+    }
+
+    /* Prefetch the class's local-id ↔ remote-id mapping. Not fatal
+     * if it fails (the per-slot ensure_remote_id fallback can still
+     * resolve ids on demand), but log so a malformed GET_CLASS
+     * response isn't silently swallowed. */
+    {
+        struct yetty_ycore_void_result translate_class_r =
+            yetty_yclass_rpc_session_translate_class(ctx->session, "yetty_ygui_yplot");
+        if (YETTY_IS_ERR(translate_class_r)) {
+            yetty_ycore_error_print(
+                stderr, "yetty_ygui_yplot_create: translate_class (degraded — will lazy-resolve)",
+                translate_class_r.error);
+            yetty_ycore_error_destroy(translate_class_r.error);
+        }
+    }
+
+    uint64_t handle = 0;
+    const char *class_name = "yetty_ygui_yplot";
+    struct yetty_ycore_size_result create_call_r =
+        yetty_yclass_rpc_call(ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, class_name,
+                              strlen(class_name), &handle, sizeof(handle));
+    if (YETTY_IS_ERR(create_call_r)) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_yplot_create: CREATE call failed",
+                         create_call_r);
+    }
+    if (create_call_r.value != sizeof(handle) || !handle) {
+        return YETTY_ERR(yetty_yclass_object_ptr,
+                         "yetty_ygui_yplot_create: CREATE returned no/invalid handle");
+    }
+
+    /* Proxy: aligned (header + uint64_t) layout. Allocating raw bytes
+     * and writing the handle past the header was misaligned on 32-bit
+     * ABIs where sizeof(struct yetty_yclass_object) == 4. The proxy
+     * struct in <yetty/yclass/class.h> uses natural alignment for both
+     * fields. The class accessor is the same on both sides — proxies
+     * never local-dispatch, so the class's data_size contract isn't
+     * honoured for this allocation. */
+    struct yetty_yclass_proxy *proxy = calloc(1, sizeof(*proxy));
+    if (!proxy) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_yplot_create: calloc(proxy) failed");
+    }
+    proxy->header.klass = klass;
+    proxy->handle = handle;
+    return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
+}
+
+/* ---- ygui/yplot: class name -> accessor ---------------------- */
+static struct yetty_yclass_ptr_result yetty_ygui_yplot_accessor_lookup(const char *name)
+{
+    if (strcmp(name, "yetty_ygui_yplot") == 0) {
+        return yetty_ygui_yplot_class_get();
+    }
+    return YETTY_OK(yetty_yclass_ptr, NULL);
+}
+
+struct yetty_ycore_void_result yetty_ygui_yplot_register_hooks(void)
+{
+    struct yetty_ycore_void_result add_accessor_r =
+        yetty_yclass_add_accessor_lookup(yetty_ygui_yplot_accessor_lookup);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_accessor_r,
+                        "yetty_ygui_yplot_register_hooks: accessor");
+    return YETTY_OK_VOID();
 }

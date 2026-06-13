@@ -263,6 +263,12 @@ struct yetty_ycore_void_result yetty_ygui_widget_scroll_main_set(struct yetty_yc
                                                                  float offset);
 float yetty_ygui_widget_scroll_main_get(const struct yetty_yclass_object *obj);
 
+/* Flex layout pass — recompute the absolute rects of `root` and its
+ * descendants within `root_rect`. Driven by the framework after any change;
+ * not part of the cross-module public API. Internal. */
+struct yetty_ycore_void_result yetty_ygui_layout_compute(struct yetty_yclass_object *root,
+                                                         struct yetty_ycore_rectangle root_rect);
+
 #ifdef __cplusplus
 }
 #endif

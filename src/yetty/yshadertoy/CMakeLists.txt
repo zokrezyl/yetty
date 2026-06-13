@@ -14,8 +14,6 @@
 
 add_library(yetty_yshadertoy STATIC
     figure.c
-    methods.gen.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_yshadertoy PUBLIC

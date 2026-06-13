@@ -48,23 +48,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef YCLASS_CODEGEN
-/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated music.h (and the dispatch TU that includes it) needs the complete
- * type — pull its defining header into the public header. */
-#include <yetty/ydraw-core/drawable-list.h>
-/* Public constants — copied verbatim into the generated music.h. */
-#define YETTY_YMUSIC_NO_ELEMENT (-1) /* hit_test: no element under the point */
-#define YETTY_YMUSIC_FLAG_NONE 0x0u  /* reserved render flags */
-#endif
-
-#ifndef YCLASS_CODEGEN
-/* Same public constants, defined for the real build of this TU (which no
- * longer includes music.h). The codegen block above re-emits them into the
- * generated public header for consumers. */
-#define YETTY_YMUSIC_NO_ELEMENT (-1) /* hit_test: no element under the point */
-#define YETTY_YMUSIC_FLAG_NONE 0x0u  /* reserved render flags */
-#endif
+/* Header-destined public constants — an `expose`d enum so codegen reproduces
+ * them in the generated music.h for consumers (replaces the old #define +
+ * verbatim-block hack). */
+enum [[clang::annotate("expose")]] yetty_ymusic_constant {
+    YETTY_YMUSIC_NO_ELEMENT = -1, /* hit_test: no element under the point */
+    YETTY_YMUSIC_FLAG_NONE = 0,   /* reserved render flags */
+};
 
 enum {
     YMUSIC_DEFAULT_WIDTH = 1200,

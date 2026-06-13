@@ -8,8 +8,6 @@
 
 add_library(yetty_yflame STATIC
     flame.c
-    methods.gen.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_yflame PUBLIC

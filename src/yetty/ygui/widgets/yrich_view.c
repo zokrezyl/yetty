@@ -42,13 +42,6 @@ struct yetty_ygui_yrich_view_ptr_result yetty_ygui_yrich_view_from(struct yetty_
 #include <stdint.h>
 #include <string.h>
 
-#ifdef YCLASS_CODEGEN
-/* Header-destined: the exposed prototypes below take yrich document/key
- * types, so the generated header must pull these in. */
-#include <yetty/yrich/yrich-document.h>
-#include <yetty/yrich/yrich-types.h>
-#endif
-
 /* Fallback text/page colours (brand off-white on a lifted surface) used
  * when no engine theme is reachable yet. Packed 0xAABBGGRR, matching the
  * theme + yrich colour convention. */

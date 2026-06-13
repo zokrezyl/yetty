@@ -298,6 +298,17 @@ classes:
       - slot: set_content_size
         slot_domain: yfigure
         impl: yetty_ygrid_grid_set_content_size_impl
+exposed:
+  - source_file: src/yetty/ygrid/grid.c
+    type_text: struct yetty_ygrid_grid;
+  - source_file: src/yetty/ygrid/grid.c
+    type_text: "struct yetty_ygrid_grid_ptr_result {
+    int ok;
+    union {
+        struct yetty_ygrid_grid * value;
+        struct yetty_ycore_error error;
+    };
+};"
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

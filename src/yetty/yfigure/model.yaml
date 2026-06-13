@@ -284,6 +284,26 @@ classes:
         impl: yetty_yfigure_figure_default_set_content_size
 exposed:
   - source_file: src/yetty/yfigure/container.c
+    type_text: struct yetty_yfigure_container;
+  - source_file: src/yetty/yfigure/figure.c
+    type_text: struct yetty_yfigure_figure;
+  - source_file: src/yetty/yfigure/container.c
+    type_text: "struct yetty_yfigure_container_ptr_result {
+    int ok;
+    union {
+        struct yetty_yfigure_container * value;
+        struct yetty_ycore_error error;
+    };
+};"
+  - source_file: src/yetty/yfigure/figure.c
+    type_text: "struct yetty_yfigure_figure_ptr_result {
+    int ok;
+    union {
+        struct yetty_yfigure_figure * value;
+        struct yetty_ycore_error error;
+    };
+};"
+  - source_file: src/yetty/yfigure/container.c
     type_text: "struct yetty_yfigure_hit {
     uint32_t figure_id;
     float local_x;

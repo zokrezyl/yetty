@@ -280,9 +280,15 @@ classes:
         impl: map_destroy
 exposed:
   - source_file: src/yetty/ymap/map.c
-    verbatim: "/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated map.h needs the complete type. */
-#include <yetty/ydraw-core/drawable-list.h>"
+    type_text: struct yetty_ymap_map;
+  - source_file: src/yetty/ymap/map.c
+    type_text: "struct yetty_ymap_map_ptr_result {
+    int ok;
+    union {
+        struct yetty_ymap_map * value;
+        struct yetty_ycore_error error;
+    };
+};"
   - source_file: src/yetty/ymap/map.c
     name: yetty_ymap_provider_count
     return_type: uint32_t

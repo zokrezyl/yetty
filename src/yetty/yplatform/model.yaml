@@ -215,6 +215,17 @@ classes:
       - slot: window_manager_handle_event
         slot_domain: yplatform
         impl: window_manager_handle_event
+exposed:
+  - source_file: src/yetty/yplatform/window-manager.c
+    type_text: struct yetty_yplatform_window_manager;
+  - source_file: src/yetty/yplatform/window-manager.c
+    type_text: "struct yetty_yplatform_window_manager_ptr_result {
+    int ok;
+    union {
+        struct yetty_yplatform_window_manager * value;
+        struct yetty_ycore_error error;
+    };
+};"
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

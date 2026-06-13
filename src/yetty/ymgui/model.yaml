@@ -86,6 +86,16 @@ classes:
         impl: ymgui_figure_process_bytes_slot
 exposed:
   - source_file: src/yetty/ymgui/figure.c
+    type_text: struct yetty_ymgui_figure;
+  - source_file: src/yetty/ymgui/figure.c
+    type_text: "struct yetty_ymgui_figure_ptr_result {
+    int ok;
+    union {
+        struct yetty_ymgui_figure * value;
+        struct yetty_ycore_error error;
+    };
+};"
+  - source_file: src/yetty/ymgui/figure.c
     type_text: "struct yetty_ymgui_factory_args {
     const struct yetty_context * context;
     struct yetty_ymgui_pipeline * pipeline;

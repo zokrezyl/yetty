@@ -25,8 +25,6 @@ add_executable(yai
     editor.c
     editor-emacs.c
     editor-vi.c
-    methods.gen.c
-    rpc.gen.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
 )
 

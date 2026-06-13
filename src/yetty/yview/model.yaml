@@ -215,6 +215,17 @@ classes:
       - slot: destroy
         slot_domain: yview
         impl: view_destroy
+exposed:
+  - source_file: src/yetty/yview/view.c
+    type_text: struct yetty_yview_view;
+  - source_file: src/yetty/yview/view.c
+    type_text: "struct yetty_yview_view_ptr_result {
+    int ok;
+    union {
+        struct yetty_yview_view * value;
+        struct yetty_ycore_error error;
+    };
+};"
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

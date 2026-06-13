@@ -132,15 +132,14 @@ endif()
 # cursor). Its own static lib (like move_resize above) so the GLFW dependency
 # and the C23 `[[clang::annotate]]` codegen attributes stay scoped to this TU
 # set instead of leaking into the main exec's source list. window-manager.gen.c
-# is #included at the foot of window-manager.c; methods.gen.c / rpc.gen.c are
-# separate codegen TUs.
+# (method stubs + rpc skeletons + create/register, consolidated) is #included
+# at the foot of window-manager.c.
 if(NOT TARGET yetty_yplatform_window_manager)
-    # methods.gen.c (the platform-independent method stubs) lives in
-    # yetty_yplatform_core so it links on every platform; here we only build the
-    # GLFW impl + the create/register (rpc.gen.c) that need a real window.
+    # window-manager.c #includes window-manager.gen.c at its foot, which now
+    # carries the method stubs, rpc skeletons, create() and registration. The
+    # whole class — GLFW impl included — builds as this one desktop-only TU.
     add_library(yetty_yplatform_window_manager STATIC
-        ${YETTY_ROOT}/src/yetty/yplatform/window-manager.c
-        ${YETTY_ROOT}/src/yetty/yplatform/rpc.gen.c)
+        ${YETTY_ROOT}/src/yetty/yplatform/window-manager.c)
     target_include_directories(yetty_yplatform_window_manager
         PUBLIC ${YETTY_ROOT}/include
         PRIVATE ${YETTY_ROOT}/src)

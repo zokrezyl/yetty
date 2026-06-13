@@ -3,8 +3,6 @@ add_library(yetty_yfigure STATIC
     figure.c
     producer.c
     registry.c
-    methods.gen.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_yfigure PUBLIC

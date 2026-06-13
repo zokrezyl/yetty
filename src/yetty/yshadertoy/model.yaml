@@ -83,6 +83,16 @@ classes:
         impl: figure_process_bytes_slot
 exposed:
   - source_file: src/yetty/yshadertoy/figure.c
+    type_text: struct yetty_yshadertoy_figure;
+  - source_file: src/yetty/yshadertoy/figure.c
+    type_text: "struct yetty_yshadertoy_figure_ptr_result {
+    int ok;
+    union {
+        struct yetty_yshadertoy_figure * value;
+        struct yetty_ycore_error error;
+    };
+};"
+  - source_file: src/yetty/yshadertoy/figure.c
     name: yetty_yshadertoy_create
     return_type: struct yetty_yclass_object_ptr_result
     args:

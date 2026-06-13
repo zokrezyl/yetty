@@ -44,12 +44,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef YCLASS_CODEGEN
-/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated map.h needs the complete type. */
-#include <yetty/ydraw-core/drawable-list.h>
-#endif
-
 /* Viewport sanity bounds (the engine enforces its own as well). */
 enum {
     YMAP_MIN_VIEWPORT_PX = 64,

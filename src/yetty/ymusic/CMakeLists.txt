@@ -10,8 +10,6 @@
 
 add_library(yetty_ymusic STATIC
     music.c
-    methods.gen.c
-    rpc.gen.c
 )
 
 target_include_directories(yetty_ymusic PUBLIC

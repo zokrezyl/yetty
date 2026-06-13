@@ -414,6 +414,87 @@ classes:
       - slot: interrupt
         slot_domain: yai
         impl: turn_engine_interrupt
+exposed:
+  - source_file: tools/ai/yai/claude.c
+    type_text: struct yetty_yai_claude;
+  - source_file: tools/ai/yai/codex.c
+    type_text: struct yetty_yai_codex;
+  - source_file: tools/ai/yai/editor.c
+    type_text: struct yetty_yai_editor;
+  - source_file: tools/ai/yai/editor-emacs.c
+    type_text: struct yetty_yai_emacs;
+  - source_file: tools/ai/yai/engine.c
+    type_text: struct yetty_yai_engine;
+  - source_file: tools/ai/yai/gemini.c
+    type_text: struct yetty_yai_gemini;
+  - source_file: tools/ai/yai/turn-engine.c
+    type_text: struct yetty_yai_turn_engine;
+  - source_file: tools/ai/yai/editor-vi.c
+    type_text: struct yetty_yai_vi;
+  - source_file: tools/ai/yai/claude.c
+    type_text: "struct yetty_yai_claude_ptr_result {
+    int ok;
+    union {
+        struct yetty_yai_claude * value;
+        struct yetty_ycore_error error;
+    };
+};"
+  - source_file: tools/ai/yai/codex.c
+    type_text: "struct yetty_yai_codex_ptr_result {
+    int ok;
+    union {
+        struct yetty_yai_codex * value;
+        struct yetty_ycore_error error;
+    };
+};"
+  - source_file: tools/ai/yai/editor.c
+    type_text: "struct yetty_yai_editor_ptr_result {
+    int ok;
+    union {
+        struct yetty_yai_editor * value;
+        struct yetty_ycore_error error;
+    };
+};"
+  - source_file: tools/ai/yai/editor-emacs.c
+    type_text: "struct yetty_yai_emacs_ptr_result {
+    int ok;
+    union {
+        struct yetty_yai_emacs * value;
+        struct yetty_ycore_error error;
+    };
+};"
+  - source_file: tools/ai/yai/engine.c
+    type_text: "struct yetty_yai_engine_ptr_result {
+    int ok;
+    union {
+        struct yetty_yai_engine * value;
+        struct yetty_ycore_error error;
+    };
+};"
+  - source_file: tools/ai/yai/gemini.c
+    type_text: "struct yetty_yai_gemini_ptr_result {
+    int ok;
+    union {
+        struct yetty_yai_gemini * value;
+        struct yetty_ycore_error error;
+    };
+};"
+  - source_file: tools/ai/yai/turn-engine.c
+    type_text: "struct yetty_yai_turn_engine_ptr_result {
+    int ok;
+    union {
+        struct yetty_yai_turn_engine * value;
+        struct yetty_ycore_error error;
+    };
+};"
+  - source_file: tools/ai/yai/editor-vi.c
+    type_text: "struct yetty_yai_vi_ptr_result {
+    int ok;
+    union {
+        struct yetty_yai_vi * value;
+        struct yetty_ycore_error error;
+    };
+};"
 types:
   - name: yai_tool_name_entry
     kind: struct
