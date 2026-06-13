@@ -67,6 +67,17 @@ from pathlib import Path
 
 HEADER = "/* GENERATED — do not edit. */\n"
 
+# The two facts the result framework's macros fix, mirrored here so the codegen
+# can speak their contract — not arbitrary hardcoding:
+#   YETTY_YRESULT_DECLARE(<id>, <value_type>)  ->  struct <id>_result
+#   YETTY_OK(<id>, v) / YETTY_ERR(<id>, …)     take the bare <id>
+# RESULT_STRUCT_SUFFIX is how a struct tag and a macro id relate; VOID_RESULT_ID
+# is the one result with no payload (its YETTY_YRESULT_DECLARE wraps a dummy
+# int, so it is structurally identical to the int result — the name is the only
+# signal, and it is already used verbatim throughout this file).
+RESULT_STRUCT_SUFFIX = "_result"
+VOID_RESULT_ID = "yetty_ycore_void"
+
 logging.basicConfig(
     level=getattr(logging, os.environ.get("YCLASS_CODEGEN_LOGLEVEL", "WARNING").upper(),
                   logging.WARNING),
@@ -97,50 +108,47 @@ def slot_table_qname(domain: str, name: str) -> str:
     return f"yetty_{domain}_{name}"
 
 
-def result_type_id(ret: str) -> str:
-    """Map an impl's return type to the YETTY_YRESULT_DECLARE identifier.
-    Every impl now returns a Result, so the canonical input here is a
-    `struct <id>_result` — we peel `_result` off. Raw scalar / pointer
-    inputs are still accepted (handy for tests), in which case the id
-    is the conventional one (yetty_ycore_int, yetty_ycore_void, …).
-    Identifiers used here MUST exist (be declared via
-    YETTY_YRESULT_DECLARE somewhere visible to the .gen.c)."""
+def _result_tag_for_value(value_type: str, results: dict) -> str:
+    """The `struct <tag>` result clang declared over `value_type` — used when a
+    property field / non-Result type needs its result form. The tag comes
+    straight from the parsed AST (build_result_value_maps); nothing is
+    reconstructed. Errors loudly if no result wraps the type."""
+    v = re.sub(r"\s+", " ", value_type.strip())
+    tag = results["tag_by_value"].get(v)
+    if tag:
+        return tag
+    sys.stderr.write(
+        f"error: no YETTY_YRESULT_DECLARE wraps value type '{v}', so its result "
+        f"type cannot be named. Declare YETTY_YRESULT_DECLARE(<id>, {v}) where "
+        f"the module's sources can see it.\n")
+    sys.exit(1)
+
+
+def _is_result_type(c_type: str) -> bool:
+    """True if `c_type` is already a `struct <id>_result`."""
+    return bool(re.match(rf"^struct\s+\w+{re.escape(RESULT_STRUCT_SUFFIX)}\s*$",
+                         c_type.strip()))
+
+
+def result_type_id(ret: str, results: dict) -> str:
+    """The bare identifier YETTY_OK / YETTY_ERR take for this type — i.e. the
+    result struct tag without its suffix. `struct <id>_result` yields `<id>`
+    directly; a raw value/pointer type resolves through the AST-derived tag
+    (build_result_value_maps). No hardcoded name table."""
     r = ret.strip()
-    m = re.match(r"^struct\s+(\w+)_result\s*$", r)
-    if m:
-        return m.group(1)
-    if r == "void":
-        return "yetty_ycore_void"
-    if r in ("int", "int32_t"):
-        # int holds an int32_t value, so the read accessor reports both
-        # through the shared yetty_ycore_int result (the setter still takes
-        # the field's own width).
-        return "yetty_ycore_int"
-    if r == "size_t":
-        return "yetty_ycore_size"
-    if r == "uint32_t":
-        return "uint32"
-    m = re.match(r"^struct\s+(\w+)\s*\*\s*$", r)
-    if m:
-        return f"{m.group(1)}_ptr"
-    m = re.match(r"^struct\s+(\w+)\s*$", r)
-    if m:
-        # A few ycore struct result types drop the `yetty_ycore_` namespace
-        # in their YETTY_YRESULT_DECLARE name (see ycore/types.h); map them
-        # so the generic struct→result rule resolves to the real symbol.
-        struct_result_overrides = {
-            "yetty_ycore_rectangle": "rectangle",
-            "yetty_ycore_pixel_size": "pixel_size",
-            "yetty_ycore_pixel_coord": "pixel_coord",
-        }
-        name = m.group(1)
-        return struct_result_overrides.get(name, name)
-    return r
+    m = re.match(rf"^struct\s+(\w+){re.escape(RESULT_STRUCT_SUFFIX)}\s*$", r)
+    tag = (m.group(1) + RESULT_STRUCT_SUFFIX) if m else _result_tag_for_value(r, results)
+    return tag[: -len(RESULT_STRUCT_SUFFIX)]
 
 
-def result_type(ret: str) -> str:
-    """The full C type — `struct <id>_result`."""
-    return f"struct {result_type_id(ret)}_result"
+def result_type(ret: str, results: dict) -> str:
+    """The full C result type. A type that is ALREADY a `struct <id>_result` is
+    returned verbatim (no peel-then-repaste); a value type resolves to the
+    actual result struct tag clang declared over it."""
+    r = ret.strip()
+    if _is_result_type(r):
+        return r
+    return f"struct {_result_tag_for_value(r, results)}"
 
 
 def file_to_include_path(abs_path: str, roots: list):
@@ -158,37 +166,6 @@ def file_to_include_path(abs_path: str, roots: list):
             continue
         return rel.as_posix()
     return None
-
-
-def ret_value_type(rid: str):
-    """Underlying value C type for a Result identifier. None for void
-    (no payload).
-
-    Mirrors:
-      - `YETTY_YRESULT_DECLARE` table in yetty/ycore/result.h
-        (yetty_ycore_void / _int / _size)
-      - Public scalar entries in yetty/ycore/types.h
-        (uint32, float)
-      - Module-local convention: `_ptr` suffix → `struct <prefix> *`,
-        any other id → `struct <id>` (matches the standard
-        `YETTY_YRESULT_DECLARE(<id>, struct <id>)` idiom modules use).
-
-    Result ids declared over scalar typedefs / primitives MUST be
-    listed here — otherwise the fallback `struct <id>` produces
-    invalid C (e.g. `struct uint32` for `YETTY_YRESULT_DECLARE(uint32,
-    uint32_t)`). Add entries as ycore grows."""
-    known_scalars = {
-        "yetty_ycore_void": None,
-        "yetty_ycore_int": "int",
-        "yetty_ycore_size": "size_t",
-        "uint32": "uint32_t",
-        "float": "float",
-    }
-    if rid in known_scalars:
-        return known_scalars[rid]
-    if rid.endswith("_ptr"):
-        return f"struct {rid[:-4]} *"
-    return f"struct {rid}"
 
 
 # ============== model — annotated C → in-memory dict ====================
@@ -479,6 +456,53 @@ def _split_ann(ann: str):
 # to the per-language runtime, so only NON-pointer struct / enum types are
 # emitted, resolved transitively through struct fields.
 # ---------------------------------------------------------------------------
+
+def _result_value_field_type(fields: list):
+    """The C type of a result struct's `value` member — the payload its
+    YETTY_YRESULT_DECLARE wrapped. clang inlines the anonymous `{value;error;}`
+    union as a nested member list, so look for the union's `value` field.
+    Returns None if there is none (not a result-shaped struct)."""
+    for field in fields:
+        if field.get("kind") == "union" and "fields" in field:
+            for member in field["fields"]:
+                if member.get("name") == "value":
+                    return member.get("type")
+    return None
+
+
+def build_result_value_maps(record_reg: dict) -> tuple:
+    """From every `struct <id>_result` clang parsed, derive the value type each
+    one wraps — replacing every hand-maintained type↔result-id table. Returns
+    (value_type_by_id, tag_by_value_type):
+
+      value_type_by_id  : "yetty_ycore_int" -> "int"  (None for the void result;
+                          read by ret_value_type for the wire payload)
+      tag_by_value_type : "int" -> "yetty_ycore_int_result"  (the actual struct
+                          tag clang declared; the void result is excluded so an
+                          `int`-typed field resolves to the int result, not the
+                          structurally-identical void one)
+
+    On a value-type collision (e.g. both `uint32` and `yetty_ycore_uint32` wrap
+    `uint32_t`) the shortest tag wins — deterministic, and correctness-neutral
+    since the two result structs are layout-identical."""
+    value_type_by_id: dict = {}
+    tag_by_value_type: dict = {}
+    for tag, fields in record_reg.items():
+        if not tag.endswith(RESULT_STRUCT_SUFFIX):
+            continue
+        rid = tag[: -len(RESULT_STRUCT_SUFFIX)]
+        value_type = _result_value_field_type(fields)
+        if value_type is None:
+            continue
+        value_type_by_id[rid] = None if rid == VOID_RESULT_ID else value_type
+        if rid == VOID_RESULT_ID:
+            continue
+        key = re.sub(r"\s+", " ", value_type.strip())
+        current = tag_by_value_type.get(key)
+        if current is None or (len(tag), tag) < (len(current), current):
+            tag_by_value_type[key] = tag
+    return value_type_by_id, tag_by_value_type
+
 
 def _record_field_list(decl: dict) -> list:
     """Field list for a RecordDecl, inlining anonymous nested struct/union
@@ -1254,6 +1278,10 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     # reproduced forward declarations). Not part of the serialized model.
     model["_type_headers"] = {n: d["file"] for n, d in header_decls.items()}
     model["_local_fwd"] = dict(local_fwd)
+    value_type_by_id, tag_by_value_type = build_result_value_maps(record_reg)
+    model["_result_value_by_id"] = value_type_by_id
+    model["_result_tag_by_value"] = tag_by_value_type
+    log.debug("[%s] result tag_by_value=%s", module, tag_by_value_type)
     return model
 
 
@@ -1329,37 +1357,12 @@ def is_buffer(t: str) -> bool:
     return bool(re.match(r"^\s*(const\s+)?struct\s+yetty_ycore_buffer\s*$", t))
 
 
-def wire_type(t: str) -> str:
-    if is_struct_ptr(t):
-        return "uint64_t"
-    if is_buffer(t):
-        # Only the size lives in the packed header; the payload bytes are
-        # appended to the body after the packed struct, in declared order.
-        return "uint32_t"
-    return t.strip()
-
-
-def wire_name(arg: dict) -> str:
-    if is_struct_ptr(arg["type"]):
-        return f"{arg['name']}_handle"
-    if is_buffer(arg["type"]):
-        return f"{arg['name']}_len"
-    return arg["name"]
-
-
 def struct_names_in(*types: str) -> set:
     out = set()
     for t in types:
         for m in re.finditer(r"\bstruct\s+(\w+)", t):
             out.add(m.group(1))
     return out
-
-
-def default_return_for(ret: str) -> str:
-    ret = ret.strip()
-    if ret == "void":
-        return ""
-    return f"({ret}){{0}}"
 
 
 def validate_class(c: dict):
@@ -1388,7 +1391,7 @@ def validate_class(c: dict):
     return None
 
 
-def validate_method(m: dict):
+def validate_method(m: dict, results: dict):
     args = m["args"]
     # Enforce the project Result-return contract on every slot impl.
     # Without this, raw returns (void/int/size_t/struct X/struct X *)
@@ -1452,7 +1455,7 @@ def validate_method(m: dict):
     # the client would wrap that meaningless address in YETTY_OK.
     # Reject. Return a value or a yclass object handle (uint64_t)
     # instead.
-    rid = result_type_id(m["return_type"])
+    rid = result_type_id(m["return_type"], results)
     if rid.endswith("_ptr"):
         sys.stderr.write(
             f"error: method {m['slot']}: return type '{m['return_type']}' "
@@ -1473,219 +1476,12 @@ def validate_method(m: dict):
         sys.exit(1)
 
 
-def wire_args(m: dict) -> list:
-    """All args except ctx."""
-    return m["args"][1:]
-
-
-def args_struct_body(args: list, indent: str) -> str:
-    if not args:
-        return f"{indent}char _empty;\n"
-    return "".join(f"{indent}{wire_type(a['type'])} {wire_name(a)};\n" for a in args)
-
-
 # ---------------- methods.gen.c — unified public stub --------------------
-
-def emit_dispatch_body(m: dict) -> str:
-    args = m["args"]
-    rid = result_type_id(m["return_type"])
-    vt = ret_value_type(rid)
-    slot_fn = f"{qualified_slot(m)}_fn"
-    ctx_name = args[0]["name"]
-    obj_name = args[1]["name"]
-    call_args = ", ".join(a["name"] for a in args)
-    qs = qualified_slot(m)
-
-    # Local-only slot: the public stub is dispatch + NULL-check, no
-    # session/RPC branch. Args that don't survive marshalling (raw
-    # producer pointers to local carriers) stay in-process by
-    # construction.
-    if m.get("local"):
-        return f"""\
-    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
-    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {{
-        struct yetty_yclass_method_slot_result method_slot_r =
-            yetty_yclass_method_slot_get("yetty_{m['domain']}", (yetty_yclass_method_id_t){qs});
-        if (YETTY_IS_ERR(method_slot_r))
-            return YETTY_ERR({rid}, "{qs}: method_slot_get failed", method_slot_r);
-        method_slot = method_slot_r.value;
-    }}
-
-    if (!{obj_name}) return YETTY_ERR({rid}, "{qs}: NULL object");
-
-    struct yetty_yclass_ptr_result object_class_r =
-        yetty_yclass_object_class({obj_name});
-    YETTY_RETURN_IF_ERR({rid}, object_class_r, "{qs}: object_class failed");
-    struct yetty_yclass_impl_t_result dispatch_impl_r =
-        yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
-    YETTY_RETURN_IF_ERR({rid}, dispatch_impl_r, "{qs}: dispatch_lookup failed");
-    return (({slot_fn})dispatch_impl_r.value)({call_args});
-"""
-
-    wargs = wire_args(m)
-    init_parts = []
-    for i, a in enumerate(wargs):
-        if is_struct_ptr(a["type"]):
-            # Every struct-ptr wire arg (obj at i=0 plus any extra
-            # object handles) was minted on this side by `<class>_create`
-            # and is a `struct yetty_yclass_proxy *` wearing a `struct
-            # yetty_yclass_object *` (or class-specific *) hat. The
-            # handle is the proxy's `handle` field, reached via
-            # container_of so the layout is alignment-correct on 32-bit
-            # ABIs (the old `*(uint64_t *)(obj + 1)` byte-pun was
-            # misaligned when sizeof(yclass_object) == 4).
-            init_parts.append(
-                f"container_of((struct yetty_yclass_object *){a['name']}, "
-                f"struct yetty_yclass_proxy, header)->handle")
-        elif is_buffer(a["type"]):
-            # Buffer arg: only the payload size lives in the packed header.
-            # The payload bytes are appended to the wire body after the
-            # packed struct (see buffer-aware remote_call below).
-            init_parts.append(f"(uint32_t){a['name']}.size")
-        else:
-            init_parts.append(a["name"])
-    init = ", ".join(init_parts)
-    fields = args_struct_body(wargs, indent="            ")
-    buf_args = [a for a in wargs if is_buffer(a["type"])]
-
-    # Build the wire body. No buffer args = fast path, body is
-    # &wire_args / sizeof(wire_args). With buffer args we heap-allocate
-    # `sizeof(wire_args) +
-    # Σ size_i`, copy the packed scalars, then concatenate every blob's
-    # bytes in declared order; the skel decodes by reading the same
-    # lengths back out of the packed header.
-    if buf_args:
-        buf_total_terms = " + ".join(
-            [f"sizeof(wire_args)"] + [f"(size_t){a['name']}.size" for a in buf_args])
-        buf_copies = "".join(
-            f"        memcpy(body_buf + body_offset, {a['name']}.data, {a['name']}.size);\n"
-            f"        body_offset += {a['name']}.size;\n"
-            for a in buf_args
-        )
-        body_setup = f"""\
-        size_t body_total = {buf_total_terms};
-        uint8_t *body_buf = (uint8_t *)malloc(body_total ? body_total : 1);
-        if (!body_buf) return YETTY_ERR({rid}, "{qs}: body buf oom");
-        memcpy(body_buf, &wire_args, sizeof(wire_args));
-        size_t body_offset = sizeof(wire_args);
-{buf_copies}\
-"""
-        body_arg = "body_buf, body_total"
-        body_cleanup = "        free(body_buf);\n"
-    else:
-        body_setup = ""
-        body_arg = "&wire_args, sizeof(wire_args)"
-        body_cleanup = ""
-
-    # Wire response: status byte (0=OK, 1=ERR) + optional payload.
-    # For void slots the payload is empty so resp_len == 1 on success;
-    # for value slots it's 1 + sizeof(value).
-    if vt is None:
-        remote_call = f"""\
-{body_setup}\
-        uint8_t resp_buf[1];
-        struct yetty_ycore_size_result rpc_call_r = yetty_yclass_rpc_call(
-            rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, {body_arg},
-            resp_buf, sizeof(resp_buf));
-{body_cleanup}\
-        YETTY_RETURN_IF_ERR({rid}, rpc_call_r, "{qs}: RPC call failed");
-        size_t response_len = rpc_call_r.value;
-        if (response_len < 1) return YETTY_ERR({rid}, "{qs}: short RPC response");
-        if (resp_buf[0] != 0) return YETTY_ERR({rid}, "{qs}: remote impl returned error");
-        return YETTY_OK_VOID();
-"""
-    else:
-        remote_call = f"""\
-{body_setup}\
-        uint8_t resp_buf[1 + sizeof({vt})];
-        struct yetty_ycore_size_result rpc_call_r = yetty_yclass_rpc_call(
-            rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, {body_arg},
-            resp_buf, sizeof(resp_buf));
-{body_cleanup}\
-        YETTY_RETURN_IF_ERR({rid}, rpc_call_r, "{qs}: RPC call failed");
-        size_t response_len = rpc_call_r.value;
-        if (response_len < 1) return YETTY_ERR({rid}, "{qs}: short RPC response");
-        if (resp_buf[0] != 0) return YETTY_ERR({rid}, "{qs}: remote impl returned error");
-        if (response_len != sizeof(resp_buf)) return YETTY_ERR({rid}, "{qs}: truncated RPC payload");
-        {vt} return_value;
-        memcpy(&return_value, resp_buf + 1, sizeof(return_value));
-        return YETTY_OK({rid}, return_value);
-"""
-
-    return f"""\
-    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
-    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {{
-        struct yetty_yclass_method_slot_result method_slot_r =
-            yetty_yclass_method_slot_get("yetty_{m['domain']}", (yetty_yclass_method_id_t){qs});
-        if (YETTY_IS_ERR(method_slot_r))
-            return YETTY_ERR({rid}, "{qs}: method_slot_get failed", method_slot_r);
-        method_slot = method_slot_r.value;
-    }}
-
-    if (!{obj_name}) return YETTY_ERR({rid}, "{qs}: NULL object");
-
-    struct yetty_yclass_ctx *rpc_ctx = {ctx_name};
-    if (rpc_ctx && rpc_ctx->session) {{
-        struct uint32_result remote_id_r =
-            yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
-        YETTY_RETURN_IF_ERR({rid}, remote_id_r, "{qs}: ensure_remote_id failed");
-        uint32_t remote_id = remote_id_r.value;
-/* Byte-exact wire layout — #pragma pack matches the first-party
- * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
- * packed attribute. */
-#pragma pack(push, 1)
-        struct {{
-{fields}\
-        }} wire_args = {{ {init} }};
-#pragma pack(pop)
-{remote_call}\
-    }} else {{
-        struct yetty_yclass_ptr_result object_class_r =
-            yetty_yclass_object_class({obj_name});
-        YETTY_RETURN_IF_ERR({rid}, object_class_r, "{qs}: object_class failed");
-        struct yetty_yclass_impl_t_result dispatch_impl_r =
-            yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
-        YETTY_RETURN_IF_ERR({rid}, dispatch_impl_r, "{qs}: dispatch_lookup failed");
-        return (({slot_fn})dispatch_impl_r.value)({call_args});
-    }}
-"""
-
-
-def emit_methods_c(model: dict, module: str, out_path: Path):
-    # This TU DEFINES every public slot stub and casts the resolved impl to
-    # the slot's `<slot>_fn`. It is a STANDALONE .gen.c — never `#include`d
-    # into a hand-written .c — so it can pull in every per-class header
-    # without the "redefine an expose'd struct" hazard that the *appended*
-    # <stem>.gen.c has. And it needs them: the `<slot>_fn` typedefs it casts
-    # to, plus the COMPLETE result types its stubs return by value (some are
-    # foreign, e.g. a ydraw result), live in (or are reachable through) those
-    # headers. There is no module-wide methods header anymore.
-    parts = [HEADER]
-    seen_headers = []
-    for c in model.get("classes", []):
-        h = class_header_for(c, module)
-        if h not in seen_headers:
-            seen_headers.append(h)
-    for h in seen_headers:
-        parts.append(f'#include "{h}"\n')
-    parts += ['#include <yetty/yclass/rpc.h>\n',
-              '#include <yetty/ycore/result.h>\n',
-              '#include <yetty/ycore/types.h>  /* container_of */\n',
-              '#include <yetty/ytrace/ytrace.h>\n',
-              '#include <stdint.h>\n'
-              '#include <stdlib.h>  /* malloc/free for buffer-arg marshalling */\n'
-              '#include <string.h>\n\n']
-    for m in model["methods"]:
-        params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
-        rt = result_type(m["return_type"])
-        parts.append(f"{rt} {qualified_slot(m)}({params})\n{{\n"
-                     f"{emit_dispatch_body(m)}}}\n\n")
-    out_path.write_text("".join(parts))
 
 
 # ---------------- .gen.c — class accessor body ---------------------------
 
-def emit_class_accessor(cls: dict) -> str:
+def emit_class_accessor(cls: dict, results: dict) -> str:
     accessor = cls["accessor"]
     is_mixin = cls["type"] == "mixin"
     data = cls["data"] or "char"
@@ -1845,10 +1641,10 @@ def emit_class_accessor(cls: dict) -> str:
             fname = field["name"]
             ftype = field["type"]
             base = f"{qcls}_{fname}"
-            field_rid = result_type_id(ftype)
+            field_rid = result_type_id(ftype, results)
             if field.get("get"):
                 parts.append(
-                    f"\n{result_type(ftype)} {base}_get(struct yetty_yclass_object *obj)\n"
+                    f"\n{result_type(ftype, results)} {base}_get(struct yetty_yclass_object *obj)\n"
                     f"{{\n"
                     f"    struct {data_ptr_rid}_result data = {qcls}_from(obj);\n"
                     f"    if (YETTY_IS_ERR(data))\n"
@@ -1900,10 +1696,8 @@ struct yetty_yclass_ptr_result {accessor}(void)
 {property_block}"""
 
 
-
-
 def emit_class_public_headers(model: dict, module: str, include_module_dir: Path,
-                              type_headers: dict, local_fwd: dict):
+                              type_headers: dict, local_fwd: dict, results: dict):
     """One generated public header per class. Output path mirrors the
     source's subdir structure under `include/yetty/<module>/` so a
     widget at `src/yetty/<module>/widgets/foo.c` lands at
@@ -2016,7 +1810,7 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
                 base = f"{q}_{field['name']}"
                 if field.get("get"):
                     lines.append(
-                        f"{result_type(field['type'])} {base}_get(struct yetty_yclass_object *obj);")
+                        f"{result_type(field['type'], results)} {base}_get(struct yetty_yclass_object *obj);")
                 if field.get("set"):
                     lines.append(
                         f"struct yetty_ycore_void_result {base}_set("
@@ -2109,7 +1903,7 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             method_decls += "\n\n" + "\n".join(exposed_protos)
 
         stub_decls = "".join(
-            f"{result_type(m['return_type'])} {qualified_slot(m)}("
+            f"{result_type(m['return_type'], results)} {qualified_slot(m)}("
             + ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
             + ");\n"
             for m in group_methods)
@@ -2117,7 +1911,7 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
         # these slots includes this header and needs `<slot>_fn` to type-check
         # its impl. Public, alongside the stubs (replaces the old methods.gen.h).
         stub_typedefs = "".join(
-            f"typedef {result_type(m['return_type'])} (*{qualified_slot(m)}_fn)("
+            f"typedef {result_type(m['return_type'], results)} (*{qualified_slot(m)}_fn)("
             + ", ".join(a["type"] for a in m["args"])
             + ");\n"
             for m in group_methods)
@@ -2187,131 +1981,7 @@ def _stem_id(src_path: str) -> str:
     return re.sub(r"[^A-Za-z0-9]", "_", Path(src_path).stem)
 
 
-def emit_stem_hooks(classes: list, wire_methods: list, module: str, stem_id: str) -> str:
-    """Per-stem registration hooks, appended into <stem>.gen.c. Each stem owns
-    a private accessor-lookup + skel-lookup over ITS OWN classes/skels (the
-    skels are `static` in this same TU, so the table can reference them), and a
-    non-static `yetty_<module>_<stem>_register_hooks()` that installs both. The
-    module-wide `yetty_<module>_register()` (emitted once, in the primary stem)
-    calls every stem's hooks."""
-    class_branches = "\n".join(
-        f'    if (strcmp(name, "{qualified_class(c)}") == 0) return {c["accessor"]}();'
-        for c in classes)
-    accessor = f"""
-/* ---- {module}/{stem_id}: class name -> accessor ---------------------- */
-static struct yetty_yclass_ptr_result yetty_{module}_{stem_id}_accessor_lookup(const char *name)
-{{
-{class_branches}
-    return YETTY_OK(yetty_yclass_ptr, NULL);
-}}
-"""
-    if wire_methods:
-        skel_rows = ",\n".join(
-            f'    {{"{qualified_slot(m)}", {qualified_slot(m)}_skel}}' for m in wire_methods)
-        rows_id = f"yetty_{module}_{stem_id}_skel_rows"
-        skel = f"""
-struct yetty_{module}_{stem_id}_skel_row {{ const char *name; yetty_yclass_rpc_skel_fn fn; }};
-static const struct yetty_{module}_{stem_id}_skel_row {rows_id}[] = {{
-{skel_rows}
-}};
-YETTY_EXTERNAL_CALLBACK
-static yetty_yclass_rpc_skel_fn yetty_{module}_{stem_id}_skel_lookup(yetty_yclass_method_slot slot)
-{{
-    struct yetty_yclass_const_char_ptr_result slot_name_r = yetty_yclass_method_slot_name(slot);
-    if (YETTY_IS_ERR(slot_name_r)) {{ yetty_ycore_error_destroy(slot_name_r.error); return NULL; }}
-    const char *name = slot_name_r.value;
-    for (size_t i = 0; i < sizeof({rows_id}) / sizeof({rows_id}[0]); ++i)
-        if (strcmp({rows_id}[i].name, name) == 0)
-            return {rows_id}[i].fn;
-    return NULL;
-}}
-"""
-        skel_install = (
-            f"    {{\n"
-            f"        struct yetty_ycore_void_result add_skel_r =\n"
-            f"            yetty_yclass_rpc_add_skel_lookup(yetty_{module}_{stem_id}_skel_lookup);\n"
-            f"        YETTY_RETURN_IF_ERR(yetty_ycore_void, add_skel_r,\n"
-            f'                            "yetty_{module}_{stem_id}_register_hooks: skel");\n'
-            f"    }}\n"
-        )
-    else:
-        skel = ""
-        skel_install = ""
-    return f"""{accessor}{skel}
-struct yetty_ycore_void_result yetty_{module}_{stem_id}_register_hooks(void)
-{{
-    struct yetty_ycore_void_result add_accessor_r =
-        yetty_yclass_add_accessor_lookup(yetty_{module}_{stem_id}_accessor_lookup);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_accessor_r,
-                        "yetty_{module}_{stem_id}_register_hooks: accessor");
-{skel_install}    return YETTY_OK_VOID();
-}}
-"""
-
-
-def emit_module_register(module: str, all_stem_ids: list) -> str:
-    """The single module entry point — emitted once, into the primary stem. It
-    forward-declares and calls every stem's register_hooks()."""
-    decls = "\n".join(
-        f"struct yetty_ycore_void_result yetty_{module}_{s}_register_hooks(void);"
-        for s in all_stem_ids)
-    calls = "\n".join(
-        f"    {{\n"
-        f"        struct yetty_ycore_void_result hook_r = yetty_{module}_{s}_register_hooks();\n"
-        f'        YETTY_RETURN_IF_ERR(yetty_ycore_void, hook_r, "yetty_{module}_register: {s}");\n'
-        f"    }}"
-        for s in all_stem_ids)
-    return f"""
-/* ===== module registration (was rpc.gen.c) ========================== */
-{decls}
-
-struct yetty_ycore_void_result yetty_{module}_register(void)
-{{
-    static bool registered = false;
-    if (registered)
-        return YETTY_OK_VOID();
-{calls}
-    registered = true;
-    return YETTY_OK_VOID();
-}}
-"""
-
-
-def emit_stem_methods_and_rpc(classes: list, model: dict, module: str, stem_id: str,
-                              all_stem_ids: list, is_primary: bool) -> str:
-    """The methods.gen.c + rpc.gen.c content for ONE stem's classes, appended
-    into its <stem>.gen.c. Stubs/skels reference only types already in scope in
-    the hand-written <stem>.c (their impls live there), so no header include is
-    needed and the redefine-an-`expose`d-struct hazard never arises."""
-    class_keys = {(c["domain"], c["name"]) for c in classes}
-    stem_methods = [m for m in model.get("methods", [])
-                    if (m["domain"], m.get("owning_class")) in class_keys]
-    wire_methods = [m for m in stem_methods if not m.get("local")]
-    regular = [c for c in classes if c.get("type") == "regular"]
-
-    parts = []
-    if stem_methods:
-        parts.append("\n/* ===== public method stubs (was methods.gen.c) ===== */\n\n")
-        for m in stem_methods:
-            params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
-            rt = result_type(m["return_type"])
-            parts.append(f"{rt} {qualified_slot(m)}({params})\n{{\n{emit_dispatch_body(m)}}}\n\n")
-
-    parts.append("\n/* ===== rpc skeletons + create (was rpc.gen.c) ===== */\n\n")
-    for m in wire_methods:
-        parts.append(emit_skel(m))
-        parts.append("\n")
-    for c in regular:
-        parts.append(emit_create_fn(c, model, module))
-        parts.append("\n")
-
-    parts.append(emit_stem_hooks(classes, wire_methods, module, stem_id))
-    if is_primary:
-        parts.append(emit_module_register(module, all_stem_ids))
-    return "".join(parts)
-
-
-def emit_class_gen_c(model: dict, module: str, module_dir: Path):
+def emit_class_gen_c(model: dict, module: str, module_dir: Path, results: dict):
     """One `<class>.gen.c` per annotated source. `#include`d at the foot
     of the matching hand-written `<class>.c` — so it must sit in the
     SAME directory as that .c, not at the module root. A widget at
@@ -2425,12 +2095,12 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
             if not m:
                 continue
             proto_structs |= struct_names_in(m["return_type"])
-            proto_structs.add(f"{result_type_id(m['return_type'])}_result")
+            proto_structs.add(f"{result_type_id(m['return_type'], results)}_result")
             for a in m["args"]:
                 proto_structs |= struct_names_in(a["type"])
             params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
             type_only = ", ".join(a["type"] for a in m["args"])
-            rt = result_type(m["return_type"])
+            rt = result_type(m["return_type"], results)
             proto_lines.append(f"{rt} {qualified_slot(m)}({params});")
             typedef_lines.append(f"typedef {rt} (*{qualified_slot(m)}_fn)({type_only});")
         for known in ("yetty_yclass_ctx", "yetty_yclass_object", "yetty_yclass",
@@ -2447,13 +2117,13 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path):
 
         body = HEADER + include_block + "\n" + slot_block \
              + "/* ===== class accessors ===== */\n\n" \
-             + "\n".join(emit_class_accessor(c) for c in classes)
+             + "\n".join(emit_class_accessor(c, results) for c in classes)
         # Fold in what used to be methods.gen.c + rpc.gen.c for this stem's
         # classes, so a module is just its <stem>.gen.c files — no separate TUs.
         this_stem_id = _stem_id(src_path)
-        body += emit_stem_methods_and_rpc(
+        body += rpc.emit_stem_methods_and_rpc(
             classes, model, module, this_stem_id, all_stem_ids,
-            is_primary=(this_stem_id == primary_stem_id))
+            is_primary=(this_stem_id == primary_stem_id), results=results)
         inc_path.write_text(body)
 
 
@@ -2495,397 +2165,6 @@ def class_header_for(cls: dict, module: str) -> str:
             rel_subdir = str(tail) + "/" if str(tail) != "." else ""
             break
     return f"yetty/{module}/{rel_subdir}{src_path.stem}.h"
-
-
-def emit_skel(m: dict) -> str:
-    """Unpack the wire body, resolve obj handle, re-enter the public stub
-    with a local ctx so the right override fires on the actual class.
-    The wire response carries a status byte (0=OK, 1=ERR); for value
-    slots the OK payload is the raw value bytes that follow.
-
-    The skel itself returns size_t per the rpc_skel_fn contract
-    (the RPC engine calls it as a fn-pointer); Result-shaped failures
-    surfaced from handle_resolve / the user impl are encoded as the
-    1-byte status=1 wire response and the skel returns 1."""
-    slot = qualified_slot(m)
-    rid = result_type_id(m["return_type"])
-    vt = ret_value_type(rid)
-    args = wire_args(m)
-    fields = args_struct_body(args, indent="        ")
-
-    # Pre-resolve every struct-ptr arg as a separate statement — each
-    # handle_resolve now returns a Result, so we must unpack it (and
-    # bail with a 1-byte ERR response on failure) before the call.
-    # Buffer args get reconstructed as local `struct yetty_ycore_buffer`
-    # values pointing at slices of the wire body (zero-copy on the
-    # server side — the impl sees the bytes for the duration of the
-    # call, and is forbidden from holding onto `.data` past return).
-    resolves = []
-    call_parts = ["&local_ctx"]
-    buf_args = [a for a in args if is_buffer(a["type"])]
-    for a in args:
-        if is_struct_ptr(a["type"]):
-            var = f"{a['name']}_resolve_r"
-            resolves.append(
-                f"""\
-    struct yetty_yclass_void_ptr_result {var} =
-        yetty_yclass_rpc_handle_resolve(wire_args.{wire_name(a)});
-    if (YETTY_IS_ERR({var})) {{
-        yetty_ycore_error_print(stderr,
-            "[skel] {slot}: handle_resolve", {var}.error);
-        yetty_ycore_error_destroy({var}.error);
-        if (resp_max < 1) return 0;
-        ((uint8_t *)resp)[0] = 1;
-        return 1;
-    }}
-""")
-            call_parts.append(f"({a['type'].strip()}){var}.value")
-        elif is_buffer(a["type"]):
-            call_parts.append(f"{a['name']}_buf")
-        else:
-            call_parts.append(f"wire_args.{a['name']}")
-    resolve_block = "".join(resolves)
-    call = ", ".join(call_parts)
-
-    if buf_args:
-        # Server-side framing: after the packed scalar header, the body
-        # carries each buffer's payload bytes back-to-back in declared
-        # order. Walk them, reconstruct local buffer values, and check
-        # the total length matches exactly — leftover bytes mean signature
-        # drift between the two sides.
-        len_terms = " + ".join(
-            ["sizeof(wire_args)"] + [f"(size_t)wire_args.{wire_name(a)}" for a in buf_args])
-        buf_block_lines = [
-            f"    if (body_len < sizeof(wire_args)) return 0;",
-            f"    memcpy(&wire_args, body, sizeof(wire_args));",
-            f"    if (body_len != {len_terms}) return 0;",
-            f"    size_t body_offset = sizeof(wire_args);",
-        ]
-        for a in buf_args:
-            wn = wire_name(a)
-            buf_block_lines += [
-                f"    struct yetty_ycore_buffer {a['name']}_buf = {{",
-                f"        .data = (uint8_t *)((const uint8_t *)body + body_offset),",
-                f"        .size = (size_t)wire_args.{wn},",
-                f"        .capacity = (size_t)wire_args.{wn},",
-                f"    }};",
-                f"    body_offset += (size_t)wire_args.{wn};",
-            ]
-        unpack_block = "\n".join(buf_block_lines) + "\n"
-    else:
-        unpack_block = (
-            "    /* Strict length match — both sides regenerate from the same\n"
-            "     * annotated source; a size mismatch means signature drift, and\n"
-            "     * silently truncating to the local prefix would let the server\n"
-            "     * execute against a misaligned struct. */\n"
-            "    if (body_len != sizeof(wire_args)) return 0;\n"
-            "    memcpy(&wire_args, body, sizeof(wire_args));\n"
-        )
-
-    rt = f"struct {rid}_result"
-    if vt is None:
-        body = f"""\
-    {rt} call_r = {slot}({call});
-    if (resp_max < 1) return 0;
-    if (YETTY_IS_ERR(call_r)) {{
-        yetty_ycore_error_print(stderr, "[skel] {slot}", call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
-        ((uint8_t *)resp)[0] = 1;
-        return 1;
-    }}
-    ((uint8_t *)resp)[0] = 0;
-    return 1;
-"""
-    else:
-        body = f"""\
-    {rt} call_r = {slot}({call});
-    if (resp_max < 1) return 0;
-    if (YETTY_IS_ERR(call_r)) {{
-        yetty_ycore_error_print(stderr, "[skel] {slot}", call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
-        ((uint8_t *)resp)[0] = 1;
-        return 1;
-    }}
-    if (resp_max < 1 + sizeof(call_r.value)) return 0;
-    ((uint8_t *)resp)[0] = 0;
-    memcpy((uint8_t *)resp + 1, &call_r.value, sizeof(call_r.value));
-    return 1 + sizeof(call_r.value);
-"""
-
-    return f"""\
-/* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table
- * contract (the RPC engine calls it as a fn-pointer), so it cannot return
- * a Result; handle_resolve / impl failures are absorbed into the 1-byte
- * status wire response at this boundary. */
-YETTY_EXTERNAL_CALLBACK
-static size_t {slot}_skel(const void *body, size_t body_len,
-                          void *resp, size_t resp_max)
-{{
-/* Byte-exact wire layout — #pragma pack matches the first-party
- * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
- * packed attribute. */
-#pragma pack(push, 1)
-    struct {{
-{fields}\
-    }} wire_args;
-#pragma pack(pop)
-{unpack_block}\
-    struct yetty_yclass_ctx local_ctx = {{0}};
-{resolve_block}\
-{body}}}
-"""
-
-
-def emit_create_fn(cls: dict, model: dict, module: str) -> str:
-    """Per-class factory. ctx decides; caller is location-agnostic.
-
-    If the module declares a `constructor` slot (any class in the
-    module overrides `<module>:<class>:constructor`), the factory's
-    local branch invokes that slot automatically after allocating —
-    so the returned object is fully constructed in one call. No
-    separate _init step; the caller-side flow is identical
-    regardless of whether the class has a constructor or not."""
-    accessor = cls["accessor"]
-    qname = qualified_class(cls)
-    has_constructor = any(
-        m["domain"] == module and m["slot"] == "constructor"
-        for m in model.get("methods", [])
-    )
-    if has_constructor:
-        ctor_call = f"""\
-
-        struct yetty_ycore_void_result ctor_r =
-            yetty_{module}_constructor(ctx, alloc_r.value);
-        if (YETTY_IS_ERR(ctor_r)) {{
-            struct yetty_ycore_void_result free_r =
-                yetty_yclass_object_free(alloc_r.value);
-            if (YETTY_IS_ERR(free_r)) yetty_ycore_error_destroy(free_r.error);
-            return YETTY_ERR(yetty_yclass_object_ptr,
-                             "{qname}_create: constructor failed", ctor_r);
-        }}"""
-    else:
-        ctor_call = ""
-    return f"""\
-struct yetty_yclass_object_ptr_result {qname}_create(struct yetty_yclass_ctx *ctx)
-{{
-    ydebug("class={qname}");
-    /* Touch the local accessor first — registers the class's slots in
-     * slot_table so subsequent name→local-slot lookups succeed.
-     * Without this, translate_class on a fresh remote-only session
-     * would have no local slots to map remote ids onto. */
-    struct yetty_yclass_ptr_result class_accessor_r = {accessor}();
-    if (YETTY_IS_ERR(class_accessor_r))
-        return YETTY_ERR(yetty_yclass_object_ptr,
-                         "{qname}_create: class accessor failed", class_accessor_r);
-    const struct yetty_yclass *klass = class_accessor_r.value;
-
-    if (!ctx || !ctx->session) {{
-        struct yetty_yclass_object_ptr_result alloc_r =
-            yetty_yclass_object_alloc(klass);
-        if (YETTY_IS_ERR(alloc_r)) return alloc_r;{ctor_call}
-        return alloc_r;
-    }}
-
-    /* Prefetch the class's local-id ↔ remote-id mapping. Not fatal
-     * if it fails (the per-slot ensure_remote_id fallback can still
-     * resolve ids on demand), but log so a malformed GET_CLASS
-     * response isn't silently swallowed. */
-    {{
-        struct yetty_ycore_void_result translate_class_r =
-            yetty_yclass_rpc_session_translate_class(ctx->session, "{qname}");
-        if (YETTY_IS_ERR(translate_class_r)) {{
-            yetty_ycore_error_print(stderr,
-                "{qname}_create: translate_class (degraded — will lazy-resolve)",
-                translate_class_r.error);
-            yetty_ycore_error_destroy(translate_class_r.error);
-        }}
-    }}
-
-    uint64_t handle = 0;
-    const char *class_name = "{qname}";
-    struct yetty_ycore_size_result create_call_r = yetty_yclass_rpc_call(
-        ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, class_name, strlen(class_name), &handle,
-        sizeof(handle));
-    if (YETTY_IS_ERR(create_call_r))
-        return YETTY_ERR(yetty_yclass_object_ptr,
-                         "{qname}_create: CREATE call failed", create_call_r);
-    if (create_call_r.value != sizeof(handle) || !handle)
-        return YETTY_ERR(yetty_yclass_object_ptr,
-                         "{qname}_create: CREATE returned no/invalid handle");
-
-    /* Proxy: aligned (header + uint64_t) layout. Allocating raw bytes
-     * and writing the handle past the header was misaligned on 32-bit
-     * ABIs where sizeof(struct yetty_yclass_object) == 4. The proxy
-     * struct in <yetty/yclass/class.h> uses natural alignment for both
-     * fields. The class accessor is the same on both sides — proxies
-     * never local-dispatch, so the class's data_size contract isn't
-     * honoured for this allocation. */
-    struct yetty_yclass_proxy *proxy = calloc(1, sizeof(*proxy));
-    if (!proxy)
-        return YETTY_ERR(yetty_yclass_object_ptr, "{qname}_create: calloc(proxy) failed");
-    proxy->header.klass = klass;
-    proxy->handle = handle;
-    return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
-}}
-"""
-
-
-def emit_lookup_tables(model: dict, module: str) -> str:
-    classes = model.get("classes", [])
-    methods = model.get("methods", [])
-
-    # Lookup keys are the QUALIFIED class names — that's what the wire
-    # carries on GET_CLASS/CREATE, and what yetty_yclass_by_name
-    # resolves to. Each branch calls the class accessor, which now
-    # returns yetty_yclass_ptr_result; we forward that result on a
-    # name match.
-    class_branches = "\n".join(
-        f'    if (strcmp(name, "{qualified_class(c)}") == 0) return {c["accessor"]}();'
-        for c in classes
-    )
-
-    accessor_section = f"""\
-/* ---- {module}: class name → accessor (lazy) ---------------------- */
-
-static struct yetty_yclass_ptr_result yetty_{module}_accessor_lookup(const char *name)
-{{
-{class_branches}
-    /* "Not mine": OK with NULL value — yetty_yclass_by_name walks to next hook. */
-    return YETTY_OK(yetty_yclass_ptr, NULL);
-}}
-"""
-
-    # A module that owns zero slots (cross-domain-only — every override
-    # targets a foreign-owned slot) has nothing to dispatch on the wire.
-    # Skip the skel table and the rpc_add_skel_lookup install — the
-    # foreign module's skel_lookup already covers those slots.
-    # Local-only slots have no skel either (no wire surface), so filter
-    # them out before building the row table.
-    wire_methods = [m for m in methods if not m.get("local")]
-    if not wire_methods:
-        skel_install = ""
-        skel_section = ""
-    else:
-        skel_rows = ",\n".join(
-            f'    {{"{qualified_slot(m)}", {qualified_slot(m)}_skel}}'
-            for m in wire_methods
-        )
-        skel_section = f"""\
-
-/* ---- {module}: slot → skel, name-keyed static data --------------- */
-
-struct yetty_{module}_skel_row {{ const char *name; yetty_yclass_rpc_skel_fn fn; }};
-
-static const struct yetty_{module}_skel_row yetty_{module}_skel_rows[] = {{
-{skel_rows}
-}};
-
-/* Signature is dictated by the skel-lookup hook contract (registered as a
- * fn-pointer via yetty_yclass_rpc_add_skel_lookup); a slot-name lookup
- * failure is absorbed into a NULL return at this boundary. */
-YETTY_EXTERNAL_CALLBACK
-static yetty_yclass_rpc_skel_fn yetty_{module}_skel_lookup(yetty_yclass_method_slot slot)
-{{
-    struct yetty_yclass_const_char_ptr_result slot_name_r = yetty_yclass_method_slot_name(slot);
-    if (YETTY_IS_ERR(slot_name_r)) {{ yetty_ycore_error_destroy(slot_name_r.error); return NULL; }}
-    const char *name = slot_name_r.value;
-    for (size_t i = 0;
-         i < sizeof(yetty_{module}_skel_rows) / sizeof(yetty_{module}_skel_rows[0]); ++i)
-        if (strcmp(yetty_{module}_skel_rows[i].name, name) == 0)
-            return yetty_{module}_skel_rows[i].fn;
-    return NULL;
-}}
-"""
-        skel_install = (
-            f"    {{\n"
-            f"        struct yetty_ycore_void_result add_skel_r =\n"
-            f"            yetty_yclass_rpc_add_skel_lookup(yetty_{module}_skel_lookup);\n"
-            f"        YETTY_RETURN_IF_ERR(yetty_ycore_void, add_skel_r,\n"
-            f'                            "yetty_{module}_register: rpc_add_skel_lookup");\n'
-            f"    }}\n"
-        )
-
-    return f"""\
-{accessor_section}\
-{skel_section}\
-
-/* ---- {module}: explicit yclass-RPC hook registration ------------- */
-
-/* Installs this module's server-side discovery hooks: the accessor
- * lookup feeds yetty_yclass_by_name()'s registry-miss path, and (when
- * the module exposes wire methods) the skel lookup feeds RPC skeleton
- * dispatch. Call once when the yclass RPC / remote-object server is
- * brought up — idempotent, so repeated calls (several hosts, re-init)
- * are no-ops. This replaces the former load-time installer: a module
- * merely being linked no longer mutates global state before main(),
- * and there is no abort() path on a constructor. */
-struct yetty_ycore_void_result yetty_{module}_register(void)
-{{
-    static bool registered = false;
-    if (registered)
-        return YETTY_OK_VOID();
-
-    struct yetty_ycore_void_result add_accessor_r =
-        yetty_yclass_add_accessor_lookup(yetty_{module}_accessor_lookup);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_accessor_r,
-                        "yetty_{module}_register: add_accessor_lookup");
-{skel_install}\
-    registered = true;
-    return YETTY_OK_VOID();
-}}
-"""
-
-
-def emit_rpc_h(model: dict, module: str, out_path: Path):
-    guard = f"YETTY_YCLASSGEN_{module.upper()}_RPC_H"
-    decls = "\n".join(
-        f"struct yetty_yclass_object_ptr_result "
-        f"{qualified_class(c)}_create(struct yetty_yclass_ctx *ctx);"
-        for c in regular_classes(model)
-    )
-    out_path.write_text(
-        HEADER
-        + f"#ifndef {guard}\n#define {guard}\n\n"
-        + '#include <yetty/yclass/rpc.h>\n'
-        + '#include <yetty/ycore/result.h>\n\n'
-        + (decls + "\n\n" if decls else "")
-        + "/* Installs this module's yclass-RPC server-side discovery hooks\n"
-          " * (accessor lookup feeding yetty_yclass_by_name; skel lookup\n"
-          " * feeding RPC dispatch when the module exposes wire methods).\n"
-          " * Call once when the yclass RPC / remote-object server is brought\n"
-          " * up; idempotent, so repeated calls are no-ops. Replaces the\n"
-          " * former load-time __attribute__((constructor)) installer. */\n"
-        + f"struct yetty_ycore_void_result yetty_{module}_register(void);\n\n"
-        + "#endif\n"
-    )
-
-
-def emit_rpc_c(model: dict, module: str, out_path: Path):
-    class_includes = "".join(
-        f'#include "{class_header_for(c, module)}"\n'
-        for c in model.get("classes", [])
-    )
-    parts = [HEADER,
-             '#include <yetty/yclass/rpc.h>\n',
-             '#include <yetty/ycore/result.h>\n',
-             '#include <yetty/ytrace/ytrace.h>\n',
-             '#include <yetty/yclass/class.h>\n',
-             class_includes,
-             '#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n'
-             '#include <stdlib.h>\n#include <string.h>\n\n']
-    for m in model["methods"]:
-        # Local-only slots never cross the wire and have no skel — the
-        # public stub is dispatch-only, and emit_lookup_tables omits
-        # them from skel_rows.
-        if m.get("local"):
-            continue
-        parts.append(emit_skel(m))
-        parts.append("\n")
-    for c in regular_classes(model):
-        parts.append(emit_create_fn(c, model, module))
-        parts.append("\n")
-    parts.append(emit_lookup_tables(model, module))
-    out_path.write_text("".join(parts))
 
 
 # ---------------- main ---------------------------------------------------
@@ -2951,6 +2230,12 @@ def main():
     # land in model.yaml.
     type_headers = model.pop("_type_headers", {})
     local_fwd = model.pop("_local_fwd", {})
+    # The clang-derived value-type ↔ result-id maps, threaded into every emitter
+    # that names a result type. Popped so they never reach model.yaml.
+    results = {
+        "value_by_id": model.pop("_result_value_by_id", {}),
+        "tag_by_value": model.pop("_result_tag_by_value", {}),
+    }
     # Collect every non-conforming class and report them all at once, rather
     # than aborting on the first — a module like ygui has dozens to rename.
     class_errors = [e for e in (validate_class(c) for c in model["classes"]) if e]
@@ -2962,13 +2247,13 @@ def main():
             f"module '{module}'.\n")
         sys.exit(1)
     for m in model["methods"]:
-        validate_method(m)
+        validate_method(m, results)
 
-    emit_class_public_headers(model, module, include_module, type_headers, local_fwd)
+    emit_class_public_headers(model, module, include_module, type_headers, local_fwd, results)
     # Single <stem>.gen.c per source: the accessor body PLUS what used to be
     # the module-wide methods.gen.c (public stubs) and rpc.gen.c (skeletons,
     # create, registration). No separate generated TUs.
-    emit_class_gen_c(model, module, module_src)
+    emit_class_gen_c(model, module, module_src, results)
     # Drop the old standalone TUs from any previous layout.
     for stale in (module_src / "methods.gen.c", module_src / "rpc.gen.c"):
         if stale.exists():
@@ -2976,6 +2261,12 @@ def main():
 
     (module_src / "model.yaml").write_text(yaml_dump(model) + "\n")
 
+
+# Imported at the foot, after every shared helper above is defined: rpc.py does
+# `from codegen import …` for those helpers, so the names must already exist
+# when rpc is first imported here. The RPC code-generation lives in rpc.py; this
+# module owns the parse, model, class accessors and public headers.
+import rpc  # noqa: E402
 
 if __name__ == "__main__":
     main()
