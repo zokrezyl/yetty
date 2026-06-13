@@ -1,0 +1,2101 @@
+methods:
+  - slot: constructor
+    domain: yrich
+    owning_class: document
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: document_destroy
+    domain: yrich
+    owning_class: document
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: document_content_width
+    domain: yrich
+    owning_class: document
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: document_content_height
+    domain: yrich
+    owning_class: document
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: document_render
+    domain: yrich
+    owning_class: document
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: document_apply_op
+    domain: yrich
+    owning_class: document
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: op
+        type: "struct yetty_yrich_operation *"
+      - name: local_flag
+        type: int
+    local: true
+  - slot: document_undo
+    domain: yrich
+    owning_class: document
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: document_redo
+    domain: yrich
+    owning_class: document
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: document_on_mouse_down
+    domain: yrich
+    owning_class: document
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: button
+        type: uint32_t
+      - name: mods
+        type: uint32_t
+    local: false
+  - slot: document_on_mouse_up
+    domain: yrich
+    owning_class: document
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: button
+        type: uint32_t
+      - name: mods
+        type: uint32_t
+    local: false
+  - slot: document_on_mouse_drag
+    domain: yrich
+    owning_class: document
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: button
+        type: uint32_t
+      - name: mods
+        type: uint32_t
+    local: false
+  - slot: document_on_mouse_double_click
+    domain: yrich
+    owning_class: document
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: button
+        type: uint32_t
+      - name: mods
+        type: uint32_t
+    local: false
+  - slot: document_on_key_down
+    domain: yrich
+    owning_class: document
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: key
+        type: uint32_t
+      - name: mods
+        type: uint32_t
+    local: false
+  - slot: document_on_text_input
+    domain: yrich
+    owning_class: document
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: struct yetty_ycore_buffer
+    local: false
+  - slot: element_destroy
+    domain: yrich
+    owning_class: element
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: true
+  - slot: element_bounds
+    domain: yrich
+    owning_class: element
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_bounds
+        type: "struct yetty_yrich_rect *"
+    local: true
+  - slot: element_hit_test
+    domain: yrich
+    owning_class: element
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+    local: false
+  - slot: element_render
+    domain: yrich
+    owning_class: element
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: drawable_list
+        type: "struct yetty_ydraw_drawable_list *"
+      - name: layer
+        type: uint32_t
+      - name: selected
+        type: int
+    local: true
+  - slot: element_is_editable
+    domain: yrich
+    owning_class: element
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: element_begin_edit
+    domain: yrich
+    owning_class: element
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: element_end_edit
+    domain: yrich
+    owning_class: element
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: element_is_editing
+    domain: yrich
+    owning_class: element
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: element_insert_text
+    domain: yrich
+    owning_class: element
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: struct yetty_ycore_buffer
+    local: false
+  - slot: element_delete_sel
+    domain: yrich
+    owning_class: element
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: slides_set_current
+    domain: yrich
+    owning_class: slides
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: int32_t
+    local: false
+  - slot: slides_next
+    domain: yrich
+    owning_class: slides
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: slides_prev
+    domain: yrich
+    owning_class: slides
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    local: false
+  - slot: spreadsheet_set_grid_size
+    domain: yrich
+    owning_class: spreadsheet
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rows
+        type: int32_t
+      - name: cols
+        type: int32_t
+    local: false
+  - slot: spreadsheet_set_row_height
+    domain: yrich
+    owning_class: spreadsheet
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: int32_t
+      - name: height
+        type: float
+    local: false
+  - slot: spreadsheet_set_col_width
+    domain: yrich
+    owning_class: spreadsheet
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: col
+        type: int32_t
+      - name: width
+        type: float
+    local: false
+  - slot: spreadsheet_set_cell_value
+    domain: yrich
+    owning_class: spreadsheet
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: int32_t
+      - name: col
+        type: int32_t
+      - name: value
+        type: struct yetty_ycore_buffer
+    local: false
+  - slot: ydoc_toggle_format
+    domain: yrich
+    owning_class: ydoc
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: format_flag
+        type: uint32_t
+    local: false
+  - slot: ydoc_set_text_color
+    domain: yrich
+    owning_class: ydoc
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: color
+        type: uint32_t
+    local: false
+  - slot: ydoc_set_alignment
+    domain: yrich
+    owning_class: ydoc
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: halign
+        type: uint32_t
+    local: false
+  - slot: ydoc_set_heading
+    domain: yrich
+    owning_class: ydoc
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: level
+        type: uint32_t
+    local: false
+  - slot: ydoc_change_font_size
+    domain: yrich
+    owning_class: ydoc
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: delta
+        type: float
+    local: false
+classes:
+  - name: document
+    domain: yrich
+    accessor: yetty_yrich_document_class_get
+    type: regular
+    source_file: src/yetty/yrich/document.c
+    parent: null
+    mixins: []
+    data: struct yetty_yrich_document
+    data_fields:
+      - name: elements
+        type: "struct yetty_yclass_object **"
+        get: false
+        set: false
+      - name: element_count
+        type: size_t
+        get: false
+        set: false
+      - name: element_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: next_id
+        type: yetty_yrich_element_id
+        get: false
+        set: false
+      - name: selection
+        type: struct yetty_yrich_selection
+        get: false
+        set: false
+      - name: op_log
+        type: struct yetty_yrich_op_log
+        get: false
+        set: false
+      - name: history
+        type: struct yetty_yrich_history
+        get: false
+        set: false
+      - name: buffer
+        type: "struct yetty_ydraw_drawable_list *"
+        get: false
+        set: false
+      - name: bg_color
+        type: uint32_t
+        get: false
+        set: false
+      - name: dirty
+        type: int
+        get: false
+        set: false
+      - name: sync_cb
+        type: yetty_yrich_sync_cb
+        get: false
+        set: false
+      - name: sync_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: dirty_cb
+        type: yetty_yrich_dirty_cb
+        get: false
+        set: false
+      - name: dirty_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: session_id
+        type: yetty_yrich_session_id
+        get: false
+        set: false
+    ops:
+      - slot: constructor
+        slot_domain: yrich
+        impl: document_constructor
+      - slot: document_destroy
+        slot_domain: yrich
+        impl: document_default_destroy
+      - slot: document_content_width
+        slot_domain: yrich
+        impl: document_default_content_width
+      - slot: document_content_height
+        slot_domain: yrich
+        impl: document_default_content_height
+      - slot: document_render
+        slot_domain: yrich
+        impl: document_default_render
+      - slot: document_apply_op
+        slot_domain: yrich
+        impl: document_default_apply_op
+      - slot: document_undo
+        slot_domain: yrich
+        impl: document_default_undo
+      - slot: document_redo
+        slot_domain: yrich
+        impl: document_default_redo
+      - slot: document_on_mouse_down
+        slot_domain: yrich
+        impl: document_default_on_mouse_down
+      - slot: document_on_mouse_up
+        slot_domain: yrich
+        impl: document_default_on_mouse_up
+      - slot: document_on_mouse_drag
+        slot_domain: yrich
+        impl: document_default_on_mouse_drag
+      - slot: document_on_mouse_double_click
+        slot_domain: yrich
+        impl: document_default_on_mouse_double_click
+      - slot: document_on_key_down
+        slot_domain: yrich
+        impl: document_default_on_key_down
+      - slot: document_on_text_input
+        slot_domain: yrich
+        impl: document_default_on_text_input
+  - name: element
+    domain: yrich
+    accessor: yetty_yrich_element_class_get
+    type: regular
+    source_file: src/yetty/yrich/element.c
+    parent: null
+    mixins: []
+    data: struct yetty_yrich_element
+    data_fields:
+      - name: id
+        type: yetty_yrich_element_id
+        get: false
+        set: false
+    ops:
+      - slot: constructor
+        slot_domain: yrich
+        impl: element_constructor
+      - slot: element_destroy
+        slot_domain: yrich
+        impl: element_default_destroy
+      - slot: element_bounds
+        slot_domain: yrich
+        impl: element_default_bounds
+      - slot: element_hit_test
+        slot_domain: yrich
+        impl: element_default_hit_test
+      - slot: element_render
+        slot_domain: yrich
+        impl: element_default_render
+      - slot: element_is_editable
+        slot_domain: yrich
+        impl: element_default_is_editable
+      - slot: element_begin_edit
+        slot_domain: yrich
+        impl: element_default_begin_edit
+      - slot: element_end_edit
+        slot_domain: yrich
+        impl: element_default_end_edit
+      - slot: element_is_editing
+        slot_domain: yrich
+        impl: element_default_is_editing
+      - slot: element_insert_text
+        slot_domain: yrich
+        impl: element_default_insert_text
+      - slot: element_delete_sel
+        slot_domain: yrich
+        impl: element_default_delete_sel
+  - name: shape
+    domain: yrich
+    accessor: yetty_yrich_shape_class_get
+    type: regular
+    source_file: src/yetty/yrich/slides.c
+    parent:
+      domain: yrich
+      name: element
+    mixins: []
+    data: struct yetty_yrich_shape
+    data_fields:
+      - name: kind
+        type: uint32_t
+        get: false
+        set: false
+      - name: bounds
+        type: struct yetty_yrich_rect
+        get: false
+        set: false
+      - name: fill_color
+        type: uint32_t
+        get: true
+        set: true
+      - name: stroke_color
+        type: uint32_t
+        get: true
+        set: true
+      - name: stroke_width
+        type: float
+        get: true
+        set: true
+      - name: rotation
+        type: float
+        get: true
+        set: true
+      - name: corner_radius
+        type: float
+        get: true
+        set: true
+      - name: text
+        type: "char *"
+        get: false
+        set: false
+      - name: text_len
+        type: size_t
+        get: false
+        set: false
+      - name: text_style
+        type: struct yetty_yrich_text_style
+        get: false
+        set: false
+      - name: text_align
+        type: uint32_t
+        get: true
+        set: true
+      - name: text_valign
+        type: uint32_t
+        get: true
+        set: true
+      - name: editing
+        type: int
+        get: false
+        set: false
+      - name: cursor_pos
+        type: int32_t
+        get: false
+        set: false
+      - name: sel_start
+        type: int32_t
+        get: false
+        set: false
+      - name: sel_end
+        type: int32_t
+        get: false
+        set: false
+      - name: image_source
+        type: "char *"
+        get: false
+        set: false
+      - name: preserve_aspect
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: constructor
+        slot_domain: yrich
+        impl: shape_constructor
+      - slot: element_destroy
+        slot_domain: yrich
+        impl: shape_destroy
+      - slot: element_bounds
+        slot_domain: yrich
+        impl: shape_bounds
+      - slot: element_is_editable
+        slot_domain: yrich
+        impl: shape_is_editable
+      - slot: element_begin_edit
+        slot_domain: yrich
+        impl: shape_begin_edit
+      - slot: element_end_edit
+        slot_domain: yrich
+        impl: shape_end_edit
+      - slot: element_is_editing
+        slot_domain: yrich
+        impl: shape_is_editing
+      - slot: element_render
+        slot_domain: yrich
+        impl: shape_render
+      - slot: element_insert_text
+        slot_domain: yrich
+        impl: shape_insert_text
+      - slot: element_delete_sel
+        slot_domain: yrich
+        impl: shape_delete_sel
+  - name: slides
+    domain: yrich
+    accessor: yetty_yrich_slides_class_get
+    type: regular
+    source_file: src/yetty/yrich/slides.c
+    parent:
+      domain: yrich
+      name: document
+    mixins: []
+    data: struct yetty_yrich_slides
+    data_fields:
+      - name: slide_width
+        type: float
+        get: false
+        set: false
+      - name: slide_height
+        type: float
+        get: false
+        set: false
+      - name: slides
+        type: "struct yetty_yrich_slide **"
+        get: false
+        set: false
+      - name: slide_count
+        type: size_t
+        get: false
+        set: false
+      - name: slide_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: current_slide
+        type: int32_t
+        get: false
+        set: false
+    ops:
+      - slot: constructor
+        slot_domain: yrich
+        impl: slides_constructor
+      - slot: document_destroy
+        slot_domain: yrich
+        impl: slides_destroy
+      - slot: document_content_width
+        slot_domain: yrich
+        impl: slides_content_width
+      - slot: document_content_height
+        slot_domain: yrich
+        impl: slides_content_height
+      - slot: document_render
+        slot_domain: yrich
+        impl: slides_render
+      - slot: slides_set_current
+        slot_domain: yrich
+        impl: slides_set_current
+      - slot: slides_next
+        slot_domain: yrich
+        impl: slides_next
+      - slot: slides_prev
+        slot_domain: yrich
+        impl: slides_prev
+  - name: cell
+    domain: yrich
+    accessor: yetty_yrich_cell_class_get
+    type: regular
+    source_file: src/yetty/yrich/spreadsheet.c
+    parent:
+      domain: yrich
+      name: element
+    mixins: []
+    data: struct yetty_yrich_cell
+    data_fields:
+      - name: address
+        type: struct yetty_yrich_cell_addr
+        get: false
+        set: false
+      - name: bounds
+        type: struct yetty_yrich_rect
+        get: false
+        set: false
+      - name: text
+        type: "char *"
+        get: false
+        set: false
+      - name: text_len
+        type: size_t
+        get: false
+        set: false
+      - name: formula
+        type: "char *"
+        get: false
+        set: false
+      - name: style
+        type: struct yetty_yrich_text_style
+        get: false
+        set: false
+      - name: fill_color
+        type: uint32_t
+        get: false
+        set: false
+      - name: border
+        type: struct yetty_yrich_border
+        get: false
+        set: false
+      - name: halign
+        type: uint32_t
+        get: false
+        set: false
+      - name: valign
+        type: uint32_t
+        get: false
+        set: false
+      - name: editing
+        type: int
+        get: false
+        set: false
+      - name: cursor_pos
+        type: int32_t
+        get: false
+        set: false
+      - name: sel_start
+        type: int32_t
+        get: false
+        set: false
+      - name: sel_end
+        type: int32_t
+        get: false
+        set: false
+    ops:
+      - slot: constructor
+        slot_domain: yrich
+        impl: cell_constructor
+      - slot: element_destroy
+        slot_domain: yrich
+        impl: cell_destroy
+      - slot: element_bounds
+        slot_domain: yrich
+        impl: cell_bounds
+      - slot: element_is_editable
+        slot_domain: yrich
+        impl: cell_is_editable
+      - slot: element_begin_edit
+        slot_domain: yrich
+        impl: cell_begin_edit
+      - slot: element_end_edit
+        slot_domain: yrich
+        impl: cell_end_edit
+      - slot: element_is_editing
+        slot_domain: yrich
+        impl: cell_is_editing
+      - slot: element_render
+        slot_domain: yrich
+        impl: cell_render
+      - slot: element_insert_text
+        slot_domain: yrich
+        impl: cell_insert_text
+      - slot: element_delete_sel
+        slot_domain: yrich
+        impl: cell_delete_sel
+  - name: spreadsheet
+    domain: yrich
+    accessor: yetty_yrich_spreadsheet_class_get
+    type: regular
+    source_file: src/yetty/yrich/spreadsheet.c
+    parent:
+      domain: yrich
+      name: document
+    mixins: []
+    data: struct yetty_yrich_spreadsheet
+    data_fields:
+      - name: row_count
+        type: int32_t
+        get: false
+        set: false
+      - name: col_count
+        type: int32_t
+        get: false
+        set: false
+      - name: default_row_height
+        type: float
+        get: false
+        set: false
+      - name: default_col_width
+        type: float
+        get: false
+        set: false
+      - name: row_overrides
+        type: "struct yetty_yrich_row_size *"
+        get: false
+        set: false
+      - name: row_override_count
+        type: size_t
+        get: false
+        set: false
+      - name: row_override_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: col_overrides
+        type: "struct yetty_yrich_col_size *"
+        get: false
+        set: false
+      - name: col_override_count
+        type: size_t
+        get: false
+        set: false
+      - name: col_override_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: row_y_cache
+        type: "float *"
+        get: false
+        set: false
+      - name: row_y_cache_count
+        type: size_t
+        get: false
+        set: false
+      - name: col_x_cache
+        type: "float *"
+        get: false
+        set: false
+      - name: col_x_cache_count
+        type: size_t
+        get: false
+        set: false
+      - name: cache_valid
+        type: int
+        get: false
+        set: false
+      - name: cells
+        type: "struct yetty_yrich_cell_entry *"
+        get: false
+        set: false
+      - name: cell_count
+        type: size_t
+        get: false
+        set: false
+      - name: cell_capacity
+        type: size_t
+        get: false
+        set: false
+    ops:
+      - slot: constructor
+        slot_domain: yrich
+        impl: spreadsheet_constructor
+      - slot: document_destroy
+        slot_domain: yrich
+        impl: spreadsheet_destroy
+      - slot: document_content_width
+        slot_domain: yrich
+        impl: spreadsheet_content_width
+      - slot: document_content_height
+        slot_domain: yrich
+        impl: spreadsheet_content_height
+      - slot: spreadsheet_set_grid_size
+        slot_domain: yrich
+        impl: spreadsheet_set_grid_size
+      - slot: spreadsheet_set_row_height
+        slot_domain: yrich
+        impl: spreadsheet_set_row_height
+      - slot: spreadsheet_set_col_width
+        slot_domain: yrich
+        impl: spreadsheet_set_col_width
+      - slot: spreadsheet_set_cell_value
+        slot_domain: yrich
+        impl: spreadsheet_set_cell_value
+  - name: paragraph
+    domain: yrich
+    accessor: yetty_yrich_paragraph_class_get
+    type: regular
+    source_file: src/yetty/yrich/ydoc.c
+    parent:
+      domain: yrich
+      name: element
+    mixins: []
+    data: struct yetty_yrich_paragraph
+    data_fields:
+      - name: bounds
+        type: struct yetty_yrich_rect
+        get: false
+        set: false
+      - name: text
+        type: "char *"
+        get: false
+        set: false
+      - name: text_len
+        type: size_t
+        get: false
+        set: false
+      - name: style
+        type: struct yetty_yrich_text_style
+        get: false
+        set: false
+      - name: runs
+        type: "struct yetty_yrich_text_run *"
+        get: false
+        set: false
+      - name: run_count
+        type: size_t
+        get: false
+        set: false
+      - name: run_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: line_height
+        type: float
+        get: false
+        set: false
+      - name: halign
+        type: uint32_t
+        get: false
+        set: false
+      - name: editing
+        type: int
+        get: false
+        set: false
+      - name: cursor_pos
+        type: int32_t
+        get: false
+        set: false
+      - name: sel_start
+        type: int32_t
+        get: false
+        set: false
+      - name: sel_end
+        type: int32_t
+        get: false
+        set: false
+    ops:
+      - slot: constructor
+        slot_domain: yrich
+        impl: paragraph_constructor
+      - slot: element_destroy
+        slot_domain: yrich
+        impl: paragraph_destroy
+      - slot: element_bounds
+        slot_domain: yrich
+        impl: paragraph_bounds
+      - slot: element_is_editable
+        slot_domain: yrich
+        impl: paragraph_is_editable
+      - slot: element_begin_edit
+        slot_domain: yrich
+        impl: paragraph_begin_edit
+      - slot: element_end_edit
+        slot_domain: yrich
+        impl: paragraph_end_edit
+      - slot: element_is_editing
+        slot_domain: yrich
+        impl: paragraph_is_editing
+      - slot: element_render
+        slot_domain: yrich
+        impl: paragraph_render
+      - slot: element_insert_text
+        slot_domain: yrich
+        impl: paragraph_insert_text
+      - slot: element_delete_sel
+        slot_domain: yrich
+        impl: paragraph_delete_sel
+  - name: inline_image
+    domain: yrich
+    accessor: yetty_yrich_inline_image_class_get
+    type: regular
+    source_file: src/yetty/yrich/ydoc.c
+    parent:
+      domain: yrich
+      name: element
+    mixins: []
+    data: struct yetty_yrich_inline_image
+    data_fields:
+      - name: bounds
+        type: struct yetty_yrich_rect
+        get: false
+        set: false
+      - name: source
+        type: "char *"
+        get: false
+        set: false
+      - name: alt_text
+        type: "char *"
+        get: false
+        set: false
+      - name: caption
+        type: "char *"
+        get: false
+        set: false
+      - name: align
+        type: uint32_t
+        get: false
+        set: false
+    ops:
+      - slot: constructor
+        slot_domain: yrich
+        impl: inline_image_constructor
+      - slot: element_destroy
+        slot_domain: yrich
+        impl: inline_image_destroy
+      - slot: element_bounds
+        slot_domain: yrich
+        impl: inline_image_bounds
+      - slot: element_render
+        slot_domain: yrich
+        impl: inline_image_render
+  - name: ydoc
+    domain: yrich
+    accessor: yetty_yrich_ydoc_class_get
+    type: regular
+    source_file: src/yetty/yrich/ydoc.c
+    parent:
+      domain: yrich
+      name: document
+    mixins: []
+    data: struct yetty_yrich_ydoc
+    data_fields:
+      - name: page_width
+        type: float
+        get: false
+        set: false
+      - name: margin
+        type: float
+        get: false
+        set: false
+      - name: paragraphs
+        type: "struct yetty_yclass_object **"
+        get: false
+        set: false
+      - name: paragraph_count
+        type: size_t
+        get: false
+        set: false
+      - name: paragraph_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: images
+        type: "struct yetty_yclass_object **"
+        get: false
+        set: false
+      - name: image_count
+        type: size_t
+        get: false
+        set: false
+      - name: image_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: source_path
+        type: "char *"
+        get: false
+        set: false
+    ops:
+      - slot: constructor
+        slot_domain: yrich
+        impl: ydoc_constructor
+      - slot: document_destroy
+        slot_domain: yrich
+        impl: ydoc_destroy
+      - slot: document_content_width
+        slot_domain: yrich
+        impl: ydoc_content_width
+      - slot: document_content_height
+        slot_domain: yrich
+        impl: ydoc_content_height
+      - slot: document_on_mouse_down
+        slot_domain: yrich
+        impl: ydoc_on_mouse_down
+      - slot: document_on_mouse_drag
+        slot_domain: yrich
+        impl: ydoc_on_mouse_drag
+      - slot: document_on_key_down
+        slot_domain: yrich
+        impl: ydoc_on_key_down
+      - slot: document_on_text_input
+        slot_domain: yrich
+        impl: ydoc_on_text_input
+      - slot: document_on_mouse_double_click
+        slot_domain: yrich
+        impl: ydoc_on_mouse_double_click
+      - slot: document_apply_op
+        slot_domain: yrich
+        impl: ydoc_apply_op
+      - slot: document_render
+        slot_domain: yrich
+        impl: ydoc_render
+      - slot: ydoc_toggle_format
+        slot_domain: yrich
+        impl: ydoc_toggle_format_impl
+      - slot: ydoc_set_text_color
+        slot_domain: yrich
+        impl: ydoc_set_text_color_impl
+      - slot: ydoc_set_alignment
+        slot_domain: yrich
+        impl: ydoc_set_alignment_impl
+      - slot: ydoc_set_heading
+        slot_domain: yrich
+        impl: ydoc_set_heading_impl
+      - slot: ydoc_change_font_size
+        slot_domain: yrich
+        impl: ydoc_change_font_size_impl
+exposed:
+  - source_file: src/yetty/yrich/document.c
+    verbatim: "/* Header-destined: the shared yrich value types (callbacks, element id
+ * Result) and the operation Result the public document API references. */
+#include <yetty/yrich/yrich-operation.h>
+#include <yetty/yrich/yrich-types.h>"
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_super_void
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: self_class
+        type: "const struct yetty_yclass *"
+      - name: method_id
+        type: yetty_yclass_method_id_t
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_mark_dirty
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_is_dirty
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_clear_dirty
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_set_buffer
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: drawable_list
+        type: "struct yetty_ydraw_drawable_list *"
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_buffer
+    return_type: "struct yetty_ydraw_drawable_list *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_set_bg_color
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: color
+        type: uint32_t
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_bg_color
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_set_dirty_cb
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: callback
+        type: yetty_yrich_dirty_cb
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_set_sync_cb
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: callback
+        type: yetty_yrich_sync_cb
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_next_id
+    return_type: struct yetty_yrich_element_id_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_create_op
+    return_type: struct yetty_yrich_operation_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: op_type
+        type: uint32_t
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_add_element
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: element_obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_remove_element
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: yetty_yrich_element_id
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_find
+    return_type: "struct yetty_yclass_object *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: yetty_yrich_element_id
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_element_at
+    return_type: "struct yetty_yclass_object *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_selection
+    return_type: "struct yetty_yrich_selection *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_is_selected
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: yetty_yrich_element_id
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_clear_selection
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_clear_history
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/document.c
+    name: yetty_yrich_document_execute
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: cmd
+        type: "struct yetty_yrich_command *"
+  - source_file: src/yetty/yrich/element.c
+    verbatim: "/* Header-destined: the shared yrich value types (rect, element id Result)
+ * the public element API above references. */
+#include <yetty/yrich/yrich-types.h>"
+  - source_file: src/yetty/yrich/element.c
+    name: yetty_yrich_element_id_value
+    return_type: struct yetty_yrich_element_id_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/element.c
+    name: yetty_yrich_element_set_id
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: yetty_yrich_element_id
+  - source_file: src/yetty/yrich/slides.c
+    verbatim: "/* Header-destined content for the generated slides.h (skipped by the real
+ * build, which defines the enum in the #ifndef block above). The types
+ * include carries the slide aggregate + its Result the slide-management
+ * API above references. */
+#include <yetty/yrich/yrich-types.h>
+
+enum yetty_yrich_shape_kind {
+    YETTY_YRICH_SHAPE_RECTANGLE = 0,
+    YETTY_YRICH_SHAPE_ELLIPSE,
+    YETTY_YRICH_SHAPE_TEXTBOX,
+    YETTY_YRICH_SHAPE_LINE,
+    YETTY_YRICH_SHAPE_ARROW,
+    YETTY_YRICH_SHAPE_IMAGE,
+};"
+  - source_file: src/yetty/yrich/slides.c
+    name: yetty_yrich_shape_set_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+      - name: len
+        type: size_t
+  - source_file: src/yetty/yrich/slides.c
+    name: yetty_yrich_shape_set_font_size
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: font_size
+        type: float
+  - source_file: src/yetty/yrich/slides.c
+    name: yetty_yrich_shape_set_text_color
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: color
+        type: uint32_t
+  - source_file: src/yetty/yrich/slides.c
+    name: yetty_yrich_shape_set_image_source
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: source
+        type: "const char *"
+  - source_file: src/yetty/yrich/slides.c
+    name: yetty_yrich_slides_set_slide_size
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: width
+        type: float
+      - name: height
+        type: float
+  - source_file: src/yetty/yrich/slides.c
+    name: yetty_yrich_slides_add_slide
+    return_type: struct yetty_yrich_slide_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/slides.c
+    name: yetty_yrich_slides_slide_at
+    return_type: "struct yetty_yrich_slide *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: int32_t
+  - source_file: src/yetty/yrich/slides.c
+    name: yetty_yrich_slides_current
+    return_type: int32_t
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/slides.c
+    name: yetty_yrich_slides_add_rectangle
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: width
+        type: float
+      - name: height
+        type: float
+  - source_file: src/yetty/yrich/slides.c
+    name: yetty_yrich_slides_add_ellipse
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: width
+        type: float
+      - name: height
+        type: float
+  - source_file: src/yetty/yrich/slides.c
+    name: yetty_yrich_slides_add_textbox
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: width
+        type: float
+      - name: height
+        type: float
+      - name: text
+        type: "const char *"
+      - name: text_len
+        type: size_t
+  - source_file: src/yetty/yrich/slides.c
+    name: yetty_yrich_slides_add_line
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x1
+        type: float
+      - name: y1
+        type: float
+      - name: x2
+        type: float
+      - name: y2
+        type: float
+  - source_file: src/yetty/yrich/slides.c
+    name: yetty_yrich_slides_add_image
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: width
+        type: float
+      - name: height
+        type: float
+  - source_file: src/yetty/yrich/spreadsheet.c
+    verbatim: "/* Header-destined: the shared yrich value types (cell address) the public
+ * spreadsheet API above references. */
+#include <yetty/yrich/yrich-types.h>"
+  - source_file: src/yetty/yrich/spreadsheet.c
+    name: yetty_yrich_cell_set_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+      - name: len
+        type: size_t
+  - source_file: src/yetty/yrich/spreadsheet.c
+    name: yetty_yrich_cell_text
+    return_type: "const char *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/spreadsheet.c
+    name: yetty_yrich_spreadsheet_row_height
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: int32_t
+  - source_file: src/yetty/yrich/spreadsheet.c
+    name: yetty_yrich_spreadsheet_col_width
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: col
+        type: int32_t
+  - source_file: src/yetty/yrich/spreadsheet.c
+    name: yetty_yrich_spreadsheet_row_y
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: int32_t
+  - source_file: src/yetty/yrich/spreadsheet.c
+    name: yetty_yrich_spreadsheet_col_x
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: col
+        type: int32_t
+  - source_file: src/yetty/yrich/spreadsheet.c
+    name: yetty_yrich_spreadsheet_cell_at
+    return_type: "struct yetty_yclass_object *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: int32_t
+      - name: col
+        type: int32_t
+  - source_file: src/yetty/yrich/spreadsheet.c
+    name: yetty_yrich_spreadsheet_ensure_cell
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: int32_t
+      - name: col
+        type: int32_t
+  - source_file: src/yetty/yrich/spreadsheet.c
+    name: yetty_yrich_spreadsheet_cell_value
+    return_type: "const char *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: int32_t
+      - name: col
+        type: int32_t
+  - source_file: src/yetty/yrich/spreadsheet.c
+    name: yetty_yrich_spreadsheet_cell_addr_at
+    return_type: struct yetty_yrich_cell_addr
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+  - source_file: src/yetty/yrich/ydoc.c
+    verbatim: "/* Header-destined: the shared yrich value types the public ydoc API above
+ * references. */
+#include <yetty/yrich/yrich-types.h>"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+      - name: len
+        type: size_t
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_font_size
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: font_size
+        type: float
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_color
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: color
+        type: uint32_t
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_format
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: format
+        type: uint32_t
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_set_page_width
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: width
+        type: float
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_set_margin
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: margin
+        type: float
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_add_paragraph
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+      - name: text_len
+        type: size_t
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_paragraph_at
+    return_type: "struct yetty_yclass_object *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: int32_t
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_insert_image
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: paragraph_index
+        type: int32_t
+      - name: width
+        type: float
+      - name: height
+        type: float
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_selection_text
+    return_type: "char *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_clear
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_set_source_path
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: path
+        type: "const char *"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_source_path
+    return_type: "const char *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_page_width
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_margin
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_ydoc_paragraph_count
+    return_type: struct yetty_ycore_size_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_text
+    return_type: "const char *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_text_len
+    return_type: struct yetty_ycore_size_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_font_size
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_color
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_format
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_alignment
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_set_alignment
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: halign
+        type: uint32_t
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_run_count
+    return_type: struct yetty_ycore_size_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_run_get
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: size_t
+      - name: out_start
+        type: "int32_t *"
+      - name: out_end
+        type: "int32_t *"
+      - name: out_format
+        type: "uint32_t *"
+      - name: out_color
+        type: "uint32_t *"
+  - source_file: src/yetty/yrich/ydoc.c
+    name: yetty_yrich_paragraph_add_run
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: start
+        type: int32_t
+      - name: end
+        type: int32_t
+      - name: format
+        type: uint32_t
+      - name: color
+        type: uint32_t
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_buffer
+    kind: struct
+    fields:
+      - name: data
+        type: "uint8_t *"
+      - name: capacity
+        type: size_t
+      - name: size
+        type: size_t
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_float_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: float
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_size_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: size_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_uint32_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: uint32_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_yrich_border
+    kind: struct
+    fields:
+      - name: width
+        type: float
+      - name: color
+        type: uint32_t
+      - name: style
+        type: uint32_t
+  - name: yetty_yrich_cell_addr
+    kind: struct
+    fields:
+      - name: row
+        type: int32_t
+      - name: col
+        type: int32_t
+  - name: yetty_yrich_cell_range
+    kind: struct
+    fields:
+      - name: start
+        type: struct yetty_yrich_cell_addr
+      - name: end
+        type: struct yetty_yrich_cell_addr
+  - name: yetty_yrich_element_id_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: yetty_yrich_element_id
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_yrich_history
+    kind: struct
+    fields:
+      - name: undo_stack
+        type: "struct yetty_yrich_command **"
+      - name: undo_count
+        type: size_t
+      - name: undo_capacity
+        type: size_t
+      - name: redo_stack
+        type: "struct yetty_yrich_command **"
+      - name: redo_count
+        type: size_t
+      - name: redo_capacity
+        type: size_t
+      - name: max_size
+        type: size_t
+  - name: yetty_yrich_op_log
+    kind: struct
+    fields:
+      - name: ops
+        type: "struct yetty_yrich_operation **"
+      - name: count
+        type: size_t
+      - name: capacity
+        type: size_t
+      - name: current_ts
+        type: uint64_t
+  - name: yetty_yrich_operation_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yrich_operation *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_yrich_rect
+    kind: struct
+    fields:
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: w
+        type: float
+      - name: h
+        type: float
+  - name: yetty_yrich_selection
+    kind: struct
+    fields:
+      - name: kind
+        type: uint32_t
+      - name: u
+        kind: union
+        fields:
+          - name: elements
+            type: struct yetty_yrich_selection_elements
+          - name: cells
+            type: struct yetty_yrich_selection_cells
+          - name: text
+            type: struct yetty_yrich_selection_text
+  - name: yetty_yrich_selection_cells
+    kind: struct
+    fields:
+      - name: range
+        type: struct yetty_yrich_cell_range
+      - name: active
+        type: struct yetty_yrich_cell_addr
+  - name: yetty_yrich_selection_elements
+    kind: struct
+    fields:
+      - name: ids
+        type: "yetty_yrich_element_id *"
+      - name: count
+        type: size_t
+      - name: capacity
+        type: size_t
+  - name: yetty_yrich_selection_text
+    kind: struct
+    fields:
+      - name: element_id
+        type: yetty_yrich_element_id
+      - name: start
+        type: int32_t
+      - name: end
+        type: int32_t
+  - name: yetty_yrich_slide_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yrich_slide *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_yrich_text_style
+    kind: struct
+    fields:
+      - name: font_size
+        type: float
+      - name: color
+        type: uint32_t
+      - name: bg_color
+        type: uint32_t
+      - name: format
+        type: uint32_t
+      - name: font_id
+        type: int32_t

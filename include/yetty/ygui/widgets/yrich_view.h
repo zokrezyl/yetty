@@ -27,23 +27,20 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yrich_view_create(struct yetty_
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_yrich_document;
-struct yetty_yrich_input_mods;
-
-/* Header-destined: the exposed prototypes below take yrich document/key
- * types, so the generated header must pull these in. */
-#include <yetty/yrich/yrich-document.h>
+/* Header-destined: the exposed prototypes below take yrich key/mod types,
+ * so the generated header must pull these in. The document itself is a
+ * yclass object — no yrich document header needed. */
 #include <yetty/yrich/yrich-types.h>
 struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_yclass_object *obj,
-                                                                  struct yetty_yrich_document *doc,
+                                                                  struct yetty_yclass_object *doc,
                                                                   int own);
 struct yetty_ycore_void_result yetty_ygui_yrich_view_invalidate(struct yetty_yclass_object *obj);
-struct yetty_yrich_document *yetty_ygui_yrich_view_document(const struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_ygui_yrich_view_document(const struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_yrich_view_content_size(
     const struct yetty_yclass_object *obj, float *w, float *h);
+struct yetty_ycore_void_result yetty_ygui_yrich_view_fit_content(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_yclass_object *obj,
-                                                              uint32_t key,
-                                                              struct yetty_yrich_input_mods mods);
+                                                              uint32_t key, uint32_t mods);
 struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_yclass_object *obj,
                                                                const char *text, size_t len);
 

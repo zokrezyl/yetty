@@ -158,7 +158,7 @@ all: help
 
 # A module entry is either a bare name (sources under src/yetty/<name>/)
 # or <name>=<path> for yclass modules living elsewhere (yclass-based tools).
-YCLASS_MODULES := yfigure ygrid ygui ymgui yrdawn yshadertoy yvterm yflame ymap yview yplatform ychrome ymusic ycircuit yai=tools/ai/yai
+YCLASS_MODULES := yfigure ygrid ygui ymgui yrdawn yshadertoy yvterm yflame ymap yview yplatform ychrome ymusic ycircuit yai=tools/ai/yai yrich
 
 .PHONY: codegen
 codegen: ## Run yclass codegen for all annotated modules (output committed to git)

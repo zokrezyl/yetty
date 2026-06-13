@@ -158,8 +158,9 @@ struct yetty_yrich_op_log {
 void yetty_yrich_op_log_init(struct yetty_yrich_op_log *log);
 void yetty_yrich_op_log_clear(struct yetty_yrich_op_log *log);
 
-/* Take ownership of op. Returns -1 on alloc failure (op is destroyed). */
-int yetty_yrich_op_log_append(struct yetty_yrich_op_log *log, struct yetty_yrich_operation *op);
+/* Take ownership of op. Errors on alloc failure (op is destroyed). */
+struct yetty_ycore_void_result yetty_yrich_op_log_append(struct yetty_yrich_op_log *log,
+                                                         struct yetty_yrich_operation *op);
 
 #ifdef __cplusplus
 }

@@ -2164,7 +2164,7 @@ classes:
     data: struct yetty_ygui_yrich_view
     data_fields:
       - name: doc
-        type: "struct yetty_yrich_document *"
+        type: "struct yetty_yclass_object *"
         get: false
         set: false
       - name: own
@@ -3945,9 +3945,9 @@ struct yetty_yplot_buffer_input;"
       - name: config
         type: "const struct yetty_ygui_yplot_config *"
   - source_file: src/yetty/ygui/widgets/yrich_view.c
-    verbatim: "/* Header-destined: the exposed prototypes below take yrich document/key
- * types, so the generated header must pull these in. */
-#include <yetty/yrich/yrich-document.h>
+    verbatim: "/* Header-destined: the exposed prototypes below take yrich key/mod types,
+ * so the generated header must pull these in. The document itself is a
+ * yclass object — no yrich document header needed. */
 #include <yetty/yrich/yrich-types.h>"
   - source_file: src/yetty/ygui/widgets/yrich_view.c
     name: yetty_ygui_yrich_view_set_document
@@ -3956,7 +3956,7 @@ struct yetty_yplot_buffer_input;"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: doc
-        type: "struct yetty_yrich_document *"
+        type: "struct yetty_yclass_object *"
       - name: own
         type: int
   - source_file: src/yetty/ygui/widgets/yrich_view.c
@@ -3967,7 +3967,7 @@ struct yetty_yplot_buffer_input;"
         type: "struct yetty_yclass_object *"
   - source_file: src/yetty/ygui/widgets/yrich_view.c
     name: yetty_ygui_yrich_view_document
-    return_type: "struct yetty_yrich_document *"
+    return_type: "struct yetty_yclass_object *"
     args:
       - name: obj
         type: "const struct yetty_yclass_object *"
@@ -3982,6 +3982,12 @@ struct yetty_yplot_buffer_input;"
       - name: h
         type: "float *"
   - source_file: src/yetty/ygui/widgets/yrich_view.c
+    name: yetty_ygui_yrich_view_fit_content
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widgets/yrich_view.c
     name: yetty_ygui_yrich_view_feed_key
     return_type: struct yetty_ycore_void_result
     args:
@@ -3990,7 +3996,7 @@ struct yetty_yplot_buffer_input;"
       - name: key
         type: uint32_t
       - name: mods
-        type: struct yetty_yrich_input_mods
+        type: uint32_t
   - source_file: src/yetty/ygui/widgets/yrich_view.c
     name: yetty_ygui_yrich_view_feed_text
     return_type: struct yetty_ycore_void_result
@@ -4265,17 +4271,6 @@ types:
         type: float
       - name: flags
         type: uint32_t
-  - name: yetty_yrich_input_mods
-    kind: struct
-    fields:
-      - name: shift
-        type: bool
-      - name: ctrl
-        type: bool
-      - name: alt
-        type: bool
-      - name: meta
-        type: bool
   - name: ynode_drag_mode
     kind: enum
     values:

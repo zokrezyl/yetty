@@ -14,9 +14,13 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <yetty/ycore/result.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct yetty_yclass_object;
 
 /*=============================================================================
  * Element identity
@@ -25,6 +29,22 @@ extern "C" {
 typedef uint64_t yetty_yrich_element_id;
 
 #define YETTY_YRICH_INVALID_ELEMENT_ID ((yetty_yrich_element_id)0)
+
+YETTY_YRESULT_DECLARE(yetty_yrich_element_id, yetty_yrich_element_id);
+
+/*=============================================================================
+ * Document callbacks — documents are yclass objects; both callbacks
+ * receive the document object.
+ *===========================================================================*/
+
+/* Outgoing-operations callback — used by the future sync layer. */
+struct yetty_yrich_operation;
+typedef void (*yetty_yrich_sync_cb)(struct yetty_yclass_object *doc_obj,
+                                    struct yetty_yrich_operation *const *ops, size_t op_count,
+                                    void *userdata);
+
+/* Dirty notification — fired when state changes between renders. */
+typedef void (*yetty_yrich_dirty_cb)(struct yetty_yclass_object *doc_obj, void *userdata);
 
 /*=============================================================================
  * Rect — axis-aligned rectangle
@@ -92,6 +112,31 @@ static inline struct yetty_yrich_text_style yetty_yrich_text_style_default(void)
 }
 
 /*=============================================================================
+ * TextRun — a contiguous span of text with uniform style.
+ *===========================================================================*/
+
+struct yetty_yrich_text_run {
+    int32_t start;
+    int32_t end;
+    struct yetty_yrich_text_style style;
+};
+
+/*=============================================================================
+ * Slide — plain value aggregate owned by the slides document (not a class).
+ *===========================================================================*/
+
+struct yetty_yrich_slide {
+    int32_t index;
+    uint32_t bg_color;
+
+    struct yetty_yclass_object **shapes; /* alias pointers; document owns */
+    size_t shape_count;
+    size_t shape_capacity;
+};
+
+YETTY_YRESULT_DECLARE(yetty_yrich_slide_ptr, struct yetty_yrich_slide *);
+
+/*=============================================================================
  * Border style
  *===========================================================================*/
 
@@ -155,11 +200,12 @@ static inline bool yetty_yrich_cell_range_contains(const struct yetty_yrich_cell
  * Input
  *===========================================================================*/
 
-struct yetty_yrich_input_mods {
-    bool shift;
-    bool ctrl;
-    bool alt;
-    bool meta;
+/* Modifier bitmask — scalar so input slots stay wire-marshallable. */
+enum yetty_yrich_mod_flags {
+    YETTY_YRICH_MOD_SHIFT = 1u << 0,
+    YETTY_YRICH_MOD_CTRL = 1u << 1,
+    YETTY_YRICH_MOD_ALT = 1u << 2,
+    YETTY_YRICH_MOD_META = 1u << 3,
 };
 
 enum yetty_yrich_mouse_button {

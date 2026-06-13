@@ -157,6 +157,8 @@ def ret_value_type(rid: str):
         "yetty_ycore_void": None,
         "yetty_ycore_int": "int",
         "yetty_ycore_size": "size_t",
+        "yetty_ycore_uint32": "uint32_t",
+        "yetty_ycore_float": "float",
         "uint32": "uint32_t",
         "float": "float",
     }
@@ -424,19 +426,36 @@ def _walk_decls(node: dict, current_file: str = None):
     after that point. """
     state = [current_file]
 
+    def file_of(loc_like):
+        # A location names its file either flat (`file`) or — for macro
+        # expansions — split into spellingLoc/expansionLoc. Document-order
+        # file tracking must follow the EXPANSION side: that is where the
+        # token sits in the including file. Without this, a macro-expanded
+        # decl (e.g. a YETTY_YRESULT_DECLARE right after the #include
+        # block) swallows the file-change marker and every later
+        # annotation in the source gets sliced from the wrong file.
+        if not isinstance(loc_like, dict):
+            return None
+        if "file" in loc_like:
+            return loc_like["file"]
+        expansion = loc_like.get("expansionLoc")
+        if isinstance(expansion, dict) and "file" in expansion:
+            return expansion["file"]
+        return None
+
     def visit(n):
         # Recurse into BEGIN-locations too: clang puts the file
         # indicator on the begin/end of a range when no top-level
         # `loc.file` exists. Without this, attribute-only nodes
         # (which carry `range` but no `loc`) wouldn't update state.
-        loc = n.get("loc")
-        if isinstance(loc, dict) and "file" in loc:
-            state[0] = loc["file"]
+        loc_file = file_of(n.get("loc"))
+        if loc_file:
+            state[0] = loc_file
         rng = n.get("range")
         if isinstance(rng, dict):
-            beg = rng.get("begin", {})
-            if isinstance(beg, dict) and "file" in beg:
-                state[0] = beg["file"]
+            begin_file = file_of(rng.get("begin"))
+            if begin_file:
+                state[0] = begin_file
         if n.get("kind") in ("FunctionDecl", "RecordDecl"):
             yield n, state[0]
         for child in n.get("inner", []) or []:

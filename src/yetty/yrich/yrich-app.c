@@ -30,10 +30,13 @@
 #include <yetty/ygui/widgets/yrich_view.h>
 #include <yetty/yinit/yinit.h>
 #include <yetty/yplatform/extract-assets.h>
+#include <yetty/yplatform/clipboard-manager.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/yrich/yrich-document.h>
 #include <yetty/yrich/yrich-shell.h>
+#include <yetty/yrich/yrich-types.h>
+
+#include <yetty/yrich/ydoc.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -54,7 +57,8 @@ static inline void destroy_safe(struct yetty_ycore_void_result r)
 struct yrich_app {
     int quit;
     enum yetty_yrich_app_kind kind;
-    struct yetty_yrich_document *doc; /* borrowed until handed to the view */
+    struct yetty_yclass_object *doc;         /* borrowed until handed to the view */
+    struct yetty_yclass_object *editor_view; /* the yrich_view — keyboard target */
 
     struct yetty_context ctx;
     struct yetty_yframework *yrt;
@@ -109,6 +113,7 @@ static struct yetty_ycore_void_result build_editor(struct yrich_app *app)
         yetty_ygui_yrich_view_set_document(editor.view, app->doc, 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "build_editor: set_document");
     app->doc = NULL;
+    app->editor_view = editor.view;
     return yetty_yrich_editor_refresh(&editor);
 }
 
@@ -124,6 +129,137 @@ static struct yetty_ycore_void_result push_scene(struct yrich_app *app)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, vr, "push_scene: set_viewport");
     yetty_ygui_framework_mark_dirty(app->ygui);
     return yetty_ygui_framework_emit(app->ygui);
+}
+
+/* GLFW modifier bits → YETTY_YRICH_MOD_* (the low three bits coincide:
+ * shift=1, ctrl=2, alt=4 — GLFW has ctrl=2/alt=4 as well). */
+static uint32_t glfw_mods_to_yrich(int glfw_mods)
+{
+    uint32_t mods = 0;
+    if (glfw_mods & 0x1) {
+        mods |= YETTY_YRICH_MOD_SHIFT;
+    }
+    if (glfw_mods & 0x2) {
+        mods |= YETTY_YRICH_MOD_CTRL;
+    }
+    if (glfw_mods & 0x4) {
+        mods |= YETTY_YRICH_MOD_ALT;
+    }
+    return mods;
+}
+
+/* GLFW key codes → yrich editing keys. Letters are only mapped when a
+ * Ctrl/Alt chord is held — plain letters arrive as CHAR events. */
+static uint32_t glfw_key_to_yrich(int glfw_key, uint32_t mods)
+{
+    switch (glfw_key) {
+    case 257: /* GLFW_KEY_ENTER */
+        return YETTY_YRICH_KEY_ENTER;
+    case 258: /* GLFW_KEY_TAB */
+        return YETTY_YRICH_KEY_TAB;
+    case 259: /* GLFW_KEY_BACKSPACE */
+        return YETTY_YRICH_KEY_BACKSPACE;
+    case 261: /* GLFW_KEY_DELETE */
+        return YETTY_YRICH_KEY_DELETE;
+    case 262: /* GLFW_KEY_RIGHT */
+        return YETTY_YRICH_KEY_RIGHT;
+    case 263: /* GLFW_KEY_LEFT */
+        return YETTY_YRICH_KEY_LEFT;
+    case 264: /* GLFW_KEY_DOWN */
+        return YETTY_YRICH_KEY_DOWN;
+    case 265: /* GLFW_KEY_UP */
+        return YETTY_YRICH_KEY_UP;
+    case 266: /* GLFW_KEY_PAGE_UP */
+        return YETTY_YRICH_KEY_PAGEUP;
+    case 267: /* GLFW_KEY_PAGE_DOWN */
+        return YETTY_YRICH_KEY_PAGEDOWN;
+    case 268: /* GLFW_KEY_HOME */
+        return YETTY_YRICH_KEY_HOME;
+    case 269: /* GLFW_KEY_END */
+        return YETTY_YRICH_KEY_END;
+    default:
+        break;
+    }
+    if (glfw_key >= 65 && glfw_key <= 90 && (mods & (YETTY_YRICH_MOD_CTRL | YETTY_YRICH_MOD_ALT))) {
+        return YETTY_YRICH_KEY_A + (uint32_t)(glfw_key - 65);
+    }
+    return YETTY_YRICH_KEY_UNKNOWN;
+}
+
+/* Minimal UTF-8 encoder for one codepoint; returns the byte count (0 for
+ * out-of-range input). */
+static size_t encode_utf8(uint32_t codepoint, char out[4])
+{
+    if (codepoint < 0x80) {
+        out[0] = (char)codepoint;
+        return 1;
+    }
+    if (codepoint < 0x800) {
+        out[0] = (char)(0xC0 | (codepoint >> 6));
+        out[1] = (char)(0x80 | (codepoint & 0x3F));
+        return 2;
+    }
+    if (codepoint < 0x10000) {
+        out[0] = (char)(0xE0 | (codepoint >> 12));
+        out[1] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+        out[2] = (char)(0x80 | (codepoint & 0x3F));
+        return 3;
+    }
+    if (codepoint <= 0x10FFFF) {
+        out[0] = (char)(0xF0 | (codepoint >> 18));
+        out[1] = (char)(0x80 | ((codepoint >> 12) & 0x3F));
+        out[2] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+        out[3] = (char)(0x80 | (codepoint & 0x3F));
+        return 4;
+    }
+    return 0;
+}
+
+/* Track content growth after an edit, then re-emit the scene. */
+static struct yetty_ycore_void_result refit_and_push(struct yrich_app *app)
+{
+    if (app->editor_view) {
+        struct yetty_ycore_void_result fit_res =
+            yetty_ygui_yrich_view_fit_content(app->editor_view);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, fit_res, "yrich: fit content");
+    }
+    return push_scene(app);
+}
+
+/* Ctrl+C / Ctrl+X / Ctrl+V — copy/cut go straight to the clipboard
+ * manager; paste is an async round trip that returns as a PASTE event. */
+static struct yetty_ycore_void_result handle_clipboard_chord(struct yrich_app *app, int glfw_key)
+{
+    struct yetty_platform_clipboard_manager *clipboard = app->yrt->clipboard_manager;
+    struct yetty_yclass_object *doc =
+        app->editor_view ? yetty_ygui_yrich_view_document(app->editor_view) : NULL;
+    if (!doc) {
+        return YETTY_OK_VOID();
+    }
+    if (glfw_key == 86) { /* V — request async paste */
+        if (clipboard) {
+            struct yetty_ycore_void_result paste_res = clipboard->ops->request_paste(clipboard);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, paste_res, "yrich: request paste");
+        }
+        return YETTY_OK_VOID();
+    }
+    char *selection_text = yetty_yrich_ydoc_selection_text(doc);
+    if (!selection_text) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result copy_res = YETTY_OK_VOID();
+    if (clipboard) {
+        copy_res = clipboard->ops->set_text(clipboard, selection_text, strlen(selection_text));
+    }
+    free(selection_text);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, copy_res, "yrich: clipboard set");
+    if (glfw_key == 88) { /* X — delete the selection after copying */
+        struct yetty_ycore_void_result delete_res =
+            yetty_ygui_yrich_view_feed_key(app->editor_view, YETTY_YRICH_KEY_DELETE, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, delete_res, "yrich: cut delete");
+        return refit_and_push(app);
+    }
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result handle_event(struct yrich_app *app,
@@ -183,12 +319,74 @@ static struct yetty_ycore_void_result handle_event(struct yrich_app *app,
         }
         return YETTY_OK_VOID();
     }
-    case YETTY_YCORE_KEY_DOWN:
-        /* Esc / 'q' quit. */
-        if (ev->key.key == 256 || ev->key.key == 81) {
+    case YETTY_YCORE_KEY_DOWN: {
+        /* Esc quits; everything else feeds the editor view (the window
+         * close button is the regular exit path). */
+        if (ev->key.key == 256) {
             app->quit = 1;
+            return YETTY_OK_VOID();
         }
+        if (!app->editor_view) {
+            return YETTY_OK_VOID();
+        }
+        uint32_t mods = glfw_mods_to_yrich(ev->key.mods);
+        /* Clipboard chords — handled at the app level, where the platform
+         * clipboard manager lives. C=67 X=88 V=86 (GLFW codes). */
+        if ((mods & YETTY_YRICH_MOD_CTRL) &&
+            (ev->key.key == 67 || ev->key.key == 88 || ev->key.key == 86)) {
+            return handle_clipboard_chord(app, ev->key.key);
+        }
+        uint32_t key = glfw_key_to_yrich(ev->key.key, mods);
+        if (key == YETTY_YRICH_KEY_UNKNOWN) {
+            return YETTY_OK_VOID();
+        }
+        struct yetty_ycore_void_result key_res =
+            yetty_ygui_yrich_view_feed_key(app->editor_view, key, mods);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, key_res, "yrich: feed key");
+        return refit_and_push(app);
+    }
+    case YETTY_YCORE_PASTE: {
+        /* Async clipboard fetch response — payload is a malloc'd string. */
+        char *paste_text = ev->payload;
+        if (!paste_text) {
+            return YETTY_OK_VOID();
+        }
+        struct yetty_ycore_void_result text_res = YETTY_OK_VOID();
+        if (app->editor_view) {
+            text_res =
+                yetty_ygui_yrich_view_feed_text(app->editor_view, paste_text, strlen(paste_text));
+        }
+        free(paste_text);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, text_res, "yrich: paste");
+        return refit_and_push(app);
+    }
+    case YETTY_YCORE_MOUSE_SCROLL: {
+        struct yetty_ycore_void_result scroll_res = yetty_ygui_framework_feed_mouse_scroll(
+            app->ygui, ev->mouse_scroll.x, ev->mouse_scroll.y, ev->mouse_scroll.dx,
+            ev->mouse_scroll.dy);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, scroll_res, "yrich: scroll");
+        struct yetty_ycore_void_result scene_r = push_scene(app);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_r, "yrich: push scene");
         return YETTY_OK_VOID();
+    }
+    case YETTY_YCORE_CHAR: {
+        if (!app->editor_view) {
+            return YETTY_OK_VOID();
+        }
+        /* Characters arriving with Ctrl/Alt are shortcut echoes, not text. */
+        if (ev->chr.mods & (2 /* GLFW_MOD_CONTROL */ | 4 /* GLFW_MOD_ALT */)) {
+            return YETTY_OK_VOID();
+        }
+        char utf8[4];
+        size_t utf8_len = encode_utf8(ev->chr.codepoint, utf8);
+        if (utf8_len == 0) {
+            return YETTY_OK_VOID();
+        }
+        struct yetty_ycore_void_result text_res =
+            yetty_ygui_yrich_view_feed_text(app->editor_view, utf8, utf8_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, text_res, "yrich: feed text");
+        return refit_and_push(app);
+    }
     case YETTY_YCORE_MOUSE_DOWN: {
         struct yetty_ycore_int_result feed_r = yetty_ygui_framework_feed_mouse_button(
             app->ygui, ev->mouse.x, ev->mouse.y, ev->mouse.button, 1, ev->mouse.mods);
@@ -390,20 +588,20 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
         app->font->ops->destroy(app->font);
         app->font = NULL;
     }
-    (void)yetty_yframework_destroy(app->yrt);
+    destroy_safe(yetty_yframework_destroy(app->yrt));
     app->yrt = NULL;
     return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_int_result yetty_yrich_app_run(int argc, char **argv,
-                                                  struct yetty_yrich_document *doc,
+                                                  struct yetty_yclass_object *doc_obj,
                                                   enum yetty_yrich_app_kind kind)
 {
-    if (!doc) {
+    if (!doc_obj) {
         return YETTY_OK(yetty_ycore_int, 2);
     }
     struct yrich_app app = {0};
-    app.doc = doc;
+    app.doc = doc_obj;
     app.kind = kind;
     struct yetty_yinit_app_config cfg = {.extract_assets_fn = yetty_platform_extract_assets};
     return yetty_yinit_run(argc, argv, &cfg, yrich_app_worker, &app);

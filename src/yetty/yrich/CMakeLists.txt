@@ -11,16 +11,20 @@
 #                      sources carry file-static state that a static
 #                      archive would let the linker prune — same reason
 #                      the ygui demo runner is an OBJECT library.
+# Annotated yclass sources (each #includes its own <stem>.gen.c at the
+# foot); methods.gen.c / rpc.gen.c are standalone generated units.
 add_library(yetty_yrich STATIC
-    yrich-element.c
+    element.c
+    document.c
+    ydoc.c
+    spreadsheet.c
+    slides.c
+    methods.gen.c
+    rpc.gen.c
     yrich-selection.c
     yrich-operation.c
     yrich-command.c
-    yrich-document.c
     yrich-yaml.c
-    yspreadsheet.c
-    yslides.c
-    ydoc.c
 )
 
 target_include_directories(yetty_yrich PUBLIC
@@ -30,10 +34,19 @@ target_include_directories(yetty_yrich PUBLIC
 
 target_link_libraries(yetty_yrich PUBLIC
     yetty_ycore
+    yetty_yclass
     yetty_ydraw_core
     yetty_ysdf
     yaml
 )
+
+# C23 for [[clang::annotate(...)]] attribute syntax.
+if(NOT MSVC)
+    set_target_properties(yetty_yrich PROPERTIES
+        C_STANDARD 23
+        C_STANDARD_REQUIRED ON
+    )
+endif()
 
 # ---------------------------------------------------------------------------
 # yetty_yrich_app — the standalone window host + editor shells. Linux +

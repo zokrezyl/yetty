@@ -22,7 +22,7 @@
 extern "C" {
 #endif
 
-struct yetty_yrich_document;
+struct yetty_yclass_object;
 
 /* Which decorated editor shell to host. */
 enum yetty_yrich_app_kind {
@@ -31,12 +31,14 @@ enum yetty_yrich_app_kind {
     YETTY_YRICH_APP_YSLIDE,   /* slide deck */
 };
 
-/* Open a window and run the decorated editor for `doc`. Takes ownership
- * of `doc` (destroyed with the widget tree on exit). `argc`/`argv` are
- * forwarded to yinit_run for its own flag parsing. Blocks until the
- * window closes. On success the value is a process exit code (0 = clean). */
+/* Open a window and run the decorated editor for the document object
+ * `doc_obj` (a yrich:ydoc / yrich:spreadsheet / yrich:slides instance).
+ * Takes ownership of the document (destroyed with the widget tree on
+ * exit). `argc`/`argv` are forwarded to yinit_run for its own flag
+ * parsing. Blocks until the window closes. On success the value is a
+ * process exit code (0 = clean). */
 struct yetty_ycore_int_result yetty_yrich_app_run(int argc, char **argv,
-                                                  struct yetty_yrich_document *doc,
+                                                  struct yetty_yclass_object *doc_obj,
                                                   enum yetty_yrich_app_kind kind);
 
 #ifdef __cplusplus

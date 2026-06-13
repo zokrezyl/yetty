@@ -1,22 +1,24 @@
 /*
  * ydoc — rich-text document editor.
  *
- * Thin entry: builds (or loads) a yetty_yrich_ydoc and hands it to the
- * shared yrich app host, which opens a window and runs the ygui-decorated
- * editor (formatting toolbar + scrolling document view + statusbar),
- * rendered through the in-process yfigure container — same path as the
- * other ygui apps (no OSC).
+ * Thin entry: builds (or loads) a yrich:ydoc document object and hands it
+ * to the shared yrich app host, which opens a window and runs the
+ * ygui-decorated editor (formatting toolbar + scrolling document view +
+ * statusbar), rendered through the in-process yfigure container — same
+ * path as the other ygui apps (no OSC).
  *
- * Press 'q' / Esc / close the window to quit.
+ * Press Esc or close the window to quit.
  *
  * Usage:
  *   ydoc                       # built-in demo content
  *   ydoc path/to/sample.ydoc.yaml
  */
 
-#include <yetty/yrich/ydoc.h>
 #include <yetty/yrich/yrich-app.h>
-#include <yetty/yrich/yrich-document.h>
+#include <yetty/yrich/yrich-types.h>
+
+#include <yetty/yrich/document.h>
+#include <yetty/yrich/ydoc.h>
 #include <yetty/yrich/yrich-yaml.h>
 
 #include <stdio.h>
@@ -30,7 +32,7 @@ static void usage(FILE *out, const char *prog)
             prog);
 }
 
-static void seed_demo(struct yetty_yrich_ydoc *d)
+static struct yetty_ycore_void_result seed_demo(struct yetty_yclass_object *doc_obj)
 {
     const char *paras[] = {
         "Welcome to ydoc — a rich text editor.",
@@ -40,8 +42,11 @@ static void seed_demo(struct yetty_yrich_ydoc *d)
         "Press 'q' or Esc to quit.",
     };
     for (size_t i = 0; i < sizeof(paras) / sizeof(paras[0]); i++) {
-        yetty_yrich_ydoc_add_paragraph(d, paras[i], strlen(paras[i]));
+        struct yetty_yclass_object_ptr_result para_res =
+            yetty_yrich_ydoc_add_paragraph(doc_obj, paras[i], strlen(paras[i]));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, para_res, "seed_demo: add_paragraph failed");
     }
+    return YETTY_OK_VOID();
 }
 
 int main(int argc, char **argv)
@@ -57,28 +62,43 @@ int main(int argc, char **argv)
         }
     }
 
-    struct yetty_yrich_ydoc *doc = NULL;
+    struct yetty_yclass_object *doc_obj = NULL;
     if (file_path) {
-        struct yetty_yrich_ydoc_ptr_result lr = yetty_yrich_ydoc_load_yaml_file(file_path);
-        if (YETTY_IS_ERR(lr)) {
-            fprintf(stderr, "ydoc: load %s: %s\n", file_path, lr.error.msg);
-            yetty_ycore_error_destroy(lr.error);
+        struct yetty_yclass_object_ptr_result load_res = yetty_yrich_ydoc_load_yaml_file(file_path);
+        if (YETTY_IS_ERR(load_res)) {
+            yetty_ycore_error_print(stderr, "ydoc: load failed", load_res.error);
+            yetty_ycore_error_destroy(load_res.error);
             return 1;
         }
-        doc = lr.value;
+        doc_obj = load_res.value;
+        struct yetty_ycore_void_result path_res =
+            yetty_yrich_ydoc_set_source_path(doc_obj, file_path);
+        if (YETTY_IS_ERR(path_res)) {
+            yetty_ycore_error_destroy(path_res.error);
+        }
     } else {
-        struct yetty_yrich_ydoc_ptr_result dr = yetty_yrich_ydoc_create();
-        if (YETTY_IS_ERR(dr)) {
-            fprintf(stderr, "ydoc: %s\n", dr.error.msg);
-            yetty_ycore_error_destroy(dr.error);
+        struct yetty_yclass_object_ptr_result create_res = yetty_yrich_ydoc_create(NULL);
+        if (YETTY_IS_ERR(create_res)) {
+            yetty_ycore_error_print(stderr, "ydoc: create failed", create_res.error);
+            yetty_ycore_error_destroy(create_res.error);
             return 1;
         }
-        doc = dr.value;
-        seed_demo(doc);
+        doc_obj = create_res.value;
+        struct yetty_ycore_void_result seed_res = seed_demo(doc_obj);
+        if (YETTY_IS_ERR(seed_res)) {
+            yetty_ycore_error_print(stderr, "ydoc: seed demo", seed_res.error);
+            yetty_ycore_error_destroy(seed_res.error);
+            struct yetty_ycore_void_result destroy_res =
+                yetty_yrich_document_destroy(NULL, doc_obj);
+            if (YETTY_IS_ERR(destroy_res)) {
+                yetty_ycore_error_destroy(destroy_res.error);
+            }
+            return 1;
+        }
     }
 
     struct yetty_ycore_int_result run_result =
-        yetty_yrich_app_run(argc, argv, &doc->base, YETTY_YRICH_APP_YDOC);
+        yetty_yrich_app_run(argc, argv, doc_obj, YETTY_YRICH_APP_YDOC);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "ydoc: run", run_result.error);
         yetty_ycore_error_destroy(run_result.error);
