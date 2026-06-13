@@ -30,31 +30,31 @@ void yetty_yrich_selection_clear(struct yetty_yrich_selection *s)
     s->kind = YETTY_YRICH_SEL_NONE;
 }
 
-static int elements_grow(struct yetty_yrich_selection_elements *e)
+static struct yetty_ycore_void_result elements_grow(struct yetty_yrich_selection_elements *e)
 {
     size_t new_cap = e->capacity ? e->capacity * 2 : 4;
     yetty_yrich_element_id *new_ids = realloc(e->ids, new_cap * sizeof(*new_ids));
     if (!new_ids) {
-        return -1;
+        return YETTY_ERR(yetty_ycore_void, "yrich selection: id array grow failed");
     }
     e->ids = new_ids;
     e->capacity = new_cap;
-    return 0;
+    return YETTY_OK_VOID();
 }
 
-int yetty_yrich_selection_select_element(struct yetty_yrich_selection *s, yetty_yrich_element_id id)
+struct yetty_ycore_void_result yetty_yrich_selection_select_element(struct yetty_yrich_selection *s,
+                                                                    yetty_yrich_element_id id)
 {
     if (!s) {
-        return -1;
+        return YETTY_ERR(yetty_ycore_void, "yrich selection_select_element: NULL selection");
     }
     yetty_yrich_selection_clear(s);
     s->kind = YETTY_YRICH_SEL_ELEMENTS;
-    if (elements_grow(&s->u.elements) < 0) {
-        return -1;
-    }
+    struct yetty_ycore_void_result grow_res = elements_grow(&s->u.elements);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grow_res, "yrich selection_select_element: grow failed");
     s->u.elements.ids[0] = id;
     s->u.elements.count = 1;
-    return 0;
+    return YETTY_OK_VOID();
 }
 
 void yetty_yrich_selection_select_cells(struct yetty_yrich_selection *s,
@@ -111,24 +111,26 @@ bool yetty_yrich_selection_contains(const struct yetty_yrich_selection *s,
     return false;
 }
 
-int yetty_yrich_selection_add(struct yetty_yrich_selection *s, yetty_yrich_element_id id)
+struct yetty_ycore_void_result yetty_yrich_selection_add(struct yetty_yrich_selection *s,
+                                                         yetty_yrich_element_id id)
 {
     if (!s) {
-        return -1;
+        return YETTY_ERR(yetty_ycore_void, "yrich selection_add: NULL selection");
     }
     if (s->kind != YETTY_YRICH_SEL_ELEMENTS) {
         yetty_yrich_selection_clear(s);
         s->kind = YETTY_YRICH_SEL_ELEMENTS;
     }
     if (yetty_yrich_selection_contains(s, id)) {
-        return 0;
+        return YETTY_OK_VOID();
     }
     struct yetty_yrich_selection_elements *e = &s->u.elements;
-    if (e->count == e->capacity && elements_grow(e) < 0) {
-        return -1;
+    if (e->count == e->capacity) {
+        struct yetty_ycore_void_result grow_res = elements_grow(e);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, grow_res, "yrich selection_add: grow failed");
     }
     e->ids[e->count++] = id;
-    return 0;
+    return YETTY_OK_VOID();
 }
 
 void yetty_yrich_selection_remove(struct yetty_yrich_selection *s, yetty_yrich_element_id id)
@@ -146,19 +148,21 @@ void yetty_yrich_selection_remove(struct yetty_yrich_selection *s, yetty_yrich_e
     }
 }
 
-int yetty_yrich_selection_toggle(struct yetty_yrich_selection *s, yetty_yrich_element_id id)
+struct yetty_ycore_void_result yetty_yrich_selection_toggle(struct yetty_yrich_selection *s,
+                                                            yetty_yrich_element_id id)
 {
     if (yetty_yrich_selection_contains(s, id)) {
         yetty_yrich_selection_remove(s, id);
-        return 0;
+        return YETTY_OK_VOID();
     }
     return yetty_yrich_selection_add(s, id);
 }
 
-int yetty_yrich_selection_extend_element(struct yetty_yrich_selection *s, yetty_yrich_element_id id)
+struct yetty_ycore_void_result yetty_yrich_selection_extend_element(struct yetty_yrich_selection *s,
+                                                                    yetty_yrich_element_id id)
 {
     if (!s) {
-        return -1;
+        return YETTY_ERR(yetty_ycore_void, "yrich selection_extend_element: NULL selection");
     }
     if (s->kind == YETTY_YRICH_SEL_ELEMENTS) {
         return yetty_yrich_selection_add(s, id);

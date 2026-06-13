@@ -201,18 +201,19 @@ void yetty_yrich_op_log_clear(struct yetty_yrich_op_log *log)
     memset(log, 0, sizeof(*log));
 }
 
-int yetty_yrich_op_log_append(struct yetty_yrich_op_log *log, struct yetty_yrich_operation *op)
+struct yetty_ycore_void_result yetty_yrich_op_log_append(struct yetty_yrich_op_log *log,
+                                                         struct yetty_yrich_operation *op)
 {
     if (!log || !op) {
         yetty_yrich_operation_destroy(op);
-        return -1;
+        return YETTY_ERR(yetty_ycore_void, "yrich op_log_append: NULL log/op");
     }
     if (log->count == log->capacity) {
         size_t new_cap = log->capacity ? log->capacity * 2 : 32;
         struct yetty_yrich_operation **new_ops = realloc(log->ops, new_cap * sizeof(*new_ops));
         if (!new_ops) {
             yetty_yrich_operation_destroy(op);
-            return -1;
+            return YETTY_ERR(yetty_ycore_void, "yrich op_log_append: log grow failed");
         }
         log->ops = new_ops;
         log->capacity = new_cap;
@@ -221,5 +222,5 @@ int yetty_yrich_op_log_append(struct yetty_yrich_op_log *log, struct yetty_yrich
     if (op->timestamp > log->current_ts) {
         log->current_ts = op->timestamp;
     }
-    return 0;
+    return YETTY_OK_VOID();
 }

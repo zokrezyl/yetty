@@ -13,6 +13,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <yetty/ycore/result.h>
 #include <yetty/yrich/yrich-types.h>
 
 #ifdef __cplusplus
@@ -67,9 +68,9 @@ void yetty_yrich_selection_clear(struct yetty_yrich_selection *s);
  * Setters — replace current selection
  *===========================================================================*/
 
-/* Replace selection with a single element. Returns -1 on alloc failure. */
-int yetty_yrich_selection_select_element(struct yetty_yrich_selection *s,
-                                         yetty_yrich_element_id id);
+/* Replace selection with a single element. Errors on alloc failure. */
+struct yetty_ycore_void_result yetty_yrich_selection_select_element(struct yetty_yrich_selection *s,
+                                                                    yetty_yrich_element_id id);
 
 void yetty_yrich_selection_select_cells(struct yetty_yrich_selection *s,
                                         struct yetty_yrich_cell_range range,
@@ -92,15 +93,17 @@ void yetty_yrich_selection_set_cursor(struct yetty_yrich_selection *s,
 bool yetty_yrich_selection_contains(const struct yetty_yrich_selection *s,
                                     yetty_yrich_element_id id);
 
-int yetty_yrich_selection_add(struct yetty_yrich_selection *s, yetty_yrich_element_id id);
+struct yetty_ycore_void_result yetty_yrich_selection_add(struct yetty_yrich_selection *s,
+                                                         yetty_yrich_element_id id);
 
 void yetty_yrich_selection_remove(struct yetty_yrich_selection *s, yetty_yrich_element_id id);
 
-int yetty_yrich_selection_toggle(struct yetty_yrich_selection *s, yetty_yrich_element_id id);
+struct yetty_ycore_void_result yetty_yrich_selection_toggle(struct yetty_yrich_selection *s,
+                                                            yetty_yrich_element_id id);
 
 /* "Extend" — add element to existing element selection or convert to one. */
-int yetty_yrich_selection_extend_element(struct yetty_yrich_selection *s,
-                                         yetty_yrich_element_id id);
+struct yetty_ycore_void_result yetty_yrich_selection_extend_element(struct yetty_yrich_selection *s,
+                                                                    yetty_yrich_element_id id);
 
 /* "Extend" cell range to addr (anchor stays put). */
 void yetty_yrich_selection_extend_cell(struct yetty_yrich_selection *s,

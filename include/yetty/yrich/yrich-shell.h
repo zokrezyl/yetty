@@ -23,25 +23,25 @@ extern "C" {
 #endif
 
 struct yetty_yclass_object;
-struct yetty_yrich_document;
 
 /* The widgets a shell builder produces. `root` is the editor's top
  * container (attach it under the engine root, or pass it as the root
  * itself). `view` is the ygui yrich_view hosting the document; `doc` is
- * the yrich document it owns (borrowed convenience pointer — destroyed
- * with the view). `toolbar` / `statusbar` are exposed so the host can
- * extend the chrome or update status text. */
+ * the yrich document object it owns (borrowed convenience pointer —
+ * destroyed with the view). `toolbar` / `statusbar` are exposed so the
+ * host can extend the chrome or update status text. */
 struct yetty_yrich_editor {
     struct yetty_yclass_object *root;
+    struct yetty_yclass_object *menubar; /* NULL when the kind has no menus */
     struct yetty_yclass_object *toolbar;
     struct yetty_yclass_object *view;
     struct yetty_yclass_object *statusbar;
-    struct yetty_yrich_document *doc;
+    struct yetty_yclass_object *doc;
 };
 
 /* Rich-text editor: a formatting toolbar over a scrolling document
  * surface with a statusbar. Creates an empty ydoc; populate it via the
- * yrich ydoc API on `out->doc` (cast to struct yetty_yrich_ydoc *). */
+ * yrich ydoc API on `out->doc`. */
 struct yetty_ycore_void_result yetty_yrich_ydoc_editor_create(struct yetty_yclass_object *parent,
                                                               struct yetty_yrich_editor *out);
 

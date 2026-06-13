@@ -1,13 +1,13 @@
 /*
  * ysheet — spreadsheet editor.
  *
- * Thin entry: builds (or loads) a yetty_yrich_spreadsheet and hands it to
- * the shared yrich app host, which opens a window and runs the
- * ygui-decorated editor (edit toolbar + scrolling grid + statusbar),
+ * Thin entry: builds (or loads) a yrich:spreadsheet document object and
+ * hands it to the shared yrich app host, which opens a window and runs
+ * the ygui-decorated editor (edit toolbar + scrolling grid + statusbar),
  * rendered through the in-process yfigure container — same path as the
  * other ygui apps (no OSC).
  *
- * Press 'q' / Esc / close the window to quit.
+ * Press Esc or close the window to quit.
  *
  * Usage:
  *   ysheet                              # built-in demo grid
@@ -15,9 +15,11 @@
  */
 
 #include <yetty/yrich/yrich-app.h>
-#include <yetty/yrich/yrich-document.h>
+#include <yetty/yrich/yrich-types.h>
+
+#include <yetty/yrich/document.h>
+#include <yetty/yrich/spreadsheet.h>
 #include <yetty/yrich/yrich-yaml.h>
-#include <yetty/yrich/yspreadsheet.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -30,26 +32,40 @@ static void usage(FILE *out, const char *prog)
             prog);
 }
 
-static void set_cell(struct yetty_yrich_spreadsheet *s, int row, int col, const char *value)
+static struct yetty_ycore_void_result set_cell(struct yetty_yclass_object *sheet_obj, int32_t row,
+                                               int32_t col, const char *value)
 {
-    struct yetty_yrich_cell_addr addr = {row, col};
-    struct yetty_ycore_void_result r =
-        yetty_yrich_spreadsheet_set_cell_value(s, addr, value, strlen(value));
-    if (YETTY_IS_ERR(r)) {
-        yetty_ycore_error_destroy(r.error);
-    }
+    struct yetty_ycore_buffer text = {
+        .data = (uint8_t *)value,
+        .size = strlen(value),
+        .capacity = strlen(value),
+    };
+    struct yetty_ycore_void_result set_res =
+        yetty_yrich_spreadsheet_set_cell_value(NULL, sheet_obj, row, col, text);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_res, "seed_demo: set_cell_value failed");
+    return YETTY_OK_VOID();
 }
 
-static void seed_demo(struct yetty_yrich_spreadsheet *s)
+static struct yetty_ycore_void_result seed_demo(struct yetty_yclass_object *sheet_obj)
 {
-    yetty_yrich_spreadsheet_set_grid_size(s, 50, 20);
-    set_cell(s, 0, 0, "yrich spreadsheet");
-    set_cell(s, 1, 0, "A");
-    set_cell(s, 1, 1, "B");
-    set_cell(s, 1, 2, "C");
-    set_cell(s, 2, 0, "100");
-    set_cell(s, 2, 1, "200");
-    set_cell(s, 2, 2, "300");
+    struct yetty_ycore_void_result grid_res =
+        yetty_yrich_spreadsheet_set_grid_size(NULL, sheet_obj, 50, 20);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "seed_demo: set_grid_size failed");
+    struct yetty_ycore_void_result cell_res = set_cell(sheet_obj, 0, 0, "yrich spreadsheet");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "seed_demo");
+    cell_res = set_cell(sheet_obj, 1, 0, "A");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "seed_demo");
+    cell_res = set_cell(sheet_obj, 1, 1, "B");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "seed_demo");
+    cell_res = set_cell(sheet_obj, 1, 2, "C");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "seed_demo");
+    cell_res = set_cell(sheet_obj, 2, 0, "100");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "seed_demo");
+    cell_res = set_cell(sheet_obj, 2, 1, "200");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "seed_demo");
+    cell_res = set_cell(sheet_obj, 2, 2, "300");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "seed_demo");
+    return YETTY_OK_VOID();
 }
 
 int main(int argc, char **argv)
@@ -65,29 +81,39 @@ int main(int argc, char **argv)
         }
     }
 
-    struct yetty_yrich_spreadsheet *sheet = NULL;
+    struct yetty_yclass_object *sheet_obj = NULL;
     if (file_path) {
-        struct yetty_yrich_spreadsheet_ptr_result lr =
+        struct yetty_yclass_object_ptr_result load_res =
             yetty_yrich_spreadsheet_load_yaml_file(file_path);
-        if (YETTY_IS_ERR(lr)) {
-            fprintf(stderr, "ysheet: load %s: %s\n", file_path, lr.error.msg);
-            yetty_ycore_error_destroy(lr.error);
+        if (YETTY_IS_ERR(load_res)) {
+            yetty_ycore_error_print(stderr, "ysheet: load failed", load_res.error);
+            yetty_ycore_error_destroy(load_res.error);
             return 1;
         }
-        sheet = lr.value;
+        sheet_obj = load_res.value;
     } else {
-        struct yetty_yrich_spreadsheet_ptr_result sr = yetty_yrich_spreadsheet_create();
-        if (YETTY_IS_ERR(sr)) {
-            fprintf(stderr, "ysheet: %s\n", sr.error.msg);
-            yetty_ycore_error_destroy(sr.error);
+        struct yetty_yclass_object_ptr_result create_res = yetty_yrich_spreadsheet_create(NULL);
+        if (YETTY_IS_ERR(create_res)) {
+            yetty_ycore_error_print(stderr, "ysheet: create failed", create_res.error);
+            yetty_ycore_error_destroy(create_res.error);
             return 1;
         }
-        sheet = sr.value;
-        seed_demo(sheet);
+        sheet_obj = create_res.value;
+        struct yetty_ycore_void_result seed_res = seed_demo(sheet_obj);
+        if (YETTY_IS_ERR(seed_res)) {
+            yetty_ycore_error_print(stderr, "ysheet: seed demo", seed_res.error);
+            yetty_ycore_error_destroy(seed_res.error);
+            struct yetty_ycore_void_result destroy_res =
+                yetty_yrich_document_destroy(NULL, sheet_obj);
+            if (YETTY_IS_ERR(destroy_res)) {
+                yetty_ycore_error_destroy(destroy_res.error);
+            }
+            return 1;
+        }
     }
 
     struct yetty_ycore_int_result run_result =
-        yetty_yrich_app_run(argc, argv, &sheet->base, YETTY_YRICH_APP_YSHEET);
+        yetty_yrich_app_run(argc, argv, sheet_obj, YETTY_YRICH_APP_YSHEET);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "ysheet: run", run_result.error);
         yetty_ycore_error_destroy(run_result.error);

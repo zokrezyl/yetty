@@ -496,8 +496,7 @@ struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
     if (app_cfg && app_cfg->extract_assets_fn) {
         struct yetty_ycore_void_result extract_result = app_cfg->extract_assets_fn();
         if (!YETTY_IS_OK(extract_result)) {
-            return YETTY_ERR(yetty_ycore_int, "yinit_run: asset extraction failed",
-                             extract_result);
+            return YETTY_ERR(yetty_ycore_int, "yinit_run: asset extraction failed", extract_result);
         }
         ydebug("yinit_run: assets extracted to /data/");
     }
