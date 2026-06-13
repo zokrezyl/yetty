@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 #include <webgpu/webgpu.h>
@@ -483,6 +484,79 @@ static struct yetty_ycore_void_result ensure_bind_group(struct poc_app *app)
     return YETTY_OK_VOID();
 }
 
+/* Re-create the one pinned cell buffer at the current total_rows x cols and
+ * invalidate the bind group (which references it). The uniform buffer is fixed
+ * size and is left alone. */
+static struct yetty_ycore_void_result resize_cell_buffer(struct poc_app *app)
+{
+    if (app->cell_buffer) {
+        wgpuBufferDestroy(app->cell_buffer);
+        wgpuBufferRelease(app->cell_buffer);
+        app->cell_buffer = NULL;
+    }
+    uint64_t size =
+        (uint64_t)app->total_rows * app->cols * POC_YVTERM_WORDS_PER_CELL * sizeof(uint32_t);
+    WGPUBufferDescriptor desc = {0};
+    desc.label = sv("poc-yvterm cells");
+    desc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
+    desc.size = size;
+    app->cell_buffer = wgpuDeviceCreateBuffer(app->device, &desc);
+    if (!app->cell_buffer) {
+        return YETTY_ERR(yetty_ycore_void, "resize_cell_buffer: buffer");
+    }
+    app->bind_group_valid = 0;
+    return YETTY_OK_VOID();
+}
+
+/* On window resize / maximize: recompute the grid so it fills the new viewport
+ * at the font's cell size, reflow the vterm + line collection, grow the GPU
+ * buffer, and SIGWINCH the child so it repaints at the new dimensions. */
+static struct yetty_ycore_void_result handle_resize(struct poc_app *app, uint32_t width,
+                                                    uint32_t height)
+{
+    struct yetty_ycore_void_result sr =
+        yetty_yframework_reconfigure_surface(app->framework, width, height);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "handle_resize: reconfigure_surface");
+
+    struct pixel_size_result cell = app->font->ops->get_cell_size(app->font);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cell, "handle_resize: cell size");
+
+    uint32_t cols = (uint32_t)((float)width / cell.value.width);
+    uint32_t rows = (uint32_t)((float)height / cell.value.height);
+    if (cols == 0) {
+        cols = 1;
+    }
+    if (rows == 0) {
+        rows = 1;
+    }
+    if (cols == app->cols && rows == app->visible_rows) {
+        return YETTY_OK_VOID(); /* surface changed but the grid is unchanged */
+    }
+    uint32_t total_rows = (app->requested_rows > rows) ? app->requested_rows : rows;
+
+    struct yetty_ycore_void_result gr = poc_yvterm_grid_resize(app->grid, cols, rows, total_rows);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "handle_resize: grid resize");
+    app->cols = cols;
+    app->visible_rows = rows;
+    app->total_rows = total_rows;
+
+    struct yetty_ycore_void_result br = resize_cell_buffer(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "handle_resize: cell buffer");
+
+    app->uniforms.cell_size[0] = cell.value.width;
+    app->uniforms.cell_size[1] = cell.value.height;
+
+    /* Tell the child its new size → SIGWINCH → it reflows and repaints. */
+    struct winsize ws = {
+        .ws_row = (unsigned short)rows,
+        .ws_col = (unsigned short)cols,
+        .ws_xpixel = (unsigned short)width,
+        .ws_ypixel = (unsigned short)height,
+    };
+    ioctl(app->pty_master, TIOCSWINSZ, &ws);
+    return YETTY_OK_VOID();
+}
+
 /*===========================================================================
  * Frame
  *=========================================================================*/
@@ -792,10 +866,9 @@ static struct yetty_ycore_void_result poc_worker(struct yetty_yinit_runtime *run
                     uint32_t width = (uint32_t)ev.resize.width;
                     uint32_t height = (uint32_t)ev.resize.height;
                     if (width && height) {
-                        struct yetty_ycore_void_result sr =
-                            yetty_yframework_reconfigure_surface(app->framework, width, height);
-                        if (YETTY_IS_ERR(sr)) {
-                            yetty_ycore_error_destroy(sr.error);
+                        struct yetty_ycore_void_result rr = handle_resize(app, width, height);
+                        if (YETTY_IS_ERR(rr)) {
+                            yetty_ycore_error_destroy(rr.error);
                         }
                     }
                 } else {

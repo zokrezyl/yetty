@@ -494,3 +494,49 @@ void poc_yvterm_grid_clear_dirty(struct poc_yvterm_grid *grid)
         grid->has_dirty = 0;
     }
 }
+
+struct yetty_ycore_void_result poc_yvterm_grid_resize(struct poc_yvterm_grid *grid, uint32_t cols,
+                                                      uint32_t visible_rows, uint32_t total_rows)
+{
+    if (!grid || cols == 0 || visible_rows == 0 || total_rows < visible_rows) {
+        return YETTY_ERR(yetty_ycore_void, "poc_yvterm_grid_resize: invalid dimensions");
+    }
+
+    /* Build the new line collection first so a failure leaves the old grid
+     * intact. */
+    struct poc_line *new_lines = calloc(total_rows, sizeof(struct poc_line));
+    if (!new_lines) {
+        return YETTY_ERR(yetty_ycore_void, "poc_yvterm_grid_resize: lines alloc");
+    }
+    for (uint32_t row = 0; row < total_rows; row++) {
+        new_lines[row].cells = calloc((size_t)cols * WORDS_PER_CELL, sizeof(uint32_t));
+        if (!new_lines[row].cells) {
+            for (uint32_t freed = 0; freed < row; freed++) {
+                free(new_lines[freed].cells);
+            }
+            free(new_lines);
+            return YETTY_ERR(yetty_ycore_void, "poc_yvterm_grid_resize: row alloc");
+        }
+    }
+
+    for (uint32_t row = 0; row < grid->total_rows; row++) {
+        free(grid->lines[row].cells);
+    }
+    free(grid->lines);
+
+    grid->lines = new_lines;
+    grid->cols = cols;
+    grid->visible_rows = visible_rows;
+    grid->total_rows = total_rows;
+
+    for (uint32_t row = 0; row < visible_rows; row++) {
+        blank_line(grid, row);
+    }
+
+    /* Resize the vterm state grid. The actual content reflow arrives when the
+     * caller SIGWINCHes the PTY and the child repaints through the callbacks. */
+    vterm_set_size(grid->vterm, (int)visible_rows, (int)cols);
+
+    mark_dirty_all(grid);
+    return YETTY_OK_VOID();
+}

@@ -72,6 +72,13 @@ void poc_yvterm_grid_force_full_dirty(struct poc_yvterm_grid *grid);
  * again and the loop stops re-rendering an unchanged frame. */
 void poc_yvterm_grid_clear_dirty(struct poc_yvterm_grid *grid);
 
+/* Reflow to a new viewport: reallocate the line collection and resize the
+ * vterm state grid to cols x visible_rows (total_rows backing lines). The
+ * caller recreates the GPU cell buffer and SIGWINCHes the PTY so the child
+ * repaints at the new size. Re-blanks and marks everything dirty. */
+struct yetty_ycore_void_result poc_yvterm_grid_resize(struct poc_yvterm_grid *grid, uint32_t cols,
+                                                      uint32_t visible_rows, uint32_t total_rows);
+
 #ifdef __cplusplus
 }
 #endif
