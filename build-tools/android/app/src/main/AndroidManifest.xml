@@ -20,11 +20,14 @@
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
-        android:label="@string/app_name"
+        android:label="${appLabel}"
         android:hasCode="false"
         android:theme="@android:style/Theme.NoTitleBar.Fullscreen">
 
-        <!-- Native activity - no Java code needed -->
+        <!-- Native activity - no Java code needed. The library it loads
+             (libyetty.so or libygreeter.so) is chosen per product flavor
+             via the ${appLibName} manifest placeholder, so each flavor is a
+             separate installable app with its own launcher. -->
         <activity
             android:name="android.app.NativeActivity"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden"
@@ -35,7 +38,7 @@
 
             <meta-data
                 android:name="android.app.lib_name"
-                android:value="yetty" />
+                android:value="${appLibName}" />
 
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

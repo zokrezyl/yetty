@@ -82,9 +82,23 @@ SOFT_GPU=false
 # Configuration
 AVD_NAME="yetty_x86_64"
 SYSTEM_IMAGE="system-images;android-34;google_apis;x86_64"
-APK_PATH="${APK_PATH:-$PROJECT_ROOT/build-android_x86_64-ytrace-release/app/outputs/apk/release/app-release.apk}"
-PACKAGE_NAME="com.yetty.terminal"
 ACTIVITY_NAME="android.app.NativeActivity"
+
+# Directory holding the gradle flavor APK outputs. Each program is built as a
+# separate gradle product flavor, so each has its own APK + applicationId:
+#   yetty    → app/outputs/apk/yetty/release/app-yetty-release.apk    (com.yetty.terminal)
+#   ygreeter → app/outputs/apk/ygreeter/release/app-ygreeter-release.apk (com.yetty.greeter)
+APK_DIR="${APK_DIR:-$PROJECT_ROOT/build-android_x86_64-ytrace-release/app/outputs/apk}"
+# Honour an explicit APK_PATH from the environment (overrides flavor lookup).
+APK_PATH_OVERRIDE="${APK_PATH:-}"
+
+# Which program to deploy. Each is a distinct app/APK; --program selects which
+# one to install and launch.
+PROGRAM="yetty"
+# Resolved from PROGRAM by resolve_program (after argument parsing).
+PACKAGE_NAME="com.yetty.terminal"
+APK_PATH=""
+LAUNCH_COMPONENT="$PACKAGE_NAME/$ACTIVITY_NAME"
 
 # Colors
 RED='\033[0;31m'
@@ -97,6 +111,26 @@ info() { echo -e "${BLUE}[INFO]${NC} $*"; }
 warn() { echo -e "${YELLOW}[WARN]${NC} $*"; }
 error() { echo -e "${RED}[ERROR]${NC} $*"; }
 success() { echo -e "${GREEN}[OK]${NC} $*"; }
+
+# Validate $PROGRAM and resolve its APK, package and launch component. Each
+# program is a separate gradle flavor / APK with its own applicationId.
+resolve_program() {
+    case "$PROGRAM" in
+        yetty)
+            PACKAGE_NAME="com.yetty.terminal"
+            APK_PATH="${APK_PATH_OVERRIDE:-$APK_DIR/yetty/release/app-yetty-release.apk}"
+            ;;
+        ygreeter)
+            PACKAGE_NAME="com.yetty.greeter"
+            APK_PATH="${APK_PATH_OVERRIDE:-$APK_DIR/ygreeter/release/app-ygreeter-release.apk}"
+            ;;
+        *)
+            error "Unknown --program '$PROGRAM' (expected: yetty or ygreeter)"
+            exit 1
+            ;;
+    esac
+    LAUNCH_COMPONENT="$PACKAGE_NAME/$ACTIVITY_NAME"
+}
 
 # Prompt user for confirmation (respects AUTO_YES)
 confirm() {
@@ -540,15 +574,15 @@ install_and_run() {
             warn "Without socat, VNC only works on localhost"
         fi
 
-        info "Starting Yetty..."
-        adb shell am start -n "$PACKAGE_NAME/$ACTIVITY_NAME"
+        info "Starting $PROGRAM..."
+        adb shell am start -n "$LAUNCH_COMPONENT"
         sleep 3
 
-        # Verify yetty is actually running
+        # Verify the app is actually running
         if adb shell pidof "$PACKAGE_NAME" >/dev/null 2>&1; then
-            success "Yetty is running! (PID: $(adb shell pidof $PACKAGE_NAME))"
+            success "$PROGRAM is running! (PID: $(adb shell pidof $PACKAGE_NAME))"
         else
-            error "Yetty failed to start!"
+            error "$PROGRAM failed to start!"
             info "Check logs: adb logcat -s yetty"
             return 1
         fi
@@ -582,15 +616,15 @@ install_and_run() {
         echo ""
 
     else
-        info "Starting Yetty..."
-        adb shell am start -n "$PACKAGE_NAME/$ACTIVITY_NAME"
+        info "Starting $PROGRAM..."
+        adb shell am start -n "$LAUNCH_COMPONENT"
         sleep 2
 
-        # Verify yetty is actually running
+        # Verify the app is actually running
         if adb shell pidof "$PACKAGE_NAME" >/dev/null 2>&1; then
-            success "Yetty is running! (PID: $(adb shell pidof $PACKAGE_NAME))"
+            success "$PROGRAM is running! (PID: $(adb shell pidof $PACKAGE_NAME))"
         else
-            error "Yetty failed to start!"
+            error "$PROGRAM failed to start!"
             info "Check logs: adb logcat -s yetty"
             return 1
         fi
@@ -658,6 +692,15 @@ main() {
                     exit 1
                 fi
                 ;;
+            --program)
+                if [ -n "$next_arg" ]; then
+                    PROGRAM="$next_arg"
+                    skip_next=true
+                else
+                    error "--program requires a name (yetty or ygreeter)"
+                    exit 1
+                fi
+                ;;
             *)
                 args+=("$arg")
                 ;;
@@ -670,9 +713,13 @@ main() {
         set -x
     fi
 
+    # Validate --program and resolve the launch component.
+    resolve_program
+
     echo "========================================"
     echo "  Yetty Android x86_64 Emulator"
     echo "========================================"
+    echo "  Program: $PROGRAM ($LAUNCH_COMPONENT)"
     if [ "$AUTO_YES" = true ]; then
         echo "  (auto-yes mode enabled)"
     fi
@@ -753,6 +800,10 @@ main() {
             echo ""
             echo "OTHER OPTIONS:"
             echo "  --run           Same as no options (run emulator)"
+            echo "  --program NAME  Which app to install + launch (default: yetty)"
+            echo "                  yetty    → the terminal        (com.yetty.terminal)"
+            echo "                  ygreeter → the ygui showcase    (com.yetty.greeter)"
+            echo "                  (each is a separate gradle-flavor APK)"
             echo "  --soft-gpu      Use software GPU (SwiftShader) instead of host GPU"
             echo "  --vnc-port N    Set VNC port (default: 5900)"
             echo "  --kill          Kill running emulator"
@@ -775,6 +826,9 @@ main() {
             echo ""
             echo "  # Or normal mode (Ctrl keys won't work):"
             echo "  $0"
+            echo ""
+            echo "  # Launch the ygreeter showcase instead of the terminal:"
+            echo "  $0 --program ygreeter"
             echo ""
             echo "WHY VNC?"
             echo "  The Android emulator's Qt GUI intercepts Ctrl key for pinch-zoom,"

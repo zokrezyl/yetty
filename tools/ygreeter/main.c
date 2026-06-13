@@ -84,6 +84,16 @@
 #include <yetty/yrender/render-target.h>
 #endif
 
+/* Android standalone entry. ygreeter runs as a NativeActivity through the
+ * shared NDK glue (src/yetty/yinit/android-glue.c), which resolves the
+ * yetty_android_program_init / _term pair defined at the foot of this file. */
+#if defined(__ANDROID__) && defined(YETTY_YGREETER_HAS_STANDALONE)
+#include <pthread.h>
+#include <webgpu/webgpu.h>
+#include <yetty/yinit/android-glue.h>
+#include <yetty/yplatform/platform-input-pipe.h>
+#endif
+
 #ifdef YETTY_YGUI_HAS_UV
 #include <uv.h>
 #endif
@@ -4537,6 +4547,198 @@ static struct yetty_ycore_void_result ygreeter_extract_assets_cb(void)
     return ygreeter_verify_assets(data_dir);
 }
 
+#if defined(__ANDROID__)
+/* Render-thread payload: the heap app object + the synthetic runtime that
+ * standalone_worker reads during setup. Both must outlive program_init's
+ * stack — standalone_worker runs the event loop to completion on this thread,
+ * so the thread owns them and frees them when it returns. */
+struct ygreeter_android_thread_args {
+    struct app *app;
+    struct yetty_yinit_runtime rt;
+};
+
+YETTY_EXTERNAL_CALLBACK
+static void *ygreeter_android_render_thread(void *arg)
+{
+    struct ygreeter_android_thread_args *targs = arg;
+    /* Blocks: builds the framework, the UI and the chrome, runs the event
+     * loop, then tears the whole lot down when the loop is stopped (the
+     * non-emscripten tail of standalone_worker). */
+    struct yetty_ycore_void_result run_res = standalone_worker(&targs->rt, targs->app);
+    if (YETTY_IS_ERR(run_res)) {
+        LOGE("ygreeter standalone worker: %s",
+             run_res.error.msg ? run_res.error.msg : "(no message)");
+        yetty_ycore_error_destroy(run_res.error);
+    }
+    free(targs->app);
+    free(targs);
+    return NULL;
+}
+
+/* Android program entry — resolved at link time by android-glue.c. Builds the
+ * standalone showcase from the live surface and runs it on a render thread,
+ * mirroring the terminal's yetty_android_program_init in src/yetty/yinit/android.c. */
+YETTY_EXTERNAL_CALLBACK
+void yetty_android_program_init(struct yetty_yplatform_app_state *state)
+{
+    if (state->initialized || !state->window) {
+        return;
+    }
+
+    LOGI("Initializing ygreeter...");
+
+    const char *cache_dir = yetty_yplatform_get_cache_dir();
+    const char *runtime_dir = yetty_yplatform_get_runtime_dir();
+    const char *data_dir = yetty_yplatform_get_data_dir();
+    const char *config_dir = yetty_yplatform_get_config_dir();
+    yetty_yinit_android_mkdir_p(cache_dir);
+    yetty_yinit_android_mkdir_p(runtime_dir);
+    yetty_yinit_android_mkdir_p(data_dir);
+    yetty_yinit_android_mkdir_p(config_dir);
+
+    /* Extract ygreeter's embedded assets (shaders, MSDF cdb font, logos,
+     * intro video, sample pdf, README) into <data_dir>. The showcase reads
+     * its font + shaders from <data_dir>/{shaders,msdf-fonts}; the rich tabs
+     * read the logos/video/pdf from <data_dir>/. */
+    {
+        struct yetty_ycore_void_result extract_res = ygreeter_extract_assets_cb();
+        if (YETTY_IS_ERR(extract_res)) {
+            LOGE("ygreeter: asset extraction failed: %s",
+                 extract_res.error.msg ? extract_res.error.msg : "(no message)");
+            yetty_ycore_error_destroy(extract_res.error);
+            return;
+        }
+    }
+
+    /* shaders/fonts live under <data_dir>/{shaders,fonts}; the MSDF cdb sits
+     * at <data_dir>/msdf-fonts (standalone_worker reaches it as
+     * fonts_dir/../msdf-fonts). Mirrors the desktop paths layout. */
+    static char shaders_dir[512];
+    static char fonts_dir[512];
+    snprintf(shaders_dir, sizeof(shaders_dir), "%s/shaders", data_dir);
+    snprintf(fonts_dir, sizeof(fonts_dir), "%s/fonts", data_dir);
+
+    struct yetty_yconfig_paths paths = {0};
+    paths.shaders_dir = shaders_dir;
+    paths.fonts_dir = fonts_dir;
+    paths.config_dir = config_dir;
+    paths.runtime_dir = runtime_dir;
+    paths.bin_dir = NULL;
+
+    /* No --qemu: ygreeter standalone renders its own figure tree, no VM. */
+    {
+        char *fake_argv[] = {(char *)"ygreeter", NULL};
+        struct yetty_yconfig_result config_result = yetty_yconfig_create(1, fake_argv, &paths);
+        if (!YETTY_IS_OK(config_result)) {
+            LOGE("ygreeter: config create failed");
+            return;
+        }
+        state->config = config_result.value;
+    }
+
+    struct yetty_yplatform_input_pipe_result pipe_result = yetty_platform_input_pipe_create();
+    if (!YETTY_IS_OK(pipe_result)) {
+        LOGE("ygreeter: input pipe create failed");
+        return;
+    }
+    state->pipe = pipe_result.value;
+
+    WGPUInstanceFeatureName instance_features[] = {WGPUInstanceFeatureName_TimedWaitAny};
+    WGPUInstanceDescriptor instance_desc = {0};
+    instance_desc.requiredFeatureCount = 1;
+    instance_desc.requiredFeatures = instance_features;
+    state->instance = wgpuCreateInstance(&instance_desc);
+    if (!state->instance) {
+        LOGE("ygreeter: WebGPU instance create failed");
+        return;
+    }
+
+    state->surface = yetty_yplatform_create_surface_from_window(state->instance, state->window);
+    if (!state->surface) {
+        LOGE("ygreeter: surface create failed");
+        return;
+    }
+
+    int32_t width = ANativeWindow_getWidth(state->window);
+    int32_t height = ANativeWindow_getHeight(state->window);
+
+    struct app *app = calloc(1, sizeof(*app));
+    struct ygreeter_android_thread_args *targs = calloc(1, sizeof(*targs));
+    if (!app || !targs) {
+        LOGE("ygreeter: out of memory");
+        free(app);
+        free(targs);
+        return;
+    }
+    targs->app = app;
+    /* Synthetic runtime: the same fields the desktop worker reads, stamped by
+     * hand (Android doesn't go through yetty_yinit_run). */
+    targs->rt.config = state->config;
+    targs->rt.instance = state->instance;
+    targs->rt.surface = state->surface;
+    targs->rt.surface_width = (uint32_t)width;
+    targs->rt.surface_height = (uint32_t)height;
+    targs->rt.content_scale = 1.0f;
+    targs->rt.platform_input_pipe = state->pipe;
+
+    state->program_state = app;
+    state->initialized = 1;
+    state->running = 1;
+    pthread_create(&state->render_thread, NULL, ygreeter_android_render_thread, targs);
+
+    /* Initial resize so the container + chrome get the real surface size. */
+    {
+        struct yetty_yui_event ev = {0};
+        ev.type = YETTY_YCORE_RESIZE;
+        ev.resize.width = (float)width;
+        ev.resize.height = (float)height;
+        state->pipe->ops->write(state->pipe, &ev, sizeof(ev));
+    }
+
+    yetty_yinit_android_show_keyboard(state->app);
+    LOGI("ygreeter initialized successfully");
+}
+
+struct yetty_ycore_void_result yetty_android_program_term(struct yetty_yplatform_app_state *state)
+{
+    if (!state->initialized) {
+        return YETTY_OK_VOID();
+    }
+
+    LOGI("Terminating ygreeter...");
+
+    /* Stop the event loop; standalone_worker then unwinds its own teardown
+     * (framework, engine, container, surface + instance) on the render thread
+     * before returning. */
+    struct app *app = state->program_state;
+    state->running = 0;
+    if (app) {
+        standalone_stop(app);
+    }
+    if (state->render_thread) {
+        pthread_join(state->render_thread, NULL);
+        state->render_thread = 0;
+    }
+    /* app + the thread args were freed by the render thread; the surface and
+     * instance were released by standalone_worker's yframework teardown. */
+    state->program_state = NULL;
+    state->surface = NULL;
+    state->instance = NULL;
+
+    if (state->pipe) {
+        state->pipe->ops->destroy(state->pipe);
+        state->pipe = NULL;
+    }
+    if (state->config) {
+        state->config->ops->destroy(state->config);
+        state->config = NULL;
+    }
+    state->initialized = 0;
+    return YETTY_OK_VOID();
+}
+#endif /* __ANDROID__ */
+
+#ifndef __ANDROID__
 static int run_standalone_mode(int argc, char **argv)
 {
 #ifdef __EMSCRIPTEN__
@@ -4569,13 +4771,15 @@ static int run_standalone_mode(int argc, char **argv)
     }
     return run_result.value;
 }
+#endif /* !__ANDROID__ — run_standalone_mode (uses GLFW yetty_yinit_run) */
 
 #endif /* YETTY_YGREETER_HAS_STANDALONE */
 
 /*=============================================================================
- * Dispatcher.
+ * Dispatcher. Not used on Android — there the NDK glue (android-glue.c)
+ * drives android_main and calls yetty_android_program_init directly.
  *===========================================================================*/
-
+#ifndef __ANDROID__
 static int in_yetty_terminal(void)
 {
     return yetty_running_under_yetty();
@@ -4602,3 +4806,4 @@ int main(int argc, char **argv)
     return 1;
 #endif
 }
+#endif /* !__ANDROID__ — desktop/web dispatcher */

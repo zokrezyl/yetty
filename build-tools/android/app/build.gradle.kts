@@ -43,6 +43,36 @@ android {
         }
     }
 
+    // Two installable apps from one project: the terminal (yetty) and the
+    // ygui feature showcase (ygreeter). Each flavor builds ONLY its own
+    // native CMake target, so the APKs stay lean — the terminal's big
+    // libyetty.so never ships in the showcase APK, and libygreeter.so never
+    // ships in the terminal APK. The launcher is the same NativeActivity in
+    // both; the android.app.lib_name meta-data (a manifest placeholder)
+    // selects which library it loads.
+    flavorDimensions += "program"
+    productFlavors {
+        create("yetty") {
+            dimension = "program"
+            // applicationId inherits com.yetty.terminal from defaultConfig.
+            manifestPlaceholders["appLibName"] = "yetty"
+            manifestPlaceholders["appLabel"] = "yetty"
+            // -DYETTY_GRADLE_FLAVOR differs per flavor only to give AGP a
+            // distinct externalNativeBuild hash, so the two flavors build into
+            // SEPARATE .cxx staging dirs. Without it both variants share one
+            // CMake output tree and Gradle aborts on the cross-variant
+            // "uses output without declaring dependency" check. CMake ignores it.
+            externalNativeBuild { cmake { targets += "yetty"; arguments += "-DYETTY_GRADLE_FLAVOR=yetty" } }
+        }
+        create("ygreeter") {
+            dimension = "program"
+            applicationId = "com.yetty.greeter"
+            manifestPlaceholders["appLibName"] = "ygreeter"
+            manifestPlaceholders["appLabel"] = "ygreeter"
+            externalNativeBuild { cmake { targets += "ygreeter"; arguments += "-DYETTY_GRADLE_FLAVOR=ygreeter" } }
+        }
+    }
+
     signingConfigs {
         create("release") {
             storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
@@ -110,6 +140,19 @@ android {
                 File(projectRoot, "demo/assets")  // Include demo assets only
             )
         }
+    }
+}
+
+// Belt-and-suspenders on top of the per-flavor CMake `targets`: make sure no
+// native lib from the other program leaks in. The showcase has nothing to do
+// with the RISC-V VM, so drop libqemu there too.
+androidComponents {
+    onVariants(selector().withFlavor("program" to "ygreeter")) { variant ->
+        variant.packaging.jniLibs.excludes.add("**/libyetty.so")
+        variant.packaging.jniLibs.excludes.add("**/libqemu-system-riscv64.so")
+    }
+    onVariants(selector().withFlavor("program" to "yetty")) { variant ->
+        variant.packaging.jniLibs.excludes.add("**/libygreeter.so")
     }
 }
 
