@@ -365,6 +365,15 @@ static struct uint32_result ms_msdf_get_glyph_index(struct yetty_yfont_ms_font *
     if (!f) {
         return YETTY_ERR(uint32, "font is NULL");
     }
+    /* Space + printable ASCII (0x20..0x7E) are reserved at create into slots
+     * 0..94 in codepoint order — slot 0 = space, slot 1 = '!' (0x21), … slot 94
+     * = '~' (0x7E) — so the glyph index is just the offset, no hash lookup. This
+     * is the bulk of terminal text (spaces included). The caller is unaware of
+     * this; it sees the same API. Create fails if any of these glyphs is missing
+     * from the CDB, so the reservation is always valid when the font exists. */
+    if (cp >= 0x20u && cp <= 0x7Eu) {
+        return YETTY_OK(uint32, cp - 0x20u);
+    }
     return load_one(f, cp, YETTY_YFONT_MS_STYLE_REGULAR);
 }
 
@@ -644,7 +653,7 @@ struct yetty_font_ms_font_result yetty_yfont_ms_msdf_font_create(
         free(font);
         return YETTY_ERR(yetty_font_ms_font, "meta allocation failed");
     }
-    font->next_slot = 1; /* slot 0 = empty/space */
+    font->next_slot = 0; /* reservation below fills slot 0 = space, then ASCII */
 
     /* Init forward and inverse glyph maps. The inverse is sized identically
      * since every (cp → slot) pair stored in the forward map also gets

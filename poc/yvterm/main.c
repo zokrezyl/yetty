@@ -982,7 +982,10 @@ int main(int argc, char **argv)
     struct yetty_yinit_app_config cfg = {
         .extract_assets_fn = yetty_platform_extract_assets,
     };
-    struct yetty_ycore_int_result run_res = yetty_yinit_run(argc, argv, &cfg, poc_worker, &app);
+    /* Our --stress/--rows/--fps/--cmd flags are not yinit's; hand yinit a clean
+     * argv (just the program name) so its own option parser doesn't choke. */
+    char *yinit_argv[] = {argv[0], NULL};
+    struct yetty_ycore_int_result run_res = yetty_yinit_run(1, yinit_argv, &cfg, poc_worker, &app);
     if (YETTY_IS_ERR(run_res)) {
         yetty_ycore_error_print(stderr, "poc-yvterm", run_res.error);
         yetty_ycore_error_destroy(run_res.error);
