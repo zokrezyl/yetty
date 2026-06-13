@@ -15,6 +15,7 @@
  * CLI:
  *   --stress        every frame mark all lines dirty (max upload pressure)
  *   --rows N        total line objects backing the buffer (>= visible rows)
+ *   --fps N         render cap in Hz (default 30; 0 = uncapped)
  *   --cmd "<cmd>"   run <cmd> via $SHELL -c instead of an interactive shell
  */
 #include <errno.h>
@@ -65,6 +66,7 @@ struct poc_uniforms {
 struct poc_app {
     int quit;
     int stress;
+    double target_fps;       /* render cap (Hz); 0 or --stress = uncapped */
     uint32_t requested_rows; /* --rows N; 0 = use visible rows */
     const char *child_cmd;   /* NULL → interactive $SHELL */
 
@@ -807,15 +809,29 @@ static struct yetty_ycore_void_result poc_worker(struct yetty_yinit_runtime *run
     uint64_t frames = 0;
     double frame_time_accum = 0.0;
 
+    /* Render is driven by a software timer: at most one frame per period, and
+     * only if the grid is dirty. period <= 0 means uncapped (stress / --fps 0). */
+    double frame_period = (app->target_fps > 0.0 && !app->stress) ? 1.0 / app->target_fps : 0.0;
+    double next_render = yetty_yplatform_ytime_monotonic_sec();
+
     while (!app->quit) {
         struct pollfd pfds[2] = {
             {.fd = app->pty_master, .events = POLLIN},
             {.fd = pipe_fd, .events = POLLIN},
         };
-        /* Stress wants to render flat-out; interactive blocks until the PTY or
-         * the window pipe has something, so an idle terminal uses ~no CPU. The
-         * finite (not infinite) timeout is only a safety wakeup. */
-        int timeout_ms = app->stress ? 0 : 1000;
+        /* Timer-paced poll: when content is pending, sleep only until the next
+         * render tick; when idle, block until input (1s safety wakeup) so an
+         * idle terminal uses ~no CPU. Uncapped (stress / --fps 0) spins. */
+        double loop_now = yetty_yplatform_ytime_monotonic_sec();
+        int timeout_ms;
+        if (frame_period <= 0.0) {
+            timeout_ms = 0;
+        } else if (poc_yvterm_grid_is_dirty(app->grid)) {
+            double wait = next_render - loop_now;
+            timeout_ms = wait <= 0.0 ? 0 : (int)(wait * 1000.0) + 1;
+        } else {
+            timeout_ms = 1000;
+        }
         int ready = poll(pfds, 2, timeout_ms);
         if (ready < 0 && errno != EINTR) {
             break;
@@ -888,11 +904,13 @@ static struct yetty_ycore_void_result poc_worker(struct yetty_yinit_runtime *run
             poc_yvterm_grid_force_full_dirty(app->grid);
         }
 
-        /* Render ONLY when the grid is dirty. Dawn's event pump runs only after
-         * a present (to settle the async surface work) — pumping it every idle
-         * iteration is what was burning a core. */
-        if (poc_yvterm_grid_is_dirty(app->grid)) {
-            double frame_begin = yetty_yplatform_ytime_monotonic_sec();
+        /* Timer-driven render: at most once per frame_period, and only if the
+         * grid is dirty. Every scroll / PTY write since the last tick coalesces
+         * into this one frame — a smooth capped FPS, not skip-9-out-of-10. Dawn's
+         * event pump runs only after a present. */
+        double render_now = yetty_yplatform_ytime_monotonic_sec();
+        if (poc_yvterm_grid_is_dirty(app->grid) &&
+            (frame_period <= 0.0 || render_now >= next_render)) {
             struct yetty_ycore_void_result fr = render_frame(app);
             if (YETTY_IS_ERR(fr)) {
                 yetty_ycore_error_destroy(fr.error);
@@ -900,8 +918,9 @@ static struct yetty_ycore_void_result poc_worker(struct yetty_yinit_runtime *run
             if (runtime->instance) {
                 wgpuInstanceProcessEvents((WGPUInstance)runtime->instance);
             }
-            frame_time_accum += yetty_yplatform_ytime_monotonic_sec() - frame_begin;
+            frame_time_accum += yetty_yplatform_ytime_monotonic_sec() - render_now;
             frames++;
+            next_render = render_now + frame_period;
         }
 
         double now = yetty_yplatform_ytime_monotonic_sec();
@@ -947,11 +966,14 @@ int main(int argc, char **argv)
 {
     struct poc_app app = {0};
     app.pty_master = -1;
+    app.target_fps = 30.0; /* default render cap */
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--stress") == 0) {
             app.stress = 1;
         } else if (strcmp(argv[i], "--rows") == 0 && i + 1 < argc) {
             app.requested_rows = (uint32_t)strtoul(argv[++i], NULL, 10);
+        } else if (strcmp(argv[i], "--fps") == 0 && i + 1 < argc) {
+            app.target_fps = strtod(argv[++i], NULL); /* 0 = uncapped */
         } else if (strcmp(argv[i], "--cmd") == 0 && i + 1 < argc) {
             app.child_cmd = argv[++i];
         }
