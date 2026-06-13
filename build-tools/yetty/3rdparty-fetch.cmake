@@ -152,16 +152,44 @@ unsupported build configuration?")
     if(NOT EXISTS "${_STAMP}")
         if(NOT EXISTS "${_TARBALL}")
             message(STATUS "3rdparty-fetch: downloading ${_FILENAME}")
-            file(DOWNLOAD "${_URL}" "${_TARBALL}"
-                SHOW_PROGRESS
-                STATUS _DL_STATUS
-                TLS_VERIFY ON
-            )
-            list(GET _DL_STATUS 0 _DL_CODE)
-            if(NOT _DL_CODE EQUAL 0)
-                file(REMOVE "${_TARBALL}")
-                message(FATAL_ERROR
-                    "3rdparty-fetch: download failed for ${_URL}: ${_DL_STATUS}")
+            # Prefer the system `curl` over CMake's file(DOWNLOAD). CMake's
+            # bundled libcurl ships WITHOUT a CA bundle on Windows, so HTTPS
+            # pulls fail SSL verification with curl error 60 ("SSL peer
+            # certificate ... was not OK") unless CMAKE_TLS_CAINFO happens to
+            # point at one — which is runner-dependent and breaks the same way
+            # on GitHub's Windows image. The system curl (System32 on Windows
+            # 10+, and every Linux/macOS host) verifies against the OS trust
+            # store (Schannel / system CA), so it works on any runner with no
+            # extra setup. file(DOWNLOAD) stays as the fallback when curl is
+            # absent (it still honours CMAKE_TLS_CAINFO if set).
+            find_program(YETTY_CURL_EXECUTABLE NAMES curl)
+            set(_DL_OK FALSE)
+            if(YETTY_CURL_EXECUTABLE)
+                # -f fail on HTTP error, -S show errors, -L follow redirects
+                # (GitHub release assets 302 to objects.githubusercontent.com),
+                # --retry rides out transient network blips.
+                execute_process(
+                    COMMAND "${YETTY_CURL_EXECUTABLE}" -fSL --retry 3 --retry-delay 2
+                            -o "${_TARBALL}" "${_URL}"
+                    RESULT_VARIABLE _CURL_RC)
+                if(_CURL_RC EQUAL 0 AND EXISTS "${_TARBALL}")
+                    set(_DL_OK TRUE)
+                else()
+                    file(REMOVE "${_TARBALL}")
+                endif()
+            endif()
+            if(NOT _DL_OK)
+                file(DOWNLOAD "${_URL}" "${_TARBALL}"
+                    SHOW_PROGRESS
+                    STATUS _DL_STATUS
+                    TLS_VERIFY ON
+                )
+                list(GET _DL_STATUS 0 _DL_CODE)
+                if(NOT _DL_CODE EQUAL 0)
+                    file(REMOVE "${_TARBALL}")
+                    message(FATAL_ERROR
+                        "3rdparty-fetch: download failed for ${_URL}: ${_DL_STATUS}")
+                endif()
             endif()
         endif()
 
