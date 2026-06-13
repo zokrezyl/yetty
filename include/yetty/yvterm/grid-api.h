@@ -78,7 +78,8 @@ struct yetty_ycore_void_result yetty_yvterm_grid_get_selection_text(struct yetty
 struct yetty_ycore_void_result yetty_yvterm_grid_set_selection(struct yetty_yclass_object *obj,
                                                                int active, uint32_t anchor_row,
                                                                uint32_t anchor_col,
-                                                               uint32_t head_row, uint32_t head_col);
+                                                               uint32_t head_row,
+                                                               uint32_t head_col);
 
 /* Clear-screen notification hook. */
 void yetty_yvterm_grid_set_clear_hook(struct yetty_yclass_object *obj,

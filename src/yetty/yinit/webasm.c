@@ -55,8 +55,7 @@ static struct yetty_ycore_void_result yetty_webasm_worker(struct yetty_yinit_run
     struct yetty_yplatform_pty_factory_ptr_result pty_factory_result =
         yetty_yplatform_pty_factory_create(config, NULL);
     if (!YETTY_IS_OK(pty_factory_result)) {
-        return YETTY_ERR(yetty_ycore_void, "webasm: pty_factory_create failed",
-                         pty_factory_result);
+        return YETTY_ERR(yetty_ycore_void, "webasm: pty_factory_create failed", pty_factory_result);
     }
     struct yetty_yplatform_pty_factory *pty_factory = pty_factory_result.value;
     ydebug("webasm worker: PtyFactory created");
@@ -82,9 +81,9 @@ static struct yetty_ycore_void_result yetty_webasm_worker(struct yetty_yinit_run
     /* Initial resize so the first frame uses the live framebuffer size. */
     int fb_width, fb_height;
     yetty_yplatform_webasm_get_framebuffer_size(&fb_width, &fb_height);
-    struct yetty_yui_event event = {.type = YETTY_YCORE_RESIZE,
-                                    .resize = {.width = (float)fb_width,
-                                               .height = (float)fb_height}};
+    struct yetty_yui_event event = {
+        .type = YETTY_YCORE_RESIZE,
+        .resize = {.width = (float)fb_width, .height = (float)fb_height}};
     rt->platform_input_pipe->ops->write(rt->platform_input_pipe, &event, sizeof(event));
     ydebug("webasm worker: posted initial resize %dx%d", fb_width, fb_height);
 
