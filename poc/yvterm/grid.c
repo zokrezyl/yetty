@@ -64,7 +64,18 @@ struct poc_yvterm_grid {
  * mapping lives here so scrolling only has to move `base`. */
 static inline uint32_t ring_slot(const struct poc_yvterm_grid *grid, uint32_t row)
 {
-    return grid->visible_rows ? (grid->base + row) % grid->visible_rows : row;
+    if (!grid->visible_rows) {
+        return row;
+    }
+    /* base < visible_rows and row < visible_rows, so base + row < 2*visible_rows
+     * — the wrap can never exceed one period. A conditional subtract replaces a
+     * hardware integer divide (~20-40 cycles, not pipelined) that, called once
+     * per printed cell, was the single hottest instruction in cb_putglyph. */
+    uint32_t slot = grid->base + row;
+    if (slot >= grid->visible_rows) {
+        slot -= grid->visible_rows;
+    }
+    return slot;
 }
 
 static inline uint32_t *cell_words(struct poc_yvterm_grid *grid, uint32_t row, uint32_t col)
@@ -111,14 +122,22 @@ static void roll_up(struct poc_yvterm_grid *grid, uint32_t lines)
         lines = grid->visible_rows;
     }
     for (uint32_t step = 0; step < lines; step++) {
-        uint32_t slot = (grid->base + step) % grid->visible_rows;
+        /* base + step < 2*visible_rows → conditional subtract, no divide. */
+        uint32_t slot = grid->base + step;
+        if (slot >= grid->visible_rows) {
+            slot -= grid->visible_rows;
+        }
         for (uint32_t col = 0; col < grid->cols; col++) {
             pack_cell(&grid->lines[slot].cells[(size_t)col * WORDS_PER_CELL], 0u, grid->default_fg,
                       grid->default_bg, 0u);
         }
         grid->lines[slot].dirty = 1;
     }
-    grid->base = (grid->base + lines) % grid->visible_rows;
+    /* base + lines <= 2*visible_rows → one conditional subtract. */
+    grid->base += lines;
+    if (grid->base >= grid->visible_rows) {
+        grid->base -= grid->visible_rows;
+    }
     grid->has_dirty = 1;
 }
 
