@@ -745,8 +745,10 @@ static struct yetty_ycore_void_result poc_worker(struct yetty_yinit_runtime *run
     if (content_scale <= 0.0f) {
         content_scale = 1.0f;
     }
+    /* Half the configured font size → smaller cells, denser grid: the dense
+     * 4K case the probe is meant to stress. */
     float font_size = (float)config->ops->get_int(config, "terminal/text-layer/font/size", 14) *
-                      content_scale;
+                      content_scale * 0.5f;
     struct yetty_yfont_ms_padding padding = {0};
 
     struct yetty_font_ms_font_result font_res =
