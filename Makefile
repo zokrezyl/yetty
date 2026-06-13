@@ -441,18 +441,18 @@ build-android-ytrace-debug: ## Build Android ytrace debug APK
 	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_YTRACE_DEBUG) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_YTRACE_DEBUG) assembleDebug"
 
 .PHONY: build-android-ytrace-release
-build-android-ytrace-release: ## Build Android ytrace release APK
+build-android-ytrace-release: ## Build Android ytrace release APKs (yetty + ygreeter flavors)
 	@$(MAKE) _android-ytrace-deps-release
 	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_YTRACE_RELEASE) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_YTRACE_RELEASE) assembleRelease"
 
 .PHONY: test-android-ytrace-debug
 test-android-ytrace-debug: build-android-ytrace-debug ## Install and run Android ytrace debug build
-	adb install -r $(BUILD_DIR_ANDROID_YTRACE_DEBUG)/app/outputs/apk/debug/app-debug.apk
+	adb install -r $(BUILD_DIR_ANDROID_YTRACE_DEBUG)/app/outputs/apk/yetty/debug/app-yetty-debug.apk
 	adb shell am start -n com.yetty.terminal/android.app.NativeActivity
 
 .PHONY: test-android-ytrace-release
 test-android-ytrace-release: build-android-ytrace-release ## Install and run Android ytrace release build
-	adb install -r $(BUILD_DIR_ANDROID_YTRACE_RELEASE)/app/outputs/apk/release/app-release.apk
+	adb install -r $(BUILD_DIR_ANDROID_YTRACE_RELEASE)/app/outputs/apk/yetty/release/app-yetty-release.apk
 	adb shell am start -n com.yetty.terminal/android.app.NativeActivity
 
 #=============================================================================
@@ -465,18 +465,18 @@ build-android_x86_64-ytrace-debug: ## Build Android x86_64 ytrace debug APK (emu
 	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_ABI=x86_64 ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_X86_64_YTRACE_DEBUG) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_X86_64_YTRACE_DEBUG) assembleDebug"
 
 .PHONY: build-android_x86_64-ytrace-release
-build-android_x86_64-ytrace-release: ## Build Android x86_64 ytrace release APK (emulator)
+build-android_x86_64-ytrace-release: ## Build Android x86_64 ytrace release APKs (yetty + ygreeter, emulator)
 	@$(MAKE) _android_x86_64-ytrace-deps-release
 	PATH="$(ANDROID_PATH)" USE_CCACHE=$(USE_CCACHE) ANDROID_ABI=x86_64 ANDROID_BUILD_DIR=$(CURDIR)/$(BUILD_DIR_ANDROID_X86_64_YTRACE_RELEASE) bash -c "cd build-tools/android && ./gradlew $(GRADLE_OPTS_X86_64_YTRACE_RELEASE) assembleRelease"
 
 .PHONY: test-android_x86_64-ytrace-debug
 test-android_x86_64-ytrace-debug: build-android_x86_64-ytrace-debug ## Install and run Android x86_64 ytrace debug (emulator)
-	adb install -r $(BUILD_DIR_ANDROID_X86_64_YTRACE_DEBUG)/app/outputs/apk/debug/app-debug.apk
+	adb install -r $(BUILD_DIR_ANDROID_X86_64_YTRACE_DEBUG)/app/outputs/apk/yetty/debug/app-yetty-debug.apk
 	adb shell am start -n com.yetty.terminal/android.app.NativeActivity
 
 .PHONY: test-android_x86_64-ytrace-release
 test-android_x86_64-ytrace-release: build-android_x86_64-ytrace-release ## Install and run Android x86_64 ytrace release (emulator)
-	adb install -r $(BUILD_DIR_ANDROID_X86_64_YTRACE_RELEASE)/app/outputs/apk/release/app-release.apk
+	adb install -r $(BUILD_DIR_ANDROID_X86_64_YTRACE_RELEASE)/app/outputs/apk/yetty/release/app-yetty-release.apk
 	adb shell am start -n com.yetty.terminal/android.app.NativeActivity
 
 #=============================================================================
