@@ -931,6 +931,13 @@ jobs:
         cp ${{ env.BUILD_DIR }}/yetty.js site/
         cp ${{ env.BUILD_DIR }}/yetty.wasm site/
         cp ${{ env.BUILD_DIR }}/yetty.data site/
+        # ygreeter — the ygui feature-showcase app, built alongside yetty
+        # (build-tools/yetty/platform/webasm/cmake.cmake). It reuses the same
+        # yetty-assets/ preload dir copied below, so only its own three files
+        # need staging here or the picker's showcase link 404s.
+        cp ${{ env.BUILD_DIR }}/ygreeter.html site/
+        cp ${{ env.BUILD_DIR }}/ygreeter.js site/
+        cp ${{ env.BUILD_DIR }}/ygreeter.wasm site/
         cp ${{ env.BUILD_DIR }}/favicon.ico site/
         cp ${{ env.BUILD_DIR }}/apple-touch-icon.jpg site/
         cp ${{ env.BUILD_DIR }}/tinyemu-iframe.html site/
