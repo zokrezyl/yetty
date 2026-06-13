@@ -585,10 +585,11 @@ static struct yetty_ycore_void_result render_frame(struct poc_app *app)
     /* All dirty lines consumed — the grid is clean until the next feed. */
     poc_yvterm_grid_clear_dirty(app->grid);
 
-    /* Uniforms. root_row stays 0 in this probe. */
+    /* Uniforms. root_row carries the rolling ring offset; the shader remaps
+     * visible row -> GPU slot with (row + root_row) % rows. */
     app->uniforms.grid_size[0] = (float)cols;
     app->uniforms.grid_size[1] = (float)app->visible_rows;
-    app->uniforms.root_row = 0u;
+    app->uniforms.root_row = poc_yvterm_grid_base(app->grid);
     wgpuQueueWriteBuffer(app->queue, app->uniform_buffer, 0, &app->uniforms,
                          sizeof(struct poc_uniforms));
 

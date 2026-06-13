@@ -62,6 +62,10 @@ uint32_t poc_yvterm_grid_visible_rows(const struct poc_yvterm_grid *grid);
 uint32_t poc_yvterm_grid_total_rows(const struct poc_yvterm_grid *grid);
 struct poc_line *poc_yvterm_grid_lines(struct poc_yvterm_grid *grid);
 
+/* Rolling ring offset — feed into the shader's root_row uniform so it maps
+ * visible row -> GPU slot the same way the grid does. */
+uint32_t poc_yvterm_grid_base(const struct poc_yvterm_grid *grid);
+
 /* True if any line is dirty since the last render. */
 int poc_yvterm_grid_is_dirty(const struct poc_yvterm_grid *grid);
 

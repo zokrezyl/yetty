@@ -25,6 +25,12 @@ struct poc_yvterm_grid {
     uint32_t visible_rows; /* the vterm height — rows the state layer writes */
     uint32_t total_rows;   /* number of line objects backing the GPU buffer */
 
+    /* Rolling ring offset. Visible row i lives at lines[(base + i) % visible_rows],
+     * and each line is pinned to a fixed GPU slot = its ring index. Scrolling
+     * just advances base + blanks the rolled-off line — no content memmove. The
+     * shader remaps row -> slot with the same modulo via the root_row uniform. */
+    uint32_t base;
+
     /* The line collection. Lines [0, visible_rows) carry the terminal screen;
      * any extra lines up to total_rows exist only so --stress / --rows N can
      * inflate the per-frame upload count. Each line owns its own row. */
@@ -53,9 +59,17 @@ struct poc_yvterm_grid {
  * Cell helpers
  *=========================================================================*/
 
+/* Map a visible row to its ring slot (= the fixed GPU slot the line uploads
+ * to). The callbacks all address the grid in visible-row coordinates; the ring
+ * mapping lives here so scrolling only has to move `base`. */
+static inline uint32_t ring_slot(const struct poc_yvterm_grid *grid, uint32_t row)
+{
+    return grid->visible_rows ? (grid->base + row) % grid->visible_rows : row;
+}
+
 static inline uint32_t *cell_words(struct poc_yvterm_grid *grid, uint32_t row, uint32_t col)
 {
-    return &grid->lines[row].cells[(size_t)col * WORDS_PER_CELL];
+    return &grid->lines[ring_slot(grid, row)].cells[(size_t)col * WORDS_PER_CELL];
 }
 
 static inline void pack_cell(uint32_t *words, uint32_t glyph_index, VTermColor fg, VTermColor bg,
@@ -80,7 +94,31 @@ static void mark_dirty_row(struct poc_yvterm_grid *grid, uint32_t row)
     if (row >= grid->visible_rows) {
         return;
     }
-    grid->lines[row].dirty = 1;
+    grid->lines[ring_slot(grid, row)].dirty = 1;
+    grid->has_dirty = 1;
+}
+
+/* Scroll the screen up by `lines` the rolling way: the top `lines` rows roll
+ * off and become the new blank bottom rows. No content moves between buffers —
+ * we just blank the rolled-off slots, advance base, and mark only those slots
+ * dirty so the renderer re-uploads exactly `lines` rows. */
+static void roll_up(struct poc_yvterm_grid *grid, uint32_t lines)
+{
+    if (grid->visible_rows == 0) {
+        return;
+    }
+    if (lines > grid->visible_rows) {
+        lines = grid->visible_rows;
+    }
+    for (uint32_t step = 0; step < lines; step++) {
+        uint32_t slot = (grid->base + step) % grid->visible_rows;
+        for (uint32_t col = 0; col < grid->cols; col++) {
+            pack_cell(&grid->lines[slot].cells[(size_t)col * WORDS_PER_CELL], 0u, grid->default_fg,
+                      grid->default_bg, 0u);
+        }
+        grid->lines[slot].dirty = 1;
+    }
+    grid->base = (grid->base + lines) % grid->visible_rows;
     grid->has_dirty = 1;
 }
 
@@ -231,9 +269,19 @@ YETTY_EXTERNAL_CALLBACK
 static int cb_scrollrect(VTermRect rect, int downward, int rightward, void *user)
 {
     struct poc_yvterm_grid *grid = user;
-    /* Decompose every scroll into the moverect/erase primitives, which move
-     * content between line buffers. With per-line storage there is no O(1)
-     * root_row slide; root_row stays 0. */
+
+    /* The common case — a whole-screen scroll up (newline at the bottom) — rolls
+     * the ring in O(1): advance base, blank + re-upload only the new bottom
+     * line(s). No content memmove. */
+    int whole_width = (rect.start_col == 0 && (uint32_t)rect.end_col == grid->cols);
+    int whole_height = (rect.start_row == 0 && (uint32_t)rect.end_row == grid->visible_rows);
+    if (rightward == 0 && downward > 0 && whole_width && whole_height) {
+        roll_up(grid, (uint32_t)downward);
+        return 1;
+    }
+
+    /* Scroll regions, reverse index, horizontal scroll: rare — fall back to the
+     * moverect/erase decomposition that copies content between line buffers. */
     vterm_scroll_rect(rect, downward, rightward, cb_moverect, cb_erase, grid);
     return 1;
 }
@@ -462,6 +510,11 @@ uint32_t poc_yvterm_grid_total_rows(const struct poc_yvterm_grid *grid)
     return grid ? grid->total_rows : 0u;
 }
 
+uint32_t poc_yvterm_grid_base(const struct poc_yvterm_grid *grid)
+{
+    return grid ? grid->base : 0u;
+}
+
 struct poc_line *poc_yvterm_grid_lines(struct poc_yvterm_grid *grid)
 {
     return grid ? grid->lines : NULL;
@@ -528,6 +581,7 @@ struct yetty_ycore_void_result poc_yvterm_grid_resize(struct poc_yvterm_grid *gr
     grid->cols = cols;
     grid->visible_rows = visible_rows;
     grid->total_rows = total_rows;
+    grid->base = 0; /* fresh ring */
 
     for (uint32_t row = 0; row < visible_rows; row++) {
         blank_line(grid, row);

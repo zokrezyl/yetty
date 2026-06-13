@@ -73,7 +73,8 @@ fn fs_main(in: VSOut) -> @location(0) vec4<f32> {
     }
     let col = floor(px.x / uni.cell_size.x);
     let row = floor(px.y / uni.cell_size.y);
-    let cell_index = (u32(row) + uni.root_row) * u32(uni.grid_size.x) + u32(col);
+    let slot = (u32(row) + uni.root_row) % u32(uni.grid_size.y);
+    let cell_index = slot * u32(uni.grid_size.x) + u32(col);
     let local = vec2<f32>(px.x - col * uni.cell_size.x, px.y - row * uni.cell_size.y);
     let glyph = cells[cell_index * 4u + 0u];
     let w1 = cells[cell_index * 4u + 1u];
