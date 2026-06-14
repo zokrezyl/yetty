@@ -63,6 +63,11 @@ if(EXISTS ${YETTY_ROOT}/poc/yvterm/CMakeLists.txt)
     add_subdirectory(${YETTY_ROOT}/poc/yvterm ${CMAKE_BINARY_DIR}/poc/yvterm)
 endif()
 
+# poc/yvterm-new — live terminal rendered through the NEW yvterm-new grid.
+if(EXISTS ${YETTY_ROOT}/poc/yvterm-new/CMakeLists.txt)
+    add_subdirectory(${YETTY_ROOT}/poc/yvterm-new ${CMAKE_BINARY_DIR}/poc/yvterm-new)
+endif()
+
 # Custom QA / static-analysis tools (Clang LibTooling-based)
 if(YETTY_ENABLE_TOOL_QA)
     add_subdirectory(${YETTY_ROOT}/qa-tools/lib/naming-convention

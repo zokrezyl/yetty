@@ -92,7 +92,6 @@ add_subdirectory(ywire)
 
 # Term subsystem: yvterm (text-grid figure) + yterminal (coordinator).
 # yvterm first — yterminal links it.
-add_subdirectory(yvterm)
 add_subdirectory(yterminal)
 
 set(YETTY_SOURCES ${YETTY_SOURCES} PARENT_SCOPE)
