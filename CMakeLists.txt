@@ -63,8 +63,12 @@ if(EXISTS ${YETTY_ROOT}/poc/yvterm/CMakeLists.txt)
     add_subdirectory(${YETTY_ROOT}/poc/yvterm ${CMAKE_BINARY_DIR}/poc/yvterm)
 endif()
 
-# poc/yvterm-new — live terminal rendered through the NEW yvterm-new grid.
-if(EXISTS ${YETTY_ROOT}/poc/yvterm-new/CMakeLists.txt)
+# poc/yvterm-new — live terminal rendered through the NEW yvterm grid.
+# Temporarily disabled: its CMakeLists still lists the removed
+# src/yetty/yvterm/buffer.c (the model is now grid.c + vterm.c), which fails the
+# CMake generate step for the whole tree. Re-enable once the POC is updated to
+# the current model API.
+if(FALSE AND EXISTS ${YETTY_ROOT}/poc/yvterm-new/CMakeLists.txt)
     add_subdirectory(${YETTY_ROOT}/poc/yvterm-new ${CMAKE_BINARY_DIR}/poc/yvterm-new)
 endif()
 

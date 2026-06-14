@@ -1,0 +1,601 @@
+methods: []
+classes:
+  - name: vterm
+    domain: yvterm
+    accessor: yetty_yvterm_vterm_class_get
+    type: regular
+    source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    parent:
+      domain: yfigure
+      name: figure
+    mixins: []
+    data: struct yetty_yvterm_vterm
+    data_fields:
+      - name: grid
+        type: struct yetty_yvterm_grid
+        get: false
+        set: false
+      - name: grid_size
+        type: struct yetty_ycore_grid_size
+        get: false
+        set: false
+      - name: cell_size
+        type: struct yetty_ycore_pixel_size
+        get: false
+        set: false
+      - name: content_inset_top
+        type: float
+        get: false
+        set: false
+      - name: content_inset_right
+        type: float
+        get: false
+        set: false
+      - name: content_inset_bottom
+        type: float
+        get: false
+        set: false
+      - name: content_inset_left
+        type: float
+        get: false
+        set: false
+      - name: pty_write_fn
+        type: yetty_yterminal_pty_write_fn
+        get: false
+        set: false
+      - name: pty_write_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: request_render_fn
+        type: yetty_yterminal_request_render_fn
+        get: false
+        set: false
+      - name: request_render_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: mouse_sub_fn
+        type: yetty_yterminal_mouse_sub_fn
+        get: false
+        set: false
+      - name: mouse_sub_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: selection_active
+        type: int
+        get: false
+        set: false
+      - name: selection_anchor_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: selection_anchor_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: selection_head_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: selection_head_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: view_top_active
+        type: int
+        get: false
+        set: false
+      - name: view_top_total_idx
+        type: uint32_t
+        get: false
+        set: false
+      - name: visual_zoom_scale
+        type: float
+        get: false
+        set: false
+      - name: visual_zoom_offset_x
+        type: float
+        get: false
+        set: false
+      - name: visual_zoom_offset_y
+        type: float
+        get: false
+        set: false
+      - name: device
+        type: WGPUDevice
+        get: false
+        set: false
+      - name: queue
+        type: WGPUQueue
+        get: false
+        set: false
+      - name: target_format
+        type: WGPUTextureFormat
+        get: false
+        set: false
+      - name: font
+        type: "struct yetty_yfont_ms_font *"
+        get: false
+        set: false
+      - name: shader_module
+        type: WGPUShaderModule
+        get: false
+        set: false
+      - name: bind_group_layout
+        type: WGPUBindGroupLayout
+        get: false
+        set: false
+      - name: pipeline
+        type: WGPURenderPipeline
+        get: false
+        set: false
+      - name: sampler
+        type: WGPUSampler
+        get: false
+        set: false
+      - name: cell_buffer
+        type: WGPUBuffer
+        get: false
+        set: false
+      - name: meta_buffer
+        type: WGPUBuffer
+        get: false
+        set: false
+      - name: uniform_buffer
+        type: WGPUBuffer
+        get: false
+        set: false
+      - name: atlas_texture
+        type: WGPUTexture
+        get: false
+        set: false
+      - name: atlas_view
+        type: WGPUTextureView
+        get: false
+        set: false
+      - name: atlas_width
+        type: uint32_t
+        get: false
+        set: false
+      - name: atlas_height
+        type: uint32_t
+        get: false
+        set: false
+      - name: meta_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: bind_group
+        type: WGPUBindGroup
+        get: false
+        set: false
+      - name: bind_group_valid
+        type: int
+        get: false
+        set: false
+      - name: cell_buffer_cells
+        type: uint32_t
+        get: false
+        set: false
+      - name: uniforms
+        type: struct vterm_uniforms
+        get: false
+        set: false
+      - name: row_scratch
+        type: "uint32_t *"
+        get: false
+        set: false
+      - name: row_scratch_cols
+        type: uint32_t
+        get: false
+        set: false
+      - name: gpu_ready
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: render
+        slot_domain: yfigure
+        impl: vterm_render_slot
+      - slot: destroy
+        slot_domain: yfigure
+        impl: vterm_destroy_slot
+exposed:
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    type_text: struct yetty_yvterm_vterm;
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    type_text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_clear_hook_fn)(void *);"
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_figure_create
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: cols
+        type: uint32_t
+      - name: rows
+        type: uint32_t
+      - name: context
+        type: "const struct yetty_context *"
+      - name: pty_write_fn
+        type: yetty_yterminal_pty_write_fn
+      - name: pty_write_userdata
+        type: "void *"
+      - name: request_render_fn
+        type: yetty_yterminal_request_render_fn
+      - name: request_render_userdata
+        type: "void *"
+      - name: mouse_sub_fn
+        type: yetty_yterminal_mouse_sub_fn
+      - name: mouse_sub_userdata
+        type: "void *"
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_as_figure
+    return_type: "struct yetty_yfigure_figure *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_feed
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bytes
+        type: "const char *"
+      - name: len
+        type: size_t
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_resize
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: grid_size
+        type: struct yetty_ycore_grid_size
+      - name: cell_size
+        type: struct yetty_ycore_pixel_size
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_cell_size
+    return_type: struct yetty_ycore_pixel_size
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_is_dirty
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_content_inset
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: top
+        type: float
+      - name: right
+        type: float
+      - name: bottom
+        type: float
+      - name: left
+        type: float
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_get_content_inset
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_top
+        type: "float *"
+      - name: out_right
+        type: "float *"
+      - name: out_bottom
+        type: "float *"
+      - name: out_left
+        type: "float *"
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_clear_hook
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fn
+        type: yetty_yvterm_clear_hook_fn
+      - name: userdata
+        type: "void *"
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_cursor
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_row
+        type: "uint32_t *"
+      - name: out_col
+        type: "uint32_t *"
+      - name: out_visible
+        type: "uint32_t *"
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_append_primitive
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: words
+        type: "const uint32_t *"
+      - name: word_count
+        type: uint32_t
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_add_primitive_ref
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: col
+        type: uint32_t
+      - name: rel_line
+        type: uint16_t
+      - name: index_in_list
+        type: uint16_t
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_attach_composite
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: composite
+        type: "struct yetty_ydraw_composite *"
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_add_composite_ref
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: col
+        type: uint32_t
+      - name: rel_line
+        type: uint16_t
+      - name: index_in_list
+        type: uint16_t
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_clear_rich_line
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_clear_rich_all
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_register_wire
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: sm
+        type: "struct yetty_ywire_wire_statemachine *"
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_on_char
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: codepoint
+        type: uint32_t
+      - name: mods
+        type: int
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_on_key
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: key
+        type: int
+      - name: mods
+        type: int
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_selection
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: active
+        type: int
+      - name: anchor_row
+        type: uint32_t
+      - name: anchor_col
+        type: uint32_t
+      - name: head_row
+        type: uint32_t
+      - name: head_col
+        type: uint32_t
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_get_selection_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out
+        type: "struct yetty_ycore_buffer *"
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_get_live_anchor
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_get_scrollback_floor
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_view_top
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: active
+        type: int
+      - name: view_top_total_idx
+        type: uint32_t
+  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_visual_zoom
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: scale
+        type: float
+      - name: offset_x
+        type: float
+      - name: offset_y
+        type: float
+types:
+  - name: vterm_uniforms
+    kind: struct
+    fields:
+      - name: grid_size
+        type: "float[2]"
+      - name: cell_size
+        type: "float[2]"
+      - name: scale
+        type: float
+      - name: baseline_y
+        type: float
+      - name: glyph_left
+        type: float
+      - name: pixel_range
+        type: float
+      - name: root_row
+        type: uint32_t
+      - name: pad0
+        type: uint32_t
+      - name: pad1
+        type: uint32_t
+      - name: pad2
+        type: uint32_t
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_grid_size
+    kind: struct
+    fields:
+      - name: rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+  - name: yetty_ycore_pixel_size
+    kind: struct
+    fields:
+      - name: width
+        type: float
+      - name: height
+        type: float
+  - name: yetty_ycore_uint32_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: uint32_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_yvterm_grid
+    kind: struct
+    fields:
+      - name: lines
+        type: "struct yetty_yvterm_line *"
+      - name: line_count
+        type: uint32_t
+      - name: visible_rows
+        type: uint32_t
+      - name: cols
+        type: uint32_t
+      - name: base
+        type: uint32_t
+      - name: vterm
+        type: "VTerm *"
+      - name: state
+        type: "VTermState *"
+      - name: pen_fg
+        type: uint32_t
+      - name: pen_bg
+        type: uint32_t
+      - name: default_fg
+        type: uint32_t
+      - name: default_bg
+        type: uint32_t
+      - name: pen_attrs
+        type: uint16_t
+      - name: pen_reverse
+        type: int
+      - name: cursor_row
+        type: uint32_t
+      - name: cursor_col
+        type: uint32_t
+      - name: cursor_visible
+        type: uint32_t
+      - name: alt_screen
+        type: int
+      - name: mouse_mode
+        type: int
+      - name: clear_hook_fn
+        type: yetty_yvterm_grid_clear_hook_fn
+      - name: clear_hook_userdata
+        type: "void *"
+      - name: has_dirty
+        type: int

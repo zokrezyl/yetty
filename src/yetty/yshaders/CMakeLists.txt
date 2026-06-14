@@ -13,8 +13,6 @@ set(MODULE_SHADERS
     ${YETTY_ROOT}/src/yetty/yfont/raster-font.wgsl
     ${YETTY_ROOT}/src/yetty/yfont/ms-msdf-font.wgsl
     ${YETTY_ROOT}/src/yetty/yfont/msdf-font.wgsl
-    ${YETTY_ROOT}/src/yetty/yvterm/text-layer.wgsl
-    ${YETTY_ROOT}/src/yetty/yvterm/ydraw-layer.wgsl
     ${YETTY_ROOT}/src/yetty/ygrid/ygrid.wgsl
     ${YETTY_ROOT}/src/yetty/yrender/blend.wgsl
     # Generated SDF dispatcher + sdf_* functions (gen-sdf-code.py output).

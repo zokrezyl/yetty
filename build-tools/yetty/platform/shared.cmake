@@ -418,7 +418,6 @@ if(YETTY_ENABLE_FEATURE_TESTS)
     add_subdirectory(${YETTY_ROOT}/test/ut/ygui ${CMAKE_BINARY_DIR}/test/ut/ygui)
     add_subdirectory(${YETTY_ROOT}/test/ut/yfigure ${CMAKE_BINARY_DIR}/test/ut/yfigure)
     add_subdirectory(${YETTY_ROOT}/test/ut/ygrid ${CMAKE_BINARY_DIR}/test/ut/ygrid)
-    add_subdirectory(${YETTY_ROOT}/test/ut/yvterm ${CMAKE_BINARY_DIR}/test/ut/yvterm)
     add_subdirectory(${YETTY_ROOT}/test/ybrowser/ut ${CMAKE_BINARY_DIR}/test/ybrowser/ut)
     # Integration: ylexbor harness driver. Self-skips when QuickJS or
     # the ylexbor target isn't built.
@@ -620,8 +619,6 @@ function(yetty_embed_assets TARGET)
         YETTY_BUILD_VERSION="${YETTY_BUILD_VERSION_STR}")
 
     # Collect shaders from module locations
-    file(COPY "${YETTY_ROOT}/src/yetty/yvterm/text-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
-    file(COPY "${YETTY_ROOT}/src/yetty/yvterm/ydraw-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/ygrid/ygrid.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/ymgui/ymgui-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yterminal/background-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
