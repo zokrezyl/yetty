@@ -418,6 +418,7 @@ if(YETTY_ENABLE_FEATURE_TESTS)
     add_subdirectory(${YETTY_ROOT}/test/ut/ygui ${CMAKE_BINARY_DIR}/test/ut/ygui)
     add_subdirectory(${YETTY_ROOT}/test/ut/yfigure ${CMAKE_BINARY_DIR}/test/ut/yfigure)
     add_subdirectory(${YETTY_ROOT}/test/ut/ygrid ${CMAKE_BINARY_DIR}/test/ut/ygrid)
+    add_subdirectory(${YETTY_ROOT}/test/ut/yvterm ${CMAKE_BINARY_DIR}/test/ut/yvterm)
     add_subdirectory(${YETTY_ROOT}/test/ybrowser/ut ${CMAKE_BINARY_DIR}/test/ybrowser/ut)
     # Integration: ylexbor harness driver. Self-skips when QuickJS or
     # the ylexbor target isn't built.
@@ -643,7 +644,6 @@ function(yetty_embed_assets TARGET)
     # Shader-glyph layer + per-glyph procedurals. Layer reads the .wgsl
     # template AND scans glyph-shaders/*.wgsl at runtime, splices them into
     # one compiled shader. Adding a glyph is dropping a .wgsl file.
-    file(COPY "${YETTY_ROOT}/src/yetty/yvterm/shader-glyph-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(MAKE_DIRECTORY "${EMBED_DATA_DIR}/shaders/glyph-shaders")
     # Glob both 0x*.wgsl (per-glyph procedurals) AND _*.wgsl (shared prelude
     # libs). The layer's runtime assembler reads `_*.wgsl` first, then glyphs.

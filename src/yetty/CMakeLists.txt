@@ -30,10 +30,6 @@ if(YETTY_ENABLE_FEATURE_YGRID)
     add_subdirectory(cards/ygrid)
 endif()
 
-if(YETTY_ENABLE_FEATURE_YGRID)
-    add_subdirectory(yvterm)
-endif()
-
 if(YETTY_ENABLE_FEATURE_MSDF_GEN)
     add_subdirectory(msdf-gen)
 endif()
@@ -96,6 +92,7 @@ add_subdirectory(ywire)
 
 # Term subsystem: yvterm (text-grid figure) + yterminal (coordinator).
 # yvterm first — yterminal links it.
+add_subdirectory(yvterm)
 add_subdirectory(yterminal)
 
 set(YETTY_SOURCES ${YETTY_SOURCES} PARENT_SCOPE)

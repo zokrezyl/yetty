@@ -43,7 +43,6 @@
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/ygrid/grid.h>
-#include <yetty/yvterm/shader-glyph-figure.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui-core/view.h>
 
