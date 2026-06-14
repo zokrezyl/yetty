@@ -418,6 +418,21 @@ static struct yetty_ycore_void_result figure_render(struct yetty_yclass_object *
         return YETTY_OK_VOID();
     }
 
+    /* The figure rect is in logical pixels (ygui chrome lays widgets out in
+     * logical space). Render at physical resolution for HiDPI: scaling the
+     * rect here makes iResolution, pixel_size, the viewport and the scissor
+     * below all physical. content_scale is 1.0 outside a HiDPI host. */
+    {
+        float content_scale = (f->context && f->context->runtime &&
+                               f->context->runtime->gpu.app_gpu_context.content_scale > 0.0f)
+                                  ? f->context->runtime->gpu.app_gpu_context.content_scale
+                                  : 1.0f;
+        x *= content_scale;
+        y *= content_scale;
+        w *= content_scale;
+        h *= content_scale;
+    }
+
     /* A live shadertoy is assumed animated — keep ticking while visible. */
     anim_timer_start(f);
 

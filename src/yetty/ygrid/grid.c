@@ -345,6 +345,8 @@ struct yetty_yfigure_registry;
 struct yetty_ygrid_factory_args {
     struct yetty_yfont_font *default_font;
     struct yetty_ydraw_composite_factory *composite_factory;
+    /* See ygrid.h — must stay in sync with the public copy. */
+    int absolute_coords;
 };
 
 /* Prototypes for the hand-written public API this TU defines but calls
@@ -2066,9 +2068,15 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
             float coord_scale = g->content_scale > 0.0f ? g->content_scale : 1.0f;
             sx = inst->bounds.min.x * coord_scale;
             sy = inst->bounds.min.y * coord_scale;
+            /* Absolute (ygui chrome) bounds are LOGICAL — the producer paints
+             * at bounds*content_scale to fill its physical footprint (the
+             * origin sx/sy above is already scaled). */
+            inst->content_scale = coord_scale;
         } else {
             sx = base_rect.min.x + inst->bounds.min.x;
             sy = base_rect.min.y + inst->bounds.min.y;
+            /* Local (scrolling-layer) bounds are already framebuffer pixels. */
+            inst->content_scale = 1.0f;
         }
         struct yetty_ycore_void_result fr = inst->render(inst, target, sx, sy);
         if (YETTY_IS_ERR(fr)) {
@@ -2937,12 +2945,17 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory_absolute(
     return ygrid_factory_impl(rect, context, user, 1);
 }
 
-/* Producer-kind figures (yimage/yplot/…) draw their content in local
- * coords from (0,0). */
-static struct yetty_yfigure_figure_ptr_result ygrid_factory_local(
+/* Producer-kind figures (yimage/yplot/…). Coordinate mode follows the
+ * hosting app's factory_args.absolute_coords: local (0) for the terminal's
+ * framebuffer-pixel scrolling-layer producers; absolute (1) for the ygui
+ * chrome (ygreeter / ybrowser), whose widgets emit logical-pixel content at
+ * their absolute rect and need content_scale applied. */
+static struct yetty_yfigure_figure_ptr_result ygrid_factory_for_kind(
     struct yetty_ycore_rectangle rect, const struct yetty_context *context, void *user)
 {
-    return ygrid_factory_impl(rect, context, user, 0);
+    const struct yetty_ygrid_factory_args *args = user;
+    int absolute = args ? args->absolute_coords : 0;
+    return ygrid_factory_impl(rect, context, user, absolute);
 }
 
 struct yetty_ycore_void_result yetty_ygrid_register_factory(
@@ -2956,7 +2969,7 @@ struct yetty_ycore_void_result yetty_ygrid_register_factory_for_kind(
     struct yetty_yfigure_registry *registry, uint32_t kind,
     const struct yetty_ygrid_factory_args *args)
 {
-    return yetty_yfigure_registry_register(registry, kind, ygrid_factory_local, (void *)args);
+    return yetty_yfigure_registry_register(registry, kind, ygrid_factory_for_kind, (void *)args);
 }
 
 struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid)

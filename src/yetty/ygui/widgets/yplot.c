@@ -144,8 +144,11 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_ctx *y
         return YETTY_OK_VOID();
     }
     struct yetty_yplot_render_config cfg = {
-        .bounds_x = 0.0f,
-        .bounds_y = 0.0f,
+        /* Emit at the widget's absolute rect: the producer figure is absolute
+         * (ygui chrome), so its content is in pane-root logical pixels scaled
+         * by content_scale — NOT figure-local from (0,0). */
+        .bounds_x = r.min.x,
+        .bounds_y = r.min.y,
         .bounds_w = w,
         .bounds_h = h,
         .x_min = d->has_cfg ? d->cfg.x_min : -3.14159f,

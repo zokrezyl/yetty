@@ -2074,6 +2074,9 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
         s->figure_registry = reg.value;
         s->figure_args.default_font = s->font;
         s->figure_args.composite_factory = s->composite_factory;
+        /* ygui chrome: producer figures laid out in logical px, scaled to
+         * framebuffer by content_scale; widgets emit at absolute widget rect. */
+        s->figure_args.absolute_coords = 1;
         struct yetty_ycore_void_result rf =
             yetty_ygrid_register_factory(s->figure_registry, &s->figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "ybrowser standalone: ygrid_register_factory");

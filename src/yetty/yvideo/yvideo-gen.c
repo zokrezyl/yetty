@@ -373,6 +373,16 @@ static struct yetty_ycore_void_result yvideo_instance_render(struct yetty_ydraw_
     rs->uniforms[0].f32 = x;
     rs->uniforms[1].f32 = y;
 
+    // HiDPI: wire bounds_w/h (uniforms[2]/[3]) are LOGICAL pixels; scale to
+    // physical so the figure fills its laid-out footprint (origin x,y above is
+    // already physical). self->content_scale is 1.0 in the terminal's local
+    // compositor, so this is a no-op there.
+    {
+        float figure_content_scale = self->content_scale > 0.0f ? self->content_scale : 1.0f;
+        rs->uniforms[2].f32 *= figure_content_scale;
+        rs->uniforms[3].f32 *= figure_content_scale;
+    }
+
     // Wire layout: 14 uniforms, then 2 buffer length fields, then both
     // buffer payloads in declaration order (nal_stream then audio_stream).
     size_t nal_words = payload[14];

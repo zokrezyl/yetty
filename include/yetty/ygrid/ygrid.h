@@ -66,6 +66,14 @@ struct yetty_ydraw_composite_factory;
 struct yetty_ygrid_factory_args {
     struct yetty_yfont_font *default_font;
     struct yetty_ydraw_composite_factory *composite_factory;
+    /* Coordinate mode for producer-kind figures (yplot/yimage/yvideo …)
+     * minted via register_factory_for_kind. 0 (default) = local: content
+     * drawn from the figure origin in framebuffer pixels — the terminal's
+     * scrolling-layer producers. 1 = absolute: content is in logical pixels
+     * and scaled to framebuffer by content_scale — the ygui chrome path
+     * (ygreeter / ybrowser), where producer widgets emit at their absolute
+     * widget rect. Must match how the hosting app's widgets emit coords. */
+    int absolute_coords;
 };
 
 /* Register the ygrid factory under YETTY_YFIGURE_KIND_YGRID with the

@@ -87,8 +87,10 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_ctx *yclass_
      * demux + render in one shot. */
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     struct yetty_yvideo_render_config cfg = {
-        .bounds_x = 0.0f,
-        .bounds_y = 0.0f,
+        /* Absolute widget rect — see yplot.c (producer figure is absolute in
+         * the ygui chrome, content scaled by content_scale). */
+        .bounds_x = r.min.x,
+        .bounds_y = r.min.y,
         .bounds_w = r.max.x - r.min.x,
         .bounds_h = r.max.y - r.min.y,
     };
