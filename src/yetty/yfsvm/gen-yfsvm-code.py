@@ -93,6 +93,34 @@ def generate_c_header(config: dict, out: Path) -> None:
     lines.append("}")
     lines.append("")
 
+    # Opcode validity check — used by bytecode validation before GPU upload.
+    lines.append("// True if the encoded opcode is a defined instruction")
+    lines.append("static inline int yfsvm_opcode_is_valid(uint32_t op) {")
+    lines.append("    switch (op) {")
+    for op in config['opcodes']:
+        lines.append(f'        case YETTY_YFSVM_OP_{op["name"]}:')
+    lines.append("            return 1;")
+    lines.append("        default:")
+    lines.append("            return 0;")
+    lines.append("    }")
+    lines.append("}")
+    lines.append("")
+
+    # True if the opcode is a control-flow branch whose imm12 is a
+    # function-relative instruction target (validated against code length).
+    branch_ops = [op for op in config['opcodes'] if op.get('branch')]
+    lines.append("// True if the opcode is a branch whose imm12 is a jump target")
+    lines.append("static inline int yfsvm_opcode_is_branch(uint32_t op) {")
+    lines.append("    switch (op) {")
+    for op in branch_ops:
+        lines.append(f'        case YETTY_YFSVM_OP_{op["name"]}:')
+    lines.append("            return 1;")
+    lines.append("        default:")
+    lines.append("            return 0;")
+    lines.append("    }")
+    lines.append("}")
+    lines.append("")
+
     lines.append("#ifdef __cplusplus")
     lines.append("}")
     lines.append("#endif")

@@ -7,7 +7,12 @@ max_registers: 16
 max_functions: 16
 max_constants: 4096
 max_instructions: 256
-max_execution_steps: 1024  # safety limit for shader execution loop
+# Safety limit for the shader execution loop. This bounds the TOTAL number of
+# instructions a single function evaluation may execute (not loop iterations),
+# so it must be generous enough to cover the iterative programs control flow
+# enables — e.g. a 128-step escape-time fractal whose loop body is a dozen
+# instructions. A program that exceeds it stops and returns the current r0.
+max_execution_steps: 8192
 
 # Instruction format (32-bit):
 #   [31:24] opcode (8 bits)
@@ -60,6 +65,50 @@ opcodes:
     value: 0x07
     arity: 1
     wgsl: "regs[dst] = y;"
+
+  # Control flow. The `imm` field is a branch target: a function-relative
+  # instruction index (0 = the function's first instruction), NOT a byte
+  # offset. The interpreter jumps by setting `pc = funcOffset + imm`, so a
+  # target stays inside the current function by construction. Validation
+  # rejects targets that fall outside the function's code range. Loops are
+  # bounded by YFSVM_MAX_EXECUTION_STEPS, the guard against non-terminating
+  # programs. `branch: true` marks these for tools (the C generator ignores it).
+  - name: JMP
+    value: 0x08
+    arity: 0
+    branch: true
+    wgsl: "pc = funcOffset + imm;"
+
+  # Conditional jumps on a single register (src1): the condition value is
+  # compared against zero. Comparison opcodes (LT/GT/…) produce exactly 0.0 or
+  # 1.0, so these pair naturally with them.
+  - name: JMP_IF_ZERO
+    value: 0x09
+    arity: 1
+    branch: true
+    wgsl: "if (v1 == 0.0) { pc = funcOffset + imm; }"
+
+  - name: JMP_IF_NONZERO
+    value: 0x0A
+    arity: 1
+    branch: true
+    wgsl: "if (v1 != 0.0) { pc = funcOffset + imm; }"
+
+  # Fused compare-and-branch on two registers (src1, src2). All four relational
+  # directions reduce to these two by swapping the operands, so the frontend
+  # can lower `<`, `>`, `<=`, `>=` loop/if guards without a separate compare
+  # instruction.
+  - name: JMP_IF_LT
+    value: 0x0B
+    arity: 2
+    branch: true
+    wgsl: "if (v1 < v2) { pc = funcOffset + imm; }"
+
+  - name: JMP_IF_GE
+    value: 0x0C
+    arity: 2
+    branch: true
+    wgsl: "if (v1 >= v2) { pc = funcOffset + imm; }"
 
   # Arithmetic
   - name: ADD

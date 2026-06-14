@@ -61,6 +61,17 @@ struct yetty_yfsvm_program_result yetty_yfsvm_compile_multi(
 /* Compile multi-plot expression string */
 struct yetty_yfsvm_program_result yetty_yfsvm_compile_multi_expr(const char *source, size_t len);
 
+/* Validate a program before serialization/GPU upload.
+ *
+ * Rejects bytecode that would drive the interpreter into undefined behaviour:
+ * unknown opcodes, register/constant indices out of range, branch targets
+ * outside the owning function, and function ranges outside the code segment.
+ * The compile entry points run this automatically; it is exposed so callers
+ * that build or receive bytecode by other means can guard their upload path.
+ * Heavy-but-well-formed programs pass — this guards correctness, not cost.
+ */
+struct yetty_ycore_void_result yetty_yfsvm_program_validate(const struct yetty_yfsvm_program *prog);
+
 /* Serialize program to buffer for GPU upload.
  * Returns number of uint32_t words written, or 0 on error.
  * Layout: [magic][version][func_count][const_count][func_table...][constants...][code...]
