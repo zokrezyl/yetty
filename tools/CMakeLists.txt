@@ -38,6 +38,10 @@ if(YETTY_ENABLE_TOOL_YPLOT)
     add_subdirectory(yplot)
 endif()
 
+if(YETTY_ENABLE_TOOL_YFSPY)
+    add_subdirectory(yfspy)
+endif()
+
 if(YETTY_ENABLE_TOOL_YVIDEO AND YETTY_ENABLE_FEATURE_YVIDEO)
     add_subdirectory(yvideo)
 endif()

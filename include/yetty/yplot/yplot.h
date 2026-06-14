@@ -88,6 +88,22 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
     const char *source, size_t len, const struct yetty_yplot_buffer_input *buffers,
     size_t buffer_count, const struct yetty_yplot_render_config *config);
 
+/* Render a PRECOMPILED yfsvm program (the serialized word array produced by
+ * yetty_yfsvm_program_serialize — e.g. emitted by an external frontend such
+ * as the Python-subset compiler) into a fresh ydraw-core buffer holding one
+ * yplot prim. No expression parsing or compilation happens here.
+ *
+ * `program` / `program_words` is the serialized program:
+ *   [magic][version][func_count][const_count][func_table...][constants...][code...]
+ * function_count is read from the header; the USES_TIME / FIELD flags are
+ * derived by scanning the code for LOAD_T / LOAD_Y, matching the expression
+ * path. Default palette colors are used (no per-curve override channel).
+ *
+ * Caller frees the returned buffer with yetty_ydraw_drawable_list_destroy. */
+struct yetty_ydraw_drawable_list_result yetty_yplot_render_program(
+    const uint32_t *program, uint32_t program_words,
+    const struct yetty_yplot_render_config *config);
+
 /* OSC envelope (YETTY_DCS_YDRAW_BIN, same wire format as ycat / yecho).
  * Returns bytes written; ERR on failure. */
 struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(

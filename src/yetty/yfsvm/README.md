@@ -61,6 +61,27 @@ Programs are serialized as 32-bit words:
 | 0x06 | MOV | Move: `dst = src1` |
 | 0x07 | LOAD_Y | Load 2nd spatial input: `dst = y` (field/heatmap mode) |
 
+### Control Flow
+
+Branch instructions give the VM real control flow — `while` loops,
+data-dependent iteration, escape-time fractals, bounded simulations. The
+`imm12` field is a **branch target**: a *function-relative instruction index*
+(0 = the function's first instruction), not a byte offset. The interpreter
+jumps with `pc = function_offset + imm`, so a target always stays inside the
+current function. Loops are bounded by the execution-step limit (see Limits).
+
+| Opcode | Name | Description |
+|--------|------|-------------|
+| 0x08 | JMP | Unconditional: `pc = imm` (function-relative) |
+| 0x09 | JMP_IF_ZERO | `if src1 == 0: pc = imm` |
+| 0x0A | JMP_IF_NONZERO | `if src1 != 0: pc = imm` |
+| 0x0B | JMP_IF_LT | `if src1 < src2: pc = imm` |
+| 0x0C | JMP_IF_GE | `if src1 >= src2: pc = imm` |
+
+`JMP_IF_LT` / `JMP_IF_GE` are fused compare-and-branch: all four relational
+directions (`<`, `>`, `<=`, `>=`) reduce to these two by swapping operands, so
+a loop or `if` guard needs no separate comparison instruction.
+
 ### Arithmetic
 | Opcode | Name | Description |
 |--------|------|-------------|
@@ -147,8 +168,48 @@ Programs are serialized as 32-bit words:
 | Max registers | 16 |
 | Max functions per program | 16 |
 | Max constants per program | 4096 |
-| Max instructions per function | 256 |
-| Max execution steps (safety) | 1024 |
+| Max instructions per program | 256 |
+| Max execution steps (safety) | 8192 |
+
+`Max execution steps` bounds the **total number of instructions** a single
+function evaluation may execute — not loop iterations. With control flow it is
+the guard against non-terminating programs: a loop that never exits stops once
+it reaches the limit. The bound is generous enough for iterative shaders (e.g.
+a 128-step escape-time fractal whose body is a dozen instructions).
+
+### Timeout semantics
+
+If a function exceeds `Max execution steps`, evaluation stops and returns the
+**current value of `r0`** (the return register). `r0` is `0.0` unless a result
+was already moved into it, so a program that only computes its result on a
+final `return` yields `0.0` on timeout. Heavy-but-terminating programs are
+fine; non-terminating ones degrade to this defined sentinel rather than
+hanging the GPU.
+
+## Validation
+
+`yetty_yfsvm_program_validate()` (in `compiler.c`) rejects malformed bytecode
+on the CPU before it is serialized and uploaded, where undefined behaviour is
+far harder to diagnose. It checks:
+
+- opcode is defined (`yfsvm_opcode_is_valid`)
+- register / constant indices in range
+- branch targets inside the owning function (`yfsvm_opcode_is_branch`)
+- function table offsets/lengths within the code segment
+
+The compile entry points run it automatically; it is also exported for callers
+that build or receive bytecode by other means. The goal is to forbid undefined
+behaviour, not expensive shaders — heavy-but-well-formed programs pass.
+
+## Python-subset frontend
+
+A shader language with Python *syntax* compiles to this bytecode. The compiler
+ships with the yfspy tool under `tools/yfspy/assets/` and is documented in
+[`tools/yfspy/assets/README.md`](../../../tools/yfspy/assets/README.md). It is an
+offline authoring tool (`uv run tools/yfspy/assets/cli.py …`): it does not run
+inside CPython at render time — it emits a bytecode blob in the exact layout
+above. The `tools/yfspy` client wraps that blob in a yplot OSC envelope for
+live render.
 
 ## Code Generation
 

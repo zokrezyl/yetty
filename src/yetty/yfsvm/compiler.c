@@ -459,7 +459,154 @@ static struct yetty_yfsvm_program_result compile_single(struct yetty_yfsvm_progr
         return YETTY_ERR(yetty_yfsvm_program, b.error);
     }
 
+    struct yetty_ycore_void_result valid = yetty_yfsvm_program_validate(prog);
+    if (YETTY_IS_ERR(valid)) {
+        return YETTY_ERR(yetty_yfsvm_program, "compiled program failed validation", valid);
+    }
+
     return YETTY_OK(yetty_yfsvm_program, *prog);
+}
+
+/*=============================================================================
+ * Validation
+ *
+ * Once control flow exists, malformed bytecode can drive the interpreter into
+ * undefined behaviour (jumping outside a function, reading past the constant
+ * table, decoding an unknown opcode). This pass rejects such programs on the
+ * CPU before the bytecode is serialized and uploaded to the GPU, where the
+ * same mistakes are far harder to diagnose. Heavy-but-valid programs are
+ * intentionally allowed through — the goal is to forbid undefined behaviour,
+ * not expensive shaders.
+ *===========================================================================*/
+
+struct yetty_ycore_void_result yetty_yfsvm_program_validate(const struct yetty_yfsvm_program *prog)
+{
+    if (!prog) {
+        return YETTY_ERR(yetty_ycore_void, "validate: null program");
+    }
+    if (prog->function_count == 0) {
+        return YETTY_ERR(yetty_ycore_void, "validate: program has no functions");
+    }
+    if (prog->function_count > YFSVM_MAX_FUNCTIONS) {
+        return YETTY_ERR(yetty_ycore_void, "validate: too many functions");
+    }
+    if (prog->constant_count > YFSVM_MAX_CONSTANTS) {
+        return YETTY_ERR(yetty_ycore_void, "validate: too many constants");
+    }
+    if (prog->code_count > YFSVM_MAX_INSTRUCTIONS) {
+        return YETTY_ERR(yetty_ycore_void, "validate: too many instructions");
+    }
+
+    for (uint32_t fi = 0; fi < prog->function_count; fi++) {
+        const struct yetty_yfsvm_function *fn = &prog->functions[fi];
+
+        if (fn->code_length == 0) {
+            return YETTY_ERR(yetty_ycore_void, "validate: empty function");
+        }
+        /* Offset/length are packed into 16 bits each during serialization. */
+        if (fn->code_offset > 0xFFFFu || fn->code_length > 0xFFFFu) {
+            return YETTY_ERR(yetty_ycore_void, "validate: function range too large to pack");
+        }
+        /* The function's code must lie within the program's code segment. */
+        if (fn->code_offset + fn->code_length > prog->code_count) {
+            return YETTY_ERR(yetty_ycore_void, "validate: function range out of bounds");
+        }
+
+        for (uint32_t pc = 0; pc < fn->code_length; pc++) {
+            uint32_t instr = prog->code[fn->code_offset + pc];
+            uint32_t op = yfsvm_decode_opcode(instr);
+            uint8_t dst = yfsvm_decode_dst(instr);
+            uint8_t src1 = yfsvm_decode_src1(instr);
+            uint8_t src2 = yfsvm_decode_src2(instr);
+            uint16_t imm = yfsvm_decode_imm12(instr);
+
+            if (!yfsvm_opcode_is_valid(op)) {
+                return YETTY_ERR(yetty_ycore_void, "validate: unknown opcode");
+            }
+            /* Register fields are 4 bits, so they can never exceed 15; the
+             * checks document intent and survive a future field-width change. */
+            if (dst >= YFSVM_MAX_REGISTERS || src1 >= YFSVM_MAX_REGISTERS ||
+                src2 >= YFSVM_MAX_REGISTERS) {
+                return YETTY_ERR(yetty_ycore_void, "validate: register index out of range");
+            }
+            if (op == YETTY_YFSVM_OP_LOAD_C && imm >= prog->constant_count) {
+                return YETTY_ERR(yetty_ycore_void, "validate: constant index out of range");
+            }
+            if (yfsvm_opcode_is_branch(op) && imm >= fn->code_length) {
+                return YETTY_ERR(yetty_ycore_void, "validate: branch target outside function");
+            }
+        }
+    }
+
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_yfsvm_validate_serialized(const uint32_t *words,
+                                                               uint32_t word_count)
+{
+    if (!words) {
+        return YETTY_ERR(yetty_ycore_void, "validate: null bytecode");
+    }
+    /* Header (4 words) + the function table padded to YFSVM_MAX_FUNCTIONS. */
+    uint32_t header_words = 4u + YFSVM_MAX_FUNCTIONS;
+    if (word_count < header_words) {
+        return YETTY_ERR(yetty_ycore_void, "validate: bytecode too short for header");
+    }
+    if (words[0] != YFSVM_MAGIC) {
+        return YETTY_ERR(yetty_ycore_void, "validate: bad magic");
+    }
+    if (words[1] != YFSVM_VERSION) {
+        return YETTY_ERR(yetty_ycore_void, "validate: unsupported version");
+    }
+
+    uint32_t function_count = words[2];
+    uint32_t constant_count = words[3];
+    if (function_count == 0 || function_count > YFSVM_MAX_FUNCTIONS) {
+        return YETTY_ERR(yetty_ycore_void, "validate: bad function count");
+    }
+    if (constant_count > YFSVM_MAX_CONSTANTS) {
+        return YETTY_ERR(yetty_ycore_void, "validate: too many constants");
+    }
+
+    uint32_t func_table_offset = 4u;
+    uint32_t const_offset = func_table_offset + YFSVM_MAX_FUNCTIONS;
+    /* word_count >= header_words == const_offset, so this subtraction is safe. */
+    if (constant_count > word_count - const_offset) {
+        return YETTY_ERR(yetty_ycore_void, "validate: constants exceed bytecode");
+    }
+    uint32_t code_offset = const_offset + constant_count;
+    uint32_t code_count = word_count - code_offset;
+    if (code_count > YFSVM_MAX_INSTRUCTIONS) {
+        return YETTY_ERR(yetty_ycore_void, "validate: too many instructions");
+    }
+
+    for (uint32_t fi = 0; fi < function_count; fi++) {
+        uint32_t packed = words[func_table_offset + fi];
+        uint32_t offset = packed & 0xFFFFu;
+        uint32_t length = packed >> 16;
+        if (length == 0) {
+            return YETTY_ERR(yetty_ycore_void, "validate: empty function");
+        }
+        if (offset + length > code_count) {
+            return YETTY_ERR(yetty_ycore_void, "validate: function range out of bounds");
+        }
+        for (uint32_t pc = 0; pc < length; pc++) {
+            uint32_t instr = words[code_offset + offset + pc];
+            uint32_t op = yfsvm_decode_opcode(instr);
+            uint16_t imm = yfsvm_decode_imm12(instr);
+            if (!yfsvm_opcode_is_valid(op)) {
+                return YETTY_ERR(yetty_ycore_void, "validate: unknown opcode");
+            }
+            if (op == YETTY_YFSVM_OP_LOAD_C && imm >= constant_count) {
+                return YETTY_ERR(yetty_ycore_void, "validate: constant index out of range");
+            }
+            if (yfsvm_opcode_is_branch(op) && imm >= length) {
+                return YETTY_ERR(yetty_ycore_void, "validate: branch target outside function");
+            }
+        }
+    }
+
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================
@@ -517,6 +664,11 @@ struct yetty_yfsvm_program_result yetty_yfsvm_compile_multi(
         if (b.error) {
             return YETTY_ERR(yetty_yfsvm_program, b.error);
         }
+    }
+
+    struct yetty_ycore_void_result valid = yetty_yfsvm_program_validate(&prog);
+    if (YETTY_IS_ERR(valid)) {
+        return YETTY_ERR(yetty_yfsvm_program, "compiled program failed validation", valid);
     }
 
     return YETTY_OK(yetty_yfsvm_program, prog);

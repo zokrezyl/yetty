@@ -396,6 +396,12 @@ if(NOT EMSCRIPTEN)
     add_subdirectory(${YETTY_ROOT}/src/yetty/yclient ${CMAKE_BINARY_DIR}/src/yetty/yclient)
 endif()
 
+# cpython — a libpython-free SUBSET of the CPython 3.14 parser (Python source
+# -> AST). Sibling of src/yetty like src/libvterm / src/tinyemu. Builds the
+# yetty_cpython static lib + the py-parse tool, linking libc only. Its runtime
+# headers shadow CPython's <Python.h>, so they are kept PRIVATE to the lib.
+add_subdirectory(${YETTY_ROOT}/src/cpython ${CMAKE_BINARY_DIR}/src/cpython)
+
 # Add src/yetty (populates YETTY_SOURCES, YETTY_CORE_SOURCES, builds feature libraries)
 add_subdirectory(${YETTY_ROOT}/src/yetty ${CMAKE_BINARY_DIR}/src/yetty)
 

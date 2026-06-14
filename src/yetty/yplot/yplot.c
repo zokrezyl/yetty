@@ -56,16 +56,10 @@ static int parse_hex_color(const char *s, uint32_t *out)
     return 1;
 }
 
-/* Fill `u` with caller config values, palette-default colors, and a
- * compiled bytecode block from `source` (may be empty when caller only
- * wants buffer curves). `bc_buf` / `bc_cap` is a caller-owned scratch
- * area for the serialized yfsvm program. The parsed plot expression is
- * also handed back to the caller in `*out_plot` so it can synthesise
- * data buffers from `name=buffer` declarations. */
-static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
-    const char *source, size_t source_len, const struct yetty_yplot_render_config *config,
-    uint32_t *bc_buf, uint32_t bc_cap, struct yetty_yplot_uniforms *u, uint32_t *out_bc_len,
-    struct yetty_yexpr_plot_parse_output *out_plot)
+/* Fill `u` with caller config geometry/ranges/flags and palette-default
+ * colors. Shared by the expression path and the precompiled-program path. */
+static void yplot_init_base_uniforms(const struct yetty_yplot_render_config *config,
+                                     struct yetty_yplot_uniforms *u)
 {
     memset(u, 0, sizeof(*u));
     u->bounds_x = config ? config->bounds_x : 0.0f;
@@ -93,6 +87,20 @@ static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
     for (int i = 0; i < 8; i++) {
         u->colors[i] = YPLOT_PALETTE[i];
     }
+}
+
+/* Fill `u` with caller config values, palette-default colors, and a
+ * compiled bytecode block from `source` (may be empty when caller only
+ * wants buffer curves). `bc_buf` / `bc_cap` is a caller-owned scratch
+ * area for the serialized yfsvm program. The parsed plot expression is
+ * also handed back to the caller in `*out_plot` so it can synthesise
+ * data buffers from `name=buffer` declarations. */
+static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
+    const char *source, size_t source_len, const struct yetty_yplot_render_config *config,
+    uint32_t *bc_buf, uint32_t bc_cap, struct yetty_yplot_uniforms *u, uint32_t *out_bc_len,
+    struct yetty_yexpr_plot_parse_output *out_plot)
+{
+    yplot_init_base_uniforms(config, u);
 
     *out_bc_len = 0;
     if (out_plot) {
@@ -337,6 +345,52 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
     }
     free(zero_fill);
     return out;
+}
+
+struct yetty_ydraw_drawable_list_result yetty_yplot_render_program(
+    const uint32_t *program, uint32_t program_words, const struct yetty_yplot_render_config *config)
+{
+    if (!program) {
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: program is NULL");
+    }
+    /* Fully validate the serialized word layout before trusting any field —
+     * this blob may have arrived from an external frontend and is headed for
+     * the GPU interpreter, where malformed bytecode is undefined behaviour. */
+    struct yetty_ycore_void_result valid = yetty_yfsvm_validate_serialized(program, program_words);
+    if (YETTY_IS_ERR(valid)) {
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: invalid program bytecode", valid);
+    }
+
+    struct yetty_yplot_uniforms u;
+    yplot_init_base_uniforms(config, &u);
+
+    uint32_t function_count = program[2];
+    uint32_t const_count = program[3];
+    u.function_count = function_count > 8u ? 8u : function_count;
+
+    /* Derive the animation/field flags by scanning the code segment for the
+     * input opcodes — the same signals the expression path reads from the
+     * compiler's uses_time / uses_y. The code segment follows the padded
+     * function table and the constant pool. */
+    uint32_t code_offset = 4u + YFSVM_MAX_FUNCTIONS + const_count;
+    if (code_offset <= program_words) {
+        for (uint32_t i = code_offset; i < program_words; i++) {
+            uint32_t op = yfsvm_decode_opcode(program[i]);
+            if (op == YETTY_YFSVM_OP_LOAD_T) {
+                u.flags |= YETTY_YPLOT_FLAG_USES_TIME;
+            } else if (op == YETTY_YFSVM_OP_LOAD_Y) {
+                u.flags |= YETTY_YPLOT_FLAG_FIELD;
+            }
+        }
+    }
+
+    struct yetty_yplot_buffers bufs = {
+        .bytecode = program,
+        .bytecode_len = program_words,
+        .data = NULL,
+        .data_count = 0,
+    };
+    return yplot_emit_prim(&u, &bufs);
 }
 
 struct yetty_ycore_size_result yetty_yplot_osc_bin_emit(

@@ -7,7 +7,7 @@ const YFSVM_MAGIC: u32 = 0x5946534Du;
 const YFSVM_VERSION: u32 = 1u;
 const YFSVM_MAX_REGISTERS: u32 = 16u;
 const YFSVM_MAX_FUNCTIONS: u32 = 16u;
-const YFSVM_MAX_EXECUTION_STEPS: u32 = 1024u;
+const YFSVM_MAX_EXECUTION_STEPS: u32 = 8192u;
 
 // Opcodes
 const YFSVM_OP_NOP: u32 = 0x00u;
@@ -18,6 +18,11 @@ const YFSVM_OP_LOAD_T: u32 = 0x04u;
 const YFSVM_OP_LOAD_S: u32 = 0x05u;
 const YFSVM_OP_MOV: u32 = 0x06u;
 const YFSVM_OP_LOAD_Y: u32 = 0x07u;
+const YFSVM_OP_JMP: u32 = 0x08u;
+const YFSVM_OP_JMP_IF_ZERO: u32 = 0x09u;
+const YFSVM_OP_JMP_IF_NONZERO: u32 = 0x0Au;
+const YFSVM_OP_JMP_IF_LT: u32 = 0x0Bu;
+const YFSVM_OP_JMP_IF_GE: u32 = 0x0Cu;
 const YFSVM_OP_ADD: u32 = 0x10u;
 const YFSVM_OP_SUB: u32 = 0x11u;
 const YFSVM_OP_MUL: u32 = 0x12u;
@@ -182,6 +187,11 @@ fn yfsvm_execute(bytecodeOffset: u32, funcIndex: u32, x: f32, y: f32, t: f32, sa
             case YFSVM_OP_LOAD_S: { regs[dst] = samplers[imm & 7u]; }
             case YFSVM_OP_MOV: { regs[dst] = v1; }
             case YFSVM_OP_LOAD_Y: { regs[dst] = y; }
+            case YFSVM_OP_JMP: { pc = funcOffset + imm; }
+            case YFSVM_OP_JMP_IF_ZERO: { if (v1 == 0.0) { pc = funcOffset + imm; } }
+            case YFSVM_OP_JMP_IF_NONZERO: { if (v1 != 0.0) { pc = funcOffset + imm; } }
+            case YFSVM_OP_JMP_IF_LT: { if (v1 < v2) { pc = funcOffset + imm; } }
+            case YFSVM_OP_JMP_IF_GE: { if (v1 >= v2) { pc = funcOffset + imm; } }
             case YFSVM_OP_ADD: { regs[dst] = v1 + v2; }
             case YFSVM_OP_SUB: { regs[dst] = v1 - v2; }
             case YFSVM_OP_MUL: { regs[dst] = v1 * v2; }
