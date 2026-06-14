@@ -30,6 +30,10 @@ if(YETTY_ENABLE_FEATURE_YGRID)
     add_subdirectory(cards/ygrid)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YGRID)
+    add_subdirectory(yvterm)
+endif()
+
 if(YETTY_ENABLE_FEATURE_MSDF_GEN)
     add_subdirectory(msdf-gen)
 endif()
