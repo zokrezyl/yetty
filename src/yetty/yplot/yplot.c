@@ -348,19 +348,17 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
 }
 
 struct yetty_ydraw_drawable_list_result yetty_yplot_render_program(
-    const uint32_t *program, uint32_t program_words,
-    const struct yetty_yplot_render_config *config)
+    const uint32_t *program, uint32_t program_words, const struct yetty_yplot_render_config *config)
 {
     if (!program) {
         return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: program is NULL");
     }
-    /* Minimum header: magic, version, func_count, const_count + the padded
-     * function table. */
-    if (program_words < 4u + YFSVM_MAX_FUNCTIONS) {
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: program too short");
-    }
-    if (program[0] != YFSVM_MAGIC) {
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: bad program magic");
+    /* Fully validate the serialized word layout before trusting any field —
+     * this blob may have arrived from an external frontend and is headed for
+     * the GPU interpreter, where malformed bytecode is undefined behaviour. */
+    struct yetty_ycore_void_result valid = yetty_yfsvm_validate_serialized(program, program_words);
+    if (YETTY_IS_ERR(valid)) {
+        return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: invalid program bytecode", valid);
     }
 
     struct yetty_yplot_uniforms u;
@@ -368,9 +366,6 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_program(
 
     uint32_t function_count = program[2];
     uint32_t const_count = program[3];
-    if (function_count == 0 || function_count > YFSVM_MAX_FUNCTIONS) {
-        return YETTY_ERR(yetty_ydraw_drawable_list, "yplot: bad program function count");
-    }
     u.function_count = function_count > 8u ? 8u : function_count;
 
     /* Derive the animation/field flags by scanning the code segment for the

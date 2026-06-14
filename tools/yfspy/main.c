@@ -1,27 +1,28 @@
 /*
  * yfspy — render a Python-subset yfsvm shader as a yplot composite.
  *
- * This is tools/yplot's sibling, but the source language is the restricted
- * Python subset (the compiler ships under tools/yfspy/assets/) instead of yexpr. The Python compiler
- * lowers the `.py` shader to a serialized yfsvm program client-side; yfspy
- * wraps that bytecode in a yplot prim and emits the OSC envelope
- * (YETTY_DCS_YDRAW_BIN) the yetty ydraw scrolling layer renders. The Python
- * frontend never runs inside yetty — only the compiled bytecode crosses the
- * wire, which is what makes this safe on webasm / android render targets.
+ * tools/yplot's sibling, but the source language is the restricted Python
+ * subset. The shader is compiled to yfsvm bytecode IN-PROCESS via the embedded
+ * libpython-free CPython parser (yetty_cpython) + the yfsvm codegen
+ * (yetty_yfspy_compile) — no subprocess, no CPython runtime. yfspy wraps the
+ * bytecode in a yplot prim and emits the OSC envelope (YETTY_DCS_YDRAW_BIN)
+ * the yetty ydraw scrolling layer renders.
  *
  * The shader's first `def` becomes function 0 (the rendered curve / field);
- * parameters bind positionally to [x, y, time, s0..s7] (see the frontend's
- * PYTHON-FRONTEND.md). A program that reads `y` renders as a heatmap field.
+ * parameters bind positionally to [x, y, time, s0..s7]. A program that reads
+ * `y` renders as a heatmap field.
  *
  * Typical use inside a yetty session:
  *   yetty -e 'yfspy mandel.py --xrange=-2.5..1 --yrange=-1.2..1.2'
  *
- * Without uv available, feed precompiled bytecode instead:
- *   uv run .../pyc/cli.py compile mandel.py -o - | yfspy --bytecode -
+ * A precompiled blob can be rendered without recompiling:
+ *   yfspy --bytecode mandel.bin
  */
 
 #include <yetty/ycore/result.h>
 #include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/yfspy/compile.h>
+#include <yetty/yfsvm/compiler.h>
 #include <yetty/yplatform/getopt.h>
 #include <yetty/yplot/yplot.h>
 
@@ -30,18 +31,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#ifdef _WIN32
-#define popen _popen
-#define pclose _pclose
-#define YFSPY_POPEN_MODE "rb"
-#else
-#define YFSPY_POPEN_MODE "r"
-#endif
-
-#ifndef YFSPY_COMPILER_DEFAULT
-#define YFSPY_COMPILER_DEFAULT ""
-#endif
 
 struct yfspy_opts {
     float width;
@@ -54,8 +43,8 @@ struct yfspy_opts {
     bool no_axes;
     bool no_labels;
     bool no_newline;
-    const char *compiler;  /* path to pyc/cli.py */
-    const char *bytecode;  /* precompiled blob path, or "-" for stdin */
+    bool emit_bytecode;   /* write raw serialized words to stdout, don't render */
+    const char *bytecode; /* precompiled blob path, or "-" for stdin */
 };
 
 static void usage(FILE *out, const char *prog)
@@ -75,10 +64,10 @@ static void usage(FILE *out, const char *prog)
             "      --no-grid        disable the grid overlay\n"
             "      --no-axes        disable the axes overlay\n"
             "      --no-labels      disable axis labels\n"
-            "      --compiler=PATH  path to the pyc/cli.py compiler\n"
-            "                       (default: $YFSPY_COMPILER or the build path)\n"
-            "      --bytecode=FILE  use a precompiled yfsvm blob (or '-' for stdin)\n"
+            "      --bytecode=FILE  render a precompiled yfsvm blob (or '-' for stdin)\n"
             "                       instead of compiling a .py shader\n"
+            "      --emit-bytecode  write the compiled yfsvm bytecode (little-endian\n"
+            "                       u32) to stdout and exit, instead of rendering\n"
             "  -n                   no trailing newline after the OSC\n"
             "  -h, --help           show this help\n",
             prog, prog);
@@ -115,8 +104,8 @@ static int parse_range(const char *text, float *low, float *high)
     return 0;
 }
 
-/* Read an entire stream into a malloc'd byte buffer. Returns bytes read; the
- * caller frees *out_data. Returns SIZE_MAX on allocation failure. */
+/* Read an entire stream into a malloc'd buffer. Returns bytes read; the caller
+ * frees *out_data. Returns SIZE_MAX on allocation failure. */
 static size_t read_all(FILE *stream, uint8_t **out_data)
 {
     size_t capacity = 65536;
@@ -148,9 +137,29 @@ static size_t read_all(FILE *stream, uint8_t **out_data)
     return size;
 }
 
-/* Convert a little-endian byte blob into a u32 word array (the serialized
- * yfsvm program). Returns the word array (caller frees) and the count, or
- * NULL on error. */
+/* Read a whole text file into a malloc'd, NUL-terminated buffer. */
+static char *read_file(const char *path)
+{
+    FILE *stream = fopen(path, "rb");
+    if (!stream) {
+        return NULL;
+    }
+    uint8_t *bytes = NULL;
+    size_t size = read_all(stream, &bytes);
+    fclose(stream);
+    if (size == SIZE_MAX) {
+        return NULL;
+    }
+    char *text = realloc(bytes, size + 1);
+    if (!text) {
+        free(bytes);
+        return NULL;
+    }
+    text[size] = '\0';
+    return text;
+}
+
+/* Little-endian byte blob -> u32 word array (caller frees), or NULL on error. */
 static uint32_t *bytes_to_words(const uint8_t *bytes, size_t byte_count, uint32_t *out_words)
 {
     if (byte_count == 0 || (byte_count % 4u) != 0u) {
@@ -167,73 +176,6 @@ static uint32_t *bytes_to_words(const uint8_t *bytes, size_t byte_count, uint32_
                    ((uint32_t)p[3] << 24);
     }
     *out_words = count;
-    return words;
-}
-
-/* Resolve the compiler path: explicit flag > env > build-time default. */
-static const char *resolve_compiler(const struct yfspy_opts *opts)
-{
-    if (opts->compiler && opts->compiler[0]) {
-        return opts->compiler;
-    }
-    const char *env = getenv("YFSPY_COMPILER");
-    if (env && env[0]) {
-        return env;
-    }
-    return YFSPY_COMPILER_DEFAULT;
-}
-
-/* Compile `shader_path` via the Python frontend, returning the serialized
- * program words (caller frees) and count. Returns NULL on failure. */
-static uint32_t *compile_shader(const struct yfspy_opts *opts, const char *shader_path,
-                                uint32_t *out_words)
-{
-    const char *compiler = resolve_compiler(opts);
-    if (!compiler[0]) {
-        fprintf(stderr,
-                "yfspy: no compiler path; pass --compiler=PATH or set $YFSPY_COMPILER\n");
-        return NULL;
-    }
-    /* Reject quotes in paths — we shell out, and quoting them safely is not
-     * worth the surface area for a dev tool. */
-    if (strchr(compiler, '"') || strchr(shader_path, '"')) {
-        fprintf(stderr, "yfspy: paths must not contain double quotes\n");
-        return NULL;
-    }
-
-    char command[4096];
-    int written = snprintf(command, sizeof(command),
-                           "uv run \"%s\" compile \"%s\" -o -", compiler, shader_path);
-    if (written < 0 || (size_t)written >= sizeof(command)) {
-        fprintf(stderr, "yfspy: compiler command too long\n");
-        return NULL;
-    }
-
-    FILE *pipe = popen(command, YFSPY_POPEN_MODE);
-    if (!pipe) {
-        fprintf(stderr, "yfspy: failed to launch compiler (%s)\n", command);
-        return NULL;
-    }
-    uint8_t *bytes = NULL;
-    size_t byte_count = read_all(pipe, &bytes);
-    int status = pclose(pipe);
-    if (byte_count == SIZE_MAX) {
-        fprintf(stderr, "yfspy: out of memory reading compiler output\n");
-        return NULL;
-    }
-    if (status != 0) {
-        /* The compiler prints its own diagnostic (e.g. "compile error: ...")
-         * to stderr, which the user already saw. */
-        fprintf(stderr, "yfspy: compiler exited with status %d\n", status);
-        free(bytes);
-        return NULL;
-    }
-    uint32_t *words = bytes_to_words(bytes, byte_count, out_words);
-    free(bytes);
-    if (!words) {
-        fprintf(stderr, "yfspy: compiler produced no usable bytecode\n");
-        return NULL;
-    }
     return words;
 }
 
@@ -269,8 +211,8 @@ enum {
     OPT_NO_GRID,
     OPT_NO_AXES,
     OPT_NO_LABELS,
-    OPT_COMPILER,
     OPT_BYTECODE,
+    OPT_EMIT_BYTECODE,
 };
 
 int main(int argc, char **argv)
@@ -292,8 +234,8 @@ int main(int argc, char **argv)
         {"no-grid", no_argument, NULL, OPT_NO_GRID},
         {"no-axes", no_argument, NULL, OPT_NO_AXES},
         {"no-labels", no_argument, NULL, OPT_NO_LABELS},
-        {"compiler", required_argument, NULL, OPT_COMPILER},
         {"bytecode", required_argument, NULL, OPT_BYTECODE},
+        {"emit-bytecode", no_argument, NULL, OPT_EMIT_BYTECODE},
         {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0},
     };
@@ -330,11 +272,11 @@ int main(int argc, char **argv)
         case OPT_NO_LABELS:
             opts.no_labels = true;
             break;
-        case OPT_COMPILER:
-            opts.compiler = yetty_yplatform_optarg;
-            break;
         case OPT_BYTECODE:
             opts.bytecode = yetty_yplatform_optarg;
+            break;
+        case OPT_EMIT_BYTECODE:
+            opts.emit_bytecode = true;
             break;
         case 'n':
             opts.no_newline = true;
@@ -348,19 +290,61 @@ int main(int argc, char **argv)
         }
     }
 
-    uint32_t words_count = 0;
+    /* Obtain the serialized program words, either by compiling a .py shader in
+     * process or by loading a precompiled blob. */
+    uint32_t stack_words[1024];
     uint32_t *words = NULL;
+    uint32_t word_count = 0;
+    int words_owned = 0;
+
     if (opts.bytecode) {
-        words = load_bytecode(opts.bytecode, &words_count);
+        words = load_bytecode(opts.bytecode, &word_count);
+        words_owned = 1;
+        if (!words) {
+            return 1;
+        }
     } else if (yetty_yplatform_optind < argc) {
-        words = compile_shader(&opts, argv[yetty_yplatform_optind], &words_count);
+        const char *path = argv[yetty_yplatform_optind];
+        char *source = read_file(path);
+        if (!source) {
+            fprintf(stderr, "yfspy: cannot read shader '%s'\n", path);
+            return 1;
+        }
+        struct yetty_yfspy_program program;
+        char err[256];
+        int rc = yetty_yfspy_compile(source, path, &program, err, sizeof(err));
+        free(source);
+        if (rc != YETTY_YFSPY_OK) {
+            fprintf(stderr, "yfspy: %s\n", err);
+            return 1;
+        }
+        word_count = yetty_yfsvm_program_serialize(&program.program, stack_words,
+                                                   (uint32_t)(sizeof(stack_words) /
+                                                              sizeof(stack_words[0])));
+        if (word_count == 0) {
+            fprintf(stderr, "yfspy: bytecode serialize failed\n");
+            return 1;
+        }
+        words = stack_words;
     } else {
         fprintf(stderr, "yfspy: missing <shader.py>\n");
         usage(stderr, argv[0]);
         return 2;
     }
-    if (!words) {
-        return 1;
+
+    if (opts.emit_bytecode) {
+        for (uint32_t i = 0; i < word_count; i++) {
+            uint32_t w = words[i];
+            putchar((int)(w & 0xFFu));
+            putchar((int)((w >> 8) & 0xFFu));
+            putchar((int)((w >> 16) & 0xFFu));
+            putchar((int)((w >> 24) & 0xFFu));
+        }
+        fflush(stdout);
+        if (words_owned) {
+            free(words);
+        }
+        return 0;
     }
 
     uint32_t flags = YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS;
@@ -385,8 +369,10 @@ int main(int argc, char **argv)
     };
 
     struct yetty_ydraw_drawable_list_result rr =
-        yetty_yplot_render_program(words, words_count, &cfg);
-    free(words);
+        yetty_yplot_render_program(words, word_count, &cfg);
+    if (words_owned) {
+        free(words);
+    }
     if (YETTY_IS_ERR(rr)) {
         fprintf(stderr, "yfspy: render failed: %s\n", rr.error.msg);
         for (const struct yetty_ycore_error *cause = rr.error.cause; cause; cause = cause->cause) {

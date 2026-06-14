@@ -541,6 +541,74 @@ struct yetty_ycore_void_result yetty_yfsvm_program_validate(const struct yetty_y
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_void_result yetty_yfsvm_validate_serialized(const uint32_t *words,
+                                                               uint32_t word_count)
+{
+    if (!words) {
+        return YETTY_ERR(yetty_ycore_void, "validate: null bytecode");
+    }
+    /* Header (4 words) + the function table padded to YFSVM_MAX_FUNCTIONS. */
+    uint32_t header_words = 4u + YFSVM_MAX_FUNCTIONS;
+    if (word_count < header_words) {
+        return YETTY_ERR(yetty_ycore_void, "validate: bytecode too short for header");
+    }
+    if (words[0] != YFSVM_MAGIC) {
+        return YETTY_ERR(yetty_ycore_void, "validate: bad magic");
+    }
+    if (words[1] != YFSVM_VERSION) {
+        return YETTY_ERR(yetty_ycore_void, "validate: unsupported version");
+    }
+
+    uint32_t function_count = words[2];
+    uint32_t constant_count = words[3];
+    if (function_count == 0 || function_count > YFSVM_MAX_FUNCTIONS) {
+        return YETTY_ERR(yetty_ycore_void, "validate: bad function count");
+    }
+    if (constant_count > YFSVM_MAX_CONSTANTS) {
+        return YETTY_ERR(yetty_ycore_void, "validate: too many constants");
+    }
+
+    uint32_t func_table_offset = 4u;
+    uint32_t const_offset = func_table_offset + YFSVM_MAX_FUNCTIONS;
+    /* word_count >= header_words == const_offset, so this subtraction is safe. */
+    if (constant_count > word_count - const_offset) {
+        return YETTY_ERR(yetty_ycore_void, "validate: constants exceed bytecode");
+    }
+    uint32_t code_offset = const_offset + constant_count;
+    uint32_t code_count = word_count - code_offset;
+    if (code_count > YFSVM_MAX_INSTRUCTIONS) {
+        return YETTY_ERR(yetty_ycore_void, "validate: too many instructions");
+    }
+
+    for (uint32_t fi = 0; fi < function_count; fi++) {
+        uint32_t packed = words[func_table_offset + fi];
+        uint32_t offset = packed & 0xFFFFu;
+        uint32_t length = packed >> 16;
+        if (length == 0) {
+            return YETTY_ERR(yetty_ycore_void, "validate: empty function");
+        }
+        if (offset + length > code_count) {
+            return YETTY_ERR(yetty_ycore_void, "validate: function range out of bounds");
+        }
+        for (uint32_t pc = 0; pc < length; pc++) {
+            uint32_t instr = words[code_offset + offset + pc];
+            uint32_t op = yfsvm_decode_opcode(instr);
+            uint16_t imm = yfsvm_decode_imm12(instr);
+            if (!yfsvm_opcode_is_valid(op)) {
+                return YETTY_ERR(yetty_ycore_void, "validate: unknown opcode");
+            }
+            if (op == YETTY_YFSVM_OP_LOAD_C && imm >= constant_count) {
+                return YETTY_ERR(yetty_ycore_void, "validate: constant index out of range");
+            }
+            if (yfsvm_opcode_is_branch(op) && imm >= length) {
+                return YETTY_ERR(yetty_ycore_void, "validate: branch target outside function");
+            }
+        }
+    }
+
+    return YETTY_OK_VOID();
+}
+
 /*=============================================================================
  * Public API
  *===========================================================================*/

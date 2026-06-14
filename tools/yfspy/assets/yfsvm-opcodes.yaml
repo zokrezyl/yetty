@@ -1,0 +1,402 @@
+# yfsvm - Yetty Fragment Shader Virtual Machine
+# Single source of truth for opcodes, generates C and WGSL code
+
+magic: 0x5946534D  # "YFSM"
+version: 1
+max_registers: 16
+max_functions: 16
+max_constants: 4096
+max_instructions: 256
+# Safety limit for the shader execution loop. This bounds the TOTAL number of
+# instructions a single function evaluation may execute (not loop iterations),
+# so it must be generous enough to cover the iterative programs control flow
+# enables — e.g. a 128-step escape-time fractal whose loop body is a dozen
+# instructions. A program that exceeds it stops and returns the current r0.
+max_execution_steps: 8192
+
+# Instruction format (32-bit):
+#   [31:24] opcode (8 bits)
+#   [23:20] dst    (4 bits) - destination register
+#   [19:16] src1   (4 bits) - first source register
+#   [15:12] src2   (4 bits) - second source register
+#   [11:0]  imm12  (12 bits) - immediate/constant index
+
+opcodes:
+  # Control
+  - name: NOP
+    value: 0x00
+    arity: 0
+    wgsl: "// nop"
+
+  - name: RET
+    value: 0x01
+    arity: 0
+    wgsl: "return regs[0];"
+
+  # Load/Move
+  - name: LOAD_C
+    value: 0x02
+    arity: 1
+    wgsl: "regs[dst] = bitcast<f32>(storage_buffer[constOffset + imm]);"
+
+  - name: LOAD_X
+    value: 0x03
+    arity: 1
+    wgsl: "regs[dst] = x;"
+
+  - name: LOAD_T
+    value: 0x04
+    arity: 1
+    wgsl: "regs[dst] = t;"
+
+  - name: LOAD_S
+    value: 0x05
+    arity: 1
+    wgsl: "regs[dst] = samplers[imm & 7u];"
+
+  - name: MOV
+    value: 0x06
+    arity: 1
+    wgsl: "regs[dst] = v1;"
+
+  # Second spatial input — the pixel's y coordinate. A program that reads it
+  # is a 2D field f(x,y); yplot renders such programs as a heatmap.
+  - name: LOAD_Y
+    value: 0x07
+    arity: 1
+    wgsl: "regs[dst] = y;"
+
+  # Control flow. The `imm` field is a branch target: a function-relative
+  # instruction index (0 = the function's first instruction), NOT a byte
+  # offset. The interpreter jumps by setting `pc = funcOffset + imm`, so a
+  # target stays inside the current function by construction. Validation
+  # rejects targets that fall outside the function's code range. Loops are
+  # bounded by YFSVM_MAX_EXECUTION_STEPS, the guard against non-terminating
+  # programs. `branch: true` marks these for tools (the C generator ignores it).
+  - name: JMP
+    value: 0x08
+    arity: 0
+    branch: true
+    wgsl: "pc = funcOffset + imm;"
+
+  # Conditional jumps on a single register (src1): the condition value is
+  # compared against zero. Comparison opcodes (LT/GT/…) produce exactly 0.0 or
+  # 1.0, so these pair naturally with them.
+  - name: JMP_IF_ZERO
+    value: 0x09
+    arity: 1
+    branch: true
+    wgsl: "if (v1 == 0.0) { pc = funcOffset + imm; }"
+
+  - name: JMP_IF_NONZERO
+    value: 0x0A
+    arity: 1
+    branch: true
+    wgsl: "if (v1 != 0.0) { pc = funcOffset + imm; }"
+
+  # Fused compare-and-branch on two registers (src1, src2). All four relational
+  # directions reduce to these two by swapping the operands, so the frontend
+  # can lower `<`, `>`, `<=`, `>=` loop/if guards without a separate compare
+  # instruction.
+  - name: JMP_IF_LT
+    value: 0x0B
+    arity: 2
+    branch: true
+    wgsl: "if (v1 < v2) { pc = funcOffset + imm; }"
+
+  - name: JMP_IF_GE
+    value: 0x0C
+    arity: 2
+    branch: true
+    wgsl: "if (v1 >= v2) { pc = funcOffset + imm; }"
+
+  # Arithmetic
+  - name: ADD
+    value: 0x10
+    arity: 2
+    wgsl: "regs[dst] = v1 + v2;"
+
+  - name: SUB
+    value: 0x11
+    arity: 2
+    wgsl: "regs[dst] = v1 - v2;"
+
+  - name: MUL
+    value: 0x12
+    arity: 2
+    wgsl: "regs[dst] = v1 * v2;"
+
+  - name: DIV
+    value: 0x13
+    arity: 2
+    wgsl: "regs[dst] = v1 / v2;"
+
+  - name: NEG
+    value: 0x14
+    arity: 1
+    wgsl: "regs[dst] = -v1;"
+
+  - name: MOD
+    value: 0x15
+    arity: 2
+    wgsl: "regs[dst] = v1 - v2 * floor(v1 / v2);"
+
+  # Transcendentals
+  - name: SIN
+    value: 0x20
+    arity: 1
+    wgsl: "regs[dst] = sin(v1);"
+
+  - name: COS
+    value: 0x21
+    arity: 1
+    wgsl: "regs[dst] = cos(v1);"
+
+  - name: TAN
+    value: 0x22
+    arity: 1
+    wgsl: "regs[dst] = tan(v1);"
+
+  - name: ASIN
+    value: 0x23
+    arity: 1
+    wgsl: "regs[dst] = asin(v1);"
+
+  - name: ACOS
+    value: 0x24
+    arity: 1
+    wgsl: "regs[dst] = acos(v1);"
+
+  - name: ATAN
+    value: 0x25
+    arity: 1
+    wgsl: "regs[dst] = atan(v1);"
+
+  - name: ATAN2
+    value: 0x26
+    arity: 2
+    wgsl: "regs[dst] = atan2(v1, v2);"
+
+  - name: SINH
+    value: 0x27
+    arity: 1
+    wgsl: "regs[dst] = sinh(v1);"
+
+  - name: COSH
+    value: 0x28
+    arity: 1
+    wgsl: "regs[dst] = cosh(v1);"
+
+  - name: TANH
+    value: 0x29
+    arity: 1
+    wgsl: "regs[dst] = tanh(v1);"
+
+  - name: ASINH
+    value: 0x2A
+    arity: 1
+    wgsl: "regs[dst] = asinh(v1);"
+
+  - name: ACOSH
+    value: 0x2B
+    arity: 1
+    wgsl: "regs[dst] = acosh(v1);"
+
+  - name: ATANH
+    value: 0x2C
+    arity: 1
+    wgsl: "regs[dst] = atanh(v1);"
+
+  # Cardinal sine, singularity-guarded: sinc(0) = 1 (no NaN at the origin).
+  - name: SINC
+    value: 0x2D
+    arity: 1
+    wgsl: "regs[dst] = select(sin(v1) / v1, 1.0, abs(v1) < 1e-6);"
+
+  # Exponential/Logarithmic
+  - name: EXP
+    value: 0x30
+    arity: 1
+    wgsl: "regs[dst] = exp(v1);"
+
+  - name: EXP2
+    value: 0x31
+    arity: 1
+    wgsl: "regs[dst] = exp2(v1);"
+
+  - name: LOG
+    value: 0x32
+    arity: 1
+    wgsl: "regs[dst] = log(v1);"
+
+  - name: LOG2
+    value: 0x33
+    arity: 1
+    wgsl: "regs[dst] = log2(v1);"
+
+  - name: POW
+    value: 0x34
+    arity: 2
+    wgsl: "regs[dst] = pow(v1, v2);"
+
+  - name: SQRT
+    value: 0x35
+    arity: 1
+    wgsl: "regs[dst] = sqrt(v1);"
+
+  - name: RSQRT
+    value: 0x36
+    arity: 1
+    wgsl: "regs[dst] = inverseSqrt(v1);"
+
+  # Error function (Abramowitz & Stegun 7.1.26 rational approximation,
+  # max error ~1.5e-7). erfc(x) = 1 - erf(x). The Gaussian CDF building block.
+  - name: ERF
+    value: 0x37
+    arity: 1
+    wgsl: "let erf_t = 1.0 / (1.0 + 0.3275911 * abs(v1)); regs[dst] = sign(v1) * (1.0 - (((((1.061405429 * erf_t - 1.453152027) * erf_t + 1.421413741) * erf_t - 0.284496736) * erf_t + 0.254829592) * erf_t) * exp(-v1 * v1));"
+
+  - name: ERFC
+    value: 0x38
+    arity: 1
+    wgsl: "let erfc_t = 1.0 / (1.0 + 0.3275911 * abs(v1)); regs[dst] = 1.0 - sign(v1) * (1.0 - (((((1.061405429 * erfc_t - 1.453152027) * erfc_t + 1.421413741) * erfc_t - 0.284496736) * erfc_t + 0.254829592) * erfc_t) * exp(-v1 * v1));"
+
+  # Utility
+  - name: ABS
+    value: 0x40
+    arity: 1
+    wgsl: "regs[dst] = abs(v1);"
+
+  - name: MIN
+    value: 0x41
+    arity: 2
+    wgsl: "regs[dst] = min(v1, v2);"
+
+  - name: MAX
+    value: 0x42
+    arity: 2
+    wgsl: "regs[dst] = max(v1, v2);"
+
+  - name: FLOOR
+    value: 0x43
+    arity: 1
+    wgsl: "regs[dst] = floor(v1);"
+
+  - name: CEIL
+    value: 0x44
+    arity: 1
+    wgsl: "regs[dst] = ceil(v1);"
+
+  - name: ROUND
+    value: 0x45
+    arity: 1
+    wgsl: "regs[dst] = round(v1);"
+
+  - name: FRACT
+    value: 0x46
+    arity: 1
+    wgsl: "regs[dst] = fract(v1);"
+
+  - name: SIGN
+    value: 0x47
+    arity: 1
+    wgsl: "regs[dst] = sign(v1);"
+
+  - name: CLAMP01
+    value: 0x48
+    arity: 1
+    wgsl: "regs[dst] = clamp(v1, 0.0, 1.0);"
+
+  - name: STEP
+    value: 0x49
+    arity: 2
+    wgsl: "regs[dst] = step(v1, v2);"
+
+  - name: MIX
+    value: 0x4A
+    arity: 3
+    wgsl: "regs[dst] = mix(v1, v2, regs[imm & 0xFu]);"
+
+  - name: SMOOTHSTEP
+    value: 0x4B
+    arity: 3
+    wgsl: "regs[dst] = smoothstep(v1, v2, regs[imm & 0xFu]);"
+
+  - name: TRUNC
+    value: 0x4C
+    arity: 1
+    wgsl: "regs[dst] = trunc(v1);"
+
+  - name: RADIANS
+    value: 0x4D
+    arity: 1
+    wgsl: "regs[dst] = radians(v1);"
+
+  - name: DEGREES
+    value: 0x4E
+    arity: 1
+    wgsl: "regs[dst] = degrees(v1);"
+
+  # Branchless ternary: cond (third operand, via imm slot) selects v2 when
+  # truthy (> 0.5), else v1. Pairs with the comparison opcodes below.
+  - name: SELECT
+    value: 0x4F
+    arity: 3
+    wgsl: "regs[dst] = select(v1, v2, regs[imm & 0xFu] > 0.5);"
+
+  # Comparison — return 1.0 (true) or 0.0 (false). Feed into SELECT/MIX for
+  # piecewise functions and domain guards.
+  - name: LT
+    value: 0x50
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 < v2);"
+
+  - name: GT
+    value: 0x51
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 > v2);"
+
+  - name: LE
+    value: 0x52
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 <= v2);"
+
+  - name: GE
+    value: 0x53
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 >= v2);"
+
+  - name: EQ
+    value: 0x54
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 == v2);"
+
+  - name: NE
+    value: 0x55
+    arity: 2
+    wgsl: "regs[dst] = select(0.0, 1.0, v1 != v2);"
+
+  # Stochastic — deterministic hash noise keyed on the argument.
+  # RAND: white noise in [0,1). NOISE: smooth (value-noise) interpolation.
+  - name: RAND
+    value: 0x60
+    arity: 1
+    wgsl: "regs[dst] = fract(sin(v1 * 12.9898) * 43758.5453);"
+
+  - name: NOISE
+    value: 0x61
+    arity: 1
+    wgsl: "let noise_i = floor(v1); let noise_f = fract(v1); let noise_u = noise_f * noise_f * (3.0 - 2.0 * noise_f); let noise_a = fract(sin(noise_i * 12.9898) * 43758.5453); let noise_b = fract(sin((noise_i + 1.0) * 12.9898) * 43758.5453); regs[dst] = mix(noise_a, noise_b, noise_u);"
+
+  # 2D variants — keyed on both arguments, so they vary in every direction
+  # (no directional banding). RAND2: white noise. NOISE2: bilinearly
+  # interpolated value noise over the integer lattice.
+  - name: RAND2
+    value: 0x62
+    arity: 2
+    wgsl: "regs[dst] = fract(sin(v1 * 12.9898 + v2 * 78.233) * 43758.5453);"
+
+  - name: NOISE2
+    value: 0x63
+    arity: 2
+    wgsl: "let n2_ix = floor(v1); let n2_iy = floor(v2); let n2_fx = fract(v1); let n2_fy = fract(v2); let n2_ux = n2_fx * n2_fx * (3.0 - 2.0 * n2_fx); let n2_uy = n2_fy * n2_fy * (3.0 - 2.0 * n2_fy); let n2_a = fract(sin(n2_ix * 12.9898 + n2_iy * 78.233) * 43758.5453); let n2_b = fract(sin((n2_ix + 1.0) * 12.9898 + n2_iy * 78.233) * 43758.5453); let n2_c = fract(sin(n2_ix * 12.9898 + (n2_iy + 1.0) * 78.233) * 43758.5453); let n2_d = fract(sin((n2_ix + 1.0) * 12.9898 + (n2_iy + 1.0) * 78.233) * 43758.5453); regs[dst] = mix(mix(n2_a, n2_b, n2_ux), mix(n2_c, n2_d, n2_ux), n2_uy);"

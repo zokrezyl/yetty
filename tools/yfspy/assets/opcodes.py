@@ -19,10 +19,12 @@ def _find_opcodes_yaml() -> Path:
     """Locate the opcode definition file — the single source of truth shared
     with the C/WGSL codegen.
 
-    The compiler ships with the yfspy tool (tools/yfspy/assets/), so the YAML
-    may sit either next to it (a self-contained bundle) or back in the source
-    tree at src/yetty/yfsvm/ (dev checkout). An explicit override wins for
-    unusual layouts.
+    The canonical table lives with the C/WGSL codegen at src/yetty/yfsvm/; the
+    codegen also mirrors a copy next to this compiler (tools/yfspy/assets/) so
+    an installed/copied bundle is self-contained. Prefer the canonical source
+    in a dev checkout (always current), and fall back to the bundled mirror
+    when the source tree is absent. An explicit override wins for unusual
+    layouts.
     """
     override = os.environ.get("YFSVM_OPCODES_YAML")
     if override:
@@ -30,9 +32,9 @@ def _find_opcodes_yaml() -> Path:
 
     here = Path(__file__).resolve().parent
     candidates = [
-        here / "yfsvm-opcodes.yaml",  # bundled alongside the compiler
         # dev checkout: tools/yfspy/assets/ -> repo root -> src/yetty/yfsvm/
         here.parent.parent.parent / "src" / "yetty" / "yfsvm" / "yfsvm-opcodes.yaml",
+        here / "yfsvm-opcodes.yaml",  # bundled mirror (installed/copied bundle)
     ]
     for candidate in candidates:
         if candidate.is_file():

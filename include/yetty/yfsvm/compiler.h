@@ -72,6 +72,16 @@ struct yetty_yfsvm_program_result yetty_yfsvm_compile_multi_expr(const char *sou
  */
 struct yetty_ycore_void_result yetty_yfsvm_program_validate(const struct yetty_yfsvm_program *prog);
 
+/* Validate a SERIALIZED program (the uint32 word array produced by
+ * yetty_yfsvm_program_serialize) before it is uploaded to the GPU. Unlike
+ * yetty_yfsvm_program_validate, this works on the on-the-wire word layout, so
+ * it is the right guard for bytecode that arrives from outside this process
+ * (e.g. an external Python-frontend blob). Checks magic, version, function and
+ * constant counts, the constant region size, per-function ranges, opcode
+ * validity, LOAD_C constant indices, and branch targets. */
+struct yetty_ycore_void_result yetty_yfsvm_validate_serialized(const uint32_t *words,
+                                                               uint32_t word_count);
+
 /* Serialize program to buffer for GPU upload.
  * Returns number of uint32_t words written, or 0 on error.
  * Layout: [magic][version][func_count][const_count][func_table...][constants...][code...]

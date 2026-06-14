@@ -1,15 +1,23 @@
-# yfsvm Python-subset frontend
+# yfsvm Python-subset frontend — reference implementation
 
 A shader language with **Python syntax** that compiles to yfsvm bytecode. It is
-not a Python runtime: nothing executes in CPython at render time. The compiler
+not a Python runtime: nothing executes in CPython at render time. This package
 parses a restricted, deterministic subset of Python with the standard `ast`
-module and lowers it to the exact bytecode layout the GPU interpreter already
-consumes (see the [yfsvm VM README](../../../src/yetty/yfsvm/README.md)).
+module and lowers it to the exact bytecode layout the GPU interpreter consumes
+(see the [yfsvm VM README](../../../src/yetty/yfsvm/README.md)).
 
-It is an **offline authoring tool**. You write a `.py`-syntax shader, compile it
-to a bytecode blob, and that blob runs on the GPU through the existing yfsvm
-interpreter. The compiler ships with the yfspy tool; its modules live here in
-`tools/yfspy/assets/`:
+> **This is the reference implementation and test oracle, not the runtime
+> path.** The `yfspy` tool compiles shaders **in-process in C**
+> (`tools/yfspy/compile.c`), using the embedded libpython-free CPython parser
+> (`src/cpython`, `yetty_cpython`) to build the AST and the same lowering as
+> here to emit bytecode — so it needs no `uv`, no subprocess, and works on
+> every target yetty builds for (including webasm/android). This Python package
+> defines the language, documents it, and serves as the cross-check oracle: the
+> C codegen is verified to emit **byte-identical** bytecode to it across the
+> demo shader set, and `run_tests.py` validates the semantics.
+
+You can still run it standalone to produce a `.bin` blob for `yfspy --bytecode`
+or to inspect a compile. Its modules live here in `tools/yfspy/assets/`:
 
 | File | Role |
 |------|------|
@@ -180,6 +188,8 @@ WGSL/GPU path remains the source of truth for on-screen results.
   — the VM is scalar today; this is "Path B" in the issue.
 - **Sampled buffers/textures** (`SAMPLE_1D` / `SAMPLE_2D`) beyond the current
   scalar sampler slots.
-- **In-app compilation.** The frontend is offline; wiring a Python-authored
-  shader into the live render path would mean a C reimplementation of this
-  compiler (CPython is unavailable on webasm/android render targets).
+
+In-process compilation is **done**: `yfspy` no longer shells out — it compiles
+shaders in C via the embedded CPython parser (`tools/yfspy/compile.c`), so a
+Python-authored shader can be compiled and rendered live inside yetty with no
+external toolchain.

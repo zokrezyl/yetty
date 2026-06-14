@@ -38,6 +38,14 @@ from opcodes import (
 )
 
 
+def _read_source(path: str) -> str:
+    try:
+        with open(path) as stream:
+            return stream.read()
+    except OSError as error:
+        raise CompileError(f"cannot read shader '{path}': {error.strerror or error}")
+
+
 def _resolve_function_index(program, selector: str | None) -> int:
     if selector is None:
         return 0
@@ -99,7 +107,7 @@ def disassemble(words: list[int], table: OpcodeTable) -> str:
 
 
 def cmd_compile(args: argparse.Namespace) -> None:
-    source = open(args.source).read()
+    source = _read_source(args.source)
     program = compile_source(source)
     table = program.builder.table
     validate_words(program.words, table)
@@ -129,7 +137,7 @@ def cmd_compile(args: argparse.Namespace) -> None:
 
 
 def cmd_run(args: argparse.Namespace) -> None:
-    source = open(args.source).read()
+    source = _read_source(args.source)
     program = compile_source(source)
     table = program.builder.table
     func_index = _resolve_function_index(program, args.func)
@@ -149,7 +157,7 @@ def cmd_run(args: argparse.Namespace) -> None:
 
 
 def cmd_dump(args: argparse.Namespace) -> None:
-    source = open(args.source).read()
+    source = _read_source(args.source)
     program = compile_source(source)
     print(disassemble(program.words, program.builder.table))
 
