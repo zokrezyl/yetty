@@ -450,6 +450,13 @@ struct yai_hud_ptr_result yai_hud_create(void)
     if (!isatty(STDOUT_FILENO)) {
         return YETTY_OK(yai_hud_ptr, NULL); /* no pane to float over */
     }
+    /* The ygui HUD is a compositor figure only yetty can render; on any
+     * other terminal it would emit garbage. There, yai falls back to the
+     * renderer's text status bar (render.c text_hud) instead. */
+    const char *term_program = getenv("TERM_PROGRAM");
+    if (!term_program || strcmp(term_program, "yetty") != 0) {
+        return YETTY_OK(yai_hud_ptr, NULL);
+    }
 
     struct yai_hud *hud = calloc(1, sizeof(*hud));
     if (!hud) {

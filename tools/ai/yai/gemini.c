@@ -2,19 +2,24 @@
  * gemini.c — yclass class `yai:gemini`: the Google AI (gemini CLI)
  * engine.
  *
- * A fresh `gemini --output-format json --prompt <text>` child per turn
- * (lifecycle inherited from yai:turn_engine). The CLI emits ONE JSON
- * object on stdout at the end of the run:
+ * A fresh `gemini --output-format stream-json --prompt <text>` child per
+ * turn (lifecycle inherited from yai:turn_engine). stream-json is clean
+ * JSONL — one event object per line, streamed as the turn runs:
  *
- *   { "response": "<the answer text>",
- *     "stats": { "models": { "<model>": { "tokens": { "prompt": N,
- *                "candidates": N, "total": N, "cached": N, … } } } },
- *     "error": { "type": …, "message": …, "code": … }   (on failure) }
+ *   {"type":"init", "session_id":…, "model":…}
+ *   {"type":"message", "role":"user", "content":…}          (our echo)
+ *   {"type":"message", "role":"assistant", "content":…, "delta":true}
+ *   {"type":"result", "status":"success",
+ *      "stats":{"input_tokens":N, "output_tokens":N, "cached":N,
+ *               "duration_ms":N, …}}
  *
- * No session resume yet: the gemini CLI has no non-interactive resume
- * token to hand back, so every turn is a fresh conversation. The
- * engine still works for one-shot Q&A and tool runs; wire a resume
- * flag here once the CLI grows one.
+ * (The plain `--output-format json` mode emits ONE pretty-printed object
+ * instead — valid JSON, but not line-delimited; stream-json is the
+ * better fit and streams the response live.)
+ *
+ * No session resume yet: each turn is a fresh conversation. The CLI now
+ * exposes --session-id / --resume and stream-json hands back a
+ * session_id, so resume can be wired here as a follow-up.
  */
 #include "app.h"
 
@@ -43,13 +48,16 @@ static struct yetty_ycore_void_result gemini_start(struct yetty_yclass_ctx *ctx,
     (void)ctx;
     (void)obj;
     (void)app; /* nothing runs until the first turn spawns */
-    /* Gemini events carry no tool output back to yai, so the yetty MCP
-     * server must write its figure envelope to /dev/tty itself. */
-    if (unsetenv("YETTY_MCP_VIA_PARENT") != 0) {
-        return YETTY_ERR(yetty_ycore_void, "gemini start: unsetenv YETTY_MCP_VIA_PARENT failed");
+    /* yai owns the terminal: route the yetty MCP server's figures back
+     * through us (parent mode) rather than racing us to /dev/tty. This
+     * relies on gemini surfacing the MCP tool result (carrying the
+     * YAI:DRAW / figure sentinel) back in its stream-json output; if a
+     * gemini build does not, the figure simply won't render (no clash). */
+    if (setenv("YETTY_MCP_VIA_PARENT", "1", 1) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "gemini start: setenv YETTY_MCP_VIA_PARENT failed");
     }
-    printf(YAI_DIM "(gemini runs one fresh conversation per turn — the CLI exposes no "
-                   "non-interactive resume token yet)" YAI_RESET "\n");
+    printf(YAI_DIM "(gemini runs one fresh conversation per turn — resume is not wired up yet)"
+                   YAI_RESET "\n");
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "gemini start: flush");
     return YETTY_OK_VOID();
@@ -76,7 +84,9 @@ static struct yetty_ycore_void_result gemini_send_user_message(struct yetty_ycla
     int arg_count = 0;
     args[arg_count++] = "gemini";
     args[arg_count++] = "--output-format";
-    args[arg_count++] = "json";
+    /* stream-json is JSONL (one event per line) and streams the response
+     * live; plain "json" emits a single pretty-printed object. */
+    args[arg_count++] = "stream-json";
     if (model && model[0]) {
         args[arg_count++] = "--model";
         args[arg_count++] = model;
@@ -91,76 +101,6 @@ static struct yetty_ycore_void_result gemini_send_user_message(struct yetty_ycla
 
     struct yetty_ycore_void_result spawn_res = yai_turn_engine_spawn(app, "gemini", args);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, spawn_res, "gemini send_user_message: spawn");
-    return YETTY_OK_VOID();
-}
-
-/* Sum the per-model token counters under stats.models.*.tokens. */
-static void gemini_sum_tokens(yyjson_val *stats, uint64_t *prompt_tokens,
-                              uint64_t *candidate_tokens, uint64_t *cached_tokens)
-{
-    *prompt_tokens = 0;
-    *candidate_tokens = 0;
-    *cached_tokens = 0;
-    yyjson_val *models = stats ? yyjson_obj_get(stats, "models") : NULL;
-    if (!yyjson_is_obj(models)) {
-        return;
-    }
-    yyjson_obj_iter iter;
-    yyjson_obj_iter_init(models, &iter);
-    yyjson_val *model_key;
-    while ((model_key = yyjson_obj_iter_next(&iter)) != NULL) {
-        yyjson_val *model_value = yyjson_obj_iter_get_val(model_key);
-        yyjson_val *tokens = yyjson_is_obj(model_value) ? yyjson_obj_get(model_value, "tokens")
-                                                        : NULL;
-        *prompt_tokens += yai_usage_field(tokens, "prompt");
-        *candidate_tokens += yai_usage_field(tokens, "candidates");
-        *cached_tokens += yai_usage_field(tokens, "cached");
-    }
-}
-
-static struct yetty_ycore_void_result gemini_render_usage(struct yai_app *app, yyjson_val *stats)
-{
-    uint64_t prompt_tokens = 0;
-    uint64_t candidate_tokens = 0;
-    uint64_t cached_tokens = 0;
-    gemini_sum_tokens(stats, &prompt_tokens, &candidate_tokens, &cached_tokens);
-    app->usage.input += prompt_tokens;
-    app->usage.output += candidate_tokens;
-    app->usage.cache_read += cached_tokens;
-    app->usage.turns++;
-
-    char input_text[16];
-    char output_text[16];
-    char cached_text[16];
-    char session_output_text[16];
-    yai_format_tokens(prompt_tokens, input_text, sizeof(input_text));
-    yai_format_tokens(candidate_tokens, output_text, sizeof(output_text));
-    yai_format_tokens(cached_tokens, cached_text, sizeof(cached_text));
-    yai_format_tokens(app->usage.output, session_output_text, sizeof(session_output_text));
-    char turn_line[192];
-    snprintf(turn_line, sizeof(turn_line), "↑%s in · %s cached · ↓%s out", input_text, cached_text,
-             output_text);
-    char session_line[128];
-    snprintf(session_line, sizeof(session_line), "session: ↓%s out · %d turn(s)",
-             session_output_text, app->usage.turns);
-    if (app->hud) {
-        struct yetty_ycore_void_result hud_res = yai_hud_set_turn(app->hud, turn_line);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "gemini_render_usage: hud turn line");
-        hud_res = yai_hud_set_session(app->hud, session_line);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "gemini_render_usage: hud session line");
-        hud_res = yai_hud_set_state(app->hud, "idle");
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "gemini_render_usage: hud state");
-        hud_res = yai_refresh_hud_stats(app);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "gemini_render_usage: hud stats");
-        hud_res = yai_hud_flush(app->hud);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "gemini_render_usage: hud flush");
-        return YETTY_OK_VOID();
-    }
-    struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "gemini_render_usage: suspend");
-    printf(YAI_MUTED "  %s" YAI_RESET "\n" YAI_DIM "  %s" YAI_RESET "\n", turn_line, session_line);
-    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "gemini_render_usage: flush");
     return YETTY_OK_VOID();
 }
 
@@ -203,7 +143,7 @@ static struct yetty_ycore_void_result gemini_config_knob(struct yetty_yclass_ctx
     }
     int written = snprintf(out, out_size,
                            "YAI_GEMINI_APPROVAL_MODE|approval mode|"
-                           "default,auto_edit,yolo|%s",
+                           "default,auto_edit,yolo,plan|%s",
                            approval_mode);
     if (written < 0 || (size_t)written >= out_size) {
         return YETTY_ERR(yetty_ycore_void, "gemini config_knob: spec truncated");
@@ -219,11 +159,39 @@ static struct yetty_ycore_void_result gemini_handle_event(struct yetty_yclass_ct
 {
     (void)ctx;
     (void)obj;
-    /* One result object per turn: response text, optional error, stats. */
-    yyjson_val *error = yyjson_obj_get(event, "error");
-    if (yyjson_is_obj(error)) {
+    const char *type = yyjson_get_str(yyjson_obj_get(event, "type"));
+    if (!type) {
+        return YETTY_OK_VOID();
+    }
+
+    /* Turn start: reset the streamed-message state so the engine label
+     * reprints. (init also carries session_id — future resume hook.) */
+    if (strcmp(type, "init") == 0) {
+        struct yai_event begin = {.kind = YAI_EVENT_MESSAGE_BEGIN};
+        struct yetty_ycore_void_result begin_res = yai_event_dispatch(app, &begin);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, begin_res, "gemini handle_event: message begin");
+        return YETTY_OK_VOID();
+    }
+
+    /* Assistant text streams as message events; the user-role echo is
+     * our own prompt coming back, so it is not rendered. */
+    if (strcmp(type, "message") == 0) {
+        const char *role = yyjson_get_str(yyjson_obj_get(event, "role"));
+        yyjson_val *content = yyjson_obj_get(event, "content");
+        if (role && strcmp(role, "assistant") == 0 && yyjson_is_str(content) &&
+            yyjson_get_len(content) > 0) {
+            struct yai_event delta = {
+                .kind = YAI_EVENT_TEXT_DELTA,
+                .text = {.text = yyjson_get_str(content), .len = yyjson_get_len(content)}};
+            struct yetty_ycore_void_result delta_res = yai_event_dispatch(app, &delta);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, delta_res, "gemini handle_event: text");
+        }
+        return YETTY_OK_VOID();
+    }
+
+    if (strcmp(type, "error") == 0) {
         app->turn_failed = 1;
-        const char *message = yyjson_get_str(yyjson_obj_get(error, "message"));
+        const char *message = yyjson_get_str(yyjson_obj_get(event, "message"));
         struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "gemini handle_event: suspend");
         printf("\n" YAI_RED "✗ %s" YAI_RESET "\n", message ? message : "gemini error");
@@ -231,22 +199,42 @@ static struct yetty_ycore_void_result gemini_handle_event(struct yetty_yclass_ct
         YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "gemini handle_event: flush");
         struct yetty_ycore_void_result resume_res = yai_renderer_zone_resume(&app->renderer);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, resume_res, "gemini handle_event: resume");
+        return YETTY_OK_VOID();
     }
-    yyjson_val *response = yyjson_obj_get(event, "response");
-    if (yyjson_is_str(response) && yyjson_get_len(response) > 0) {
-        struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "gemini handle_event: suspend");
-        printf("\n" YAI_MINT YAI_BOLD "gemini" YAI_RESET " %s\n", yyjson_get_str(response));
-        struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "gemini handle_event: flush");
-        struct yetty_ycore_void_result resume_res = yai_renderer_zone_resume(&app->renderer);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, resume_res, "gemini handle_event: resume");
-    }
-    yyjson_val *stats = yyjson_obj_get(event, "stats");
-    if (yyjson_is_obj(stats)) {
-        struct yetty_ycore_void_result usage_res = gemini_render_usage(app, stats);
+
+    /* Turn end: flush the streamed line + clear activity, then usage.
+     * The actual turn boundary (queue pump / re-prompt) is the child
+     * exit, handled by yai:turn_engine — not here. */
+    if (strcmp(type, "result") == 0) {
+        const char *status = yyjson_get_str(yyjson_obj_get(event, "status"));
+        if (status && strcmp(status, "success") != 0) {
+            app->turn_failed = 1;
+            struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "gemini handle_event: suspend");
+            printf("\n" YAI_RED "✗ gemini: %s" YAI_RESET "\n", status);
+            struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "gemini handle_event: flush");
+            struct yetty_ycore_void_result resume_res = yai_renderer_zone_resume(&app->renderer);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, resume_res, "gemini handle_event: resume");
+        }
+        struct yai_event turn_end = {.kind = YAI_EVENT_TURN_END};
+        struct yetty_ycore_void_result end_res = yai_event_dispatch(app, &turn_end);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, end_res, "gemini handle_event: turn end");
+
+        yyjson_val *stats = yyjson_obj_get(event, "stats");
+        yyjson_val *duration_value = stats ? yyjson_obj_get(stats, "duration_ms") : NULL;
+        struct yai_event usage_event = {
+            .kind = YAI_EVENT_USAGE,
+            .usage = {.input = yai_usage_field(stats, "input_tokens"),
+                      .output = yai_usage_field(stats, "output_tokens"),
+                      .cache_read = yai_usage_field(stats, "cached"),
+                      .seconds = duration_value ? yyjson_get_num(duration_value) / 1000.0 : 0.0}};
+        struct yetty_ycore_void_result usage_res = yai_event_dispatch(app, &usage_event);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, usage_res, "gemini handle_event: usage");
+        return YETTY_OK_VOID();
     }
+
+    /* user-role message echo and any other event types: nothing to draw. */
     return YETTY_OK_VOID();
 }
 

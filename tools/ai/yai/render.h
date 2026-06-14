@@ -34,6 +34,24 @@
 struct yai_renderer {
     int fold_lines;    /* tool-output preview cap */
     int show_thinking; /* stream dim thinking text */
+    /* Render completed assistant answers as a yetty markdown figure
+     * (via ycat) instead of plain text. Opt-in via --markdown, and only
+     * on the yetty host (the figure envelope can't display elsewhere);
+     * falls back to plain text if ycat is unavailable or fails. */
+    int render_markdown;
+    /* Use the animated shader glyph for the activity indicator. OFF by
+     * default: an animated glyph keeps yetty's renderer running every
+     * frame (≈100% of a CPU core for the whole turn). Opt in with
+     * --animate; otherwise a static glyph is used and yetty idles when
+     * nothing changes. */
+    int animate_glyph;
+    /* Text status bar at the bottom of the pinned zone, for non-yetty
+     * terminals (where the ygui HUD window can't render). Active when
+     * stdout is a tty but the host is not yetty. hud_state = left
+     * (activity), hud_stats = right (model + token/cost summary). */
+    int text_hud;
+    char hud_state[160];
+    char hud_stats[192];
 
     /*
      * Pinned zone — transient rows at the bottom of the scrollback,
@@ -129,6 +147,22 @@ struct yetty_ycore_void_result yai_renderer_activity_clear(struct yai_renderer *
 struct yetty_ycore_void_result yai_renderer_menu_set(struct yai_renderer *renderer,
                                                      const char *const *rows, size_t count);
 struct yetty_ycore_void_result yai_renderer_menu_clear(struct yai_renderer *renderer);
+
+/* Text-HUD status bar (non-yetty terminals). Set the left (activity) and
+ * right (model/usage) segments; redraws the zone when the text HUD is
+ * active, otherwise just records the text. */
+struct yetty_ycore_void_result yai_renderer_hud_state(struct yai_renderer *renderer,
+                                                      const char *text);
+struct yetty_ycore_void_result yai_renderer_hud_stats(struct yai_renderer *renderer,
+                                                      const char *text);
+
+/* Reserve / release the bottom terminal row for the text-HUD bar via a
+ * DECSTBM scroll region (conversation text scrolls above it). Call
+ * reserve at startup and after a resize / shell / alt-screen, release at
+ * shutdown and before handing the terminal to a shell or the alt screen.
+ * No-ops unless the text HUD is active. */
+struct yetty_ycore_void_result yai_renderer_text_hud_reserve(struct yai_renderer *renderer);
+struct yetty_ycore_void_result yai_renderer_text_hud_release(struct yai_renderer *renderer);
 
 /* One tool invocation line: "⚙ name <one-line input summary>". */
 struct yetty_ycore_void_result yai_render_tool_call(struct yai_renderer *renderer, const char *name,

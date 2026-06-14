@@ -13,6 +13,7 @@
 #include <string.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 /* Sentinels the yetty MCP server emits under YETTY_MCP_VIA_PARENT: yai is
@@ -33,6 +34,16 @@
 #define YAI_FIGURE_SPOOL_SUFFIX ".bin"
 #define YAI_FIGURE_SPOOL_MAX_BYTES (64u * 1024u * 1024u)
 
+/* The YAI:DRAW sentinel: the agent (via the yetty MCP server in parent
+ * mode) wrote RAW content to a temp file and tells yai which tool to
+ * render it with. yai — the single PTY writer, and the side that knows
+ * the real terminal width — runs that tool itself. Format:
+ *   <<YAI:DRAW kind=<kind> path=</abs/tmp/yetty-draw-XXXX>>>
+ * The temp file uses this prefix so the path validator can recognise it. */
+#define YAI_DRAW_SENTINEL_OPEN "<<YAI:DRAW "
+#define YAI_DRAW_SENTINEL_CLOSE ">>"
+#define YAI_DRAW_SPOOL_PREFIX "yetty-draw-"
+
 #define YAI_SUMMARY_MAX 100
 
 #define YAI_STREAM_NONE 0
@@ -41,6 +52,13 @@
 
 /* "you ▸ " — 6 display columns; the glyph prefix adds 2 more. */
 #define YAI_PROMPT_COLUMNS 6
+
+/* Render `len` bytes of markdown to a yetty figure (via ycat) and write
+ * it under the engine label. Defined below; forward-declared so the
+ * stream finish path (above its definition) can reach it. Value 1 =
+ * rendered; 0 = could not (ycat absent/failed) → caller prints plain. */
+static struct yetty_ycore_int_result render_markdown_buffer(struct yai_renderer *renderer,
+                                                            const char *bytes, size_t len);
 
 /* Flush stdio's stdout buffer to the tty. stdout is NON-BLOCKING here
  * (the uv_poll on stdin put the shared tty file description in
@@ -75,6 +93,13 @@ void yai_renderer_init(struct yai_renderer *renderer, int fold_lines, int show_t
     renderer->pin_enabled = isatty(STDOUT_FILENO);
     const char *term_program = getenv("TERM_PROGRAM");
     renderer->pin_shader_glyphs = term_program && strcmp(term_program, "yetty") == 0;
+    /* render_markdown, animate_glyph and text_hud are opt-in flags set by
+     * main from --markdown / --animate / --hud after init. All default off:
+     * plain text, static glyph, and — crucially — NO bottom status bar, so
+     * the conversation uses the full normal screen and stays in the
+     * terminal's scrollback. The bar needs a DECSTBM scroll region, which
+     * drops scrolled-off lines from scrollback in most terminals; hence
+     * opt-in. */
 }
 
 void yai_renderer_destroy(struct yai_renderer *renderer)
@@ -166,14 +191,21 @@ static size_t char_index_to_byte(const char *bytes, size_t len, size_t target_ch
     return len;
 }
 
-/* The current in-progress streamed line (the remainder in stream_buf),
- * shown as a single clipped ticker row. */
+/* The current in-progress streamed line, shown as a single clipped
+ * ticker row. Only the LAST line of stream_buf is shown: in markdown
+ * mode the buffer holds the whole multi-line answer, and a '\n' printed
+ * in this single row would move the cursor and corrupt the pinned zone. */
 static void zone_draw_ticker(const struct yai_renderer *renderer, int columns)
 {
+    size_t line_start = renderer->stream_len;
+    while (line_start > 0 && renderer->stream_buf[line_start - 1] != '\n') {
+        line_start--;
+    }
     size_t tail_len = 0;
     int clipped = 0;
-    const char *tail =
-        clip_tail(renderer->stream_buf, renderer->stream_len, columns - 2, &tail_len, &clipped);
+    const char *tail = clip_tail(renderer->stream_buf + line_start,
+                                 renderer->stream_len - line_start, columns - 2, &tail_len,
+                                 &clipped);
     const char *style = (renderer->stream_kind == YAI_STREAM_THINKING) ? YAI_DIM : "";
     printf("%s%s%.*s" YAI_RESET, style, clipped ? "…" : "", (int)tail_len, tail);
 }
@@ -260,6 +292,98 @@ static void zone_draw_prompt(const struct yai_renderer *renderer, int columns)
     }
 }
 
+static int terminal_rows(void)
+{
+    struct winsize size = {0};
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) != 0 || size.ws_row == 0) {
+        return 24;
+    }
+    return size.ws_row;
+}
+
+/* Redraw the text-HUD bar on the last terminal row (reserved by the
+ * DECSTBM scroll region). Absolute-positioned and cursor-preserving, so
+ * it can refresh independently of the scrolling conversation above. One
+ * row only — clipped to `columns` codepoints so it never wraps. */
+static struct yetty_ycore_void_result text_hud_redraw(struct yai_renderer *renderer)
+{
+    if (!renderer->text_hud) {
+        return YETTY_OK_VOID();
+    }
+    int columns = terminal_columns();
+    int rows = terminal_rows();
+    if (rows < 2 || columns < 2) {
+        return YETTY_OK_VOID();
+    }
+    char line[1024];
+    int left_cols = (int)count_chars(renderer->hud_state, strlen(renderer->hud_state));
+    int right_cols = (int)count_chars(renderer->hud_stats, strlen(renderer->hud_stats));
+    int gap = columns - left_cols - right_cols;
+    if (gap >= 1) {
+        snprintf(line, sizeof(line), "%s%*s%s", renderer->hud_state, gap, "", renderer->hud_stats);
+    } else {
+        snprintf(line, sizeof(line), "%s  %s", renderer->hud_state, renderer->hud_stats);
+    }
+    size_t len = strlen(line);
+    size_t bytes = 0;
+    size_t chars = 0;
+    while (bytes < len && chars < (size_t)columns) {
+        bytes++;
+        while (bytes < len && ((unsigned char)line[bytes] & 0xC0) == 0x80) {
+            bytes++;
+        }
+        chars++;
+    }
+    /* Save cursor, jump to the reserved last row, paint, restore. */
+    printf("\033[s\033[%d;1H\033[2K\033[7m ", rows);
+    fwrite(line, 1, bytes, stdout);
+    fputs("\033[0m\033[u", stdout);
+    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "text_hud_redraw: flush");
+    return YETTY_OK_VOID();
+}
+
+/* Reserve the bottom row for the text HUD via a DECSTBM scroll region
+ * (rows 1..N-1 scroll; row N is the fixed bar), then paint the bar.
+ * Setting the region homes the cursor, so save/restore around it. */
+struct yetty_ycore_void_result yai_renderer_text_hud_reserve(struct yai_renderer *renderer)
+{
+    if (!renderer->text_hud) {
+        return YETTY_OK_VOID();
+    }
+    int rows = terminal_rows();
+    if (rows < 3) {
+        return YETTY_OK_VOID(); /* too short to spare a row */
+    }
+    /* Reserve rows 1..rows-1 to scroll, then PARK the cursor at the bottom
+     * of that region (row rows-1). Restoring the prior cursor would be
+     * wrong: if the screen was full when yai started, the cursor sat on
+     * the last row — now the bar row, outside the region — so the prompt
+     * and all output would land there and nothing would scroll. */
+    printf("\033[1;%dr\033[%d;1H", rows - 1, rows - 1);
+    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "text_hud_reserve: region");
+    return text_hud_redraw(renderer);
+}
+
+/* Drop the scroll region (back to the full screen) and clear the bar. */
+struct yetty_ycore_void_result yai_renderer_text_hud_release(struct yai_renderer *renderer)
+{
+    if (!renderer->text_hud) {
+        return YETTY_OK_VOID();
+    }
+    int rows = terminal_rows();
+    /* Save the cursor BEFORE resetting the region: DECSTBM (\033[r) homes the
+     * cursor to row 1. Saving after the reset would capture (1,1), and the
+     * restore would strand the cursor at the top — the caller's final output
+     * (and the shell prompt after exit) would then land mid-screen over the
+     * conversation. Save real position, reset, clear the bar row, restore. */
+    printf("\033[s\033[r\033[%d;1H\033[2K\033[u", rows);
+    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "text_hud_release: reset");
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result zone_draw(struct yai_renderer *renderer)
 {
     if (!renderer->pin_enabled || !renderer->pin_active || renderer->zone_visible) {
@@ -270,7 +394,7 @@ static struct yetty_ycore_void_result zone_draw(struct yai_renderer *renderer)
     if (renderer->stream_kind != YAI_STREAM_NONE && renderer->stream_len > 0) {
         zone_draw_ticker(renderer, columns);
         fputc('\n', stdout);
-        renderer->zone_rows_above = 1;
+        renderer->zone_rows_above++;
     }
     zone_draw_prompt(renderer, columns);
     /* Menu rows walk down with newlines (scrolling at the screen
@@ -370,7 +494,10 @@ struct yetty_ycore_void_result yai_renderer_activity_set(struct yai_renderer *re
     }
     char glyph_bytes[8] = "";
     size_t glyph_len = 0;
-    if (renderer->pin_shader_glyphs && glyph_name) {
+    /* Only emit the animated shader glyph when explicitly opted in — it
+     * keeps yetty re-rendering every frame (high CPU). Otherwise fall
+     * through to the static glyph below so yetty idles. */
+    if (renderer->pin_shader_glyphs && renderer->animate_glyph && glyph_name) {
         struct uint32_result codepoint_res = yetty_yfont_shader_glyph_codepoint(glyph_name);
         if (YETTY_IS_ERR(codepoint_res)) {
             /* Unknown glyph name is not an error — the static fallback
@@ -397,6 +524,20 @@ struct yetty_ycore_void_result yai_renderer_activity_clear(struct yai_renderer *
     struct yetty_ycore_void_result redraw_res = yai_renderer_pin_redraw(renderer);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, redraw_res, "activity_clear: redraw");
     return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yai_renderer_hud_state(struct yai_renderer *renderer,
+                                                      const char *text)
+{
+    snprintf(renderer->hud_state, sizeof(renderer->hud_state), "%s", text ? text : "");
+    return text_hud_redraw(renderer);
+}
+
+struct yetty_ycore_void_result yai_renderer_hud_stats(struct yai_renderer *renderer,
+                                                      const char *text)
+{
+    snprintf(renderer->hud_stats, sizeof(renderer->hud_stats), "%s", text ? text : "");
+    return text_hud_redraw(renderer);
 }
 
 struct yetty_ycore_void_result yai_renderer_menu_set(struct yai_renderer *renderer,
@@ -478,6 +619,11 @@ static void stream_print_line(struct yai_renderer *renderer, const char *line, s
 /* Flush completed lines out of stream_buf; keep the partial tail. */
 static void stream_flush_lines(struct yai_renderer *renderer)
 {
+    /* Markdown mode keeps the whole assistant message buffered and
+     * renders it as one figure at finish — don't commit plain lines. */
+    if (renderer->render_markdown && renderer->stream_kind == YAI_STREAM_TEXT) {
+        return;
+    }
     size_t start = 0;
     for (size_t index = 0; index < renderer->stream_len; index++) {
         if (renderer->stream_buf[index] != '\n') {
@@ -492,7 +638,9 @@ static void stream_flush_lines(struct yai_renderer *renderer)
     }
 }
 
-/* End of a streamed run: flush the unterminated remainder. */
+/* End of a streamed run. In markdown mode, render the whole accumulated
+ * assistant message as one yetty figure; otherwise flush the
+ * unterminated remainder as plain text. */
 static struct yetty_ycore_void_result stream_finish(struct yai_renderer *renderer)
 {
     if (renderer->stream_kind == YAI_STREAM_NONE) {
@@ -500,10 +648,31 @@ static struct yetty_ycore_void_result stream_finish(struct yai_renderer *rendere
     }
     struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(renderer);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "stream_finish: suspend");
-    if (renderer->stream_len > 0) {
-        stream_print_line(renderer, renderer->stream_buf, renderer->stream_len);
-        renderer->stream_len = 0;
+
+    int rendered_markdown = 0;
+    if (renderer->render_markdown && renderer->stream_kind == YAI_STREAM_TEXT &&
+        renderer->stream_len > 0) {
+        struct yetty_ycore_int_result markdown_res =
+            render_markdown_buffer(renderer, renderer->stream_buf, renderer->stream_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, markdown_res, "stream_finish: markdown render");
+        rendered_markdown = markdown_res.value;
     }
+    if (!rendered_markdown && renderer->stream_len > 0) {
+        /* Plain text — either non-markdown mode (just the tail), or the
+         * markdown fallback (the buffer holds whole lines; split them). */
+        size_t start = 0;
+        for (size_t index = 0; index < renderer->stream_len; index++) {
+            if (renderer->stream_buf[index] != '\n') {
+                continue;
+            }
+            stream_print_line(renderer, renderer->stream_buf + start, index - start);
+            start = index + 1;
+        }
+        if (start < renderer->stream_len) {
+            stream_print_line(renderer, renderer->stream_buf + start, renderer->stream_len - start);
+        }
+    }
+    renderer->stream_len = 0;
     renderer->stream_kind = YAI_STREAM_NONE;
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "stream_finish: flush");
@@ -623,6 +792,12 @@ void yai_summarize_tool_input(yyjson_val *input, char *out, size_t out_size)
 struct yetty_ycore_void_result yai_render_tool_call(struct yai_renderer *renderer, const char *name,
                                                     yyjson_val *input)
 {
+    /* Markdown mode buffers the assistant text; render it before the
+     * tool line so ordering holds (text, then its tool call). */
+    if (renderer->render_markdown) {
+        struct yetty_ycore_void_result finish_res = stream_finish(renderer);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, finish_res, "render_tool_call: finish text");
+    }
     struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(renderer);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "render_tool_call: suspend");
     char summary[YAI_SUMMARY_MAX + 1];
@@ -793,22 +968,182 @@ static struct yetty_ycore_void_result write_figure_envelope(const unsigned char 
     return YETTY_OK_VOID();
 }
 
-/* The FILE sentinel's path arrives inside model-visible tool output —
- * UNTRUSTED. Accept only what the MCP server's tempfile actually
- * produces: an absolute path in the temp directory whose basename is
- * yetty-figure-*.bin, with no ".." anywhere. */
-static int figure_spool_path_acceptable(const char *path)
+/* Run `ycat -w <cols> -c <kind> <path>` with TERM_PROGRAM=yetty and
+ * capture its stdout — the OSC figure envelope — into a malloc'd buffer.
+ * yai is the single PTY writer, so the child's stdout is captured here
+ * (a pipe), never written to the tty directly. Value 1 with out and
+ * out_len set on success; value 0 when ycat is absent or produced
+ * nothing, so the caller falls back to plain text. */
+static struct yetty_ycore_int_result run_render_tool(const char *kind, const char *path,
+                                                     unsigned char **out, size_t *out_len)
+{
+    char columns_text[16];
+    snprintf(columns_text, sizeof(columns_text), "%d", terminal_columns());
+    const char *bin_dir = getenv("YETTY_BIN_DIR");
+    char tool_path[1024];
+    if (bin_dir && bin_dir[0]) {
+        snprintf(tool_path, sizeof(tool_path), "%s/ycat", bin_dir);
+    } else {
+        snprintf(tool_path, sizeof(tool_path), "ycat");
+    }
+    char *const argv[] = {tool_path,    "-w",         columns_text, "-c",
+                          (char *)kind, (char *)path, NULL};
+
+    int pipe_fds[2];
+    if (pipe(pipe_fds) != 0) {
+        return YETTY_ERR(yetty_ycore_int, "run_render_tool: pipe failed");
+    }
+    pid_t pid = fork();
+    if (pid < 0) {
+        close(pipe_fds[0]);
+        close(pipe_fds[1]);
+        return YETTY_ERR(yetty_ycore_int, "run_render_tool: fork failed");
+    }
+    if (pid == 0) {
+        /* Child: stdout -> pipe, stderr -> /dev/null (its chatter must
+         * never reach our tty), and TERM_PROGRAM=yetty so ycat emits the
+         * envelope instead of plain text. */
+        dup2(pipe_fds[1], STDOUT_FILENO);
+        close(pipe_fds[0]);
+        close(pipe_fds[1]);
+        int devnull = open("/dev/null", O_WRONLY | O_CLOEXEC);
+        if (devnull >= 0) {
+            dup2(devnull, STDERR_FILENO);
+            close(devnull);
+        }
+        setenv("TERM_PROGRAM", "yetty", 1);
+        execvp(tool_path, argv);
+        _exit(127);
+    }
+    close(pipe_fds[1]);
+    size_t cap = 64 * 1024;
+    size_t len = 0;
+    unsigned char *buffer = malloc(cap);
+    if (!buffer) {
+        close(pipe_fds[0]);
+        waitpid(pid, NULL, 0);
+        return YETTY_ERR(yetty_ycore_int, "run_render_tool: alloc failed");
+    }
+    int overflow = 0;
+    for (;;) {
+        if (len == cap) {
+            if (cap >= YAI_FIGURE_SPOOL_MAX_BYTES) {
+                overflow = 1;
+                break;
+            }
+            cap *= 2;
+            unsigned char *grown = realloc(buffer, cap);
+            if (!grown) {
+                free(buffer);
+                close(pipe_fds[0]);
+                waitpid(pid, NULL, 0);
+                return YETTY_ERR(yetty_ycore_int, "run_render_tool: realloc failed");
+            }
+            buffer = grown;
+        }
+        ssize_t chunk = read(pipe_fds[0], buffer + len, cap - len);
+        if (chunk < 0 && errno == EINTR) {
+            continue;
+        }
+        if (chunk <= 0) {
+            break;
+        }
+        len += (size_t)chunk;
+    }
+    /* Closing the read end unblocks the child if it overflowed our cap
+     * (its next write gets EPIPE), so waitpid can never hang. */
+    close(pipe_fds[0]);
+    int status = 0;
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {
+    }
+    if (overflow || len == 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        free(buffer);
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    *out = buffer;
+    *out_len = len;
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
+static struct yetty_ycore_int_result render_markdown_buffer(struct yai_renderer *renderer,
+                                                            const char *bytes, size_t len)
+{
+    /* Stage the markdown in a temp file so ycat reads a file arg — no
+     * stdin pipe, so no producer/consumer deadlock with our capture. */
+    const char *temp_dir = getenv("TMPDIR");
+    if (!temp_dir || !temp_dir[0]) {
+        temp_dir = "/tmp";
+    }
+    char template_path[1024];
+    int written = snprintf(template_path, sizeof(template_path), "%s/yetty-draw-XXXXXX", temp_dir);
+    if (written < 0 || (size_t)written >= sizeof(template_path)) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    int temp_fd = mkstemp(template_path);
+    if (temp_fd < 0) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    size_t flushed = 0;
+    int write_failed = 0;
+    while (flushed < len) {
+        ssize_t chunk = write(temp_fd, bytes + flushed, len - flushed);
+        if (chunk < 0 && errno == EINTR) {
+            continue;
+        }
+        if (chunk <= 0) {
+            write_failed = 1;
+            break;
+        }
+        flushed += (size_t)chunk;
+    }
+    close(temp_fd);
+    if (write_failed) {
+        unlink(template_path);
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    unsigned char *envelope = NULL;
+    size_t envelope_len = 0;
+    struct yetty_ycore_int_result run_res =
+        run_render_tool("markdown", template_path, &envelope, &envelope_len);
+    unlink(template_path);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, run_res, "render_markdown_buffer: run ycat");
+    if (!run_res.value) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    /* Label it like a normal answer, then the figure, then a newline so
+     * the next write starts below the figure. */
+    printf("\n" YAI_MINT YAI_BOLD "%s" YAI_RESET "\n", renderer->engine_label);
+    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+    if (YETTY_IS_ERR(flush_res)) {
+        free(envelope);
+        return YETTY_ERR(yetty_ycore_int, "render_markdown_buffer: pre-flush", flush_res);
+    }
+    struct yetty_ycore_void_result write_res =
+        write_all_to_terminal(STDOUT_FILENO, envelope, envelope_len);
+    free(envelope);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, write_res, "render_markdown_buffer: envelope write");
+    if (fputc('\n', stdout) == EOF) {
+        return YETTY_ERR(yetty_ycore_int, "render_markdown_buffer: trailing newline");
+    }
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
+/* A sentinel path arrives inside model-visible tool output — UNTRUSTED.
+ * Accept only what the MCP server's tempfile actually produces: an
+ * absolute path in the temp directory whose basename is
+ * <prefix>*<suffix>, with no ".." anywhere. An empty suffix matches any. */
+static int spool_path_acceptable(const char *path, const char *prefix, const char *suffix)
 {
     if (path[0] != '/' || strstr(path, "..")) {
         return 0;
     }
     const char *basename_start = strrchr(path, '/') + 1;
     size_t basename_len = strlen(basename_start);
-    size_t prefix_len = strlen(YAI_FIGURE_SPOOL_PREFIX);
-    size_t suffix_len = strlen(YAI_FIGURE_SPOOL_SUFFIX);
+    size_t prefix_len = strlen(prefix);
+    size_t suffix_len = strlen(suffix);
     if (basename_len <= prefix_len + suffix_len ||
-        strncmp(basename_start, YAI_FIGURE_SPOOL_PREFIX, prefix_len) != 0 ||
-        strcmp(basename_start + basename_len - suffix_len, YAI_FIGURE_SPOOL_SUFFIX) != 0) {
+        strncmp(basename_start, prefix, prefix_len) != 0 ||
+        strcmp(basename_start + basename_len - suffix_len, suffix) != 0) {
         return 0;
     }
     /* Directory must be the temp dir (same resolution order as the
@@ -856,7 +1191,7 @@ static struct yetty_ycore_int_result try_render_figure_file(const char *raw, con
     }
     memcpy(path, payload, path_len);
     path[path_len] = '\0';
-    if (!figure_spool_path_acceptable(path)) {
+    if (!spool_path_acceptable(path, YAI_FIGURE_SPOOL_PREFIX, YAI_FIGURE_SPOOL_SUFFIX)) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
 
@@ -934,6 +1269,85 @@ static struct yetty_ycore_int_result try_render_figure(const char *raw, const ch
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
+/* Copy the value of `key` (e.g. "kind=") from the marker body [begin,end)
+ * into `out`, stopping at whitespace or `end`. Value 1 if a non-empty
+ * value was found and fit. */
+static int extract_marker_field(const char *begin, const char *end, const char *key, char *out,
+                                size_t out_size)
+{
+    const char *found = strstr(begin, key);
+    if (!found || found >= end) {
+        return 0;
+    }
+    const char *value = found + strlen(key);
+    size_t len = 0;
+    while (value + len < end && value[len] != ' ' && value[len] != '\t' && len < out_size - 1) {
+        len++;
+    }
+    if (len == 0) {
+        return 0;
+    }
+    memcpy(out, value, len);
+    out[len] = '\0';
+    return 1;
+}
+
+/* A render kind is passed as a literal argv element to ycat (no shell),
+ * so injection is impossible; still bound it to lowercase letters so a
+ * malformed marker can't smuggle flags or paths. */
+static int draw_kind_acceptable(const char *kind)
+{
+    if (!kind[0]) {
+        return 0;
+    }
+    for (size_t index = 0; kind[index]; index++) {
+        if (kind[index] < 'a' || kind[index] > 'z') {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* YAI:DRAW sentinel: the agent staged raw content in a temp file and
+ * named the render kind. Validate, run the tool (ycat -c <kind>), emit
+ * the envelope, unlink. Value 1 = a figure was emitted. */
+static struct yetty_ycore_int_result try_render_draw(const char *raw, const char *tool_name)
+{
+    const char *open_marker = strstr(raw, YAI_DRAW_SENTINEL_OPEN);
+    if (!open_marker) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    const char *body = open_marker + strlen(YAI_DRAW_SENTINEL_OPEN);
+    const char *close_marker = strstr(body, YAI_DRAW_SENTINEL_CLOSE);
+    if (!close_marker || close_marker == body) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    char kind[32] = "";
+    char path[1024] = "";
+    if (!extract_marker_field(body, close_marker, "kind=", kind, sizeof(kind)) ||
+        !extract_marker_field(body, close_marker, "path=", path, sizeof(path))) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    if (!draw_kind_acceptable(kind) || !spool_path_acceptable(path, YAI_DRAW_SPOOL_PREFIX, "")) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    unsigned char *envelope = NULL;
+    size_t envelope_len = 0;
+    struct yetty_ycore_int_result run_res = run_render_tool(kind, path, &envelope, &envelope_len);
+    unlink(path);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, run_res, "try_render_draw: run tool");
+    if (!run_res.value) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    struct yetty_ycore_void_result emit_res =
+        write_figure_envelope(envelope, envelope_len, tool_name);
+    free(envelope);
+    if (YETTY_IS_ERR(emit_res)) {
+        return YETTY_ERR(yetty_ycore_int, "try_render_draw: emit", emit_res);
+    }
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
 struct yetty_ycore_void_result yai_render_tool_result(struct yai_renderer *renderer,
                                                       yyjson_val *content, int is_error,
                                                       const char *tool_name)
@@ -942,13 +1356,36 @@ struct yetty_ycore_void_result yai_render_tool_result(struct yai_renderer *rende
     if (!raw) {
         return YETTY_ERR(yetty_ycore_void, "render_tool_result: tool_result_text alloc failed");
     }
+    /* Render any buffered assistant text before the result (markdown mode). */
+    if (renderer->render_markdown) {
+        struct yetty_ycore_void_result finish_res = stream_finish(renderer);
+        if (YETTY_IS_ERR(finish_res)) {
+            free(raw);
+            return YETTY_ERR(yetty_ycore_void, "render_tool_result: finish text", finish_res);
+        }
+    }
     struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(renderer);
     if (YETTY_IS_ERR(suspend_res)) {
         free(raw);
         return YETTY_ERR(yetty_ycore_void, "render_tool_result: suspend", suspend_res);
     }
     if (!is_error) {
-        struct yetty_ycore_int_result figure_res = try_render_figure(raw, tool_name);
+        /* Two parent-render paths: YAI:DRAW (raw content + kind — yai
+         * runs the tool) and the figure sentinel (a pre-rendered
+         * envelope yai just relays). Either emits and we're done. */
+        struct yetty_ycore_int_result draw_res = try_render_draw(raw, tool_name);
+        if (YETTY_IS_ERR(draw_res)) {
+            free(raw);
+            struct yetty_ycore_void_result resume_res = yai_renderer_zone_resume(renderer);
+            if (YETTY_IS_ERR(resume_res)) {
+                yetty_ycore_error_destroy(resume_res.error);
+            }
+            return YETTY_ERR(yetty_ycore_void, "render_tool_result: draw", draw_res);
+        }
+        struct yetty_ycore_int_result figure_res = {.ok = 1, .value = 0};
+        if (!draw_res.value) {
+            figure_res = try_render_figure(raw, tool_name);
+        }
         if (YETTY_IS_ERR(figure_res)) {
             free(raw);
             /* Never leave the zone suspended: restore it before
@@ -959,7 +1396,7 @@ struct yetty_ycore_void_result yai_render_tool_result(struct yai_renderer *rende
             }
             return YETTY_ERR(yetty_ycore_void, "render_tool_result: figure", figure_res);
         }
-        if (figure_res.value) {
+        if (draw_res.value || figure_res.value) {
             free(raw);
             struct yetty_ycore_void_result resume_res = yai_renderer_zone_resume(renderer);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, resume_res, "render_tool_result: resume");

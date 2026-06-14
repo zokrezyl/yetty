@@ -34,10 +34,13 @@ static struct yetty_ycore_void_result codex_start(struct yetty_yclass_ctx *ctx,
     (void)ctx;
     (void)obj;
     (void)app; /* nothing runs until the first turn spawns */
-    /* Codex events carry no tool output back to yai, so the yetty MCP
-     * server must write its figure envelope to /dev/tty itself. */
-    if (unsetenv("YETTY_MCP_VIA_PARENT") != 0) {
-        return YETTY_ERR(yetty_ycore_void, "codex start: unsetenv YETTY_MCP_VIA_PARENT failed");
+    /* yai owns the terminal: route the yetty MCP server's figures back
+     * through us (parent mode) instead of letting it race us to /dev/tty.
+     * The server returns a YAI:DRAW / figure sentinel in the tool result,
+     * which rides codex's mcp_tool_call item output into yai_render_tool_result.
+     * (Requires YAI_CODEX_SANDBOX=danger-full-access for MCP tools to run.) */
+    if (setenv("YETTY_MCP_VIA_PARENT", "1", 1) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "codex start: setenv YETTY_MCP_VIA_PARENT failed");
     }
     const char *sandbox_mode = getenv("YAI_CODEX_SANDBOX");
     if (!sandbox_mode || !sandbox_mode[0]) {
@@ -200,49 +203,17 @@ static struct yetty_ycore_void_result codex_render_item(struct yai_app *app, yyj
     return YETTY_OK_VOID();
 }
 
+/* Normalize codex's turn.completed usage into a USAGE event. Codex
+ * reports no cost or duration (has_cost stays 0, seconds 0), so the
+ * shared renderer omits the "$…" and timing segments. */
 static struct yetty_ycore_void_result codex_render_usage(struct yai_app *app, yyjson_val *usage)
 {
-    uint64_t turn_input = yai_usage_field(usage, "input_tokens");
-    uint64_t cached = yai_usage_field(usage, "cached_input_tokens");
-    uint64_t turn_output = yai_usage_field(usage, "output_tokens");
-    app->usage.input += turn_input;
-    app->usage.output += turn_output;
-    app->usage.cache_read += cached;
-    app->usage.turns++;
-
-    char input_text[16];
-    char output_text[16];
-    char cached_text[16];
-    char session_output_text[16];
-    yai_format_tokens(turn_input, input_text, sizeof(input_text));
-    yai_format_tokens(turn_output, output_text, sizeof(output_text));
-    yai_format_tokens(cached, cached_text, sizeof(cached_text));
-    yai_format_tokens(app->usage.output, session_output_text, sizeof(session_output_text));
-    char turn_line[192];
-    snprintf(turn_line, sizeof(turn_line), "↑%s in · %s cached · ↓%s out", input_text, cached_text,
-             output_text);
-    char session_line[128];
-    snprintf(session_line, sizeof(session_line), "session: ↓%s out · %d turn(s)",
-             session_output_text, app->usage.turns);
-    if (app->hud) {
-        struct yetty_ycore_void_result hud_res = yai_hud_set_turn(app->hud, turn_line);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "codex_render_usage: hud turn line");
-        hud_res = yai_hud_set_session(app->hud, session_line);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "codex_render_usage: hud session line");
-        hud_res = yai_hud_set_state(app->hud, "idle");
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "codex_render_usage: hud state");
-        hud_res = yai_refresh_hud_stats(app);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "codex_render_usage: hud stats");
-        hud_res = yai_hud_flush(app->hud);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "codex_render_usage: hud flush");
-        return YETTY_OK_VOID();
-    }
-    struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "codex_render_usage: suspend");
-    printf(YAI_MUTED "  %s" YAI_RESET "\n" YAI_DIM "  %s" YAI_RESET "\n", turn_line, session_line);
-    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "codex_render_usage: flush");
-    return YETTY_OK_VOID();
+    struct yai_event usage_event = {
+        .kind = YAI_EVENT_USAGE,
+        .usage = {.input = yai_usage_field(usage, "input_tokens"),
+                  .output = yai_usage_field(usage, "output_tokens"),
+                  .cache_read = yai_usage_field(usage, "cached_input_tokens")}};
+    return yai_event_dispatch(app, &usage_event);
 }
 
 [[clang::annotate("override@yai:codex:describe_config")]]

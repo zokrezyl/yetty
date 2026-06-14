@@ -17,6 +17,7 @@ add_executable(yai
     render.c
     hud.c
     commands.c
+    event.c
     engine.c
     turn-engine.c
     claude.c

@@ -20,6 +20,7 @@
 #define YAI_APP_H
 
 #include "commands.h"
+#include "event.h"
 #include "hud.h"
 #include "render.h"
 
@@ -37,6 +38,8 @@
 /* Completion menu rows under the prompt while typing a /command. */
 #define YAI_MENU_ROWS YAI_RENDERER_MENU_ROWS
 #define YAI_HISTORY_MAX 100
+/* Tools the user marked "always allow" this session (permission prompt). */
+#define YAI_ALWAYS_ALLOW_MAX 32
 
 struct yetty_yface;
 
@@ -83,6 +86,12 @@ struct yai_app {
     struct yetty_yface *yface;
     int focus_gui; /* 1 = the HUD window owns keyboard input */
     int mouse_subscribed;
+    /* Bottom band (px) currently reserved with the yetty host for the
+     * docked HUD via YETTY_OSC_CS_CONTENT_INSET. Re-emitting an unchanged
+     * inset makes the host re-resize the grid and re-raise SIGWINCH, whose
+     * handler re-emits the inset — a reflow feedback loop. Track the last
+     * emitted value and only send on a real change. 0 = nothing reserved. */
+    float dock_reserved_px;
     int echo_input;   /* echo typed bytes (stdin is a tty in raw mode) */
     int escape_state; /* line-editor ESC/CSI decode: 0 none, 1 ESC, 2 CSI */
     int escape_param; /* numeric CSI parameter (last group) */
@@ -120,6 +129,10 @@ struct yai_app {
      * turn.failed / error event). Read and cleared at the turn
      * boundary to render a distinct failed state. */
     int turn_failed;
+    /* The most recent turn ended with an error `result` event (e.g. a
+     * failed --resume). If the child then exits, that exit is explained,
+     * so the EOF handler skips its "exited unexpectedly" warning. */
+    int saw_result_error;
     int waiting;       /* a turn is in flight */
     int shutting_down; /* /quit or EOF — wind the child down */
     int exit_code;
@@ -128,6 +141,22 @@ struct yai_app {
     char *child_out_buf;
     size_t child_out_len;
     size_t child_out_cap;
+
+    /* JSON-document reassembly across lines. Claude/codex emit JSONL —
+     * one complete object per line, so this parses and clears on the
+     * first line. Gemini emits ONE pretty-printed (multi-line) object
+     * per turn, so its lines accumulate here until the closing brace
+     * completes the document. Reset at each child EOF. */
+    char *pending_json;
+    size_t pending_json_len;
+    size_t pending_json_cap;
+
+    /* The assistant's most recent answer text (accumulated from text
+     * deltas; reset at each message start). Ctrl-G opens the external
+     * editor with the current draft plus this, for reference/quoting. */
+    char *last_response;
+    size_t last_response_len;
+    size_t last_response_cap;
 
     /* line editor buffer (terminal-focused typing). The buffer lives
      * here (not in the editor object) so the renderer's pinned prompt
@@ -162,6 +191,12 @@ struct yai_app {
 
     struct yai_pending_permission pending_permission;
 
+    /* Tools the user chose "always allow" for this session — the engine's
+     * can_use_tool requests for these auto-approve without prompting
+     * (claude only; the other engines have no interactive prompt). */
+    char always_allow_tools[YAI_ALWAYS_ALLOW_MAX][80];
+    int always_allow_count;
+
     /* /config dialog knob mapping — assembled when the dialog opens
      * (knob 0 = yai edit mode; the rest = the engine's config_knob).
      * The click sync diffs each against `selected` and applies: the
@@ -178,6 +213,15 @@ struct yai_app {
     int config_knob_count;
     int config_show_thinking_applied;
     int config_fold_lines_applied;
+
+    /* Text settings TUI: a non-yetty alt-screen modal over config_knobs
+     * (the ygui dialog's text-terminal counterpart). active = on screen;
+     * selected = highlighted knob row; initial = each knob's selection
+     * when the TUI opened, so only changed knobs are applied on close. */
+    int config_tui_active;
+    int config_tui_selected;
+    int config_tui_escape; /* arrow-key decode: 0 none, 1 ESC, 2 ESC[ */
+    int config_tui_initial[YAI_HUD_CONFIG_MAX_KNOBS];
 
     /* Slash commands: locals + the CLI's list from `initialize`. */
     struct yai_command_table commands;
@@ -219,6 +263,13 @@ struct yetty_ycore_void_result yai_begin_shutdown(struct yai_app *app);
 /* Free the pending permission's owned state and mark it inactive.
  * Pure teardown — cannot fail. */
 void yai_drop_pending_permission(struct yai_app *app);
+
+/* Session "always allow" policy for the permission prompt: an engine's
+ * tool-permission request for a remembered tool is auto-approved without
+ * prompting. yai_tool_remember_allow records one (idempotent, silently
+ * caps at YAI_ALWAYS_ALLOW_MAX); yai_tool_always_allowed queries. */
+int yai_tool_always_allowed(const struct yai_app *app, const char *tool_name);
+void yai_tool_remember_allow(struct yai_app *app, const char *tool_name);
 
 /* One decoded child stdout line: transcript mirror + JSON parse +
  * engine handle_event dispatch. Non-JSON lines are not an error;
