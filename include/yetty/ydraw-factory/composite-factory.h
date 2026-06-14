@@ -97,6 +97,14 @@ struct yetty_ydraw_composite {
     size_t buffer_size;
     struct yetty_ycore_rectangle bounds;
     uint32_t rolling_row;
+    /* HiDPI logical->physical scale for THIS render. `bounds` is in the
+     * coordinate space the host laid the figure out in: for the absolute
+     * (ygui chrome) compositor that is LOGICAL pixels, so the figure must
+     * paint at bounds*content_scale to fill its physical footprint; for the
+     * local (terminal scrolling-layer) compositor bounds are already
+     * framebuffer pixels, so this stays 1.0. The hosting grid sets it before
+     * each render() call; producers read it (treating <=0 as 1.0). */
+    float content_scale;
     void *instance_data; // type-specific, managed by concrete factory
 
     /* Per-instance dirty bit. The render loop renders this figure iff

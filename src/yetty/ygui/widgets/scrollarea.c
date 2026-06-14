@@ -63,8 +63,12 @@ static struct yetty_ycore_void_result scrollarea_set_offset(struct yetty_yclass_
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-/* Drag callback installed on the draggable mixin. The cursor moves the
- * thumb 1:1; the thumb's travel maps onto the full content offset. */
+/* Drag callback installed on the draggable mixin (fires for a drag anywhere
+ * in the area). Treated as a DIRECT content drag — the content tracks the
+ * finger/cursor 1:1, the natural touch-scroll gesture: dragging down (dy>0)
+ * pulls the content down, revealing what's above (offset toward the top).
+ * This is the inverse of scrollbar-thumb dragging; on touch nobody grabs the
+ * 6 px thumb, and the wheel path (on_scroll) still drives precise scrolling. */
 static struct yetty_ycore_void_result scrollarea_on_drag(struct yetty_yclass_object *obj, float dx,
                                                          float dy, void *userdata)
 {
@@ -75,10 +79,10 @@ static struct yetty_ycore_void_result scrollarea_on_drag(struct yetty_yclass_obj
     struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, class_result.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "scrollarea_on_drag: data_get");
     struct yetty_ygui_scrollarea *d = d_dr.value;
-    if (d->max_offset <= 0.0f || d->thumb_travel <= 0.0f) {
+    if (d->max_offset <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    float new_off = d->offset + dy * (d->max_offset / d->thumb_travel);
+    float new_off = d->offset - dy;
     if (new_off == d->offset) {
         return YETTY_OK_VOID();
     }

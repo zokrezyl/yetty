@@ -111,8 +111,10 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *
      * raw JPEG/PNG bytes. yetty_yimage_render builds that drawable_list. */
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     struct yetty_yimage_render_config cfg = {
-        .bounds_x = 0.0f,
-        .bounds_y = 0.0f,
+        /* Absolute widget rect — see yplot.c (producer figure is absolute in
+         * the ygui chrome, content scaled by content_scale). */
+        .bounds_x = r.min.x,
+        .bounds_y = r.min.y,
         .bounds_w = r.max.x - r.min.x,
         .bounds_h = r.max.y - r.min.y,
     };

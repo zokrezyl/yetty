@@ -61,6 +61,9 @@ struct yetty_yplatform_app_state {
      * finger-to-finger distance in pixels. */
     int pinch_active;
     float pinch_last_dist;
+    /* When set, the glue never auto-pops the soft IME (launch or tap). The
+     * terminal wants the keyboard; the ygui showcase (ygreeter) does not. */
+    int suppress_soft_keyboard;
 };
 
 /* --- program interface (one implementation per shared library) --------- */
@@ -81,6 +84,14 @@ void yetty_yinit_android_mkdir_p(const char *path);
 /* Pop / dismiss the soft IME via the JNI InputMethodManager bridge. */
 void yetty_yinit_android_show_keyboard(struct android_app *app);
 void yetty_yinit_android_hide_keyboard(struct android_app *app);
+
+/* HiDPI content scale (logical -> physical pixels), derived from the display
+ * density. This is the Android analogue of the desktop framebuffer/window
+ * ratio (2.0 on a Retina Mac): mdpi (160 dpi) is the 1.0 baseline, matching
+ * Android's DisplayMetrics.density, so a 420-dpi phone yields 2.625. The
+ * surface is sized in physical pixels; the renderer divides by this to lay
+ * UI out in logical units. Returns 1.0 when the density is unknown. */
+float yetty_yinit_android_content_scale(struct android_app *app);
 
 /* Defined in yplatform/webgpu-surface/android.c. */
 WGPUSurface yetty_yplatform_create_surface_from_window(WGPUInstance instance,

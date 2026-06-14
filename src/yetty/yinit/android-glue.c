@@ -6,6 +6,7 @@
  * program supplies yetty_android_program_init / _term (resolved at link
  * time, one impl per shared library). See android-glue.h. */
 
+#include <android/configuration.h>
 #include <android/input.h>
 #include <android/keycodes.h>
 #include <android/looper.h>
@@ -124,6 +125,18 @@ void yetty_yinit_android_show_keyboard(struct android_app *app)
 void yetty_yinit_android_hide_keyboard(struct android_app *app)
 {
     ime_call(app, 0);
+}
+
+float yetty_yinit_android_content_scale(struct android_app *app)
+{
+    int32_t density = (app && app->config) ? AConfiguration_getDensity(app->config) : 0;
+    /* DEFAULT (0), ANY (0xfffe) and NONE (0xffff) are sentinels, not real
+     * dpi values — fall back to the mdpi baseline (scale 1.0) for those. */
+    if (density <= 0 || density >= ACONFIGURATION_DENSITY_ANY) {
+        return 1.0f;
+    }
+    /* mdpi (160 dpi) == 1.0, the same baseline as DisplayMetrics.density. */
+    return (float)density / 160.0f;
 }
 
 void yetty_yinit_android_mkdir_p(const char *path)
@@ -483,8 +496,11 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event)
         switch (action) {
         case AMOTION_EVENT_ACTION_DOWN:
             /* Re-show the soft keyboard on tap — gives the user a way
-             * back after dismissing it with the Back button. */
-            yetty_yinit_android_show_keyboard(app);
+             * back after dismissing it with the Back button. Programs that
+             * don't want an IME (the ygui showcase) opt out. */
+            if (!state->suppress_soft_keyboard) {
+                yetty_yinit_android_show_keyboard(app);
+            }
             ev.type = YETTY_YCORE_MOUSE_DOWN;
             ev.mouse.x = x;
             ev.mouse.y = y;

@@ -177,7 +177,7 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
     yinit_rt.surface = state->surface;
     yinit_rt.surface_width = (uint32_t)width;
     yinit_rt.surface_height = (uint32_t)height;
-    yinit_rt.content_scale = 1.0f;
+    yinit_rt.content_scale = yetty_yinit_android_content_scale(state->app);
     yinit_rt.platform_input_pipe = state->pipe;
 
     struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(&yinit_rt);

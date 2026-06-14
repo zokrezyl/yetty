@@ -4203,6 +4203,10 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         app->figure_registry = reg.value;
         app->figure_args.default_font = app->font;
         app->figure_args.composite_factory = app->composite_factory;
+        /* ygui chrome: producer figures (yplot/yimage/yvideo) are laid out in
+         * logical pixels and must be scaled to framebuffer by content_scale
+         * (HiDPI). Their widgets emit at the absolute widget rect to match. */
+        app->figure_args.absolute_coords = 1;
         struct yetty_ycore_void_result rf =
             yetty_ygrid_register_factory(app->figure_registry, &app->figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "standalone: ygrid_register_factory");
@@ -4678,10 +4682,12 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
     targs->rt.surface = state->surface;
     targs->rt.surface_width = (uint32_t)width;
     targs->rt.surface_height = (uint32_t)height;
-    targs->rt.content_scale = 1.0f;
+    targs->rt.content_scale = yetty_yinit_android_content_scale(state->app);
     targs->rt.platform_input_pipe = state->pipe;
 
     state->program_state = app;
+    /* The showcase is pointer-driven; never auto-pop the soft IME. */
+    state->suppress_soft_keyboard = 1;
     state->initialized = 1;
     state->running = 1;
     pthread_create(&state->render_thread, NULL, ygreeter_android_render_thread, targs);
@@ -4695,7 +4701,6 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
         state->pipe->ops->write(state->pipe, &ev, sizeof(ev));
     }
 
-    yetty_yinit_android_show_keyboard(state->app);
     LOGI("ygreeter initialized successfully");
 }
 
