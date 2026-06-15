@@ -252,8 +252,9 @@ void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance YETTY_
 // wrapper over the instance's render slot so callers that keep the composite
 // type opaque (e.g. yvterm, which can't include this defining header) can still
 // draw anchored composites. No-op when the instance has no render slot.
-struct yetty_ycore_void_result yetty_ydraw_composite_render(
-    struct yetty_ydraw_composite *instance, struct yetty_ydraw_target *target, float x, float y);
+struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_composite *instance,
+                                                            struct yetty_ydraw_target *target,
+                                                            float x, float y);
 
 // Fan out visual-zoom state to every registered concrete factory (yplot,
 // yimage, ...). Safe to call with no registrations. Concrete factories that

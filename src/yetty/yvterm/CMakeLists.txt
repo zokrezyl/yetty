@@ -1,4 +1,5 @@
 add_library(yetty_yvterm STATIC
+    grid.c
     vterm.c
 )
 

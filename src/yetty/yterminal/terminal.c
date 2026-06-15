@@ -226,6 +226,14 @@ struct yetty_yterminal_terminal {
     uint32_t sel_anchor_col;
     uint32_t sel_head_row;
     uint32_t sel_head_col;
+
+    /* Multi-click detection for word (double) / line (triple) selection. A
+     * press within sel_multiclick_sec of the previous one on the SAME cell bumps
+     * the count; otherwise it resets to a single click. */
+    double sel_last_click_sec;
+    uint32_t sel_last_click_row;
+    uint32_t sel_last_click_col;
+    int sel_click_count;
 };
 
 /* How many lines a single mouse-wheel notch moves the scrollback view. */
@@ -1041,8 +1049,7 @@ static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
         if (step.value == YETTY_YDRAW_ITERATOR_EOE) {
             break;
         }
-        if (step.value != YETTY_YDRAW_ITERATOR_OK ||
-            iter.command.kind != YETTY_YDRAW_COMMAND_ADD) {
+        if (step.value != YETTY_YDRAW_ITERATOR_OK || iter.command.kind != YETTY_YDRAW_COMMAND_ADD) {
             continue; /* DELETE/UPDATE not modelled yet — skip cleanly */
         }
         const uint32_t *data = iter.command.entry.data;
@@ -1073,22 +1080,20 @@ static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
                 continue;
             }
             struct yetty_ycore_void_result ref_res = yetty_yvterm_vterm_add_composite_ref(
-                terminal->grid, anchor_row, anchor_col, /*rel_line=*/0,
-                (uint16_t)idx_res.value);
+                terminal->grid, anchor_row, anchor_col, /*rel_line=*/0, (uint16_t)idx_res.value);
             if (YETTY_IS_ERR(ref_res)) {
                 yetty_ycore_error_destroy(ref_res.error);
             }
         } else {
             uint32_t word_count = (uint32_t)(record_bytes / sizeof(uint32_t));
-            struct yetty_ycore_uint32_result idx_res = yetty_yvterm_vterm_append_primitive(
-                terminal->grid, anchor_row, data, word_count);
+            struct yetty_ycore_uint32_result idx_res =
+                yetty_yvterm_vterm_append_primitive(terminal->grid, anchor_row, data, word_count);
             if (YETTY_IS_ERR(idx_res)) {
                 yetty_ycore_error_destroy(idx_res.error);
                 continue;
             }
             struct yetty_ycore_void_result ref_res = yetty_yvterm_vterm_add_primitive_ref(
-                terminal->grid, anchor_row, anchor_col, /*rel_line=*/0,
-                (uint16_t)idx_res.value);
+                terminal->grid, anchor_row, anchor_col, /*rel_line=*/0, (uint16_t)idx_res.value);
             if (YETTY_IS_ERR(ref_res)) {
                 yetty_ycore_error_destroy(ref_res.error);
             }
@@ -1651,25 +1656,25 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, reg_res,
                             "terminal_create: ydraw registry create");
         terminal->ydraw_registry = reg_res.value;
-        yetty_ydraw_drawable_list_registry_set_default(terminal->ydraw_registry, yetty_ysdf_handler);
+        yetty_ydraw_drawable_list_registry_set_default(terminal->ydraw_registry,
+                                                       yetty_ysdf_handler);
         struct yetty_ycore_void_result hr;
         hr = yetty_ydraw_drawable_list_registry_add(terminal->ydraw_registry, YETTY_YDRAW_CMD_BASE,
                                                     YETTY_YDRAW_CMD_END, yetty_ydraw_cmd_handler);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr, "terminal_create: ydraw registry cmd");
-        hr = yetty_ydraw_drawable_list_registry_add(terminal->ydraw_registry,
-                                                    YETTY_YDRAW_RESOURCE_FONT,
-                                                    YETTY_YDRAW_RESOURCE_FONT,
-                                                    yetty_ydraw_font_resource_handler);
+        hr = yetty_ydraw_drawable_list_registry_add(
+            terminal->ydraw_registry, YETTY_YDRAW_RESOURCE_FONT, YETTY_YDRAW_RESOURCE_FONT,
+            yetty_ydraw_font_resource_handler);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr, "terminal_create: ydraw registry font");
-        hr = yetty_ydraw_drawable_list_registry_add(terminal->ydraw_registry,
-                                                    YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
-                                                    YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
-                                                    yetty_ydraw_text_drawable_list_handler);
+        hr = yetty_ydraw_drawable_list_registry_add(
+            terminal->ydraw_registry, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
+            YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST, yetty_ydraw_text_drawable_list_handler);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr, "terminal_create: ydraw registry text");
         hr = yetty_ydraw_drawable_list_registry_add(terminal->ydraw_registry,
                                                     YETTY_YDRAW_COMPOSITE_TYPE_BASE, 0xFFFFFFFFu,
                                                     yetty_ydraw_composite_record_handler);
-        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr, "terminal_create: ydraw registry complex");
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr,
+                            "terminal_create: ydraw registry complex");
     }
 
     terminal->figure_args.default_font = terminal->compositor_font;
@@ -2077,7 +2082,7 @@ static struct yetty_ycore_void_result terminal_apply_pane_geometry(
     struct yetty_ycore_pixel_size cell = yetty_yvterm_vterm_cell_size(terminal->grid);
     float inset_top = 0.0f, inset_right = 0.0f, inset_bottom = 0.0f, inset_left = 0.0f;
     yetty_yvterm_vterm_get_content_inset(terminal->grid, &inset_top, &inset_right, &inset_bottom,
-                                        &inset_left);
+                                         &inset_left);
 
     float cell_w_target = cell.width > 0 ? cell.width : 10.0f;
     float cell_h_target = cell.height > 0 ? cell.height : 20.0f;
@@ -2554,15 +2559,71 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             if (event->type == YETTY_YCORE_MOUSE_DOWN) {
                 uint32_t r, c;
                 terminal_cell_from_local(terminal, lx_sel, ly_sel, &r, &c);
-                terminal->sel_anchor_row = r;
-                terminal->sel_anchor_col = c;
-                terminal->sel_head_row = r;
-                terminal->sel_head_col = c;
-                terminal->sel_active = 1;
-                terminal->sel_dragging = 1;
+
+                /* Multi-click: a press within 0.4s of the previous one on the
+                 * same cell escalates single → word (double) → line (triple),
+                 * then wraps back to single. Mirrors xterm. */
+                double now = yetty_yplatform_ytime_monotonic_sec();
+                if (now - terminal->sel_last_click_sec <= 0.4 &&
+                    r == terminal->sel_last_click_row && c == terminal->sel_last_click_col) {
+                    terminal->sel_click_count++;
+                    if (terminal->sel_click_count > 3) {
+                        terminal->sel_click_count = 1;
+                    }
+                } else {
+                    terminal->sel_click_count = 1;
+                }
+                terminal->sel_last_click_sec = now;
+                terminal->sel_last_click_row = r;
+                terminal->sel_last_click_col = c;
+
+                if (terminal->sel_click_count == 2) {
+                    /* Word select: snap the anchor/head to the word boundaries
+                     * around the clicked cell. Not a drag — finalised here. */
+                    uint32_t sc = c, ec = c;
+                    yetty_yvterm_vterm_word_bounds(terminal->grid, r, c, &sc, &ec);
+                    terminal->sel_anchor_row = r;
+                    terminal->sel_anchor_col = sc;
+                    terminal->sel_head_row = r;
+                    terminal->sel_head_col = ec;
+                    terminal->sel_active = 1;
+                    terminal->sel_dragging = 0;
+                } else if (terminal->sel_click_count == 3) {
+                    /* Line select: the whole visible row (trailing blanks stream
+                     * as nothing in get_selection_text). */
+                    terminal->sel_anchor_row = r;
+                    terminal->sel_anchor_col = 0;
+                    terminal->sel_head_row = r;
+                    terminal->sel_head_col = terminal->cols ? terminal->cols - 1u : 0u;
+                    terminal->sel_active = 1;
+                    terminal->sel_dragging = 0;
+                } else {
+                    /* Single click: anchor a fresh drag selection. */
+                    terminal->sel_anchor_row = r;
+                    terminal->sel_anchor_col = c;
+                    terminal->sel_head_row = r;
+                    terminal->sel_head_col = c;
+                    terminal->sel_active = 1;
+                    terminal->sel_dragging = 1;
+                }
                 struct yetty_ycore_void_result psr = terminal_push_selection(terminal);
                 YETTY_RETURN_IF_ERR(yetty_ycore_int, psr,
                                     "terminal_view_on_event: push_selection (anchor) failed");
+                /* Word/line selections are complete on the press — auto-copy now
+                 * (honouring the same config as drag auto-copy). */
+                if (terminal->sel_click_count >= 2) {
+                    struct yetty_yconfig_config *cfg =
+                        terminal->context.yetty_context.runtime->config;
+                    int auto_copy = 1;
+                    if (cfg && cfg->ops && cfg->ops->get_bool) {
+                        auto_copy = cfg->ops->get_bool(cfg, "terminal/selection/auto-copy", 1);
+                    }
+                    if (auto_copy) {
+                        struct yetty_ycore_void_result cs = terminal_copy_selection(terminal);
+                        YETTY_RETURN_IF_ERR(yetty_ycore_int, cs,
+                                            "terminal_view_on_event: word/line auto-copy failed");
+                    }
+                }
                 return YETTY_OK(yetty_ycore_int, 1);
             }
             /* MOUSE_UP for our drag — finalise. A pure click (no movement)

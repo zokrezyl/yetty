@@ -1,18 +1,140 @@
 methods: []
 classes:
+  - name: grid
+    domain: yvterm
+    accessor: yetty_yvterm_grid_class_get
+    type: regular
+    source_file: src/yetty/yvterm/grid.c
+    parent: null
+    mixins: []
+    data: struct yetty_yvterm_grid
+    data_fields:
+      - name: lines
+        type: "struct yetty_yvterm_line *"
+        get: false
+        set: false
+      - name: line_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: visible_rows
+        type: uint32_t
+        get: false
+        set: false
+      - name: cols
+        type: uint32_t
+        get: false
+        set: false
+      - name: base
+        type: uint32_t
+        get: false
+        set: false
+      - name: vterm
+        type: "int *"
+        get: false
+        set: false
+      - name: state
+        type: "int *"
+        get: false
+        set: false
+      - name: pen_fg
+        type: uint32_t
+        get: false
+        set: false
+      - name: pen_bg
+        type: uint32_t
+        get: false
+        set: false
+      - name: default_fg
+        type: uint32_t
+        get: false
+        set: false
+      - name: default_bg
+        type: uint32_t
+        get: false
+        set: false
+      - name: pen_attrs
+        type: uint16_t
+        get: false
+        set: false
+      - name: pen_reverse
+        type: int
+        get: false
+        set: false
+      - name: cursor_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: cursor_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: cursor_visible
+        type: uint32_t
+        get: false
+        set: false
+      - name: alt_screen
+        type: int
+        get: false
+        set: false
+      - name: mouse_mode
+        type: int
+        get: false
+        set: false
+      - name: clear_hook_fn
+        type: yetty_yvterm_grid_clear_hook_fn
+        get: false
+        set: false
+      - name: clear_hook_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: pty_write_fn
+        type: yetty_yvterm_grid_pty_write_fn
+        get: false
+        set: false
+      - name: pty_write_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: selection_active
+        type: int
+        get: false
+        set: false
+      - name: selection_anchor_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: selection_anchor_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: selection_head_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: selection_head_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: has_dirty
+        type: int
+        get: false
+        set: false
+    ops: []
   - name: vterm
     domain: yvterm
     accessor: yetty_yvterm_vterm_class_get
     type: regular
-    source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+    source_file: src/yetty/yvterm/vterm.c
     parent:
       domain: yfigure
       name: figure
     mixins: []
     data: struct yetty_yvterm_vterm
     data_fields:
-      - name: grid
-        type: struct yetty_yvterm_grid
+      - name: grid_obj
+        type: "struct yetty_yclass_object *"
         get: false
         set: false
       - name: grid_size
@@ -39,14 +161,6 @@ classes:
         type: float
         get: false
         set: false
-      - name: pty_write_fn
-        type: yetty_yterminal_pty_write_fn
-        get: false
-        set: false
-      - name: pty_write_userdata
-        type: "void *"
-        get: false
-        set: false
       - name: request_render_fn
         type: yetty_yterminal_request_render_fn
         get: false
@@ -61,26 +175,6 @@ classes:
         set: false
       - name: mouse_sub_userdata
         type: "void *"
-        get: false
-        set: false
-      - name: selection_active
-        type: int
-        get: false
-        set: false
-      - name: selection_anchor_row
-        type: uint32_t
-        get: false
-        set: false
-      - name: selection_anchor_col
-        type: uint32_t
-        get: false
-        set: false
-      - name: selection_head_row
-        type: uint32_t
-        get: false
-        set: false
-      - name: selection_head_col
-        type: uint32_t
         get: false
         set: false
       - name: view_top_active
@@ -104,15 +198,15 @@ classes:
         get: false
         set: false
       - name: device
-        type: WGPUDevice
+        type: int
         get: false
         set: false
       - name: queue
-        type: WGPUQueue
+        type: int
         get: false
         set: false
       - name: target_format
-        type: WGPUTextureFormat
+        type: int
         get: false
         set: false
       - name: font
@@ -120,39 +214,39 @@ classes:
         get: false
         set: false
       - name: shader_module
-        type: WGPUShaderModule
+        type: int
         get: false
         set: false
       - name: bind_group_layout
-        type: WGPUBindGroupLayout
+        type: int
         get: false
         set: false
       - name: pipeline
-        type: WGPURenderPipeline
+        type: int
         get: false
         set: false
       - name: sampler
-        type: WGPUSampler
+        type: int
         get: false
         set: false
       - name: cell_buffer
-        type: WGPUBuffer
+        type: int
         get: false
         set: false
       - name: meta_buffer
-        type: WGPUBuffer
+        type: int
         get: false
         set: false
       - name: uniform_buffer
-        type: WGPUBuffer
+        type: int
         get: false
         set: false
       - name: atlas_texture
-        type: WGPUTexture
+        type: int
         get: false
         set: false
       - name: atlas_view
-        type: WGPUTextureView
+        type: int
         get: false
         set: false
       - name: atlas_width
@@ -168,7 +262,7 @@ classes:
         get: false
         set: false
       - name: bind_group
-        type: WGPUBindGroup
+        type: int
         get: false
         set: false
       - name: bind_group_valid
@@ -203,11 +297,330 @@ classes:
         slot_domain: yfigure
         impl: vterm_destroy_slot
 exposed:
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/grid.c
+    type_text: struct yetty_yvterm_grid;
+  - source_file: src/yetty/yvterm/vterm.c
     type_text: struct yetty_yvterm_vterm;
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/grid.c
+    type_text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *);"
+  - source_file: src/yetty/yvterm/grid.c
+    type_text: "struct yetty_yvterm_grid_ptr_result {
+    int ok;
+    union {
+        struct yetty_yvterm_grid * value;
+        struct yetty_ycore_error error;
+    };
+};"
+  - source_file: src/yetty/yvterm/grid.c
+    type_text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_pty_write_fn)(const char *, size_t, void *);"
+  - source_file: src/yetty/yvterm/grid.c
+    type_text: "enum yetty_yvterm_text_attr {
+    YETTY_YVTERM_ATTR_BOLD = 1,
+    YETTY_YVTERM_ATTR_UNDERLINE = 2,
+    YETTY_YVTERM_ATTR_UNDERLINE2 = 4,
+    YETTY_YVTERM_ATTR_ITALIC = 8,
+    YETTY_YVTERM_ATTR_REVERSE = 16,
+    YETTY_YVTERM_ATTR_BLINK = 32,
+    YETTY_YVTERM_ATTR_STRIKE = 64,
+    YETTY_YVTERM_ATTR_CONCEAL = 128,
+};"
+  - source_file: src/yetty/yvterm/grid.c
+    type_text: "struct yetty_yvterm_text_cell {
+    uint32_t glyph_index;
+    uint32_t codepoint;
+    uint32_t fg;
+    uint32_t bg;
+    uint16_t attrs;
+    uint8_t width;
+    uint8_t flags;
+};"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_make
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: cols
+        type: uint32_t
+      - name: rows
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_dispose
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_pty_write
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fn
+        type: yetty_yvterm_grid_pty_write_fn
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_clear_hook
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fn
+        type: yetty_yvterm_grid_clear_hook_fn
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_feed
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bytes
+        type: "const char *"
+      - name: len
+        type: size_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_resize
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: cols
+        type: uint32_t
+      - name: rows
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_is_dirty
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_cursor
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_row
+        type: "uint32_t *"
+      - name: out_col
+        type: "uint32_t *"
+      - name: out_visible
+        type: "uint32_t *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_append_primitive
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: words
+        type: "const uint32_t *"
+      - name: word_count
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_add_primitive_ref
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: col
+        type: uint32_t
+      - name: rel_line
+        type: uint16_t
+      - name: index_in_list
+        type: uint16_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_attach_composite
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: composite
+        type: "struct yetty_ydraw_composite *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_add_composite_ref
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: col
+        type: uint32_t
+      - name: rel_line
+        type: uint16_t
+      - name: index_in_list
+        type: uint16_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_clear_rich_line
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_clear_rich_all
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_register_wire
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: sm
+        type: "struct yetty_ywire_wire_statemachine *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_on_char
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: codepoint
+        type: uint32_t
+      - name: mods
+        type: int
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_on_key
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: key
+        type: int
+      - name: mods
+        type: int
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_selection
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: active
+        type: int
+      - name: anchor_row
+        type: uint32_t
+      - name: anchor_col
+        type: uint32_t
+      - name: head_row
+        type: uint32_t
+      - name: head_col
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_get_selection_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out
+        type: "struct yetty_ycore_buffer *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_word_bounds
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: col
+        type: uint32_t
+      - name: out_start_col
+        type: "uint32_t *"
+      - name: out_end_col
+        type: "uint32_t *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_dims
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_cols
+        type: "uint32_t *"
+      - name: out_rows
+        type: "uint32_t *"
+      - name: out_base
+        type: "uint32_t *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_line_cells
+    return_type: "const struct yetty_yvterm_text_cell *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_line_dirty
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_line_composites
+    return_type: "struct yetty_ydraw_composite *const *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: out_count
+        type: "uint32_t *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_selection
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_active
+        type: "int *"
+      - name: out_anchor_row
+        type: "uint32_t *"
+      - name: out_anchor_col
+        type: "uint32_t *"
+      - name: out_head_row
+        type: "uint32_t *"
+      - name: out_head_col
+        type: "uint32_t *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_clear_dirty
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_count
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_cells
+    return_type: "const struct yetty_yvterm_text_cell *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: slot
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_dirty
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: slot
+        type: uint32_t
+  - source_file: src/yetty/yvterm/vterm.c
     type_text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_clear_hook_fn)(void *);"
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_figure_create
     return_type: struct yetty_yclass_object_ptr_result
     args:
@@ -229,13 +642,13 @@ exposed:
         type: yetty_yterminal_mouse_sub_fn
       - name: mouse_sub_userdata
         type: "void *"
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_as_figure
     return_type: "struct yetty_yfigure_figure *"
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_feed
     return_type: struct yetty_ycore_void_result
     args:
@@ -245,7 +658,7 @@ exposed:
         type: "const char *"
       - name: len
         type: size_t
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_resize
     return_type: struct yetty_ycore_void_result
     args:
@@ -255,19 +668,19 @@ exposed:
         type: struct yetty_ycore_grid_size
       - name: cell_size
         type: struct yetty_ycore_pixel_size
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_cell_size
     return_type: struct yetty_ycore_pixel_size
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_is_dirty
     return_type: int
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_set_content_inset
     return_type: void
     args:
@@ -281,7 +694,7 @@ exposed:
         type: float
       - name: left
         type: float
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_get_content_inset
     return_type: void
     args:
@@ -295,7 +708,7 @@ exposed:
         type: "float *"
       - name: out_left
         type: "float *"
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_set_clear_hook
     return_type: void
     args:
@@ -305,7 +718,7 @@ exposed:
         type: yetty_yvterm_clear_hook_fn
       - name: userdata
         type: "void *"
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_cursor
     return_type: void
     args:
@@ -317,7 +730,21 @@ exposed:
         type: "uint32_t *"
       - name: out_visible
         type: "uint32_t *"
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_word_bounds
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: col
+        type: uint32_t
+      - name: out_start_col
+        type: "uint32_t *"
+      - name: out_end_col
+        type: "uint32_t *"
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_append_primitive
     return_type: struct yetty_ycore_uint32_result
     args:
@@ -329,7 +756,7 @@ exposed:
         type: "const uint32_t *"
       - name: word_count
         type: uint32_t
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_add_primitive_ref
     return_type: struct yetty_ycore_void_result
     args:
@@ -343,7 +770,7 @@ exposed:
         type: uint16_t
       - name: index_in_list
         type: uint16_t
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_attach_composite
     return_type: struct yetty_ycore_uint32_result
     args:
@@ -353,7 +780,7 @@ exposed:
         type: uint32_t
       - name: composite
         type: "struct yetty_ydraw_composite *"
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_add_composite_ref
     return_type: struct yetty_ycore_void_result
     args:
@@ -367,7 +794,7 @@ exposed:
         type: uint16_t
       - name: index_in_list
         type: uint16_t
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_clear_rich_line
     return_type: struct yetty_ycore_void_result
     args:
@@ -375,13 +802,13 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: row
         type: uint32_t
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_clear_rich_all
     return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_register_wire
     return_type: struct yetty_ycore_void_result
     args:
@@ -389,7 +816,7 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: sm
         type: "struct yetty_ywire_wire_statemachine *"
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_on_char
     return_type: int
     args:
@@ -399,7 +826,7 @@ exposed:
         type: uint32_t
       - name: mods
         type: int
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_on_key
     return_type: int
     args:
@@ -409,7 +836,7 @@ exposed:
         type: int
       - name: mods
         type: int
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_set_selection
     return_type: struct yetty_ycore_void_result
     args:
@@ -425,7 +852,7 @@ exposed:
         type: uint32_t
       - name: head_col
         type: uint32_t
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_get_selection_text
     return_type: struct yetty_ycore_void_result
     args:
@@ -433,19 +860,19 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: out
         type: "struct yetty_ycore_buffer *"
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_get_live_anchor
     return_type: uint32_t
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_get_scrollback_floor
     return_type: uint32_t
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_set_view_top
     return_type: struct yetty_ycore_void_result
     args:
@@ -455,7 +882,7 @@ exposed:
         type: int
       - name: view_top_total_idx
         type: uint32_t
-  - source_file: /home/misi/work/my/yetty-yvterm-yfigure/src/yetty/yvterm/vterm.c
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_set_visual_zoom
     return_type: struct yetty_ycore_void_result
     args:
@@ -485,11 +912,27 @@ types:
         type: float
       - name: root_row
         type: uint32_t
-      - name: pad0
+      - name: cursor_col
         type: uint32_t
-      - name: pad1
+      - name: cursor_row
         type: uint32_t
-      - name: pad2
+      - name: cursor_visible
+        type: uint32_t
+      - name: sel_active
+        type: uint32_t
+      - name: sel_start_row
+        type: uint32_t
+      - name: sel_start_col
+        type: uint32_t
+      - name: sel_end_row
+        type: uint32_t
+      - name: sel_end_col
+        type: uint32_t
+      - name: pad_a
+        type: uint32_t
+      - name: pad_b
+        type: uint32_t
+      - name: pad_c
         type: uint32_t
   - name: yetty_yclass_object_ptr_result
     kind: result
@@ -554,48 +997,3 @@ types:
             type: int
           - name: error
             type: struct yetty_ycore_error
-  - name: yetty_yvterm_grid
-    kind: struct
-    fields:
-      - name: lines
-        type: "struct yetty_yvterm_line *"
-      - name: line_count
-        type: uint32_t
-      - name: visible_rows
-        type: uint32_t
-      - name: cols
-        type: uint32_t
-      - name: base
-        type: uint32_t
-      - name: vterm
-        type: "VTerm *"
-      - name: state
-        type: "VTermState *"
-      - name: pen_fg
-        type: uint32_t
-      - name: pen_bg
-        type: uint32_t
-      - name: default_fg
-        type: uint32_t
-      - name: default_bg
-        type: uint32_t
-      - name: pen_attrs
-        type: uint16_t
-      - name: pen_reverse
-        type: int
-      - name: cursor_row
-        type: uint32_t
-      - name: cursor_col
-        type: uint32_t
-      - name: cursor_visible
-        type: uint32_t
-      - name: alt_screen
-        type: int
-      - name: mouse_mode
-        type: int
-      - name: clear_hook_fn
-        type: yetty_yvterm_grid_clear_hook_fn
-      - name: clear_hook_userdata
-        type: "void *"
-      - name: has_dirty
-        type: int

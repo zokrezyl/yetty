@@ -1,19 +1,17 @@
 /*
  * vterm.c — the terminal content as a yfigure: class@yvterm:vterm.
  *
- * This is the main class. It is a yclass figure (parent yfigure:figure) that
- * owns the unified grid model whose datatypes live in grid.c. Raw PTY bytes
- * enter libvterm; the libvterm State callbacks below transform the ONE model
- * (text cells + per-cell rich refs + anchored primitive/composite storage on a
- * scrolling line ring). The figure render slot reads that model — it is not a
- * second source of truth and there is no text-layer/ydraw-layer split.
+ * The GPU renderer. It is a yclass figure (parent yfigure:figure) that COMPOSES
+ * a separate class@yvterm:grid object (the terminal model + libvterm + keyboard
+ * I/O, in grid.c). Concerns are split: grid.c owns the truth; this figure reads
+ * it through grid's bulk accessors (yetty_yvterm_grid_*) and draws the MSDF text
+ * plane plus anchored composites. The public yetty_yvterm_vterm_* model entry
+ * points here are thin delegators to the grid object, so the terminal keeps one
+ * API surface.
  *
- * grid.c carries only the data layout (no methods, no callbacks); it is
- * included here so this implementation TU sees the struct definitions. The
- * generated public header (vterm.h) is a downstream artifact for other modules
- * and is deliberately NOT included here — the foundational types are pulled in
- * directly and this TU declares its own yetty_yvterm_vterm_ptr_result, the same
- * one vterm.h publishes for consumers.
+ * The model types (text cell, attrs) come from the generated grid.h. This TU
+ * declares its own yetty_yvterm_vterm_ptr_result — the same one vterm.h
+ * publishes for consumers — rather than including its own generated header.
  */
 #include <stdint.h>
 #include <stdlib.h>
@@ -37,6 +35,7 @@
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterminal/terminal.h>
 #include <yetty/ytrace/ytrace.h>
+#include <yetty/yvterm/grid.h>
 #include <yetty/ywire/wire-statemachine.h>
 
 /* GPU cell layout the text shader reads: 4 u32 words per cell. */
@@ -54,6 +53,15 @@ struct vterm_uniforms {
     uint32_t cursor_col;
     uint32_t cursor_row;
     uint32_t cursor_visible;
+    /* Selection highlight, normalised to reading order (start <= end). */
+    uint32_t sel_active;
+    uint32_t sel_start_row;
+    uint32_t sel_start_col;
+    uint32_t sel_end_row;
+    uint32_t sel_end_col;
+    uint32_t pad_a;
+    uint32_t pad_b;
+    uint32_t pad_c;
 };
 
 /* `struct yetty_ydraw_composite` is forward-declared in grid.c and kept opaque
@@ -77,791 +85,10 @@ struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_c
  * render-target.h into the model TU (matches figure.c's own forward decls). */
 struct yetty_ydraw_target;
 
-/* The unified model datatypes (data layout only). */
-#include "grid.c"
-
 /* Absolute lowest stacking order: the container sorts children by (z, seq) and
  * renders back-to-front, so the most-negative z renders first (the floor). The
  * terminal content must sit below every other figure. */
 #define YETTY_YVTERM_VTERM_Z (-2000000000)
-
-/*===========================================================================
- * Model helpers — operate on the unified grid datatypes from grid.c.
- *=========================================================================*/
-
-static inline uint32_t pack_color(VTermColor color)
-{
-    return (uint32_t)color.red | ((uint32_t)color.green << 8) | ((uint32_t)color.blue << 16) |
-           (0xFFu << 24);
-}
-
-static inline uint32_t ring_slot(const struct yetty_yvterm_grid *grid, uint32_t row)
-{
-    if (!grid->visible_rows) {
-        return row;
-    }
-    uint32_t slot = grid->base + row;
-    if (slot >= grid->visible_rows) {
-        slot -= grid->visible_rows;
-    }
-    return slot;
-}
-
-static inline struct yetty_yvterm_line *line_at(struct yetty_yvterm_grid *grid, uint32_t row)
-{
-    return &grid->lines[ring_slot(grid, row)];
-}
-
-static inline struct yetty_yvterm_text_cell *cell_at(struct yetty_yvterm_grid *grid, uint32_t row,
-                                                     uint32_t col)
-{
-    return &line_at(grid, row)->text_cells[col];
-}
-
-static inline struct yetty_yvterm_drawable_refs *refs_at(struct yetty_yvterm_grid *grid,
-                                                         uint32_t row, uint32_t col)
-{
-    return &line_at(grid, row)->drawable_refs[col];
-}
-
-static void destroy_composite(struct yetty_ydraw_composite *composite)
-{
-    if (composite) {
-        yetty_ydraw_composite_destroy(composite);
-    }
-}
-
-/* Growable backing arrays — each grows capacity (doubling, clamped to need). */
-
-static struct yetty_ycore_void_result ensure_primitive_refs(
-    struct yetty_yvterm_drawable_refs *refs, uint16_t need)
-{
-    if (need <= refs->primitive_ref_capacity) {
-        return YETTY_OK_VOID();
-    }
-    uint32_t new_cap = refs->primitive_ref_capacity ? refs->primitive_ref_capacity : 2u;
-    while (new_cap < need) {
-        new_cap *= 2u;
-    }
-    if (new_cap > UINT16_MAX) {
-        new_cap = UINT16_MAX;
-    }
-    struct yetty_yvterm_primitive_ref *grown =
-        realloc(refs->primitive_refs, (size_t)new_cap * sizeof(*grown));
-    if (!grown) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm: primitive_refs grow failed");
-    }
-    refs->primitive_refs = grown;
-    refs->primitive_ref_capacity = (uint16_t)new_cap;
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result ensure_composite_refs(
-    struct yetty_yvterm_drawable_refs *refs, uint16_t need)
-{
-    if (need <= refs->composite_ref_capacity) {
-        return YETTY_OK_VOID();
-    }
-    uint32_t new_cap = refs->composite_ref_capacity ? refs->composite_ref_capacity : 2u;
-    while (new_cap < need) {
-        new_cap *= 2u;
-    }
-    if (new_cap > UINT16_MAX) {
-        new_cap = UINT16_MAX;
-    }
-    struct yetty_yvterm_composite_ref *grown =
-        realloc(refs->composite_refs, (size_t)new_cap * sizeof(*grown));
-    if (!grown) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm: composite_refs grow failed");
-    }
-    refs->composite_refs = grown;
-    refs->composite_ref_capacity = (uint16_t)new_cap;
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result ensure_arena(struct yetty_yvterm_line *line, uint32_t need)
-{
-    if (need <= line->arena_capacity) {
-        return YETTY_OK_VOID();
-    }
-    uint32_t new_cap = line->arena_capacity ? line->arena_capacity : 16u;
-    while (new_cap < need) {
-        new_cap *= 2u;
-    }
-    uint32_t *grown = realloc(line->arena, (size_t)new_cap * sizeof(*grown));
-    if (!grown) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm: arena grow failed");
-    }
-    line->arena = grown;
-    line->arena_capacity = new_cap;
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result ensure_primitives(struct yetty_yvterm_line *line,
-                                                        uint32_t need)
-{
-    if (need <= line->primitive_capacity) {
-        return YETTY_OK_VOID();
-    }
-    uint32_t new_cap = line->primitive_capacity ? line->primitive_capacity : 4u;
-    while (new_cap < need) {
-        new_cap *= 2u;
-    }
-    struct yetty_yvterm_primitive *grown =
-        realloc(line->primitives, (size_t)new_cap * sizeof(*grown));
-    if (!grown) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm: primitives grow failed");
-    }
-    line->primitives = grown;
-    line->primitive_capacity = new_cap;
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result ensure_composites(struct yetty_yvterm_line *line,
-                                                        uint32_t need)
-{
-    if (need <= line->composite_capacity) {
-        return YETTY_OK_VOID();
-    }
-    uint32_t new_cap = line->composite_capacity ? line->composite_capacity : 4u;
-    while (new_cap < need) {
-        new_cap *= 2u;
-    }
-    struct yetty_ydraw_composite **grown =
-        realloc(line->composites, (size_t)new_cap * sizeof(struct yetty_ydraw_composite *));
-    if (!grown) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm: composites grow failed");
-    }
-    line->composites = grown;
-    line->composite_capacity = new_cap;
-    return YETTY_OK_VOID();
-}
-
-static void free_refs(struct yetty_yvterm_drawable_refs *refs)
-{
-    free(refs->primitive_refs);
-    refs->primitive_refs = NULL;
-    refs->primitive_ref_count = 0;
-    refs->primitive_ref_capacity = 0;
-
-    free(refs->composite_refs);
-    refs->composite_refs = NULL;
-    refs->composite_ref_count = 0;
-    refs->composite_ref_capacity = 0;
-}
-
-/* Per-cell borrow drop: forget which rich content covers this cell. Never
- * destroys the anchor line's owned content. */
-static void clear_refs(struct yetty_yvterm_drawable_refs *refs)
-{
-    refs->primitive_ref_count = 0;
-    refs->composite_ref_count = 0;
-}
-
-/* Full line ownership clear: drop every cell's borrows AND release the line's
- * owned rich content (arena/primitives reset, composites destroyed). */
-static void clear_line_rich(struct yetty_yvterm_line *line, uint32_t cols)
-{
-    if (line->drawable_refs) {
-        for (uint32_t col = 0; col < cols; ++col) {
-            clear_refs(&line->drawable_refs[col]);
-        }
-    }
-    line->primitive_count = 0;
-    line->arena_count = 0;
-    for (uint32_t i = 0; i < line->composite_count; ++i) {
-        destroy_composite(line->composites[i]);
-        line->composites[i] = NULL;
-    }
-    line->composite_count = 0;
-}
-
-/* Remove every borrowed ref (on any visible line) that points to anchor_row, so
- * clearing that anchor line's owned storage cannot leave a dangling ref behind.
- * The anchor convention is downward (anchor = covered_row + rel_line), so only
- * rows at or above anchor_row can reference it. */
-static void drop_refs_to_anchor(struct yetty_yvterm_grid *grid, uint32_t anchor_row)
-{
-    if (anchor_row >= grid->visible_rows) {
-        return;
-    }
-    for (uint32_t row = 0; row <= anchor_row; ++row) {
-        struct yetty_yvterm_line *line = line_at(grid, row);
-        if (!line->drawable_refs) {
-            continue;
-        }
-        int touched = 0;
-        for (uint32_t col = 0; col < grid->cols; ++col) {
-            struct yetty_yvterm_drawable_refs *refs = &line->drawable_refs[col];
-            uint16_t kept = 0;
-            for (uint16_t i = 0; i < refs->primitive_ref_count; ++i) {
-                if ((uint32_t)row + refs->primitive_refs[i].rel_line != anchor_row) {
-                    refs->primitive_refs[kept++] = refs->primitive_refs[i];
-                }
-            }
-            if (kept != refs->primitive_ref_count) {
-                refs->primitive_ref_count = kept;
-                touched = 1;
-            }
-            kept = 0;
-            for (uint16_t i = 0; i < refs->composite_ref_count; ++i) {
-                if ((uint32_t)row + refs->composite_refs[i].rel_line != anchor_row) {
-                    refs->composite_refs[kept++] = refs->composite_refs[i];
-                }
-            }
-            if (kept != refs->composite_ref_count) {
-                refs->composite_ref_count = kept;
-                touched = 1;
-            }
-        }
-        if (touched) {
-            line->dirty = 1;
-            grid->has_dirty = 1;
-        }
-    }
-}
-
-static void blank_cell(struct yetty_yvterm_text_cell *cell, uint32_t fg, uint32_t bg)
-{
-    cell->glyph_index = 0;
-    cell->codepoint = 0;
-    cell->fg = fg;
-    cell->bg = bg;
-    cell->attrs = 0;
-    cell->width = 1;
-    cell->flags = 0;
-}
-
-static void reset_line(struct yetty_yvterm_grid *grid, struct yetty_yvterm_line *line)
-{
-    for (uint32_t col = 0; col < grid->cols; ++col) {
-        blank_cell(&line->text_cells[col], grid->default_fg, grid->default_bg);
-    }
-    clear_line_rich(line, grid->cols);
-}
-
-static void blank_line(struct yetty_yvterm_grid *grid, uint32_t row)
-{
-    reset_line(grid, line_at(grid, row));
-}
-
-static void mark_dirty_row(struct yetty_yvterm_grid *grid, uint32_t row)
-{
-    if (row >= grid->visible_rows) {
-        return;
-    }
-    line_at(grid, row)->dirty = 1;
-    grid->has_dirty = 1;
-}
-
-static void mark_dirty_all(struct yetty_yvterm_grid *grid)
-{
-    for (uint32_t i = 0; i < grid->line_count; ++i) {
-        grid->lines[i].dirty = 1;
-    }
-    grid->has_dirty = 1;
-}
-
-/* O(1) whole-screen scroll-up: blank rolled-off slots (dropping rich
- * ownership) and advance the ring base so everything below moves together. */
-static void roll_up(struct yetty_yvterm_grid *grid, uint32_t count)
-{
-    if (grid->visible_rows == 0) {
-        return;
-    }
-    if (count > grid->visible_rows) {
-        count = grid->visible_rows;
-    }
-    for (uint32_t step = 0; step < count; ++step) {
-        uint32_t slot = grid->base + step;
-        if (slot >= grid->visible_rows) {
-            slot -= grid->visible_rows;
-        }
-        reset_line(grid, &grid->lines[slot]);
-        grid->lines[slot].dirty = 1;
-    }
-    grid->base += count;
-    while (grid->base >= grid->visible_rows) {
-        grid->base -= grid->visible_rows;
-    }
-    grid->has_dirty = 1;
-}
-
-/* Move one cell's full state — text plus borrowed primitive/composite refs.
- *
- * Borrowed refs name their anchor relative to the *covered* row
- * (anchor = covered_row + rel_line). Moving a cell to a different row must keep
- * the absolute anchor fixed, so rel_line is rebased by (src_row - dst_row). A
- * ref whose rebased rel_line would point above the cell (negative — violating
- * the downward-anchor convention) or past the visible grid is dropped rather
- * than left dangling. Line-owned primitive/composite *storage* is not touched
- * here: it lives on its anchor line and is addressed by index, so a cell move
- * only needs to keep the references consistent. Best-effort on allocation: a
- * libvterm callback cannot propagate an error, so it keeps what fits. */
-static void move_cell(struct yetty_yvterm_grid *grid, uint32_t dst_row, uint32_t dst_col,
-                      uint32_t src_row, uint32_t src_col)
-{
-    *cell_at(grid, dst_row, dst_col) = *cell_at(grid, src_row, src_col);
-
-    struct yetty_yvterm_drawable_refs *dst = refs_at(grid, dst_row, dst_col);
-    struct yetty_yvterm_drawable_refs *src = refs_at(grid, src_row, src_col);
-    int rel_delta = (int)src_row - (int)dst_row;
-    dst->primitive_ref_count = 0;
-    dst->composite_ref_count = 0;
-
-    struct yetty_ycore_void_result pr = ensure_primitive_refs(dst, src->primitive_ref_count);
-    if (YETTY_IS_OK(pr)) {
-        for (uint16_t i = 0; i < src->primitive_ref_count; ++i) {
-            int new_rel = (int)src->primitive_refs[i].rel_line + rel_delta;
-            if (new_rel < 0 || new_rel > UINT16_MAX ||
-                dst_row + (uint32_t)new_rel >= grid->visible_rows) {
-                continue;
-            }
-            dst->primitive_refs[dst->primitive_ref_count].rel_line = (uint16_t)new_rel;
-            dst->primitive_refs[dst->primitive_ref_count].index_in_list =
-                src->primitive_refs[i].index_in_list;
-            dst->primitive_ref_count++;
-        }
-    } else {
-        yetty_ycore_error_destroy(pr.error);
-    }
-
-    struct yetty_ycore_void_result cr = ensure_composite_refs(dst, src->composite_ref_count);
-    if (YETTY_IS_OK(cr)) {
-        for (uint16_t i = 0; i < src->composite_ref_count; ++i) {
-            int new_rel = (int)src->composite_refs[i].rel_line + rel_delta;
-            if (new_rel < 0 || new_rel > UINT16_MAX ||
-                dst_row + (uint32_t)new_rel >= grid->visible_rows) {
-                continue;
-            }
-            dst->composite_refs[dst->composite_ref_count].rel_line = (uint16_t)new_rel;
-            dst->composite_refs[dst->composite_ref_count].index_in_list =
-                src->composite_refs[i].index_in_list;
-            dst->composite_ref_count++;
-        }
-    } else {
-        yetty_ycore_error_destroy(cr.error);
-    }
-}
-
-/*===========================================================================
- * libvterm State callbacks — transform the one model. user = grid pointer.
- *=========================================================================*/
-
-YETTY_EXTERNAL_CALLBACK
-static int cb_putglyph(VTermGlyphInfo *info, VTermPos pos, void *user)
-{
-    struct yetty_yvterm_grid *grid = user;
-    if (pos.row < 0 || pos.col < 0 || (uint32_t)pos.row >= grid->visible_rows ||
-        (uint32_t)pos.col >= grid->cols) {
-        return 1;
-    }
-
-    uint32_t fg = grid->pen_reverse ? grid->pen_bg : grid->pen_fg;
-    uint32_t bg = grid->pen_reverse ? grid->pen_fg : grid->pen_bg;
-    struct yetty_yvterm_text_cell *cell = cell_at(grid, (uint32_t)pos.row, (uint32_t)pos.col);
-    cell->glyph_index = 0;
-    cell->codepoint = (info->chars && info->chars[0]) ? info->chars[0] : 0u;
-    cell->fg = fg;
-    cell->bg = bg;
-    cell->attrs = grid->pen_attrs;
-    cell->width = (uint8_t)(info->width >= 2 ? 2 : 1);
-    cell->flags = 0;
-
-    /* A text write overwrites the cell, so its rich-content borrows go stale. */
-    clear_refs(refs_at(grid, (uint32_t)pos.row, (uint32_t)pos.col));
-
-    if (info->width == 2 && (uint32_t)pos.col + 1u < grid->cols) {
-        struct yetty_yvterm_text_cell *next =
-            cell_at(grid, (uint32_t)pos.row, (uint32_t)pos.col + 1u);
-        next->glyph_index = 0;
-        next->codepoint = 0;
-        next->fg = fg;
-        next->bg = bg;
-        next->attrs = grid->pen_attrs;
-        next->width = 0;
-        next->flags = 0;
-        clear_refs(refs_at(grid, (uint32_t)pos.row, (uint32_t)pos.col + 1u));
-    }
-
-    /* If this row anchors owned primitives/composites, writing text over it
-     * invalidates that rich content: release the owned storage and drop every
-     * borrowed ref (on any row) that pointed at this anchor, so nothing dangles.
-     * primitive_count/composite_count drop to 0, so later glyphs on the same
-     * line skip this cheaply. */
-    struct yetty_yvterm_line *line = line_at(grid, (uint32_t)pos.row);
-    if (line->primitive_count || line->composite_count) {
-        clear_line_rich(line, grid->cols);
-        drop_refs_to_anchor(grid, (uint32_t)pos.row);
-    }
-
-    mark_dirty_row(grid, (uint32_t)pos.row);
-    return 1;
-}
-
-YETTY_EXTERNAL_CALLBACK
-static int cb_movecursor(VTermPos pos, VTermPos oldpos, int visible, void *user)
-{
-    struct yetty_yvterm_grid *grid = user;
-    if (oldpos.row >= 0) {
-        mark_dirty_row(grid, (uint32_t)oldpos.row);
-    }
-    grid->cursor_row = pos.row >= 0 ? (uint32_t)pos.row : 0u;
-    grid->cursor_col = pos.col >= 0 ? (uint32_t)pos.col : 0u;
-    grid->cursor_visible = visible ? 1u : 0u;
-    mark_dirty_row(grid, grid->cursor_row);
-    return 1;
-}
-
-YETTY_EXTERNAL_CALLBACK
-static int cb_moverect(VTermRect dest, VTermRect src, void *user)
-{
-    struct yetty_yvterm_grid *grid = user;
-    int row_count = dest.end_row - dest.start_row;
-    int col_count = dest.end_col - dest.start_col;
-    if (row_count <= 0 || col_count <= 0) {
-        return 1;
-    }
-
-    /* Respect overlap direction on BOTH axes exactly like memmove. Pick the row
-     * and column traversal order independently from the sign of the shift: when
-     * the destination is past the source on an axis, walk that axis backwards so
-     * a source cell is always read before a later write can overwrite it. This
-     * covers vertical moves, same-row horizontal moves, and diagonal moves. */
-    int row_shift = dest.start_row - src.start_row;
-    int col_shift = dest.start_col - src.start_col;
-    for (int row_step = 0; row_step < row_count; ++row_step) {
-        int row = (row_shift > 0) ? (row_count - 1 - row_step) : row_step;
-        for (int col_step = 0; col_step < col_count; ++col_step) {
-            int col = (col_shift > 0) ? (col_count - 1 - col_step) : col_step;
-            move_cell(grid, (uint32_t)(dest.start_row + row), (uint32_t)(dest.start_col + col),
-                      (uint32_t)(src.start_row + row), (uint32_t)(src.start_col + col));
-        }
-        mark_dirty_row(grid, (uint32_t)(dest.start_row + row));
-    }
-    return 1;
-}
-
-YETTY_EXTERNAL_CALLBACK
-static int cb_erase(VTermRect rect, int selective, void *user)
-{
-    struct yetty_yvterm_grid *grid = user;
-    (void)selective;
-
-    int whole_screen = rect.start_row <= 0 && rect.start_col <= 0 &&
-                       (uint32_t)rect.end_row >= grid->visible_rows &&
-                       (uint32_t)rect.end_col >= grid->cols;
-
-    if (whole_screen) {
-        for (uint32_t row = 0; row < grid->visible_rows; ++row) {
-            reset_line(grid, line_at(grid, row));
-            mark_dirty_row(grid, row);
-        }
-        if (grid->clear_hook_fn) {
-            struct yetty_ycore_void_result r = grid->clear_hook_fn(grid->clear_hook_userdata);
-            if (YETTY_IS_ERR(r)) {
-                yetty_ycore_error_destroy(r.error);
-            }
-        }
-        return 1;
-    }
-
-    for (int row = rect.start_row; row < rect.end_row; ++row) {
-        if (row < 0 || (uint32_t)row >= grid->visible_rows) {
-            continue;
-        }
-        for (int col = rect.start_col; col < rect.end_col; ++col) {
-            if (col < 0 || (uint32_t)col >= grid->cols) {
-                continue;
-            }
-            blank_cell(cell_at(grid, (uint32_t)row, (uint32_t)col), grid->default_fg,
-                       grid->default_bg);
-            clear_refs(refs_at(grid, (uint32_t)row, (uint32_t)col));
-        }
-        /* Erasing cells on a row that anchors owned rich content invalidates
-         * that content too — release it and drop refs pointing here, mirroring
-         * cb_putglyph's anchor-line invalidation. */
-        struct yetty_yvterm_line *line = line_at(grid, (uint32_t)row);
-        if (line->primitive_count || line->composite_count) {
-            clear_line_rich(line, grid->cols);
-            drop_refs_to_anchor(grid, (uint32_t)row);
-        }
-        mark_dirty_row(grid, (uint32_t)row);
-    }
-    return 1;
-}
-
-YETTY_EXTERNAL_CALLBACK
-static int cb_scrollrect(VTermRect rect, int downward, int rightward, void *user)
-{
-    struct yetty_yvterm_grid *grid = user;
-    int whole_width = rect.start_col == 0 && (uint32_t)rect.end_col == grid->cols;
-    int whole_height = rect.start_row == 0 && (uint32_t)rect.end_row == grid->visible_rows;
-    /* The common whole-screen scroll-up is O(1): advance the ring. Everything
-     * else decomposes through the unified move/erase callbacks. */
-    if (rightward == 0 && downward > 0 && whole_width && whole_height) {
-        roll_up(grid, (uint32_t)downward);
-        return 1;
-    }
-    vterm_scroll_rect(rect, downward, rightward, cb_moverect, cb_erase, grid);
-    return 1;
-}
-
-YETTY_EXTERNAL_CALLBACK
-static int cb_initpen(void *user)
-{
-    struct yetty_yvterm_grid *grid = user;
-    grid->pen_fg = grid->default_fg;
-    grid->pen_bg = grid->default_bg;
-    grid->pen_attrs = 0;
-    grid->pen_reverse = 0;
-    return 1;
-}
-
-YETTY_EXTERNAL_CALLBACK
-static int cb_setpenattr(VTermAttr attr, VTermValue *val, void *user)
-{
-    struct yetty_yvterm_grid *grid = user;
-    switch (attr) {
-    case VTERM_ATTR_BOLD:
-        grid->pen_attrs = val->boolean ? (grid->pen_attrs | YETTY_YVTERM_ATTR_BOLD)
-                                       : (grid->pen_attrs & ~(uint16_t)YETTY_YVTERM_ATTR_BOLD);
-        break;
-    case VTERM_ATTR_UNDERLINE: {
-        uint16_t mask = YETTY_YVTERM_ATTR_UNDERLINE | YETTY_YVTERM_ATTR_UNDERLINE2;
-        grid->pen_attrs =
-            (uint16_t)((grid->pen_attrs & ~mask) | (((uint16_t)(val->number & 0x3)) << 1));
-        break;
-    }
-    case VTERM_ATTR_ITALIC:
-        grid->pen_attrs = val->boolean ? (grid->pen_attrs | YETTY_YVTERM_ATTR_ITALIC)
-                                       : (grid->pen_attrs & ~(uint16_t)YETTY_YVTERM_ATTR_ITALIC);
-        break;
-    case VTERM_ATTR_BLINK:
-        grid->pen_attrs = val->boolean ? (grid->pen_attrs | YETTY_YVTERM_ATTR_BLINK)
-                                       : (grid->pen_attrs & ~(uint16_t)YETTY_YVTERM_ATTR_BLINK);
-        break;
-    case VTERM_ATTR_STRIKE:
-        grid->pen_attrs = val->boolean ? (grid->pen_attrs | YETTY_YVTERM_ATTR_STRIKE)
-                                       : (grid->pen_attrs & ~(uint16_t)YETTY_YVTERM_ATTR_STRIKE);
-        break;
-    case VTERM_ATTR_CONCEAL:
-        grid->pen_attrs = val->boolean ? (grid->pen_attrs | YETTY_YVTERM_ATTR_CONCEAL)
-                                       : (grid->pen_attrs & ~(uint16_t)YETTY_YVTERM_ATTR_CONCEAL);
-        break;
-    case VTERM_ATTR_REVERSE:
-        grid->pen_reverse = val->boolean ? 1 : 0;
-        break;
-    case VTERM_ATTR_FOREGROUND:
-        grid->pen_fg = pack_color(val->color);
-        break;
-    case VTERM_ATTR_BACKGROUND:
-        grid->pen_bg = pack_color(val->color);
-        break;
-    default:
-        break;
-    }
-    return 1;
-}
-
-YETTY_EXTERNAL_CALLBACK
-static int cb_settermprop(VTermProp prop, VTermValue *val, void *user)
-{
-    struct yetty_yvterm_grid *grid = user;
-    switch (prop) {
-    case VTERM_PROP_CURSORVISIBLE:
-        grid->cursor_visible = val->boolean ? 1u : 0u;
-        mark_dirty_row(grid, grid->cursor_row);
-        break;
-    case VTERM_PROP_ALTSCREEN:
-        grid->alt_screen = val->boolean ? 1 : 0;
-        mark_dirty_all(grid);
-        break;
-    case VTERM_PROP_MOUSE:
-        grid->mouse_mode = (int)val->number;
-        break;
-    default:
-        break;
-    }
-    return 1;
-}
-
-YETTY_EXTERNAL_CALLBACK
-static int cb_bell(void *user)
-{
-    (void)user;
-    return 1;
-}
-
-YETTY_EXTERNAL_CALLBACK
-static int cb_resize(int rows, int cols, VTermStateFields *fields, void *user)
-{
-    (void)cols;
-    (void)user;
-    /* libvterm has already updated state->rows/state->cols and delegates the
-     * lineinfo (re)allocation to this callback — its internal fallback is dead
-     * code once a state resize callback is installed. Each non-NULL lineinfos[]
-     * buffer must be grown/shrunk to `rows` entries here; otherwise the next
-     * glyph indexes the old, shorter buffer out of bounds (heap corruption,
-     * then a crash). The default vterm allocator is libc malloc/free, so plain
-     * calloc/free matches what libvterm will later free. Our grid model blanks
-     * every line on resize, so fresh zeroed lineinfo (no flag carry-over) is
-     * the correct semantics — mirrors libvterm's own screen-layer resize. */
-    int safe_rows = rows > 0 ? rows : 1;
-    for (int bufidx = 0; bufidx < 2; ++bufidx) {
-        if (!fields->lineinfos[bufidx]) {
-            continue;
-        }
-        VTermLineInfo *resized = calloc((size_t)safe_rows, sizeof(VTermLineInfo));
-        if (!resized) {
-            /* Keep the existing buffer rather than crash; libvterm clamps the
-             * cursor below, so a stale-but-valid buffer is the safer failure. */
-            continue;
-        }
-        free(fields->lineinfos[bufidx]);
-        fields->lineinfos[bufidx] = resized;
-    }
-    return 1;
-}
-
-static const VTermStateCallbacks *grid_state_callbacks(void)
-{
-    static const VTermStateCallbacks callbacks = {
-        .putglyph = cb_putglyph,
-        .movecursor = cb_movecursor,
-        .scrollrect = cb_scrollrect,
-        .moverect = cb_moverect,
-        .erase = cb_erase,
-        .initpen = cb_initpen,
-        .setpenattr = cb_setpenattr,
-        .settermprop = cb_settermprop,
-        .bell = cb_bell,
-        .resize = cb_resize,
-        .setlineinfo = NULL,
-        .sb_clear = NULL,
-    };
-    return &callbacks;
-}
-
-/*===========================================================================
- * Grid model lifecycle — the model lives embedded in the vterm object.
- *=========================================================================*/
-
-static void grid_free_lines(struct yetty_yvterm_grid *grid)
-{
-    if (!grid->lines) {
-        return;
-    }
-    for (uint32_t line = 0; line < grid->line_count; ++line) {
-        struct yetty_yvterm_line *current = &grid->lines[line];
-        if (current->drawable_refs) {
-            for (uint32_t col = 0; col < grid->cols; ++col) {
-                free_refs(&current->drawable_refs[col]);
-            }
-        }
-        for (uint32_t i = 0; i < current->composite_count; ++i) {
-            destroy_composite(current->composites[i]);
-        }
-        free(current->text_cells);
-        free(current->drawable_refs);
-        free(current->primitives);
-        free(current->arena);
-        free(current->composites);
-    }
-    free(grid->lines);
-    grid->lines = NULL;
-}
-
-static struct yetty_ycore_void_result grid_alloc_lines(struct yetty_yvterm_grid *grid,
-                                                       uint32_t rows, uint32_t cols)
-{
-    grid->lines = calloc(rows, sizeof(struct yetty_yvterm_line));
-    if (!grid->lines) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm: line array allocation failed");
-    }
-    grid->line_count = rows;
-    for (uint32_t line = 0; line < rows; ++line) {
-        grid->lines[line].text_cells = calloc(cols, sizeof(struct yetty_yvterm_text_cell));
-        grid->lines[line].drawable_refs = calloc(cols, sizeof(struct yetty_yvterm_drawable_refs));
-        if (!grid->lines[line].text_cells || !grid->lines[line].drawable_refs) {
-            grid_free_lines(grid);
-            return YETTY_ERR(yetty_ycore_void, "yvterm: line allocation failed");
-        }
-    }
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result grid_model_init(struct yetty_yvterm_grid *grid, uint32_t cols,
-                                                      uint32_t rows)
-{
-    grid->cols = cols;
-    grid->visible_rows = rows;
-
-    struct yetty_ycore_void_result lines_r = grid_alloc_lines(grid, rows, cols);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, lines_r, "yvterm: grid_model_init alloc_lines");
-
-    grid->vterm = vterm_new((int)rows, (int)cols);
-    if (!grid->vterm) {
-        grid_free_lines(grid);
-        return YETTY_ERR(yetty_ycore_void, "yvterm: vterm_new failed");
-    }
-    vterm_set_utf8(grid->vterm, 1);
-    grid->state = vterm_obtain_state(grid->vterm);
-    vterm_state_set_callbacks(grid->state, grid_state_callbacks(), grid);
-
-    VTermColor default_fg;
-    VTermColor default_bg;
-    vterm_state_get_default_colors(grid->state, &default_fg, &default_bg);
-    grid->default_fg = pack_color(default_fg);
-    grid->default_bg = pack_color(default_bg);
-
-    vterm_state_reset(grid->state, 1);
-    grid->pen_fg = grid->default_fg;
-    grid->pen_bg = grid->default_bg;
-    grid->cursor_visible = 1u;
-
-    for (uint32_t row = 0; row < rows; ++row) {
-        blank_line(grid, row);
-    }
-    mark_dirty_all(grid);
-    return YETTY_OK_VOID();
-}
-
-static void grid_model_teardown(struct yetty_yvterm_grid *grid)
-{
-    if (grid->vterm) {
-        vterm_free(grid->vterm);
-        grid->vterm = NULL;
-        grid->state = NULL;
-    }
-    grid_free_lines(grid);
-}
-
-static struct yetty_ycore_void_result grid_model_resize(struct yetty_yvterm_grid *grid,
-                                                        uint32_t cols, uint32_t rows)
-{
-    struct yetty_yvterm_grid tmp = {0};
-    tmp.cols = cols;
-    tmp.visible_rows = rows;
-    tmp.default_fg = grid->default_fg;
-    tmp.default_bg = grid->default_bg;
-    struct yetty_ycore_void_result lines_r = grid_alloc_lines(&tmp, rows, cols);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, lines_r, "yvterm: grid_model_resize alloc_lines");
-
-    grid_free_lines(grid);
-    grid->lines = tmp.lines;
-    grid->line_count = tmp.line_count;
-    grid->cols = cols;
-    grid->visible_rows = rows;
-    grid->base = 0;
-
-    for (uint32_t row = 0; row < rows; ++row) {
-        blank_line(grid, row);
-    }
-    vterm_set_size(grid->vterm, (int)rows, (int)cols);
-    mark_dirty_all(grid);
-    return YETTY_OK_VOID();
-}
 
 /*===========================================================================
  * The vterm yclass class — a yfigure subclass owning the unified model.
@@ -869,8 +96,9 @@ static struct yetty_ycore_void_result grid_model_resize(struct yetty_yvterm_grid
 
 struct [[clang::annotate("class@yvterm:vterm")]] [[clang::annotate("parent@yfigure:figure")]]
 yetty_yvterm_vterm {
-    /* The unified terminal model (text + rich refs on a scrolling ring). */
-    struct yetty_yvterm_grid grid;
+    /* The terminal model lives in a separate class@yvterm:grid object; this
+     * figure composes it and renders it. Owned: disposed in the destroy slot. */
+    struct yetty_yclass_object *grid_obj;
 
     /* Cell + grid metrics mirrored for the terminal's mouse→cell mapping, PTY
      * resize, and the figure rect. The terminal sets these via resize. */
@@ -884,22 +112,13 @@ yetty_yvterm_vterm {
     float content_inset_bottom;
     float content_inset_left;
 
-    /* Terminal-owned hooks. pty_write delivers keyboard output to the child;
-     * request_render asks the terminal for a frame; mouse_sub reports libvterm
-     * mouse-mode changes. */
-    yetty_yterminal_pty_write_fn pty_write_fn;
-    void *pty_write_userdata;
+    /* Terminal-owned hooks. request_render asks the terminal for a frame;
+     * mouse_sub reports libvterm mouse-mode changes. (pty_write lives on the
+     * grid model, which produces the keyboard/query output.) */
     yetty_yterminal_request_render_fn request_render_fn;
     void *request_render_userdata;
     yetty_yterminal_mouse_sub_fn mouse_sub_fn;
     void *mouse_sub_userdata;
-
-    /* Selection rectangle in grid cells (terminal-driven). */
-    int selection_active;
-    uint32_t selection_anchor_row;
-    uint32_t selection_anchor_col;
-    uint32_t selection_head_row;
-    uint32_t selection_head_col;
 
     /* Scrollback view (not yet backed by a scrollback ring — see methods). */
     int view_top_active;
@@ -990,6 +209,12 @@ static const char *vterm_text_wgsl(void)
         "    cursor_col: u32,\n"
         "    cursor_row: u32,\n"
         "    cursor_visible: u32,\n"
+        "    sel_active: u32,\n"
+        "    sel_start_row: u32,\n"
+        "    sel_start_col: u32,\n"
+        "    sel_end_row: u32,\n"
+        "    sel_end_col: u32,\n"
+        "    pad_a: u32, pad_b: u32, pad_c: u32,\n"
         "};\n"
         "@group(0) @binding(0) var<storage, read> cells: array<u32>;\n"
         "@group(0) @binding(1) var<storage, read> glyph_meta: array<u32>;\n"
@@ -1091,9 +316,19 @@ static const char *vterm_text_wgsl(void)
         "{ alpha = 1.0; }\n"
         "    let is_cursor = uni.cursor_visible != 0u && col == uni.cursor_col && "
         "row == uni.cursor_row;\n"
+        /* Selection highlight (reading-order stream, start <= end). Inverted
+         * like the cursor — the xterm default look. */
+        "    var selected = false;\n"
+        "    if (uni.sel_active != 0u) {\n"
+        "        if (row > uni.sel_start_row && row < uni.sel_end_row) { selected = true; }\n"
+        "        else if (row == uni.sel_start_row && row == uni.sel_end_row) {\n"
+        "            selected = col >= uni.sel_start_col && col <= uni.sel_end_col;\n"
+        "        } else if (row == uni.sel_start_row) { selected = col >= uni.sel_start_col; }\n"
+        "        else if (row == uni.sel_end_row) { selected = col <= uni.sel_end_col; }\n"
+        "    }\n"
         "    var composed = mix(bg, fg, alpha);\n"
-        "    if (is_cursor) {\n"
-        "        composed = mix(fg, bg, alpha);\n" /* inverted block: fg fill, glyph punched in bg */
+        "    if (is_cursor || selected) {\n"
+        "        composed = mix(fg, bg, alpha);\n" /* inverted: fg fill, glyph punched in bg */
         "    }\n"
         "    return vec4<f32>(composed, 1.0);\n"
         "}\n";
@@ -1131,13 +366,14 @@ static enum yetty_yfont_ms_style vterm_cell_style(uint16_t attrs)
     return (enum yetty_yfont_ms_style)style;
 }
 
-/* Pack one model line into out[cols*4] in the GPU layout the shader reads. */
-static void vterm_pack_line(struct yetty_yvterm_vterm *vterm, struct yetty_yvterm_line *line,
+/* Pack one model line (cells[cols], from the grid accessor) into out[cols*4] in
+ * the GPU layout the shader reads. */
+static void vterm_pack_line(struct yetty_yvterm_vterm *vterm,
+                            const struct yetty_yvterm_text_cell *cells, uint32_t cols,
                             uint32_t *out)
 {
-    uint32_t cols = vterm->grid.cols;
     for (uint32_t col = 0; col < cols; ++col) {
-        struct yetty_yvterm_text_cell *cell = &line->text_cells[col];
+        const struct yetty_yvterm_text_cell *cell = &cells[col];
         /* Concealed cells render their background only — resolve no glyph.
          * Bold/italic pick a styled atlas slot via the cell attributes. */
         uint32_t glyph = 0u;
@@ -1156,9 +392,9 @@ static void vterm_pack_line(struct yetty_yvterm_vterm *vterm, struct yetty_yvter
     }
 }
 
-static struct yetty_ycore_void_result vterm_ensure_row_scratch(struct yetty_yvterm_vterm *vterm)
+static struct yetty_ycore_void_result vterm_ensure_row_scratch(struct yetty_yvterm_vterm *vterm,
+                                                               uint32_t cols)
 {
-    uint32_t cols = vterm->grid.cols;
     if (vterm->row_scratch && vterm->row_scratch_cols >= cols) {
         return YETTY_OK_VOID();
     }
@@ -1259,7 +495,8 @@ static struct yetty_ycore_void_result vterm_create_pipeline(struct yetty_yvterm_
 
 static struct yetty_ycore_void_result vterm_create_cell_buffer(struct yetty_yvterm_vterm *vterm)
 {
-    uint32_t cols = vterm->grid.cols, rows = vterm->grid.visible_rows;
+    uint32_t cols = 0, rows = 0;
+    yetty_yvterm_grid_dims(vterm->grid_obj, &cols, &rows, NULL);
     if (vterm->cell_buffer) {
         wgpuBufferDestroy(vterm->cell_buffer);
         wgpuBufferRelease(vterm->cell_buffer);
@@ -1565,24 +802,33 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     if (!vterm->gpu_ready || !target || !target->ops || !target->ops->get_view) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yvterm_grid *grid = &vterm->grid;
-    if (grid->cols == 0 || grid->visible_rows == 0) {
+    struct yetty_yclass_object *grid = vterm->grid_obj;
+    uint32_t cols = 0, rows = 0, base = 0;
+    yetty_yvterm_grid_dims(grid, &cols, &rows, &base);
+    if (cols == 0 || rows == 0) {
         return YETTY_OK_VOID();
     }
     /* The model may have been resized since the cell buffer was sized. */
-    if (vterm->cell_buffer_cells != grid->visible_rows * grid->cols) {
+    if (vterm->cell_buffer_cells != rows * cols) {
         struct yetty_ycore_void_result br = vterm_create_cell_buffer(vterm);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "vterm_render: resize cell buffer");
     }
-    struct yetty_ycore_void_result rsr = vterm_ensure_row_scratch(vterm);
+    struct yetty_ycore_void_result rsr = vterm_ensure_row_scratch(vterm, cols);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rsr, "vterm_render: row scratch");
 
-    size_t row_bytes = (size_t)grid->cols * YVTERM_WORDS_PER_CELL * sizeof(uint32_t);
-    for (uint32_t slot = 0; slot < grid->visible_rows; ++slot) {
-        if (!grid->lines[slot].dirty) {
+    /* The cell buffer is ring-slot-indexed; the shader maps visible row →
+     * (row + root_row) % rows, so upload by raw slot and pass base as root_row. */
+    size_t row_bytes = (size_t)cols * YVTERM_WORDS_PER_CELL * sizeof(uint32_t);
+    uint32_t slot_count = yetty_yvterm_grid_slot_count(grid);
+    for (uint32_t slot = 0; slot < slot_count; ++slot) {
+        if (!yetty_yvterm_grid_slot_dirty(grid, slot)) {
             continue;
         }
-        vterm_pack_line(vterm, &grid->lines[slot], vterm->row_scratch);
+        const struct yetty_yvterm_text_cell *cells = yetty_yvterm_grid_slot_cells(grid, slot);
+        if (!cells) {
+            continue;
+        }
+        vterm_pack_line(vterm, cells, cols, vterm->row_scratch);
         wgpuQueueWriteBuffer(vterm->queue, vterm->cell_buffer, (uint64_t)slot * row_bytes,
                              vterm->row_scratch, row_bytes);
     }
@@ -1592,14 +838,33 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "vterm_render: upload_font");
     }
 
-    vterm->uniforms.grid_size[0] = (float)grid->cols;
-    vterm->uniforms.grid_size[1] = (float)grid->visible_rows;
+    uint32_t cursor_row = 0, cursor_col = 0, cursor_visible = 0;
+    yetty_yvterm_grid_cursor(grid, &cursor_row, &cursor_col, &cursor_visible);
+    vterm->uniforms.grid_size[0] = (float)cols;
+    vterm->uniforms.grid_size[1] = (float)rows;
     vterm->uniforms.cell_size[0] = vterm->cell_size.width;
     vterm->uniforms.cell_size[1] = vterm->cell_size.height;
-    vterm->uniforms.root_row = grid->base;
-    vterm->uniforms.cursor_col = grid->cursor_col;
-    vterm->uniforms.cursor_row = grid->cursor_row;
-    vterm->uniforms.cursor_visible = grid->cursor_visible;
+    vterm->uniforms.root_row = base;
+    vterm->uniforms.cursor_col = cursor_col;
+    vterm->uniforms.cursor_row = cursor_row;
+    vterm->uniforms.cursor_visible = cursor_visible;
+    /* Selection highlight: normalise (anchor, head) to reading order so the
+     * shader's start<=end stream test is simple. */
+    int sel_active = 0;
+    uint32_t sa_row = 0, sa_col = 0, sh_row = 0, sh_col = 0;
+    yetty_yvterm_grid_selection(grid, &sel_active, &sa_row, &sa_col, &sh_row, &sh_col);
+    if (sel_active && (sa_row > sh_row || (sa_row == sh_row && sa_col > sh_col))) {
+        uint32_t tr = sa_row, tc = sa_col;
+        sa_row = sh_row;
+        sa_col = sh_col;
+        sh_row = tr;
+        sh_col = tc;
+    }
+    vterm->uniforms.sel_active = sel_active ? 1u : 0u;
+    vterm->uniforms.sel_start_row = sa_row;
+    vterm->uniforms.sel_start_col = sa_col;
+    vterm->uniforms.sel_end_row = sh_row;
+    vterm->uniforms.sel_end_col = sh_col;
     wgpuQueueWriteBuffer(vterm->queue, vterm->uniform_buffer, 0, &vterm->uniforms,
                          sizeof(struct vterm_uniforms));
 
@@ -1676,21 +941,22 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
      * here yet — that needs the ydraw SDF grid/binder pipeline (the deleted
      * ydraw-scrolling-layer). Composites cover the common anchored-figure case. */
     float zoom = vterm->visual_zoom_scale > 0.0f ? vterm->visual_zoom_scale : 1.0f;
-    for (uint32_t row = 0; row < grid->visible_rows; ++row) {
-        struct yetty_yvterm_line *anchor = line_at(grid, row);
-        if (anchor->composite_count == 0) {
+    for (uint32_t row = 0; row < rows; ++row) {
+        uint32_t comp_count = 0;
+        struct yetty_ydraw_composite *const *comps =
+            yetty_yvterm_grid_line_composites(grid, row, &comp_count);
+        if (!comps || comp_count == 0) {
             continue;
         }
         float comp_x = rect.min.x + vterm->visual_zoom_offset_x;
-        float comp_y = rect.min.y + vterm->visual_zoom_offset_y +
-                       (float)row * vterm->cell_size.height * zoom;
-        for (uint32_t ci = 0; ci < anchor->composite_count; ++ci) {
-            struct yetty_ydraw_composite *comp = anchor->composites[ci];
-            if (!comp) {
+        float comp_y =
+            rect.min.y + vterm->visual_zoom_offset_y + (float)row * vterm->cell_size.height * zoom;
+        for (uint32_t ci = 0; ci < comp_count; ++ci) {
+            if (!comps[ci]) {
                 continue;
             }
             struct yetty_ycore_void_result cr =
-                yetty_ydraw_composite_render(comp, target, comp_x, comp_y);
+                yetty_ydraw_composite_render(comps[ci], target, comp_x, comp_y);
             if (YETTY_IS_ERR(cr)) {
                 yetty_ycore_error_destroy(cr.error);
             }
@@ -1699,10 +965,7 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
 
     /* Uploaded — clear model dirty now that the renderer has consumed both the
      * text plane and the anchored composites. */
-    for (uint32_t i = 0; i < grid->line_count; ++i) {
-        grid->lines[i].dirty = 0;
-    }
-    grid->has_dirty = 0;
+    yetty_yvterm_grid_clear_dirty(grid);
     return YETTY_OK_VOID();
 }
 
@@ -1742,7 +1005,13 @@ static struct yetty_ycore_void_result vterm_destroy_slot(struct yetty_yclass_ctx
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "vterm_destroy: from_obj");
     vterm_gpu_destroy(vterm_res.value);
-    grid_model_teardown(&vterm_res.value->grid);
+    if (vterm_res.value->grid_obj) {
+        struct yetty_ycore_void_result gd = yetty_yvterm_grid_dispose(vterm_res.value->grid_obj);
+        if (YETTY_IS_ERR(gd)) {
+            yetty_ycore_error_destroy(gd.error);
+        }
+        vterm_res.value->grid_obj = NULL;
+    }
 
     struct yetty_ycore_void_result free_res = yetty_yclass_object_free(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, free_res, "vterm_destroy: object_free");
@@ -1795,18 +1064,22 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
     }
     struct yetty_yvterm_vterm *vterm = vterm_res.value;
 
-    struct yetty_ycore_void_result init_res = grid_model_init(&vterm->grid, cols, rows);
-    if (YETTY_IS_ERR(init_res)) {
+    /* The model is a separate yvterm:grid object this figure composes/owns. */
+    struct yetty_yclass_object_ptr_result grid_res = yetty_yvterm_grid_make(cols, rows);
+    if (YETTY_IS_ERR(grid_res)) {
         struct yetty_ycore_void_result free_res = yetty_yclass_object_free(obj);
         if (YETTY_IS_ERR(free_res)) {
             yetty_ycore_error_destroy(free_res.error);
         }
-        return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: grid_model_init", init_res);
+        return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: grid_make", grid_res);
     }
+    vterm->grid_obj = grid_res.value;
+    /* The grid produces keyboard/query output; hand it the PTY hook. The
+     * terminal's pty_write_fn matches the grid's pty_write signature. */
+    yetty_yvterm_grid_set_pty_write(vterm->grid_obj, (yetty_yvterm_grid_pty_write_fn)pty_write_fn,
+                                    pty_write_userdata);
     vterm->grid_size = (struct yetty_ycore_grid_size){.cols = cols, .rows = rows};
     vterm->cell_size = (struct yetty_ycore_pixel_size){.width = 9.0f, .height = 18.0f};
-    vterm->pty_write_fn = pty_write_fn;
-    vterm->pty_write_userdata = pty_write_userdata;
     vterm->request_render_fn = request_render_fn;
     vterm->request_render_userdata = request_render_userdata;
     vterm->mouse_sub_fn = mouse_sub_fn;
@@ -1835,7 +1108,10 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
      * initialized resources do not leak. */
     if (YETTY_IS_ERR(rect_res) || YETTY_IS_ERR(z_res) || YETTY_IS_ERR(dirty_res)) {
         vterm_gpu_destroy(vterm);
-        grid_model_teardown(&vterm->grid);
+        struct yetty_ycore_void_result gd = yetty_yvterm_grid_dispose(vterm->grid_obj);
+        if (YETTY_IS_ERR(gd)) {
+            yetty_ycore_error_destroy(gd.error);
+        }
         struct yetty_ycore_void_result free_res = yetty_yclass_object_free(obj);
         if (YETTY_IS_ERR(free_res)) {
             yetty_ycore_error_destroy(free_res.error);
@@ -1867,17 +1143,15 @@ struct yetty_yfigure_figure *yetty_yvterm_vterm_as_figure(struct yetty_yclass_ob
     return figure_res.value;
 }
 
-[[clang::annotate("expose")]]
+[[clang::annotate("expose")]] [[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_yvterm_vterm_feed(struct yetty_yclass_object *obj,
                                                        const char *bytes, size_t len)
 {
-    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_feed: from_obj");
-    if (len && !bytes) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm vterm_feed: NULL bytes");
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    if (!vterm) {
+        return YETTY_ERR(yetty_ycore_void, "yvterm vterm_feed: bad obj");
     }
-    vterm_input_write(vterm_res.value->grid.vterm, bytes, len);
-    return YETTY_OK_VOID();
+    return yetty_yvterm_grid_feed(vterm->grid_obj, bytes, len);
 }
 
 [[clang::annotate("expose")]]
@@ -1885,19 +1159,18 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_resize(struct yetty_yclass_obj
                                                          struct yetty_ycore_grid_size grid_size,
                                                          struct yetty_ycore_pixel_size cell_size)
 {
-    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_resize: from_obj");
-    struct yetty_yvterm_vterm *vterm = vterm_res.value;
-
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    if (!vterm) {
+        return YETTY_ERR(yetty_ycore_void, "yvterm vterm_resize: bad obj");
+    }
     if (grid_size.cols == 0 || grid_size.rows == 0) {
         return YETTY_ERR(yetty_ycore_void, "yvterm vterm_resize: invalid dimensions");
     }
     struct yetty_ycore_void_result resize_res =
-        grid_model_resize(&vterm->grid, grid_size.cols, grid_size.rows);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, resize_res, "yvterm vterm_resize: grid_model_resize");
+        yetty_yvterm_grid_resize(vterm->grid_obj, grid_size.cols, grid_size.rows);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, resize_res, "yvterm vterm_resize: grid_resize");
     vterm->grid_size = grid_size;
     vterm->cell_size = cell_size;
-
     struct yetty_ycore_rectangle rect = {
         .min = {.x = 0.0f, .y = 0.0f},
         .max = {.x = (float)grid_size.cols * cell_size.width,
@@ -1922,7 +1195,7 @@ struct yetty_ycore_pixel_size yetty_yvterm_vterm_cell_size(struct yetty_yclass_o
 int yetty_yvterm_vterm_is_dirty(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    return vterm ? vterm->grid.has_dirty : 0;
+    return vterm ? yetty_yvterm_grid_is_dirty(vterm->grid_obj) : 0;
 }
 
 [[clang::annotate("expose")]]
@@ -1966,391 +1239,174 @@ void yetty_yvterm_vterm_set_clear_hook(struct yetty_yclass_object *obj,
     if (!vterm) {
         return;
     }
-    vterm->grid.clear_hook_fn = fn;
-    vterm->grid.clear_hook_userdata = userdata;
+    yetty_yvterm_grid_set_clear_hook(vterm->grid_obj, (yetty_yvterm_grid_clear_hook_fn)fn,
+                                     userdata);
 }
 
 [[clang::annotate("expose")]]
-void yetty_yvterm_vterm_cursor(struct yetty_yclass_object *obj, uint32_t *out_row, uint32_t *out_col,
-                               uint32_t *out_visible)
+void yetty_yvterm_vterm_cursor(struct yetty_yclass_object *obj, uint32_t *out_row,
+                               uint32_t *out_col, uint32_t *out_visible)
 {
     struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (out_row) {
-        *out_row = vterm ? vterm->grid.cursor_row : 0u;
+    if (!vterm) {
+        if (out_row) {
+            *out_row = 0u;
+        }
+        if (out_col) {
+            *out_col = 0u;
+        }
+        if (out_visible) {
+            *out_visible = 0u;
+        }
+        return;
     }
-    if (out_col) {
-        *out_col = vterm ? vterm->grid.cursor_col : 0u;
+    yetty_yvterm_grid_cursor(vterm->grid_obj, out_row, out_col, out_visible);
+}
+
+[[clang::annotate("expose")]]
+void yetty_yvterm_vterm_word_bounds(struct yetty_yclass_object *obj, uint32_t row, uint32_t col,
+                                    uint32_t *out_start_col, uint32_t *out_end_col)
+{
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    if (!vterm) {
+        if (out_start_col) {
+            *out_start_col = col;
+        }
+        if (out_end_col) {
+            *out_end_col = col;
+        }
+        return;
     }
-    if (out_visible) {
-        *out_visible = vterm ? vterm->grid.cursor_visible : 0u;
-    }
+    yetty_yvterm_grid_word_bounds(vterm->grid_obj, row, col, out_start_col, out_end_col);
 }
 
 /*===========================================================================
- * Rich-content insertion — primitives/composites anchored to a line; covered
- * cells reference them with a downward rel_line + the returned index.
+ * Rich-content insertion — delegated to the grid model.
  *=========================================================================*/
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_append_primitive(
     struct yetty_yclass_object *obj, uint32_t row, const uint32_t *words, uint32_t word_count)
 {
-    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm append_primitive: from_obj");
-    struct yetty_yvterm_grid *grid = &vterm_res.value->grid;
-    if (row >= grid->visible_rows) {
-        return YETTY_ERR(yetty_ycore_uint32, "yvterm append_primitive: row out of range");
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    if (!vterm) {
+        return YETTY_ERR(yetty_ycore_uint32, "yvterm append_primitive: bad obj");
     }
-    if (word_count && !words) {
-        return YETTY_ERR(yetty_ycore_uint32, "yvterm append_primitive: NULL words");
-    }
-    struct yetty_yvterm_line *line = line_at(grid, row);
-    if (line->primitive_count >= UINT16_MAX) {
-        return YETTY_ERR(yetty_ycore_uint32, "yvterm append_primitive: too many primitives");
-    }
-    struct yetty_ycore_void_result ar = ensure_arena(line, line->arena_count + word_count);
-    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, ar, "yvterm append_primitive: arena");
-    struct yetty_ycore_void_result pr = ensure_primitives(line, line->primitive_count + 1u);
-    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, pr, "yvterm append_primitive: primitives");
-
-    uint32_t arena_offset = line->arena_count;
-    if (word_count) {
-        memcpy(line->arena + arena_offset, words, (size_t)word_count * sizeof(uint32_t));
-        line->arena_count += word_count;
-    }
-    uint32_t index = line->primitive_count;
-    line->primitives[index].arena_offset = arena_offset;
-    line->primitives[index].word_count = word_count;
-    line->primitive_count++;
-    mark_dirty_row(grid, row);
-    return YETTY_OK(yetty_ycore_uint32, index);
+    return yetty_yvterm_grid_append_primitive(vterm->grid_obj, row, words, word_count);
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_yvterm_vterm_add_primitive_ref(
-    struct yetty_yclass_object *obj, uint32_t row, uint32_t col, uint16_t rel_line,
-    uint16_t index_in_list)
+struct yetty_ycore_void_result yetty_yvterm_vterm_add_primitive_ref(struct yetty_yclass_object *obj,
+                                                                    uint32_t row, uint32_t col,
+                                                                    uint16_t rel_line,
+                                                                    uint16_t index_in_list)
 {
-    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm add_primitive_ref: from_obj");
-    struct yetty_yvterm_grid *grid = &vterm_res.value->grid;
-    if (row >= grid->visible_rows || col >= grid->cols) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm add_primitive_ref: out of range");
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    if (!vterm) {
+        return YETTY_ERR(yetty_ycore_void, "yvterm add_primitive_ref: bad obj");
     }
-    /* The anchor (row + rel_line) must be a real visible line, and index_in_list
-     * must name an existing primitive on it — otherwise the ref dangles. */
-    uint32_t anchor_row = (uint32_t)row + rel_line;
-    if (anchor_row >= grid->visible_rows) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm add_primitive_ref: anchor out of range");
-    }
-    if (index_in_list >= line_at(grid, anchor_row)->primitive_count) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm add_primitive_ref: primitive index out of range");
-    }
-    struct yetty_yvterm_drawable_refs *refs = refs_at(grid, row, col);
-    struct yetty_ycore_void_result gr =
-        ensure_primitive_refs(refs, (uint16_t)(refs->primitive_ref_count + 1u));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "yvterm add_primitive_ref: grow");
-    refs->primitive_refs[refs->primitive_ref_count].rel_line = rel_line;
-    refs->primitive_refs[refs->primitive_ref_count].index_in_list = index_in_list;
-    refs->primitive_ref_count++;
-    mark_dirty_row(grid, row);
-    return YETTY_OK_VOID();
+    return yetty_yvterm_grid_add_primitive_ref(vterm->grid_obj, row, col, rel_line, index_in_list);
 }
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_attach_composite(
     struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_composite *composite)
 {
-    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm attach_composite: from_obj");
-    struct yetty_yvterm_grid *grid = &vterm_res.value->grid;
-    if (row >= grid->visible_rows) {
-        return YETTY_ERR(yetty_ycore_uint32, "yvterm attach_composite: row out of range");
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    if (!vterm) {
+        return YETTY_ERR(yetty_ycore_uint32, "yvterm attach_composite: bad obj");
     }
-    if (!composite) {
-        return YETTY_ERR(yetty_ycore_uint32, "yvterm attach_composite: NULL composite");
-    }
-    struct yetty_yvterm_line *line = line_at(grid, row);
-    if (line->composite_count >= UINT16_MAX) {
-        return YETTY_ERR(yetty_ycore_uint32, "yvterm attach_composite: too many composites");
-    }
-    struct yetty_ycore_void_result gr = ensure_composites(line, line->composite_count + 1u);
-    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, gr, "yvterm attach_composite: grow");
-    uint32_t index = line->composite_count;
-    line->composites[index] = composite;
-    line->composite_count++;
-    mark_dirty_row(grid, row);
-    return YETTY_OK(yetty_ycore_uint32, index);
+    return yetty_yvterm_grid_attach_composite(vterm->grid_obj, row, composite);
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_yvterm_vterm_add_composite_ref(
-    struct yetty_yclass_object *obj, uint32_t row, uint32_t col, uint16_t rel_line,
-    uint16_t index_in_list)
+struct yetty_ycore_void_result yetty_yvterm_vterm_add_composite_ref(struct yetty_yclass_object *obj,
+                                                                    uint32_t row, uint32_t col,
+                                                                    uint16_t rel_line,
+                                                                    uint16_t index_in_list)
 {
-    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm add_composite_ref: from_obj");
-    struct yetty_yvterm_grid *grid = &vterm_res.value->grid;
-    if (row >= grid->visible_rows || col >= grid->cols) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm add_composite_ref: out of range");
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    if (!vterm) {
+        return YETTY_ERR(yetty_ycore_void, "yvterm add_composite_ref: bad obj");
     }
-    /* The anchor (row + rel_line) must be a real visible line, and index_in_list
-     * must name an existing composite on it — otherwise the ref dangles. */
-    uint32_t anchor_row = (uint32_t)row + rel_line;
-    if (anchor_row >= grid->visible_rows) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm add_composite_ref: anchor out of range");
-    }
-    if (index_in_list >= line_at(grid, anchor_row)->composite_count) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm add_composite_ref: composite index out of range");
-    }
-    struct yetty_yvterm_drawable_refs *refs = refs_at(grid, row, col);
-    struct yetty_ycore_void_result gr =
-        ensure_composite_refs(refs, (uint16_t)(refs->composite_ref_count + 1u));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "yvterm add_composite_ref: grow");
-    refs->composite_refs[refs->composite_ref_count].rel_line = rel_line;
-    refs->composite_refs[refs->composite_ref_count].index_in_list = index_in_list;
-    refs->composite_ref_count++;
-    mark_dirty_row(grid, row);
-    return YETTY_OK_VOID();
+    return yetty_yvterm_grid_add_composite_ref(vterm->grid_obj, row, col, rel_line, index_in_list);
 }
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_yvterm_vterm_clear_rich_line(struct yetty_yclass_object *obj,
                                                                   uint32_t row)
 {
-    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm clear_rich_line: from_obj");
-    struct yetty_yvterm_grid *grid = &vterm_res.value->grid;
-    if (row >= grid->visible_rows) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm clear_rich_line: row out of range");
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    if (!vterm) {
+        return YETTY_ERR(yetty_ycore_void, "yvterm clear_rich_line: bad obj");
     }
-    clear_line_rich(line_at(grid, row), grid->cols);
-    /* Other visible lines may hold refs anchored here; drop them so clearing the
-     * owned storage cannot leave a dangling ref. */
-    drop_refs_to_anchor(grid, row);
-    mark_dirty_row(grid, row);
-    return YETTY_OK_VOID();
+    return yetty_yvterm_grid_clear_rich_line(vterm->grid_obj, row);
 }
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_yvterm_vterm_clear_rich_all(struct yetty_yclass_object *obj)
 {
-    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm clear_rich_all: from_obj");
-    struct yetty_yvterm_grid *grid = &vterm_res.value->grid;
-    for (uint32_t row = 0; row < grid->visible_rows; ++row) {
-        clear_line_rich(line_at(grid, row), grid->cols);
-        mark_dirty_row(grid, row);
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    if (!vterm) {
+        return YETTY_ERR(yetty_ycore_void, "yvterm clear_rich_all: bad obj");
     }
-    return YETTY_OK_VOID();
+    return yetty_yvterm_grid_clear_rich_all(vterm->grid_obj);
 }
 
 /*===========================================================================
- * Input, wire, selection, scrollback, zoom — terminal-facing methods.
+ * Input, wire, selection, scrollback, zoom — delegated to the grid model
+ * (except the renderer-local view/zoom state).
  *=========================================================================*/
-
-/* Map the terminal's GLFW-style modifier bitmask to libvterm modifiers. */
-static VTermModifier vterm_map_mods(int mods)
-{
-    int out = VTERM_MOD_NONE;
-    if (mods & 0x01) { /* shift */
-        out |= VTERM_MOD_SHIFT;
-    }
-    if (mods & 0x02) { /* control */
-        out |= VTERM_MOD_CTRL;
-    }
-    if (mods & 0x04) { /* alt */
-        out |= VTERM_MOD_ALT;
-    }
-    return (VTermModifier)out;
-}
-
-/* Drain libvterm's keyboard output ring to the PTY via the terminal's hook. */
-static struct yetty_ycore_void_result vterm_flush_output(struct yetty_yvterm_vterm *vterm)
-{
-    if (!vterm->pty_write_fn) {
-        return YETTY_OK_VOID();
-    }
-    char buf[256];
-    size_t got;
-    while ((got = vterm_output_read(vterm->grid.vterm, buf, sizeof(buf))) > 0) {
-        struct yetty_ycore_void_result wr =
-            vterm->pty_write_fn(buf, got, vterm->pty_write_userdata);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "vterm_flush_output: pty write");
-    }
-    return YETTY_OK_VOID();
-}
-
-/* Append one Unicode scalar to a buffer as UTF-8. */
-static struct yetty_ycore_void_result append_utf8(struct yetty_ycore_buffer *out, uint32_t cp)
-{
-    uint8_t bytes[4];
-    size_t len = 0;
-    if (cp < 0x80u) {
-        bytes[len++] = (uint8_t)cp;
-    } else if (cp < 0x800u) {
-        bytes[len++] = (uint8_t)(0xC0u | (cp >> 6));
-        bytes[len++] = (uint8_t)(0x80u | (cp & 0x3Fu));
-    } else if (cp < 0x10000u) {
-        bytes[len++] = (uint8_t)(0xE0u | (cp >> 12));
-        bytes[len++] = (uint8_t)(0x80u | ((cp >> 6) & 0x3Fu));
-        bytes[len++] = (uint8_t)(0x80u | (cp & 0x3Fu));
-    } else {
-        bytes[len++] = (uint8_t)(0xF0u | (cp >> 18));
-        bytes[len++] = (uint8_t)(0x80u | ((cp >> 12) & 0x3Fu));
-        bytes[len++] = (uint8_t)(0x80u | ((cp >> 6) & 0x3Fu));
-        bytes[len++] = (uint8_t)(0x80u | (cp & 0x3Fu));
-    }
-    return yetty_ycore_buffer_write(out, bytes, len);
-}
-
-/* Default wire sink: raw terminal bytes outside any envelope feed libvterm. */
-static struct yetty_ycore_void_result vterm_wire_default(void *userdata,
-                                                         struct yetty_ywire_wire_statemachine *sm)
-{
-    struct yetty_yvterm_vterm *vterm = userdata;
-    uint8_t buf[4096];
-    while (!yetty_ywire_wire_statemachine_at_end(sm)) {
-        struct yetty_ycore_size_result rr =
-            yetty_ywire_wire_statemachine_read(sm, buf, sizeof(buf));
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "vterm_wire_default: read");
-        if (rr.value == 0) {
-            break;
-        }
-        vterm_input_write(vterm->grid.vterm, (const char *)buf, rr.value);
-        /* libvterm answers terminal queries (cursor-position report, primary
-         * device attributes, …) by queueing output during input_write. Flush it
-         * back to the PTY right here, inside the loop. This sink runs as a
-         * long-lived coroutine whose read() yields for more bytes and never
-         * falls out of the loop, so a flush placed after the loop would be dead
-         * code. TUIs like fzf emit a query on startup and block until the reply
-         * lands; without an immediate flush they look frozen until the next
-         * keystroke forces an on_char flush (Ctrl-R not opening the menu). */
-        struct yetty_ycore_void_result fr = vterm_flush_output(vterm);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "vterm_wire_default: flush output");
-    }
-    return YETTY_OK_VOID();
-}
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_yvterm_vterm_register_wire(
     struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *sm)
 {
-    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm register_wire: from_obj");
-    struct yetty_ycore_void_result rr =
-        yetty_ywire_wire_statemachine_set_default(sm, vterm_wire_default, vterm_res.value);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yvterm register_wire: set_default");
-    return YETTY_OK_VOID();
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    if (!vterm) {
+        return YETTY_ERR(yetty_ycore_void, "yvterm register_wire: bad obj");
+    }
+    return yetty_yvterm_grid_register_wire(vterm->grid_obj, sm);
 }
 
 [[clang::annotate("expose")]]
 int yetty_yvterm_vterm_on_char(struct yetty_yclass_object *obj, uint32_t codepoint, int mods)
 {
     struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm || codepoint == 0) {
-        return 0;
-    }
-    vterm_keyboard_unichar(vterm->grid.vterm, codepoint, vterm_map_mods(mods));
-    struct yetty_ycore_void_result fr = vterm_flush_output(vterm);
-    if (YETTY_IS_ERR(fr)) {
-        yetty_ycore_error_destroy(fr.error);
-    }
-    return 1;
+    return vterm ? yetty_yvterm_grid_on_char(vterm->grid_obj, codepoint, mods) : 0;
 }
 
 [[clang::annotate("expose")]]
 int yetty_yvterm_vterm_on_key(struct yetty_yclass_object *obj, int key, int mods)
 {
     struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return 0;
-    }
-    /* GLFW special-key codes → libvterm keys. Printable keys arrive via
-     * on_char and are not handled here. */
-    VTermKey vk = VTERM_KEY_NONE;
-    switch (key) {
-    case 256: vk = VTERM_KEY_ESCAPE; break;
-    case 257: vk = VTERM_KEY_ENTER; break;
-    case 258: vk = VTERM_KEY_TAB; break;
-    case 259: vk = VTERM_KEY_BACKSPACE; break;
-    case 260: vk = VTERM_KEY_INS; break;
-    case 261: vk = VTERM_KEY_DEL; break;
-    case 262: vk = VTERM_KEY_RIGHT; break;
-    case 263: vk = VTERM_KEY_LEFT; break;
-    case 264: vk = VTERM_KEY_DOWN; break;
-    case 265: vk = VTERM_KEY_UP; break;
-    case 266: vk = VTERM_KEY_PAGEUP; break;
-    case 267: vk = VTERM_KEY_PAGEDOWN; break;
-    case 268: vk = VTERM_KEY_HOME; break;
-    case 269: vk = VTERM_KEY_END; break;
-    default: return 0;
-    }
-    vterm_keyboard_key(vterm->grid.vterm, vk, vterm_map_mods(mods));
-    struct yetty_ycore_void_result fr = vterm_flush_output(vterm);
-    if (YETTY_IS_ERR(fr)) {
-        yetty_ycore_error_destroy(fr.error);
-    }
-    return 1;
+    return vterm ? yetty_yvterm_grid_on_key(vterm->grid_obj, key, mods) : 0;
 }
 
 [[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_yvterm_vterm_set_selection(struct yetty_yclass_object *obj,
                                                                 int active, uint32_t anchor_row,
                                                                 uint32_t anchor_col,
-                                                                uint32_t head_row, uint32_t head_col)
+                                                                uint32_t head_row,
+                                                                uint32_t head_col)
 {
-    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm set_selection: from_obj");
-    struct yetty_yvterm_vterm *vterm = vterm_res.value;
-    vterm->selection_active = active;
-    vterm->selection_anchor_row = anchor_row;
-    vterm->selection_anchor_col = anchor_col;
-    vterm->selection_head_row = head_row;
-    vterm->selection_head_col = head_col;
-    return YETTY_OK_VOID();
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    if (!vterm) {
+        return YETTY_ERR(yetty_ycore_void, "yvterm set_selection: bad obj");
+    }
+    return yetty_yvterm_grid_set_selection(vterm->grid_obj, active, anchor_row, anchor_col,
+                                           head_row, head_col);
 }
 
-/* Stream selection: codepoints from the anchor cell to the head cell in
- * row-major order, newline between rows. Reads the unified model directly. */
 [[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_yvterm_vterm_get_selection_text(
     struct yetty_yclass_object *obj, struct yetty_ycore_buffer *out)
 {
-    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm get_selection_text: from_obj");
-    struct yetty_yvterm_vterm *vterm = vterm_res.value;
-    if (!out || !vterm->selection_active) {
-        return YETTY_OK_VOID();
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    if (!vterm) {
+        return YETTY_ERR(yetty_ycore_void, "yvterm get_selection_text: bad obj");
     }
-    struct yetty_yvterm_grid *grid = &vterm->grid;
-    uint32_t start_row = vterm->selection_anchor_row;
-    uint32_t start_col = vterm->selection_anchor_col;
-    uint32_t end_row = vterm->selection_head_row;
-    uint32_t end_col = vterm->selection_head_col;
-    if (start_row > end_row || (start_row == end_row && start_col > end_col)) {
-        uint32_t tr = start_row, tc = start_col;
-        start_row = end_row;
-        start_col = end_col;
-        end_row = tr;
-        end_col = tc;
-    }
-    for (uint32_t row = start_row; row <= end_row && row < grid->visible_rows; ++row) {
-        uint32_t first = (row == start_row) ? start_col : 0u;
-        uint32_t last = (row == end_row) ? end_col : (grid->cols ? grid->cols - 1u : 0u);
-        for (uint32_t col = first; col <= last && col < grid->cols; ++col) {
-            uint32_t cp = cell_at(grid, row, col)->codepoint;
-            if (cp) {
-                struct yetty_ycore_void_result ar = append_utf8(out, cp);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "yvterm get_selection_text: append");
-            }
-        }
-        if (row != end_row) {
-            struct yetty_ycore_void_result nr = yetty_ycore_buffer_write(out, "\n", 1);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, nr, "yvterm get_selection_text: newline");
-        }
-    }
-    return YETTY_OK_VOID();
+    return yetty_yvterm_grid_get_selection_text(vterm->grid_obj, out);
 }
 
 /* Scrollback is not yet backed by a history ring; the live screen is all there
