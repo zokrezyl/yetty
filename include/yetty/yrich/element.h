@@ -2,8 +2,8 @@
 /* Public interface for regular class(es) `element` (module: yrich).
  * Fully generated from the source .c — do not edit. This single
  * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), and any
- * `expose`d API. Public types come from `expose` annotations. */
+ * accessors, method stubs, create()/register(), exposed
+ * functions, and the public types the signatures use. */
 #ifndef YETTY_YCLASSGEN_YRICH_ELEMENT_H
 #define YETTY_YCLASSGEN_YRICH_ELEMENT_H
 
@@ -11,6 +11,14 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/yrich/yrich-types.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct yetty_ydraw_drawable_list;
+struct yetty_yrich_rect;
 
 struct yetty_yclass_ptr_result yetty_yrich_element_class_get(void);
 
@@ -19,14 +27,15 @@ struct yetty_yclass_ptr_result yetty_yrich_element_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_yrich_element;
-YETTY_YRESULT_DECLARE(yetty_yrich_element_ptr, struct yetty_yrich_element *);
+struct yetty_yrich_element_ptr_result {
+    int ok;
+    union {
+        struct yetty_yrich_element *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_yrich_element_ptr_result yetty_yrich_element_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yrich_element_to(struct yetty_yrich_element *data);
-
-struct yetty_ycore_int_result;
-struct yetty_ycore_void_result;
-struct yetty_ydraw_drawable_list;
-struct yetty_yrich_rect;
 
 struct yetty_ycore_void_result yetty_yrich_element_destroy(struct yetty_yclass_ctx *ctx,
                                                            struct yetty_yclass_object *obj);
@@ -79,11 +88,12 @@ struct yetty_yclass_object_ptr_result yetty_yrich_element_create(struct yetty_yc
 
 struct yetty_ycore_void_result yetty_yrich_register(void);
 
-/* Header-destined: the shared yrich value types (rect, element id Result)
- * the public element API above references. */
-#include <yetty/yrich/yrich-types.h>
 struct yetty_yrich_element_id_result yetty_yrich_element_id_value(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yrich_element_set_id(struct yetty_yclass_object *obj,
                                                           yetty_yrich_element_id id);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

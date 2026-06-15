@@ -41,7 +41,8 @@ struct yetty_ycore_void_result yetty_yrich_element_bounds(struct yetty_yclass_ct
  * Element base data slice — the first slice in every element object.
  *=========================================================================*/
 
-struct [[clang::annotate("class@yrich:element")]] yetty_yrich_element {
+struct [[clang::annotate("class@yrich:element"),
+         clang::annotate("include@yetty/yrich/yrich-types.h")]] yetty_yrich_element {
     yetty_yrich_element_id id;
 };
 
@@ -202,11 +203,5 @@ struct yetty_ycore_void_result yetty_yrich_element_set_id(struct yetty_yclass_ob
     data_res.value->id = id;
     return YETTY_OK_VOID();
 }
-
-#ifdef YCLASS_CODEGEN
-/* Header-destined: the shared yrich value types (rect, element id Result)
- * the public element API above references. */
-#include <yetty/yrich/yrich-types.h>
-#endif
 
 #include "element.gen.c"

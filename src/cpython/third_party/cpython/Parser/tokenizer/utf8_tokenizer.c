@@ -4,13 +4,12 @@
 #include "helpers.h"
 #include "../lexer/state.h"
 
-static int
-tok_underflow_string(struct tok_state *tok) {
+static int tok_underflow_string(struct tok_state *tok)
+{
     char *end = strchr(tok->inp, '\n');
     if (end != NULL) {
         end++;
-    }
-    else {
+    } else {
         end = strchr(tok->inp, '\0');
         if (end == tok->inp) {
             tok->done = E_EOF;
@@ -27,13 +26,13 @@ tok_underflow_string(struct tok_state *tok) {
 }
 
 /* Set up tokenizer for UTF-8 string */
-struct tok_state *
-_PyTokenizer_FromUTF8(const char *str, int exec_input, int preserve_crlf)
+struct tok_state *_PyTokenizer_FromUTF8(const char *str, int exec_input, int preserve_crlf)
 {
     struct tok_state *tok = _PyTokenizer_tok_new();
     char *translated;
-    if (tok == NULL)
+    if (tok == NULL) {
         return NULL;
+    }
     tok->input = translated = _PyTokenizer_translate_newlines(str, exec_input, preserve_crlf, tok);
     if (translated == NULL) {
         _PyTokenizer_Free(tok);

@@ -32,21 +32,11 @@
 YETTY_YRESULT_DECLARE(yetty_ygui_ynodes_ptr, struct yetty_ygui_ynodes *);
 struct yetty_yclass_ptr_result yetty_ygui_ynodes_class_get(void);
 struct yetty_ygui_ynodes_ptr_result yetty_ygui_ynodes_from(struct yetty_yclass_object *obj);
-/* Real-build copy of the header-destined link callback typedef. Codegen
- * reads the `#ifdef YCLASS_CODEGEN` block at the foot (copied verbatim into
- * the generated header); the two never coexist in one parse. */
-#ifdef YCLASS_CODEGEN
-#include <yetty/ycore/result.h>
-#include <yetty/ygui/widget.h>
+/* Link callback type. Defined here in the owning .c; codegen reproduces it
+ * into the generated header for any public signature that references it. */
 typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(
     struct yetty_yclass_object *editor, struct yetty_yclass_object *from, int out_idx,
     struct yetty_yclass_object *to, int in_idx, void *userdata);
-#endif
-#ifndef YCLASS_CODEGEN
-typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(
-    struct yetty_yclass_object *editor, struct yetty_yclass_object *from, int out_idx,
-    struct yetty_yclass_object *to, int in_idx, void *userdata);
-#endif
 #include "paint-helpers.h"
 
 #include <yetty/yfigure/wire.h>

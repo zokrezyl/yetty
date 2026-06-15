@@ -2,8 +2,8 @@
 /* Public interface for regular class(es) `chrome` (module: ychrome).
  * Fully generated from the source .c — do not edit. This single
  * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), and any
- * `expose`d API. Public types come from `expose` annotations. */
+ * accessors, method stubs, create()/register(), exposed
+ * functions, and the public types the signatures use. */
 #ifndef YETTY_YCLASSGEN_YCHROME_CHROME_H
 #define YETTY_YCLASSGEN_YCHROME_CHROME_H
 
@@ -11,6 +11,20 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ydraw-core/drawable-list.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct yetty_yui_event;
+
+enum yetty_ychrome_flag {
+    YETTY_YCHROME_FLAG_DRAG = 1,
+    YETTY_YCHROME_FLAG_RESIZE = 2,
+    YETTY_YCHROME_FLAG_MAXIMIZE = 4,
+    YETTY_YCHROME_FLAG_ALL = 7,
+};
 
 struct yetty_yclass_ptr_result yetty_ychrome_chrome_class_get(void);
 
@@ -19,14 +33,15 @@ struct yetty_yclass_ptr_result yetty_ychrome_chrome_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_ychrome_chrome;
-YETTY_YRESULT_DECLARE(yetty_ychrome_chrome_ptr, struct yetty_ychrome_chrome *);
+struct yetty_ychrome_chrome_ptr_result {
+    int ok;
+    union {
+        struct yetty_ychrome_chrome *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_ychrome_chrome_ptr_result yetty_ychrome_chrome_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_ychrome_chrome_to(struct yetty_ychrome_chrome *data);
-
-struct yetty_ycore_int_result;
-struct yetty_ycore_void_result;
-struct yetty_ydraw_drawable_list_result;
-struct yetty_yui_event;
 
 struct yetty_ycore_void_result yetty_ychrome_configure(struct yetty_yclass_ctx *ctx,
                                                        struct yetty_yclass_object *obj,
@@ -67,17 +82,10 @@ struct yetty_yclass_object_ptr_result yetty_ychrome_chrome_create(struct yetty_y
 
 struct yetty_ycore_void_result yetty_ychrome_register(void);
 
-/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated chrome.h (and the dispatch TU that includes it) needs the complete
- * type — pull its defining header into the public header. */
-#include <yetty/ydraw-core/drawable-list.h>
-/* Feature flags for configure(). OR them together; FLAG_ALL enables the lot.
- * Copied verbatim into the generated chrome.h. */
-#define YETTY_YCHROME_FLAG_DRAG 0x1u     /* caption drag moves the window      */
-#define YETTY_YCHROME_FLAG_RESIZE 0x2u   /* right/bottom edges resize          */
-#define YETTY_YCHROME_FLAG_MAXIMIZE 0x4u /* caption double-click toggles max   */
-#define YETTY_YCHROME_FLAG_ALL                                                                     \
-    (YETTY_YCHROME_FLAG_DRAG | YETTY_YCHROME_FLAG_RESIZE | YETTY_YCHROME_FLAG_MAXIMIZE)
 struct yetty_ycore_int_result yetty_ychrome_hover_button(struct yetty_yclass_object *obj);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

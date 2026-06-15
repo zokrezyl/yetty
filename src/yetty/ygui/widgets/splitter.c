@@ -18,19 +18,10 @@
 YETTY_YRESULT_DECLARE(yetty_ygui_splitter_ptr, struct yetty_ygui_splitter *);
 struct yetty_yclass_ptr_result yetty_ygui_splitter_class_get(void);
 struct yetty_ygui_splitter_ptr_result yetty_ygui_splitter_from(struct yetty_yclass_object *obj);
-/* Real-build copy of the header-destined change callback typedef. Codegen
- * reads the `#ifdef YCLASS_CODEGEN` block at the foot (copied verbatim into
- * the generated header); the two never coexist in one parse. */
-#ifdef YCLASS_CODEGEN
-struct yetty_yclass_object;
+/* Change callback type. Defined here in the owning .c; codegen reproduces it
+ * into the generated header for any public signature that references it. */
 typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_yclass_object *splitter, float delta,
                                               void *userdata);
-#endif
-#ifndef YCLASS_CODEGEN
-struct yetty_yclass_object;
-typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_yclass_object *splitter, float delta,
-                                              void *userdata);
-#endif
 #include "paint-helpers.h"
 #include <yetty/ygui/primitive-widget.h>
 

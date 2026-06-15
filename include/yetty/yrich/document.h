@@ -2,8 +2,8 @@
 /* Public interface for regular class(es) `document` (module: yrich).
  * Fully generated from the source .c — do not edit. This single
  * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), and any
- * `expose`d API. Public types come from `expose` annotations. */
+ * accessors, method stubs, create()/register(), exposed
+ * functions, and the public types the signatures use. */
 #ifndef YETTY_YCLASSGEN_YRICH_DOCUMENT_H
 #define YETTY_YCLASSGEN_YRICH_DOCUMENT_H
 
@@ -11,6 +11,17 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/yrich/yrich-operation.h>
+#include <yetty/yrich/yrich-types.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct yetty_ydraw_drawable_list;
+struct yetty_yrich_command;
+struct yetty_yrich_operation;
+struct yetty_yrich_selection;
 
 struct yetty_yclass_ptr_result yetty_yrich_document_class_get(void);
 
@@ -19,13 +30,15 @@ struct yetty_yclass_ptr_result yetty_yrich_document_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_yrich_document;
-YETTY_YRESULT_DECLARE(yetty_yrich_document_ptr, struct yetty_yrich_document *);
+struct yetty_yrich_document_ptr_result {
+    int ok;
+    union {
+        struct yetty_yrich_document *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_yrich_document_ptr_result yetty_yrich_document_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yrich_document_to(struct yetty_yrich_document *data);
-
-struct yetty_ycore_float_result;
-struct yetty_ycore_void_result;
-struct yetty_yrich_operation;
 
 struct yetty_ycore_void_result yetty_yrich_constructor(struct yetty_yclass_ctx *ctx,
                                                        struct yetty_yclass_object *obj);
@@ -100,14 +113,6 @@ struct yetty_yclass_object_ptr_result yetty_yrich_document_create(struct yetty_y
 
 struct yetty_ycore_void_result yetty_yrich_register(void);
 
-struct yetty_ydraw_drawable_list;
-struct yetty_yrich_command;
-struct yetty_yrich_selection;
-
-/* Header-destined: the shared yrich value types (callbacks, element id
- * Result) and the operation Result the public document API references. */
-#include <yetty/yrich/yrich-operation.h>
-#include <yetty/yrich/yrich-types.h>
 struct yetty_ycore_void_result yetty_yrich_super_void(struct yetty_yclass_object *obj,
                                                       const struct yetty_yclass *self_class,
                                                       yetty_yclass_method_id_t method_id);
@@ -144,5 +149,9 @@ struct yetty_ycore_void_result yetty_yrich_document_clear_selection(
 struct yetty_ycore_void_result yetty_yrich_document_clear_history(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yrich_document_execute(struct yetty_yclass_object *obj,
                                                             struct yetty_yrich_command *cmd);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -2,8 +2,8 @@
 /* Public interface for regular class(es) `menubar` (module: ygui).
  * Fully generated from the source .c — do not edit. This single
  * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), and any
- * `expose`d API. Public types come from `expose` annotations. */
+ * accessors, method stubs, create()/register(), exposed
+ * functions, and the public types the signatures use. */
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_MENUBAR_H
 #define YETTY_YCLASSGEN_YGUI_WIDGETS_MENUBAR_H
 
@@ -12,6 +12,10 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 struct yetty_yclass_ptr_result yetty_ygui_menubar_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct
@@ -19,7 +23,13 @@ struct yetty_yclass_ptr_result yetty_ygui_menubar_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_ygui_menubar;
-YETTY_YRESULT_DECLARE(yetty_ygui_menubar_ptr, struct yetty_ygui_menubar *);
+struct yetty_ygui_menubar_ptr_result {
+    int ok;
+    union {
+        struct yetty_ygui_menubar *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_ygui_menubar_ptr_result yetty_ygui_menubar_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_ygui_menubar_to(struct yetty_ygui_menubar *data);
 
@@ -30,5 +40,9 @@ struct yetty_ycore_void_result yetty_ygui_register(void);
 struct yetty_ycore_void_result yetty_ygui_menubar_add(struct yetty_yclass_object *bar,
                                                       const char *label,
                                                       struct yetty_yclass_object *menu);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

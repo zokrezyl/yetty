@@ -55,7 +55,9 @@ struct yetty_ycore_void_result yetty_yrich_document_redo(struct yetty_yclass_ctx
  * Document base data slice — the first slice in every document object.
  *=========================================================================*/
 
-struct [[clang::annotate("class@yrich:document")]] yetty_yrich_document {
+struct [[clang::annotate("class@yrich:document"),
+         clang::annotate("include@yetty/yrich/yrich-operation.h"),
+         clang::annotate("include@yetty/yrich/yrich-types.h")]] yetty_yrich_document {
     /* Elements — flat array of element objects, insertion ordered, owned. */
     struct yetty_yclass_object **elements;
     size_t element_count;
@@ -840,12 +842,5 @@ static struct yetty_ycore_void_result document_default_on_text_input(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, insert_res, "document_on_text_input: insert_text");
     return yetty_yrich_document_mark_dirty(obj);
 }
-
-#ifdef YCLASS_CODEGEN
-/* Header-destined: the shared yrich value types (callbacks, element id
- * Result) and the operation Result the public document API references. */
-#include <yetty/yrich/yrich-operation.h>
-#include <yetty/yrich/yrich-types.h>
-#endif
 
 #include "document.gen.c"

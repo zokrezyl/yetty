@@ -13,6 +13,7 @@ methods:
       - name: allowed
         type: int
     local: true
+    return_payload_type: null
   - slot: handle_event
     domain: yai
     owning_class: engine
@@ -27,6 +28,7 @@ methods:
       - name: event
         type: "struct yyjson_val *"
     local: true
+    return_payload_type: null
   - slot: send_user_message
     domain: yai
     owning_class: engine
@@ -41,6 +43,7 @@ methods:
       - name: text
         type: "const char *"
     local: true
+    return_payload_type: null
   - slot: interrupt
     domain: yai
     owning_class: engine
@@ -53,6 +56,7 @@ methods:
       - name: app
         type: "struct yai_app *"
     local: true
+    return_payload_type: null
   - slot: start
     domain: yai
     owning_class: engine
@@ -65,6 +69,7 @@ methods:
       - name: app
         type: "struct yai_app *"
     local: true
+    return_payload_type: null
   - slot: describe_config
     domain: yai
     owning_class: engine
@@ -81,6 +86,7 @@ methods:
       - name: out_size
         type: size_t
     local: true
+    return_payload_type: null
   - slot: config_knob
     domain: yai
     owning_class: engine
@@ -97,6 +103,7 @@ methods:
       - name: out_size
         type: size_t
     local: true
+    return_payload_type: null
   - slot: apply_config
     domain: yai
     owning_class: engine
@@ -113,6 +120,7 @@ methods:
       - name: value
         type: "const char *"
     local: true
+    return_payload_type: null
   - slot: on_child_exit
     domain: yai
     owning_class: engine
@@ -127,6 +135,7 @@ methods:
       - name: exit_status
         type: int64_t
     local: true
+    return_payload_type: null
   - slot: on_child_eof
     domain: yai
     owning_class: engine
@@ -139,6 +148,7 @@ methods:
       - name: app
         type: "struct yai_app *"
     local: true
+    return_payload_type: null
   - slot: feed_byte
     domain: yai
     owning_class: editor
@@ -153,6 +163,7 @@ methods:
       - name: byte
         type: int
     local: true
+    return_payload_type: int
 classes:
   - name: claude
     domain: yai
@@ -471,3 +482,38 @@ types:
             type: int
           - name: error
             type: struct yetty_ycore_error
+local_types:
+  yai_tool_name_entry: tools/ai/yai/claude.c
+  yetty_yai_claude: tools/ai/yai/claude.c
+  yetty_yai_claude_ptr_result: tools/ai/yai/claude.c
+  yai_child_write: tools/ai/yai/claude.c
+  yetty_yai_codex: tools/ai/yai/codex.c
+  yetty_yai_codex_ptr_result: tools/ai/yai/codex.c
+  yetty_yai_emacs: tools/ai/yai/editor-emacs.c
+  yetty_yai_emacs_ptr_result: tools/ai/yai/editor-emacs.c
+  yetty_yai_vi: tools/ai/yai/editor-vi.c
+  yetty_yai_vi_ptr_result: tools/ai/yai/editor-vi.c
+  yetty_yai_editor: tools/ai/yai/editor.c
+  yetty_yai_editor_ptr_result: tools/ai/yai/editor.c
+  yetty_yai_engine: tools/ai/yai/engine.c
+  yetty_yai_engine_ptr_result: tools/ai/yai/engine.c
+  yetty_yai_gemini: tools/ai/yai/gemini.c
+  yetty_yai_gemini_ptr_result: tools/ai/yai/gemini.c
+  yetty_yai_turn_engine: tools/ai/yai/turn-engine.c
+  yetty_yai_turn_engine_ptr_result: tools/ai/yai/turn-engine.c
+local_typedefs:
+  __int128_t:
+    source_file: tools/ai/yai/claude.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: tools/ai/yai/claude.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: tools/ai/yai/claude.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: tools/ai/yai/claude.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: tools/ai/yai/claude.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

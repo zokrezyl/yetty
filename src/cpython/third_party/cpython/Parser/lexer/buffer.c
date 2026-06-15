@@ -5,8 +5,7 @@
 
 /* Traverse and remember all f-string buffers, in order to be able to restore
    them after reallocating tok->buf */
-void
-_PyLexer_remember_fstring_buffers(struct tok_state *tok)
+void _PyLexer_remember_fstring_buffers(struct tok_state *tok)
 {
     int index;
     tokenizer_mode *mode;
@@ -14,13 +13,13 @@ _PyLexer_remember_fstring_buffers(struct tok_state *tok)
     for (index = tok->tok_mode_stack_index; index >= 0; --index) {
         mode = &(tok->tok_mode_stack[index]);
         mode->start_offset = mode->start == NULL ? -1 : mode->start - tok->buf;
-        mode->multi_line_start_offset = mode->multi_line_start == NULL ? -1 : mode->multi_line_start - tok->buf;
+        mode->multi_line_start_offset =
+            mode->multi_line_start == NULL ? -1 : mode->multi_line_start - tok->buf;
     }
 }
 
 /* Traverse and restore all f-string buffers after reallocating tok->buf */
-void
-_PyLexer_restore_fstring_buffers(struct tok_state *tok)
+void _PyLexer_restore_fstring_buffers(struct tok_state *tok)
 {
     int index;
     tokenizer_mode *mode;
@@ -28,7 +27,8 @@ _PyLexer_restore_fstring_buffers(struct tok_state *tok)
     for (index = tok->tok_mode_stack_index; index >= 0; --index) {
         mode = &(tok->tok_mode_stack[index]);
         mode->start = mode->start_offset < 0 ? NULL : tok->buf + mode->start_offset;
-        mode->multi_line_start = mode->multi_line_start_offset < 0 ? NULL : tok->buf + mode->multi_line_start_offset;
+        mode->multi_line_start =
+            mode->multi_line_start_offset < 0 ? NULL : tok->buf + mode->multi_line_start_offset;
     }
 }
 
@@ -46,8 +46,7 @@ _PyLexer_restore_fstring_buffers(struct tok_state *tok)
        until the buffer ends with a '\n' (or until the end of the file is
        reached): see tok_nextc and its calls to tok_reserve_buf.
 */
-int
-_PyLexer_tok_reserve_buf(struct tok_state *tok, Py_ssize_t size)
+int _PyLexer_tok_reserve_buf(struct tok_state *tok, Py_ssize_t size)
 {
     Py_ssize_t cur = tok->cur - tok->buf;
     Py_ssize_t oldsize = tok->inp - tok->buf;

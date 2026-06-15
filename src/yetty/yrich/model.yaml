@@ -9,6 +9,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: null
   - slot: document_destroy
     domain: yrich
     owning_class: document
@@ -19,6 +20,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
   - slot: document_content_width
     domain: yrich
     owning_class: document
@@ -29,6 +31,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: float
   - slot: document_content_height
     domain: yrich
     owning_class: document
@@ -39,6 +42,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: float
   - slot: document_render
     domain: yrich
     owning_class: document
@@ -49,6 +53,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
   - slot: document_apply_op
     domain: yrich
     owning_class: document
@@ -63,6 +68,7 @@ methods:
       - name: local_flag
         type: int
     local: true
+    return_payload_type: null
   - slot: document_undo
     domain: yrich
     owning_class: document
@@ -73,6 +79,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: null
   - slot: document_redo
     domain: yrich
     owning_class: document
@@ -83,6 +90,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: null
   - slot: document_on_mouse_down
     domain: yrich
     owning_class: document
@@ -101,6 +109,7 @@ methods:
       - name: mods
         type: uint32_t
     local: false
+    return_payload_type: null
   - slot: document_on_mouse_up
     domain: yrich
     owning_class: document
@@ -119,6 +128,7 @@ methods:
       - name: mods
         type: uint32_t
     local: false
+    return_payload_type: null
   - slot: document_on_mouse_drag
     domain: yrich
     owning_class: document
@@ -137,6 +147,7 @@ methods:
       - name: mods
         type: uint32_t
     local: false
+    return_payload_type: null
   - slot: document_on_mouse_double_click
     domain: yrich
     owning_class: document
@@ -155,6 +166,7 @@ methods:
       - name: mods
         type: uint32_t
     local: false
+    return_payload_type: null
   - slot: document_on_key_down
     domain: yrich
     owning_class: document
@@ -169,6 +181,7 @@ methods:
       - name: mods
         type: uint32_t
     local: false
+    return_payload_type: null
   - slot: document_on_text_input
     domain: yrich
     owning_class: document
@@ -181,6 +194,7 @@ methods:
       - name: text
         type: struct yetty_ycore_buffer
     local: false
+    return_payload_type: null
   - slot: element_destroy
     domain: yrich
     owning_class: element
@@ -191,6 +205,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
   - slot: element_bounds
     domain: yrich
     owning_class: element
@@ -203,6 +218,7 @@ methods:
       - name: out_bounds
         type: "struct yetty_yrich_rect *"
     local: true
+    return_payload_type: null
   - slot: element_hit_test
     domain: yrich
     owning_class: element
@@ -217,6 +233,7 @@ methods:
       - name: y
         type: float
     local: false
+    return_payload_type: int
   - slot: element_render
     domain: yrich
     owning_class: element
@@ -233,6 +250,7 @@ methods:
       - name: selected
         type: int
     local: true
+    return_payload_type: null
   - slot: element_is_editable
     domain: yrich
     owning_class: element
@@ -243,6 +261,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: int
   - slot: element_begin_edit
     domain: yrich
     owning_class: element
@@ -253,6 +272,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: null
   - slot: element_end_edit
     domain: yrich
     owning_class: element
@@ -263,6 +283,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: null
   - slot: element_is_editing
     domain: yrich
     owning_class: element
@@ -273,6 +294,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: int
   - slot: element_insert_text
     domain: yrich
     owning_class: element
@@ -285,6 +307,7 @@ methods:
       - name: text
         type: struct yetty_ycore_buffer
     local: false
+    return_payload_type: null
   - slot: element_delete_sel
     domain: yrich
     owning_class: element
@@ -295,6 +318,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: null
   - slot: slides_set_current
     domain: yrich
     owning_class: slides
@@ -307,6 +331,7 @@ methods:
       - name: index
         type: int32_t
     local: false
+    return_payload_type: null
   - slot: slides_next
     domain: yrich
     owning_class: slides
@@ -317,6 +342,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: null
   - slot: slides_prev
     domain: yrich
     owning_class: slides
@@ -327,6 +353,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: null
   - slot: spreadsheet_set_grid_size
     domain: yrich
     owning_class: spreadsheet
@@ -341,6 +368,7 @@ methods:
       - name: cols
         type: int32_t
     local: false
+    return_payload_type: null
   - slot: spreadsheet_set_row_height
     domain: yrich
     owning_class: spreadsheet
@@ -355,6 +383,7 @@ methods:
       - name: height
         type: float
     local: false
+    return_payload_type: null
   - slot: spreadsheet_set_col_width
     domain: yrich
     owning_class: spreadsheet
@@ -369,6 +398,7 @@ methods:
       - name: width
         type: float
     local: false
+    return_payload_type: null
   - slot: spreadsheet_set_cell_value
     domain: yrich
     owning_class: spreadsheet
@@ -385,6 +415,7 @@ methods:
       - name: value
         type: struct yetty_ycore_buffer
     local: false
+    return_payload_type: null
   - slot: ydoc_toggle_format
     domain: yrich
     owning_class: ydoc
@@ -397,6 +428,7 @@ methods:
       - name: format_flag
         type: uint32_t
     local: false
+    return_payload_type: null
   - slot: ydoc_set_text_color
     domain: yrich
     owning_class: ydoc
@@ -409,6 +441,7 @@ methods:
       - name: color
         type: uint32_t
     local: false
+    return_payload_type: null
   - slot: ydoc_set_alignment
     domain: yrich
     owning_class: ydoc
@@ -421,6 +454,7 @@ methods:
       - name: halign
         type: uint32_t
     local: false
+    return_payload_type: null
   - slot: ydoc_set_heading
     domain: yrich
     owning_class: ydoc
@@ -433,6 +467,7 @@ methods:
       - name: level
         type: uint32_t
     local: false
+    return_payload_type: null
   - slot: ydoc_change_font_size
     domain: yrich
     owning_class: ydoc
@@ -445,6 +480,7 @@ methods:
       - name: delta
         type: float
     local: false
+    return_payload_type: null
 classes:
   - name: document
     domain: yrich
@@ -1221,11 +1257,6 @@ classes:
         impl: ydoc_change_font_size_impl
 exposed:
   - source_file: src/yetty/yrich/document.c
-    verbatim: "/* Header-destined: the shared yrich value types (callbacks, element id
- * Result) and the operation Result the public document API references. */
-#include <yetty/yrich/yrich-operation.h>
-#include <yetty/yrich/yrich-types.h>"
-  - source_file: src/yetty/yrich/document.c
     name: yetty_yrich_super_void
     return_type: struct yetty_ycore_void_result
     args:
@@ -1384,10 +1415,6 @@ exposed:
       - name: cmd
         type: "struct yetty_yrich_command *"
   - source_file: src/yetty/yrich/element.c
-    verbatim: "/* Header-destined: the shared yrich value types (rect, element id Result)
- * the public element API above references. */
-#include <yetty/yrich/yrich-types.h>"
-  - source_file: src/yetty/yrich/element.c
     name: yetty_yrich_element_id_value
     return_type: struct yetty_yrich_element_id_result
     args:
@@ -1402,19 +1429,13 @@ exposed:
       - name: id
         type: yetty_yrich_element_id
   - source_file: src/yetty/yrich/slides.c
-    verbatim: "/* Header-destined content for the generated slides.h (skipped by the real
- * build, which defines the enum in the #ifndef block above). The types
- * include carries the slide aggregate + its Result the slide-management
- * API above references. */
-#include <yetty/yrich/yrich-types.h>
-
-enum yetty_yrich_shape_kind {
+    type_text: "enum yetty_yrich_shape_kind {
     YETTY_YRICH_SHAPE_RECTANGLE = 0,
-    YETTY_YRICH_SHAPE_ELLIPSE,
-    YETTY_YRICH_SHAPE_TEXTBOX,
-    YETTY_YRICH_SHAPE_LINE,
-    YETTY_YRICH_SHAPE_ARROW,
-    YETTY_YRICH_SHAPE_IMAGE,
+    YETTY_YRICH_SHAPE_ELLIPSE = 1,
+    YETTY_YRICH_SHAPE_TEXTBOX = 2,
+    YETTY_YRICH_SHAPE_LINE = 3,
+    YETTY_YRICH_SHAPE_ARROW = 4,
+    YETTY_YRICH_SHAPE_IMAGE = 5,
 };"
   - source_file: src/yetty/yrich/slides.c
     name: yetty_yrich_shape_set_text
@@ -1555,10 +1576,6 @@ enum yetty_yrich_shape_kind {
       - name: height
         type: float
   - source_file: src/yetty/yrich/spreadsheet.c
-    verbatim: "/* Header-destined: the shared yrich value types (cell address) the public
- * spreadsheet API above references. */
-#include <yetty/yrich/yrich-types.h>"
-  - source_file: src/yetty/yrich/spreadsheet.c
     name: yetty_yrich_cell_set_text
     return_type: struct yetty_ycore_void_result
     args:
@@ -1646,10 +1663,6 @@ enum yetty_yrich_shape_kind {
         type: float
       - name: y
         type: float
-  - source_file: src/yetty/yrich/ydoc.c
-    verbatim: "/* Header-destined: the shared yrich value types the public ydoc API above
- * references. */
-#include <yetty/yrich/yrich-types.h>"
   - source_file: src/yetty/yrich/ydoc.c
     name: yetty_yrich_paragraph_set_text
     return_type: struct yetty_ycore_void_result
@@ -2099,3 +2112,67 @@ types:
         type: uint32_t
       - name: font_id
         type: int32_t
+local_types:
+  yetty_yrich_document_ptr_result: src/yetty/yrich/document.c
+  yetty_yrich_document: src/yetty/yrich/document.c
+  yetty_yrich_element_ptr_result: src/yetty/yrich/element.c
+  yetty_yrich_element: src/yetty/yrich/element.c
+  yetty_yrich_slides_ptr_result: src/yetty/yrich/slides.c
+  yetty_yrich_shape_ptr_result: src/yetty/yrich/slides.c
+  yetty_yrich_shape: src/yetty/yrich/slides.c
+  yetty_yrich_shape_kind: src/yetty/yrich/slides.c
+  yetty_yrich_slides: src/yetty/yrich/slides.c
+  yetty_yrich_spreadsheet_ptr_result: src/yetty/yrich/spreadsheet.c
+  yetty_yrich_cell_ptr_result: src/yetty/yrich/spreadsheet.c
+  yetty_yrich_cell: src/yetty/yrich/spreadsheet.c
+  yetty_yrich_cell_entry: src/yetty/yrich/spreadsheet.c
+  yetty_yrich_row_size: src/yetty/yrich/spreadsheet.c
+  yetty_yrich_col_size: src/yetty/yrich/spreadsheet.c
+  yetty_yrich_spreadsheet: src/yetty/yrich/spreadsheet.c
+  yetty_yrich_ydoc_ptr_result: src/yetty/yrich/ydoc.c
+  yetty_yrich_paragraph_ptr_result: src/yetty/yrich/ydoc.c
+  yetty_yrich_inline_image_ptr_result: src/yetty/yrich/ydoc.c
+  yetty_yrich_paragraph: src/yetty/yrich/ydoc.c
+  paragraph_line: src/yetty/yrich/ydoc.c
+  caret_place: src/yetty/yrich/ydoc.c
+  caret_target: src/yetty/yrich/ydoc.c
+  line_lookup: src/yetty/yrich/ydoc.c
+  char_attrs: src/yetty/yrich/ydoc.c
+  paragraph_render_pass: src/yetty/yrich/ydoc.c
+  yetty_yrich_inline_image: src/yetty/yrich/ydoc.c
+  yetty_yrich_ydoc: src/yetty/yrich/ydoc.c
+  ydoc_active_paragraph: src/yetty/yrich/ydoc.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/yrich/document.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/yrich/document.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/yrich/document.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/yrich/document.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/yrich/document.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  fn_t:
+    source_file: src/yetty/yrich/document.c
+    text: "typedef struct yetty_ycore_void_result (*fn_t)(struct yetty_yclass_ctx *, struct yetty_yclass_object *);"
+  paragraph_line_visitor:
+    source_file: src/yetty/yrich/ydoc.c
+    text: "typedef int (*paragraph_line_visitor)(const struct paragraph_line *, size_t, void *);"
+includes:
+  src/yetty/yrich/document.c:
+    - yetty/yrich/yrich-operation.h
+    - yetty/yrich/yrich-types.h
+  src/yetty/yrich/element.c:
+    - yetty/yrich/yrich-types.h
+  src/yetty/yrich/slides.c:
+    - yetty/yrich/yrich-types.h
+  src/yetty/yrich/spreadsheet.c:
+    - yetty/yrich/yrich-types.h
+  src/yetty/yrich/ydoc.c:
+    - yetty/yrich/yrich-types.h

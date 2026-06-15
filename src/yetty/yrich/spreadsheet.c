@@ -366,8 +366,9 @@ struct yetty_yrich_col_size {
     float width;
 };
 
-struct [[clang::annotate("class@yrich:spreadsheet")]] [[clang::annotate("parent@yrich:document")]]
-yetty_yrich_spreadsheet {
+struct [[clang::annotate("class@yrich:spreadsheet"),
+         clang::annotate("include@yetty/yrich/yrich-types.h")]] [[clang::annotate(
+    "parent@yrich:document")]] yetty_yrich_spreadsheet {
     int32_t row_count;
     int32_t col_count;
     float default_row_height;
@@ -875,11 +876,5 @@ struct yetty_yrich_cell_addr yetty_yrich_spreadsheet_cell_addr_at(struct yetty_y
     }
     return addr;
 }
-
-#ifdef YCLASS_CODEGEN
-/* Header-destined: the shared yrich value types (cell address) the public
- * spreadsheet API above references. */
-#include <yetty/yrich/yrich-types.h>
-#endif
 
 #include "spreadsheet.gen.c"

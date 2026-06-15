@@ -208,3 +208,24 @@ types:
             type: "struct yetty_ymgui_figure *"
           - name: error
             type: struct yetty_ycore_error
+local_types:
+  yetty_ymgui_figure: src/yetty/ymgui/figure.c
+  yetty_ymgui_figure_ptr_result: src/yetty/ymgui/figure.c
+  yetty_ymgui_factory_args: src/yetty/ymgui/figure.c
+  cl_offsets: src/yetty/ymgui/figure.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ymgui/figure.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ymgui/figure.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ymgui/figure.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ymgui/figure.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ymgui/figure.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

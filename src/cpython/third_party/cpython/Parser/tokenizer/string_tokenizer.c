@@ -4,13 +4,12 @@
 #include "helpers.h"
 #include "../lexer/state.h"
 
-static int
-tok_underflow_string(struct tok_state *tok) {
+static int tok_underflow_string(struct tok_state *tok)
+{
     char *end = strchr(tok->inp, '\n');
     if (end != NULL) {
         end++;
-    }
-    else {
+    } else {
         end = strchr(tok->inp, '\0');
         if (end == tok->inp) {
             tok->done = E_EOF;
@@ -27,22 +26,22 @@ tok_underflow_string(struct tok_state *tok) {
 }
 
 /* Fetch a byte from TOK, using the string buffer. */
-static int
-buf_getc(struct tok_state *tok) {
+static int buf_getc(struct tok_state *tok)
+{
     return Py_CHARMASK(*tok->str++);
 }
 
 /* Unfetch a byte from TOK, using the string buffer. */
-static void
-buf_ungetc(int c, struct tok_state *tok) {
+static void buf_ungetc(int c, struct tok_state *tok)
+{
     tok->str--;
-    assert(Py_CHARMASK(*tok->str) == c);        /* tok->cur may point to read-only segment */
+    assert(Py_CHARMASK(*tok->str) == c); /* tok->cur may point to read-only segment */
 }
 
 /* Set the readline function for TOK to ENC. For the string-based
    tokenizer, this means to just record the encoding. */
-static int
-buf_setreadl(struct tok_state *tok, const char* enc) {
+static int buf_setreadl(struct tok_state *tok, const char *enc)
+{
     tok->enc = enc;
     return 1;
 }
@@ -50,36 +49,41 @@ buf_setreadl(struct tok_state *tok, const char* enc) {
 /* Decode a byte string STR for use as the buffer of TOK.
    Look for encoding declarations inside STR, and record them
    inside TOK.  */
-static char *
-decode_str(const char *input, int single, struct tok_state *tok, int preserve_crlf)
+static char *decode_str(const char *input, int single, struct tok_state *tok, int preserve_crlf)
 {
-    PyObject* utf8 = NULL;
+    PyObject *utf8 = NULL;
     char *str;
     const char *s;
     const char *newl[2] = {NULL, NULL};
     int lineno = 0;
     tok->input = str = _PyTokenizer_translate_newlines(input, single, preserve_crlf, tok);
-    if (str == NULL)
+    if (str == NULL) {
         return NULL;
+    }
     tok->enc = NULL;
     tok->str = str;
-    if (!_PyTokenizer_check_bom(buf_getc, buf_ungetc, buf_setreadl, tok))
+    if (!_PyTokenizer_check_bom(buf_getc, buf_ungetc, buf_setreadl, tok)) {
         return _PyTokenizer_error_ret(tok);
-    str = tok->str;             /* string after BOM if any */
+    }
+    str = tok->str; /* string after BOM if any */
     assert(str);
     if (tok->enc != NULL) {
         utf8 = _PyTokenizer_translate_into_utf8(str, tok->enc);
-        if (utf8 == NULL)
+        if (utf8 == NULL) {
             return _PyTokenizer_error_ret(tok);
+        }
         str = PyBytes_AsString(utf8);
     }
     for (s = str;; s++) {
-        if (*s == '\0') break;
-        else if (*s == '\n') {
+        if (*s == '\0') {
+            break;
+        } else if (*s == '\n') {
             assert(lineno < 2);
             newl[lineno] = s;
             lineno++;
-            if (lineno == 2) break;
+            if (lineno == 2) {
+                break;
+            }
         }
     }
     tok->enc = NULL;
@@ -92,25 +96,25 @@ decode_str(const char *input, int single, struct tok_state *tok, int preserve_cr
         }
         if (tok->enc == NULL && tok->decoding_state != STATE_NORMAL && newl[1]) {
             tok->lineno = 2;
-            if (!_PyTokenizer_check_coding_spec(newl[0]+1, newl[1] - newl[0],
-                                   tok, buf_setreadl))
+            if (!_PyTokenizer_check_coding_spec(newl[0] + 1, newl[1] - newl[0], tok,
+                                                buf_setreadl)) {
                 return NULL;
+            }
         }
     }
     tok->lineno = 0;
     if (tok->enc != NULL) {
         assert(utf8 == NULL);
         utf8 = _PyTokenizer_translate_into_utf8(str, tok->enc);
-        if (utf8 == NULL)
+        if (utf8 == NULL) {
             return _PyTokenizer_error_ret(tok);
+        }
         str = PyBytes_AS_STRING(utf8);
-    }
-    else if (!_PyTokenizer_ensure_utf8(str, tok, 1)) {
+    } else if (!_PyTokenizer_ensure_utf8(str, tok, 1)) {
         return _PyTokenizer_error_ret(tok);
     }
     if (utf8 != NULL) {
-        char *translated = _PyTokenizer_translate_newlines(
-            str, single, preserve_crlf, tok);
+        char *translated = _PyTokenizer_translate_newlines(str, single, preserve_crlf, tok);
         if (translated == NULL) {
             Py_DECREF(utf8);
             return _PyTokenizer_error_ret(tok);
@@ -127,14 +131,14 @@ decode_str(const char *input, int single, struct tok_state *tok, int preserve_cr
 }
 
 /* Set up tokenizer for string */
-struct tok_state *
-_PyTokenizer_FromString(const char *str, int exec_input, int preserve_crlf)
+struct tok_state *_PyTokenizer_FromString(const char *str, int exec_input, int preserve_crlf)
 {
     struct tok_state *tok = _PyTokenizer_tok_new();
     char *decoded;
 
-    if (tok == NULL)
+    if (tok == NULL) {
         return NULL;
+    }
     decoded = decode_str(str, exec_input, tok, preserve_crlf);
     if (decoded == NULL) {
         _PyTokenizer_Free(tok);

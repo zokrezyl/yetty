@@ -45,9 +45,9 @@
  * modules. The foundational types this TU and the appended chrome.gen.c need
  * (yclass identity, Result, core types) are pulled in directly here, and this
  * TU declares its own `yetty_ychrome_chrome_ptr_result` below (the same one
- * chrome.h publishes for consumers). The configure() FLAG_* macros the body
- * uses are defined unconditionally below; codegen re-emits them into chrome.h
- * from the `#ifdef YCLASS_CODEGEN` block at the foot. */
+ * chrome.h publishes for consumers). The configure() FLAG_* values the body
+ * uses are defined below as an exposed enum that codegen reproduces into
+ * chrome.h. */
 #include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
 
@@ -67,31 +67,14 @@
 #include <stdint.h>
 
 /* Feature flags for configure(). OR them together; FLAG_ALL enables the lot.
- * Defined here for the real build (this TU no longer includes its own header);
- * the `#ifdef YCLASS_CODEGEN` block below re-emits them into the generated
- * chrome.h for consumers. The guard keeps the codegen pass — which sees both
- * — from redefining them. */
-#ifndef YETTY_YCHROME_FLAG_DRAG
-#define YETTY_YCHROME_FLAG_DRAG 0x1u     /* caption drag moves the window      */
-#define YETTY_YCHROME_FLAG_RESIZE 0x2u   /* right/bottom edges resize          */
-#define YETTY_YCHROME_FLAG_MAXIMIZE 0x4u /* caption double-click toggles max   */
-#define YETTY_YCHROME_FLAG_ALL                                                                     \
-    (YETTY_YCHROME_FLAG_DRAG | YETTY_YCHROME_FLAG_RESIZE | YETTY_YCHROME_FLAG_MAXIMIZE)
-#endif
-
-#ifdef YCLASS_CODEGEN
-/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated chrome.h (and the dispatch TU that includes it) needs the complete
- * type — pull its defining header into the public header. */
-#include <yetty/ydraw-core/drawable-list.h>
-/* Feature flags for configure(). OR them together; FLAG_ALL enables the lot.
- * Copied verbatim into the generated chrome.h. */
-#define YETTY_YCHROME_FLAG_DRAG 0x1u     /* caption drag moves the window      */
-#define YETTY_YCHROME_FLAG_RESIZE 0x2u   /* right/bottom edges resize          */
-#define YETTY_YCHROME_FLAG_MAXIMIZE 0x4u /* caption double-click toggles max   */
-#define YETTY_YCHROME_FLAG_ALL                                                                     \
-    (YETTY_YCHROME_FLAG_DRAG | YETTY_YCHROME_FLAG_RESIZE | YETTY_YCHROME_FLAG_MAXIMIZE)
-#endif
+ * Defined here in the owning .c; codegen reproduces the enum into the generated
+ * chrome.h for consumers. */
+enum [[clang::annotate("expose")]] yetty_ychrome_flag {
+    YETTY_YCHROME_FLAG_DRAG = 0x1,     /* caption drag moves the window */
+    YETTY_YCHROME_FLAG_RESIZE = 0x2,   /* right/bottom edges resize */
+    YETTY_YCHROME_FLAG_MAXIMIZE = 0x4, /* caption double-click toggles max */
+    YETTY_YCHROME_FLAG_ALL = 0x7,      /* DRAG | RESIZE | MAXIMIZE */
+};
 
 enum {
     /* Drag/resize-vs-click slop: below this many pixels of motion the gesture
@@ -115,7 +98,8 @@ enum {
 #define YCHROME_HOVER_BG 0xFF463A30u       /* lifted strip */
 #define YCHROME_HOVER_CLOSE_BG 0xFF3B3BC8u /* #C83B3B red */
 
-struct [[clang::annotate("class@ychrome:chrome")]] yetty_ychrome_chrome {
+struct [[clang::annotate("class@ychrome:chrome"),
+         clang::annotate("include@yetty/ydraw-core/drawable-list.h")]] yetty_ychrome_chrome {
     /* Borrowed yplatform:window_manager yclass object — set by configure(). */
     struct yetty_yclass_object *window_manager;
 

@@ -79,10 +79,8 @@ yetty_yrich_shape {
     int preserve_aspect;
 };
 
-/* Shape kinds — header-destined; the real build takes them from the
- * generated slides.h consumers include, this TU defines them below. */
-#ifndef YCLASS_CODEGEN
-enum yetty_yrich_shape_kind {
+/* Shape kinds — exposed in the generated slides.h. */
+enum [[clang::annotate("expose")]] yetty_yrich_shape_kind {
     YETTY_YRICH_SHAPE_RECTANGLE = 0,
     YETTY_YRICH_SHAPE_ELLIPSE,
     YETTY_YRICH_SHAPE_TEXTBOX,
@@ -90,7 +88,6 @@ enum yetty_yrich_shape_kind {
     YETTY_YRICH_SHAPE_ARROW,
     YETTY_YRICH_SHAPE_IMAGE,
 };
-#endif
 
 [[clang::annotate("override@yrich:shape:constructor")]]
 static struct yetty_ycore_void_result shape_constructor(struct yetty_yclass_ctx *ctx,
@@ -448,8 +445,9 @@ struct yetty_ycore_void_result yetty_yrich_shape_set_image_source(struct yetty_y
  * Slides document
  *=========================================================================*/
 
-struct [[clang::annotate("class@yrich:slides")]] [[clang::annotate("parent@yrich:document")]]
-yetty_yrich_slides {
+struct [[clang::annotate("class@yrich:slides"),
+         clang::annotate("include@yetty/yrich/yrich-types.h")]] [[clang::annotate(
+    "parent@yrich:document")]] yetty_yrich_slides {
     float slide_width;
     float slide_height;
 
@@ -855,22 +853,5 @@ struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_image(struct yetty_
     struct yetty_yrich_rect bounds = {x, y, width, height};
     return add_shape_to_current(obj, YETTY_YRICH_SHAPE_IMAGE, bounds);
 }
-
-#ifdef YCLASS_CODEGEN
-/* Header-destined content for the generated slides.h (skipped by the real
- * build, which defines the enum in the #ifndef block above). The types
- * include carries the slide aggregate + its Result the slide-management
- * API above references. */
-#include <yetty/yrich/yrich-types.h>
-
-enum yetty_yrich_shape_kind {
-    YETTY_YRICH_SHAPE_RECTANGLE = 0,
-    YETTY_YRICH_SHAPE_ELLIPSE,
-    YETTY_YRICH_SHAPE_TEXTBOX,
-    YETTY_YRICH_SHAPE_LINE,
-    YETTY_YRICH_SHAPE_ARROW,
-    YETTY_YRICH_SHAPE_IMAGE,
-};
-#endif
 
 #include "slides.gen.c"

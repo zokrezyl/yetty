@@ -1087,8 +1087,9 @@ static struct yetty_ycore_void_result inline_image_render(
  * Document
  *=========================================================================*/
 
-struct [[clang::annotate("class@yrich:ydoc")]] [[clang::annotate("parent@yrich:document")]]
-yetty_yrich_ydoc {
+struct [[clang::annotate("class@yrich:ydoc"),
+         clang::annotate("include@yetty/yrich/yrich-types.h")]] [[clang::annotate(
+    "parent@yrich:document")]] yetty_yrich_ydoc {
     float page_width;
     float margin;
 
@@ -2606,11 +2607,5 @@ struct yetty_ycore_void_result yetty_yrich_paragraph_add_run(struct yetty_yclass
     run->style.color = color;
     return YETTY_OK_VOID();
 }
-
-#ifdef YCLASS_CODEGEN
-/* Header-destined: the shared yrich value types the public ydoc API above
- * references. */
-#include <yetty/yrich/yrich-types.h>
-#endif
 
 #include "ydoc.gen.c"

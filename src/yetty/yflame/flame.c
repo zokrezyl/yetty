@@ -25,8 +25,7 @@
  * (yclass identity, Result, basic C types) are pulled in directly here, and
  * this TU declares its own `yetty_yflame_flame_ptr_result` below (the same
  * one flame.h publishes for consumers). The public flags / hit-test sentinels
- * are defined unconditionally (and re-emitted into flame.h via the
- * `#ifdef YCLASS_CODEGEN` verbatim block at the foot of the include list). */
+ * are defined here as an exposed enum that codegen reproduces into flame.h. */
 #include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
@@ -42,27 +41,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Public flags. */
-#define YETTY_YFLAME_FLAG_LABELS 0x1u /* draw truncated frame-name labels */
-#define YETTY_YFLAME_FLAG_ICICLE 0x2u /* root at top, growing down (vs flame: bottom-up) */
-/* hit_test returns these (in place of a node id) when a navigation button is
- * under the point: the caller should focus the parent / reset to root. */
-#define YETTY_YFLAME_HIT_UP (-2)
-#define YETTY_YFLAME_HIT_ROOT (-3)
-
-#ifdef YCLASS_CODEGEN
-/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated flame.h (and the dispatch TU that includes it) needs the complete
- * type — pull its defining header into the public header. */
-#include <yetty/ydraw-core/drawable-list.h>
-/* Public flags — copied verbatim into the generated flame.h. */
-#define YETTY_YFLAME_FLAG_LABELS 0x1u /* draw truncated frame-name labels */
-#define YETTY_YFLAME_FLAG_ICICLE 0x2u /* root at top, growing down (vs flame: bottom-up) */
-/* hit_test returns these (in place of a node id) when a navigation button is
- * under the point: the caller should focus the parent / reset to root. */
-#define YETTY_YFLAME_HIT_UP (-2)
-#define YETTY_YFLAME_HIT_ROOT (-3)
-#endif
+/* Public flags / hit-test sentinels. Defined here in the owning .c; codegen
+ * reproduces the enum into the generated flame.h for consumers. */
+enum [[clang::annotate("expose")]] yetty_yflame_constant {
+    YETTY_YFLAME_FLAG_LABELS = 0x1, /* draw truncated frame-name labels */
+    YETTY_YFLAME_FLAG_ICICLE = 0x2, /* root at top, growing down (vs flame: bottom-up) */
+    /* hit_test returns these (in place of a node id) when a navigation button is
+     * under the point: the caller should focus the parent / reset to root. */
+    YETTY_YFLAME_HIT_UP = -2,
+    YETTY_YFLAME_HIT_ROOT = -3,
+};
 
 enum {
     YFLAME_DEFAULT_FRAME_HEIGHT = 18,
@@ -102,7 +90,8 @@ struct yflame_frame {
  * Class data
  *===========================================================================*/
 
-struct [[clang::annotate("class@yflame:flame")]] yetty_yflame_flame {
+struct [[clang::annotate("class@yflame:flame"),
+         clang::annotate("include@yetty/ydraw-core/drawable-list.h")]] yetty_yflame_flame {
     /* Render configuration. */
     float width;
     float frame_height;

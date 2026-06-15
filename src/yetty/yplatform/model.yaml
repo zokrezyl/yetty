@@ -15,6 +15,7 @@ methods:
       - name: input_pipe
         type: "struct yetty_ycore_xthread_event_pipe *"
     local: true
+    return_payload_type: null
   - slot: window_manager_destroy
     domain: yplatform
     owning_class: window_manager
@@ -25,6 +26,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
   - slot: window_manager_iconify
     domain: yplatform
     owning_class: window_manager
@@ -35,6 +37,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
   - slot: window_manager_toggle_maximize
     domain: yplatform
     owning_class: window_manager
@@ -45,6 +48,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
   - slot: window_manager_request_close
     domain: yplatform
     owning_class: window_manager
@@ -55,6 +59,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
   - slot: window_manager_drag_by
     domain: yplatform
     owning_class: window_manager
@@ -69,6 +74,7 @@ methods:
       - name: dy
         type: int
     local: true
+    return_payload_type: null
   - slot: window_manager_resize_by
     domain: yplatform
     owning_class: window_manager
@@ -85,6 +91,7 @@ methods:
       - name: edge
         type: int
     local: true
+    return_payload_type: null
   - slot: window_manager_begin_interactive_move
     domain: yplatform
     owning_class: window_manager
@@ -95,6 +102,7 @@ methods:
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
   - slot: window_manager_begin_interactive_resize
     domain: yplatform
     owning_class: window_manager
@@ -107,6 +115,7 @@ methods:
       - name: edge
         type: int
     local: true
+    return_payload_type: null
   - slot: window_manager_set_cursor
     domain: yplatform
     owning_class: window_manager
@@ -119,6 +128,7 @@ methods:
       - name: shape
         type: int
     local: true
+    return_payload_type: null
   - slot: window_manager_handle_event
     domain: yplatform
     owning_class: window_manager
@@ -131,6 +141,7 @@ methods:
       - name: event
         type: "const struct yetty_yui_event *"
     local: true
+    return_payload_type: null
 classes:
   - name: window_manager
     domain: yplatform
@@ -253,3 +264,22 @@ types:
             type: int
           - name: error
             type: struct yetty_ycore_error
+local_types:
+  yetty_yplatform_window_manager: src/yetty/yplatform/window-manager.c
+  yetty_yplatform_window_manager_ptr_result: src/yetty/yplatform/window-manager.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/yplatform/window-manager.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/yplatform/window-manager.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/yplatform/window-manager.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/yplatform/window-manager.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/yplatform/window-manager.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

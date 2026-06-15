@@ -44,12 +44,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef YCLASS_CODEGEN
-/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated map.h needs the complete type. */
-#include <yetty/ydraw-core/drawable-list.h>
-#endif
-
 /* Viewport sanity bounds (the engine enforces its own as well). */
 enum {
     YMAP_MIN_VIEWPORT_PX = 64,
@@ -128,7 +122,8 @@ static const struct ymap_provider *ymap_provider_by_name(const char *name)
  * Class data
  *===========================================================================*/
 
-struct [[clang::annotate("class@ymap:map")]] yetty_ymap_map {
+struct [[clang::annotate("class@ymap:map"),
+         clang::annotate("include@yetty/ydraw-core/drawable-list.h")]] yetty_ymap_map {
     double latitude;
     double longitude;
     uint32_t zoom;

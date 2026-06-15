@@ -2,8 +2,8 @@
 /* Public interface for regular class(es) `cell, spreadsheet` (module: yrich).
  * Fully generated from the source .c — do not edit. This single
  * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), and any
- * `expose`d API. Public types come from `expose` annotations. */
+ * accessors, method stubs, create()/register(), exposed
+ * functions, and the public types the signatures use. */
 #ifndef YETTY_YCLASSGEN_YRICH_SPREADSHEET_H
 #define YETTY_YCLASSGEN_YRICH_SPREADSHEET_H
 
@@ -11,6 +11,13 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/yrich/yrich-types.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct yetty_yrich_cell_addr;
 
 struct yetty_yclass_ptr_result yetty_yrich_cell_class_get(void);
 struct yetty_yclass_ptr_result yetty_yrich_spreadsheet_class_get(void);
@@ -20,7 +27,13 @@ struct yetty_yclass_ptr_result yetty_yrich_spreadsheet_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_yrich_cell;
-YETTY_YRESULT_DECLARE(yetty_yrich_cell_ptr, struct yetty_yrich_cell *);
+struct yetty_yrich_cell_ptr_result {
+    int ok;
+    union {
+        struct yetty_yrich_cell *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_yrich_cell_ptr_result yetty_yrich_cell_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yrich_cell_to(struct yetty_yrich_cell *data);
 
@@ -29,12 +42,16 @@ struct yetty_yclass_object *yetty_yrich_cell_to(struct yetty_yrich_cell *data);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_yrich_spreadsheet;
-YETTY_YRESULT_DECLARE(yetty_yrich_spreadsheet_ptr, struct yetty_yrich_spreadsheet *);
+struct yetty_yrich_spreadsheet_ptr_result {
+    int ok;
+    union {
+        struct yetty_yrich_spreadsheet *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_yrich_spreadsheet_ptr_result yetty_yrich_spreadsheet_from(
     struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yrich_spreadsheet_to(struct yetty_yrich_spreadsheet *data);
-
-struct yetty_ycore_void_result;
 
 struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_grid_size(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int32_t rows, int32_t cols);
@@ -61,11 +78,6 @@ struct yetty_yclass_object_ptr_result yetty_yrich_spreadsheet_create(struct yett
 
 struct yetty_ycore_void_result yetty_yrich_register(void);
 
-struct yetty_yrich_cell_addr;
-
-/* Header-destined: the shared yrich value types (cell address) the public
- * spreadsheet API above references. */
-#include <yetty/yrich/yrich-types.h>
 struct yetty_ycore_void_result yetty_yrich_cell_set_text(struct yetty_yclass_object *obj,
                                                          const char *text, size_t len);
 const char *yetty_yrich_cell_text(struct yetty_yclass_object *obj);
@@ -85,5 +97,9 @@ const char *yetty_yrich_spreadsheet_cell_value(struct yetty_yclass_object *obj, 
                                                int32_t col);
 struct yetty_yrich_cell_addr yetty_yrich_spreadsheet_cell_addr_at(struct yetty_yclass_object *obj,
                                                                   float x, float y);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

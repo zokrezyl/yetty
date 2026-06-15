@@ -20,18 +20,16 @@
 YETTY_YRESULT_DECLARE(yetty_ygui_yplot_ptr, struct yetty_ygui_yplot *);
 struct yetty_yclass_ptr_result yetty_ygui_yplot_class_get(void);
 struct yetty_ygui_yplot_ptr_result yetty_ygui_yplot_from(struct yetty_yclass_object *obj);
-/* Real-build copy of the header-destined config struct. Codegen reads the
- * `#ifdef YCLASS_CODEGEN` block at the foot (copied verbatim into the
- * generated header); the two never coexist in one parse. */
-#ifndef YCLASS_CODEGEN
-struct yetty_ygui_yplot_config {
+/* Plot configuration. Defined here in the owning .c; codegen reproduces it
+ * into the generated header (consumers fill it by value, so the full
+ * definition is published via the `expose` annotation). */
+struct [[clang::annotate("expose")]] yetty_ygui_yplot_config {
     float x_min;
     float x_max;
     float y_min;
     float y_max;
     uint32_t flags;
 };
-#endif
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
@@ -341,17 +339,3 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_buffers(
 }
 
 #include "yplot.gen.c"
-
-#ifdef YCLASS_CODEGEN
-#include <stddef.h>
-#include <stdint.h>
-struct yetty_yclass_object;
-struct yetty_ygui_yplot_config {
-    float x_min;
-    float x_max;
-    float y_min;
-    float y_max;
-    uint32_t flags;
-};
-struct yetty_yplot_buffer_input;
-#endif

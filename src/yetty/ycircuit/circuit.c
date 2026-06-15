@@ -68,23 +68,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef YCLASS_CODEGEN
-/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated circuit.h (and the dispatch TU that includes it) needs the
- * complete type — pull its defining header into the public header. */
-#include <yetty/ydraw-core/drawable-list.h>
-/* Public constants — copied verbatim into the generated circuit.h. */
-#define YETTY_YCIRCUIT_NO_ELEMENT (-1) /* hit_test: no element under the point */
-#define YETTY_YCIRCUIT_FLAG_NONE 0x0u  /* reserved render flags */
-#endif
-
-#ifndef YCLASS_CODEGEN
-/* Same public constants, defined for the real build of this TU (which does
- * not include circuit.h). The codegen block above re-emits them into the
- * generated public header for consumers. */
-#define YETTY_YCIRCUIT_NO_ELEMENT (-1) /* hit_test: no element under the point */
-#define YETTY_YCIRCUIT_FLAG_NONE 0x0u  /* reserved render flags */
-#endif
+/* Public constants. Defined here in the owning .c; codegen reproduces the
+ * enum into the generated circuit.h for consumers. */
+enum [[clang::annotate("expose")]] yetty_ycircuit_constant {
+    YETTY_YCIRCUIT_NO_ELEMENT = -1, /* hit_test: no element under the point */
+    YETTY_YCIRCUIT_FLAG_NONE = 0,   /* reserved render flags */
+};
 
 enum {
     YCIRCUIT_DEFAULT_GRID = 14, /* px per grid unit */
@@ -166,7 +155,8 @@ struct ycircuit_element {
  * Class data
  *===========================================================================*/
 
-struct [[clang::annotate("class@ycircuit:circuit")]] yetty_ycircuit_circuit {
+struct [[clang::annotate("class@ycircuit:circuit"),
+         clang::annotate("include@yetty/ydraw-core/drawable-list.h")]] yetty_ycircuit_circuit {
     /* Render configuration. 0 = default. */
     float grid;     /* px per grid unit (configure() wins over the DSL hint) */
     uint32_t flags; /* reserved */

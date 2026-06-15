@@ -2,8 +2,8 @@
 /* Public interface for regular class(es) `engine` (module: yai).
  * Fully generated from the source .c — do not edit. This single
  * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), and any
- * `expose`d API. Public types come from `expose` annotations. */
+ * accessors, method stubs, create()/register(), exposed
+ * functions, and the public types the signatures use. */
 #ifndef YETTY_YCLASSGEN_YAI_ENGINE_H
 #define YETTY_YCLASSGEN_YAI_ENGINE_H
 
@@ -12,6 +12,13 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct yai_app;
+struct yyjson_val;
+
 struct yetty_yclass_ptr_result yetty_yai_engine_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct
@@ -19,13 +26,15 @@ struct yetty_yclass_ptr_result yetty_yai_engine_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_yai_engine;
-YETTY_YRESULT_DECLARE(yetty_yai_engine_ptr, struct yetty_yai_engine *);
+struct yetty_yai_engine_ptr_result {
+    int ok;
+    union {
+        struct yetty_yai_engine *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_yai_engine_ptr_result yetty_yai_engine_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yai_engine_to(struct yetty_yai_engine *data);
-
-struct yai_app;
-struct yetty_ycore_void_result;
-struct yyjson_val;
 
 struct yetty_ycore_void_result yetty_yai_resolve_permission(struct yetty_yclass_ctx *ctx,
                                                             struct yetty_yclass_object *obj,
@@ -98,5 +107,9 @@ typedef struct yetty_ycore_void_result (*yetty_yai_on_child_eof_fn)(struct yetty
 struct yetty_yclass_object_ptr_result yetty_yai_engine_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_yai_register(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

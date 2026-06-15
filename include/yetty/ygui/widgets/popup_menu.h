@@ -2,8 +2,8 @@
 /* Public interface for regular class(es) `popup_menu` (module: ygui).
  * Fully generated from the source .c — do not edit. This single
  * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), and any
- * `expose`d API. Public types come from `expose` annotations. */
+ * accessors, method stubs, create()/register(), exposed
+ * functions, and the public types the signatures use. */
 #ifndef YETTY_YCLASSGEN_YGUI_WIDGETS_POPUP_MENU_H
 #define YETTY_YCLASSGEN_YGUI_WIDGETS_POPUP_MENU_H
 
@@ -12,6 +12,14 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_ctx *,
+                                                                  struct yetty_yclass_object *, int,
+                                                                  void *);
+
 struct yetty_yclass_ptr_result yetty_ygui_popup_menu_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct
@@ -19,7 +27,13 @@ struct yetty_yclass_ptr_result yetty_ygui_popup_menu_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_ygui_popup_menu;
-YETTY_YRESULT_DECLARE(yetty_ygui_popup_menu_ptr, struct yetty_ygui_popup_menu *);
+struct yetty_ygui_popup_menu_ptr_result {
+    int ok;
+    union {
+        struct yetty_ygui_popup_menu *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_ygui_popup_menu_ptr_result yetty_ygui_popup_menu_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_ygui_popup_menu_to(struct yetty_ygui_popup_menu *data);
 
@@ -27,9 +41,6 @@ struct yetty_yclass_object_ptr_result yetty_ygui_popup_menu_create(struct yetty_
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_ctx *ctx,
-                                                                  struct yetty_yclass_object *menu,
-                                                                  int item_index, void *userdata);
 struct yetty_ycore_void_result yetty_ygui_popup_menu_add_item(struct yetty_yclass_object *obj,
                                                               const char *label,
                                                               yetty_ygui_menu_item_cb cb,
@@ -54,5 +65,9 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_add_drill_item(struct yetty
                                                                     void *userdata);
 struct yetty_ycore_void_result yetty_ygui_popup_menu_set_modal(struct yetty_yclass_object *obj,
                                                                int modal);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -2,7 +2,7 @@
  * PyArena (which kept a PyList of objects to decref — unneeded now that AST
  * leaves are plain C). Part of the yetty project (see ../../LICENSE.md). */
 #include "arena.h"
-#include "ast.gen.h"   /* mod_ty for _PyAST_Validate */
+#include "ast.gen.h" /* mod_ty for _PyAST_Validate */
 
 #include <stdlib.h>
 #include <string.h>
@@ -22,14 +22,12 @@ struct pyp_arena {
     int oom;
 };
 
-void
-pyp_ast_error(const char *message)
+void pyp_ast_error(const char *message)
 {
     fprintf(stderr, "py-parse: AST error: %s\n", message);
 }
 
-static struct pyp_block *
-block_new(size_t capacity)
+static struct pyp_block *block_new(size_t capacity)
 {
     struct pyp_block *block = malloc(sizeof(*block) + capacity);
     if (block == NULL) {
@@ -41,8 +39,7 @@ block_new(size_t capacity)
     return block;
 }
 
-PyArena *
-_PyArena_New(void)
+PyArena *_PyArena_New(void)
 {
     PyArena *arena = calloc(1, sizeof(*arena));
     if (arena == NULL) {
@@ -56,8 +53,7 @@ _PyArena_New(void)
     return arena;
 }
 
-void
-_PyArena_Free(PyArena *arena)
+void _PyArena_Free(PyArena *arena)
 {
     if (arena == NULL) {
         return;
@@ -71,8 +67,7 @@ _PyArena_Free(PyArena *arena)
     free(arena);
 }
 
-void *
-_PyArena_Malloc(PyArena *arena, size_t size)
+void *_PyArena_Malloc(PyArena *arena, size_t size)
 {
     /* Align to pointer size. */
     size = (size + (sizeof(void *) - 1)) & ~(sizeof(void *) - 1);
@@ -100,8 +95,7 @@ GENERATE_ASDL_SEQ_CONSTRUCTOR(identifier, void *)
 GENERATE_ASDL_SEQ_CONSTRUCTOR(int, int)
 
 /* Arena PyObject tracking is a no-op (boxes are leaked, not refcounted). */
-int
-_PyArena_AddPyObject(PyArena *arena, PyObject *obj)
+int _PyArena_AddPyObject(PyArena *arena, PyObject *obj)
 {
     (void)arena;
     (void)obj;
@@ -109,8 +103,7 @@ _PyArena_AddPyObject(PyArena *arena, PyObject *obj)
 }
 
 /* AST validation: accept everything (we trust the grammar). */
-int
-_PyAST_Validate(mod_ty mod)
+int _PyAST_Validate(mod_ty mod)
 {
     (void)mod;
     return 1;

@@ -2,8 +2,8 @@
 /* Public interface for regular class(es) `window_manager` (module: yplatform).
  * Fully generated from the source .c — do not edit. This single
  * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), and any
- * `expose`d API. Public types come from `expose` annotations. */
+ * accessors, method stubs, create()/register(), exposed
+ * functions, and the public types the signatures use. */
 #ifndef YETTY_YCLASSGEN_YPLATFORM_WINDOW_MANAGER_H
 #define YETTY_YCLASSGEN_YPLATFORM_WINDOW_MANAGER_H
 
@@ -12,6 +12,13 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct yetty_ycore_xthread_event_pipe;
+struct yetty_yui_event;
+
 struct yetty_yclass_ptr_result yetty_yplatform_window_manager_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct
@@ -19,15 +26,17 @@ struct yetty_yclass_ptr_result yetty_yplatform_window_manager_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_yplatform_window_manager;
-YETTY_YRESULT_DECLARE(yetty_yplatform_window_manager_ptr, struct yetty_yplatform_window_manager *);
+struct yetty_yplatform_window_manager_ptr_result {
+    int ok;
+    union {
+        struct yetty_yplatform_window_manager *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_yplatform_window_manager_ptr_result yetty_yplatform_window_manager_from(
     struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yplatform_window_manager_to(
     struct yetty_yplatform_window_manager *data);
-
-struct yetty_ycore_void_result;
-struct yetty_ycore_xthread_event_pipe;
-struct yetty_yui_event;
 
 struct yetty_ycore_void_result yetty_yplatform_window_manager_configure(
     struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, void *os_window,
@@ -84,5 +93,9 @@ struct yetty_yclass_object_ptr_result yetty_yplatform_window_manager_create(
     struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_yplatform_register(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

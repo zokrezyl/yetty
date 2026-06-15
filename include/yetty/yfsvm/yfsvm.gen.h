@@ -98,180 +98,270 @@ typedef enum yetty_yfsvm_YfsvmOpcode {
 //   [11:0]  imm12  (12 bits)
 
 // Encode instruction
-static inline uint32_t yfsvm_encode(YfsvmOpcode op, uint8_t dst, uint8_t src1, uint8_t src2, uint16_t imm12) {
-    return ((uint32_t)op << 24) | ((dst & 0xF) << 20) | ((src1 & 0xF) << 16) | ((src2 & 0xF) << 12) | (imm12 & 0xFFF);
+static inline uint32_t yfsvm_encode(YfsvmOpcode op, uint8_t dst, uint8_t src1, uint8_t src2,
+                                    uint16_t imm12)
+{
+    return ((uint32_t)op << 24) | ((dst & 0xF) << 20) | ((src1 & 0xF) << 16) |
+           ((src2 & 0xF) << 12) | (imm12 & 0xFFF);
 }
 
 // Decode instruction
-static inline YfsvmOpcode yfsvm_decode_opcode(uint32_t instr) { return (YfsvmOpcode)((instr >> 24) & 0xFF); }
-static inline uint8_t yfsvm_decode_dst(uint32_t instr) { return (instr >> 20) & 0xF; }
-static inline uint8_t yfsvm_decode_src1(uint32_t instr) { return (instr >> 16) & 0xF; }
-static inline uint8_t yfsvm_decode_src2(uint32_t instr) { return (instr >> 12) & 0xF; }
-static inline uint16_t yfsvm_decode_imm12(uint32_t instr) { return instr & 0xFFF; }
+static inline YfsvmOpcode yfsvm_decode_opcode(uint32_t instr)
+{
+    return (YfsvmOpcode)((instr >> 24) & 0xFF);
+}
+static inline uint8_t yfsvm_decode_dst(uint32_t instr)
+{
+    return (instr >> 20) & 0xF;
+}
+static inline uint8_t yfsvm_decode_src1(uint32_t instr)
+{
+    return (instr >> 16) & 0xF;
+}
+static inline uint8_t yfsvm_decode_src2(uint32_t instr)
+{
+    return (instr >> 12) & 0xF;
+}
+static inline uint16_t yfsvm_decode_imm12(uint32_t instr)
+{
+    return instr & 0xFFF;
+}
 
 // Get opcode name for debugging
-static inline const char* yfsvm_opcode_name(YfsvmOpcode op) {
+static inline const char *yfsvm_opcode_name(YfsvmOpcode op)
+{
     switch (op) {
-        case YETTY_YFSVM_OP_NOP: return "NOP";
-        case YETTY_YFSVM_OP_RET: return "RET";
-        case YETTY_YFSVM_OP_LOAD_C: return "LOAD_C";
-        case YETTY_YFSVM_OP_LOAD_X: return "LOAD_X";
-        case YETTY_YFSVM_OP_LOAD_T: return "LOAD_T";
-        case YETTY_YFSVM_OP_LOAD_S: return "LOAD_S";
-        case YETTY_YFSVM_OP_MOV: return "MOV";
-        case YETTY_YFSVM_OP_LOAD_Y: return "LOAD_Y";
-        case YETTY_YFSVM_OP_JMP: return "JMP";
-        case YETTY_YFSVM_OP_JMP_IF_ZERO: return "JMP_IF_ZERO";
-        case YETTY_YFSVM_OP_JMP_IF_NONZERO: return "JMP_IF_NONZERO";
-        case YETTY_YFSVM_OP_JMP_IF_LT: return "JMP_IF_LT";
-        case YETTY_YFSVM_OP_JMP_IF_GE: return "JMP_IF_GE";
-        case YETTY_YFSVM_OP_ADD: return "ADD";
-        case YETTY_YFSVM_OP_SUB: return "SUB";
-        case YETTY_YFSVM_OP_MUL: return "MUL";
-        case YETTY_YFSVM_OP_DIV: return "DIV";
-        case YETTY_YFSVM_OP_NEG: return "NEG";
-        case YETTY_YFSVM_OP_MOD: return "MOD";
-        case YETTY_YFSVM_OP_SIN: return "SIN";
-        case YETTY_YFSVM_OP_COS: return "COS";
-        case YETTY_YFSVM_OP_TAN: return "TAN";
-        case YETTY_YFSVM_OP_ASIN: return "ASIN";
-        case YETTY_YFSVM_OP_ACOS: return "ACOS";
-        case YETTY_YFSVM_OP_ATAN: return "ATAN";
-        case YETTY_YFSVM_OP_ATAN2: return "ATAN2";
-        case YETTY_YFSVM_OP_SINH: return "SINH";
-        case YETTY_YFSVM_OP_COSH: return "COSH";
-        case YETTY_YFSVM_OP_TANH: return "TANH";
-        case YETTY_YFSVM_OP_ASINH: return "ASINH";
-        case YETTY_YFSVM_OP_ACOSH: return "ACOSH";
-        case YETTY_YFSVM_OP_ATANH: return "ATANH";
-        case YETTY_YFSVM_OP_SINC: return "SINC";
-        case YETTY_YFSVM_OP_EXP: return "EXP";
-        case YETTY_YFSVM_OP_EXP2: return "EXP2";
-        case YETTY_YFSVM_OP_LOG: return "LOG";
-        case YETTY_YFSVM_OP_LOG2: return "LOG2";
-        case YETTY_YFSVM_OP_POW: return "POW";
-        case YETTY_YFSVM_OP_SQRT: return "SQRT";
-        case YETTY_YFSVM_OP_RSQRT: return "RSQRT";
-        case YETTY_YFSVM_OP_ERF: return "ERF";
-        case YETTY_YFSVM_OP_ERFC: return "ERFC";
-        case YETTY_YFSVM_OP_ABS: return "ABS";
-        case YETTY_YFSVM_OP_MIN: return "MIN";
-        case YETTY_YFSVM_OP_MAX: return "MAX";
-        case YETTY_YFSVM_OP_FLOOR: return "FLOOR";
-        case YETTY_YFSVM_OP_CEIL: return "CEIL";
-        case YETTY_YFSVM_OP_ROUND: return "ROUND";
-        case YETTY_YFSVM_OP_FRACT: return "FRACT";
-        case YETTY_YFSVM_OP_SIGN: return "SIGN";
-        case YETTY_YFSVM_OP_CLAMP01: return "CLAMP01";
-        case YETTY_YFSVM_OP_STEP: return "STEP";
-        case YETTY_YFSVM_OP_MIX: return "MIX";
-        case YETTY_YFSVM_OP_SMOOTHSTEP: return "SMOOTHSTEP";
-        case YETTY_YFSVM_OP_TRUNC: return "TRUNC";
-        case YETTY_YFSVM_OP_RADIANS: return "RADIANS";
-        case YETTY_YFSVM_OP_DEGREES: return "DEGREES";
-        case YETTY_YFSVM_OP_SELECT: return "SELECT";
-        case YETTY_YFSVM_OP_LT: return "LT";
-        case YETTY_YFSVM_OP_GT: return "GT";
-        case YETTY_YFSVM_OP_LE: return "LE";
-        case YETTY_YFSVM_OP_GE: return "GE";
-        case YETTY_YFSVM_OP_EQ: return "EQ";
-        case YETTY_YFSVM_OP_NE: return "NE";
-        case YETTY_YFSVM_OP_RAND: return "RAND";
-        case YETTY_YFSVM_OP_NOISE: return "NOISE";
-        case YETTY_YFSVM_OP_RAND2: return "RAND2";
-        case YETTY_YFSVM_OP_NOISE2: return "NOISE2";
-        default: return "UNKNOWN";
+    case YETTY_YFSVM_OP_NOP:
+        return "NOP";
+    case YETTY_YFSVM_OP_RET:
+        return "RET";
+    case YETTY_YFSVM_OP_LOAD_C:
+        return "LOAD_C";
+    case YETTY_YFSVM_OP_LOAD_X:
+        return "LOAD_X";
+    case YETTY_YFSVM_OP_LOAD_T:
+        return "LOAD_T";
+    case YETTY_YFSVM_OP_LOAD_S:
+        return "LOAD_S";
+    case YETTY_YFSVM_OP_MOV:
+        return "MOV";
+    case YETTY_YFSVM_OP_LOAD_Y:
+        return "LOAD_Y";
+    case YETTY_YFSVM_OP_JMP:
+        return "JMP";
+    case YETTY_YFSVM_OP_JMP_IF_ZERO:
+        return "JMP_IF_ZERO";
+    case YETTY_YFSVM_OP_JMP_IF_NONZERO:
+        return "JMP_IF_NONZERO";
+    case YETTY_YFSVM_OP_JMP_IF_LT:
+        return "JMP_IF_LT";
+    case YETTY_YFSVM_OP_JMP_IF_GE:
+        return "JMP_IF_GE";
+    case YETTY_YFSVM_OP_ADD:
+        return "ADD";
+    case YETTY_YFSVM_OP_SUB:
+        return "SUB";
+    case YETTY_YFSVM_OP_MUL:
+        return "MUL";
+    case YETTY_YFSVM_OP_DIV:
+        return "DIV";
+    case YETTY_YFSVM_OP_NEG:
+        return "NEG";
+    case YETTY_YFSVM_OP_MOD:
+        return "MOD";
+    case YETTY_YFSVM_OP_SIN:
+        return "SIN";
+    case YETTY_YFSVM_OP_COS:
+        return "COS";
+    case YETTY_YFSVM_OP_TAN:
+        return "TAN";
+    case YETTY_YFSVM_OP_ASIN:
+        return "ASIN";
+    case YETTY_YFSVM_OP_ACOS:
+        return "ACOS";
+    case YETTY_YFSVM_OP_ATAN:
+        return "ATAN";
+    case YETTY_YFSVM_OP_ATAN2:
+        return "ATAN2";
+    case YETTY_YFSVM_OP_SINH:
+        return "SINH";
+    case YETTY_YFSVM_OP_COSH:
+        return "COSH";
+    case YETTY_YFSVM_OP_TANH:
+        return "TANH";
+    case YETTY_YFSVM_OP_ASINH:
+        return "ASINH";
+    case YETTY_YFSVM_OP_ACOSH:
+        return "ACOSH";
+    case YETTY_YFSVM_OP_ATANH:
+        return "ATANH";
+    case YETTY_YFSVM_OP_SINC:
+        return "SINC";
+    case YETTY_YFSVM_OP_EXP:
+        return "EXP";
+    case YETTY_YFSVM_OP_EXP2:
+        return "EXP2";
+    case YETTY_YFSVM_OP_LOG:
+        return "LOG";
+    case YETTY_YFSVM_OP_LOG2:
+        return "LOG2";
+    case YETTY_YFSVM_OP_POW:
+        return "POW";
+    case YETTY_YFSVM_OP_SQRT:
+        return "SQRT";
+    case YETTY_YFSVM_OP_RSQRT:
+        return "RSQRT";
+    case YETTY_YFSVM_OP_ERF:
+        return "ERF";
+    case YETTY_YFSVM_OP_ERFC:
+        return "ERFC";
+    case YETTY_YFSVM_OP_ABS:
+        return "ABS";
+    case YETTY_YFSVM_OP_MIN:
+        return "MIN";
+    case YETTY_YFSVM_OP_MAX:
+        return "MAX";
+    case YETTY_YFSVM_OP_FLOOR:
+        return "FLOOR";
+    case YETTY_YFSVM_OP_CEIL:
+        return "CEIL";
+    case YETTY_YFSVM_OP_ROUND:
+        return "ROUND";
+    case YETTY_YFSVM_OP_FRACT:
+        return "FRACT";
+    case YETTY_YFSVM_OP_SIGN:
+        return "SIGN";
+    case YETTY_YFSVM_OP_CLAMP01:
+        return "CLAMP01";
+    case YETTY_YFSVM_OP_STEP:
+        return "STEP";
+    case YETTY_YFSVM_OP_MIX:
+        return "MIX";
+    case YETTY_YFSVM_OP_SMOOTHSTEP:
+        return "SMOOTHSTEP";
+    case YETTY_YFSVM_OP_TRUNC:
+        return "TRUNC";
+    case YETTY_YFSVM_OP_RADIANS:
+        return "RADIANS";
+    case YETTY_YFSVM_OP_DEGREES:
+        return "DEGREES";
+    case YETTY_YFSVM_OP_SELECT:
+        return "SELECT";
+    case YETTY_YFSVM_OP_LT:
+        return "LT";
+    case YETTY_YFSVM_OP_GT:
+        return "GT";
+    case YETTY_YFSVM_OP_LE:
+        return "LE";
+    case YETTY_YFSVM_OP_GE:
+        return "GE";
+    case YETTY_YFSVM_OP_EQ:
+        return "EQ";
+    case YETTY_YFSVM_OP_NE:
+        return "NE";
+    case YETTY_YFSVM_OP_RAND:
+        return "RAND";
+    case YETTY_YFSVM_OP_NOISE:
+        return "NOISE";
+    case YETTY_YFSVM_OP_RAND2:
+        return "RAND2";
+    case YETTY_YFSVM_OP_NOISE2:
+        return "NOISE2";
+    default:
+        return "UNKNOWN";
     }
 }
 
 // True if the encoded opcode is a defined instruction
-static inline int yfsvm_opcode_is_valid(uint32_t op) {
+static inline int yfsvm_opcode_is_valid(uint32_t op)
+{
     switch (op) {
-        case YETTY_YFSVM_OP_NOP:
-        case YETTY_YFSVM_OP_RET:
-        case YETTY_YFSVM_OP_LOAD_C:
-        case YETTY_YFSVM_OP_LOAD_X:
-        case YETTY_YFSVM_OP_LOAD_T:
-        case YETTY_YFSVM_OP_LOAD_S:
-        case YETTY_YFSVM_OP_MOV:
-        case YETTY_YFSVM_OP_LOAD_Y:
-        case YETTY_YFSVM_OP_JMP:
-        case YETTY_YFSVM_OP_JMP_IF_ZERO:
-        case YETTY_YFSVM_OP_JMP_IF_NONZERO:
-        case YETTY_YFSVM_OP_JMP_IF_LT:
-        case YETTY_YFSVM_OP_JMP_IF_GE:
-        case YETTY_YFSVM_OP_ADD:
-        case YETTY_YFSVM_OP_SUB:
-        case YETTY_YFSVM_OP_MUL:
-        case YETTY_YFSVM_OP_DIV:
-        case YETTY_YFSVM_OP_NEG:
-        case YETTY_YFSVM_OP_MOD:
-        case YETTY_YFSVM_OP_SIN:
-        case YETTY_YFSVM_OP_COS:
-        case YETTY_YFSVM_OP_TAN:
-        case YETTY_YFSVM_OP_ASIN:
-        case YETTY_YFSVM_OP_ACOS:
-        case YETTY_YFSVM_OP_ATAN:
-        case YETTY_YFSVM_OP_ATAN2:
-        case YETTY_YFSVM_OP_SINH:
-        case YETTY_YFSVM_OP_COSH:
-        case YETTY_YFSVM_OP_TANH:
-        case YETTY_YFSVM_OP_ASINH:
-        case YETTY_YFSVM_OP_ACOSH:
-        case YETTY_YFSVM_OP_ATANH:
-        case YETTY_YFSVM_OP_SINC:
-        case YETTY_YFSVM_OP_EXP:
-        case YETTY_YFSVM_OP_EXP2:
-        case YETTY_YFSVM_OP_LOG:
-        case YETTY_YFSVM_OP_LOG2:
-        case YETTY_YFSVM_OP_POW:
-        case YETTY_YFSVM_OP_SQRT:
-        case YETTY_YFSVM_OP_RSQRT:
-        case YETTY_YFSVM_OP_ERF:
-        case YETTY_YFSVM_OP_ERFC:
-        case YETTY_YFSVM_OP_ABS:
-        case YETTY_YFSVM_OP_MIN:
-        case YETTY_YFSVM_OP_MAX:
-        case YETTY_YFSVM_OP_FLOOR:
-        case YETTY_YFSVM_OP_CEIL:
-        case YETTY_YFSVM_OP_ROUND:
-        case YETTY_YFSVM_OP_FRACT:
-        case YETTY_YFSVM_OP_SIGN:
-        case YETTY_YFSVM_OP_CLAMP01:
-        case YETTY_YFSVM_OP_STEP:
-        case YETTY_YFSVM_OP_MIX:
-        case YETTY_YFSVM_OP_SMOOTHSTEP:
-        case YETTY_YFSVM_OP_TRUNC:
-        case YETTY_YFSVM_OP_RADIANS:
-        case YETTY_YFSVM_OP_DEGREES:
-        case YETTY_YFSVM_OP_SELECT:
-        case YETTY_YFSVM_OP_LT:
-        case YETTY_YFSVM_OP_GT:
-        case YETTY_YFSVM_OP_LE:
-        case YETTY_YFSVM_OP_GE:
-        case YETTY_YFSVM_OP_EQ:
-        case YETTY_YFSVM_OP_NE:
-        case YETTY_YFSVM_OP_RAND:
-        case YETTY_YFSVM_OP_NOISE:
-        case YETTY_YFSVM_OP_RAND2:
-        case YETTY_YFSVM_OP_NOISE2:
-            return 1;
-        default:
-            return 0;
+    case YETTY_YFSVM_OP_NOP:
+    case YETTY_YFSVM_OP_RET:
+    case YETTY_YFSVM_OP_LOAD_C:
+    case YETTY_YFSVM_OP_LOAD_X:
+    case YETTY_YFSVM_OP_LOAD_T:
+    case YETTY_YFSVM_OP_LOAD_S:
+    case YETTY_YFSVM_OP_MOV:
+    case YETTY_YFSVM_OP_LOAD_Y:
+    case YETTY_YFSVM_OP_JMP:
+    case YETTY_YFSVM_OP_JMP_IF_ZERO:
+    case YETTY_YFSVM_OP_JMP_IF_NONZERO:
+    case YETTY_YFSVM_OP_JMP_IF_LT:
+    case YETTY_YFSVM_OP_JMP_IF_GE:
+    case YETTY_YFSVM_OP_ADD:
+    case YETTY_YFSVM_OP_SUB:
+    case YETTY_YFSVM_OP_MUL:
+    case YETTY_YFSVM_OP_DIV:
+    case YETTY_YFSVM_OP_NEG:
+    case YETTY_YFSVM_OP_MOD:
+    case YETTY_YFSVM_OP_SIN:
+    case YETTY_YFSVM_OP_COS:
+    case YETTY_YFSVM_OP_TAN:
+    case YETTY_YFSVM_OP_ASIN:
+    case YETTY_YFSVM_OP_ACOS:
+    case YETTY_YFSVM_OP_ATAN:
+    case YETTY_YFSVM_OP_ATAN2:
+    case YETTY_YFSVM_OP_SINH:
+    case YETTY_YFSVM_OP_COSH:
+    case YETTY_YFSVM_OP_TANH:
+    case YETTY_YFSVM_OP_ASINH:
+    case YETTY_YFSVM_OP_ACOSH:
+    case YETTY_YFSVM_OP_ATANH:
+    case YETTY_YFSVM_OP_SINC:
+    case YETTY_YFSVM_OP_EXP:
+    case YETTY_YFSVM_OP_EXP2:
+    case YETTY_YFSVM_OP_LOG:
+    case YETTY_YFSVM_OP_LOG2:
+    case YETTY_YFSVM_OP_POW:
+    case YETTY_YFSVM_OP_SQRT:
+    case YETTY_YFSVM_OP_RSQRT:
+    case YETTY_YFSVM_OP_ERF:
+    case YETTY_YFSVM_OP_ERFC:
+    case YETTY_YFSVM_OP_ABS:
+    case YETTY_YFSVM_OP_MIN:
+    case YETTY_YFSVM_OP_MAX:
+    case YETTY_YFSVM_OP_FLOOR:
+    case YETTY_YFSVM_OP_CEIL:
+    case YETTY_YFSVM_OP_ROUND:
+    case YETTY_YFSVM_OP_FRACT:
+    case YETTY_YFSVM_OP_SIGN:
+    case YETTY_YFSVM_OP_CLAMP01:
+    case YETTY_YFSVM_OP_STEP:
+    case YETTY_YFSVM_OP_MIX:
+    case YETTY_YFSVM_OP_SMOOTHSTEP:
+    case YETTY_YFSVM_OP_TRUNC:
+    case YETTY_YFSVM_OP_RADIANS:
+    case YETTY_YFSVM_OP_DEGREES:
+    case YETTY_YFSVM_OP_SELECT:
+    case YETTY_YFSVM_OP_LT:
+    case YETTY_YFSVM_OP_GT:
+    case YETTY_YFSVM_OP_LE:
+    case YETTY_YFSVM_OP_GE:
+    case YETTY_YFSVM_OP_EQ:
+    case YETTY_YFSVM_OP_NE:
+    case YETTY_YFSVM_OP_RAND:
+    case YETTY_YFSVM_OP_NOISE:
+    case YETTY_YFSVM_OP_RAND2:
+    case YETTY_YFSVM_OP_NOISE2:
+        return 1;
+    default:
+        return 0;
     }
 }
 
 // True if the opcode is a branch whose imm12 is a jump target
-static inline int yfsvm_opcode_is_branch(uint32_t op) {
+static inline int yfsvm_opcode_is_branch(uint32_t op)
+{
     switch (op) {
-        case YETTY_YFSVM_OP_JMP:
-        case YETTY_YFSVM_OP_JMP_IF_ZERO:
-        case YETTY_YFSVM_OP_JMP_IF_NONZERO:
-        case YETTY_YFSVM_OP_JMP_IF_LT:
-        case YETTY_YFSVM_OP_JMP_IF_GE:
-            return 1;
-        default:
-            return 0;
+    case YETTY_YFSVM_OP_JMP:
+    case YETTY_YFSVM_OP_JMP_IF_ZERO:
+    case YETTY_YFSVM_OP_JMP_IF_NONZERO:
+    case YETTY_YFSVM_OP_JMP_IF_LT:
+    case YETTY_YFSVM_OP_JMP_IF_GE:
+        return 1;
+    default:
+        return 0;
     }
 }
 

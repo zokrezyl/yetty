@@ -152,9 +152,9 @@ all: help
 # *.gen.c) that contains a `class@<module>:` or `mixin@<module>:`
 # clang annotation is included as a source for that module.
 #
-# Include hints (YCLASS_CODEGEN_INCLUDES): only project-local paths.
-# Codegen's clang -fsyntax-only step tolerates missing third-party
-# headers — it needs the annotation AST nodes, not a clean compile.
+# Codegen derives its clang include paths from the include/ and src/ roots
+# it is passed; its -fsyntax-only step tolerates missing third-party headers —
+# it needs the annotation AST nodes, not a clean compile.
 
 # A module entry is either a bare name (sources under src/yetty/<name>/)
 # or <name>=<path> for yclass modules living elsewhere (yclass-based tools).
@@ -182,8 +182,7 @@ codegen: ## Run yclass codegen for all annotated modules (output committed to gi
 				fail=1; continue; \
 			fi; \
 			echo "==> yclass codegen: $$mod"; \
-			YCLASS_CODEGEN_INCLUDES="$(CURDIR)/include:$(CURDIR)/src" \
-				uv run src/yetty/yclass/gen/codegen.py "$$mod" \
+			uv run src/yetty/yclass/gen/codegen.py "$$mod" \
 					"$(CURDIR)/include/yetty" \
 					"$(CURDIR)/$$src_dir" \
 					$$sources || fail=1; \

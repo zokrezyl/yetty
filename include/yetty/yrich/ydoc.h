@@ -2,8 +2,8 @@
 /* Public interface for regular class(es) `paragraph, inline_image, ydoc` (module: yrich).
  * Fully generated from the source .c — do not edit. This single
  * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), and any
- * `expose`d API. Public types come from `expose` annotations. */
+ * accessors, method stubs, create()/register(), exposed
+ * functions, and the public types the signatures use. */
 #ifndef YETTY_YCLASSGEN_YRICH_YDOC_H
 #define YETTY_YCLASSGEN_YRICH_YDOC_H
 
@@ -11,6 +11,11 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/yrich/yrich-types.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 struct yetty_yclass_ptr_result yetty_yrich_paragraph_class_get(void);
 struct yetty_yclass_ptr_result yetty_yrich_inline_image_class_get(void);
@@ -21,7 +26,13 @@ struct yetty_yclass_ptr_result yetty_yrich_ydoc_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_yrich_paragraph;
-YETTY_YRESULT_DECLARE(yetty_yrich_paragraph_ptr, struct yetty_yrich_paragraph *);
+struct yetty_yrich_paragraph_ptr_result {
+    int ok;
+    union {
+        struct yetty_yrich_paragraph *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_yrich_paragraph_ptr_result yetty_yrich_paragraph_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yrich_paragraph_to(struct yetty_yrich_paragraph *data);
 
@@ -30,7 +41,13 @@ struct yetty_yclass_object *yetty_yrich_paragraph_to(struct yetty_yrich_paragrap
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_yrich_inline_image;
-YETTY_YRESULT_DECLARE(yetty_yrich_inline_image_ptr, struct yetty_yrich_inline_image *);
+struct yetty_yrich_inline_image_ptr_result {
+    int ok;
+    union {
+        struct yetty_yrich_inline_image *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_yrich_inline_image_ptr_result yetty_yrich_inline_image_from(
     struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yrich_inline_image_to(struct yetty_yrich_inline_image *data);
@@ -40,11 +57,15 @@ struct yetty_yclass_object *yetty_yrich_inline_image_to(struct yetty_yrich_inlin
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_yrich_ydoc;
-YETTY_YRESULT_DECLARE(yetty_yrich_ydoc_ptr, struct yetty_yrich_ydoc *);
+struct yetty_yrich_ydoc_ptr_result {
+    int ok;
+    union {
+        struct yetty_yrich_ydoc *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_yrich_ydoc_ptr_result yetty_yrich_ydoc_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yrich_ydoc_to(struct yetty_yrich_ydoc *data);
-
-struct yetty_ycore_void_result;
 
 struct yetty_ycore_void_result yetty_yrich_ydoc_toggle_format(struct yetty_yclass_ctx *ctx,
                                                               struct yetty_yclass_object *obj,
@@ -79,9 +100,6 @@ struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_create(struct yetty_yclas
 
 struct yetty_ycore_void_result yetty_yrich_register(void);
 
-/* Header-destined: the shared yrich value types the public ydoc API above
- * references. */
-#include <yetty/yrich/yrich-types.h>
 struct yetty_ycore_void_result yetty_yrich_paragraph_set_text(struct yetty_yclass_object *obj,
                                                               const char *text, size_t len);
 struct yetty_ycore_void_result yetty_yrich_paragraph_set_font_size(struct yetty_yclass_object *obj,
@@ -125,5 +143,9 @@ struct yetty_ycore_void_result yetty_yrich_paragraph_run_get(struct yetty_yclass
 struct yetty_ycore_void_result yetty_yrich_paragraph_add_run(struct yetty_yclass_object *obj,
                                                              int32_t start, int32_t end,
                                                              uint32_t format, uint32_t color);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

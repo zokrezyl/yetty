@@ -2,8 +2,8 @@
 /* Public interface for regular class(es) `container` (module: yfigure).
  * Fully generated from the source .c — do not edit. This single
  * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), and any
- * `expose`d API. Public types come from `expose` annotations. */
+ * accessors, method stubs, create()/register(), exposed
+ * functions, and the public types the signatures use. */
 #ifndef YETTY_YCLASSGEN_YFIGURE_CONTAINER_H
 #define YETTY_YCLASSGEN_YFIGURE_CONTAINER_H
 
@@ -12,6 +12,22 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct yetty_context;
+struct yetty_ycore_rectangle;
+struct yetty_yfigure_figure;
+struct yetty_yfigure_registry;
+struct yetty_ywire_wire_statemachine;
+
+struct yetty_yfigure_hit {
+    uint32_t figure_id;
+    float local_x;
+    float local_y;
+};
+
 struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct
@@ -19,13 +35,16 @@ struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_yfigure_container;
-YETTY_YRESULT_DECLARE(yetty_yfigure_container_ptr, struct yetty_yfigure_container *);
+struct yetty_yfigure_container_ptr_result {
+    int ok;
+    union {
+        struct yetty_yfigure_container *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_yfigure_container_ptr_result yetty_yfigure_container_from(
     struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yfigure_container_to(struct yetty_yfigure_container *data);
-
-struct yetty_ycore_void_result;
-struct yetty_yfigure_figure;
 
 struct yetty_ycore_void_result yetty_yfigure_constructor(struct yetty_yclass_ctx *ctx,
                                                          struct yetty_yclass_object *obj);
@@ -60,17 +79,6 @@ struct yetty_yclass_object_ptr_result yetty_yfigure_container_create(struct yett
 
 struct yetty_ycore_void_result yetty_yfigure_register(void);
 
-struct yetty_context;
-struct yetty_ycore_rectangle;
-struct yetty_yfigure_figure;
-struct yetty_yfigure_registry;
-struct yetty_ywire_wire_statemachine;
-
-struct yetty_yfigure_hit {
-    uint32_t figure_id;
-    float local_x;
-    float local_y;
-};
 struct yetty_ycore_char_ptr_result yetty_yfigure_dump(const struct yetty_yfigure_figure *self,
                                                       int indent);
 struct yetty_ycore_void_result yetty_yfigure_container_clear_all(struct yetty_yclass_object *obj);
@@ -102,5 +110,9 @@ struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id(
     struct yetty_yclass_object *obj, uint32_t id);
 struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yclass_object *obj, float x,
                                                           float y);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

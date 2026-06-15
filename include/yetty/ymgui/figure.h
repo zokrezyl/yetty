@@ -2,8 +2,8 @@
 /* Public interface for regular class(es) `figure` (module: ymgui).
  * Fully generated from the source .c — do not edit. This single
  * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), and any
- * `expose`d API. Public types come from `expose` annotations. */
+ * accessors, method stubs, create()/register(), exposed
+ * functions, and the public types the signatures use. */
 #ifndef YETTY_YCLASSGEN_YMGUI_FIGURE_H
 #define YETTY_YCLASSGEN_YMGUI_FIGURE_H
 
@@ -12,6 +12,20 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct yetty_context;
+struct yetty_ycore_rectangle;
+struct yetty_yfigure_registry;
+struct yetty_ymgui_pipeline;
+
+struct yetty_ymgui_factory_args {
+    const struct yetty_context *context;
+    struct yetty_ymgui_pipeline *pipeline;
+};
+
 struct yetty_yclass_ptr_result yetty_ymgui_figure_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct
@@ -19,7 +33,13 @@ struct yetty_yclass_ptr_result yetty_ymgui_figure_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_ymgui_figure;
-YETTY_YRESULT_DECLARE(yetty_ymgui_figure_ptr, struct yetty_ymgui_figure *);
+struct yetty_ymgui_figure_ptr_result {
+    int ok;
+    union {
+        struct yetty_ymgui_figure *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_ymgui_figure_to(struct yetty_ymgui_figure *data);
 
@@ -27,13 +47,6 @@ struct yetty_yclass_object_ptr_result yetty_ymgui_figure_create(struct yetty_ycl
 
 struct yetty_ycore_void_result yetty_ymgui_register(void);
 
-struct yetty_ycore_rectangle;
-struct yetty_yfigure_registry;
-
-struct yetty_ymgui_factory_args {
-    const struct yetty_context *context;
-    struct yetty_ymgui_pipeline *pipeline;
-};
 struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create_local(
     struct yetty_ycore_rectangle rect, struct yetty_ymgui_pipeline *pipeline,
     const struct yetty_context *context);
@@ -49,5 +62,9 @@ struct yetty_ycore_void_result yetty_ymgui_register_factory(struct yetty_yfigure
                                                             struct yetty_ymgui_factory_args *args);
 struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
     struct yetty_ymgui_factory_args *args);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

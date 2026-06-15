@@ -2,8 +2,8 @@
 /* Public interface for regular class(es) `shape, slides` (module: yrich).
  * Fully generated from the source .c — do not edit. This single
  * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), and any
- * `expose`d API. Public types come from `expose` annotations. */
+ * accessors, method stubs, create()/register(), exposed
+ * functions, and the public types the signatures use. */
 #ifndef YETTY_YCLASSGEN_YRICH_SLIDES_H
 #define YETTY_YCLASSGEN_YRICH_SLIDES_H
 
@@ -11,6 +11,22 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/yrich/yrich-types.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct yetty_yrich_slide;
+
+enum yetty_yrich_shape_kind {
+    YETTY_YRICH_SHAPE_RECTANGLE = 0,
+    YETTY_YRICH_SHAPE_ELLIPSE = 1,
+    YETTY_YRICH_SHAPE_TEXTBOX = 2,
+    YETTY_YRICH_SHAPE_LINE = 3,
+    YETTY_YRICH_SHAPE_ARROW = 4,
+    YETTY_YRICH_SHAPE_IMAGE = 5,
+};
 
 struct yetty_yclass_ptr_result yetty_yrich_shape_class_get(void);
 struct yetty_yclass_ptr_result yetty_yrich_slides_class_get(void);
@@ -20,7 +36,13 @@ struct yetty_yclass_ptr_result yetty_yrich_slides_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_yrich_shape;
-YETTY_YRESULT_DECLARE(yetty_yrich_shape_ptr, struct yetty_yrich_shape *);
+struct yetty_yrich_shape_ptr_result {
+    int ok;
+    union {
+        struct yetty_yrich_shape *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_yrich_shape_ptr_result yetty_yrich_shape_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yrich_shape_to(struct yetty_yrich_shape *data);
 struct uint32_result yetty_yrich_shape_fill_color_get(struct yetty_yclass_object *obj);
@@ -50,11 +72,15 @@ struct yetty_ycore_void_result yetty_yrich_shape_text_valign_set(struct yetty_yc
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_yrich_slides;
-YETTY_YRESULT_DECLARE(yetty_yrich_slides_ptr, struct yetty_yrich_slides *);
+struct yetty_yrich_slides_ptr_result {
+    int ok;
+    union {
+        struct yetty_yrich_slides *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_yrich_slides_ptr_result yetty_yrich_slides_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yrich_slides_to(struct yetty_yrich_slides *data);
-
-struct yetty_ycore_void_result;
 
 struct yetty_ycore_void_result yetty_yrich_slides_set_current(struct yetty_yclass_ctx *ctx,
                                                               struct yetty_yclass_object *obj,
@@ -76,22 +102,6 @@ struct yetty_yclass_object_ptr_result yetty_yrich_slides_create(struct yetty_ycl
 
 struct yetty_ycore_void_result yetty_yrich_register(void);
 
-struct yetty_yrich_slide;
-
-/* Header-destined content for the generated slides.h (skipped by the real
- * build, which defines the enum in the #ifndef block above). The types
- * include carries the slide aggregate + its Result the slide-management
- * API above references. */
-#include <yetty/yrich/yrich-types.h>
-
-enum yetty_yrich_shape_kind {
-    YETTY_YRICH_SHAPE_RECTANGLE = 0,
-    YETTY_YRICH_SHAPE_ELLIPSE,
-    YETTY_YRICH_SHAPE_TEXTBOX,
-    YETTY_YRICH_SHAPE_LINE,
-    YETTY_YRICH_SHAPE_ARROW,
-    YETTY_YRICH_SHAPE_IMAGE,
-};
 struct yetty_ycore_void_result yetty_yrich_shape_set_text(struct yetty_yclass_object *obj,
                                                           const char *text, size_t len);
 struct yetty_ycore_void_result yetty_yrich_shape_set_font_size(struct yetty_yclass_object *obj,
@@ -119,5 +129,9 @@ struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_line(struct yetty_y
 struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_image(struct yetty_yclass_object *obj,
                                                                    float x, float y, float width,
                                                                    float height);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

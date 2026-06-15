@@ -49,8 +49,8 @@ struct yetty_yfspy_program {
  * error messages and may be NULL.
  *
  * The produced program is already validated (yetty_yfsvm_program_validate). */
-int yetty_yfspy_compile(const char *source, const char *filename,
-                        struct yetty_yfspy_program *out, char *errbuf, size_t errcap);
+int yetty_yfspy_compile(const char *source, const char *filename, struct yetty_yfspy_program *out,
+                        char *errbuf, size_t errcap);
 
 #ifdef __cplusplus
 }

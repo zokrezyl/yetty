@@ -2,8 +2,8 @@
 /* Public interface for regular class(es) `map` (module: ymap).
  * Fully generated from the source .c — do not edit. This single
  * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), and any
- * `expose`d API. Public types come from `expose` annotations. */
+ * accessors, method stubs, create()/register(), exposed
+ * functions, and the public types the signatures use. */
 #ifndef YETTY_YCLASSGEN_YMAP_MAP_H
 #define YETTY_YCLASSGEN_YMAP_MAP_H
 
@@ -11,6 +11,13 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ydraw-core/drawable-list.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct yetty_ydraw_drawable_list;
 
 struct yetty_yclass_ptr_result yetty_ymap_map_class_get(void);
 
@@ -19,14 +26,15 @@ struct yetty_yclass_ptr_result yetty_ymap_map_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_ymap_map;
-YETTY_YRESULT_DECLARE(yetty_ymap_map_ptr, struct yetty_ymap_map *);
+struct yetty_ymap_map_ptr_result {
+    int ok;
+    union {
+        struct yetty_ymap_map *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_ymap_map_ptr_result yetty_ymap_map_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_ymap_map_to(struct yetty_ymap_map *data);
-
-struct yetty_ycore_const_char_ptr_result;
-struct yetty_ycore_int_result;
-struct yetty_ycore_void_result;
-struct yetty_ydraw_drawable_list_result;
 
 struct yetty_ycore_void_result yetty_ymap_configure(struct yetty_yclass_ctx *ctx,
                                                     struct yetty_yclass_object *obj,
@@ -108,16 +116,15 @@ struct yetty_yclass_object_ptr_result yetty_ymap_map_create(struct yetty_yclass_
 
 struct yetty_ycore_void_result yetty_ymap_register(void);
 
-struct yetty_ydraw_drawable_list;
-
-/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated map.h needs the complete type. */
-#include <yetty/ydraw-core/drawable-list.h>
 uint32_t yetty_ymap_provider_count(void);
 struct yetty_ycore_void_result yetty_ymap_provider_info(uint32_t index, const char **out_name,
                                                         const char **out_attribution,
                                                         uint32_t *out_max_zoom, int *out_is_vector);
 struct yetty_ycore_void_result yetty_ymap_emit_osc(const struct yetty_ydraw_drawable_list *list,
                                                    int fd);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

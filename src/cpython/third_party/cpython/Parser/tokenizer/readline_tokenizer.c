@@ -6,10 +6,10 @@
 #include "../lexer/state.h"
 #include "../lexer/buffer.h"
 
-static int
-tok_readline_string(struct tok_state* tok) {
-    PyObject* line = NULL;
-    PyObject* raw_line = PyObject_CallNoArgs(tok->readline);
+static int tok_readline_string(struct tok_state *tok)
+{
+    PyObject *line = NULL;
+    PyObject *raw_line = PyObject_CallNoArgs(tok->readline);
     if (raw_line == NULL) {
         if (PyErr_ExceptionMatches(PyExc_StopIteration)) {
             PyErr_Clear();
@@ -18,7 +18,7 @@ tok_readline_string(struct tok_state* tok) {
         _PyTokenizer_error_ret(tok);
         goto error;
     }
-    if(tok->encoding != NULL) {
+    if (tok->encoding != NULL) {
         if (!PyBytes_Check(raw_line)) {
             PyErr_Format(PyExc_TypeError, "readline() returned a non-bytes object");
             _PyTokenizer_error_ret(tok);
@@ -32,7 +32,7 @@ tok_readline_string(struct tok_state* tok) {
             goto error;
         }
     } else {
-        if(!PyUnicode_Check(raw_line)) {
+        if (!PyUnicode_Check(raw_line)) {
             PyErr_Format(PyExc_TypeError, "readline() returned a non-string object");
             _PyTokenizer_error_ret(tok);
             goto error;
@@ -41,7 +41,7 @@ tok_readline_string(struct tok_state* tok) {
         raw_line = NULL;
     }
     Py_ssize_t buflen;
-    const char* buf = PyUnicode_AsUTF8AndSize(line, &buflen);
+    const char *buf = PyUnicode_AsUTF8AndSize(line, &buflen);
     if (buf == NULL) {
         _PyTokenizer_error_ret(tok);
         goto error;
@@ -67,8 +67,8 @@ error:
     return 0;
 }
 
-static int
-tok_underflow_readline(struct tok_state* tok) {
+static int tok_underflow_readline(struct tok_state *tok)
+{
     assert(tok->decoding_state == STATE_NORMAL);
     assert(tok->fp == NULL && tok->input == NULL && tok->decoding_readline == NULL);
     if (tok->start == NULL && !INSIDE_FSTRING(tok)) {
@@ -105,13 +105,13 @@ tok_underflow_readline(struct tok_state* tok) {
     return tok->done == E_OK;
 }
 
-struct tok_state *
-_PyTokenizer_FromReadline(PyObject* readline, const char* enc,
-                          int exec_input, int preserve_crlf)
+struct tok_state *_PyTokenizer_FromReadline(PyObject *readline, const char *enc, int exec_input,
+                                            int preserve_crlf)
 {
     struct tok_state *tok = _PyTokenizer_tok_new();
-    if (tok == NULL)
+    if (tok == NULL) {
         return NULL;
+    }
     if ((tok->buf = (char *)PyMem_Malloc(BUFSIZ)) == NULL) {
         _PyTokenizer_Free(tok);
         PyErr_NoMemory();

@@ -3,7 +3,7 @@
 #ifndef PYP_ARENA_H
 #define PYP_ARENA_H
 
-#include "asdl.h"   /* PyArena, _PyArena_Malloc */
+#include "asdl.h" /* PyArena, _PyArena_Malloc */
 
 PyArena *_PyArena_New(void);
 void _PyArena_Free(PyArena *arena);

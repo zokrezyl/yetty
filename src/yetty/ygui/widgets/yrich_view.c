@@ -43,13 +43,6 @@ struct yetty_ygui_yrich_view_ptr_result yetty_ygui_yrich_view_from(struct yetty_
 #include <stdint.h>
 #include <string.h>
 
-#ifdef YCLASS_CODEGEN
-/* Header-destined: the exposed prototypes below take yrich key/mod types,
- * so the generated header must pull these in. The document itself is a
- * yclass object — no yrich document header needed. */
-#include <yetty/yrich/yrich-types.h>
-#endif
-
 /* Fallback text/page colours (brand off-white on a lifted surface) used
  * when no engine theme is reachable yet. Packed 0xAABBGGRR, matching the
  * theme + yrich colour convention. */
@@ -58,8 +51,9 @@ struct yetty_ygui_yrich_view_ptr_result yetty_ygui_yrich_view_from(struct yetty_
 
 #define YRICH_VIEW_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
 
-struct [[clang::annotate("class@ygui:yrich_view")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
-yetty_ygui_yrich_view {
+struct [[clang::annotate("class@ygui:yrich_view"),
+         clang::annotate("include@yetty/yrich/yrich-types.h")]] [[clang::annotate(
+    "parent@ygui:ydraw_embed")]] yetty_ygui_yrich_view {
     struct yetty_yclass_object *doc; /* yrich document object — owned iff `own` */
     int own;
     float rendered_w;

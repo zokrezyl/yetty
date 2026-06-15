@@ -22,20 +22,10 @@
 #include "../internal.h"
 #include <yetty/ygui/widget.h>
 
-/* Drag callback typedef. Header-destined: codegen copies the
- * `#ifdef YCLASS_CODEGEN` block verbatim into the generated header (it must
- * appear BEFORE the exposed functions that take it, so they resolve to it
- * rather than an unrelated visible typedef). The real build gets its own
- * copy from the parallel `#ifndef YCLASS_CODEGEN` block. The two never
- * coexist in one parse. */
-#ifdef YCLASS_CODEGEN
+/* Drag callback type. Defined here in the owning .c; codegen reproduces it
+ * into the generated header for any public signature that references it. */
 typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *obj,
                                                              float dx, float dy, void *userdata);
-#endif
-#ifndef YCLASS_CODEGEN
-typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *obj,
-                                                             float dx, float dy, void *userdata);
-#endif
 
 struct [[clang::annotate("mixin@ygui:draggable")]] yetty_ygui_draggable {
     int dragging;
