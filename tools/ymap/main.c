@@ -253,8 +253,7 @@ int main(int argc, char **argv)
 
     int exit_code = 1;
     if (url_template) {
-        struct yetty_ycore_void_result custom_res = yetty_ymap_set_custom_provider(
-            NULL, map_object, url_template, vector_mode ? 1 : 0, NULL, 0,
+        struct yetty_ycore_void_result custom_res = yetty_ymap_set_custom_provider(map_object, url_template, vector_mode ? 1 : 0, NULL, 0,
             "(C) custom tile provider — check its usage terms");
         if (YETTY_IS_ERR(custom_res)) {
             fprintf(stderr, "ymap: --url rejected: %s\n", custom_res.error.msg);
@@ -264,7 +263,7 @@ int main(int argc, char **argv)
     } else {
         const char *chosen = provider_name ? provider_name : (vector_mode ? "osm-vector" : "osm");
         struct yetty_ycore_void_result provider_res =
-            yetty_ymap_set_provider(NULL, map_object, chosen);
+            yetty_ymap_set_provider(map_object, chosen);
         if (YETTY_IS_ERR(provider_res)) {
             fprintf(stderr, "ymap: unknown provider '%s' (see --list-providers)\n",
                     chosen);
@@ -303,8 +302,7 @@ int main(int argc, char **argv)
     uint32_t width_px = (uint32_t)width_cells * CELL_WIDTH_PX;
     uint32_t height_px = (uint32_t)height_cells * CELL_HEIGHT_PX;
     {
-        struct yetty_ycore_void_result configure_res = yetty_ymap_configure(
-            NULL, map_object, latitude, longitude, (uint32_t)zoom, width_px, height_px);
+        struct yetty_ycore_void_result configure_res = yetty_ymap_configure(map_object, latitude, longitude, (uint32_t)zoom, width_px, height_px);
         if (YETTY_IS_ERR(configure_res)) {
             fprintf(stderr, "ymap: configure failed: %s\n", configure_res.error.msg);
             yetty_ycore_error_destroy(configure_res.error);
@@ -317,7 +315,7 @@ int main(int argc, char **argv)
         goto out;
     }
 
-    struct yetty_ydraw_drawable_list_result render_res = yetty_ymap_render(NULL, map_object);
+    struct yetty_ydraw_drawable_list_result render_res = yetty_ymap_render(map_object);
     if (YETTY_IS_ERR(render_res)) {
         fprintf(stderr, "ymap: render failed: %s\n", render_res.error.msg);
         yetty_ycore_error_destroy(render_res.error);
@@ -337,7 +335,7 @@ int main(int argc, char **argv)
     /* Required by every provider's terms — keep visible under the map. */
     {
         struct yetty_ycore_const_char_ptr_result attribution_res =
-            yetty_ymap_attribution(NULL, map_object);
+            yetty_ymap_attribution(map_object);
         printf("%s\n", YETTY_IS_OK(attribution_res) ? attribution_res.value
                                                      : "(C) tile provider");
         if (YETTY_IS_ERR(attribution_res)) {
@@ -360,7 +358,7 @@ int main(int argc, char **argv)
     exit_code = 0;
 
 out:;
-    struct yetty_ycore_void_result destroy_res = yetty_ymap_destroy(NULL, map_object);
+    struct yetty_ycore_void_result destroy_res = yetty_ymap_destroy(map_object);
     if (YETTY_IS_ERR(destroy_res)) {
         yetty_ycore_error_destroy(destroy_res.error);
     }

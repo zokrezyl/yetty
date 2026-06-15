@@ -572,10 +572,8 @@ static void on_wheel(struct yaudio_app *app, float dy, int mods)
     request_view_update(app);
 }
 
-static struct yetty_ycore_void_result on_prev_click(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *w, void *userdata)
+static struct yetty_ycore_void_result on_prev_click(struct yetty_yclass_object *w, void *userdata)
 {
-    (void)ctx;
     (void)w;
     struct yaudio_app *app = userdata;
     if (app->iv->n == 0) {
@@ -586,10 +584,8 @@ static struct yetty_ycore_void_result on_prev_click(struct yetty_yclass_ctx *ctx
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result on_next_click(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *w, void *userdata)
+static struct yetty_ycore_void_result on_next_click(struct yetty_yclass_object *w, void *userdata)
 {
-    (void)ctx;
     (void)w;
     struct yaudio_app *app = userdata;
     if (app->iv->n == 0) {
@@ -1007,11 +1003,11 @@ static struct yetty_ycore_int_result yaudio_event_handler(
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (ev->key.key == 262) {
-            yetty_ycore_error_destroy_safe(on_next_click(NULL, NULL, app));
+            yetty_ycore_error_destroy_safe(on_next_click(NULL, app));
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (ev->key.key == 263) {
-            yetty_ycore_error_destroy_safe(on_prev_click(NULL, NULL, app));
+            yetty_ycore_error_destroy_safe(on_prev_click(NULL, app));
             return YETTY_OK(yetty_ycore_int, 1);
         }
         break;

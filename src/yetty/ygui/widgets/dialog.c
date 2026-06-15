@@ -46,10 +46,8 @@ yetty_ygui_dialog {
 };
 
 [[clang::annotate("override@ygui:dialog:constructor")]]
-static struct yetty_ycore_void_result dialog_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                         struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result dialog_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_dialog_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -74,10 +72,8 @@ static struct yetty_ycore_void_result dialog_constructor(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@ygui:dialog:destructor")]]
-static struct yetty_ycore_void_result dialog_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                        struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result dialog_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_dialog_ptr_result d_dr = yetty_ygui_dialog_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dialog_destructor: data_get");
@@ -125,11 +121,9 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
 }
 
 [[clang::annotate("override@ygui:dialog:widget_paint")]]
-static struct yetty_ycore_void_result dialog_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                   struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result dialog_paint(struct yetty_yclass_object *yclass_obj,
                                                    struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_dialog_ptr_result d_dr = yetty_ygui_dialog_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dialog_paint: data_get");

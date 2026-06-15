@@ -259,12 +259,11 @@ static const char *const *demo_labels(int *count)
 
 /* Tabbar VALUE_CHANGED → swap the ybrowser's document to the picked page.
  * userdata is the ybrowser widget itself (it outlives the subscription). */
-static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *ctx,
+static struct yetty_ycore_void_result on_tab_change(
                                                     struct yetty_yclass_object *target,
                                                     const struct yetty_ygui_event *event,
                                                     void *userdata)
 {
-    (void)ctx;
     (void)target;
     struct yetty_yclass_object *browser = userdata;
     if (!browser || !event) {

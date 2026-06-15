@@ -38,11 +38,9 @@ struct [[clang::annotate("class@ygui:toggle")]] [[clang::annotate(
     int on;
 };
 
-static struct yetty_ycore_void_result on_click_flip(struct yetty_yclass_ctx *yclass_ctx,
-                                                    struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result on_click_flip(struct yetty_yclass_object *yclass_obj,
                                                     void *userdata)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)userdata;
     struct yetty_ygui_toggle_ptr_result d_dr = yetty_ygui_toggle_from(obj);
@@ -61,10 +59,8 @@ static struct yetty_ycore_void_result on_click_flip(struct yetty_yclass_ctx *ycl
 }
 
 [[clang::annotate("override@ygui:toggle:constructor")]]
-static struct yetty_ycore_void_result toggle_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                         struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result toggle_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_toggle_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -78,10 +74,8 @@ static struct yetty_ycore_void_result toggle_constructor(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@ygui:toggle:destructor")]]
-static struct yetty_ycore_void_result toggle_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                        struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result toggle_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_toggle_ptr_result d_dr = yetty_ygui_toggle_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "toggle_destructor: data_get");
@@ -132,11 +126,9 @@ static struct yetty_ycore_void_result paint_circle(struct yetty_ygui_emit_ctx *c
 }
 
 [[clang::annotate("override@ygui:toggle:widget_paint")]]
-static struct yetty_ycore_void_result toggle_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                   struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result toggle_paint(struct yetty_yclass_object *yclass_obj,
                                                    struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "toggle_paint: NULL ctx");

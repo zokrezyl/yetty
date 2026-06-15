@@ -225,3 +225,20 @@ void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance)
     free(instance->buffer_data);
     free(instance);
 }
+
+/* Render one composite instance into `target` at (x, y). Thin public wrapper
+ * over the per-instance `render` op (the host grid supplies the position for
+ * its scrolling/anchored placement). A figure type with no render op simply
+ * doesn't paint — not an error. */
+struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_composite *instance,
+                                                            struct yetty_ydraw_target *target,
+                                                            float x, float y)
+{
+    if (!instance) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ydraw_composite_render: NULL instance");
+    }
+    if (!instance->render) {
+        return YETTY_OK_VOID();
+    }
+    return instance->render(instance, target, x, y);
+}

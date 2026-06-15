@@ -74,11 +74,9 @@ static int splitter_axis_row(struct yetty_yclass_object *obj, const struct yetty
 }
 
 [[clang::annotate("override@ygui:splitter:widget_paint")]]
-static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
-                                            struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "splitter paint: NULL ctx");
@@ -121,11 +119,9 @@ static struct yetty_yclass_object *splitter_prev_sibling(struct yetty_yclass_obj
 }
 
 [[clang::annotate("override@ygui:splitter:widget_on_press")]]
-static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ctx,
-                                              struct yetty_yclass_object *yclass_obj, float x,
+static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass_obj, float x,
                                               float y, int btn)
 {
-    (void)yclass_ctx;
     (void)yclass_obj;
     (void)x;
     (void)y;
@@ -135,11 +131,9 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
 }
 
 [[clang::annotate("override@ygui:splitter:widget_on_motion")]]
-static struct yetty_ycore_int_result on_motion(struct yetty_yclass_ctx *yclass_ctx,
-                                               struct yetty_yclass_object *yclass_obj, float x,
+static struct yetty_ycore_int_result on_motion(struct yetty_yclass_object *yclass_obj, float x,
                                                float y)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_yclass_ptr_result class_result = splitter_class();
     YETTY_RETURN_IF_ERR(yetty_ycore_int, class_result, "on_motion: class");

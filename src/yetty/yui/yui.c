@@ -349,26 +349,19 @@ static const struct view_meta s_views[YETTY_YUI_VIEW_KIND_COUNT] = {
  *   click_cb     : (ctx, obj, userdata)
  *===========================================================================*/
 
-static struct yetty_ycore_void_result yui_menu_open_dialog(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result yui_menu_open_dialog(struct yetty_yclass_object *menu,
                                                            int item_index, void *userdata);
-static struct yetty_ycore_void_result yui_menu_spawn_shell(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result yui_menu_spawn_shell(struct yetty_yclass_object *menu,
                                                            int item_index, void *userdata);
-static struct yetty_ycore_void_result yui_dialog_connect(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *button,
+static struct yetty_ycore_void_result yui_dialog_connect(struct yetty_yclass_object *button,
                                                          void *userdata);
-static struct yetty_ycore_void_result yui_dialog_cancel(struct yetty_yclass_ctx *ctx,
-                                                        struct yetty_yclass_object *button,
+static struct yetty_ycore_void_result yui_dialog_cancel(struct yetty_yclass_object *button,
                                                         void *userdata);
-static struct yetty_ycore_void_result yui_app_menu_open_new_view(struct yetty_yclass_ctx *ctx,
-                                                                 struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result yui_app_menu_open_new_view(struct yetty_yclass_object *menu,
                                                                  int item_index, void *userdata);
-static struct yetty_ycore_void_result yui_app_menu_open_gpu_info(struct yetty_yclass_ctx *ctx,
-                                                                 struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result yui_app_menu_open_gpu_info(struct yetty_yclass_object *menu,
                                                                  int item_index, void *userdata);
-static struct yetty_ycore_void_result yui_app_menu_back_to_root(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result yui_app_menu_back_to_root(struct yetty_yclass_object *menu,
                                                                 int item_index, void *userdata);
 static struct yetty_ycore_void_result yui_app_menu_populate_root(struct yetty_yui *yui);
 static struct yetty_ycore_void_result yui_app_menu_populate_new_view(struct yetty_yui *yui);
@@ -376,47 +369,37 @@ static struct yetty_ycore_void_result yui_app_menu_populate_context_root(struct 
 static struct yetty_ycore_void_result yui_app_menu_populate_split_kind(struct yetty_yui *yui,
                                                                        int horizontal);
 static struct yetty_ycore_void_result yui_context_open_split_vertical(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *menu, int item_index, void *userdata);
+    struct yetty_yclass_object *menu, int item_index, void *userdata);
 static struct yetty_ycore_void_result yui_context_open_split_horizontal(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *menu, int item_index, void *userdata);
-static struct yetty_ycore_void_result yui_split_kind_action(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *menu,
+    struct yetty_yclass_object *menu, int item_index, void *userdata);
+static struct yetty_ycore_void_result yui_split_kind_action(struct yetty_yclass_object *menu,
                                                             int item_index, void *userdata);
-static struct yetty_ycore_void_result yui_split_back_to_context(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result yui_split_back_to_context(struct yetty_yclass_object *menu,
                                                                 int item_index, void *userdata);
 static struct yetty_ycore_void_result yui_context_toggle_debug_window(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *menu, int item_index, void *userdata);
-static struct yetty_ycore_void_result yui_gpu_info_refresh(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *button,
+    struct yetty_yclass_object *menu, int item_index, void *userdata);
+static struct yetty_ycore_void_result yui_gpu_info_refresh(struct yetty_yclass_object *button,
                                                            void *userdata);
-static struct yetty_ycore_void_result yui_gpu_info_close(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *button,
+static struct yetty_ycore_void_result yui_gpu_info_close(struct yetty_yclass_object *button,
                                                          void *userdata);
-static struct yetty_ycore_void_result yui_app_menu_open_settings(struct yetty_yclass_ctx *ctx,
-                                                                 struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result yui_app_menu_open_settings(struct yetty_yclass_object *menu,
                                                                  int item_index, void *userdata);
 
 /* Titlebar (ygui-driven). */
 static struct yetty_ycore_void_result yui_titlebar_build(struct yetty_yui *yui);
 static struct yetty_ycore_void_result yui_titlebar_sync(struct yetty_yui *yui);
-static struct yetty_ycore_void_result yui_titlebar_on_hamburger(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *btn,
+static struct yetty_ycore_void_result yui_titlebar_on_hamburger(struct yetty_yclass_object *btn,
                                                                 void *userdata);
 YETTY_EXTERNAL_CALLBACK
 static void yui_titlebar_on_new_tab(struct yetty_yclass_object *tabbar, void *userdata);
-static struct yetty_ycore_void_result yui_titlebar_on_min(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *btn,
+static struct yetty_ycore_void_result yui_titlebar_on_min(struct yetty_yclass_object *btn,
                                                           void *userdata);
-static struct yetty_ycore_void_result yui_titlebar_on_max(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *btn,
+static struct yetty_ycore_void_result yui_titlebar_on_max(struct yetty_yclass_object *btn,
                                                           void *userdata);
-static struct yetty_ycore_void_result yui_titlebar_on_close_window(struct yetty_yclass_ctx *ctx,
-                                                                   struct yetty_yclass_object *btn,
+static struct yetty_ycore_void_result yui_titlebar_on_close_window(struct yetty_yclass_object *btn,
                                                                    void *userdata);
 static struct yetty_ycore_void_result yui_titlebar_on_tab_change(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *target,
-    const struct yetty_ygui_event *event, void *userdata);
+    struct yetty_yclass_object *target, const struct yetty_ygui_event *event, void *userdata);
 YETTY_EXTERNAL_CALLBACK
 static void yui_titlebar_on_tab_close(struct yetty_yclass_object *tabbar, int index,
                                       void *userdata);
@@ -966,7 +949,7 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
         struct yetty_yfigure_figure *rf =
             yetty_yfigure_container_as_figure(yui->root_container_obj);
         struct yetty_ycore_void_result r =
-            yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
+            yetty_yfigure_destroy((struct yetty_yclass_object *)rf - 1);
         if (!YETTY_IS_OK(r)) {
             ywarn("yui_destroy: root_container destroy: %s", r.error.msg);
             yetty_ycore_error_destroy(r.error);
@@ -1453,7 +1436,7 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
         struct yetty_yfigure_figure *rf =
             yetty_yfigure_container_as_figure(yui->root_container_obj);
         struct yetty_ycore_void_result rr =
-            yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
+            yetty_yfigure_render((struct yetty_yclass_object *)rf - 1, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yui root_container render");
         {
             struct yetty_ycore_void_result drop_r =
@@ -1483,11 +1466,9 @@ struct yetty_ycore_int_result yetty_yui_is_dirty(const struct yetty_yui *yui)
  * Menu / dialog callback implementations
  *===========================================================================*/
 
-static struct yetty_ycore_void_result yui_menu_open_dialog(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result yui_menu_open_dialog(struct yetty_yclass_object *menu,
                                                            int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     struct yui_cb_ctx *cb = userdata;
@@ -1505,11 +1486,9 @@ static struct yetty_ycore_void_result yui_menu_open_dialog(struct yetty_yclass_c
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yui_menu_spawn_shell(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result yui_menu_spawn_shell(struct yetty_yclass_object *menu,
                                                            int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     struct yui_cb_ctx *cb = userdata;
@@ -1525,11 +1504,9 @@ static struct yetty_ycore_void_result yui_menu_spawn_shell(struct yetty_yclass_c
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yui_dialog_cancel(struct yetty_yclass_ctx *ctx,
-                                                        struct yetty_yclass_object *button,
+static struct yetty_ycore_void_result yui_dialog_cancel(struct yetty_yclass_object *button,
                                                         void *userdata)
 {
-    (void)ctx;
     (void)button;
     struct yui_cb_ctx *cb = userdata;
     if (!cb || !cb->yui || (int)cb->kind < 0 || (int)cb->kind >= YETTY_YUI_VIEW_KIND_COUNT) {
@@ -1603,11 +1580,9 @@ static struct yetty_ycore_void_result yui_app_menu_populate_new_view(struct yett
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yui_app_menu_open_new_view(struct yetty_yclass_ctx *ctx,
-                                                                 struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result yui_app_menu_open_new_view(struct yetty_yclass_object *menu,
                                                                  int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     struct yetty_ycore_void_result populate_r =
@@ -1616,11 +1591,9 @@ static struct yetty_ycore_void_result yui_app_menu_open_new_view(struct yetty_yc
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yui_app_menu_back_to_root(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result yui_app_menu_back_to_root(struct yetty_yclass_object *menu,
                                                                 int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     struct yetty_ycore_void_result populate_r =
@@ -1705,9 +1678,8 @@ static struct yetty_ycore_void_result yui_app_menu_populate_split_kind(struct ye
 }
 
 static struct yetty_ycore_void_result yui_context_open_split_vertical(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *menu, int item_index, void *userdata)
+    struct yetty_yclass_object *menu, int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     struct yetty_ycore_void_result populate_r =
@@ -1717,9 +1689,8 @@ static struct yetty_ycore_void_result yui_context_open_split_vertical(
 }
 
 static struct yetty_ycore_void_result yui_context_open_split_horizontal(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *menu, int item_index, void *userdata)
+    struct yetty_yclass_object *menu, int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     struct yetty_ycore_void_result populate_r =
@@ -1728,11 +1699,9 @@ static struct yetty_ycore_void_result yui_context_open_split_horizontal(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yui_split_back_to_context(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result yui_split_back_to_context(struct yetty_yclass_object *menu,
                                                                 int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     struct yetty_ycore_void_result populate_r =
@@ -1745,9 +1714,8 @@ static struct yetty_ycore_void_result yui_split_back_to_context(struct yetty_ycl
  * lives on the pane; the per-frame reconcile creates/destroys the actual
  * widget on the next sync. */
 static struct yetty_ycore_void_result yui_context_toggle_debug_window(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *menu, int item_index, void *userdata)
+    struct yetty_yclass_object *menu, int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     struct yetty_yui *yui = userdata;
@@ -1766,11 +1734,9 @@ static struct yetty_ycore_void_result yui_context_toggle_debug_window(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yui_split_kind_action(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result yui_split_kind_action(struct yetty_yclass_object *menu,
                                                             int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     struct yui_split_ctx *sctx = userdata;
@@ -1951,11 +1917,9 @@ static struct yetty_ycore_void_result yui_gpu_info_load_into_textarea(struct yet
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yui_app_menu_open_gpu_info(struct yetty_yclass_ctx *ctx,
-                                                                 struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result yui_app_menu_open_gpu_info(struct yetty_yclass_object *menu,
                                                                  int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     struct yetty_yui *yui = userdata;
@@ -1971,11 +1935,9 @@ static struct yetty_ycore_void_result yui_app_menu_open_gpu_info(struct yetty_yc
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yui_gpu_info_refresh(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *button,
+static struct yetty_ycore_void_result yui_gpu_info_refresh(struct yetty_yclass_object *button,
                                                            void *userdata)
 {
-    (void)ctx;
     (void)button;
     struct yetty_yui *yui = userdata;
     if (!yui) {
@@ -1989,11 +1951,9 @@ static struct yetty_ycore_void_result yui_gpu_info_refresh(struct yetty_yclass_c
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yui_gpu_info_close(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *button,
+static struct yetty_ycore_void_result yui_gpu_info_close(struct yetty_yclass_object *button,
                                                          void *userdata)
 {
-    (void)ctx;
     (void)button;
     struct yetty_yui *yui = userdata;
     if (!yui || !yui->gpu_info_dialog) {
@@ -2006,11 +1966,9 @@ static struct yetty_ycore_void_result yui_gpu_info_close(struct yetty_yclass_ctx
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yui_app_menu_open_settings(struct yetty_yclass_ctx *ctx,
-                                                                 struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result yui_app_menu_open_settings(struct yetty_yclass_object *menu,
                                                                  int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     struct yetty_yui *yui = userdata;
@@ -2169,11 +2127,9 @@ static struct yetty_ycore_void_result yui_titlebar_sync(struct yetty_yui *yui)
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yui_titlebar_on_hamburger(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *btn,
+static struct yetty_ycore_void_result yui_titlebar_on_hamburger(struct yetty_yclass_object *btn,
                                                                 void *userdata)
 {
-    (void)ctx;
     (void)btn;
     struct yetty_ycore_void_result show_r =
         yetty_yui_show_view_menu((struct yetty_yui *)userdata, 4.0f, 36.0f);
@@ -2197,33 +2153,27 @@ static void yui_titlebar_on_new_tab(struct yetty_yclass_object *tabbar, void *us
     }
 }
 
-static struct yetty_ycore_void_result yui_titlebar_on_min(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *btn,
+static struct yetty_ycore_void_result yui_titlebar_on_min(struct yetty_yclass_object *btn,
                                                           void *userdata)
 {
-    (void)ctx;
     (void)btn;
     struct yetty_yui *yui = userdata;
     yetty_yui_tabbar_model_iconify(yui ? yui->tabbar_model : NULL);
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yui_titlebar_on_max(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *btn,
+static struct yetty_ycore_void_result yui_titlebar_on_max(struct yetty_yclass_object *btn,
                                                           void *userdata)
 {
-    (void)ctx;
     (void)btn;
     struct yetty_yui *yui = userdata;
     yetty_yui_tabbar_model_toggle_maximize(yui ? yui->tabbar_model : NULL);
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result yui_titlebar_on_close_window(struct yetty_yclass_ctx *ctx,
-                                                                   struct yetty_yclass_object *btn,
+static struct yetty_ycore_void_result yui_titlebar_on_close_window(struct yetty_yclass_object *btn,
                                                                    void *userdata)
 {
-    (void)ctx;
     (void)btn;
     struct yetty_yui *yui = userdata;
     yetty_yui_tabbar_model_close_window(yui ? yui->tabbar_model : NULL);
@@ -2234,10 +2184,8 @@ static struct yetty_ycore_void_result yui_titlebar_on_close_window(struct yetty_
  * state (user click OR our own sync set_active). Forward to the model
  * only on a genuine change so the sync path doesn't recurse. */
 static struct yetty_ycore_void_result yui_titlebar_on_tab_change(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *target,
-    const struct yetty_ygui_event *event, void *userdata)
+    struct yetty_yclass_object *target, const struct yetty_ygui_event *event, void *userdata)
 {
-    (void)ctx;
     (void)target;
     struct yetty_yui *yui = userdata;
     if (!yui || !yui->tabbar_model || !event) {
@@ -2272,11 +2220,9 @@ static void yui_titlebar_on_tab_close(struct yetty_yclass_object *tabbar, int in
     }
 }
 
-static struct yetty_ycore_void_result yui_dialog_connect(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *button,
+static struct yetty_ycore_void_result yui_dialog_connect(struct yetty_yclass_object *button,
                                                          void *userdata)
 {
-    (void)ctx;
     (void)button;
     struct yui_cb_ctx *cb = userdata;
     if (!cb || !cb->yui || (int)cb->kind < 0 || (int)cb->kind >= YETTY_YUI_VIEW_KIND_COUNT) {
@@ -2493,7 +2439,7 @@ static struct yetty_ycore_void_result yui_apply_cursor(struct yetty_yui *yui, fl
     struct yetty_yclass_object *wm = yui->ctx->runtime->window_manager;
     if (wm) {
         struct yetty_ycore_void_result cursor_result =
-            yetty_yplatform_window_manager_set_cursor(NULL, wm, shape);
+            yetty_yplatform_window_manager_set_cursor(wm, shape);
         if (YETTY_IS_ERR(cursor_result)) {
             yetty_ycore_error_destroy(cursor_result.error);
         }

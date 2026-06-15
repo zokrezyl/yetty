@@ -44,11 +44,9 @@ yetty_ygui_dropdown {
     struct yetty_yclass_object *menu; /* borrowed; lives under root */
 };
 
-static struct yetty_ycore_void_result on_pick_item(struct yetty_yclass_ctx *yclass_ctx,
-                                                   struct yetty_yclass_object *yclass_obj, int item,
+static struct yetty_ycore_void_result on_pick_item(struct yetty_yclass_object *yclass_obj, int item,
                                                    void *userdata)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *menu = (struct yetty_yclass_object *)yclass_obj;
     (void)menu;
     struct yetty_yclass_object *dd = (struct yetty_yclass_object *)userdata;
@@ -70,11 +68,9 @@ static struct yetty_ycore_void_result on_pick_item(struct yetty_yclass_ctx *ycla
     return yetty_ygui_widget_emit(dd, &ev);
 }
 
-static struct yetty_ycore_void_result on_click_open(struct yetty_yclass_ctx *yclass_ctx,
-                                                    struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result on_click_open(struct yetty_yclass_object *yclass_obj,
                                                     void *userdata)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)userdata;
     struct yetty_ygui_dropdown_ptr_result d_dr = yetty_ygui_dropdown_from(obj);
@@ -88,10 +84,8 @@ static struct yetty_ycore_void_result on_click_open(struct yetty_yclass_ctx *ycl
 }
 
 [[clang::annotate("override@ygui:dropdown:constructor")]]
-static struct yetty_ycore_void_result dropdown_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result dropdown_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_dropdown_class_get().value,
@@ -109,10 +103,8 @@ static struct yetty_ycore_void_result dropdown_constructor(struct yetty_yclass_c
 }
 
 [[clang::annotate("override@ygui:dropdown:destructor")]]
-static struct yetty_ycore_void_result dropdown_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                          struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result dropdown_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_dropdown_ptr_result d_dr = yetty_ygui_dropdown_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dropdown_destructor: data_get");
@@ -159,11 +151,9 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
 }
 
 [[clang::annotate("override@ygui:dropdown:widget_paint")]]
-static struct yetty_ycore_void_result dropdown_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                     struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result dropdown_paint(struct yetty_yclass_object *yclass_obj,
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "dropdown_paint: NULL ctx");

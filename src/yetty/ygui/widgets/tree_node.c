@@ -51,10 +51,8 @@ static struct yetty_ycore_void_result tn_fold_children(struct yetty_yclass_objec
 }
 
 [[clang::annotate("override@ygui:tree_node:constructor")]]
-static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
-                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_tree_node_class_get().value,
@@ -75,10 +73,8 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 [[clang::annotate("override@ygui:tree_node:destructor")]]
-static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
-                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_tree_node_ptr_result d_dr = yetty_ygui_tree_node_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
@@ -89,11 +85,9 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 [[clang::annotate("override@ygui:tree_node:widget_on_press")]]
-static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ctx,
-                                              struct yetty_yclass_object *yclass_obj, float x,
+static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass_obj, float x,
                                               float y, int btn)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)x;
     (void)btn;
@@ -114,7 +108,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
         return YETTY_ERR(yetty_ycore_int, "tree_node: dirty", lr);
     }
     if (d->on_toggle) {
-        struct yetty_ycore_void_result cr = d->on_toggle(NULL, yclass_obj, d->on_toggle_ud);
+        struct yetty_ycore_void_result cr = d->on_toggle(yclass_obj, d->on_toggle_ud);
         if (YETTY_IS_ERR(cr)) {
             return YETTY_ERR(yetty_ycore_int, "tree_node: on_toggle", cr);
         }
@@ -123,11 +117,9 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ct
 }
 
 [[clang::annotate("override@ygui:tree_node:widget_paint")]]
-static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
-                                            struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "tree_node paint: NULL ctx");

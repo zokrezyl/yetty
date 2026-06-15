@@ -164,11 +164,10 @@ static void test_padding(void)
 
 /* Click callback test. */
 static int click_fired = 0;
-static struct yetty_ycore_void_result on_click_cb(struct yetty_yclass_ctx *_yc_ctx,
+static struct yetty_ycore_void_result on_click_cb(
                                                   struct yetty_yclass_object *_yc_obj,
                                                   void *userdata)
 {
-    (void)_yc_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;
     (void)obj;
     int *counter = (int *)userdata;
@@ -194,7 +193,7 @@ static void test_clickable_state_machine(void)
     assert(YETTY_IS_OK(pressed_before));
     assert(!pressed_before.value);
     struct yetty_ycore_int_result pr =
-        yetty_ygui_widget_on_press(NULL, (struct yetty_yclass_object *)btn, 1, 1, 0);
+        yetty_ygui_widget_on_press((struct yetty_yclass_object *)btn, 1, 1, 0);
     assert(YETTY_IS_OK(pr));
     assert(pr.value == 1);
     struct yetty_ycore_int_result pressed_after = yetty_ygui_clickable_is_pressed(btn);
@@ -203,7 +202,7 @@ static void test_clickable_state_machine(void)
     assert(click_fired == 0); /* not yet — press alone doesn't fire */
 
     struct yetty_ycore_int_result rr =
-        yetty_ygui_widget_on_release(NULL, (struct yetty_yclass_object *)btn, 1, 1, 0);
+        yetty_ygui_widget_on_release((struct yetty_yclass_object *)btn, 1, 1, 0);
     assert(YETTY_IS_OK(rr));
     assert(rr.value == 1);
     struct yetty_ycore_int_result pressed_released = yetty_ygui_clickable_is_pressed(btn);
@@ -213,7 +212,7 @@ static void test_clickable_state_machine(void)
 
     /* Release without prior press → no fire. */
     struct yetty_ycore_int_result rr2 =
-        yetty_ygui_widget_on_release(NULL, (struct yetty_yclass_object *)btn, 1, 1, 0);
+        yetty_ygui_widget_on_release((struct yetty_yclass_object *)btn, 1, 1, 0);
     assert(YETTY_IS_OK(rr2));
     assert(click_fired == 1);
 
@@ -249,9 +248,9 @@ static void test_widget_paint_emits_real_prims(void)
         .figure_bodies = NULL,
         .current_figure_id = 0,
     };
-    yetty_ygui_widget_paint(NULL, (struct yetty_yclass_object *)panel, &ctx);
-    yetty_ygui_widget_paint(NULL, (struct yetty_yclass_object *)label, &ctx);
-    yetty_ygui_widget_paint(NULL, (struct yetty_yclass_object *)btn, &ctx);
+    yetty_ygui_widget_paint((struct yetty_yclass_object *)panel, &ctx);
+    yetty_ygui_widget_paint((struct yetty_yclass_object *)label, &ctx);
+    yetty_ygui_widget_paint((struct yetty_yclass_object *)btn, &ctx);
 
     /* Walk the prims by type word — confirm: panel SDF_BOX (0x7FFFFFFE),
      * label TEXT_DRAWABLE_LIST (0x40000002), button SDF_ROUNDED_BOX (0x7FFFFFF7)

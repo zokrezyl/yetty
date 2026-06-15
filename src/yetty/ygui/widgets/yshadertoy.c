@@ -36,10 +36,8 @@ yetty_ygui_yshadertoy {
 };
 
 [[clang::annotate("override@ygui:yshadertoy:constructor")]]
-static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
-                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_yshadertoy_class_get().value,
@@ -55,10 +53,8 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 [[clang::annotate("override@ygui:yshadertoy:destructor")]]
-static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
-                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_yshadertoy_ptr_result d_r = yetty_ygui_yshadertoy_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "dtor: data");
@@ -69,11 +65,9 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 [[clang::annotate("override@ygui:yshadertoy:widget_emit_container")]]
-static struct yetty_ycore_void_result emit_container(struct yetty_yclass_ctx *yclass_ctx,
-                                                     struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result emit_container(struct yetty_yclass_object *yclass_obj,
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_widget_id(obj),
@@ -82,11 +76,9 @@ static struct yetty_ycore_void_result emit_container(struct yetty_yclass_ctx *yc
 }
 
 [[clang::annotate("override@ygui:yshadertoy:widget_emit_body")]]
-static struct yetty_ycore_void_result emit_body(struct yetty_yclass_ctx *yclass_ctx,
-                                                struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result emit_body(struct yetty_yclass_object *yclass_obj,
                                                 struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_yshadertoy_ptr_result d_r = yetty_ygui_yshadertoy_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_r, "emit_body: data");

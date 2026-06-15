@@ -54,24 +54,22 @@ struct yetty_yrich_spreadsheet_ptr_result yetty_yrich_spreadsheet_from(
 struct yetty_yclass_object *yetty_yrich_spreadsheet_to(struct yetty_yrich_spreadsheet *data);
 
 struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_grid_size(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int32_t rows, int32_t cols);
+    struct yetty_yclass_object *obj, int32_t rows, int32_t cols);
 struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_row_height(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int32_t row, float height);
+    struct yetty_yclass_object *obj, int32_t row, float height);
 struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_col_width(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int32_t col, float width);
+    struct yetty_yclass_object *obj, int32_t col, float width);
 struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_cell_value(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int32_t row, int32_t col,
-    struct yetty_ycore_buffer value);
+    struct yetty_yclass_object *obj, int32_t row, int32_t col, struct yetty_ycore_buffer value);
 
 typedef struct yetty_ycore_void_result (*yetty_yrich_spreadsheet_set_grid_size_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, int32_t, int32_t);
+    struct yetty_yclass_object *, int32_t, int32_t);
 typedef struct yetty_ycore_void_result (*yetty_yrich_spreadsheet_set_row_height_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, int32_t, float);
+    struct yetty_yclass_object *, int32_t, float);
 typedef struct yetty_ycore_void_result (*yetty_yrich_spreadsheet_set_col_width_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, int32_t, float);
+    struct yetty_yclass_object *, int32_t, float);
 typedef struct yetty_ycore_void_result (*yetty_yrich_spreadsheet_set_cell_value_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, int32_t, int32_t,
-    struct yetty_ycore_buffer);
+    struct yetty_yclass_object *, int32_t, int32_t, struct yetty_ycore_buffer);
 
 struct yetty_yclass_object_ptr_result yetty_yrich_cell_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_yrich_spreadsheet_create(struct yetty_yclass_ctx *ctx);

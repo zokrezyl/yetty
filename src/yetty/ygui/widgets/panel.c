@@ -36,10 +36,8 @@ yetty_ygui_panel {
 };
 
 [[clang::annotate("override@ygui:panel:constructor")]]
-static struct yetty_ycore_void_result panel_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                        struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result panel_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_panel_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -60,11 +58,9 @@ static uint32_t pack_rgba(struct yetty_ycore_rgba c)
 }
 
 [[clang::annotate("override@ygui:panel:widget_paint")]]
-static struct yetty_ycore_void_result panel_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                  struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result panel_paint(struct yetty_yclass_object *yclass_obj,
                                                   struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "panel_paint: NULL ctx");

@@ -5,10 +5,8 @@
 #include <stddef.h> /* NULL, size_t */
 
 struct yetty_ycore_void_result;
-struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj);
-typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_ctx *,
-                                                                    struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object *obj);
+typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_object *);
 
 [[maybe_unused]]
 static yetty_ygui_constructor_fn yetty_ygui_menubar_yetty_ygui_constructor_check =

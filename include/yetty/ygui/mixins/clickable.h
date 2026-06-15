@@ -16,8 +16,7 @@
 extern "C" {
 #endif
 
-typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_ctx *,
-                                                              struct yetty_yclass_object *, void *);
+typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_object *, void *);
 
 struct yetty_yclass_ptr_result yetty_ygui_clickable_mixin_get(void);
 

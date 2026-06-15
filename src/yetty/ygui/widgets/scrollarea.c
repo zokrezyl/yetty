@@ -93,11 +93,9 @@ static struct yetty_ycore_void_result scrollarea_on_drag(struct yetty_yclass_obj
  * only when there's room to scroll, so it bubbles to an enclosing
  * scrollable when this one is empty/short. */
 [[clang::annotate("override@ygui:scrollarea:widget_on_scroll")]]
-static struct yetty_ycore_int_result on_scroll(struct yetty_yclass_ctx *yclass_ctx,
-                                               struct yetty_yclass_object *yclass_obj, float x,
+static struct yetty_ycore_int_result on_scroll(struct yetty_yclass_object *yclass_obj, float x,
                                                float y, float dx, float dy)
 {
-    (void)yclass_ctx;
     (void)x;
     (void)y;
     (void)dx;
@@ -116,10 +114,8 @@ static struct yetty_ycore_int_result on_scroll(struct yetty_yclass_ctx *yclass_c
 }
 
 [[clang::annotate("override@ygui:scrollarea:constructor")]]
-static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
-                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_scrollarea_class_get().value,
@@ -142,11 +138,9 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 [[clang::annotate("override@ygui:scrollarea:widget_paint")]]
-static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
-                                            struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "scrollarea paint: NULL ctx");

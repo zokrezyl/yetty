@@ -171,6 +171,31 @@ void yetty_ygrid_set_content_size(struct yetty_ygrid_grid *grid, float content_w
  * single offset update + redraw, no re-emit. */
 void yetty_ygrid_set_scroll(struct yetty_ygrid_grid *grid, float scroll_x, float scroll_y);
 
+/*---------------------------------------------------------------------------
+ * Rolling-row scroll API — for a grid that backs scrolling content (e.g. the
+ * terminal's ydraw layer, scrolling in lockstep with the text). Each prim is
+ * stamped with its creation row (`set_insert_rolling_row` before adding it);
+ * the shader offsets it by (rolling_row - rolling_row_0) * cell_height, giving
+ * O(1) scroll. Static compositor grids never call these (rolling_row 0).
+ *-------------------------------------------------------------------------*/
+
+/* Set the row origin the shader subtracts from each prim's rolling_row — i.e.
+ * which absolute row is currently at the top. Pure view shift (redraw only). */
+void yetty_ygrid_set_rolling_row_0(struct yetty_ygrid_grid *grid, uint32_t rolling_row_0);
+
+/* Set the creation row stamped onto every prim added from now on. */
+void yetty_ygrid_set_insert_rolling_row(struct yetty_ygrid_grid *grid, uint32_t rolling_row);
+
+/* Set the cell height the shader uses for the rolling-row Y offset, so
+ * anchored content aligns to the terminal rows regardless of bucket geometry.
+ * 0 = unset (use the grid's own bucket height). */
+void yetty_ygrid_set_rolling_cell_height(struct yetty_ygrid_grid *grid, float cell_height);
+
+/* Explicitly re-bucket the grid to grid_cols x grid_rows (the terminal sizes
+ * its ydraw grid to the text columns/rows after a resize). */
+struct yetty_ycore_void_result yetty_ygrid_resize(struct yetty_ygrid_grid *grid, uint32_t grid_cols,
+                                                  uint32_t grid_rows);
+
 #ifdef __cplusplus
 }
 #endif

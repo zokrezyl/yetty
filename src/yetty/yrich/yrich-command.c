@@ -54,7 +54,7 @@ struct yetty_ycore_void_result yetty_yrich_command_default_undo(struct yetty_yri
             yetty_yrich_operation_inverse(cmd->recorded[i - 1]);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, inv_r, "command_default_undo: inverse failed");
         struct yetty_ycore_void_result apply_res =
-            yetty_yrich_document_apply_op(NULL, doc_obj, inv_r.value, 1);
+            yetty_yrich_document_apply_op(doc_obj, inv_r.value, 1);
         if (YETTY_IS_ERR(apply_res)) {
             yetty_yrich_operation_destroy(inv_r.value);
             return YETTY_ERR(yetty_ycore_void, "command_default_undo: apply_op failed", apply_res);
@@ -72,7 +72,7 @@ struct yetty_ycore_void_result yetty_yrich_command_default_redo(struct yetty_yri
     }
     for (size_t i = 0; i < cmd->recorded_count; i++) {
         struct yetty_ycore_void_result apply_res =
-            yetty_yrich_document_apply_op(NULL, doc_obj, cmd->recorded[i], 1);
+            yetty_yrich_document_apply_op(doc_obj, cmd->recorded[i], 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "command_default_redo: apply_op failed");
     }
     return YETTY_OK_VOID();
@@ -106,7 +106,7 @@ static struct yetty_ycore_void_result op_command_execute(struct yetty_yrich_comm
 {
     for (size_t i = 0; i < cmd->recorded_count; i++) {
         struct yetty_ycore_void_result apply_res =
-            yetty_yrich_document_apply_op(NULL, doc_obj, cmd->recorded[i], 1);
+            yetty_yrich_document_apply_op(doc_obj, cmd->recorded[i], 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "op_command_execute: apply_op failed");
     }
     return YETTY_OK_VOID();

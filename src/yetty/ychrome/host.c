@@ -124,11 +124,11 @@ static struct yetty_ydraw_drawable_list_result host_make_backdrop_list(float wid
 static struct yetty_ycore_void_result host_local_load(struct yetty_yclass_object *figure_obj,
                                                       const uint8_t *data, size_t size)
 {
-    struct yetty_ycore_void_result reset_result = yetty_yfigure_reset_content(NULL, figure_obj);
+    struct yetty_ycore_void_result reset_result = yetty_yfigure_reset_content(figure_obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, reset_result, "chrome host load: reset_content");
     if (data && size > 0) {
         struct yetty_ycore_void_result process_result =
-            yetty_yfigure_process_bytes(NULL, figure_obj, data, size);
+            yetty_yfigure_process_bytes(figure_obj, data, size);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, process_result, "chrome host load: process_bytes");
     }
     struct yetty_ycore_void_result dirty_result = yetty_yfigure_figure_dirty_set(figure_obj, 1);
@@ -210,8 +210,7 @@ static struct yetty_ycore_void_result host_wire_backdrop_emit(struct yetty_ychro
 
 static struct yetty_ycore_void_result host_wire_caption_emit(struct yetty_ychrome_host *host)
 {
-    struct yetty_ydraw_drawable_list_result render_result =
-        yetty_ychrome_render(NULL, host->chrome);
+    struct yetty_ydraw_drawable_list_result render_result = yetty_ychrome_render(host->chrome);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, render_result, "chrome host wire caption: render");
     struct yetty_ydraw_drawable_list *list = render_result.value;
     struct yetty_ycore_rectangle rect = {.min = {0.0f, 0.0f},
@@ -237,8 +236,7 @@ static struct yetty_ycore_void_result host_caption_refresh(struct yetty_ychrome_
 #ifdef YETTY_YCHROME_HAS_LOCAL
     /* LOCAL: ychrome renders its caption to a drawable list (pure ydraw); load
      * that record stream into the pinned ygrid figure. */
-    struct yetty_ydraw_drawable_list_result render_result =
-        yetty_ychrome_render(NULL, host->chrome);
+    struct yetty_ydraw_drawable_list_result render_result = yetty_ychrome_render(host->chrome);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, render_result, "chrome host caption refresh: render");
     struct yetty_ydraw_drawable_list *list = render_result.value;
     struct yetty_ycore_void_result load_result = host_local_load(
@@ -271,8 +269,7 @@ static struct yetty_ychrome_host_ptr_result host_alloc(struct yetty_yclass_objec
 
     struct yetty_ychrome_host *host = calloc(1, sizeof(*host));
     if (!host) {
-        struct yetty_ycore_void_result destroy_result =
-            yetty_ychrome_destroy(NULL, chrome_result.value);
+        struct yetty_ycore_void_result destroy_result = yetty_ychrome_destroy(chrome_result.value);
         if (YETTY_IS_ERR(destroy_result)) {
             return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host: alloc (and chrome teardown)",
                              destroy_result);
@@ -284,19 +281,19 @@ static struct yetty_ychrome_host_ptr_result host_alloc(struct yetty_yclass_objec
     host->height = height;
     host->caption_height = caption_height;
 
-    struct yetty_ycore_void_result configure_result = yetty_ychrome_configure(
-        NULL, host->chrome, window_manager, caption_height, edge_size, flags);
+    struct yetty_ycore_void_result configure_result =
+        yetty_ychrome_configure(host->chrome, window_manager, caption_height, edge_size, flags);
     if (YETTY_IS_ERR(configure_result)) {
-        struct yetty_ycore_void_result destroy_result = yetty_ychrome_destroy(NULL, host->chrome);
+        struct yetty_ycore_void_result destroy_result = yetty_ychrome_destroy(host->chrome);
         free(host);
         struct yetty_ycore_void_result chained =
             yetty_ycore_void_chain(configure_result, destroy_result);
         return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host: configure", chained);
     }
     struct yetty_ycore_void_result size_result =
-        yetty_ychrome_set_size(NULL, host->chrome, width, height);
+        yetty_ychrome_set_size(host->chrome, width, height);
     if (YETTY_IS_ERR(size_result)) {
-        struct yetty_ycore_void_result destroy_result = yetty_ychrome_destroy(NULL, host->chrome);
+        struct yetty_ycore_void_result destroy_result = yetty_ychrome_destroy(host->chrome);
         free(host);
         struct yetty_ycore_void_result chained =
             yetty_ycore_void_chain(size_result, destroy_result);
@@ -311,8 +308,7 @@ static struct yetty_ychrome_host_ptr_result host_build_fail(struct yetty_ychrome
                                                             const char *message,
                                                             struct yetty_ycore_void_result cause)
 {
-    struct yetty_ycore_void_result chrome_destroy_result =
-        yetty_ychrome_destroy(NULL, host->chrome);
+    struct yetty_ycore_void_result chrome_destroy_result = yetty_ychrome_destroy(host->chrome);
     struct yetty_ycore_void_result chained = yetty_ycore_void_chain(cause, chrome_destroy_result);
     free(host);
     return YETTY_ERR(yetty_ychrome_host_ptr, message, chained);
@@ -424,8 +420,7 @@ struct yetty_ycore_int_result yetty_ychrome_host_handle_event(struct yetty_ychro
     if (!host) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    struct yetty_ycore_int_result handle_result =
-        yetty_ychrome_handle_event(NULL, host->chrome, event);
+    struct yetty_ycore_int_result handle_result = yetty_ychrome_handle_event(host->chrome, event);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, handle_result, "ychrome_host_handle_event: handle");
     int consumed = handle_result.value;
 
@@ -450,8 +445,7 @@ struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_h
     }
     host->width = width;
     host->height = height;
-    struct yetty_ycore_void_result result =
-        yetty_ychrome_set_size(NULL, host->chrome, width, height);
+    struct yetty_ycore_void_result result = yetty_ychrome_set_size(host->chrome, width, height);
 
     if (host->producer) {
         /* WIRE: re-emit both figures at the new size (CREATE_CHILD re-mints). */
@@ -515,7 +509,7 @@ struct yetty_ycore_void_result yetty_ychrome_host_destroy(struct yetty_ychrome_h
      *    add_child) and destroyed with it.
      * Either way, destroy only frees what is ours: the chrome engine + host. */
     if (host->chrome) {
-        result = yetty_ycore_void_chain(result, yetty_ychrome_destroy(NULL, host->chrome));
+        result = yetty_ycore_void_chain(result, yetty_ychrome_destroy(host->chrome));
     }
     free(host);
     return result;

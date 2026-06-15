@@ -4,8 +4,6 @@ methods:
     owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -15,8 +13,6 @@ methods:
     owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: target
@@ -28,8 +24,6 @@ methods:
     owning_class: container
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
@@ -39,8 +33,6 @@ methods:
     owning_class: container
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: child
@@ -54,8 +46,6 @@ methods:
     owning_class: container
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: id
@@ -67,8 +57,6 @@ methods:
     owning_class: container
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: id
@@ -80,8 +68,6 @@ methods:
     owning_class: container
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: bytes
@@ -93,8 +79,6 @@ methods:
     owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: statemachine
@@ -106,8 +90,6 @@ methods:
     owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: bytes
@@ -121,8 +103,6 @@ methods:
     owning_class: figure
     return_type: struct yetty_ycore_char_ptr_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: indent
@@ -134,8 +114,6 @@ methods:
     owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -145,8 +123,6 @@ methods:
     owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: scroll_x
@@ -160,8 +136,6 @@ methods:
     owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: content_w

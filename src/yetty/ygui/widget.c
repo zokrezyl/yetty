@@ -146,10 +146,8 @@ struct yetty_ygui_widget_ptr_result yetty_ygui_widget_from(struct yetty_yclass_o
  * widget.gen.c). widget.c calls them in widget_instantiate / _destroy above
  * that foot include, and can't include its own widget.h, so forward-declare
  * them here. */
-struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_object *obj);
 
 /* Defined lower in this file (the widget tree/lifecycle block), but the
  * geometry setters above it mark the widget dirty — forward-declare. */
@@ -182,8 +180,8 @@ static const struct yetty_yclass *widget_class(void)
  * / `_on_press` / `_on_release` / `_on_motion` are emitted by yclass
  * codegen from the override annotations on `widget_default_*` below.
  * The generated stubs live in methods.gen.c; they have the canonical
- * yclass slot signature `(struct yetty_yclass_ctx *, struct
- * yetty_yclass_object *, …)`.
+ * yclass slot signature `(struct yetty_yclass_object *, …)` — methods take
+ * no ctx; the RPC session is read from the object (obj->session).
  *=========================================================================*/
 
 /*===========================================================================
@@ -200,10 +198,8 @@ static struct yetty_yclass_object *self_of(struct yetty_yclass_object *obj)
 }
 
 [[clang::annotate("virtual@ygui:widget:constructor")]]
-static struct yetty_ycore_void_result widget_default_constructor(struct yetty_yclass_ctx *ctx,
-                                                                 struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result widget_default_constructor(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_ygui_widget_ptr_result wd_dr = yetty_ygui_widget_from(self_of(obj));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_dr, "widget_default_constructor: data_get");
     struct yetty_ygui_widget *wd = wd_dr.value;
@@ -217,20 +213,16 @@ static struct yetty_ycore_void_result widget_default_constructor(struct yetty_yc
 }
 
 [[clang::annotate("virtual@ygui:widget:destructor")]]
-static struct yetty_ycore_void_result widget_default_destructor(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result widget_default_destructor(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     (void)obj;
     return YETTY_OK_VOID();
 }
 
 [[clang::annotate("virtual@ygui:widget:widget_on_press")]]
-static struct yetty_ycore_int_result widget_default_on_press(struct yetty_yclass_ctx *ctx,
-                                                             struct yetty_yclass_object *obj,
+static struct yetty_ycore_int_result widget_default_on_press(struct yetty_yclass_object *obj,
                                                              float x, float y, int button)
 {
-    (void)ctx;
     (void)obj;
     (void)x;
     (void)y;
@@ -239,11 +231,9 @@ static struct yetty_ycore_int_result widget_default_on_press(struct yetty_yclass
 }
 
 [[clang::annotate("virtual@ygui:widget:widget_on_release")]]
-static struct yetty_ycore_int_result widget_default_on_release(struct yetty_yclass_ctx *ctx,
-                                                               struct yetty_yclass_object *obj,
+static struct yetty_ycore_int_result widget_default_on_release(struct yetty_yclass_object *obj,
                                                                float x, float y, int button)
 {
-    (void)ctx;
     (void)obj;
     (void)x;
     (void)y;
@@ -252,11 +242,9 @@ static struct yetty_ycore_int_result widget_default_on_release(struct yetty_ycla
 }
 
 [[clang::annotate("virtual@ygui:widget:widget_on_motion")]]
-static struct yetty_ycore_int_result widget_default_on_motion(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj,
+static struct yetty_ycore_int_result widget_default_on_motion(struct yetty_yclass_object *obj,
                                                               float x, float y)
 {
-    (void)ctx;
     (void)obj;
     (void)x;
     (void)y;
@@ -267,11 +255,9 @@ static struct yetty_ycore_int_result widget_default_on_motion(struct yetty_yclas
  * not handled (0), so the framework keeps bubbling to an ancestor that
  * scrolls. Scrollable widgets (scrollarea, filepicker) override this. */
 [[clang::annotate("virtual@ygui:widget:widget_on_scroll")]]
-static struct yetty_ycore_int_result widget_default_on_scroll(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj,
+static struct yetty_ycore_int_result widget_default_on_scroll(struct yetty_yclass_object *obj,
                                                               float x, float y, float dx, float dy)
 {
-    (void)ctx;
     (void)obj;
     (void)x;
     (void)y;
@@ -282,11 +268,9 @@ static struct yetty_ycore_int_result widget_default_on_scroll(struct yetty_yclas
 
 [[clang::annotate("virtual@ygui:widget:widget_paint")]] [[clang::annotate(
     "local@ygui:widget_paint")]]
-static struct yetty_ycore_void_result widget_default_paint(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result widget_default_paint(struct yetty_yclass_object *obj,
                                                            struct yetty_ygui_emit_ctx *emit_ctx)
 {
-    (void)ctx;
     (void)obj;
     (void)emit_ctx;
     return YETTY_OK_VOID();
@@ -295,10 +279,8 @@ static struct yetty_ycore_void_result widget_default_paint(struct yetty_yclass_c
 [[clang::annotate("virtual@ygui:widget:widget_emit_container")]] [[clang::annotate(
     "local@ygui:widget_emit_container")]]
 static struct yetty_ycore_void_result widget_default_emit_container(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    struct yetty_ygui_emit_ctx *emit_ctx)
+    struct yetty_yclass_object *obj, struct yetty_ygui_emit_ctx *emit_ctx)
 {
-    (void)ctx;
     (void)obj;
     (void)emit_ctx;
     return YETTY_OK_VOID();
@@ -306,11 +288,9 @@ static struct yetty_ycore_void_result widget_default_emit_container(
 
 [[clang::annotate("virtual@ygui:widget:widget_emit_body")]] [[clang::annotate(
     "local@ygui:widget_emit_body")]]
-static struct yetty_ycore_void_result widget_default_emit_body(struct yetty_yclass_ctx *ctx,
-                                                               struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result widget_default_emit_body(struct yetty_yclass_object *obj,
                                                                struct yetty_ygui_emit_ctx *emit_ctx)
 {
-    (void)ctx;
     (void)obj;
     (void)emit_ctx;
     return YETTY_OK_VOID();
@@ -733,9 +713,8 @@ struct yetty_ycore_void_result yetty_ygui_super_void(struct yetty_yclass_object 
     if (!impl) {
         return YETTY_OK_VOID();
     }
-    typedef struct yetty_ycore_void_result (*fn_t)(struct yetty_yclass_ctx *,
-                                                   struct yetty_yclass_object *);
-    return ((fn_t)impl)(NULL, (struct yetty_yclass_object *)obj);
+    typedef struct yetty_ycore_void_result (*fn_t)(struct yetty_yclass_object *);
+    return ((fn_t)impl)((struct yetty_yclass_object *)obj);
 }
 
 [[clang::annotate("expose")]]
@@ -759,9 +738,8 @@ struct yetty_ycore_int_result yetty_ygui_super_int(struct yetty_yclass_object *o
     if (!impl) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    typedef struct yetty_ycore_int_result (*fn_t)(struct yetty_yclass_ctx *,
-                                                  struct yetty_yclass_object *);
-    return ((fn_t)impl)(NULL, (struct yetty_yclass_object *)obj);
+    typedef struct yetty_ycore_int_result (*fn_t)(struct yetty_yclass_object *);
+    return ((fn_t)impl)((struct yetty_yclass_object *)obj);
 }
 
 [[clang::annotate("expose")]]
@@ -989,8 +967,7 @@ static struct yetty_yclass_object_ptr_result widget_instantiate(const struct yet
         wdata(obj)->id = idr.value;
     }
 
-    struct yetty_ycore_void_result cr =
-        yetty_ygui_constructor(NULL, (struct yetty_yclass_object *)obj);
+    struct yetty_ycore_void_result cr = yetty_ygui_constructor((struct yetty_yclass_object *)obj);
     if (YETTY_IS_ERR(cr)) {
         if (framework && wdata(obj)->id) {
             struct yetty_ycore_void_result fr =
@@ -1045,8 +1022,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_destroy(struct yetty_yclass_obj
         sub = next;
     }
     wdata(obj)->subscriptions = NULL;
-    struct yetty_ycore_void_result dr =
-        yetty_ygui_destructor(NULL, (struct yetty_yclass_object *)obj);
+    struct yetty_ycore_void_result dr = yetty_ygui_destructor((struct yetty_yclass_object *)obj);
     if (YETTY_IS_ERR(dr)) {
         yetty_ycore_error_destroy(dr.error);
     }

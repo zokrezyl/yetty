@@ -4,8 +4,6 @@ methods:
     owning_class: window_manager
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: os_window
@@ -21,8 +19,6 @@ methods:
     owning_class: window_manager
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -32,8 +28,6 @@ methods:
     owning_class: window_manager
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -43,8 +37,6 @@ methods:
     owning_class: window_manager
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -54,8 +46,6 @@ methods:
     owning_class: window_manager
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -65,8 +55,6 @@ methods:
     owning_class: window_manager
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: dx
@@ -80,8 +68,6 @@ methods:
     owning_class: window_manager
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: dx
@@ -97,8 +83,6 @@ methods:
     owning_class: window_manager
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -108,8 +92,6 @@ methods:
     owning_class: window_manager
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: edge
@@ -121,8 +103,6 @@ methods:
     owning_class: window_manager
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: shape
@@ -134,8 +114,6 @@ methods:
     owning_class: window_manager
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: event

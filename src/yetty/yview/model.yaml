@@ -4,8 +4,6 @@ methods:
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: fd
@@ -31,8 +29,6 @@ methods:
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: content
@@ -44,8 +40,6 @@ methods:
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: text
@@ -59,8 +53,6 @@ methods:
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: expr
@@ -80,8 +72,6 @@ methods:
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: content_w
@@ -95,8 +85,6 @@ methods:
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: scroll_x
@@ -110,8 +98,6 @@ methods:
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: delta_x
@@ -125,8 +111,6 @@ methods:
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: min_x
@@ -144,8 +128,6 @@ methods:
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true

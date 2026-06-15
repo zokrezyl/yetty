@@ -39,11 +39,10 @@ struct probe_a_data {
 
 static const struct yetty_yclass *probe_a_class_get(void);
 
-static struct yetty_ycore_int_result probe_a_on_press(struct yetty_yclass_ctx *_yc_ctx,
+static struct yetty_ycore_int_result probe_a_on_press(
                                                       struct yetty_yclass_object *_yc_obj, float x,
                                                       float y, int button)
 {
-    (void)_yc_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;
     (void)x;
     (void)y;
@@ -90,10 +89,9 @@ struct probe_b_data {
 
 static const struct yetty_yclass *probe_b_class_get(void);
 
-static struct yetty_ycore_void_result probe_b_constructor(struct yetty_yclass_ctx *_yc_ctx,
+static struct yetty_ycore_void_result probe_b_constructor(
                                                           struct yetty_yclass_object *_yc_obj)
 {
-    (void)_yc_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, probe_b_class_get(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -105,11 +103,10 @@ static struct yetty_ycore_void_result probe_b_constructor(struct yetty_yclass_ct
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_int_result probe_b_on_motion(struct yetty_yclass_ctx *_yc_ctx,
+static struct yetty_ycore_int_result probe_b_on_motion(
                                                        struct yetty_yclass_object *_yc_obj, float x,
                                                        float y)
 {
-    (void)_yc_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;
     (void)x;
     (void)y;
@@ -174,7 +171,7 @@ static void test_instance_alloc_and_dispatch(void)
 
     /* Dispatch on_press → probe_a override. */
     struct yetty_ycore_int_result pr =
-        yetty_ygui_widget_on_press(NULL, (struct yetty_yclass_object *)obj, 1.0f, 2.0f, 0);
+        yetty_ygui_widget_on_press((struct yetty_yclass_object *)obj, 1.0f, 2.0f, 0);
     assert(YETTY_IS_OK(pr));
     assert(pr.value == 1);
     struct probe_a_data *ad = yetty_yclass_object_data(obj, probe_a_class_get()).value;
@@ -182,7 +179,7 @@ static void test_instance_alloc_and_dispatch(void)
 
     /* Dispatch on_motion → falls through to base widget default (return 0). */
     struct yetty_ycore_int_result mr =
-        yetty_ygui_widget_on_motion(NULL, (struct yetty_yclass_object *)obj, 1.0f, 2.0f);
+        yetty_ygui_widget_on_motion((struct yetty_yclass_object *)obj, 1.0f, 2.0f);
     assert(YETTY_IS_OK(mr));
     assert(mr.value == 0);
 
@@ -207,14 +204,14 @@ static void test_subclass_dispatch_and_super(void)
 
     /* on_motion → probe_b's override. */
     struct yetty_ycore_int_result mr =
-        yetty_ygui_widget_on_motion(NULL, (struct yetty_yclass_object *)obj, 0, 0);
+        yetty_ygui_widget_on_motion((struct yetty_yclass_object *)obj, 0, 0);
     assert(YETTY_IS_OK(mr));
     assert(mr.value == 1);
     assert(bd->motion_count == 1);
 
     /* on_press → inherited from probe_a. */
     struct yetty_ycore_int_result pr =
-        yetty_ygui_widget_on_press(NULL, (struct yetty_yclass_object *)obj, 0, 0, 0);
+        yetty_ygui_widget_on_press((struct yetty_yclass_object *)obj, 0, 0, 0);
     assert(YETTY_IS_OK(pr));
     assert(pr.value == 1);
     struct probe_a_data *ad = yetty_yclass_object_data(obj, probe_a_class_get()).value;
@@ -261,7 +258,7 @@ static void test_tooltip_pilot(void)
         .current_figure_id = 0,
     };
     struct yetty_ycore_void_result er =
-        yetty_ygui_widget_paint(NULL, (struct yetty_yclass_object *)obj, &ctx);
+        yetty_ygui_widget_paint((struct yetty_yclass_object *)obj, &ctx);
     assert(YETTY_IS_OK(er));
     /* First u32 in the primitives buffer is the type word —
      * YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST = 0x40000002 (no id flag, anonymous). */

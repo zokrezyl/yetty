@@ -33,12 +33,12 @@
  * Lifecycle:
  *   yetty_ychrome_register();
  *   obj = yetty_ychrome_chrome_create(NULL);
- *   yetty_ychrome_configure(NULL, obj, window_manager_obj,
+ *   yetty_ychrome_configure(obj, window_manager_obj,
  *                           caption_height, edge_size, YETTY_YCHROME_FLAG_ALL);
- *   yetty_ychrome_set_size(NULL, obj, width, height);   // on every resize
- *   consumed = yetty_ychrome_handle_event(NULL, obj, &mouse_event);
- *   shape    = yetty_ychrome_edge_cursor_at(NULL, obj, x, y); // optional hover
- *   yetty_ychrome_destroy(NULL, obj);
+ *   yetty_ychrome_set_size(obj, width, height);   // on every resize
+ *   consumed = yetty_ychrome_handle_event(obj, &mouse_event);
+ *   shape    = yetty_ychrome_edge_cursor_at(obj, x, y); // optional hover
+ *   yetty_ychrome_destroy(obj);
  */
 /* This TU deliberately does NOT include its own generated header
  * `yetty/ychrome/chrome.h` — that header is a downstream artifact for other
@@ -201,13 +201,11 @@ static int chrome_event_xy(const struct yetty_yui_event *event, float *out_x, fl
  * once after create(), before feeding events. window_manager is borrowed. */
 [[clang::annotate("virtual@ychrome:chrome:configure")]] [[clang::annotate(
     "local@ychrome:configure")]]
-static struct yetty_ycore_void_result chrome_configure(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result chrome_configure(struct yetty_yclass_object *obj,
                                                        struct yetty_yclass_object *window_manager,
                                                        float caption_height, float edge_size,
                                                        uint32_t flags)
 {
-    (void)ctx;
     /* window_manager may be NULL: the in-terminal / client case has no OS
      * window to drive. Chrome still renders its caption and tracks hover so the
      * app can act on a control click itself; only the live OS-window gestures
@@ -225,11 +223,9 @@ static struct yetty_ycore_void_result chrome_configure(struct yetty_yclass_ctx *
 /* Update the window size so the right/bottom edge bands track it. Call on every
  * resize. */
 [[clang::annotate("virtual@ychrome:chrome:set_size")]] [[clang::annotate("local@ychrome:set_size")]]
-static struct yetty_ycore_void_result chrome_set_size(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj, float width,
+static struct yetty_ycore_void_result chrome_set_size(struct yetty_yclass_object *obj, float width,
                                                       float height)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "chrome set_size: object");
     struct yetty_ychrome_chrome *chrome = data_r.value;
@@ -239,10 +235,8 @@ static struct yetty_ycore_void_result chrome_set_size(struct yetty_yclass_ctx *c
 }
 
 [[clang::annotate("virtual@ychrome:chrome:destroy")]] [[clang::annotate("local@ychrome:destroy")]]
-static struct yetty_ycore_void_result chrome_destroy(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result chrome_destroy(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     /* No owned resources (window_manager is borrowed) — just free the object. */
     return yetty_yclass_object_free(obj);
 }
@@ -268,11 +262,9 @@ static void chrome_edges_at(const struct yetty_ychrome_chrome *chrome, float x, 
 
 [[clang::annotate("virtual@ychrome:chrome:edge_cursor_at")]] [[clang::annotate(
     "local@ychrome:edge_cursor_at")]]
-static struct yetty_ycore_int_result chrome_edge_cursor_at(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj, float x,
+static struct yetty_ycore_int_result chrome_edge_cursor_at(struct yetty_yclass_object *obj, float x,
                                                            float y)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, data_r, "chrome edge_cursor_at: object");
     struct yetty_ychrome_chrome *chrome = data_r.value;
@@ -325,10 +317,8 @@ static int chrome_button_at(const struct yetty_ychrome_chrome *chrome, float x, 
  * glyphs flush right. The caller composites the list as a pinned top figure and
  * destroys it. Uses font_id=-1 (the default font), so no font dependency. */
 [[clang::annotate("virtual@ychrome:chrome:render")]] [[clang::annotate("local@ychrome:render")]]
-static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass_ctx *ctx,
-                                                             struct yetty_yclass_object *obj)
+static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, data_r, "chrome render: object");
     struct yetty_ychrome_chrome *chrome = data_r.value;
@@ -409,11 +399,9 @@ static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass
  * after your own controls (buttons, tabs) had their chance. */
 [[clang::annotate("virtual@ychrome:chrome:handle_event")]] [[clang::annotate(
     "local@ychrome:handle_event")]]
-static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj,
+static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_object *obj,
                                                          const struct yetty_yui_event *event)
 {
-    (void)ctx;
     if (!event) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
@@ -462,7 +450,7 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
                  * below keeps driving the size. */
                 chrome->resize_grab_sent = 1;
                 wm_absorb(yetty_yplatform_window_manager_begin_interactive_resize(
-                    NULL, wm, chrome->resize_edge));
+                    wm, chrome->resize_edge));
             }
             /* Per-axis delta. Right/bottom keep the top-left fixed → track
              * incrementally (update resize_last). Left/top move the origin →
@@ -484,7 +472,7 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
                 step_dy = (int)(y - chrome->resize_anchor_y);
             }
             if (step_dx != 0 || step_dy != 0) {
-                wm_absorb(yetty_yplatform_window_manager_resize_by(NULL, wm, step_dx, step_dy,
+                wm_absorb(yetty_yplatform_window_manager_resize_by(wm, step_dx, step_dy,
                                                                    chrome->resize_edge));
             }
             return YETTY_OK(yetty_ycore_int, 1);
@@ -508,13 +496,13 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
             }
             if (!chrome->drag_grab_sent) {
                 chrome->drag_grab_sent = 1;
-                wm_absorb(yetty_yplatform_window_manager_begin_interactive_move(NULL, wm));
+                wm_absorb(yetty_yplatform_window_manager_begin_interactive_move(wm));
             }
             if (dx != 0 || dy != 0) {
                 /* Don't update the anchor: glfwSetWindowPos repositions
                  * absolutely, leaving the cursor at the anchor in the moved
                  * frame; resetting would accumulate rounding error. */
-                wm_absorb(yetty_yplatform_window_manager_drag_by(NULL, wm, dx, dy));
+                wm_absorb(yetty_yplatform_window_manager_drag_by(wm, dx, dy));
             }
             return YETTY_OK(yetty_ycore_int, 1);
         }
@@ -543,11 +531,10 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
         if (edge_left || edge_right || edge_top || edge_bottom) {
             int shape =
                 (edge_left || edge_right) ? YETTY_YCORE_CURSOR_HRESIZE : YETTY_YCORE_CURSOR_VRESIZE;
-            wm_absorb(yetty_yplatform_window_manager_set_cursor(NULL, wm, shape));
+            wm_absorb(yetty_yplatform_window_manager_set_cursor(wm, shape));
             chrome->edge_cursor_on = 1;
         } else if (chrome->edge_cursor_on) {
-            wm_absorb(
-                yetty_yplatform_window_manager_set_cursor(NULL, wm, YETTY_YCORE_CURSOR_DEFAULT));
+            wm_absorb(yetty_yplatform_window_manager_set_cursor(wm, YETTY_YCORE_CURSOR_DEFAULT));
             chrome->edge_cursor_on = 0;
         }
     }
@@ -561,15 +548,15 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
     if (in_caption && event->type == YETTY_YCORE_MOUSE_DOWN) {
         int button = chrome_button_at(chrome, x, y);
         if (button == 1) {
-            wm_absorb(yetty_yplatform_window_manager_iconify(NULL, wm));
+            wm_absorb(yetty_yplatform_window_manager_iconify(wm));
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (button == 2) {
-            wm_absorb(yetty_yplatform_window_manager_toggle_maximize(NULL, wm));
+            wm_absorb(yetty_yplatform_window_manager_toggle_maximize(wm));
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (button == 3) {
-            wm_absorb(yetty_yplatform_window_manager_request_close(NULL, wm));
+            wm_absorb(yetty_yplatform_window_manager_request_close(wm));
             return YETTY_OK(yetty_ycore_int, 1);
         }
     }
@@ -605,7 +592,7 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_ctx
     /* --- caption double-click → toggle maximize ------------------------ */
     if ((chrome->flags & YETTY_YCHROME_FLAG_MAXIMIZE) && in_caption &&
         event->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK && event->mouse.button == 0) {
-        wm_absorb(yetty_yplatform_window_manager_toggle_maximize(NULL, wm));
+        wm_absorb(yetty_yplatform_window_manager_toggle_maximize(wm));
         chrome->dragging = 0; /* cancel any drag the preceding press armed */
         return YETTY_OK(yetty_ycore_int, 1);
     }

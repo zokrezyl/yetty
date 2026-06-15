@@ -19,8 +19,7 @@
 
 /* The click callback type. Defined here in the owning .c; codegen reproduces
  * it into the generated header for any public signature that references it. */
-typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj,
+typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_object *obj,
                                                               void *userdata);
 
 struct [[clang::annotate("mixin@ygui:clickable")]] yetty_ygui_clickable {
@@ -42,11 +41,9 @@ struct yetty_yclass_ptr_result yetty_ygui_clickable_mixin_get(void);
 struct yetty_ygui_clickable_ptr_result yetty_ygui_clickable_from(struct yetty_yclass_object *obj);
 
 [[clang::annotate("override@ygui:clickable:widget_on_press")]]
-static struct yetty_ycore_int_result clickable_on_press(struct yetty_yclass_ctx *yclass_ctx,
-                                                        struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result clickable_on_press(struct yetty_yclass_object *yclass_obj,
                                                         float x, float y, int button)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)button;
     struct yetty_ygui_clickable_ptr_result cd_dr = yetty_ygui_clickable_from(obj);
@@ -63,11 +60,9 @@ static struct yetty_ycore_int_result clickable_on_press(struct yetty_yclass_ctx 
 }
 
 [[clang::annotate("override@ygui:clickable:widget_on_release")]]
-static struct yetty_ycore_int_result clickable_on_release(struct yetty_yclass_ctx *yclass_ctx,
-                                                          struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result clickable_on_release(struct yetty_yclass_object *yclass_obj,
                                                           float x, float y, int button)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)x;
     (void)y;
@@ -93,7 +88,7 @@ static struct yetty_ycore_int_result clickable_on_release(struct yetty_yclass_ct
     }
     if (was_pressed && cd->on_click) {
         struct yetty_ycore_void_result r =
-            cd->on_click(NULL, (struct yetty_yclass_object *)obj, cd->userdata);
+            cd->on_click((struct yetty_yclass_object *)obj, cd->userdata);
         if (YETTY_IS_ERR(r)) {
             return YETTY_ERR(yetty_ycore_int, "clickable_on_release: on_click", r);
         }

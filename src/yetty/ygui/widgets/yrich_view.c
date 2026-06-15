@@ -69,10 +69,8 @@ static const struct yetty_yclass *yrich_view_class(void)
 }
 
 [[clang::annotate("override@ygui:yrich_view:constructor")]]
-static struct yetty_ycore_void_result yrich_view_ctor(struct yetty_yclass_ctx *yclass_ctx,
-                                                      struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result yrich_view_ctor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yrich_view_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -89,10 +87,8 @@ static struct yetty_ycore_void_result yrich_view_ctor(struct yetty_yclass_ctx *y
 }
 
 [[clang::annotate("override@ygui:yrich_view:destructor")]]
-static struct yetty_ycore_void_result yrich_view_dtor(struct yetty_yclass_ctx *yclass_ctx,
-                                                      struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result yrich_view_dtor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yrich_view_dtor: data_get");
@@ -105,7 +101,7 @@ static struct yetty_ycore_void_result yrich_view_dtor(struct yetty_yclass_ctx *y
         if (YETTY_IS_ERR(buffer_res)) {
             yetty_ycore_error_destroy(buffer_res.error);
         }
-        struct yetty_ycore_void_result destroy_res = yetty_yrich_document_destroy(NULL, d->doc);
+        struct yetty_ycore_void_result destroy_res = yetty_yrich_document_destroy(d->doc);
         if (YETTY_IS_ERR(destroy_res)) {
             yetty_ycore_error_destroy(destroy_res.error);
         }
@@ -196,7 +192,7 @@ static struct yetty_ycore_void_result yrich_view_render(struct yetty_yclass_obje
         yetty_ydraw_drawable_list_destroy(br.value);
         return YETTY_ERR(yetty_ycore_void, "yrich_view_render: set_buffer", buffer_res);
     }
-    struct yetty_ycore_void_result rr = yetty_yrich_document_render(NULL, d->doc);
+    struct yetty_ycore_void_result rr = yetty_yrich_document_render(d->doc);
     if (YETTY_IS_ERR(rr)) {
         struct yetty_ycore_void_result drop_res = yetty_yrich_document_set_buffer(d->doc, NULL);
         if (YETTY_IS_ERR(drop_res)) {
@@ -230,11 +226,9 @@ static struct yetty_ycore_void_result yrich_view_render(struct yetty_yclass_obje
 }
 
 [[clang::annotate("override@ygui:yrich_view:widget_emit_body")]]
-static struct yetty_ycore_void_result yrich_view_emit_body(struct yetty_yclass_ctx *yclass_ctx,
-                                                           struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result yrich_view_emit_body(struct yetty_yclass_object *yclass_obj,
                                                            struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yrich_view_emit_body: data_get");
@@ -259,9 +253,9 @@ static struct yetty_ycore_void_result yrich_view_emit_body(struct yetty_yclass_c
     if (!impl) {
         return YETTY_OK_VOID();
     }
-    typedef struct yetty_ycore_void_result (*fn_t)(
-        struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
-    return ((fn_t)impl)(NULL, yclass_obj, ctx);
+    typedef struct yetty_ycore_void_result (*fn_t)(struct yetty_yclass_object *,
+                                                   struct yetty_ygui_emit_ctx *);
+    return ((fn_t)impl)(yclass_obj, ctx);
 }
 
 /* Map an absolute viewport point to document content coords. */
@@ -273,11 +267,9 @@ static void to_doc_coords(struct yetty_yclass_object *obj, float x, float y, flo
 }
 
 [[clang::annotate("override@ygui:yrich_view:widget_on_press")]]
-static struct yetty_ycore_int_result yrich_view_on_press(struct yetty_yclass_ctx *yclass_ctx,
-                                                         struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result yrich_view_on_press(struct yetty_yclass_object *yclass_obj,
                                                          float x, float y, int button)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yrich_view_on_press: data_get");
@@ -288,7 +280,7 @@ static struct yetty_ycore_int_result yrich_view_on_press(struct yetty_yclass_ctx
     float dx, dy;
     to_doc_coords(obj, x, y, &dx, &dy);
     struct yetty_ycore_void_result down_res =
-        yetty_yrich_document_on_mouse_down(NULL, d->doc, dx, dy, (uint32_t)button, 0u);
+        yetty_yrich_document_on_mouse_down(d->doc, dx, dy, (uint32_t)button, 0u);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, down_res, "yrich_view_on_press: mouse_down");
     d->pressed = 1;
     struct yetty_ycore_void_result result_263 = yetty_ygui_widget_set_dirty(obj);
@@ -297,11 +289,9 @@ static struct yetty_ycore_int_result yrich_view_on_press(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@ygui:yrich_view:widget_on_release")]]
-static struct yetty_ycore_int_result yrich_view_on_release(struct yetty_yclass_ctx *yclass_ctx,
-                                                           struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result yrich_view_on_release(struct yetty_yclass_object *yclass_obj,
                                                            float x, float y, int button)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yrich_view_on_release: data_get");
@@ -312,7 +302,7 @@ static struct yetty_ycore_int_result yrich_view_on_release(struct yetty_yclass_c
     float dx, dy;
     to_doc_coords(obj, x, y, &dx, &dy);
     struct yetty_ycore_void_result up_res =
-        yetty_yrich_document_on_mouse_up(NULL, d->doc, dx, dy, (uint32_t)button, 0u);
+        yetty_yrich_document_on_mouse_up(d->doc, dx, dy, (uint32_t)button, 0u);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, up_res, "yrich_view_on_release: mouse_up");
     d->pressed = 0;
     struct yetty_ycore_void_result result_285 = yetty_ygui_widget_set_dirty(obj);
@@ -321,11 +311,9 @@ static struct yetty_ycore_int_result yrich_view_on_release(struct yetty_yclass_c
 }
 
 [[clang::annotate("override@ygui:yrich_view:widget_on_motion")]]
-static struct yetty_ycore_int_result yrich_view_on_motion(struct yetty_yclass_ctx *yclass_ctx,
-                                                          struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result yrich_view_on_motion(struct yetty_yclass_object *yclass_obj,
                                                           float x, float y)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "yrich_view_on_motion: data_get");
@@ -336,7 +324,7 @@ static struct yetty_ycore_int_result yrich_view_on_motion(struct yetty_yclass_ct
     float dx, dy;
     to_doc_coords(obj, x, y, &dx, &dy);
     struct yetty_ycore_void_result drag_res =
-        yetty_yrich_document_on_mouse_drag(NULL, d->doc, dx, dy, 0, 0u);
+        yetty_yrich_document_on_mouse_drag(d->doc, dx, dy, 0, 0u);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, drag_res, "yrich_view_on_motion: mouse_drag");
     struct yetty_ycore_void_result result_306 = yetty_ygui_widget_set_dirty(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, result_306, "yrich_view_on_motion");
@@ -362,7 +350,7 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_y
         if (YETTY_IS_ERR(buffer_res)) {
             yetty_ycore_error_destroy(buffer_res.error);
         }
-        struct yetty_ycore_void_result destroy_res = yetty_yrich_document_destroy(NULL, d->doc);
+        struct yetty_ycore_void_result destroy_res = yetty_yrich_document_destroy(d->doc);
         if (YETTY_IS_ERR(destroy_res)) {
             yetty_ycore_error_destroy(destroy_res.error);
         }
@@ -419,8 +407,7 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_content_size(
     if (w) {
         *w = 0.0f;
         if (d->doc) {
-            struct yetty_ycore_float_result width_res =
-                yetty_yrich_document_content_width(NULL, d->doc);
+            struct yetty_ycore_float_result width_res = yetty_yrich_document_content_width(d->doc);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, width_res,
                                 "yrich_view_content_size: content_width");
             *w = width_res.value;
@@ -430,7 +417,7 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_content_size(
         *h = 0.0f;
         if (d->doc) {
             struct yetty_ycore_float_result height_res =
-                yetty_yrich_document_content_height(NULL, d->doc);
+                yetty_yrich_document_content_height(d->doc);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, height_res,
                                 "yrich_view_content_size: content_height");
             *h = height_res.value;
@@ -471,7 +458,7 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_yclas
     if (!d->doc) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result kr = yetty_yrich_document_on_key_down(NULL, d->doc, key, mods);
+    struct yetty_ycore_void_result kr = yetty_yrich_document_on_key_down(d->doc, key, mods);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, kr, "yrich_view_feed_key");
     return yetty_ygui_widget_set_dirty(obj);
 }
@@ -495,7 +482,7 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_ycla
         .capacity = len,
     };
     struct yetty_ycore_void_result text_res =
-        yetty_yrich_document_on_text_input(NULL, d->doc, text_buffer);
+        yetty_yrich_document_on_text_input(d->doc, text_buffer);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, text_res, "yrich_view_feed_text");
     return yetty_ygui_widget_set_dirty(obj);
 }

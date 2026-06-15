@@ -32,10 +32,8 @@ struct [[clang::annotate("class@ygui:progress")]] [[clang::annotate(
 };
 
 [[clang::annotate("override@ygui:progress:constructor")]]
-static struct yetty_ycore_void_result progress_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result progress_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_progress_class_get().value,
@@ -77,11 +75,9 @@ static struct yetty_ycore_void_result paint_rounded(struct yetty_ygui_emit_ctx *
 }
 
 [[clang::annotate("override@ygui:progress:widget_paint")]]
-static struct yetty_ycore_void_result progress_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                     struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result progress_paint(struct yetty_yclass_object *yclass_obj,
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "progress_paint: NULL ctx");

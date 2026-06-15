@@ -392,12 +392,12 @@ struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
             if (YETTY_IS_OK(wm_res)) {
                 window_manager = wm_res.value;
                 struct yetty_ycore_void_result wm_cfg = yetty_yplatform_window_manager_configure(
-                    NULL, window_manager, window, output_pipe, platform_input_pipe);
+                    window_manager, window, output_pipe, platform_input_pipe);
                 if (YETTY_IS_ERR(wm_cfg)) {
                     ywarn("yinit: window manager configure failed: %s", wm_cfg.error.msg);
                     yetty_ycore_error_destroy(wm_cfg.error);
                     struct yetty_ycore_void_result wm_destroy =
-                        yetty_yplatform_window_manager_destroy(NULL, window_manager);
+                        yetty_yplatform_window_manager_destroy(window_manager);
                     if (YETTY_IS_ERR(wm_destroy)) {
                         yetty_ycore_error_destroy(wm_destroy.error);
                     }
@@ -418,7 +418,7 @@ struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
                 yetty_ycore_error_destroy(clip_res.error);
                 if (window_manager) {
                     struct yetty_ycore_void_result wm_destroy =
-                        yetty_yplatform_window_manager_destroy(NULL, window_manager);
+                        yetty_yplatform_window_manager_destroy(window_manager);
                     if (YETTY_IS_ERR(wm_destroy)) {
                         yetty_ycore_error_destroy(wm_destroy.error);
                     }
@@ -497,7 +497,7 @@ struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
     }
     if (window_manager) {
         struct yetty_ycore_void_result wm_destroy =
-            yetty_yplatform_window_manager_destroy(NULL, window_manager);
+            yetty_yplatform_window_manager_destroy(window_manager);
         if (YETTY_IS_ERR(wm_destroy)) {
             yetty_ycore_error_destroy(wm_destroy.error);
         }

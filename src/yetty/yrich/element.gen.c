@@ -7,55 +7,43 @@ struct yetty_ycore_int_result;
 struct yetty_ycore_void_result;
 struct yetty_ydraw_drawable_list;
 struct yetty_yrich_rect;
-struct yetty_ycore_void_result yetty_yrich_constructor(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_element_destroy(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_element_bounds(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_yrich_constructor(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_element_destroy(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_element_bounds(struct yetty_yclass_object *obj,
                                                           struct yetty_yrich_rect *out_bounds);
-struct yetty_ycore_int_result yetty_yrich_element_hit_test(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_yrich_element_hit_test(struct yetty_yclass_object *obj, float x,
                                                            float y);
 struct yetty_ycore_void_result yetty_yrich_element_render(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    struct yetty_ydraw_drawable_list *drawable_list, uint32_t layer, int selected);
-struct yetty_ycore_int_result yetty_yrich_element_is_editable(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_element_begin_edit(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_element_end_edit(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj);
-struct yetty_ycore_int_result yetty_yrich_element_is_editing(struct yetty_yclass_ctx *ctx,
-                                                             struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_element_insert_text(struct yetty_yclass_ctx *ctx,
-                                                               struct yetty_yclass_object *obj,
+    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *drawable_list,
+    uint32_t layer, int selected);
+struct yetty_ycore_int_result yetty_yrich_element_is_editable(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_element_begin_edit(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_element_end_edit(struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_yrich_element_is_editing(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_element_insert_text(struct yetty_yclass_object *obj,
                                                                struct yetty_ycore_buffer text);
-struct yetty_ycore_void_result yetty_yrich_element_delete_sel(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj);
-typedef struct yetty_ycore_void_result (*yetty_yrich_constructor_fn)(struct yetty_yclass_ctx *,
-                                                                     struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_yrich_element_delete_sel(struct yetty_yclass_object *obj);
+typedef struct yetty_ycore_void_result (*yetty_yrich_constructor_fn)(struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_element_destroy_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_element_bounds_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_yrich_rect *);
+    struct yetty_yclass_object *, struct yetty_yrich_rect *);
 typedef struct yetty_ycore_int_result (*yetty_yrich_element_hit_test_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float);
+    struct yetty_yclass_object *, float, float);
 typedef struct yetty_ycore_void_result (*yetty_yrich_element_render_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ydraw_drawable_list *,
-    uint32_t, int);
+    struct yetty_yclass_object *, struct yetty_ydraw_drawable_list *, uint32_t, int);
 typedef struct yetty_ycore_int_result (*yetty_yrich_element_is_editable_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_element_begin_edit_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_element_end_edit_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_int_result (*yetty_yrich_element_is_editing_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_element_insert_text_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ycore_buffer);
+    struct yetty_yclass_object *, struct yetty_ycore_buffer);
 typedef struct yetty_ycore_void_result (*yetty_yrich_element_delete_sel_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 
 [[maybe_unused]]
 static yetty_yrich_constructor_fn yetty_yrich_element_yetty_yrich_constructor_check =

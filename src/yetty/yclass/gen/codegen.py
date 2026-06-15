@@ -32,9 +32,10 @@ Symbol naming:
   wire label — one canonical name, three uses.
 
 Method signature contract:
-  RetT slot(struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, <rest...>);
+  RetT slot(struct yetty_yclass_object *obj, <rest...>);
 
-  ctx is *not* on the wire. Public stub branches on ctx->session:
+  Methods take no ctx — the RPC session is linked onto the object at create
+  time (obj->session). The public stub branches on obj->session:
     NULL → local: vtable dispatch via obj->klass.
     set  → remote: look up remote_id via xlat (batched per-class via
            yetty_yclass_rpc_session_translate_class, lazy fallback via
@@ -42,10 +43,11 @@ Method signature contract:
            yetty_yclass_rpc_call(YETTY_YCLASS_RPC_OP_CALL, rid).
 
 Object creation:
-  <class>_create(ctx) — local: yetty_yclass_object_alloc; remote: triggers
-  per-class translate handshake, then yetty_yclass_rpc_call(CREATE,
-  "<name>"), wraps the returned handle in a proxy with the same class
-  accessor.
+  <class>_create(ctx) — the ONLY entry point that takes a ctx; it links
+  ctx->session onto the object. Local (ctx/session NULL):
+  yetty_yclass_object_alloc; remote: per-class translate handshake, then
+  yetty_yclass_rpc_call(CREATE, "<name>"), wraps the returned handle in a
+  proxy whose header.session = ctx->session.
 
 Usage:
   ./codegen.py <module> <include_base> <module_src_dir> <source.c>...
@@ -1152,19 +1154,16 @@ def validate_method(m: dict):
             f"  YETTY_YRESULT_DECLARE. Use `struct yetty_ycore_void_result` for\n"
             f"  methods that have no success value.\n")
         sys.exit(1)
-    if len(args) < 2:
+    if len(args) < 1:
         sys.stderr.write(
-            f"error: method {m['slot']} needs (ctx*, obj*, ...). got {len(args)}\n")
+            f"error: method {m['slot']} needs (obj*, ...). got {len(args)}\n")
         sys.exit(1)
-    if not is_specific_struct_ptr(args[0]["type"], "yetty_yclass_ctx"):
+    # First arg is the target object — methods no longer take a ctx; the
+    # session is linked onto the object at create time and read from there.
+    if not is_specific_struct_ptr(args[0]["type"], "yetty_yclass_object"):
         sys.stderr.write(
-            f"error: method {m['slot']}: first arg must be 'struct yetty_yclass_ctx *' "
+            f"error: method {m['slot']}: first arg must be 'struct yetty_yclass_object *' "
             f"(got '{args[0]['type']}')\n")
-        sys.exit(1)
-    if not is_specific_struct_ptr(args[1]["type"], "yetty_yclass_object"):
-        sys.stderr.write(
-            f"error: method {m['slot']}: second arg must be 'struct yetty_yclass_object *' "
-            f"(got '{args[1]['type']}')\n")
         sys.exit(1)
     # Local-only slots are never marshalled, so the wire-shape rules
     # below don't apply: they may freely take raw pointers to producer-
@@ -1178,7 +1177,7 @@ def validate_method(m: dict):
     # (char *, void *, int *, struct yetty_ycore_buffer *, …) is
     # rejected: marshalling a raw address would write the producer's
     # local heap pointer onto the wire, meaningless on the peer.
-    for a in args[2:]:
+    for a in args[1:]:
         if is_buffer(a["type"]):
             continue  # length-prefixed payload after the packed header
         if is_struct_ptr(a["type"]):
@@ -1220,8 +1219,11 @@ def validate_method(m: dict):
 
 
 def wire_args(m: dict) -> list:
-    """All args except ctx."""
-    return m["args"][1:]
+    """The args that cross the wire: every method arg. The first is the target
+    object (marshalled as its handle); the rest follow it. Methods no longer
+    take a ctx parameter — the session is read from the object — so there is
+    nothing to skip."""
+    return m["args"]
 
 
 def args_struct_body(args: list, indent: str) -> str:
@@ -1237,8 +1239,7 @@ def emit_dispatch_body(m: dict) -> str:
     rid = result_type_id(m["return_type"])
     vt = m["return_payload_type"]
     slot_fn = f"{qualified_slot(m)}_fn"
-    ctx_name = args[0]["name"]
-    obj_name = args[1]["name"]
+    obj_name = args[0]["name"]
     call_args = ", ".join(a["name"] for a in args)
     qs = qualified_slot(m)
 
@@ -1331,7 +1332,7 @@ def emit_dispatch_body(m: dict) -> str:
 {body_setup}\
         uint8_t resp_buf[1];
         struct yetty_ycore_size_result rpc_call_r = yetty_yclass_rpc_call(
-            rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, {body_arg},
+            {obj_name}->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, {body_arg},
             resp_buf, sizeof(resp_buf));
 {body_cleanup}\
         YETTY_RETURN_IF_ERR({rid}, rpc_call_r, "{qs}: RPC call failed");
@@ -1345,7 +1346,7 @@ def emit_dispatch_body(m: dict) -> str:
 {body_setup}\
         uint8_t resp_buf[1 + sizeof({vt})];
         struct yetty_ycore_size_result rpc_call_r = yetty_yclass_rpc_call(
-            rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, {body_arg},
+            {obj_name}->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, {body_arg},
             resp_buf, sizeof(resp_buf));
 {body_cleanup}\
         YETTY_RETURN_IF_ERR({rid}, rpc_call_r, "{qs}: RPC call failed");
@@ -1370,10 +1371,9 @@ def emit_dispatch_body(m: dict) -> str:
 
     if (!{obj_name}) return YETTY_ERR({rid}, "{qs}: NULL object");
 
-    struct yetty_yclass_ctx *rpc_ctx = {ctx_name};
-    if (rpc_ctx && rpc_ctx->session) {{
+    if ({obj_name}->session) {{
         struct uint32_result remote_id_r =
-            yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
+            yetty_yclass_rpc_session_ensure_remote_id({obj_name}->session, method_slot);
         YETTY_RETURN_IF_ERR({rid}, remote_id_r, "{qs}: ensure_remote_id failed");
         uint32_t remote_id = remote_id_r.value;
 /* Byte-exact wire layout — #pragma pack matches the first-party
@@ -2168,7 +2168,10 @@ def emit_skel(m: dict) -> str:
     # server side — the impl sees the bytes for the duration of the
     # call, and is forbidden from holding onto `.data` past return).
     resolves = []
-    call_parts = ["&local_ctx"]
+    # The resolved server-side object is local (session NULL), so re-entering
+    # the public stub dispatches in-process. No ctx argument — the stub reads
+    # the session off the object.
+    call_parts = []
     buf_args = [a for a in args if is_buffer(a["type"])]
     for a in args:
         if is_struct_ptr(a["type"]):
@@ -2277,7 +2280,6 @@ static size_t {slot}_skel(const void *body, size_t body_len,
     }} wire_args;
 #pragma pack(pop)
 {unpack_block}\
-    struct yetty_yclass_ctx local_ctx = {{0}};
 {resolve_block}\
 {body}}}
 """
@@ -2302,7 +2304,7 @@ def emit_create_fn(cls: dict, model: dict, module: str) -> str:
         ctor_call = f"""\
 
         struct yetty_ycore_void_result ctor_r =
-            yetty_{module}_constructor(ctx, alloc_r.value);
+            yetty_{module}_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {{
             struct yetty_ycore_void_result free_r =
                 yetty_yclass_object_free(alloc_r.value);
@@ -2371,6 +2373,9 @@ struct yetty_yclass_object_ptr_result {qname}_create(struct yetty_yclass_ctx *ct
     if (!proxy)
         return YETTY_ERR(yetty_yclass_object_ptr, "{qname}_create: calloc(proxy) failed");
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }}

@@ -4,8 +4,6 @@ methods:
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: latitude
@@ -25,8 +23,6 @@ methods:
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: name
@@ -38,8 +34,6 @@ methods:
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: url_template
@@ -59,8 +53,6 @@ methods:
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: latitude
@@ -74,8 +66,6 @@ methods:
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: zoom
@@ -87,8 +77,6 @@ methods:
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: width_px
@@ -102,8 +90,6 @@ methods:
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: delta_x
@@ -117,8 +103,6 @@ methods:
     owning_class: map
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: step
@@ -134,8 +118,6 @@ methods:
     owning_class: map
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -145,8 +127,6 @@ methods:
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -156,8 +136,6 @@ methods:
     owning_class: map
     return_type: struct yetty_ycore_const_char_ptr_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -167,8 +145,6 @@ methods:
     owning_class: map
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -178,8 +154,6 @@ methods:
     owning_class: map
     return_type: struct yetty_ydraw_drawable_list_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -189,8 +163,6 @@ methods:
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true

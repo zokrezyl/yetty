@@ -44,13 +44,15 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
     output.position = vec4<f32>(input.position, 0.0, 1.0);
 
-    let grid_size = uniforms.ydraw_ydraw_grid_size;
-    let cell_size = uniforms.ydraw_ydraw_cell_size;
-    let grid_pixel_w = grid_size.x * cell_size.x;
-    let grid_pixel_h = grid_size.y * cell_size.y;
+    // Map the rect's NDC quad onto the on-screen view (rect) size in px.
+    // The fragment offsets this by the scroll (cz_off) into the content and
+    // buckets/bounds against grid_size*cell_size (the content extent). When
+    // content == rect, view == content and this is identical to mapping the
+    // whole content onto the rect (the non-scrolling case).
+    let view = uniforms.ydraw_ydraw_view_size;
     output.grid_pixel = vec2<f32>(
-        (input.position.x * 0.5 + 0.5) * grid_pixel_w,
-        (0.5 - input.position.y * 0.5) * grid_pixel_h
+        (input.position.x * 0.5 + 0.5) * view.x,
+        (0.5 - input.position.y * 0.5) * view.y
     );
     return output;
 }
@@ -206,11 +208,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // Read cell's primitive list from grid
     let cell_start = storage_buffer[grid_offset + cell_index];
     let cell_count = storage_buffer[grid_offset + cell_start];
-    // Safety cap. 64 proved far too low for map-like content (yopenstreet
-    // vector): a measured dense-city 32 px ygrid cell holds ~800 prims
-    // (fill triangles + cased roads + dashes + label glyphs), and prims
-    // past the cap — labels first, they are appended last — silently
-    // vanish. grid.c logs "max prims/cell" at staging rebuild.
+    // Safety cap. 64 proved far too low for map-like content: a measured
+    // dense-city 32 px cell holds ~800 prims (fill triangles + cased
+    // roads + dash segments + label glyphs), and prims past the cap —
+    // labels first, since they are appended last — silently vanish.
+    // grid.c logs "max prims/cell" at staging rebuild; keep this above it.
     let loop_count = min(cell_count, 1024u);
 
     var result_color = vec3<f32>(0.0);

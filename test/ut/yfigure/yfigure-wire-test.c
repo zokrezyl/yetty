@@ -86,29 +86,26 @@ static struct test_leaf *test_leaf_from_obj(struct yetty_yclass_object *obj)
 /* test_leaf is a yclass figure (manually registered — test TUs aren't run
  * through codegen). Each slot impl takes the yclass object; the typed body
  * sits at obj + 1, base is its first member. */
-static struct yetty_ycore_void_result test_leaf_destroy(struct yetty_yclass_ctx *ctx,
+static struct yetty_ycore_void_result test_leaf_destroy(
                                                         struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     return yetty_yclass_object_free(obj);
 }
 
-static struct yetty_ycore_void_result test_leaf_render(struct yetty_yclass_ctx *ctx,
+static struct yetty_ycore_void_result test_leaf_render(
                                                        struct yetty_yclass_object *obj,
                                                        struct yetty_ydraw_target *target)
 {
-    (void)ctx;
     (void)obj;
     (void)target;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result test_leaf_process_bytes(struct yetty_yclass_ctx *ctx,
+static struct yetty_ycore_void_result test_leaf_process_bytes(
                                                               struct yetty_yclass_object *obj,
                                                               const uint8_t *bytes,
                                                               size_t bytes_len)
 {
-    (void)ctx;
     (void)bytes;
     struct test_leaf *l = test_leaf_from_obj(obj);
     l->bytes_seen += bytes_len;
@@ -116,21 +113,19 @@ static struct yetty_ycore_void_result test_leaf_process_bytes(struct yetty_yclas
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result test_leaf_reset_content(struct yetty_yclass_ctx *ctx,
+static struct yetty_ycore_void_result test_leaf_reset_content(
                                                               struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct test_leaf *l = test_leaf_from_obj(obj);
     l->bytes_seen = 0;
     l->call_count = 0;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_char_ptr_result test_leaf_dump(struct yetty_yclass_ctx *ctx,
+static struct yetty_ycore_char_ptr_result test_leaf_dump(
                                                          struct yetty_yclass_object *obj,
                                                          int indent)
 {
-    (void)ctx;
     const struct test_leaf *l = test_leaf_from_obj(obj);
     char pad[64];
     int n = indent < 0 ? 0 : indent;
@@ -197,7 +192,6 @@ static struct yetty_yclass_ptr_result test_leaf_class_get(void)
 static struct yetty_yfigure_figure_ptr_result test_leaf_factory(
     struct yetty_ycore_rectangle rect, const struct yetty_context *ctx, void *user)
 {
-    (void)ctx;
     (void)user;
     struct yetty_yclass_ptr_result cls_r = test_leaf_class_get();
     if (YETTY_IS_ERR(cls_r)) {
@@ -308,7 +302,7 @@ static void test_empty_container(void)
     ASSERT_STR_EQ("empty_container", dump, expected);
     free(dump);
 
-    yetty_yfigure_destroy(NULL, root);
+    yetty_yfigure_destroy(root);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -342,7 +336,7 @@ static void test_one_create_child(void)
     ASSERT_STR_EQ("one_create_child", dump, expected);
     free(dump);
 
-    yetty_yfigure_destroy(NULL, root);
+    yetty_yfigure_destroy(root);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -384,7 +378,7 @@ static void test_two_create_child(void)
     ASSERT_STR_EQ("two_create_child", dump, expected);
     free(dump);
 
-    yetty_yfigure_destroy(NULL, root);
+    yetty_yfigure_destroy(root);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -421,7 +415,7 @@ static void test_create_then_delete(void)
     ASSERT_STR_EQ("create_then_delete", dump, expected);
     free(dump);
 
-    yetty_yfigure_destroy(NULL, root);
+    yetty_yfigure_destroy(root);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -461,7 +455,7 @@ static void test_create_with_init_payload(void)
     ASSERT_STR_EQ("create_with_init_payload", dump, expected);
     free(dump);
 
-    yetty_yfigure_destroy(NULL, root);
+    yetty_yfigure_destroy(root);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -499,7 +493,7 @@ static void test_routed_to_child(void)
     ASSERT_STR_EQ("routed_to_child", dump, expected);
     free(dump);
 
-    yetty_yfigure_destroy(NULL, root);
+    yetty_yfigure_destroy(root);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -529,7 +523,7 @@ static void test_clear_all(void)
     ASSERT_STR_EQ("clear_all", dump, expected);
     free(dump);
 
-    yetty_yfigure_destroy(NULL, root);
+    yetty_yfigure_destroy(root);
     yetty_yfigure_registry_destroy(reg);
 }
 
@@ -566,7 +560,7 @@ static void test_stale_delete_is_noop(void)
     ASSERT_STR_EQ("stale_delete_is_noop", dump, expected);
     free(dump);
 
-    yetty_yfigure_destroy(NULL, root);
+    yetty_yfigure_destroy(root);
     yetty_yfigure_registry_destroy(reg);
 }
 

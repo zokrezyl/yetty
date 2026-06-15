@@ -40,10 +40,8 @@ yetty_ygui_yimage {
 };
 
 [[clang::annotate("override@ygui:yimage:constructor")]]
-static struct yetty_ycore_void_result yimage_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                         struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result yimage_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_yimage_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -57,10 +55,8 @@ static struct yetty_ycore_void_result yimage_constructor(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@ygui:yimage:destructor")]]
-static struct yetty_ycore_void_result yimage_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                        struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result yimage_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_yimage_ptr_result d_dr = yetty_ygui_yimage_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yimage_destructor: data_get");
@@ -77,11 +73,9 @@ static struct yetty_ycore_void_result yimage_destructor(struct yetty_yclass_ctx 
  * stays warm. The kind is hardcoded here — the framework class
  * system doesn't know about figure kinds. */
 [[clang::annotate("override@ygui:yimage:widget_emit_container")]]
-static struct yetty_ycore_void_result yimage_emit_container(struct yetty_yclass_ctx *yclass_ctx,
-                                                            struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result yimage_emit_container(struct yetty_yclass_object *yclass_obj,
                                                             struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_widget_id(obj), YETTY_YFIGURE_KIND_YIMAGE,
@@ -90,11 +84,9 @@ static struct yetty_ycore_void_result yimage_emit_container(struct yetty_yclass_
 }
 
 [[clang::annotate("override@ygui:yimage:widget_emit_body")]]
-static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_ctx *yclass_ctx,
-                                                       struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_object *yclass_obj,
                                                        struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_yimage_ptr_result d_dr = yetty_ygui_yimage_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yimage_emit_body: data_get");

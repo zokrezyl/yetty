@@ -4,8 +4,6 @@ methods:
     owning_class: grid
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: record
@@ -17,8 +15,6 @@ methods:
     owning_class: grid
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
@@ -28,8 +24,6 @@ methods:
     owning_class: grid
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
@@ -71,6 +65,14 @@ classes:
         get: false
         set: false
       - name: scroll_y
+        type: float
+        get: false
+        set: false
+      - name: insert_rolling_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: rolling_cell_height
         type: float
         get: false
         set: false

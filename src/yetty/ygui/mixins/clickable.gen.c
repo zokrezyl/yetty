@@ -4,17 +4,14 @@
 #include <stddef.h> /* NULL, size_t */
 
 struct yetty_ycore_int_result;
-struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_object *obj, float x,
                                                          float y, int button);
-struct yetty_ycore_int_result yetty_ygui_widget_on_release(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ygui_widget_on_release(struct yetty_yclass_object *obj, float x,
                                                            float y, int button);
-typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct yetty_yclass_ctx *,
-                                                                       struct yetty_yclass_object *,
+typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct yetty_yclass_object *,
                                                                        float, float, int);
 typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_release_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, int);
+    struct yetty_yclass_object *, float, float, int);
 
 [[maybe_unused]]
 static yetty_ygui_widget_on_press_fn yetty_ygui_clickable_yetty_ygui_widget_on_press_check =

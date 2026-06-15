@@ -67,32 +67,27 @@ struct yetty_yrich_ydoc_ptr_result {
 struct yetty_yrich_ydoc_ptr_result yetty_yrich_ydoc_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yrich_ydoc_to(struct yetty_yrich_ydoc *data);
 
-struct yetty_ycore_void_result yetty_yrich_ydoc_toggle_format(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_yrich_ydoc_toggle_format(struct yetty_yclass_object *obj,
                                                               uint32_t format_flag);
-struct yetty_ycore_void_result yetty_yrich_ydoc_set_text_color(struct yetty_yclass_ctx *ctx,
-                                                               struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_text_color(struct yetty_yclass_object *obj,
                                                                uint32_t color);
-struct yetty_ycore_void_result yetty_yrich_ydoc_set_alignment(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_alignment(struct yetty_yclass_object *obj,
                                                               uint32_t halign);
-struct yetty_ycore_void_result yetty_yrich_ydoc_set_heading(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_yrich_ydoc_set_heading(struct yetty_yclass_object *obj,
                                                             uint32_t level);
-struct yetty_ycore_void_result yetty_yrich_ydoc_change_font_size(struct yetty_yclass_ctx *ctx,
-                                                                 struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_yrich_ydoc_change_font_size(struct yetty_yclass_object *obj,
                                                                  float delta);
 
 typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_toggle_format_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, uint32_t);
+    struct yetty_yclass_object *, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_text_color_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, uint32_t);
+    struct yetty_yclass_object *, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_alignment_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, uint32_t);
+    struct yetty_yclass_object *, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_set_heading_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, uint32_t);
+    struct yetty_yclass_object *, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yrich_ydoc_change_font_size_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, float);
+    struct yetty_yclass_object *, float);
 
 struct yetty_yclass_object_ptr_result yetty_yrich_paragraph_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_yrich_inline_image_create(struct yetty_yclass_ctx *ctx);

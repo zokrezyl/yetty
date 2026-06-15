@@ -147,10 +147,8 @@ static struct yetty_ycore_void_result fp_load_dir(struct yetty_ygui_filepicker *
 }
 
 [[clang::annotate("override@ygui:filepicker:constructor")]]
-static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
-                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, fp_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -167,10 +165,8 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 [[clang::annotate("override@ygui:filepicker:destructor")]]
-static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
-                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_filepicker_ptr_result d_dr = yetty_ygui_filepicker_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
@@ -181,11 +177,9 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 [[clang::annotate("override@ygui:filepicker:widget_paint")]]
-static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
-                                            struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "filepicker paint: NULL ctx");
@@ -277,11 +271,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
  * vertical drag into a row offset. The paint already windows + clips to
  * [scroll, scroll+visible), so changing scroll is all that's needed. */
 [[clang::annotate("override@ygui:filepicker:widget_on_motion")]]
-static struct yetty_ycore_int_result fp_on_motion(struct yetty_yclass_ctx *yclass_ctx,
-                                                  struct yetty_yclass_object *yclass_obj, float x,
+static struct yetty_ycore_int_result fp_on_motion(struct yetty_yclass_object *yclass_obj, float x,
                                                   float y)
 {
-    (void)yclass_ctx;
     (void)x;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_framework *eng = yetty_ygui_widget_framework(obj);
@@ -323,11 +315,9 @@ static struct yetty_ycore_int_result fp_on_motion(struct yetty_yclass_ctx *yclas
 /* Wheel / trackpad scroll over the list. dy>0 (wheel up) moves toward the
  * top. Consumed only when the list overflows, so it bubbles otherwise. */
 [[clang::annotate("override@ygui:filepicker:widget_on_scroll")]]
-static struct yetty_ycore_int_result fp_on_scroll(struct yetty_yclass_ctx *yclass_ctx,
-                                                  struct yetty_yclass_object *yclass_obj, float x,
+static struct yetty_ycore_int_result fp_on_scroll(struct yetty_yclass_object *yclass_obj, float x,
                                                   float y, float dx, float dy)
 {
-    (void)yclass_ctx;
     (void)x;
     (void)y;
     (void)dx;
@@ -363,8 +353,7 @@ static struct yetty_ycore_int_result fp_on_scroll(struct yetty_yclass_ctx *yclas
 }
 
 [[clang::annotate("override@ygui:filepicker:widget_on_press")]]
-static struct yetty_ycore_int_result on_press(struct yetty_yclass_ctx *yclass_ctx,
-                                              struct yetty_yclass_object *yclass_obj, float x,
+static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass_obj, float x,
                                               float y, int btn)
 {
     (void)btn;

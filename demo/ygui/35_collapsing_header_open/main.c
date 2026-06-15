@@ -111,29 +111,26 @@ static void finalize_section(struct yetty_yclass_object *sec)
 
 /* ---- Overlay trigger callbacks ---- */
 
-static struct yetty_ycore_void_result on_menu_item(struct yetty_yclass_ctx *yc,
+static struct yetty_ycore_void_result on_menu_item(
                                                    struct yetty_yclass_object *menu, int idx,
                                                    void *ud)
 {
-    (void)yc;
     (void)menu;
     (void)idx;
     (void)ud;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result on_open_dialog(struct yetty_yclass_ctx *yc,
+static struct yetty_ycore_void_result on_open_dialog(
                                                      struct yetty_yclass_object *obj, void *ud)
 {
-    (void)yc;
     (void)obj;
     return yetty_ygui_dialog_open_at((struct yetty_yclass_object *)ud, 240, 180, 380, 180);
 }
 
-static struct yetty_ycore_void_result on_open_menu(struct yetty_yclass_ctx *yc,
+static struct yetty_ycore_void_result on_open_menu(
                                                    struct yetty_yclass_object *obj, void *ud)
 {
-    (void)yc;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect((struct yetty_yclass_object *)obj);
     return yetty_ygui_popup_menu_toggle_at((struct yetty_yclass_object *)ud, r.min.x, r.max.y + 2.0f);
 }

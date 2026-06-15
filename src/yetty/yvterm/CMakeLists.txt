@@ -1,77 +1,45 @@
-# yvterm — the text-grid figure: the yvterm:grid figure composites the
-# libvterm text layer, scrollback, and the ydraw rich-content canvas it owns,
-# plus the shader-glyph figure. Owned/driven by yterminal (the coordinator).
-# Symbol prefix: yetty_yvterm_.
-add_library(yetty_yvterm
+add_library(yetty_yvterm STATIC
     grid.c
-    text-layer.c
-    text-scrollback.c
-    ydraw-content.c
-    shader-glyph-figure.c
-    osc-args.c
+    vterm.c
+    # yvterm's own SDF/glyph/text renderer for the raw ydraw records (ycat
+    # PDF/SVG/markdown) stored on the grid ring. Standalone — does not use ygrid.
+    sdf-layer.c
+    # Module-level registration + RPC dispatch (yetty_yvterm_register lives here)
+    # and the cross-class method tables. grid.c/vterm.c each only #include their
+    # own <name>.gen.c at the foot, so these are compiled as standalone units —
+    # mirrors ygrid/CMakeLists.txt.
     methods.gen.c
     rpc.gen.c
 )
 
-target_include_directories(yetty_yvterm BEFORE PUBLIC
-    # Pinned webgpu.h shared with yetty_yrdawn — server-dispatch.gen.c
-    # and the surrounding layer code must see the SAME struct layouts
-    # the client encodes from. See src/yetty/yrdawn/CMakeLists.txt for
-    # the full rationale.
-    ${YETTY_ROOT}/include/yetty/yrdawn
-)
 target_include_directories(yetty_yvterm PUBLIC
     ${YETTY_ROOT}/include
 )
-# Codegen-emitted internal sources (*.gen.c) sit under src/.
+# Codegen-emitted internal sources (*.gen.c) sit under src/yetty/yvterm/.
+# PRIVATE so the path does not leak to consumers — the public API is the per-class
+# headers under include/yetty/yvterm/.
 target_include_directories(yetty_yvterm PRIVATE ${YETTY_ROOT}/src)
 
-target_link_libraries(yetty_yvterm
-    vterm
-    webgpu
+target_link_libraries(yetty_yvterm PUBLIC
+    yetty_ycore
     yetty_yclass
-    yetty_ydraw_core
-    yetty_ydraw_factory
-    yetty_yfont_core
-    yetty_yui_core
-    yetty_yface
-    yetty_ywire
-    yetty_yrdawn
     yetty_yfigure
-    yetty_ygrid
-    lz4_static
+    yetty_ydraw_core
+    yetty_ydraw_factory  # yetty_ydraw_composite_destroy (anchored composite teardown)
+    yetty_ywire          # wire statemachine: default raw-bytes sink → libvterm
+    yetty_yfont_core     # MSDF font + font cache: text render AND SDF-layer wire fonts
+    yetty_yrender        # gpu_resource_set / binder / font dispatcher (text + SDF layer)
+    yetty_yplatform_core # SDF layer wire-font cache: cache dir + mkdir/file_exists
+    webgpu               # wgpu* pipeline/buffers/draw for the text + SDF render
+    vterm
 )
 
-# shader-glyph-figure.c carries `[[clang::annotate(...)]]` on its data
-# struct (codegen reads it off the AST). The C2x attribute syntax needs
-# C23 to parse — host clang/gcc accept it by default, NDK clang 17 does
-# not. Off-MSVC only: MSVC can't express C23 via CMake's C_STANDARD and
-# parses the attributes via the global /std:clatest. (Mirrors ygui.)
+# vterm.c carries `[[clang::annotate(...)]]` on its class struct (codegen reads
+# it off the AST). The C2x attribute syntax needs C23 to parse — host clang/gcc
+# accept it by default, NDK clang 17 does not. (Mirrors ygrid/CMakeLists.txt.)
 if(NOT MSVC)
     set_target_properties(yetty_yvterm PROPERTIES
         C_STANDARD 23
         C_STANDARD_REQUIRED ON
     )
 endif()
-
-# The yrdawn server (figure + session + codegen dispatch) is linked
-# wherever a host wants to mint yrdawn figures from a registry. On
-# webasm we don't host canvases, so the server lib doesn't exist.
-if(TARGET yetty_yrdawn_server)
-    target_link_libraries(yetty_yvterm yetty_yrdawn_server)
-endif()
-
-# yvterm's sources reference only header-only constants from
-# <yetty/ymgui/wire.h> (YMGUI_WIRE_VERSION) — no compiled symbols. Pull
-# yetty_ymgui in transitively only when the feature is built, so webasm
-# (FEATURE_YMGUI=OFF) doesn't request -lyetty_ymgui at link time.
-if(YETTY_ENABLE_FEATURE_YMGUI)
-    target_link_libraries(yetty_yvterm yetty_ymgui)
-endif()
-
-# Embed shaders via incbin (or stubs on Emscripten)
-incbin_add_resources(yetty_yvterm
-    text_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/text-layer.wgsl"
-    ydraw_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/ydraw-layer.wgsl"
-    shader_glyph_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/shader-glyph-layer.wgsl"
-)

@@ -53,10 +53,8 @@ struct yetty_ywire_wire_statemachine;
 
 [[clang::annotate("virtual@yfigure:figure:render")]] [[clang::annotate("local@yfigure:render")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_render(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    struct yetty_ydraw_target *target)
+    struct yetty_yclass_object *obj, struct yetty_ydraw_target *target)
 {
-    (void)ctx;
     (void)obj;
     (void)target;
     return YETTY_OK_VOID();
@@ -67,9 +65,8 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_render(
  * every concrete kind overrides this and frees via object_free. */
 [[clang::annotate("virtual@yfigure:figure:destroy")]] [[clang::annotate("local@yfigure:destroy")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_destroy(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+    struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     (void)obj;
     return YETTY_OK_VOID();
 }
@@ -81,10 +78,8 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_destroy(
 [[clang::annotate("virtual@yfigure:figure:process_input")]] [[clang::annotate(
     "local@yfigure:process_input")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_input(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    struct yetty_ywire_wire_statemachine *statemachine)
+    struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *statemachine)
 {
-    (void)ctx;
     (void)obj;
     (void)statemachine;
     return YETTY_ERR(yetty_ycore_void, "yfigure: process_input not implemented by this figure");
@@ -94,10 +89,8 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_input
 [[clang::annotate("virtual@yfigure:figure:process_bytes")]] [[clang::annotate(
     "local@yfigure:process_bytes")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_bytes(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, const uint8_t *bytes,
-    size_t bytes_len)
+    struct yetty_yclass_object *obj, const uint8_t *bytes, size_t bytes_len)
 {
-    (void)ctx;
     (void)obj;
     (void)bytes;
     (void)bytes_len;
@@ -109,9 +102,8 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_bytes
 [[clang::annotate("virtual@yfigure:figure:reset_content")]] [[clang::annotate(
     "local@yfigure:reset_content")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_reset_content(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+    struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     (void)obj;
     return YETTY_ERR(yetty_ycore_void, "yfigure: reset_content not implemented by this figure");
 }
@@ -121,9 +113,8 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_reset_content
 [[clang::annotate("virtual@yfigure:figure:dump_state")]] [[clang::annotate(
     "local@yfigure:dump_state")]]
 static struct yetty_ycore_char_ptr_result yetty_yfigure_figure_default_dump_state(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int indent)
+    struct yetty_yclass_object *obj, int indent)
 {
-    (void)ctx;
     (void)obj;
     (void)indent;
     return YETTY_OK(yetty_ycore_char_ptr, NULL);
@@ -138,9 +129,8 @@ static struct yetty_ycore_char_ptr_result yetty_yfigure_figure_default_dump_stat
 [[clang::annotate("virtual@yfigure:figure:set_scroll")]] [[clang::annotate(
     "local@yfigure:set_scroll")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_set_scroll(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, float scroll_x, float scroll_y)
+    struct yetty_yclass_object *obj, float scroll_x, float scroll_y)
 {
-    (void)ctx;
     (void)obj;
     (void)scroll_x;
     (void)scroll_y;
@@ -153,9 +143,8 @@ static struct yetty_ycore_void_result yetty_yfigure_figure_default_set_scroll(
 [[clang::annotate("virtual@yfigure:figure:set_content_size")]] [[clang::annotate(
     "local@yfigure:set_content_size")]]
 static struct yetty_ycore_void_result yetty_yfigure_figure_default_set_content_size(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, float content_w, float content_h)
+    struct yetty_yclass_object *obj, float content_w, float content_h)
 {
-    (void)ctx;
     (void)obj;
     (void)content_w;
     (void)content_h;

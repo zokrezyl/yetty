@@ -42,7 +42,6 @@ static size_t yetty_yrich_constructor_skel(const void *body, size_t body_len, vo
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -56,7 +55,7 @@ static size_t yetty_yrich_constructor_skel(const void *body, size_t body_len, vo
         return 1;
     }
     struct yetty_ycore_void_result call_r =
-        yetty_yrich_constructor(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+        yetty_yrich_constructor((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -94,7 +93,6 @@ static size_t yetty_yrich_document_content_width_skel(const void *body, size_t b
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -107,8 +105,8 @@ static size_t yetty_yrich_document_content_width_skel(const void *body, size_t b
         ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_ycore_float_result call_r = yetty_yrich_document_content_width(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+    struct yetty_ycore_float_result call_r =
+        yetty_yrich_document_content_width((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -150,7 +148,6 @@ static size_t yetty_yrich_document_content_height_skel(const void *body, size_t 
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -164,8 +161,8 @@ static size_t yetty_yrich_document_content_height_skel(const void *body, size_t 
         ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_ycore_float_result call_r = yetty_yrich_document_content_height(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+    struct yetty_ycore_float_result call_r =
+        yetty_yrich_document_content_height((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -207,7 +204,6 @@ static size_t yetty_yrich_document_undo_skel(const void *body, size_t body_len, 
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -221,7 +217,7 @@ static size_t yetty_yrich_document_undo_skel(const void *body, size_t body_len, 
         return 1;
     }
     struct yetty_ycore_void_result call_r =
-        yetty_yrich_document_undo(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+        yetty_yrich_document_undo((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -259,7 +255,6 @@ static size_t yetty_yrich_document_redo_skel(const void *body, size_t body_len, 
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -273,7 +268,7 @@ static size_t yetty_yrich_document_redo_skel(const void *body, size_t body_len, 
         return 1;
     }
     struct yetty_ycore_void_result call_r =
-        yetty_yrich_document_redo(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+        yetty_yrich_document_redo((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -315,7 +310,6 @@ static size_t yetty_yrich_document_on_mouse_down_skel(const void *body, size_t b
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -329,7 +323,7 @@ static size_t yetty_yrich_document_on_mouse_down_skel(const void *body, size_t b
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_document_on_mouse_down(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x, wire_args.y,
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x, wire_args.y,
         wire_args.button, wire_args.mods);
     if (resp_max < 1) {
         return 0;
@@ -372,7 +366,6 @@ static size_t yetty_yrich_document_on_mouse_up_skel(const void *body, size_t bod
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -386,7 +379,7 @@ static size_t yetty_yrich_document_on_mouse_up_skel(const void *body, size_t bod
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_document_on_mouse_up(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x, wire_args.y,
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x, wire_args.y,
         wire_args.button, wire_args.mods);
     if (resp_max < 1) {
         return 0;
@@ -429,7 +422,6 @@ static size_t yetty_yrich_document_on_mouse_drag_skel(const void *body, size_t b
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -443,7 +435,7 @@ static size_t yetty_yrich_document_on_mouse_drag_skel(const void *body, size_t b
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_document_on_mouse_drag(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x, wire_args.y,
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x, wire_args.y,
         wire_args.button, wire_args.mods);
     if (resp_max < 1) {
         return 0;
@@ -486,7 +478,6 @@ static size_t yetty_yrich_document_on_mouse_double_click_skel(const void *body, 
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -501,7 +492,7 @@ static size_t yetty_yrich_document_on_mouse_double_click_skel(const void *body, 
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_document_on_mouse_double_click(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x, wire_args.y,
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x, wire_args.y,
         wire_args.button, wire_args.mods);
     if (resp_max < 1) {
         return 0;
@@ -543,7 +534,6 @@ static size_t yetty_yrich_document_on_key_down_skel(const void *body, size_t bod
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -557,8 +547,7 @@ static size_t yetty_yrich_document_on_key_down_skel(const void *body, size_t bod
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_document_on_key_down(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.key,
-        wire_args.mods);
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.key, wire_args.mods);
     if (resp_max < 1) {
         return 0;
     }
@@ -603,7 +592,6 @@ static size_t yetty_yrich_document_on_text_input_skel(const void *body, size_t b
         .capacity = (size_t)wire_args.text_len,
     };
     body_offset += (size_t)wire_args.text_len;
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -617,7 +605,7 @@ static size_t yetty_yrich_document_on_text_input_skel(const void *body, size_t b
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_document_on_text_input(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, text_buf);
+        (struct yetty_yclass_object *)obj_resolve_r.value, text_buf);
     if (resp_max < 1) {
         return 0;
     }
@@ -657,7 +645,6 @@ static size_t yetty_yrich_element_hit_test_skel(const void *body, size_t body_le
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -671,7 +658,7 @@ static size_t yetty_yrich_element_hit_test_skel(const void *body, size_t body_le
         return 1;
     }
     struct yetty_ycore_int_result call_r = yetty_yrich_element_hit_test(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x, wire_args.y);
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x, wire_args.y);
     if (resp_max < 1) {
         return 0;
     }
@@ -713,7 +700,6 @@ static size_t yetty_yrich_element_is_editable_skel(const void *body, size_t body
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -726,8 +712,8 @@ static size_t yetty_yrich_element_is_editable_skel(const void *body, size_t body
         ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_ycore_int_result call_r = yetty_yrich_element_is_editable(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+    struct yetty_ycore_int_result call_r =
+        yetty_yrich_element_is_editable((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -769,7 +755,6 @@ static size_t yetty_yrich_element_begin_edit_skel(const void *body, size_t body_
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -782,8 +767,8 @@ static size_t yetty_yrich_element_begin_edit_skel(const void *body, size_t body_
         ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_ycore_void_result call_r = yetty_yrich_element_begin_edit(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+    struct yetty_ycore_void_result call_r =
+        yetty_yrich_element_begin_edit((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -821,7 +806,6 @@ static size_t yetty_yrich_element_end_edit_skel(const void *body, size_t body_le
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -835,7 +819,7 @@ static size_t yetty_yrich_element_end_edit_skel(const void *body, size_t body_le
         return 1;
     }
     struct yetty_ycore_void_result call_r =
-        yetty_yrich_element_end_edit(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+        yetty_yrich_element_end_edit((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -873,7 +857,6 @@ static size_t yetty_yrich_element_is_editing_skel(const void *body, size_t body_
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -886,8 +869,8 @@ static size_t yetty_yrich_element_is_editing_skel(const void *body, size_t body_
         ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_ycore_int_result call_r = yetty_yrich_element_is_editing(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+    struct yetty_ycore_int_result call_r =
+        yetty_yrich_element_is_editing((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -936,7 +919,6 @@ static size_t yetty_yrich_element_insert_text_skel(const void *body, size_t body
         .capacity = (size_t)wire_args.text_len,
     };
     body_offset += (size_t)wire_args.text_len;
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -950,7 +932,7 @@ static size_t yetty_yrich_element_insert_text_skel(const void *body, size_t body
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_element_insert_text(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, text_buf);
+        (struct yetty_yclass_object *)obj_resolve_r.value, text_buf);
     if (resp_max < 1) {
         return 0;
     }
@@ -988,7 +970,6 @@ static size_t yetty_yrich_element_delete_sel_skel(const void *body, size_t body_
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -1001,8 +982,8 @@ static size_t yetty_yrich_element_delete_sel_skel(const void *body, size_t body_
         ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_ycore_void_result call_r = yetty_yrich_element_delete_sel(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+    struct yetty_ycore_void_result call_r =
+        yetty_yrich_element_delete_sel((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -1041,7 +1022,6 @@ static size_t yetty_yrich_slides_set_current_skel(const void *body, size_t body_
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -1055,7 +1035,7 @@ static size_t yetty_yrich_slides_set_current_skel(const void *body, size_t body_
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_slides_set_current(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.index);
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.index);
     if (resp_max < 1) {
         return 0;
     }
@@ -1093,7 +1073,6 @@ static size_t yetty_yrich_slides_next_skel(const void *body, size_t body_len, vo
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -1107,7 +1086,7 @@ static size_t yetty_yrich_slides_next_skel(const void *body, size_t body_len, vo
         return 1;
     }
     struct yetty_ycore_void_result call_r =
-        yetty_yrich_slides_next(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+        yetty_yrich_slides_next((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -1145,7 +1124,6 @@ static size_t yetty_yrich_slides_prev_skel(const void *body, size_t body_len, vo
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -1159,7 +1137,7 @@ static size_t yetty_yrich_slides_prev_skel(const void *body, size_t body_len, vo
         return 1;
     }
     struct yetty_ycore_void_result call_r =
-        yetty_yrich_slides_prev(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+        yetty_yrich_slides_prev((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -1199,7 +1177,6 @@ static size_t yetty_yrich_spreadsheet_set_grid_size_skel(const void *body, size_
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -1214,8 +1191,7 @@ static size_t yetty_yrich_spreadsheet_set_grid_size_skel(const void *body, size_
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_spreadsheet_set_grid_size(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.rows,
-        wire_args.cols);
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.rows, wire_args.cols);
     if (resp_max < 1) {
         return 0;
     }
@@ -1256,7 +1232,6 @@ static size_t yetty_yrich_spreadsheet_set_row_height_skel(const void *body, size
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -1271,8 +1246,7 @@ static size_t yetty_yrich_spreadsheet_set_row_height_skel(const void *body, size
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_spreadsheet_set_row_height(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.row,
-        wire_args.height);
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.row, wire_args.height);
     if (resp_max < 1) {
         return 0;
     }
@@ -1313,7 +1287,6 @@ static size_t yetty_yrich_spreadsheet_set_col_width_skel(const void *body, size_
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -1328,8 +1301,7 @@ static size_t yetty_yrich_spreadsheet_set_col_width_skel(const void *body, size_
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_spreadsheet_set_col_width(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.col,
-        wire_args.width);
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.col, wire_args.width);
     if (resp_max < 1) {
         return 0;
     }
@@ -1377,7 +1349,6 @@ static size_t yetty_yrich_spreadsheet_set_cell_value_skel(const void *body, size
         .capacity = (size_t)wire_args.value_len,
     };
     body_offset += (size_t)wire_args.value_len;
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -1392,8 +1363,7 @@ static size_t yetty_yrich_spreadsheet_set_cell_value_skel(const void *body, size
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_spreadsheet_set_cell_value(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.row, wire_args.col,
-        value_buf);
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.row, wire_args.col, value_buf);
     if (resp_max < 1) {
         return 0;
     }
@@ -1433,7 +1403,6 @@ static size_t yetty_yrich_ydoc_toggle_format_skel(const void *body, size_t body_
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -1447,7 +1416,7 @@ static size_t yetty_yrich_ydoc_toggle_format_skel(const void *body, size_t body_
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_ydoc_toggle_format(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.format_flag);
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.format_flag);
     if (resp_max < 1) {
         return 0;
     }
@@ -1486,7 +1455,6 @@ static size_t yetty_yrich_ydoc_set_text_color_skel(const void *body, size_t body
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -1500,7 +1468,7 @@ static size_t yetty_yrich_ydoc_set_text_color_skel(const void *body, size_t body
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_ydoc_set_text_color(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.color);
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.color);
     if (resp_max < 1) {
         return 0;
     }
@@ -1539,7 +1507,6 @@ static size_t yetty_yrich_ydoc_set_alignment_skel(const void *body, size_t body_
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -1553,7 +1520,7 @@ static size_t yetty_yrich_ydoc_set_alignment_skel(const void *body, size_t body_
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_ydoc_set_alignment(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.halign);
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.halign);
     if (resp_max < 1) {
         return 0;
     }
@@ -1592,7 +1559,6 @@ static size_t yetty_yrich_ydoc_set_heading_skel(const void *body, size_t body_le
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -1606,7 +1572,7 @@ static size_t yetty_yrich_ydoc_set_heading_skel(const void *body, size_t body_le
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_ydoc_set_heading(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.level);
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.level);
     if (resp_max < 1) {
         return 0;
     }
@@ -1645,7 +1611,6 @@ static size_t yetty_yrich_ydoc_change_font_size_skel(const void *body, size_t bo
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -1659,7 +1624,7 @@ static size_t yetty_yrich_ydoc_change_font_size_skel(const void *body, size_t bo
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_ydoc_change_font_size(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.delta);
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.delta);
     if (resp_max < 1) {
         return 0;
     }
@@ -1692,7 +1657,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_document_create(struct yetty_y
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1747,6 +1712,9 @@ struct yetty_yclass_object_ptr_result yetty_yrich_document_create(struct yetty_y
                          "yetty_yrich_document_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1770,7 +1738,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_element_create(struct yetty_yc
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1825,6 +1793,9 @@ struct yetty_yclass_object_ptr_result yetty_yrich_element_create(struct yetty_yc
                          "yetty_yrich_element_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1848,7 +1819,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_shape_create(struct yetty_ycla
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1901,6 +1872,9 @@ struct yetty_yclass_object_ptr_result yetty_yrich_shape_create(struct yetty_ycla
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yrich_shape_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1924,7 +1898,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_slides_create(struct yetty_ycl
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1978,6 +1952,9 @@ struct yetty_yclass_object_ptr_result yetty_yrich_slides_create(struct yetty_ycl
                          "yetty_yrich_slides_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2001,7 +1978,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_cell_create(struct yetty_yclas
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2054,6 +2031,9 @@ struct yetty_yclass_object_ptr_result yetty_yrich_cell_create(struct yetty_yclas
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yrich_cell_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2077,7 +2057,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_spreadsheet_create(struct yett
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2132,6 +2112,9 @@ struct yetty_yclass_object_ptr_result yetty_yrich_spreadsheet_create(struct yett
                          "yetty_yrich_spreadsheet_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2155,7 +2138,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_paragraph_create(struct yetty_
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2210,6 +2193,9 @@ struct yetty_yclass_object_ptr_result yetty_yrich_paragraph_create(struct yetty_
                          "yetty_yrich_paragraph_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2234,7 +2220,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_inline_image_create(struct yet
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2289,6 +2275,9 @@ struct yetty_yclass_object_ptr_result yetty_yrich_inline_image_create(struct yet
                          "yetty_yrich_inline_image_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2312,7 +2301,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_create(struct yetty_yclas
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_yrich_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2365,6 +2354,9 @@ struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_create(struct yetty_yclas
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yrich_ydoc_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }

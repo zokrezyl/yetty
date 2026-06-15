@@ -5,20 +5,14 @@
 #include <stddef.h> /* NULL, size_t */
 
 struct yetty_ycore_void_result;
-struct yetty_ycore_void_result yetty_ygrid_add_record(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ygrid_add_record(struct yetty_yclass_object *obj,
                                                       struct yetty_ycore_buffer record);
-struct yetty_ycore_void_result yetty_ygrid_clear(struct yetty_yclass_ctx *ctx,
-                                                 struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygrid_destroy(struct yetty_yclass_ctx *ctx,
-                                                   struct yetty_yclass_object *obj);
-typedef struct yetty_ycore_void_result (*yetty_ygrid_add_record_fn)(struct yetty_yclass_ctx *,
-                                                                    struct yetty_yclass_object *,
+struct yetty_ycore_void_result yetty_ygrid_clear(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygrid_destroy(struct yetty_yclass_object *obj);
+typedef struct yetty_ycore_void_result (*yetty_ygrid_add_record_fn)(struct yetty_yclass_object *,
                                                                     struct yetty_ycore_buffer);
-typedef struct yetty_ycore_void_result (*yetty_ygrid_clear_fn)(struct yetty_yclass_ctx *,
-                                                               struct yetty_yclass_object *);
-typedef struct yetty_ycore_void_result (*yetty_ygrid_destroy_fn)(struct yetty_yclass_ctx *,
-                                                                 struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_ygrid_clear_fn)(struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_ygrid_destroy_fn)(struct yetty_yclass_object *);
 
 [[maybe_unused]]
 static yetty_yfigure_render_fn yetty_ygrid_grid_yetty_yfigure_render_check = ygrid_render_slot;

@@ -39,12 +39,11 @@ static void apply_shader(int idx)
     }
 }
 
-static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *ctx,
+static struct yetty_ycore_void_result on_tab_change(
                                                     struct yetty_yclass_object *obj,
                                                     const struct yetty_ygui_event *event,
                                                     void *userdata)
 {
-    (void)ctx;
     (void)obj;
     (void)userdata;
     apply_shader(event->i0);

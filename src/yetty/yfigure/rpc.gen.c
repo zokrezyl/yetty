@@ -35,7 +35,6 @@ static size_t yetty_yfigure_constructor_skel(const void *body, size_t body_len, 
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -49,7 +48,7 @@ static size_t yetty_yfigure_constructor_skel(const void *body, size_t body_len, 
         return 1;
     }
     struct yetty_ycore_void_result call_r =
-        yetty_yfigure_constructor(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+        yetty_yfigure_constructor((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -89,7 +88,6 @@ static size_t yetty_yfigure_add_child_skel(const void *body, size_t body_len, vo
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -115,7 +113,7 @@ static size_t yetty_yfigure_add_child_skel(const void *body, size_t body_len, vo
         return 1;
     }
     struct yetty_ycore_void_result call_r =
-        yetty_yfigure_add_child(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value,
+        yetty_yfigure_add_child((struct yetty_yclass_object *)obj_resolve_r.value,
                                 (struct yetty_yfigure_figure *)child_resolve_r.value, wire_args.id);
     if (resp_max < 1) {
         return 0;
@@ -155,7 +153,6 @@ static size_t yetty_yfigure_remove_child_by_id_skel(const void *body, size_t bod
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -169,7 +166,7 @@ static size_t yetty_yfigure_remove_child_by_id_skel(const void *body, size_t bod
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yfigure_remove_child_by_id(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.id);
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.id);
     if (resp_max < 1) {
         return 0;
     }
@@ -208,7 +205,6 @@ static size_t yetty_yfigure_raise_child_by_id_skel(const void *body, size_t body
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -222,7 +218,7 @@ static size_t yetty_yfigure_raise_child_by_id_skel(const void *body, size_t body
         return 1;
     }
     struct yetty_ycore_void_result call_r = yetty_yfigure_raise_child_by_id(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.id);
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.id);
     if (resp_max < 1) {
         return 0;
     }
@@ -267,7 +263,6 @@ static size_t yetty_yfigure_process_records_skel(const void *body, size_t body_l
         .capacity = (size_t)wire_args.bytes_len,
     };
     body_offset += (size_t)wire_args.bytes_len;
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -280,8 +275,8 @@ static size_t yetty_yfigure_process_records_skel(const void *body, size_t body_l
         ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_ycore_void_result call_r = yetty_yfigure_process_records(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, bytes_buf);
+    struct yetty_ycore_void_result call_r =
+        yetty_yfigure_process_records((struct yetty_yclass_object *)obj_resolve_r.value, bytes_buf);
     if (resp_max < 1) {
         return 0;
     }
@@ -314,7 +309,7 @@ struct yetty_yclass_object_ptr_result yetty_yfigure_container_create(struct yett
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_yfigure_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_yfigure_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -369,6 +364,9 @@ struct yetty_yclass_object_ptr_result yetty_yfigure_container_create(struct yett
                          "yetty_yfigure_container_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -392,7 +390,7 @@ struct yetty_yclass_object_ptr_result yetty_yfigure_figure_create(struct yetty_y
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_yfigure_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_yfigure_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -447,6 +445,9 @@ struct yetty_yclass_object_ptr_result yetty_yfigure_figure_create(struct yetty_y
                          "yetty_yfigure_figure_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }

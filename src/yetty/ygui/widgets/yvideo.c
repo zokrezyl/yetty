@@ -26,10 +26,8 @@ yetty_ygui_yvideo {
 };
 
 [[clang::annotate("override@ygui:yvideo:constructor")]]
-static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
-                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_yvideo_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -43,10 +41,8 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 [[clang::annotate("override@ygui:yvideo:destructor")]]
-static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
-                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_yvideo_ptr_result d_dr = yetty_ygui_yvideo_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
@@ -57,11 +53,9 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 [[clang::annotate("override@ygui:yvideo:widget_emit_container")]]
-static struct yetty_ycore_void_result emit_container(struct yetty_yclass_ctx *yclass_ctx,
-                                                     struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result emit_container(struct yetty_yclass_object *yclass_obj,
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
     return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_widget_id(obj), YETTY_YFIGURE_KIND_YVIDEO,
@@ -69,11 +63,9 @@ static struct yetty_ycore_void_result emit_container(struct yetty_yclass_ctx *yc
 }
 
 [[clang::annotate("override@ygui:yvideo:widget_emit_body")]]
-static struct yetty_ycore_void_result emit_body(struct yetty_yclass_ctx *yclass_ctx,
-                                                struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result emit_body(struct yetty_yclass_object *yclass_obj,
                                                 struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_yvideo_ptr_result d_dr = yetty_ygui_yvideo_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "emit_body: data_get");

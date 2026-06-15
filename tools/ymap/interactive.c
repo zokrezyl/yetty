@@ -132,7 +132,7 @@ static void subscribe_input(int out_fd, uint32_t flags)
 /* Full map re-render → yview content. Blocks on uncached tile downloads. */
 static void rerender(struct map_ui *ui)
 {
-    struct yetty_ydraw_drawable_list_result map_res = yetty_ymap_render(NULL, ui->map);
+    struct yetty_ydraw_drawable_list_result map_res = yetty_ymap_render(ui->map);
     if (YETTY_IS_ERR(map_res)) {
         ywarn("ymap interactive: render failed: %s", map_res.error.msg);
         yetty_ycore_error_destroy(map_res.error);
@@ -142,7 +142,7 @@ static void rerender(struct map_ui *ui)
     /* Tile providers require their attribution visible on the map. */
     {
         struct yetty_ycore_const_char_ptr_result attribution_res =
-            yetty_ymap_attribution(NULL, ui->map);
+            yetty_ymap_attribution(ui->map);
         const char *attribution =
             YETTY_IS_OK(attribution_res) ? attribution_res.value : "(C) tile provider";
         if (YETTY_IS_ERR(attribution_res)) {
@@ -163,7 +163,7 @@ static void rerender(struct map_ui *ui)
     }
 
     struct yetty_ycore_void_result content_res =
-        yetty_yview_set_content(NULL, ui->view, map_res.value);
+        yetty_yview_set_content(ui->view, map_res.value);
     if (YETTY_IS_ERR(content_res)) {
         ywarn("ymap interactive: set_content failed: %s", content_res.error.msg);
         yetty_ycore_error_destroy(content_res.error);
@@ -175,7 +175,7 @@ static void rerender(struct map_ui *ui)
 static void zoom_at(struct map_ui *ui, int step, float anchor_x, float anchor_y)
 {
     struct yetty_ycore_int_result zoom_res =
-        yetty_ymap_zoom_by_at(NULL, ui->map, step, (double)anchor_x, (double)anchor_y);
+        yetty_ymap_zoom_by_at(ui->map, step, (double)anchor_x, (double)anchor_y);
     if (YETTY_IS_ERR(zoom_res)) {
         yetty_ycore_error_destroy(zoom_res.error);
         return;
@@ -189,7 +189,7 @@ static void pan_by(struct map_ui *ui, float delta_x, float delta_y)
         return;
     }
     struct yetty_ycore_void_result pan_res =
-        yetty_ymap_pan_by_pixels(NULL, ui->map, (double)delta_x, (double)delta_y);
+        yetty_ymap_pan_by_pixels(ui->map, (double)delta_x, (double)delta_y);
     if (YETTY_IS_ERR(pan_res)) {
         yetty_ycore_error_destroy(pan_res.error);
         return;
@@ -249,12 +249,12 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
             ui->width_px = (uint32_t)resize->width;
             ui->height_px = (uint32_t)resize->height;
             struct yetty_ycore_void_result viewport_res =
-                yetty_ymap_set_viewport(NULL, ui->map, ui->width_px, ui->height_px);
+                yetty_ymap_set_viewport(ui->map, ui->width_px, ui->height_px);
             if (YETTY_IS_ERR(viewport_res)) {
                 yetty_ycore_error_destroy(viewport_res.error);
             }
             struct yetty_ycore_void_result rect_res =
-                yetty_yview_set_rect(NULL, ui->view, 0.0f, 0.0f, resize->width, resize->height);
+                yetty_yview_set_rect(ui->view, 0.0f, 0.0f, resize->width, resize->height);
             if (YETTY_IS_ERR(rect_res)) {
                 yetty_ycore_error_destroy(rect_res.error);
             }
@@ -290,7 +290,7 @@ int ymap_interactive_run(struct yetty_yclass_object *map_object, uint32_t width_
     }
     bool vector_mode = false;
     {
-        struct yetty_ycore_int_result vector_res = yetty_ymap_is_vector(NULL, map_object);
+        struct yetty_ycore_int_result vector_res = yetty_ymap_is_vector(map_object);
         if (YETTY_IS_OK(vector_res)) {
             vector_mode = vector_res.value != 0;
         } else {
@@ -321,13 +321,12 @@ int ymap_interactive_run(struct yetty_yclass_object *map_object, uint32_t width_
     };
 
     {
-        struct yetty_ycore_void_result cfg_res = yetty_yview_configure(
-            NULL, ui.view, YMAP_STDOUT_FD, YMAP_GETPID(), /*kind=*/0u, YMAP_BG_COLOR, 0.0f, 0.0f,
+        struct yetty_ycore_void_result cfg_res = yetty_yview_configure(ui.view, YMAP_STDOUT_FD, YMAP_GETPID(), /*kind=*/0u, YMAP_BG_COLOR, 0.0f, 0.0f,
             (float)ui.width_px, (float)ui.height_px);
         if (YETTY_IS_ERR(cfg_res)) {
             fprintf(stderr, "ymap: view configure failed: %s\n", cfg_res.error.msg);
             yetty_ycore_error_destroy(cfg_res.error);
-            (void)yetty_yview_destroy(NULL, ui.view);
+            (void)yetty_yview_destroy(ui.view);
             return 1;
         }
     }
@@ -336,7 +335,7 @@ int ymap_interactive_run(struct yetty_yclass_object *map_object, uint32_t width_
     if (YETTY_IS_ERR(yface_res)) {
         fprintf(stderr, "ymap: yface create failed: %s\n", yface_res.error.msg);
         yetty_ycore_error_destroy(yface_res.error);
-        (void)yetty_yview_destroy(NULL, ui.view);
+        (void)yetty_yview_destroy(ui.view);
         return 1;
     }
     struct yetty_yface *yface = yface_res.value;
@@ -352,7 +351,7 @@ int ymap_interactive_run(struct yetty_yclass_object *map_object, uint32_t width_
     if (yetty_yplatform_tty_set_raw() < 0) {
         fprintf(stderr, "ymap: cannot put stdin into raw mode\n");
         yetty_yface_destroy(yface);
-        (void)yetty_yview_destroy(NULL, ui.view);
+        (void)yetty_yview_destroy(ui.view);
         return 1;
     }
 
@@ -404,7 +403,7 @@ int ymap_interactive_run(struct yetty_yclass_object *map_object, uint32_t width_
         (void)ymap_write(YMAP_STDOUT_FD, mouse_off, sizeof(mouse_off) - 1);
     }
     subscribe_input(YMAP_STDOUT_FD, 0u);
-    (void)yetty_yview_destroy(NULL, ui.view);
+    (void)yetty_yview_destroy(ui.view);
     yetty_yplatform_tty_restore();
     yetty_yface_destroy(yface);
     return 0;

@@ -111,11 +111,11 @@ static void subscribe_input(int out_fd, uint32_t flags)
  * bottom (zoom in to shrink it). Figure-local coords == content coords. */
 static void rerender(struct ui_state *ui)
 {
-    (void)yetty_yflame_configure(NULL, ui->flame, ui->viewport_w, ui->frame_height, ui->min_width,
+    (void)yetty_yflame_configure(ui->flame, ui->viewport_w, ui->frame_height, ui->min_width,
                                  ui->base_flags);
-    struct yetty_ydraw_drawable_list_result rr = yetty_yflame_render(NULL, ui->flame);
+    struct yetty_ydraw_drawable_list_result rr = yetty_yflame_render(ui->flame);
     if (YETTY_IS_OK(rr)) {
-        (void)yetty_yview_set_content(NULL, ui->view, rr.value);
+        (void)yetty_yview_set_content(ui->view, rr.value);
         yetty_ydraw_drawable_list_destroy(rr.value);
     } else {
         yetty_ycore_error_destroy(rr.error);
@@ -124,7 +124,7 @@ static void rerender(struct ui_state *ui)
 
 static int32_t hit(struct ui_state *ui, float x, float y)
 {
-    struct yetty_ycore_int_result h = yetty_yflame_hit_test(NULL, ui->flame, x, y);
+    struct yetty_ycore_int_result h = yetty_yflame_hit_test(ui->flame, x, y);
     if (YETTY_IS_ERR(h)) {
         yetty_ycore_error_destroy(h.error);
         return -1;
@@ -150,7 +150,7 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         if (m->figure_id == 0u && m->kind == YETTY_YMGUI_INPUT_MOUSE_POS) {
             if (ui->hover != -1) {
                 ui->hover = -1;
-                (void)yetty_yflame_set_highlight(NULL, ui->flame, -1);
+                (void)yetty_yflame_set_highlight(ui->flame, -1);
                 ui->dirty = true;
             }
             return;
@@ -159,7 +159,7 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
             int32_t id = hit(ui, m->x, m->y);
             if (id != ui->hover) {
                 ui->hover = id;
-                (void)yetty_yflame_set_highlight(NULL, ui->flame, id);
+                (void)yetty_yflame_set_highlight(ui->flame, id);
                 ui->dirty = true;
             }
         } else if (m->kind == YETTY_YMGUI_INPUT_MOUSE_BUTTON && m->pressed) {
@@ -168,17 +168,17 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
                 ydebug("yflame left-click: hit_test(%.1f,%.1f) -> id=%d", (double)m->x,
                        (double)m->y, id);
                 if (id == YETTY_YFLAME_HIT_UP) {
-                    (void)yetty_yflame_focus_parent(NULL, ui->flame);
+                    (void)yetty_yflame_focus_parent(ui->flame);
                     ui->dirty = true;
                 } else if (id == YETTY_YFLAME_HIT_ROOT) {
-                    (void)yetty_yflame_reset(NULL, ui->flame);
+                    (void)yetty_yflame_reset(ui->flame);
                     ui->dirty = true;
                 } else if (id >= 0) {
-                    (void)yetty_yflame_focus(NULL, ui->flame, id);
+                    (void)yetty_yflame_focus(ui->flame, id);
                     ui->dirty = true;
                 }
             } else { /* right → zoom back out one level */
-                (void)yetty_yflame_focus_parent(NULL, ui->flame);
+                (void)yetty_yflame_focus_parent(ui->flame);
                 ui->dirty = true;
             }
         } else if (m->kind == YETTY_YMGUI_INPUT_MOUSE_WHEEL) {
@@ -187,11 +187,11 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
             if (m->wheel_dy > 0.0f) {
                 int32_t id = hit(ui, m->x, m->y);
                 if (id >= 0) {
-                    (void)yetty_yflame_focus(NULL, ui->flame, id);
+                    (void)yetty_yflame_focus(ui->flame, id);
                     ui->dirty = true;
                 }
             } else if (m->wheel_dy < 0.0f) {
-                (void)yetty_yflame_focus_parent(NULL, ui->flame);
+                (void)yetty_yflame_focus_parent(ui->flame);
                 ui->dirty = true;
             }
         }
@@ -205,7 +205,7 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
         if (rz->width > 0.0f && rz->height > 0.0f) {
             ui->viewport_w = rz->width;
             ui->viewport_h = rz->height;
-            (void)yetty_yview_set_rect(NULL, ui->view, 0.0f, 0.0f, ui->viewport_w, ui->viewport_h);
+            (void)yetty_yview_set_rect(ui->view, 0.0f, 0.0f, ui->viewport_w, ui->viewport_h);
             ui->dirty = true;
         }
     } else {
@@ -221,7 +221,7 @@ static void on_raw(void *user, const char *bytes, size_t n)
         if (c == 'q' || c == 0x03 /* Ctrl-C */ || c == 0x04 /* Ctrl-D */) {
             ui->want_quit = true;
         } else if (c == 'r' || c == 0x1b /* Esc */) {
-            (void)yetty_yflame_reset(NULL, ui->flame);
+            (void)yetty_yflame_reset(ui->flame);
             ui->dirty = true;
         }
     }
@@ -262,14 +262,14 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
     }
     struct yetty_yclass_object *flame = obj_r.value;
 
-    struct yetty_ycore_void_result pr = yetty_yflame_parse(NULL, flame, input, input_len);
+    struct yetty_ycore_void_result pr = yetty_yflame_parse(flame, input, input_len);
     if (YETTY_IS_ERR(pr)) {
         fprintf(stderr, "yflame: parse failed: %s\n", pr.error.msg);
         for (const struct yetty_ycore_error *e = pr.error.cause; e; e = e->cause) {
             fprintf(stderr, "  caused by: %s\n", e->msg);
         }
         yetty_ycore_error_destroy(pr.error);
-        (void)yetty_yflame_destroy(NULL, flame);
+        (void)yetty_yflame_destroy(flame);
         return 1;
     }
 
@@ -277,18 +277,18 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
     if (YETTY_IS_ERR(view_r)) {
         fprintf(stderr, "yflame: view create failed: %s\n", view_r.error.msg);
         yetty_ycore_error_destroy(view_r.error);
-        (void)yetty_yflame_destroy(NULL, flame);
+        (void)yetty_yflame_destroy(flame);
         return 1;
     }
     {
         struct yetty_ycore_void_result cfg_r =
-            yetty_yview_configure(NULL, view_r.value, YFLAME_STDOUT_FD, YFLAME_GETPID(),
+            yetty_yview_configure(view_r.value, YFLAME_STDOUT_FD, YFLAME_GETPID(),
                                   /*kind=*/0u, YFLAME_BG_COLOR, 0.0f, 0.0f, viewport_w, viewport_h);
         if (YETTY_IS_ERR(cfg_r)) {
             fprintf(stderr, "yflame: view configure failed: %s\n", cfg_r.error.msg);
             yetty_ycore_error_destroy(cfg_r.error);
-            (void)yetty_yview_destroy(NULL, view_r.value);
-            (void)yetty_yflame_destroy(NULL, flame);
+            (void)yetty_yview_destroy(view_r.value);
+            (void)yetty_yflame_destroy(flame);
             return 1;
         }
     }
@@ -309,8 +309,8 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
     if (YETTY_IS_ERR(yface_r)) {
         fprintf(stderr, "yflame: yface create failed: %s\n", yface_r.error.msg);
         yetty_ycore_error_destroy(yface_r.error);
-        (void)yetty_yview_destroy(NULL, ui.view);
-        (void)yetty_yflame_destroy(NULL, flame);
+        (void)yetty_yview_destroy(ui.view);
+        (void)yetty_yflame_destroy(flame);
         return 1;
     }
     struct yetty_yface *yface = yface_r.value;
@@ -326,8 +326,8 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
     if (yetty_yplatform_tty_set_raw() < 0) {
         fprintf(stderr, "yflame: cannot put stdin into raw mode\n");
         yetty_yface_destroy(yface);
-        (void)yetty_yview_destroy(NULL, ui.view);
-        (void)yetty_yflame_destroy(NULL, flame);
+        (void)yetty_yview_destroy(ui.view);
+        (void)yetty_yflame_destroy(flame);
         return 1;
     }
 
@@ -370,9 +370,9 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
         (void)yflame_write(YFLAME_STDOUT_FD, mouse_off, sizeof(mouse_off) - 1);
     }
     subscribe_input(YFLAME_STDOUT_FD, 0u);
-    (void)yetty_yview_destroy(NULL, ui.view);
+    (void)yetty_yview_destroy(ui.view);
     yetty_yplatform_tty_restore();
     yetty_yface_destroy(yface);
-    (void)yetty_yflame_destroy(NULL, flame);
+    (void)yetty_yflame_destroy(flame);
     return 0;
 }

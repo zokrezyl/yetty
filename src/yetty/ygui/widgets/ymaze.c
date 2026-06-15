@@ -33,10 +33,8 @@ yetty_ygui_ymaze {
 };
 
 [[clang::annotate("override@ygui:ymaze:constructor")]]
-static struct yetty_ycore_void_result ymz_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                      struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ymz_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_ymaze_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -56,10 +54,8 @@ static struct yetty_ycore_void_result ymz_constructor(struct yetty_yclass_ctx *y
 }
 
 [[clang::annotate("override@ygui:ymaze:destructor")]]
-static struct yetty_ycore_void_result ymz_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                     struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ymz_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_ymaze_ptr_result d_dr = yetty_ygui_ymaze_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymz_destructor: data_get");
@@ -71,11 +67,9 @@ static struct yetty_ycore_void_result ymz_destructor(struct yetty_yclass_ctx *yc
 }
 
 [[clang::annotate("override@ygui:ymaze:widget_emit_body")]]
-static struct yetty_ycore_void_result ymz_emit_body(struct yetty_yclass_ctx *yclass_ctx,
-                                                    struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result ymz_emit_body(struct yetty_yclass_object *yclass_obj,
                                                     struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_ymaze_ptr_result d_dr = yetty_ygui_ymaze_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ymz_emit_body: data_get");
@@ -124,9 +118,9 @@ static struct yetty_ycore_void_result ymz_emit_body(struct yetty_yclass_ctx *ycl
     if (!impl) {
         return YETTY_OK_VOID();
     }
-    typedef struct yetty_ycore_void_result (*fn_t)(
-        struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
-    return ((fn_t)impl)(NULL, yclass_obj, ctx);
+    typedef struct yetty_ycore_void_result (*fn_t)(struct yetty_yclass_object *,
+                                                   struct yetty_ygui_emit_ctx *);
+    return ((fn_t)impl)(yclass_obj, ctx);
 }
 
 #include "ymaze.gen.c"

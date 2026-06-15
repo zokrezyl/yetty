@@ -4,8 +4,6 @@ methods:
     owning_class: flame
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: width
@@ -23,8 +21,6 @@ methods:
     owning_class: flame
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: input
@@ -38,8 +34,6 @@ methods:
     owning_class: flame
     return_type: struct yetty_ydraw_drawable_list_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -49,8 +43,6 @@ methods:
     owning_class: flame
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -64,8 +56,6 @@ methods:
     owning_class: flame
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: node_id
@@ -77,8 +67,6 @@ methods:
     owning_class: flame
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -88,8 +76,6 @@ methods:
     owning_class: flame
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -99,8 +85,6 @@ methods:
     owning_class: flame
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: node_id
@@ -112,8 +96,6 @@ methods:
     owning_class: flame
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true

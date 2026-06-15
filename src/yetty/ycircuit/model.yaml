@@ -4,8 +4,6 @@ methods:
     owning_class: circuit
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: grid_px
@@ -19,8 +17,6 @@ methods:
     owning_class: circuit
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: input
@@ -34,8 +30,6 @@ methods:
     owning_class: circuit
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -45,8 +39,6 @@ methods:
     owning_class: circuit
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: kind
@@ -68,8 +60,6 @@ methods:
     owning_class: circuit
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -97,8 +87,6 @@ methods:
     owning_class: circuit
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x0
@@ -116,8 +104,6 @@ methods:
     owning_class: circuit
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -131,8 +117,6 @@ methods:
     owning_class: circuit
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -148,8 +132,6 @@ methods:
     owning_class: circuit
     return_type: struct yetty_ydraw_drawable_list_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
@@ -159,8 +141,6 @@ methods:
     owning_class: circuit
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -174,8 +154,6 @@ methods:
     owning_class: circuit
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: element_id
@@ -187,8 +165,6 @@ methods:
     owning_class: circuit
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true

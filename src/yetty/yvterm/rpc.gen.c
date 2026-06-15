@@ -4,7 +4,7 @@
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yclass/class.h>
 #include "yetty/yvterm/grid.h"
-#include "yetty/yvterm/shader-glyph-figure.h"
+#include "yetty/yvterm/vterm.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -74,22 +74,24 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_grid_create(struct yetty_ycla
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yvterm_grid_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
 
-struct yetty_yclass_object_ptr_result yetty_yvterm_shader_glyph_create(struct yetty_yclass_ctx *ctx)
+struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_create(struct yetty_yclass_ctx *ctx)
 {
-    ydebug("class=yetty_yvterm_shader_glyph");
+    ydebug("class=yetty_yvterm_vterm");
     /* Touch the local accessor first — registers the class's slots in
      * slot_table so subsequent name→local-slot lookups succeed.
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
-    struct yetty_yclass_ptr_result class_accessor_r = yetty_yvterm_shader_glyph_class_get();
+    struct yetty_yclass_ptr_result class_accessor_r = yetty_yvterm_vterm_class_get();
     if (YETTY_IS_ERR(class_accessor_r)) {
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_yvterm_shader_glyph_create: class accessor failed",
-                         class_accessor_r);
+                         "yetty_yvterm_vterm_create: class accessor failed", class_accessor_r);
     }
     const struct yetty_yclass *klass = class_accessor_r.value;
 
@@ -107,28 +109,27 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_shader_glyph_create(struct ye
      * response isn't silently swallowed. */
     {
         struct yetty_ycore_void_result translate_class_r =
-            yetty_yclass_rpc_session_translate_class(ctx->session, "yetty_yvterm_shader_glyph");
+            yetty_yclass_rpc_session_translate_class(ctx->session, "yetty_yvterm_vterm");
         if (YETTY_IS_ERR(translate_class_r)) {
             yetty_ycore_error_print(
-                stderr,
-                "yetty_yvterm_shader_glyph_create: translate_class (degraded — will lazy-resolve)",
+                stderr, "yetty_yvterm_vterm_create: translate_class (degraded — will lazy-resolve)",
                 translate_class_r.error);
             yetty_ycore_error_destroy(translate_class_r.error);
         }
     }
 
     uint64_t handle = 0;
-    const char *class_name = "yetty_yvterm_shader_glyph";
+    const char *class_name = "yetty_yvterm_vterm";
     struct yetty_ycore_size_result create_call_r =
         yetty_yclass_rpc_call(ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, class_name,
                               strlen(class_name), &handle, sizeof(handle));
     if (YETTY_IS_ERR(create_call_r)) {
-        return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_yvterm_shader_glyph_create: CREATE call failed", create_call_r);
+        return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yvterm_vterm_create: CREATE call failed",
+                         create_call_r);
     }
     if (create_call_r.value != sizeof(handle) || !handle) {
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_yvterm_shader_glyph_create: CREATE returned no/invalid handle");
+                         "yetty_yvterm_vterm_create: CREATE returned no/invalid handle");
     }
 
     /* Proxy: aligned (header + uint64_t) layout. Allocating raw bytes
@@ -141,9 +142,12 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_shader_glyph_create(struct ye
     struct yetty_yclass_proxy *proxy = calloc(1, sizeof(*proxy));
     if (!proxy) {
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_yvterm_shader_glyph_create: calloc(proxy) failed");
+                         "yetty_yvterm_vterm_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -155,8 +159,8 @@ static struct yetty_yclass_ptr_result yetty_yvterm_accessor_lookup(const char *n
     if (strcmp(name, "yetty_yvterm_grid") == 0) {
         return yetty_yvterm_grid_class_get();
     }
-    if (strcmp(name, "yetty_yvterm_shader_glyph") == 0) {
-        return yetty_yvterm_shader_glyph_class_get();
+    if (strcmp(name, "yetty_yvterm_vterm") == 0) {
+        return yetty_yvterm_vterm_class_get();
     }
     /* "Not mine": OK with NULL value — yetty_yclass_by_name walks to next hook. */
     return YETTY_OK(yetty_yclass_ptr, NULL);

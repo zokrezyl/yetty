@@ -256,6 +256,13 @@ struct yetty_ydraw_composite_ptr_result yetty_ydraw_composite_factory_create_ins
 // Destroy instance (uses instance->factory back-pointer)
 void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance YETTY_ANNOT_CALLEE_OWNED);
 
+// Render one instance into `target` at (x, y). The host grid supplies the
+// position for its scrolling/anchored placement. Thin wrapper over the
+// per-instance render op; a figure type with no render op doesn't paint.
+struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_composite *instance,
+                                                            struct yetty_ydraw_target *target,
+                                                            float x, float y);
+
 // Fan out visual-zoom state to every registered concrete factory (yplot,
 // yimage, ...). Safe to call with no registrations. Concrete factories that
 // don't implement set_visual_zoom are silently skipped.

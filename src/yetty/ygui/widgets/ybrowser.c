@@ -36,10 +36,8 @@ yetty_ygui_ybrowser {
 };
 
 [[clang::annotate("override@ygui:ybrowser:constructor")]]
-static struct yetty_ycore_void_result ybr_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                      struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ybr_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_ybrowser_class_get().value,
@@ -56,10 +54,8 @@ static struct yetty_ycore_void_result ybr_constructor(struct yetty_yclass_ctx *y
 }
 
 [[clang::annotate("override@ygui:ybrowser:destructor")]]
-static struct yetty_ycore_void_result ybr_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                     struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ybr_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_ybrowser_ptr_result d_dr = yetty_ygui_ybrowser_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ybr_destructor: data_get");
@@ -70,20 +66,17 @@ static struct yetty_ycore_void_result ybr_destructor(struct yetty_yclass_ctx *yc
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_ctx *yclass_ctx,
-                                                 struct yetty_yclass_object *yclass_obj, float w,
+static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_object *yclass_obj, float w,
                                                  float h)
 {
 #if !YETTY_YGUI_HAVE_YBROWSER
     /* No HTML backend on this platform — render nothing, leave the embed
      * empty. set_html still stashes the bytes; they're simply never laid out. */
-    (void)yclass_ctx;
     (void)yclass_obj;
     (void)w;
     (void)h;
     return YETTY_OK_VOID();
 #else
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_ybrowser_ptr_result d_dr = yetty_ygui_ybrowser_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ybr_render: data_get");
@@ -127,11 +120,9 @@ static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_ctx *yclass
 }
 
 [[clang::annotate("override@ygui:ybrowser:widget_emit_body")]]
-static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_ctx *yclass_ctx,
-                                                    struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_object *yclass_obj,
                                                     struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_ybrowser_ptr_result d_dr = yetty_ygui_ybrowser_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ybr_emit_body: data_get");
@@ -140,7 +131,7 @@ static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_ctx *ycl
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
     if (d->html && (w != d->rendered_w || h != d->rendered_h)) {
-        struct yetty_ycore_void_result rr = ybr_render(NULL, yclass_obj, w, h);
+        struct yetty_ycore_void_result rr = ybr_render(yclass_obj, w, h);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ybrowser_emit_body: render");
     }
     struct yetty_yclass_method_slot_result slot_result =
@@ -154,9 +145,9 @@ static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_ctx *ycl
     if (!impl) {
         return YETTY_OK_VOID();
     }
-    typedef struct yetty_ycore_void_result (*fn_t)(
-        struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
-    return ((fn_t)impl)(NULL, yclass_obj, ctx);
+    typedef struct yetty_ycore_void_result (*fn_t)(struct yetty_yclass_object *,
+                                                   struct yetty_ygui_emit_ctx *);
+    return ((fn_t)impl)(yclass_obj, ctx);
 }
 
 [[clang::annotate("expose")]]

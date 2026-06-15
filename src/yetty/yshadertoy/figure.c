@@ -590,29 +590,23 @@ static struct yetty_ycore_void_result figure_destroy(struct yetty_yclass_object 
  * ========================================================================= */
 
 [[clang::annotate("override@yshadertoy:figure:yfigure:render")]]
-static struct yetty_ycore_void_result figure_render_slot(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result figure_render_slot(struct yetty_yclass_object *obj,
                                                          struct yetty_ydraw_target *target)
 {
-    (void)ctx;
     return figure_render(obj, target);
 }
 
 [[clang::annotate("override@yshadertoy:figure:yfigure:destroy")]]
-static struct yetty_ycore_void_result figure_destroy_slot(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result figure_destroy_slot(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     return figure_destroy(obj);
 }
 
 [[clang::annotate("override@yshadertoy:figure:yfigure:process_bytes")]]
-static struct yetty_ycore_void_result figure_process_bytes_slot(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result figure_process_bytes_slot(struct yetty_yclass_object *obj,
                                                                 const uint8_t *bytes,
                                                                 size_t bytes_len)
 {
-    (void)ctx;
     return figure_process_bytes(obj, bytes, bytes_len);
 }
 

@@ -51,11 +51,9 @@ yetty_ygui_textinput {
 #define TEXTINPUT_TEXT_PAD 10.0f
 #define TEXTINPUT_CHAR_W (TEXTINPUT_FONT_SIZE * 0.55f)
 
-static struct yetty_ycore_void_result on_click_focus(struct yetty_yclass_ctx *yclass_ctx,
-                                                     struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result on_click_focus(struct yetty_yclass_object *yclass_obj,
                                                      void *userdata)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)userdata;
     struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from(obj);
@@ -84,10 +82,8 @@ static struct yetty_ycore_void_result on_click_focus(struct yetty_yclass_ctx *yc
 }
 
 [[clang::annotate("override@ygui:textinput:constructor")]]
-static struct yetty_ycore_void_result textinput_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                            struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result textinput_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_textinput_class_get().value,
@@ -106,10 +102,8 @@ static struct yetty_ycore_void_result textinput_constructor(struct yetty_yclass_
 }
 
 [[clang::annotate("override@ygui:textinput:destructor")]]
-static struct yetty_ycore_void_result textinput_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result textinput_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "textinput_destructor: data_get");
@@ -156,11 +150,9 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
 }
 
 [[clang::annotate("override@ygui:textinput:widget_paint")]]
-static struct yetty_ycore_void_result textinput_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                      struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result textinput_paint(struct yetty_yclass_object *yclass_obj,
                                                       struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "textinput_paint: NULL ctx");

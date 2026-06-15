@@ -641,7 +641,7 @@ done:
     yaml_parser_delete(&parser);
 
     if (YETTY_IS_ERR(parse_res) || !found_doc) {
-        struct yetty_ycore_void_result destroy_res = yetty_yrich_document_destroy(NULL, doc_obj);
+        struct yetty_ycore_void_result destroy_res = yetty_yrich_document_destroy(doc_obj);
         if (YETTY_IS_ERR(destroy_res)) {
             yetty_ycore_error_destroy(destroy_res.error);
         }
@@ -926,7 +926,7 @@ static struct yetty_ycore_void_result parse_sheet_cells(struct yaml_parser_s *p,
                     .capacity = ev.data.scalar.length,
                 };
                 struct yetty_ycore_void_result set_res =
-                    yetty_yrich_spreadsheet_set_cell_value(NULL, sheet_obj, row, col, value);
+                    yetty_yrich_spreadsheet_set_cell_value(sheet_obj, row, col, value);
                 if (YETTY_IS_ERR(set_res)) {
                     yaml_event_delete(&ev);
                     free(key);
@@ -969,7 +969,7 @@ static struct yetty_ycore_void_result parse_sheet_col_widths(struct yaml_parser_
         if (ev.type == YAML_SCALAR_EVENT) {
             float width = (float)scalar_to_d(&ev);
             struct yetty_ycore_void_result width_res =
-                yetty_yrich_spreadsheet_set_col_width(NULL, sheet_obj, col++, width);
+                yetty_yrich_spreadsheet_set_col_width(sheet_obj, col++, width);
             if (YETTY_IS_ERR(width_res)) {
                 yaml_event_delete(&ev);
                 return YETTY_ERR(yetty_ycore_void, "yrich yaml: set_col_width failed", width_res);
@@ -997,7 +997,7 @@ static struct yetty_ycore_void_result parse_sheet_body(struct yaml_parser_s *p,
         YETTY_RETURN_IF_ERR(yetty_ycore_void, ev_res, "yrich yaml: sheet body read failed");
         if (ev.type == YAML_MAPPING_END_EVENT) {
             yaml_event_delete(&ev);
-            return yetty_yrich_spreadsheet_set_grid_size(NULL, sheet_obj, rows, cols);
+            return yetty_yrich_spreadsheet_set_grid_size(sheet_obj, rows, cols);
         }
         if (ev.type != YAML_SCALAR_EVENT) {
             yaml_event_delete(&ev);
@@ -1017,7 +1017,7 @@ static struct yetty_ycore_void_result parse_sheet_body(struct yaml_parser_s *p,
         }
         if (key_cells) {
             struct yetty_ycore_void_result grid_res =
-                yetty_yrich_spreadsheet_set_grid_size(NULL, sheet_obj, rows, cols);
+                yetty_yrich_spreadsheet_set_grid_size(sheet_obj, rows, cols);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yrich yaml: set_grid_size failed");
             struct yetty_ycore_void_result cells_res = parse_sheet_cells(p, sheet_obj);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, cells_res, "yrich yaml: cells parse failed");
@@ -1111,7 +1111,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_spreadsheet_load_yaml(const ch
 done:
     yaml_parser_delete(&parser);
     if (YETTY_IS_ERR(parse_res) || !found) {
-        struct yetty_ycore_void_result destroy_res = yetty_yrich_document_destroy(NULL, sheet_obj);
+        struct yetty_ycore_void_result destroy_res = yetty_yrich_document_destroy(sheet_obj);
         if (YETTY_IS_ERR(destroy_res)) {
             yetty_ycore_error_destroy(destroy_res.error);
         }
@@ -1414,7 +1414,7 @@ static struct yetty_ycore_void_result parse_slide(struct yaml_parser_s *p,
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, slide_res, "yrich yaml: slide create failed");
             }
             struct yetty_ycore_void_result current_res =
-                yetty_yrich_slides_set_current(NULL, slides_obj, index);
+                yetty_yrich_slides_set_current(slides_obj, index);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, current_res, "yrich yaml: set_current failed");
             struct yetty_yrich_slide *current = yetty_yrich_slides_slide_at(slides_obj, index);
             if (current && have_bg) {
@@ -1521,7 +1521,7 @@ static struct yetty_ycore_void_result parse_presentation(struct yaml_parser_s *p
             struct yetty_ycore_void_result size_res =
                 yetty_yrich_slides_set_slide_size(slides_obj, width, height);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, size_res, "yrich yaml: set_slide_size failed");
-            return yetty_yrich_slides_set_current(NULL, slides_obj, 0);
+            return yetty_yrich_slides_set_current(slides_obj, 0);
         }
         if (ev.type != YAML_SCALAR_EVENT) {
             yaml_event_delete(&ev);
@@ -1630,7 +1630,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_slides_load_yaml(const char *y
 done:
     yaml_parser_delete(&parser);
     if (YETTY_IS_ERR(parse_res) || !found) {
-        struct yetty_ycore_void_result destroy_res = yetty_yrich_document_destroy(NULL, slides_obj);
+        struct yetty_ycore_void_result destroy_res = yetty_yrich_document_destroy(slides_obj);
         if (YETTY_IS_ERR(destroy_res)) {
             yetty_ycore_error_destroy(destroy_res.error);
         }

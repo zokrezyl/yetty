@@ -53,7 +53,7 @@ static struct yetty_ycore_void_result seed_demo(struct yetty_yclass_object *deck
     /* Slide 2 — shapes. */
     struct yetty_yrich_slide_ptr_result slide_res = yetty_yrich_slides_add_slide(deck_obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, slide_res, "seed_demo: slide 2 create");
-    struct yetty_ycore_void_result current_res = yetty_yrich_slides_set_current(NULL, deck_obj, 1);
+    struct yetty_ycore_void_result current_res = yetty_yrich_slides_set_current(deck_obj, 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, current_res, "seed_demo: slide 2 current");
     text_res = add_textbox(deck_obj, 200, 50, 560, 50, "Shape examples");
     YETTY_RETURN_IF_ERR(yetty_ycore_void, text_res, "seed_demo: slide 2");
@@ -68,7 +68,7 @@ static struct yetty_ycore_void_result seed_demo(struct yetty_yclass_object *deck
     /* Slide 3 — features. */
     slide_res = yetty_yrich_slides_add_slide(deck_obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, slide_res, "seed_demo: slide 3 create");
-    current_res = yetty_yrich_slides_set_current(NULL, deck_obj, 2);
+    current_res = yetty_yrich_slides_set_current(deck_obj, 2);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, current_res, "seed_demo: slide 3 current");
     text_res = add_textbox(deck_obj, 200, 50, 560, 50, "Features");
     YETTY_RETURN_IF_ERR(yetty_ycore_void, text_res, "seed_demo: slide 3");
@@ -84,7 +84,7 @@ static struct yetty_ycore_void_result seed_demo(struct yetty_yclass_object *deck
         y += 50.0f;
     }
 
-    return yetty_yrich_slides_set_current(NULL, deck_obj, 0);
+    return yetty_yrich_slides_set_current(deck_obj, 0);
 }
 
 int main(int argc, char **argv)
@@ -123,7 +123,7 @@ int main(int argc, char **argv)
             yetty_ycore_error_print(stderr, "yslide: seed demo", seed_res.error);
             yetty_ycore_error_destroy(seed_res.error);
             struct yetty_ycore_void_result destroy_res =
-                yetty_yrich_document_destroy(NULL, deck_obj);
+                yetty_yrich_document_destroy(deck_obj);
             if (YETTY_IS_ERR(destroy_res)) {
                 yetty_ycore_error_destroy(destroy_res.error);
             }

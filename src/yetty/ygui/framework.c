@@ -577,10 +577,9 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_button(
     }
     while (target) {
         struct yetty_ycore_int_result r =
-            pressed ? yetty_ygui_widget_on_press(NULL, (struct yetty_yclass_object *)target, x, y,
-                                                 button)
-                    : yetty_ygui_widget_on_release(NULL, (struct yetty_yclass_object *)target, x, y,
-                                                   button);
+            pressed
+                ? yetty_ygui_widget_on_press((struct yetty_yclass_object *)target, x, y, button)
+                : yetty_ygui_widget_on_release((struct yetty_yclass_object *)target, x, y, button);
         if (YETTY_IS_ERR(r)) {
             return YETTY_ERR(yetty_ycore_int,
                              "yetty_ygui_framework_feed_mouse_button: on_press/release", r);
@@ -614,7 +613,7 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_motion(
         struct yetty_yclass_object *cap = framework->pressed_obj;
         while (cap) {
             struct yetty_ycore_int_result r =
-                yetty_ygui_widget_on_motion(NULL, (struct yetty_yclass_object *)cap, x, y);
+                yetty_ygui_widget_on_motion((struct yetty_yclass_object *)cap, x, y);
             if (YETTY_IS_ERR(r)) {
                 return YETTY_ERR(yetty_ycore_int,
                                  "yetty_ygui_framework_feed_mouse_motion: capture on_motion", r);
@@ -644,7 +643,7 @@ struct yetty_ycore_int_result yetty_ygui_framework_feed_mouse_motion(
     }
     while (target) {
         struct yetty_ycore_int_result r =
-            yetty_ygui_widget_on_motion(NULL, (struct yetty_yclass_object *)target, x, y);
+            yetty_ygui_widget_on_motion((struct yetty_yclass_object *)target, x, y);
         if (YETTY_IS_ERR(r)) {
             return YETTY_ERR(yetty_ycore_int, "yetty_ygui_framework_feed_mouse_motion: on_motion",
                              r);
@@ -672,7 +671,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_feed_mouse_scroll(
     struct yetty_yclass_object *target = hit_test(framework->root, x, y);
     while (target) {
         struct yetty_ycore_int_result r =
-            yetty_ygui_widget_on_scroll(NULL, (struct yetty_yclass_object *)target, x, y, dx, dy);
+            yetty_ygui_widget_on_scroll((struct yetty_yclass_object *)target, x, y, dx, dy);
         if (YETTY_IS_ERR(r)) {
             return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_feed_mouse_scroll: on_scroll",
                              r);
@@ -1208,7 +1207,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
     ydebug("walk_container: node=%p id=%u klass=%p", (void *)node, yetty_ygui_widget_id(node),
            (void *)node->klass);
     struct yetty_ycore_void_result r =
-        yetty_ygui_widget_emit_container(NULL, (struct yetty_yclass_object *)node, ctx);
+        yetty_ygui_widget_emit_container((struct yetty_yclass_object *)node, ctx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
                         "yetty_ygui_framework_walk_emit_container: emit_container");
     for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(node); c;
@@ -1234,7 +1233,7 @@ static struct yetty_ycore_void_result walk_emit_body_inline(struct yetty_yclass_
                                                             struct yetty_ygui_emit_ctx *ctx)
 {
     struct yetty_ycore_void_result r =
-        yetty_ygui_widget_emit_body(NULL, (struct yetty_yclass_object *)node, ctx);
+        yetty_ygui_widget_emit_body((struct yetty_yclass_object *)node, ctx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_framework_walk_emit_body: emit_body");
     for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(node); c;
          c = yetty_ygui_widget_next_sibling(c)) {
@@ -1428,7 +1427,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_fram
             .size = envelope.size,
         };
         struct yetty_ycore_void_result pr =
-            yetty_yfigure_process_records(&framework->yclass_ctx, framework->container_obj, view);
+            yetty_yfigure_process_records(framework->container_obj, view);
         yetty_ycore_buffer_destroy(&envelope);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, pr,
                             "yetty_ygui_framework_flush: process_records slot");

@@ -74,6 +74,9 @@ struct yetty_yclass_object_ptr_result yetty_ymusic_music_create(struct yetty_ycl
                          "yetty_ymusic_music_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }

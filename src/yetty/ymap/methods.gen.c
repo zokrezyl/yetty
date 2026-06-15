@@ -8,8 +8,7 @@
 #include <stdlib.h> /* malloc/free for buffer-arg marshalling */
 #include <string.h>
 
-struct yetty_ycore_void_result yetty_ymap_configure(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ymap_configure(struct yetty_yclass_object *obj,
                                                     double latitude, double longitude,
                                                     uint32_t zoom, uint32_t width_px,
                                                     uint32_t height_px)
@@ -36,12 +35,11 @@ struct yetty_ycore_void_result yetty_ymap_configure(struct yetty_yclass_ctx *ctx
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ymap_configure: dispatch_lookup failed");
-    return ((yetty_ymap_configure_fn)dispatch_impl_r.value)(ctx, obj, latitude, longitude, zoom,
+    return ((yetty_ymap_configure_fn)dispatch_impl_r.value)(obj, latitude, longitude, zoom,
                                                             width_px, height_px);
 }
 
-struct yetty_ycore_void_result yetty_ymap_set_provider(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ymap_set_provider(struct yetty_yclass_object *obj,
                                                        const char *name)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -66,12 +64,12 @@ struct yetty_ycore_void_result yetty_ymap_set_provider(struct yetty_yclass_ctx *
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ymap_set_provider: dispatch_lookup failed");
-    return ((yetty_ymap_set_provider_fn)dispatch_impl_r.value)(ctx, obj, name);
+    return ((yetty_ymap_set_provider_fn)dispatch_impl_r.value)(obj, name);
 }
 
 struct yetty_ycore_void_result yetty_ymap_set_custom_provider(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, const char *url_template,
-    int is_vector, const char *file_extension, uint32_t max_zoom, const char *attribution)
+    struct yetty_yclass_object *obj, const char *url_template, int is_vector,
+    const char *file_extension, uint32_t max_zoom, const char *attribution)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -97,11 +95,10 @@ struct yetty_ycore_void_result yetty_ymap_set_custom_provider(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ymap_set_custom_provider: dispatch_lookup failed");
     return ((yetty_ymap_set_custom_provider_fn)dispatch_impl_r.value)(
-        ctx, obj, url_template, is_vector, file_extension, max_zoom, attribution);
+        obj, url_template, is_vector, file_extension, max_zoom, attribution);
 }
 
-struct yetty_ycore_void_result yetty_ymap_set_center(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ymap_set_center(struct yetty_yclass_object *obj,
                                                      double latitude, double longitude)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -126,11 +123,10 @@ struct yetty_ycore_void_result yetty_ymap_set_center(struct yetty_yclass_ctx *ct
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ymap_set_center: dispatch_lookup failed");
-    return ((yetty_ymap_set_center_fn)dispatch_impl_r.value)(ctx, obj, latitude, longitude);
+    return ((yetty_ymap_set_center_fn)dispatch_impl_r.value)(obj, latitude, longitude);
 }
 
-struct yetty_ycore_void_result yetty_ymap_set_zoom(struct yetty_yclass_ctx *ctx,
-                                                   struct yetty_yclass_object *obj, uint32_t zoom)
+struct yetty_ycore_void_result yetty_ymap_set_zoom(struct yetty_yclass_object *obj, uint32_t zoom)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -154,11 +150,10 @@ struct yetty_ycore_void_result yetty_ymap_set_zoom(struct yetty_yclass_ctx *ctx,
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ymap_set_zoom: dispatch_lookup failed");
-    return ((yetty_ymap_set_zoom_fn)dispatch_impl_r.value)(ctx, obj, zoom);
+    return ((yetty_ymap_set_zoom_fn)dispatch_impl_r.value)(obj, zoom);
 }
 
-struct yetty_ycore_void_result yetty_ymap_set_viewport(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ymap_set_viewport(struct yetty_yclass_object *obj,
                                                        uint32_t width_px, uint32_t height_px)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -183,11 +178,10 @@ struct yetty_ycore_void_result yetty_ymap_set_viewport(struct yetty_yclass_ctx *
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ymap_set_viewport: dispatch_lookup failed");
-    return ((yetty_ymap_set_viewport_fn)dispatch_impl_r.value)(ctx, obj, width_px, height_px);
+    return ((yetty_ymap_set_viewport_fn)dispatch_impl_r.value)(obj, width_px, height_px);
 }
 
-struct yetty_ycore_void_result yetty_ymap_pan_by_pixels(struct yetty_yclass_ctx *ctx,
-                                                        struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ymap_pan_by_pixels(struct yetty_yclass_object *obj,
                                                         double delta_x, double delta_y)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -212,11 +206,10 @@ struct yetty_ycore_void_result yetty_ymap_pan_by_pixels(struct yetty_yclass_ctx 
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ymap_pan_by_pixels: dispatch_lookup failed");
-    return ((yetty_ymap_pan_by_pixels_fn)dispatch_impl_r.value)(ctx, obj, delta_x, delta_y);
+    return ((yetty_ymap_pan_by_pixels_fn)dispatch_impl_r.value)(obj, delta_x, delta_y);
 }
 
-struct yetty_ycore_int_result yetty_ymap_zoom_by_at(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj, int32_t step,
+struct yetty_ycore_int_result yetty_ymap_zoom_by_at(struct yetty_yclass_object *obj, int32_t step,
                                                     double anchor_x, double anchor_y)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -241,11 +234,10 @@ struct yetty_ycore_int_result yetty_ymap_zoom_by_at(struct yetty_yclass_ctx *ctx
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                         "yetty_ymap_zoom_by_at: dispatch_lookup failed");
-    return ((yetty_ymap_zoom_by_at_fn)dispatch_impl_r.value)(ctx, obj, step, anchor_x, anchor_y);
+    return ((yetty_ymap_zoom_by_at_fn)dispatch_impl_r.value)(obj, step, anchor_x, anchor_y);
 }
 
-struct yetty_ycore_int_result yetty_ymap_get_zoom(struct yetty_yclass_ctx *ctx,
-                                                  struct yetty_yclass_object *obj)
+struct yetty_ycore_int_result yetty_ymap_get_zoom(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -269,11 +261,10 @@ struct yetty_ycore_int_result yetty_ymap_get_zoom(struct yetty_yclass_ctx *ctx,
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                         "yetty_ymap_get_zoom: dispatch_lookup failed");
-    return ((yetty_ymap_get_zoom_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_ymap_get_zoom_fn)dispatch_impl_r.value)(obj);
 }
 
-struct yetty_ycore_void_result yetty_ymap_geolocate(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj)
+struct yetty_ycore_void_result yetty_ymap_geolocate(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -297,11 +288,10 @@ struct yetty_ycore_void_result yetty_ymap_geolocate(struct yetty_yclass_ctx *ctx
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ymap_geolocate: dispatch_lookup failed");
-    return ((yetty_ymap_geolocate_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_ymap_geolocate_fn)dispatch_impl_r.value)(obj);
 }
 
-struct yetty_ycore_const_char_ptr_result yetty_ymap_attribution(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *obj)
+struct yetty_ycore_const_char_ptr_result yetty_ymap_attribution(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -325,11 +315,10 @@ struct yetty_ycore_const_char_ptr_result yetty_ymap_attribution(struct yetty_ycl
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, dispatch_impl_r,
                         "yetty_ymap_attribution: dispatch_lookup failed");
-    return ((yetty_ymap_attribution_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_ymap_attribution_fn)dispatch_impl_r.value)(obj);
 }
 
-struct yetty_ycore_int_result yetty_ymap_is_vector(struct yetty_yclass_ctx *ctx,
-                                                   struct yetty_yclass_object *obj)
+struct yetty_ycore_int_result yetty_ymap_is_vector(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -353,11 +342,10 @@ struct yetty_ycore_int_result yetty_ymap_is_vector(struct yetty_yclass_ctx *ctx,
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                         "yetty_ymap_is_vector: dispatch_lookup failed");
-    return ((yetty_ymap_is_vector_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_ymap_is_vector_fn)dispatch_impl_r.value)(obj);
 }
 
-struct yetty_ydraw_drawable_list_result yetty_ymap_render(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj)
+struct yetty_ydraw_drawable_list_result yetty_ymap_render(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -381,11 +369,10 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render(struct yetty_yclass_ct
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, dispatch_impl_r,
                         "yetty_ymap_render: dispatch_lookup failed");
-    return ((yetty_ymap_render_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_ymap_render_fn)dispatch_impl_r.value)(obj);
 }
 
-struct yetty_ycore_void_result yetty_ymap_destroy(struct yetty_yclass_ctx *ctx,
-                                                  struct yetty_yclass_object *obj)
+struct yetty_ycore_void_result yetty_ymap_destroy(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -409,5 +396,5 @@ struct yetty_ycore_void_result yetty_ymap_destroy(struct yetty_yclass_ctx *ctx,
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ymap_destroy: dispatch_lookup failed");
-    return ((yetty_ymap_destroy_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_ymap_destroy_fn)dispatch_impl_r.value)(obj);
 }

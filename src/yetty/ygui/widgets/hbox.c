@@ -24,10 +24,8 @@ struct yetty_ygui_hbox_ptr_result yetty_ygui_hbox_from(struct yetty_yclass_objec
 #include <yetty/ygui/primitive-widget.h>
 
 [[clang::annotate("override@ygui:hbox:constructor")]]
-static struct yetty_ycore_void_result hbox_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                       struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result hbox_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_hbox_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);

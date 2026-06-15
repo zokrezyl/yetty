@@ -40,74 +40,60 @@ struct yetty_yrich_document_ptr_result {
 struct yetty_yrich_document_ptr_result yetty_yrich_document_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yrich_document_to(struct yetty_yrich_document *data);
 
-struct yetty_ycore_void_result yetty_yrich_constructor(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_document_destroy(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj);
-struct yetty_ycore_float_result yetty_yrich_document_content_width(struct yetty_yclass_ctx *ctx,
-                                                                   struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_constructor(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_document_destroy(struct yetty_yclass_object *obj);
+struct yetty_ycore_float_result yetty_yrich_document_content_width(struct yetty_yclass_object *obj);
 struct yetty_ycore_float_result yetty_yrich_document_content_height(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_document_render(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_document_apply_op(struct yetty_yclass_ctx *ctx,
-                                                             struct yetty_yclass_object *obj,
+    struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_document_render(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_document_apply_op(struct yetty_yclass_object *obj,
                                                              struct yetty_yrich_operation *op,
                                                              int local_flag);
-struct yetty_ycore_void_result yetty_yrich_document_undo(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_document_redo(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_document_on_mouse_down(struct yetty_yclass_ctx *ctx,
-                                                                  struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_yrich_document_undo(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_document_redo(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_document_on_mouse_down(struct yetty_yclass_object *obj,
                                                                   float x, float y, uint32_t button,
                                                                   uint32_t mods);
-struct yetty_ycore_void_result yetty_yrich_document_on_mouse_up(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_yrich_document_on_mouse_up(struct yetty_yclass_object *obj,
                                                                 float x, float y, uint32_t button,
                                                                 uint32_t mods);
-struct yetty_ycore_void_result yetty_yrich_document_on_mouse_drag(struct yetty_yclass_ctx *ctx,
-                                                                  struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_yrich_document_on_mouse_drag(struct yetty_yclass_object *obj,
                                                                   float x, float y, uint32_t button,
                                                                   uint32_t mods);
 struct yetty_ycore_void_result yetty_yrich_document_on_mouse_double_click(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, float x, float y,
-    uint32_t button, uint32_t mods);
-struct yetty_ycore_void_result yetty_yrich_document_on_key_down(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *obj,
+    struct yetty_yclass_object *obj, float x, float y, uint32_t button, uint32_t mods);
+struct yetty_ycore_void_result yetty_yrich_document_on_key_down(struct yetty_yclass_object *obj,
                                                                 uint32_t key, uint32_t mods);
-struct yetty_ycore_void_result yetty_yrich_document_on_text_input(struct yetty_yclass_ctx *ctx,
-                                                                  struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_yrich_document_on_text_input(struct yetty_yclass_object *obj,
                                                                   struct yetty_ycore_buffer text);
 
-typedef struct yetty_ycore_void_result (*yetty_yrich_constructor_fn)(struct yetty_yclass_ctx *,
-                                                                     struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_yrich_constructor_fn)(struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_document_destroy_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_float_result (*yetty_yrich_document_content_width_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_float_result (*yetty_yrich_document_content_height_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_document_render_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_document_apply_op_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_yrich_operation *, int);
+    struct yetty_yclass_object *, struct yetty_yrich_operation *, int);
 typedef struct yetty_ycore_void_result (*yetty_yrich_document_undo_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_document_redo_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_document_on_mouse_down_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, uint32_t, uint32_t);
+    struct yetty_yclass_object *, float, float, uint32_t, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yrich_document_on_mouse_up_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, uint32_t, uint32_t);
+    struct yetty_yclass_object *, float, float, uint32_t, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yrich_document_on_mouse_drag_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, uint32_t, uint32_t);
+    struct yetty_yclass_object *, float, float, uint32_t, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yrich_document_on_mouse_double_click_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, uint32_t, uint32_t);
+    struct yetty_yclass_object *, float, float, uint32_t, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yrich_document_on_key_down_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, uint32_t, uint32_t);
+    struct yetty_yclass_object *, uint32_t, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yrich_document_on_text_input_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ycore_buffer);
+    struct yetty_yclass_object *, struct yetty_ycore_buffer);
 
 struct yetty_yclass_object_ptr_result yetty_yrich_document_create(struct yetty_yclass_ctx *ctx);
 

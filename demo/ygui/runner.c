@@ -214,7 +214,7 @@ static void runner_chrome_caption_refresh(struct demo_runner *r)
     if (!r->chrome || !r->chrome_caption) {
         return;
     }
-    struct yetty_ydraw_drawable_list_result lr = yetty_ychrome_render(NULL, r->chrome);
+    struct yetty_ydraw_drawable_list_result lr = yetty_ychrome_render(r->chrome);
     if (YETTY_IS_ERR(lr)) {
         yetty_ycore_error_destroy(lr.error);
         return;
@@ -224,12 +224,12 @@ static void runner_chrome_caption_refresh(struct demo_runner *r)
     size_t size = yetty_ydraw_drawable_list_size(list);
     struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(r->chrome_caption);
     struct yetty_yclass_object *fobj = (struct yetty_yclass_object *)(fig)-1;
-    struct yetty_ycore_void_result rc = yetty_yfigure_reset_content(NULL, fobj);
+    struct yetty_ycore_void_result rc = yetty_yfigure_reset_content(fobj);
     if (YETTY_IS_ERR(rc)) {
         yetty_ycore_error_destroy(rc.error);
     }
     if (data && size > 0) {
-        struct yetty_ycore_void_result pb = yetty_yfigure_process_bytes(NULL, fobj, data, size);
+        struct yetty_ycore_void_result pb = yetty_yfigure_process_bytes(fobj, data, size);
         if (YETTY_IS_ERR(pb)) {
             yetty_ycore_error_destroy(pb.error);
         }
@@ -285,7 +285,7 @@ static int runner_chrome_handle(struct demo_runner *r, const struct yetty_yui_ev
     if (!r->enable_chrome || !r->chrome) {
         return 0;
     }
-    struct yetty_ycore_int_result cr = yetty_ychrome_handle_event(NULL, r->chrome, ev);
+    struct yetty_ycore_int_result cr = yetty_ychrome_handle_event(r->chrome, ev);
     int consumed = YETTY_IS_OK(cr) && cr.value;
     if (YETTY_IS_ERR(cr)) {
         yetty_ycore_error_destroy(cr.error);
@@ -342,7 +342,7 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
         if (r->root_container) {
             struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(r->root_container);
             struct yetty_ycore_void_result rr =
-                yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, r->render_target);
+                yetty_yfigure_render((struct yetty_yclass_object *)rf - 1, r->render_target);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
             }
@@ -397,8 +397,7 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
         }
         /* Keep chrome's edge bands + the caption figure tracking the window. */
         if (r->enable_chrome && r->chrome) {
-            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(
-                NULL, r->chrome, (float)ev->resize.width, (float)ev->resize.height);
+            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(r->chrome, (float)ev->resize.width, (float)ev->resize.height);
             if (YETTY_IS_ERR(csz)) {
                 yetty_ycore_error_destroy(csz.error);
             }
@@ -707,14 +706,12 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         struct yetty_yclass_object_ptr_result cor = yetty_ychrome_chrome_create(NULL);
         if (YETTY_IS_OK(cor)) {
             r->chrome = cor.value;
-            struct yetty_ycore_void_result ccfg = yetty_ychrome_configure(
-                NULL, r->chrome, r->yframework->window_manager, DEMO_CHROME_CAPTION_H,
+            struct yetty_ycore_void_result ccfg = yetty_ychrome_configure(r->chrome, r->yframework->window_manager, DEMO_CHROME_CAPTION_H,
                 /*edge_size=*/8.0f, YETTY_YCHROME_FLAG_ALL);
             if (YETTY_IS_ERR(ccfg)) {
                 yetty_ycore_error_destroy(ccfg.error);
             }
-            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(
-                NULL, r->chrome, (float)rt->surface_width, (float)rt->surface_height);
+            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(r->chrome, (float)rt->surface_width, (float)rt->surface_height);
             if (YETTY_IS_ERR(csz)) {
                 yetty_ycore_error_destroy(csz.error);
             }
@@ -791,7 +788,7 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
 
     /* Teardown — mirror ygreeter's order. */
     if (r->chrome) {
-        struct yetty_ycore_void_result dr = yetty_ychrome_destroy(NULL, r->chrome);
+        struct yetty_ycore_void_result dr = yetty_ychrome_destroy(r->chrome);
         if (YETTY_IS_ERR(dr)) {
             yetty_ycore_error_destroy(dr.error);
         }
@@ -829,7 +826,7 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
     if (r->root_container) {
         struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(r->root_container);
         struct yetty_ycore_void_result dr =
-            yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
+            yetty_yfigure_destroy((struct yetty_yclass_object *)rf - 1);
         if (YETTY_IS_ERR(dr)) {
             yetty_ycore_error_destroy(dr.error);
         }

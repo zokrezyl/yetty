@@ -33,10 +33,8 @@ struct [[clang::annotate("class@ygui:statusbar")]] [[clang::annotate(
 };
 
 [[clang::annotate("override@ygui:statusbar:constructor")]]
-static struct yetty_ycore_void_result statusbar_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                            struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result statusbar_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_statusbar_class_get().value,
@@ -55,10 +53,8 @@ static struct yetty_ycore_void_result statusbar_constructor(struct yetty_yclass_
 }
 
 [[clang::annotate("override@ygui:statusbar:destructor")]]
-static struct yetty_ycore_void_result statusbar_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result statusbar_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_statusbar_ptr_result d_dr = yetty_ygui_statusbar_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "statusbar_destructor: data_get");
@@ -71,11 +67,9 @@ static struct yetty_ycore_void_result statusbar_destructor(struct yetty_yclass_c
 }
 
 [[clang::annotate("override@ygui:statusbar:widget_paint")]]
-static struct yetty_ycore_void_result statusbar_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                      struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result statusbar_paint(struct yetty_yclass_object *yclass_obj,
                                                       struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "statusbar_paint: NULL ctx");

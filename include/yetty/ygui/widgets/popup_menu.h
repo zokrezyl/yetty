@@ -16,8 +16,7 @@
 extern "C" {
 #endif
 
-typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_ctx *,
-                                                                  struct yetty_yclass_object *, int,
+typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_object *, int,
                                                                   void *);
 
 struct yetty_yclass_ptr_result yetty_ygui_popup_menu_class_get(void);

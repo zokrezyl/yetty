@@ -1241,11 +1241,9 @@ static struct yetty_ycore_void_result emit_element(struct yetty_ydraw_drawable_l
 /* configure: set system width, staff-space (line gap) in px and render flags.
  * 0 selects the default for each. Call after create(), before render(). */
 [[clang::annotate("virtual@ymusic:music:configure")]] [[clang::annotate("local@ymusic:configure")]]
-static struct yetty_ycore_void_result music_configure(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj, float width,
+static struct yetty_ycore_void_result music_configure(struct yetty_yclass_object *obj, float width,
                                                       float staff_space, uint32_t flags)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, music_r, "ymusic configure: from_obj");
     struct yetty_ymusic_music *music = music_r.value;
@@ -1258,11 +1256,9 @@ static struct yetty_ycore_void_result music_configure(struct yetty_yclass_ctx *c
 /* parse: ingest LilyPond-subset text and build the score model. Resets the model
  * and clears any selection. */
 [[clang::annotate("virtual@ymusic:music:parse")]] [[clang::annotate("local@ymusic:parse")]]
-static struct yetty_ycore_void_result music_parse(struct yetty_yclass_ctx *ctx,
-                                                  struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result music_parse(struct yetty_yclass_object *obj,
                                                   const char *input, size_t len)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, music_r, "ymusic parse: from_obj");
     struct yetty_ymusic_music *music = music_r.value;
@@ -1409,10 +1405,8 @@ static struct yetty_ycore_void_result emit_system_prefix(struct yetty_ydraw_draw
 /* render: lay out the score and emit it as a fresh ydraw drawable list (caller
  * owns it). Pointer return -> local-only. */
 [[clang::annotate("virtual@ymusic:music:render")]] [[clang::annotate("local@ymusic:render")]]
-static struct yetty_ydraw_drawable_list_result music_render(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj)
+static struct yetty_ydraw_drawable_list_result music_render(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, music_r, "ymusic render: from_obj");
     struct yetty_ymusic_music *music = music_r.value;
@@ -1546,11 +1540,9 @@ static struct yetty_ydraw_drawable_list_result music_render(struct yetty_yclass_
 /* hit_test: id of the element whose column + system band contains content
  * (x,y), or YETTY_YMUSIC_NO_ELEMENT. Requires a prior render() for the layout. */
 [[clang::annotate("virtual@ymusic:music:hit_test")]] [[clang::annotate("local@ymusic:hit_test")]]
-static struct yetty_ycore_int_result music_hit_test(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj, float x,
+static struct yetty_ycore_int_result music_hit_test(struct yetty_yclass_object *obj, float x,
                                                     float y)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, music_r, "ymusic hit_test: from_obj");
     struct yetty_ymusic_music *music = music_r.value;
@@ -1575,11 +1567,9 @@ static struct yetty_ycore_int_result music_hit_test(struct yetty_yclass_ctx *ctx
 /* set_highlight: mark an element as selected (-1 clears) for the next render. */
 [[clang::annotate("virtual@ymusic:music:set_highlight")]] [[clang::annotate(
     "local@ymusic:set_highlight")]]
-static struct yetty_ycore_void_result music_set_highlight(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result music_set_highlight(struct yetty_yclass_object *obj,
                                                           int32_t element_id)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, music_r, "ymusic set_highlight: from_obj");
     struct yetty_ymusic_music *music = music_r.value;
@@ -1590,10 +1580,8 @@ static struct yetty_ycore_void_result music_set_highlight(struct yetty_yclass_ct
 
 /* destroy: free the score model and the object. */
 [[clang::annotate("virtual@ymusic:music:destroy")]] [[clang::annotate("local@ymusic:destroy")]]
-static struct yetty_ycore_void_result music_obj_destroy(struct yetty_yclass_ctx *ctx,
-                                                        struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result music_obj_destroy(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     if (YETTY_IS_ERR(music_r)) {
         yetty_ycore_error_destroy(music_r.error);

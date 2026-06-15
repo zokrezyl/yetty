@@ -82,20 +82,15 @@ struct yetty_yrich_slides_ptr_result {
 struct yetty_yrich_slides_ptr_result yetty_yrich_slides_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yrich_slides_to(struct yetty_yrich_slides *data);
 
-struct yetty_ycore_void_result yetty_yrich_slides_set_current(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_yrich_slides_set_current(struct yetty_yclass_object *obj,
                                                               int32_t index);
-struct yetty_ycore_void_result yetty_yrich_slides_next(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_slides_prev(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_slides_next(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_slides_prev(struct yetty_yclass_object *obj);
 
 typedef struct yetty_ycore_void_result (*yetty_yrich_slides_set_current_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, int32_t);
-typedef struct yetty_ycore_void_result (*yetty_yrich_slides_next_fn)(struct yetty_yclass_ctx *,
-                                                                     struct yetty_yclass_object *);
-typedef struct yetty_ycore_void_result (*yetty_yrich_slides_prev_fn)(struct yetty_yclass_ctx *,
-                                                                     struct yetty_yclass_object *);
+    struct yetty_yclass_object *, int32_t);
+typedef struct yetty_ycore_void_result (*yetty_yrich_slides_next_fn)(struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_yrich_slides_prev_fn)(struct yetty_yclass_object *);
 
 struct yetty_yclass_object_ptr_result yetty_yrich_shape_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_yrich_slides_create(struct yetty_yclass_ctx *ctx);

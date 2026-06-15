@@ -9,7 +9,7 @@
 #include <string.h>
 
 struct yetty_ycore_void_result yetty_yplatform_window_manager_configure(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, void *os_window,
+    struct yetty_yclass_object *obj, void *os_window,
     struct yetty_ycore_xthread_event_pipe *output_pipe,
     struct yetty_ycore_xthread_event_pipe *input_pipe)
 {
@@ -37,11 +37,11 @@ struct yetty_ycore_void_result yetty_yplatform_window_manager_configure(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yplatform_window_manager_configure: dispatch_lookup failed");
     return ((yetty_yplatform_window_manager_configure_fn)dispatch_impl_r.value)(
-        ctx, obj, os_window, output_pipe, input_pipe);
+        obj, os_window, output_pipe, input_pipe);
 }
 
 struct yetty_ycore_void_result yetty_yplatform_window_manager_destroy(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+    struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -66,11 +66,11 @@ struct yetty_ycore_void_result yetty_yplatform_window_manager_destroy(
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yplatform_window_manager_destroy: dispatch_lookup failed");
-    return ((yetty_yplatform_window_manager_destroy_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_yplatform_window_manager_destroy_fn)dispatch_impl_r.value)(obj);
 }
 
 struct yetty_ycore_void_result yetty_yplatform_window_manager_iconify(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+    struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -95,11 +95,11 @@ struct yetty_ycore_void_result yetty_yplatform_window_manager_iconify(
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yplatform_window_manager_iconify: dispatch_lookup failed");
-    return ((yetty_yplatform_window_manager_iconify_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_yplatform_window_manager_iconify_fn)dispatch_impl_r.value)(obj);
 }
 
 struct yetty_ycore_void_result yetty_yplatform_window_manager_toggle_maximize(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+    struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -127,11 +127,11 @@ struct yetty_ycore_void_result yetty_yplatform_window_manager_toggle_maximize(
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yplatform_window_manager_toggle_maximize: dispatch_lookup failed");
-    return ((yetty_yplatform_window_manager_toggle_maximize_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_yplatform_window_manager_toggle_maximize_fn)dispatch_impl_r.value)(obj);
 }
 
 struct yetty_ycore_void_result yetty_yplatform_window_manager_request_close(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+    struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -158,11 +158,11 @@ struct yetty_ycore_void_result yetty_yplatform_window_manager_request_close(
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yplatform_window_manager_request_close: dispatch_lookup failed");
-    return ((yetty_yplatform_window_manager_request_close_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_yplatform_window_manager_request_close_fn)dispatch_impl_r.value)(obj);
 }
 
 struct yetty_ycore_void_result yetty_yplatform_window_manager_drag_by(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int dx, int dy)
+    struct yetty_yclass_object *obj, int dx, int dy)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -187,11 +187,11 @@ struct yetty_ycore_void_result yetty_yplatform_window_manager_drag_by(
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yplatform_window_manager_drag_by: dispatch_lookup failed");
-    return ((yetty_yplatform_window_manager_drag_by_fn)dispatch_impl_r.value)(ctx, obj, dx, dy);
+    return ((yetty_yplatform_window_manager_drag_by_fn)dispatch_impl_r.value)(obj, dx, dy);
 }
 
 struct yetty_ycore_void_result yetty_yplatform_window_manager_resize_by(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int dx, int dy, int edge)
+    struct yetty_yclass_object *obj, int dx, int dy, int edge)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -216,12 +216,11 @@ struct yetty_ycore_void_result yetty_yplatform_window_manager_resize_by(
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yplatform_window_manager_resize_by: dispatch_lookup failed");
-    return ((yetty_yplatform_window_manager_resize_by_fn)dispatch_impl_r.value)(ctx, obj, dx, dy,
-                                                                                edge);
+    return ((yetty_yplatform_window_manager_resize_by_fn)dispatch_impl_r.value)(obj, dx, dy, edge);
 }
 
 struct yetty_ycore_void_result yetty_yplatform_window_manager_begin_interactive_move(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+    struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -251,12 +250,11 @@ struct yetty_ycore_void_result yetty_yplatform_window_manager_begin_interactive_
     YETTY_RETURN_IF_ERR(
         yetty_ycore_void, dispatch_impl_r,
         "yetty_yplatform_window_manager_begin_interactive_move: dispatch_lookup failed");
-    return ((yetty_yplatform_window_manager_begin_interactive_move_fn)dispatch_impl_r.value)(ctx,
-                                                                                             obj);
+    return ((yetty_yplatform_window_manager_begin_interactive_move_fn)dispatch_impl_r.value)(obj);
 }
 
 struct yetty_ycore_void_result yetty_yplatform_window_manager_begin_interactive_resize(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int edge)
+    struct yetty_yclass_object *obj, int edge)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -287,11 +285,11 @@ struct yetty_ycore_void_result yetty_yplatform_window_manager_begin_interactive_
         yetty_ycore_void, dispatch_impl_r,
         "yetty_yplatform_window_manager_begin_interactive_resize: dispatch_lookup failed");
     return ((yetty_yplatform_window_manager_begin_interactive_resize_fn)dispatch_impl_r.value)(
-        ctx, obj, edge);
+        obj, edge);
 }
 
 struct yetty_ycore_void_result yetty_yplatform_window_manager_set_cursor(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int shape)
+    struct yetty_yclass_object *obj, int shape)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -317,12 +315,11 @@ struct yetty_ycore_void_result yetty_yplatform_window_manager_set_cursor(
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yplatform_window_manager_set_cursor: dispatch_lookup failed");
-    return ((yetty_yplatform_window_manager_set_cursor_fn)dispatch_impl_r.value)(ctx, obj, shape);
+    return ((yetty_yplatform_window_manager_set_cursor_fn)dispatch_impl_r.value)(obj, shape);
 }
 
 struct yetty_ycore_void_result yetty_yplatform_window_manager_handle_event(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    const struct yetty_yui_event *event)
+    struct yetty_yclass_object *obj, const struct yetty_yui_event *event)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -349,5 +346,5 @@ struct yetty_ycore_void_result yetty_yplatform_window_manager_handle_event(
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yplatform_window_manager_handle_event: dispatch_lookup failed");
-    return ((yetty_yplatform_window_manager_handle_event_fn)dispatch_impl_r.value)(ctx, obj, event);
+    return ((yetty_yplatform_window_manager_handle_event_fn)dispatch_impl_r.value)(obj, event);
 }

@@ -41,11 +41,9 @@ yetty_ygui_checkbox {
     int checked;
 };
 
-static struct yetty_ycore_void_result on_click_toggle(struct yetty_yclass_ctx *yclass_ctx,
-                                                      struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result on_click_toggle(struct yetty_yclass_object *yclass_obj,
                                                       void *userdata)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)userdata;
     struct yetty_ygui_checkbox_ptr_result d_dr = yetty_ygui_checkbox_from(obj);
@@ -64,10 +62,8 @@ static struct yetty_ycore_void_result on_click_toggle(struct yetty_yclass_ctx *y
 }
 
 [[clang::annotate("override@ygui:checkbox:constructor")]]
-static struct yetty_ycore_void_result checkbox_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result checkbox_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_checkbox_class_get().value,
@@ -82,10 +78,8 @@ static struct yetty_ycore_void_result checkbox_constructor(struct yetty_yclass_c
 }
 
 [[clang::annotate("override@ygui:checkbox:destructor")]]
-static struct yetty_ycore_void_result checkbox_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                          struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result checkbox_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_checkbox_ptr_result d_dr = yetty_ygui_checkbox_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "checkbox_destructor: data_get");
@@ -124,11 +118,9 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
 }
 
 [[clang::annotate("override@ygui:checkbox:widget_paint")]]
-static struct yetty_ycore_void_result checkbox_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                     struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result checkbox_paint(struct yetty_yclass_object *yclass_obj,
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "checkbox_paint: NULL ctx");
