@@ -51,9 +51,9 @@ struct vterm_uniforms {
     float glyph_left;
     float pixel_range;
     uint32_t root_row;
-    uint32_t pad0;
-    uint32_t pad1;
-    uint32_t pad2;
+    uint32_t cursor_col;
+    uint32_t cursor_row;
+    uint32_t cursor_visible;
 };
 
 /* `struct yetty_ydraw_composite` is forward-declared in grid.c and kept opaque
@@ -646,10 +646,31 @@ static int cb_bell(void *user)
 YETTY_EXTERNAL_CALLBACK
 static int cb_resize(int rows, int cols, VTermStateFields *fields, void *user)
 {
-    (void)rows;
     (void)cols;
-    (void)fields;
     (void)user;
+    /* libvterm has already updated state->rows/state->cols and delegates the
+     * lineinfo (re)allocation to this callback — its internal fallback is dead
+     * code once a state resize callback is installed. Each non-NULL lineinfos[]
+     * buffer must be grown/shrunk to `rows` entries here; otherwise the next
+     * glyph indexes the old, shorter buffer out of bounds (heap corruption,
+     * then a crash). The default vterm allocator is libc malloc/free, so plain
+     * calloc/free matches what libvterm will later free. Our grid model blanks
+     * every line on resize, so fresh zeroed lineinfo (no flag carry-over) is
+     * the correct semantics — mirrors libvterm's own screen-layer resize. */
+    int safe_rows = rows > 0 ? rows : 1;
+    for (int bufidx = 0; bufidx < 2; ++bufidx) {
+        if (!fields->lineinfos[bufidx]) {
+            continue;
+        }
+        VTermLineInfo *resized = calloc((size_t)safe_rows, sizeof(VTermLineInfo));
+        if (!resized) {
+            /* Keep the existing buffer rather than crash; libvterm clamps the
+             * cursor below, so a stale-but-valid buffer is the safer failure. */
+            continue;
+        }
+        free(fields->lineinfos[bufidx]);
+        fields->lineinfos[bufidx] = resized;
+    }
     return 1;
 }
 
@@ -916,7 +937,9 @@ static const char *vterm_text_wgsl(void)
         "    glyph_left: f32,\n"
         "    pixel_range: f32,\n"
         "    root_row: u32,\n"
-        "    pad0: u32, pad1: u32, pad2: u32,\n"
+        "    cursor_col: u32,\n"
+        "    cursor_row: u32,\n"
+        "    cursor_visible: u32,\n"
         "};\n"
         "@group(0) @binding(0) var<storage, read> cells: array<u32>;\n"
         "@group(0) @binding(1) var<storage, read> glyph_meta: array<u32>;\n"
@@ -991,7 +1014,12 @@ static const char *vterm_text_wgsl(void)
         "f32((w2>>8u)&0xFFu)/255.0);\n"
         "    var alpha = 0.0;\n"
         "    if (glyph != 0u) { alpha = sample_glyph(glyph, local); }\n"
-        "    let composed = mix(bg, fg, alpha);\n"
+        "    let is_cursor = uni.cursor_visible != 0u && u32(col) == uni.cursor_col && "
+        "u32(row) == uni.cursor_row;\n"
+        "    var composed = mix(bg, fg, alpha);\n"
+        "    if (is_cursor) {\n"
+        "        composed = mix(fg, bg, alpha);\n" /* inverted block: fg fill, glyph punched in bg */
+        "    }\n"
         "    return vec4<f32>(composed, 1.0);\n"
         "}\n";
     return src;
@@ -1334,8 +1362,12 @@ static void vterm_gpu_init(struct yetty_yvterm_vterm *vterm, const struct yetty_
     if (content_scale <= 0.0f) {
         content_scale = 1.0f;
     }
+    /* Config carries the font size in logical (CSS-style) pixels; scale once
+     * here to framebuffer pixels so the glyphs render at the right physical
+     * size on HiDPI displays without every other pipeline stage having to know
+     * about content_scale. */
     int cfg_size = config ? config->ops->get_int(config, "terminal/text-layer/font/size", 14) : 14;
-    float font_size = (float)cfg_size * content_scale * 0.5f;
+    float font_size = (float)cfg_size * content_scale;
 
     char cdb_path[768];
     char font_shader_path[768];
@@ -1477,6 +1509,9 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     vterm->uniforms.cell_size[0] = vterm->cell_size.width;
     vterm->uniforms.cell_size[1] = vterm->cell_size.height;
     vterm->uniforms.root_row = grid->base;
+    vterm->uniforms.cursor_col = grid->cursor_col;
+    vterm->uniforms.cursor_row = grid->cursor_row;
+    vterm->uniforms.cursor_visible = grid->cursor_visible;
     wgpuQueueWriteBuffer(vterm->queue, vterm->uniform_buffer, 0, &vterm->uniforms,
                          sizeof(struct vterm_uniforms));
 
@@ -1487,8 +1522,13 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     if (!view) {
         return YETTY_ERR(yetty_ycore_void, "vterm_render: target view NULL");
     }
-    float vx = rect.min.x;
-    float vy = rect.min.y;
+    /* The figure rect is pane-local (origin 0,0); the pane's framebuffer
+     * position lives in the target viewport origin (e.g. y=36 below the
+     * tabbar). Offset the draw viewport by it so terminal row 0 lands at the
+     * pane top instead of behind the tabbar — otherwise an idle shell's single
+     * prompt row is drawn at y=0 and scissored away, leaving a blank pane. */
+    float vx = target->viewport.x + rect.min.x;
+    float vy = target->viewport.y + rect.min.y;
     float w = rect.max.x - rect.min.x;
     float h = rect.max.y - rect.min.y;
     if (w <= 0.0f || h <= 0.0f) {
@@ -2046,7 +2086,7 @@ static struct yetty_ycore_void_result append_utf8(struct yetty_ycore_buffer *out
 static struct yetty_ycore_void_result vterm_wire_default(void *userdata,
                                                          struct yetty_ywire_wire_statemachine *sm)
 {
-    struct yetty_yvterm_grid *grid = userdata;
+    struct yetty_yvterm_vterm *vterm = userdata;
     uint8_t buf[4096];
     while (!yetty_ywire_wire_statemachine_at_end(sm)) {
         struct yetty_ycore_size_result rr =
@@ -2055,7 +2095,17 @@ static struct yetty_ycore_void_result vterm_wire_default(void *userdata,
         if (rr.value == 0) {
             break;
         }
-        vterm_input_write(grid->vterm, (const char *)buf, rr.value);
+        vterm_input_write(vterm->grid.vterm, (const char *)buf, rr.value);
+        /* libvterm answers terminal queries (cursor-position report, primary
+         * device attributes, …) by queueing output during input_write. Flush it
+         * back to the PTY right here, inside the loop. This sink runs as a
+         * long-lived coroutine whose read() yields for more bytes and never
+         * falls out of the loop, so a flush placed after the loop would be dead
+         * code. TUIs like fzf emit a query on startup and block until the reply
+         * lands; without an immediate flush they look frozen until the next
+         * keystroke forces an on_char flush (Ctrl-R not opening the menu). */
+        struct yetty_ycore_void_result fr = vterm_flush_output(vterm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "vterm_wire_default: flush output");
     }
     return YETTY_OK_VOID();
 }
@@ -2067,7 +2117,7 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_register_wire(
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm register_wire: from_obj");
     struct yetty_ycore_void_result rr =
-        yetty_ywire_wire_statemachine_set_default(sm, vterm_wire_default, &vterm_res.value->grid);
+        yetty_ywire_wire_statemachine_set_default(sm, vterm_wire_default, vterm_res.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yvterm register_wire: set_default");
     return YETTY_OK_VOID();
 }
