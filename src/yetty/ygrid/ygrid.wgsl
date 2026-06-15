@@ -200,9 +200,16 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     // Scene position = pixel position (1:1 mapping)
     let scene_pos = pixel_pos;
 
-    // Grid lookup: find which cell we're in
+    // Grid lookup: find which cell we're in. The row axis is offset by
+    // rolling_row_0 and wrapped over grid_height so it indexes the ABSOLUTE
+    // canvas row (visible_row + rolling_row_0), matching how bucket_prim files
+    // a rolling prim at (local_row + rolling_row) % grid_height. Without this,
+    // a prim scrolled by its rolling_row would be bucketed in a row the lookup
+    // never reads at its on-screen position. For non-rolling grids
+    // (rolling_row_0 == 0) the wrap is the identity (pixel_row < grid_height).
     let cell_x = u32(clamp(pixel_pos.x / cell_size.x, 0.0, f32(grid_width - 1u)));
-    let cell_y = u32(clamp(pixel_pos.y / cell_size.y, 0.0, f32(grid_height - 1u)));
+    let pixel_row = u32(clamp(pixel_pos.y / cell_size.y, 0.0, f32(grid_height - 1u)));
+    let cell_y = (pixel_row + uniforms.ydraw_ydraw_rolling_row_0) % grid_height;
     let cell_index = cell_y * grid_width + cell_x;
 
     // Read cell's primitive list from grid

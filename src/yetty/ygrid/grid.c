@@ -982,6 +982,7 @@ static struct yetty_ycore_void_result bucket_prim(struct yetty_ygrid_grid *g, ui
         return YETTY_OK_VOID();
     }
 
+    int grid_rows = (int)g->grid_rows;
     int col_min = (int)(p->min_x / cw);
     int col_max = (int)(p->max_x / cw);
     int row_min = (int)(p->min_y / ch);
@@ -995,21 +996,35 @@ static struct yetty_ycore_void_result bucket_prim(struct yetty_ygrid_grid *g, ui
     if (col_max >= (int)g->grid_cols) {
         col_max = (int)g->grid_cols - 1;
     }
-    if (row_max >= (int)g->grid_rows) {
-        row_max = (int)g->grid_rows - 1;
-    }
-    ydebug("ygrid: bucket prim_index=%u aabb=(%.1f,%.1f)-(%.1f,%.1f) cw=%.2f ch=%.2f → cells "
-           "(%d..%d, %d..%d)",
-           prim_index, p->min_x, p->min_y, p->max_x, p->max_y, cw, ch, col_min, col_max, row_min,
-           row_max);
-    if (col_max < col_min || row_max < row_min) {
+    if (col_max < col_min || row_max < row_min || grid_rows <= 0) {
         return YETTY_OK_VOID();
     }
 
+    /* Every prim is bucketed by its ABSOLUTE canvas row (local_row +
+     * rolling_row) wrapped over grid_rows — exactly mirroring the shader's
+     * (visible_row + rolling_row_0) % grid_rows lookup, so a prim scrolled by
+     * its rolling_row lands in the cell the shader reads at its on-screen
+     * position. For non-scrolling content (rolling_row == 0 and a view whose
+     * rolling_row_0 stays 0) the wrap is the identity. A prim taller than the
+     * whole grid wraps onto every row, so bucket it into all rows once instead
+     * of looping its (possibly enormous) local span. */
+    int row_span = row_max - row_min + 1;
+    if (row_span >= grid_rows) {
+        for (int cell_r = 0; cell_r < grid_rows; ++cell_r) {
+            for (int c = col_min; c <= col_max; ++c) {
+                struct yetty_ycore_void_result pr =
+                    cell_push(&g->cells[(size_t)cell_r * g->grid_cols + (size_t)c], prim_index);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "ygrid: cell_push");
+            }
+        }
+        return YETTY_OK_VOID();
+    }
     for (int r = row_min; r <= row_max; ++r) {
+        long abs_row = (long)r + (long)p->rolling_row;
+        int cell_r = (int)(((abs_row % grid_rows) + grid_rows) % grid_rows);
         for (int c = col_min; c <= col_max; ++c) {
             struct yetty_ycore_void_result pr =
-                cell_push(&g->cells[(size_t)r * g->grid_cols + (size_t)c], prim_index);
+                cell_push(&g->cells[(size_t)cell_r * g->grid_cols + (size_t)c], prim_index);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "ygrid: cell_push");
         }
     }
@@ -1809,8 +1824,22 @@ void yetty_ygrid_set_insert_rolling_row(struct yetty_ygrid_grid *grid, uint32_t 
 
 void yetty_ygrid_set_rolling_row_0(struct yetty_ygrid_grid *grid, uint32_t rolling_row_0)
 {
-    if (grid) {
-        grid->rolling_row_0 = rolling_row_0;
+    if (!grid || grid->rolling_row_0 == rolling_row_0) {
+        return;
+    }
+    grid->rolling_row_0 = rolling_row_0;
+    /* The scroll origin changed (e.g. wheel scrollback) but no records were
+     * added, so the figure's own dirty bit would stay clear and the dirty-driven
+     * compositor would skip this grid — freezing the rich content while the text
+     * scrolls. Mark it dirty so it re-renders at the new scroll position. */
+    struct yetty_yclass_object_ptr_result obj_r = ygrid_obj_from_body(grid);
+    if (YETTY_IS_ERR(obj_r)) {
+        yetty_ycore_error_destroy(obj_r.error);
+        return;
+    }
+    struct yetty_ycore_void_result dirty_r = yetty_yfigure_figure_dirty_set(obj_r.value, 1);
+    if (YETTY_IS_ERR(dirty_r)) {
+        yetty_ycore_error_destroy(dirty_r.error);
     }
 }
 
@@ -1897,6 +1926,18 @@ static struct yetty_ycore_void_result resize_grid_dims_if_needed(struct yetty_yg
     float ch = ygrid_content_extent_h(g, base_rect);
     struct yetty_ycore_rectangle content_rect = {{0.0f, 0.0f}, {cw, ch}};
     ygrid_dims_from_rect(content_rect, &want_cols, &want_rows);
+    /* Rolling-row content (terminal scrollback) MUST bucket at exactly the text
+     * cell height: the shader offsets each prim by rolling_row * cell_size.y
+     * (= ch/grid_rows), and the host reserves space + scrolls in text rows, so a
+     * mismatch makes figures render 1.7x off and drift. Pin the row count so
+     * ch/grid_rows == rolling_cell_h instead of the generic ~32px perf target.
+     * Columns keep the perf target — the X axis has no rolling. */
+    if (g->rolling_cell_h > 0.0f) {
+        uint32_t rows_for_text = (uint32_t)(ch / g->rolling_cell_h + 0.5f);
+        if (rows_for_text > 0u) {
+            want_rows = rows_for_text;
+        }
+    }
     if (want_cols == g->grid_cols && want_rows == g->grid_rows) {
         return YETTY_OK_VOID();
     }
@@ -1985,6 +2026,12 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
     float ch = ygrid_content_extent_h(g, base_rect);
     g->rs.uniforms[U_CELL_SIZE].vec2[0] = cw / (float)g->grid_cols;
     g->rs.uniforms[U_CELL_SIZE].vec2[1] = ch / (float)g->grid_rows;
+    if (g->rolling_cell_h > 0.0f) {
+        ydebug("XDIAGAL ygrid render: cell_size.y=%.3f rolling_cell_h=%.3f ch=%.1f grid_rows=%u "
+               "rect_h=%.1f content_scale=%.3f rolling_row_0=%u",
+               ch / (float)g->grid_rows, g->rolling_cell_h, ch, g->grid_rows, h, g->content_scale,
+               g->rolling_row_0);
+    }
     /* Rolling-row scroll origin (absolute top row); shader offsets each prim by
      * (prim.rolling_row - rolling_row_0) * cell_h. 0 for non-scrolling grids. */
     g->rs.uniforms[U_ROLLING_ROW_0].u32 = g->rolling_row_0;

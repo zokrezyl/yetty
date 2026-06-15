@@ -1075,11 +1075,13 @@ static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
         yetty_ydraw_drawable_iterator_init(&iter, sm, terminal->ydraw_registry);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, init_res, "terminal_ydraw: iterator init");
 
-    /* Tallest composite figure in this envelope (px, measured from the insert
-     * row's top). Used after ingestion to reserve that many terminal rows so
-     * the next output — and the next figure — lands below this one instead of
-     * overlapping. SDF / text records lay themselves out and reserve nothing. */
-    float figure_bottom_px = 0.0f;
+    /* Bottom extent of this envelope's drawn content (px, envelope-local, from
+     * the insert row's top). After ingestion the cursor is advanced past it so
+     * the next envelope's content (the next plot, the next PDF page, …) lands
+     * below instead of on top. Covers composites, SDF prims, and text alike —
+     * ycat ships one envelope per PDF page with y=0 origin, so without this the
+     * pages would all stack at the same row. */
+    float content_bottom_px = 0.0f;
 
     struct yetty_ycore_void_result result = YETTY_OK_VOID();
     for (;;) {
@@ -1104,14 +1106,29 @@ static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
             yetty_ycore_error_destroy(size_res.error);
             continue;
         }
-        if (yetty_ydraw_is_composite(data[0])) {
-            struct rectangle_result aabb = yetty_ydraw_composite_record_aabb(data);
-            if (YETTY_IS_OK(aabb)) {
-                if (aabb.value.max.y > figure_bottom_px) {
-                    figure_bottom_px = aabb.value.max.y;
+        /* Track the content's bottom for the space-reservation pass below. The
+         * FONT resource record ships glyph bytes, not drawn geometry, so it has
+         * no meaningful extent — skip it. Composites carry their bounds at a
+         * fixed payload offset; SDF / text records expose them via the entry
+         * ops aabb. */
+        if (data[0] != YETTY_YDRAW_RESOURCE_FONT) {
+            struct rectangle_result aabb;
+            int have_aabb = 0;
+            if (yetty_ydraw_is_composite(data[0])) {
+                aabb = yetty_ydraw_composite_record_aabb(data);
+                have_aabb = 1;
+            } else if (iter.command.entry.ops->aabb) {
+                aabb = iter.command.entry.ops->aabb(data);
+                have_aabb = 1;
+            }
+            if (have_aabb) {
+                if (YETTY_IS_OK(aabb)) {
+                    if (aabb.value.max.y > content_bottom_px) {
+                        content_bottom_px = aabb.value.max.y;
+                    }
+                } else {
+                    yetty_ycore_error_destroy(aabb.error);
                 }
-            } else {
-                yetty_ycore_error_destroy(aabb.error);
             }
         }
         struct yetty_ycore_void_result ar = yetty_ygrid_add_record_local(
@@ -1123,14 +1140,17 @@ static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
 
     yetty_ydraw_drawable_iterator_destroy(&iter);
 
-    /* Reserve vertical space for the tallest figure by advancing the libvterm
-     * cursor that many rows (newlines drive normal scrollback + rolling_row
-     * bookkeeping). Only the receiver knows the cell height, so this row count
-     * cannot be computed by the producer. */
-    if (YETTY_IS_OK(result) && figure_bottom_px > 0.0f) {
+    /* Reserve vertical space for this envelope's content by advancing the
+     * libvterm cursor that many rows (newlines drive normal scrollback +
+     * rolling_row bookkeeping). Only the receiver knows the cell height, so this
+     * row count cannot be computed by the producer. */
+    if (YETTY_IS_OK(result) && content_bottom_px > 0.0f) {
         if (text_cell.height > 0) {
             uint32_t cell_h = (uint32_t)text_cell.height;
-            uint32_t reserve_rows = ((uint32_t)figure_bottom_px + cell_h - 1u) / cell_h;
+            uint32_t reserve_rows = ((uint32_t)content_bottom_px + cell_h - 1u) / cell_h;
+            ydebug("XDIAGAL consume_bin: abs_row=%u content_bottom_px=%.1f text_cell_h=%.3f "
+                   "reserve_rows=%u",
+                   abs_row, content_bottom_px, text_cell.height, reserve_rows);
             if (reserve_rows > 0u) {
                 char newlines[256];
                 memset(newlines, '\n', sizeof(newlines));
@@ -2093,6 +2113,8 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
 
     terminal->cols = grid_size.cols;
     terminal->rows = grid_size.rows;
+    ydebug("XDIAGAL resize_grid: cols=%u rows=%u cell=%.3fx%.3f", grid_size.cols, grid_size.rows,
+           cell_size.width, cell_size.height);
 
     if (terminal->grid) {
         struct yetty_ycore_void_result r =
@@ -2157,6 +2179,8 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
                 yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)yg_fig - 1, new_rect);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, yg_rect_res,
                                 "yetty_yterminal_terminal_resize_grid: ydraw grid rect_set");
+            ydebug("XDIAGAL resize_grid: resizing ydraw_grid to cols=%u rows=%u rect_h=%.1f",
+                   grid_size.cols, grid_size.rows, new_rect.max.y - new_rect.min.y);
             struct yetty_ycore_void_result yg_resize_res =
                 yetty_ygrid_resize(terminal->ydraw_grid, grid_size.cols, grid_size.rows);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, yg_resize_res,
