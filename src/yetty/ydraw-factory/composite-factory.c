@@ -225,3 +225,13 @@ void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance)
     free(instance->buffer_data);
     free(instance);
 }
+
+struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_composite *instance,
+                                                            struct yetty_ydraw_target *target,
+                                                            float x, float y)
+{
+    if (!instance || !instance->render) {
+        return YETTY_OK_VOID();
+    }
+    return instance->render(instance, target, x, y);
+}

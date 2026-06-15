@@ -126,6 +126,18 @@ static void atlas_grow(struct yetty_yfont_ms_msdf_font *f)
 
     memset(p + old_sz, 0, new_sz - old_sz);
     f->atlas_pixels = p;
+
+    /* Every already-placed glyph's V coordinates were normalized against the
+     * OLD atlas height (uv = ay / atlas_height). Growing the atlas changes the
+     * denominator, so without rescaling, previously-loaded glyphs would sample
+     * the wrong vertical region after the first grow. Rescale all existing slots
+     * by old/new so they keep pointing at the same pixels. U is normalized
+     * against atlas_width, which atlas_grow never changes — leave it alone. */
+    float v_scale = (float)f->atlas_height / (float)new_h;
+    for (uint32_t slot = 0; slot < f->next_slot; ++slot) {
+        f->meta[slot].uv_min_y *= v_scale;
+        f->meta[slot].uv_max_y *= v_scale;
+    }
     f->atlas_height = new_h;
 }
 

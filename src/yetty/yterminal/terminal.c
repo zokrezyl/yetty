@@ -33,6 +33,13 @@
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-core/cmds.h>
+#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-core/drawable-iterator.h>
+#include <yetty/ydraw-core/drawable-list-registry.h>
+#include <yetty/ydraw-core/font-resource.h>
+#include <yetty/ydraw-core/text-drawable-list.h>
+#include <yetty/ysdf/handler.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yterminal/terminal.h>
@@ -126,6 +133,9 @@ struct yetty_yterminal_terminal {
      * fn; the handler recovers the terminal by dereferencing it. */
     struct yetty_yterminal_terminal *inset_handler_self;
 
+    /* Same self-back-pointer trick for the YDRAW handler coroutine. */
+    struct yetty_yterminal_terminal *ydraw_handler_self;
+
     /* Reusable read buffer handed back from terminal_pty_pipe_alloc.
      * Lazily allocated on the first read; freed in destroy. */
     char *pty_read_buf;
@@ -184,6 +194,11 @@ struct yetty_yterminal_terminal {
      * borrows the same pointer via figure_args (below) so they all share
      * the same per-type pipeline cache. */
     struct yetty_ydraw_composite_factory *composite_factory;
+
+    /* Drawable-list registry for parsing inbound YDRAW_BIN record streams into
+     * the content grid's anchored rich model. Same handler set ygrid uses, so
+     * the iterator can step SDF primitives and composite (FAM) records. */
+    struct yetty_ydraw_drawable_list_registry *ydraw_registry;
 
     /* Bundle handed as registry user-data on every kind ygrid handles.
      * Lives on the terminal because the registry stores a pointer to it,
@@ -997,6 +1012,129 @@ static struct yetty_ycore_void_result terminal_content_inset_process_input(
     }
 }
 
+/* Ingest one YDRAW_BIN envelope into the content grid's anchored rich model.
+ * Records are streamed via the drawable iterator; each ADD is anchored at the
+ * current cursor row (where the producer placed its drawing). Composite records
+ * (FAM, type >= 0x80000000 — yplot/yimage/…) are built through the shared
+ * factory and attached; SDF primitive records are copied into the line arena.
+ * Both get a downward ref (rel_line 0) on the anchor cell so the model is
+ * consistent for the render walk. */
+static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
+    struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)
+{
+    uint32_t anchor_row = 0, anchor_col = 0, cursor_visible = 0;
+    yetty_yvterm_vterm_cursor(terminal->grid, &anchor_row, &anchor_col, &cursor_visible);
+
+    struct yetty_ydraw_drawable_iterator iter = {0};
+    struct yetty_ycore_void_result init_res =
+        yetty_ydraw_drawable_iterator_init(&iter, sm, terminal->ydraw_registry);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, init_res, "terminal_ydraw: iterator init");
+
+    struct yetty_ycore_void_result result = YETTY_OK_VOID();
+    for (;;) {
+        struct yetty_ydraw_drawable_iterator_status_result step =
+            yetty_ydraw_drawable_iterator_next(&iter);
+        if (YETTY_IS_ERR(step)) {
+            result = YETTY_ERR(yetty_ycore_void, "terminal_ydraw: iterator next", step);
+            break;
+        }
+        if (step.value == YETTY_YDRAW_ITERATOR_EOE) {
+            break;
+        }
+        if (step.value != YETTY_YDRAW_ITERATOR_OK ||
+            iter.command.kind != YETTY_YDRAW_COMMAND_ADD) {
+            continue; /* DELETE/UPDATE not modelled yet — skip cleanly */
+        }
+        const uint32_t *data = iter.command.entry.data;
+        if (!data || !iter.command.entry.ops || !iter.command.entry.ops->size) {
+            continue;
+        }
+        struct yetty_ycore_size_result size_res = iter.command.entry.ops->size(data);
+        if (YETTY_IS_ERR(size_res)) {
+            yetty_ycore_error_destroy(size_res.error);
+            continue;
+        }
+        size_t record_bytes = size_res.value;
+        uint32_t type = data[0];
+
+        if (yetty_ydraw_is_composite(type)) {
+            struct yetty_ydraw_composite_ptr_result comp_res =
+                yetty_ydraw_composite_factory_create_instance(terminal->composite_factory, data,
+                                                              record_bytes, anchor_row);
+            if (YETTY_IS_ERR(comp_res)) {
+                yetty_ycore_error_destroy(comp_res.error);
+                continue; /* unknown composite type — skip, keep parsing */
+            }
+            struct yetty_ycore_uint32_result idx_res =
+                yetty_yvterm_vterm_attach_composite(terminal->grid, anchor_row, comp_res.value);
+            if (YETTY_IS_ERR(idx_res)) {
+                yetty_ydraw_composite_destroy(comp_res.value);
+                yetty_ycore_error_destroy(idx_res.error);
+                continue;
+            }
+            struct yetty_ycore_void_result ref_res = yetty_yvterm_vterm_add_composite_ref(
+                terminal->grid, anchor_row, anchor_col, /*rel_line=*/0,
+                (uint16_t)idx_res.value);
+            if (YETTY_IS_ERR(ref_res)) {
+                yetty_ycore_error_destroy(ref_res.error);
+            }
+        } else {
+            uint32_t word_count = (uint32_t)(record_bytes / sizeof(uint32_t));
+            struct yetty_ycore_uint32_result idx_res = yetty_yvterm_vterm_append_primitive(
+                terminal->grid, anchor_row, data, word_count);
+            if (YETTY_IS_ERR(idx_res)) {
+                yetty_ycore_error_destroy(idx_res.error);
+                continue;
+            }
+            struct yetty_ycore_void_result ref_res = yetty_yvterm_vterm_add_primitive_ref(
+                terminal->grid, anchor_row, anchor_col, /*rel_line=*/0,
+                (uint16_t)idx_res.value);
+            if (YETTY_IS_ERR(ref_res)) {
+                yetty_ycore_error_destroy(ref_res.error);
+            }
+        }
+    }
+
+    yetty_ydraw_drawable_iterator_destroy(&iter);
+    return result;
+}
+
+/* Wire handler for the YDRAW_* DCS codes: CLEAR drops all anchored rich
+ * content, BIN/OVERLAY stream records into the model. Loops across envelopes
+ * (one persistent coroutine), draining CLEAR's empty body and yielding between
+ * envelopes so the SM can advance. */
+static struct yetty_ycore_void_result terminal_ydraw_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_yterminal_terminal *terminal = *(struct yetty_yterminal_terminal **)userdata;
+    for (;;) {
+        int code = yetty_ywire_wire_statemachine_code(sm);
+        if (code == YETTY_DCS_YDRAW_CLEAR) {
+            struct yetty_ycore_void_result clear_res =
+                yetty_yvterm_vterm_clear_rich_all(terminal->grid);
+            if (YETTY_IS_ERR(clear_res)) {
+                yetty_ycore_error_destroy(clear_res.error);
+            }
+            /* CLEAR has no body; drain the terminator so the SM advances. */
+            while (!yetty_ywire_wire_statemachine_at_end(sm)) {
+                uint8_t drain[16];
+                struct yetty_ycore_size_result drain_res =
+                    yetty_ywire_wire_statemachine_read(sm, drain, sizeof(drain));
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, drain_res, "terminal_ydraw: clear drain");
+                if (drain_res.value == 0 && !yetty_ywire_wire_statemachine_at_end(sm)) {
+                    yetty_yplatform_coro_yield();
+                }
+            }
+        } else {
+            struct yetty_ycore_void_result bin_res = terminal_ydraw_consume_bin(terminal, sm);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, bin_res, "terminal_ydraw: consume bin");
+        }
+        terminal->context.yetty_context.event_loop->ops->request_render(
+            terminal->context.yetty_context.event_loop);
+        yetty_yplatform_coro_yield();
+    }
+}
+
 /* yetty_yterminal_mouse_sub_fn impl — fired by the text-layer when libvterm
  * flips DEC mode 1500/1501. Latch state on the terminal, and on the
  * rising edge ship the current pane pixel size to the client via
@@ -1503,6 +1641,37 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
             }
         }
     }
+
+    /* Drawable-list registry for ingesting inbound YDRAW_BIN record streams.
+     * Same handler set ygrid registers, so the iterator can step SDF primitives,
+     * cmd/font/text-list records, and composite (FAM) records alike. */
+    {
+        struct yetty_ydraw_drawable_list_registry_ptr_result reg_res =
+            yetty_ydraw_drawable_list_registry_create();
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, reg_res,
+                            "terminal_create: ydraw registry create");
+        terminal->ydraw_registry = reg_res.value;
+        yetty_ydraw_drawable_list_registry_set_default(terminal->ydraw_registry, yetty_ysdf_handler);
+        struct yetty_ycore_void_result hr;
+        hr = yetty_ydraw_drawable_list_registry_add(terminal->ydraw_registry, YETTY_YDRAW_CMD_BASE,
+                                                    YETTY_YDRAW_CMD_END, yetty_ydraw_cmd_handler);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr, "terminal_create: ydraw registry cmd");
+        hr = yetty_ydraw_drawable_list_registry_add(terminal->ydraw_registry,
+                                                    YETTY_YDRAW_RESOURCE_FONT,
+                                                    YETTY_YDRAW_RESOURCE_FONT,
+                                                    yetty_ydraw_font_resource_handler);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr, "terminal_create: ydraw registry font");
+        hr = yetty_ydraw_drawable_list_registry_add(terminal->ydraw_registry,
+                                                    YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
+                                                    YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
+                                                    yetty_ydraw_text_drawable_list_handler);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr, "terminal_create: ydraw registry text");
+        hr = yetty_ydraw_drawable_list_registry_add(terminal->ydraw_registry,
+                                                    YETTY_YDRAW_COMPOSITE_TYPE_BASE, 0xFFFFFFFFu,
+                                                    yetty_ydraw_composite_record_handler);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr, "terminal_create: ydraw registry complex");
+    }
+
     terminal->figure_args.default_font = terminal->compositor_font;
     terminal->figure_args.composite_factory = terminal->composite_factory;
 
@@ -1637,6 +1806,24 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: register content inset");
     ydebug("terminal_create: content inset registered for DCS %d", YETTY_OSC_CS_CONTENT_INSET);
 
+    /* Anchored rich content (yplot/yimage/SDF drawings) arrives as YDRAW DCS
+     * envelopes from producers (yplot, ycat, …). One handler coroutine (distinct
+     * userdata) serves CLEAR + BIN + OVERLAY, parsing records into the content
+     * grid's per-line rich model, which the grid figure then renders. */
+    terminal->ydraw_handler_self = terminal;
+    {
+        const int ydraw_codes[] = {YETTY_DCS_YDRAW_CLEAR, YETTY_DCS_YDRAW_BIN,
+                                   YETTY_DCS_YDRAW_OVERLAY};
+        for (size_t i = 0; i < sizeof(ydraw_codes) / sizeof(ydraw_codes[0]); ++i) {
+            rr = yetty_ywire_wire_statemachine_register(
+                terminal->sm, YETTY_YWIRE_ENVELOPE_DCS, ydraw_codes[i], /*has_args=*/1,
+                terminal_ydraw_process_input, &terminal->ydraw_handler_self);
+            YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr,
+                                "terminal_create: register ydraw handler");
+        }
+    }
+    ydebug("terminal_create: ydraw handlers registered (CLEAR/BIN/OVERLAY)");
+
     /* This process is about to act as a yclass RPC / remote-object
      * server, so bring up the per-module discovery hooks explicitly.
      * The accessor lookups feed yetty_yclass_by_name()'s registry-miss
@@ -1742,6 +1929,10 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
     if (terminal->composite_factory) {
         yetty_ydraw_composite_factory_destroy(terminal->composite_factory);
         terminal->composite_factory = NULL;
+    }
+    if (terminal->ydraw_registry) {
+        yetty_ydraw_drawable_list_registry_destroy(terminal->ydraw_registry);
+        terminal->ydraw_registry = NULL;
     }
     if (terminal->compositor_font) {
         terminal->compositor_font->ops->destroy(terminal->compositor_font);

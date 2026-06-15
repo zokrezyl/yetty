@@ -65,6 +65,12 @@ struct vterm_uniforms {
  * header rather than including a (conflicting) defining header. */
 struct yetty_ydraw_composite;
 void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance);
+/* Render an anchored composite at a pixel origin — hand-declared free function
+ * (defined in ydraw-factory) so this TU can draw composites without including
+ * the conflicting defining header. */
+struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_composite *instance,
+                                                            struct yetty_ydraw_target *target,
+                                                            float x, float y);
 
 /* The render slot takes the render target only by pointer and never derefs it
  * here, so a forward decl suffices — avoids pulling the webgpu-heavy
@@ -382,8 +388,16 @@ static void roll_up(struct yetty_yvterm_grid *grid, uint32_t count)
 }
 
 /* Move one cell's full state — text plus borrowed primitive/composite refs.
- * Best-effort on the borrow arrays: a libvterm callback has nowhere to
- * propagate an allocation failure, so it copies what fits. */
+ *
+ * Borrowed refs name their anchor relative to the *covered* row
+ * (anchor = covered_row + rel_line). Moving a cell to a different row must keep
+ * the absolute anchor fixed, so rel_line is rebased by (src_row - dst_row). A
+ * ref whose rebased rel_line would point above the cell (negative — violating
+ * the downward-anchor convention) or past the visible grid is dropped rather
+ * than left dangling. Line-owned primitive/composite *storage* is not touched
+ * here: it lives on its anchor line and is addressed by index, so a cell move
+ * only needs to keep the references consistent. Best-effort on allocation: a
+ * libvterm callback cannot propagate an error, so it keeps what fits. */
 static void move_cell(struct yetty_yvterm_grid *grid, uint32_t dst_row, uint32_t dst_col,
                       uint32_t src_row, uint32_t src_col)
 {
@@ -391,23 +405,40 @@ static void move_cell(struct yetty_yvterm_grid *grid, uint32_t dst_row, uint32_t
 
     struct yetty_yvterm_drawable_refs *dst = refs_at(grid, dst_row, dst_col);
     struct yetty_yvterm_drawable_refs *src = refs_at(grid, src_row, src_col);
+    int rel_delta = (int)src_row - (int)dst_row;
     dst->primitive_ref_count = 0;
     dst->composite_ref_count = 0;
 
     struct yetty_ycore_void_result pr = ensure_primitive_refs(dst, src->primitive_ref_count);
     if (YETTY_IS_OK(pr)) {
-        memcpy(dst->primitive_refs, src->primitive_refs,
-               (size_t)src->primitive_ref_count * sizeof(*dst->primitive_refs));
-        dst->primitive_ref_count = src->primitive_ref_count;
+        for (uint16_t i = 0; i < src->primitive_ref_count; ++i) {
+            int new_rel = (int)src->primitive_refs[i].rel_line + rel_delta;
+            if (new_rel < 0 || new_rel > UINT16_MAX ||
+                dst_row + (uint32_t)new_rel >= grid->visible_rows) {
+                continue;
+            }
+            dst->primitive_refs[dst->primitive_ref_count].rel_line = (uint16_t)new_rel;
+            dst->primitive_refs[dst->primitive_ref_count].index_in_list =
+                src->primitive_refs[i].index_in_list;
+            dst->primitive_ref_count++;
+        }
     } else {
         yetty_ycore_error_destroy(pr.error);
     }
 
     struct yetty_ycore_void_result cr = ensure_composite_refs(dst, src->composite_ref_count);
     if (YETTY_IS_OK(cr)) {
-        memcpy(dst->composite_refs, src->composite_refs,
-               (size_t)src->composite_ref_count * sizeof(*dst->composite_refs));
-        dst->composite_ref_count = src->composite_ref_count;
+        for (uint16_t i = 0; i < src->composite_ref_count; ++i) {
+            int new_rel = (int)src->composite_refs[i].rel_line + rel_delta;
+            if (new_rel < 0 || new_rel > UINT16_MAX ||
+                dst_row + (uint32_t)new_rel >= grid->visible_rows) {
+                continue;
+            }
+            dst->composite_refs[dst->composite_ref_count].rel_line = (uint16_t)new_rel;
+            dst->composite_refs[dst->composite_ref_count].index_in_list =
+                src->composite_refs[i].index_in_list;
+            dst->composite_ref_count++;
+        }
     } else {
         yetty_ycore_error_destroy(cr.error);
     }
@@ -451,6 +482,17 @@ static int cb_putglyph(VTermGlyphInfo *info, VTermPos pos, void *user)
         next->width = 0;
         next->flags = 0;
         clear_refs(refs_at(grid, (uint32_t)pos.row, (uint32_t)pos.col + 1u));
+    }
+
+    /* If this row anchors owned primitives/composites, writing text over it
+     * invalidates that rich content: release the owned storage and drop every
+     * borrowed ref (on any row) that pointed at this anchor, so nothing dangles.
+     * primitive_count/composite_count drop to 0, so later glyphs on the same
+     * line skip this cheaply. */
+    struct yetty_yvterm_line *line = line_at(grid, (uint32_t)pos.row);
+    if (line->primitive_count || line->composite_count) {
+        clear_line_rich(line, grid->cols);
+        drop_refs_to_anchor(grid, (uint32_t)pos.row);
     }
 
     mark_dirty_row(grid, (uint32_t)pos.row);
@@ -535,6 +577,14 @@ static int cb_erase(VTermRect rect, int selective, void *user)
             blank_cell(cell_at(grid, (uint32_t)row, (uint32_t)col), grid->default_fg,
                        grid->default_bg);
             clear_refs(refs_at(grid, (uint32_t)row, (uint32_t)col));
+        }
+        /* Erasing cells on a row that anchors owned rich content invalidates
+         * that content too — release it and drop refs pointing here, mirroring
+         * cb_putglyph's anchor-line invalidation. */
+        struct yetty_yvterm_line *line = line_at(grid, (uint32_t)row);
+        if (line->primitive_count || line->composite_count) {
+            clear_line_rich(line, grid->cols);
+            drop_refs_to_anchor(grid, (uint32_t)row);
         }
         mark_dirty_row(grid, (uint32_t)row);
     }
@@ -1000,22 +1050,47 @@ static const char *vterm_text_wgsl(void)
         "    if (px.x < 0.0 || px.y < 0.0 || px.x >= grid_w || px.y >= grid_h) {\n"
         "        return vec4<f32>(0.0,0.0,0.0,1.0);\n"
         "    }\n"
-        "    let col = floor(px.x / uni.cell_size.x);\n"
-        "    let row = floor(px.y / uni.cell_size.y);\n"
-        "    let slot = (u32(row) + uni.root_row) % u32(uni.grid_size.y);\n"
-        "    let cell_index = slot * u32(uni.grid_size.x) + u32(col);\n"
-        "    let local = vec2<f32>(px.x - col*uni.cell_size.x, px.y - row*uni.cell_size.y);\n"
-        "    let glyph = cells[cell_index*4u + 0u];\n"
+        "    let colf = floor(px.x / uni.cell_size.x);\n"
+        "    let rowf = floor(px.y / uni.cell_size.y);\n"
+        "    let col = u32(colf);\n"
+        "    let row = u32(rowf);\n"
+        "    let gcols = u32(uni.grid_size.x);\n"
+        "    let slot = (row + uni.root_row) % u32(uni.grid_size.y);\n"
+        "    let cell_index = slot * gcols + col;\n"
+        "    var local = vec2<f32>(px.x - colf*uni.cell_size.x, px.y - rowf*uni.cell_size.y);\n"
+        "    var glyph = cells[cell_index*4u + 0u];\n"
         "    let w1 = cells[cell_index*4u + 1u];\n"
         "    let w2 = cells[cell_index*4u + 2u];\n"
+        "    let attrs = (w2 >> 16u) & 0xFFFFu;\n"
         "    let fg = vec3<f32>(f32(w1 & 0xFFu)/255.0, f32((w1>>8u)&0xFFu)/255.0, "
         "f32((w1>>16u)&0xFFu)/255.0);\n"
         "    let bg = vec3<f32>(f32((w1>>24u)&0xFFu)/255.0, f32(w2 & 0xFFu)/255.0, "
         "f32((w2>>8u)&0xFFu)/255.0);\n"
+        /* A wide glyph occupies two cells: the head (width 2) holds the glyph,
+         * the spill cell (width 0) to its right is blank. Continue sampling the
+         * head glyph into the spill cell, shifted one cell to the right, so the
+         * right half of CJK/double-width glyphs is drawn. */
+        "    if ((cells[cell_index*4u + 3u] & 0xFFu) == 0u && col > 0u) {\n"
+        "        let head = slot * gcols + (col - 1u);\n"
+        "        if ((cells[head*4u + 3u] & 0xFFu) == 2u) {\n"
+        "            glyph = cells[head*4u + 0u];\n"
+        "            local.x = local.x + uni.cell_size.x;\n"
+        "        }\n"
+        "    }\n"
         "    var alpha = 0.0;\n"
         "    if (glyph != 0u) { alpha = sample_glyph(glyph, local); }\n"
-        "    let is_cursor = uni.cursor_visible != 0u && u32(col) == uni.cursor_col && "
-        "u32(row) == uni.cursor_row;\n"
+        /* Underline (single 0x2 or double 0x4) sits just below the baseline;
+         * strikethrough (0x40) crosses the cell middle. Both paint at full
+         * coverage so they show on blank cells too. */
+        "    let line_h = max(1.0, uni.cell_size.y * 0.07);\n"
+        "    let ul_y = uni.baseline_y + max(1.0, uni.cell_size.y * 0.10);\n"
+        "    if ((attrs & 0x6u) != 0u && local.y >= ul_y && local.y < ul_y + line_h) "
+        "{ alpha = 1.0; }\n"
+        "    let st_y = uni.cell_size.y * 0.5;\n"
+        "    if ((attrs & 0x40u) != 0u && local.y >= st_y && local.y < st_y + line_h) "
+        "{ alpha = 1.0; }\n"
+        "    let is_cursor = uni.cursor_visible != 0u && col == uni.cursor_col && "
+        "row == uni.cursor_row;\n"
         "    var composed = mix(bg, fg, alpha);\n"
         "    if (is_cursor) {\n"
         "        composed = mix(fg, bg, alpha);\n" /* inverted block: fg fill, glyph punched in bg */
@@ -1025,27 +1100,35 @@ static const char *vterm_text_wgsl(void)
     return src;
 }
 
-static uint32_t vterm_resolve_glyph(struct yetty_yvterm_vterm *vterm, uint32_t codepoint)
+/* Resolve a codepoint to an atlas glyph index for the given style. The styled
+ * lookup lazy-loads the (style, codepoint) slot on demand, falling back to the
+ * Regular face when a bold/italic CDB variant is absent. */
+static uint32_t vterm_resolve_glyph(struct yetty_yvterm_vterm *vterm, uint32_t codepoint,
+                                    enum yetty_yfont_ms_style style)
 {
     if (!vterm->font || codepoint == 0) {
         return 0;
     }
-    struct uint32_result gi = vterm->font->ops->get_glyph_index(vterm->font, codepoint);
-    if (YETTY_IS_OK(gi)) {
-        return gi.value;
-    }
-    yetty_ycore_error_destroy(gi.error);
-    struct yetty_ycore_void_result lr = vterm->font->ops->load_glyphs(vterm->font, &codepoint, 1);
-    if (YETTY_IS_ERR(lr)) {
-        yetty_ycore_error_destroy(lr.error);
-        return 0;
-    }
-    gi = vterm->font->ops->get_glyph_index(vterm->font, codepoint);
+    struct uint32_result gi =
+        vterm->font->ops->get_glyph_index_styled(vterm->font, codepoint, style);
     if (YETTY_IS_OK(gi)) {
         return gi.value;
     }
     yetty_ycore_error_destroy(gi.error);
     return 0;
+}
+
+/* Map cell text attributes to a font style variant (bold/italic combinations). */
+static enum yetty_yfont_ms_style vterm_cell_style(uint16_t attrs)
+{
+    int style = YETTY_YFONT_MS_STYLE_REGULAR;
+    if (attrs & YETTY_YVTERM_ATTR_BOLD) {
+        style |= YETTY_YFONT_MS_STYLE_BOLD;
+    }
+    if (attrs & YETTY_YVTERM_ATTR_ITALIC) {
+        style |= YETTY_YFONT_MS_STYLE_ITALIC;
+    }
+    return (enum yetty_yfont_ms_style)style;
 }
 
 /* Pack one model line into out[cols*4] in the GPU layout the shader reads. */
@@ -1055,7 +1138,12 @@ static void vterm_pack_line(struct yetty_yvterm_vterm *vterm, struct yetty_yvter
     uint32_t cols = vterm->grid.cols;
     for (uint32_t col = 0; col < cols; ++col) {
         struct yetty_yvterm_text_cell *cell = &line->text_cells[col];
-        uint32_t glyph = cell->codepoint ? vterm_resolve_glyph(vterm, cell->codepoint) : 0u;
+        /* Concealed cells render their background only — resolve no glyph.
+         * Bold/italic pick a styled atlas slot via the cell attributes. */
+        uint32_t glyph = 0u;
+        if (cell->codepoint && !(cell->attrs & YETTY_YVTERM_ATTR_CONCEAL)) {
+            glyph = vterm_resolve_glyph(vterm, cell->codepoint, vterm_cell_style(cell->attrs));
+        }
         uint32_t fg = cell->fg;
         uint32_t bg = cell->bg;
         uint32_t fr = fg & 0xFFu, fgr = (fg >> 8) & 0xFFu, fb = (fg >> 16) & 0xFFu;
@@ -1064,7 +1152,7 @@ static void vterm_pack_line(struct yetty_yvterm_vterm *vterm, struct yetty_yvter
         words[0] = glyph;
         words[1] = fr | (fgr << 8) | (fb << 16) | (br << 24);
         words[2] = bgr | (bb << 8) | ((uint32_t)cell->attrs << 16);
-        words[3] = 0u;
+        words[3] = cell->width;
     }
 }
 
@@ -1576,7 +1664,41 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     wgpuCommandBufferRelease(cmd);
     wgpuCommandEncoderRelease(enc);
 
-    /* Uploaded — clear model dirty now that the renderer has consumed it. */
+    /* Rich-content pass: anchored composites (yplot/yimage/… wrapped as
+     * ydraw composites) scroll with the text. Whatever line currently sits at
+     * visible row R draws its owned composites at that row's pixel origin, on
+     * top of the text (each composite runs its own LoadOp_Load pass). The
+     * vertical scroll offset + visual zoom match the text mapping. This is
+     * consumed in the SAME render that clears the dirty flags below, so rich
+     * updates are never dropped.
+     *
+     * NOTE: raw SDF *primitives* stored in the per-line arena are not drawn
+     * here yet — that needs the ydraw SDF grid/binder pipeline (the deleted
+     * ydraw-scrolling-layer). Composites cover the common anchored-figure case. */
+    float zoom = vterm->visual_zoom_scale > 0.0f ? vterm->visual_zoom_scale : 1.0f;
+    for (uint32_t row = 0; row < grid->visible_rows; ++row) {
+        struct yetty_yvterm_line *anchor = line_at(grid, row);
+        if (anchor->composite_count == 0) {
+            continue;
+        }
+        float comp_x = rect.min.x + vterm->visual_zoom_offset_x;
+        float comp_y = rect.min.y + vterm->visual_zoom_offset_y +
+                       (float)row * vterm->cell_size.height * zoom;
+        for (uint32_t ci = 0; ci < anchor->composite_count; ++ci) {
+            struct yetty_ydraw_composite *comp = anchor->composites[ci];
+            if (!comp) {
+                continue;
+            }
+            struct yetty_ycore_void_result cr =
+                yetty_ydraw_composite_render(comp, target, comp_x, comp_y);
+            if (YETTY_IS_ERR(cr)) {
+                yetty_ycore_error_destroy(cr.error);
+            }
+        }
+    }
+
+    /* Uploaded — clear model dirty now that the renderer has consumed both the
+     * text plane and the anchored composites. */
     for (uint32_t i = 0; i < grid->line_count; ++i) {
         grid->lines[i].dirty = 0;
     }
