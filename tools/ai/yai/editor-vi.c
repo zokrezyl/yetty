@@ -228,6 +228,8 @@ static int vi_normal_cmd(struct yai_app *app, struct yetty_yai_vi *vi, char byte
         return editor_ops_yank(app) ? YAI_EDIT_CHANGED : YAI_EDIT_NONE;
     case 'P': /* paste before the cursor */
         return editor_ops_yank(app) ? YAI_EDIT_CHANGED : YAI_EDIT_NONE;
+    case 'u': /* undo the previous edit; repeat to walk further back */
+        return editor_ops_undo_pop(app) ? YAI_EDIT_CHANGED : YAI_EDIT_NONE;
     case '.': { /* repeat the last text-changing command */
         int action = YAI_EDIT_NONE;
         for (int index = 0; index < vi->repeat_len; index++) {
@@ -294,6 +296,12 @@ static struct yetty_ycore_int_result vi_feed_byte(struct yetty_yclass_ctx *ctx,
         vi->pending_op = 0;
     }
 
+    /* Snapshot the line before this keystroke mutates it, for undo. */
+    char undo_pre[sizeof(app->stdin_buf)];
+    size_t undo_pre_len = app->stdin_len;
+    size_t undo_pre_cursor = app->stdin_cursor;
+    memcpy(undo_pre, app->stdin_buf, undo_pre_len);
+
     char final_byte = 0;
     int param = 0;
     int status = editor_ops_csi(app, (char)byte, &final_byte, &param);
@@ -323,7 +331,7 @@ static struct yetty_ycore_int_result vi_feed_byte(struct yetty_yclass_ctx *ctx,
                  * if it changed text and stayed in normal mode (an edit
                  * that drops into insert can't be replayed verbatim). */
                 if (action == YAI_EDIT_CHANGED && vi->normal && (char)byte != '.' &&
-                    vi->acc_len > 0) {
+                    (char)byte != 'u' && vi->acc_len > 0) {
                     memcpy(vi->repeat, vi->acc, (size_t)vi->acc_len);
                     vi->repeat_len = vi->acc_len;
                 }
@@ -333,6 +341,24 @@ static struct yetty_ycore_int_result vi_feed_byte(struct yetty_yclass_ctx *ctx,
             action = vi_insert(app, vi, (char)byte);
         }
         break;
+    }
+
+    /* Undo bookkeeping. `u` is the pop itself, excluded here. A text change
+     * opens (or continues) the current group and marks it dirty; resolving
+     * back to NORMAL mode commits it — so a normal-mode command is one undo
+     * step, and an insert session (group stays open until ESC) collapses
+     * into a single step. Line resets (submit / cancel) clear the stack. */
+    if ((char)byte != 'u') {
+        if (action == YAI_EDIT_CHANGED) {
+            editor_ops_undo_begin(app, undo_pre, undo_pre_len, undo_pre_cursor);
+            editor_ops_undo_mark_dirty(app);
+        }
+        if (vi->normal) {
+            editor_ops_undo_commit(app);
+        }
+    }
+    if (action == YAI_EDIT_SUBMIT || action == YAI_EDIT_INTERRUPT || action == YAI_EDIT_EOF) {
+        editor_ops_undo_clear(app);
     }
 
     snprintf(app->edit_status, sizeof(app->edit_status), "%s", vi->normal ? "[N]" : "[I]");

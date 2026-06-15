@@ -301,10 +301,36 @@ static int terminal_rows(void)
     return size.ws_row;
 }
 
+/* Display columns of `s`: one cell per UTF-8 codepoint, skipping CSI
+ * escape sequences so the bar's embedded color codes don't count toward
+ * width. */
+static int text_hud_cols(const char *s)
+{
+    int cols = 0;
+    for (const unsigned char *cursor = (const unsigned char *)s; *cursor;) {
+        if (cursor[0] == 0x1b && cursor[1] == '[') {
+            cursor += 2;
+            while (*cursor && (*cursor < '@' || *cursor > '~')) {
+                cursor++;
+            }
+            if (*cursor) {
+                cursor++;
+            }
+            continue;
+        }
+        if ((*cursor & 0xC0) != 0x80) {
+            cols++;
+        }
+        cursor++;
+    }
+    return cols;
+}
+
 /* Redraw the text-HUD bar on the last terminal row (reserved by the
  * DECSTBM scroll region). Absolute-positioned and cursor-preserving, so
- * it can refresh independently of the scrolling conversation above. One
- * row only — clipped to `columns` codepoints so it never wraps. */
+ * it can refresh independently of the scrolling conversation above. The
+ * row is a dark-mint band: bright-mint activity on the left, the
+ * (self-colored) stats on the right, mint background filling the gap. */
 static struct yetty_ycore_void_result text_hud_redraw(struct yai_renderer *renderer)
 {
     if (!renderer->text_hud) {
@@ -315,29 +341,21 @@ static struct yetty_ycore_void_result text_hud_redraw(struct yai_renderer *rende
     if (rows < 2 || columns < 2) {
         return YETTY_OK_VOID();
     }
-    char line[1024];
-    int left_cols = (int)count_chars(renderer->hud_state, strlen(renderer->hud_state));
-    int right_cols = (int)count_chars(renderer->hud_stats, strlen(renderer->hud_stats));
+    int left_cols = text_hud_cols(renderer->hud_state);
+    int right_cols = text_hud_cols(renderer->hud_stats);
     int gap = columns - left_cols - right_cols;
+    /* Save cursor, jump to the reserved last row, clear it, then paint the
+     * mint band. left + gap + right == columns (gap path), so the dark
+     * mint background fills the whole row. */
+    printf("\033[s\033[%d;1H\033[2K" YAI_HUD_BG, rows);
+    printf(YAI_MINT_BRIGHT "%s" YAI_FG_DEFAULT, renderer->hud_state);
     if (gap >= 1) {
-        snprintf(line, sizeof(line), "%s%*s%s", renderer->hud_state, gap, "", renderer->hud_stats);
+        printf("%*s", gap, "");
     } else {
-        snprintf(line, sizeof(line), "%s  %s", renderer->hud_state, renderer->hud_stats);
+        fputs("  ", stdout);
     }
-    size_t len = strlen(line);
-    size_t bytes = 0;
-    size_t chars = 0;
-    while (bytes < len && chars < (size_t)columns) {
-        bytes++;
-        while (bytes < len && ((unsigned char)line[bytes] & 0xC0) == 0x80) {
-            bytes++;
-        }
-        chars++;
-    }
-    /* Save cursor, jump to the reserved last row, paint, restore. */
-    printf("\033[s\033[%d;1H\033[2K\033[7m ", rows);
-    fwrite(line, 1, bytes, stdout);
-    fputs("\033[0m\033[u", stdout);
+    fputs(renderer->hud_stats, stdout);
+    fputs(YAI_RESET "\033[u", stdout);
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "text_hud_redraw: flush");
     return YETTY_OK_VOID();

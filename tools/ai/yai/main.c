@@ -210,6 +210,124 @@ static int env_int(const char *name, int fallback)
     return (int)strtol(value, NULL, 10);
 }
 
+/*---------------------------------------------------------------------------
+ * Persisted config — standard XDG path. Config is otherwise environment-
+ * driven (YAI_* vars the engines read at spawn); persistence just mirrors
+ * those to a file: loaded into the environment at startup (without
+ * clobbering a value the shell already set, so an explicit env/CLI choice
+ * still wins), and rewritten whenever the config changes and on exit.
+ *---------------------------------------------------------------------------*/
+
+/* $XDG_CONFIG_HOME/yai/config, else $HOME/.config/yai/config. Returns 0 on
+ * success, -1 if neither base directory is known. */
+static int yai_config_path(char *out, size_t out_size)
+{
+    const char *xdg = getenv("XDG_CONFIG_HOME");
+    int written;
+    if (xdg && xdg[0]) {
+        written = snprintf(out, out_size, "%s/yai/config", xdg);
+    } else {
+        const char *home = getenv("HOME");
+        if (!home || !home[0]) {
+            return -1;
+        }
+        written = snprintf(out, out_size, "%s/.config/yai/config", home);
+    }
+    return (written > 0 && (size_t)written < out_size) ? 0 : -1;
+}
+
+/* mkdir -p of every path component (best-effort; existing dirs are fine). */
+static void yai_mkdir_p(const char *path)
+{
+    char tmp[512];
+    if (snprintf(tmp, sizeof(tmp), "%s", path) >= (int)sizeof(tmp)) {
+        return;
+    }
+    for (char *cursor = tmp + 1; *cursor; cursor++) {
+        if (*cursor == '/') {
+            *cursor = '\0';
+            (void)mkdir(tmp, 0700);
+            *cursor = '/';
+        }
+    }
+    (void)mkdir(tmp, 0700);
+}
+
+/* Load persisted YAI_* keys into the environment without overwriting a
+ * value already present (shell/CLI wins). Best-effort: a missing or
+ * unreadable file is not an error. Call before any config getenv. */
+static void yai_config_load(void)
+{
+    char path[512];
+    if (yai_config_path(path, sizeof(path)) != 0) {
+        return;
+    }
+    FILE *file = fopen(path, "r");
+    if (!file) {
+        return;
+    }
+    char line[512];
+    while (fgets(line, sizeof(line), file)) {
+        char *newline = strchr(line, '\n');
+        if (newline) {
+            *newline = '\0';
+        }
+        if (line[0] == '\0' || line[0] == '#') {
+            continue;
+        }
+        char *equals = strchr(line, '=');
+        if (!equals) {
+            continue;
+        }
+        *equals = '\0';
+        /* Only restore yai's own keys — never inject arbitrary env. */
+        if (strncmp(line, "YAI_", 4) != 0) {
+            continue;
+        }
+        (void)setenv(line, equals + 1, /*overwrite=*/0);
+    }
+    (void)fclose(file);
+}
+
+/* Write the live config to the XDG path. Captures the effective values
+ * (renderer fields + the YAI_* env the dialogs set), so it persists
+ * whatever the source. */
+static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
+{
+    char path[512];
+    if (yai_config_path(path, sizeof(path)) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "yai_config_save: no HOME / XDG_CONFIG_HOME");
+    }
+    char dir[512];
+    snprintf(dir, sizeof(dir), "%s", path);
+    char *slash = strrchr(dir, '/');
+    if (slash) {
+        *slash = '\0';
+        yai_mkdir_p(dir);
+    }
+    FILE *file = fopen(path, "w");
+    if (!file) {
+        return YETTY_ERR(yetty_ycore_void, "yai_config_save: fopen failed");
+    }
+    const char *model = getenv("YAI_MODEL");
+    const char *permission_mode = getenv("YAI_PERMISSION_MODE");
+    fputs("# yai config (auto-written on config change / exit)\n", file);
+    fprintf(file, "YAI_ENGINE=%s\n", app->engine_name);
+    fprintf(file, "YAI_EDIT_MODE=%s\n", app->editor_mode_name);
+    fprintf(file, "YAI_FOLD_LINES=%d\n", app->renderer.fold_lines);
+    fprintf(file, "YAI_SHOW_THINKING=%d\n", app->renderer.show_thinking ? 1 : 0);
+    if (model && model[0]) {
+        fprintf(file, "YAI_MODEL=%s\n", model);
+    }
+    if (permission_mode && permission_mode[0]) {
+        fprintf(file, "YAI_PERMISSION_MODE=%s\n", permission_mode);
+    }
+    if (fclose(file) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "yai_config_save: fclose failed");
+    }
+    return YETTY_OK_VOID();
+}
+
 /* RFC 4122 v4 UUID from /dev/urandom. Bails on the first error — a
  * session id from a weak fallback would silently degrade resume
  * semantics, so there is no fallback. */
@@ -1010,6 +1128,9 @@ static void history_load_entry(struct yai_app *app, const char *text, size_t len
     memcpy(app->stdin_buf, text, len);
     app->stdin_len = len;
     app->stdin_cursor = len;
+    /* The line was replaced wholesale — undo history of the prior line no
+     * longer applies. */
+    editor_ops_undo_clear(app);
 }
 
 static struct yetty_ycore_void_result history_browse_move(struct yai_app *app, int delta)
@@ -1166,6 +1287,9 @@ struct yetty_ycore_void_result yai_begin_shutdown(struct yai_app *app)
     teardown = yetty_ycore_void_chain(teardown, unsubscribe_mouse(app));
     teardown = yetty_ycore_void_chain(teardown, yai_release_dock_reservation(app));
     teardown = yetty_ycore_void_chain(teardown, yai_renderer_text_hud_release(&app->renderer));
+    /* Stop accepting / handling external control so it can't inject during
+     * the wind-down; the handles drain with the loop below. */
+    yai_control_stop(app);
     app->shutting_down = 1;
     uv_poll_stop(&app->stdin_poll);
     uv_signal_stop(&app->sigint_handle);
@@ -1468,9 +1592,13 @@ struct yetty_ycore_void_result yai_refresh_hud_stats(struct yai_app *app)
         YETTY_RETURN_IF_ERR(yetty_ycore_void, stats_res, "yai_refresh_hud_stats: stats");
         return YETTY_OK_VOID();
     }
-    /* Non-yetty tty: one compact line on the text status bar. */
-    char stats_line[192];
-    snprintf(stats_line, sizeof(stats_line), "%s · %s · ↑%s ↓%s · $%.4f · %d turn%s",
+    /* Non-yetty tty: one compact line on the text status bar, each field in
+     * its own light brand color (foreground-only, so the bar's mint
+     * background carries through). */
+    char stats_line[320];
+    snprintf(stats_line, sizeof(stats_line),
+             YAI_PRIMARY "%s · %s" YAI_FG_DEFAULT YAI_MINT "  ↑%s ↓%s" YAI_FG_DEFAULT YAI_MUTED
+                         "  $%.4f · %d turn%s" YAI_FG_DEFAULT,
              app->engine_name, model, input_text, output_text, app->usage.cost, app->usage.turns,
              app->usage.turns == 1 ? "" : "s");
     struct yetty_ycore_void_result hud_res = yai_renderer_hud_stats(&app->renderer, stats_line);
@@ -2031,7 +2159,6 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
     if (app->waiting) {
         struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "handle_input_line: suspend");
-        struct yetty_ycore_void_result queue_res = YETTY_OK_VOID();
         if (app->queue_len < YAI_QUEUE_MAX) {
             char *copy = strndup(line, len);
             if (!copy) {
@@ -2040,15 +2167,17 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
             app->queue[app->queue_len++] = copy;
             printf(YAI_DIM "(queued — sends when this turn finishes)" YAI_RESET "\n");
         } else {
+            /* The queue cap is normal back-pressure, not a failure: tell the
+             * user the message was dropped and carry on. Surfacing it as a
+             * Result error would bubble an internal ✗ chain all the way up to
+             * the keyboard handler, on top of this already-friendly line. */
             printf(YAI_RED "queue full — message dropped" YAI_RESET "\n");
-            queue_res = YETTY_ERR(yetty_ycore_void, "handle_input_line: queue full");
         }
-        /* Best-effort: the zone must come back whatever happened; the
-         * first error wins, the rest still run. */
+        /* Restore the zone whatever happened; an IO failure HERE is a real
+         * error and propagates. */
         struct yetty_ycore_void_result restore_res = yai_render_flush_stdout();
         restore_res = yetty_ycore_void_chain(restore_res, yai_renderer_zone_resume(&app->renderer));
-        queue_res = yetty_ycore_void_chain(queue_res, restore_res);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, queue_res, "handle_input_line: queue");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, restore_res, "handle_input_line: queue restore");
         return YETTY_OK_VOID();
     }
     char *copy = strndup(line, len);
@@ -2056,6 +2185,7 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
         return YETTY_ERR(yetty_ycore_void, "handle_input_line: strndup failed");
     }
     app->waiting = 1;
+    app->estimated_tokens = 0; /* fresh per-request estimate */
     struct yetty_ycore_void_result activity_res =
         yai_set_activity(app, "typing-dots", "… thinking");
     if (YETTY_IS_ERR(activity_res)) {
@@ -2153,6 +2283,36 @@ static struct yetty_ycore_void_result editor_submit(struct yai_app *app)
     struct yetty_ycore_void_result input_res =
         handle_input_line(app, app->stdin_buf, submitted_len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, input_res, "editor_submit: input line");
+    return YETTY_OK_VOID();
+}
+
+/* Inject a line from the external control server as if it were typed and
+ * submitted. The user's in-progress line is stashed and restored around
+ * the injection, so an outside command never eats what they were typing;
+ * the line then flows through the normal submit path (slash command,
+ * shell escape, or a message — queued if a turn is already in flight). */
+struct yetty_ycore_void_result yai_control_inject(struct yai_app *app, const char *line, size_t len)
+{
+    if (len >= sizeof(app->stdin_buf)) {
+        len = sizeof(app->stdin_buf) - 1;
+    }
+    char stash[sizeof(app->stdin_buf)];
+    size_t stash_len = app->stdin_len;
+    size_t stash_cursor = app->stdin_cursor;
+    memcpy(stash, app->stdin_buf, stash_len);
+
+    memcpy(app->stdin_buf, line, len);
+    app->stdin_len = len;
+    app->stdin_cursor = len;
+    struct yetty_ycore_void_result submit_res = editor_submit(app);
+
+    /* editor_submit reset the buffer to empty; restore the stashed line. */
+    memcpy(app->stdin_buf, stash, stash_len);
+    app->stdin_len = stash_len;
+    app->stdin_cursor = stash_cursor;
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, submit_res, "yai_control_inject: submit");
+    struct yetty_ycore_void_result redraw_res = editor_render(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, redraw_res, "yai_control_inject: redraw");
     return YETTY_OK_VOID();
 }
 
@@ -2493,6 +2653,9 @@ static struct yetty_ycore_void_result config_dialog_sync(struct yai_app *app)
         struct yetty_ycore_void_result apply_res = apply_config_knob(app, knob);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "config_dialog_sync: apply knob");
     }
+    /* Persist the new config so it survives the next launch. Best-effort:
+     * a save failure is reported but must not break the dialog flow. */
+    yai_report_error(app, "config save", yai_config_save(app));
     return YETTY_OK_VOID();
 }
 
@@ -2913,6 +3076,11 @@ static void print_usage(FILE *stream, const char *program)
             "(yetty host only)\n"
             "  --animate                       animated activity glyph (costs ~100%% CPU; "
             "default static)\n"
+            "  --rpc <port>                    msgpack-RPC control server on 127.0.0.1:<port> "
+            "(or YAI_RPC_PORT)\n"
+            "  --connect <port> <method> [a…]  client: drive another running yai's --rpc server, "
+            "print reply, exit\n"
+            "                                  (methods: run \"<line>\" · status)\n"
             "  -h, --help                      show this help and exit\n"
             "\n"
             "At the prompt:\n"
@@ -2953,10 +3121,36 @@ int main(int argc, char **argv)
 {
     ytrace_init();
 
+    /* Client mode: `yai --connect <port> <method> [args...]` makes this
+     * yai a one-shot client of ANOTHER running yai's --rpc server — send
+     * one request, print the response, exit. Handled before any terminal /
+     * engine setup, since the client needs none of it. */
+    for (int arg_index = 1; arg_index < argc; arg_index++) {
+        if (strcmp(argv[arg_index], "--connect") == 0) {
+            if (arg_index + 2 >= argc) {
+                fprintf(stderr, "yai: --connect needs <port> <method> [args...]\n");
+                return 2;
+            }
+            int peer_port = (int)strtol(argv[arg_index + 1], NULL, 10);
+            const char *method = argv[arg_index + 2];
+            const char *const *params = (const char *const *)&argv[arg_index + 3];
+            int param_count = argc - (arg_index + 3);
+            return yai_control_client_main("127.0.0.1", peer_port, method, params, param_count);
+        }
+    }
+
+    /* Load persisted config into the environment before any config read,
+     * so file values seed getenv() while an explicit shell/CLI choice
+     * (which is already in the env, or overrides the local below) wins. */
+    yai_config_load();
+
     const char *resume_session_id = NULL;
     const char *engine_name = getenv("YAI_ENGINE");
     int markdown_requested = 0;
     int animate_requested = 0;
+    /* External control server port (0 = off). YAI_RPC_PORT seeds it;
+     * --rpc <port> overrides. */
+    int rpc_port = env_int("YAI_RPC_PORT", 0);
     for (int arg_index = 1; arg_index < argc; arg_index++) {
         const char *arg = argv[arg_index];
         if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
@@ -2966,6 +3160,12 @@ int main(int argc, char **argv)
             markdown_requested = 1;
         } else if (strcmp(arg, "--animate") == 0) {
             animate_requested = 1;
+        } else if (strcmp(arg, "--rpc") == 0) {
+            if (arg_index + 1 >= argc) {
+                fprintf(stderr, "yai: --rpc needs a port\n");
+                return 2;
+            }
+            rpc_port = (int)strtol(argv[++arg_index], NULL, 10);
         } else if (strcmp(arg, "--resume") == 0) {
             if (arg_index + 1 >= argc) {
                 fprintf(stderr, "yai: --resume needs an id\n");
@@ -3153,6 +3353,12 @@ int main(int argc, char **argv)
         yai_report_error(app, "mouse subscribe", subscribe_mouse(app));
     }
 
+    /* Optional external control server (--rpc / YAI_RPC_PORT). A bind
+     * failure is reported but non-fatal — the session runs without it. */
+    if (rpc_port > 0) {
+        yai_report_error(app, "control server", yai_control_start(app, rpc_port));
+    }
+
     yai_report_error(app, "banner", print_banner(app));
     yai_report_error(app, "hud dock", yai_apply_dock_reservation(app));
     /* Reserve the bottom row for the text HUD (non-yetty tty) before the
@@ -3162,7 +3368,9 @@ int main(int argc, char **argv)
 
     uv_run(&app->loop, UV_RUN_DEFAULT);
 
-    /* Drain closing handles. */
+    /* Drain closing handles. (control was already stopped in begin_shutdown
+     * for the normal paths; this covers any exit that skipped it.) */
+    yai_control_stop(app);
     uv_close((uv_handle_t *)&app->stdin_poll, yai_handle_closed_cb);
     uv_close((uv_handle_t *)&app->sigint_handle, yai_handle_closed_cb);
     uv_close((uv_handle_t *)&app->sigwinch_handle, yai_handle_closed_cb);
@@ -3202,7 +3410,20 @@ int main(int argc, char **argv)
     }
     yai_report_error(app, "input demux destroy", yetty_yface_destroy(app->yface));
     yai_report_error(app, "raw input restore", leave_raw_input(app));
-    printf("\n" YAI_DIM "transcript saved to %s" YAI_RESET "\n", app->transcript_path);
+    /* Persist the final config on exit (covers changes made via the
+     * permission "auto" shortcut and any path that didn't save inline). */
+    yai_report_error(app, "config save", yai_config_save(app));
+    printf("\n");
+    /* Show the resume token so the conversation can be picked up later.
+     * For claude this id is also the transcript filename uuid; for codex
+     * it's the server thread id (differs from the file tag); gemini has
+     * none, so the line is skipped. */
+    if (app->session_id[0]) {
+        printf(YAI_MINT "session %s" YAI_RESET YAI_DIM " · resume: yai --engine %s --resume %s"
+                        YAI_RESET "\n",
+               app->session_id, app->engine_name, app->session_id);
+    }
+    printf(YAI_DIM "transcript saved to %s" YAI_RESET "\n", app->transcript_path);
     yai_report_error(app, "final flush", yai_render_flush_stdout());
 
     int exit_code = app->exit_code;

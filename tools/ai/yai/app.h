@@ -38,10 +38,21 @@
 /* Completion menu rows under the prompt while typing a /command. */
 #define YAI_MENU_ROWS YAI_RENDERER_MENU_ROWS
 #define YAI_HISTORY_MAX 100
+/* Max line-editor undo depth (vi `u`); oldest steps drop past this. */
+#define YAI_UNDO_MAX 256
+
+/* One line-editor undo step: a heap copy of the line and its cursor as
+ * they were before an edit. See struct yai_app's undo_stack. */
+struct yai_undo_entry {
+    char *bytes; /* malloc'd; `len` bytes, not NUL-terminated */
+    size_t len;
+    size_t cursor;
+};
 /* Tools the user marked "always allow" this session (permission prompt). */
 #define YAI_ALWAYS_ALLOW_MAX 32
 
 struct yetty_yface;
+struct yai_control;
 
 struct yai_session_usage {
     uint64_t input;
@@ -84,6 +95,10 @@ struct yai_app {
 
     /* Input demux + routing. */
     struct yetty_yface *yface;
+    /* External msgpack-RPC control server (NULL unless --rpc/YAI_RPC_PORT
+     * was given): lets an outside client inject commands and query state
+     * over a localhost TCP port. */
+    struct yai_control *control;
     int focus_gui; /* 1 = the HUD window owns keyboard input */
     int mouse_subscribed;
     /* Bottom band (px) currently reserved with the yetty host for the
@@ -134,6 +149,11 @@ struct yai_app {
      * so the EOF handler skips its "exited unexpectedly" warning. */
     int saw_result_error;
     int waiting;       /* a turn is in flight */
+    /* Running token estimate for the in-flight request (claude's
+     * system/thinking_tokens events; cumulative, reset at each turn start).
+     * Shown next to the "thinking" activity on the left of the HUD, while
+     * app->usage holds the cumulative session total on the right. */
+    uint64_t estimated_tokens;
     int shutting_down; /* /quit or EOF — wind the child down */
     int exit_code;
 
@@ -169,6 +189,21 @@ struct yai_app {
      * delete-into-register. */
     char kill_buf[8192];
     size_t kill_len;
+    /* Multi-level undo for the line editor (vi `u`). Each text-changing
+     * normal-mode command — and each whole insert session (i…ESC) — pushes
+     * the pre-change line onto the stack; `u` pops and restores, so
+     * repeated `u` walks back through the previous edits. Entries are heap
+     * copies, freed when the line is submitted/cancelled. The "group"
+     * fields hold the snapshot for the command/session in progress: a
+     * normal command opens and commits it in one keystroke, while an insert
+     * session keeps it open until ESC so the whole insertion is one undo. */
+    struct yai_undo_entry undo_stack[YAI_UNDO_MAX];
+    int undo_depth;
+    char undo_group_buf[8192];
+    size_t undo_group_len;
+    size_t undo_group_cursor;
+    int undo_group_open;
+    int undo_group_dirty;
     /* Editor mode indicator drawn before the prompt ("", "[N]", "[I]"). */
     char edit_status[16];
 
@@ -276,6 +311,27 @@ void yai_tool_remember_allow(struct yai_app *app, const char *tool_name);
  * dispatch failures propagate. */
 struct yetty_ycore_void_result yai_handle_child_line(struct yai_app *app, const char *line,
                                                      size_t len);
+
+/* Inject one line as if the user had typed it and pressed Enter (echoes
+ * the prompt, then dispatches through the normal input path: slash
+ * commands, shell escapes, or a message to the engine). Used by the
+ * external control server. Defined in main.c. */
+struct yetty_ycore_void_result yai_control_inject(struct yai_app *app, const char *line,
+                                                  size_t len);
+
+/* External control server (control.c): a localhost msgpack-RPC TCP server
+ * for injecting commands / querying state from outside. start binds and
+ * listens (storing the server on app->control); stop tears it down. Both
+ * are no-ops / safe when control is absent. */
+struct yetty_ycore_void_result yai_control_start(struct yai_app *app, int port);
+void yai_control_stop(struct yai_app *app);
+
+/* Client mode: connect to another running yai's --rpc control server, send
+ * one request (method + string args), print the response, and return a
+ * process exit code. This is how `yai --connect <port> <method> [args...]`
+ * makes one yai drive another. Defined in control.c. */
+int yai_control_client_main(const char *host, int port, const char *method,
+                            const char *const *args, int arg_count);
 
 /* uv callbacks shared by the engines' child spawns. Signatures are
  * dictated by libuv (YETTY_EXTERNAL_CALLBACK) — inner Results are

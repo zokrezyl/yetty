@@ -30,6 +30,16 @@
 #define YAI_RED "\033[38;2;220;100;100m"
 #define YAI_RESET "\033[0m"
 
+/* yetty brand colors for the text HUD bar: a dark-mint background with a
+ * distinct light brand color per field. The field colors are FOREGROUND
+ * only and end with YAI_FG_DEFAULT (not YAI_RESET), so the bar's mint
+ * background carries through the whole row. */
+#define YAI_HUD_BG "\033[48;2;20;42;35m"           /* dark mint canvas */
+#define YAI_MINT_BRIGHT "\033[38;2;116;197;165m"   /* brightest mint — live activity */
+#define YAI_PRIMARY "\033[38;2;224;229;228m"       /* off-white — the model */
+#define YAI_SECONDARY "\033[38;2;159;167;168m"     /* cool gray — secondary text */
+#define YAI_FG_DEFAULT "\033[39m"                  /* reset foreground only (keep bg) */
+
 /* Per-message streaming state + render configuration. */
 struct yai_renderer {
     int fold_lines;    /* tool-output preview cap */
@@ -51,7 +61,9 @@ struct yai_renderer {
      * (activity), hud_stats = right (model + token/cost summary). */
     int text_hud;
     char hud_state[160];
-    char hud_stats[192];
+    /* May embed per-field foreground color escapes, so sized well past the
+     * visible text. */
+    char hud_stats[320];
 
     /*
      * Pinned zone — transient rows at the bottom of the scrollback,

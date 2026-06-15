@@ -18,6 +18,7 @@ add_executable(yai
     hud.c
     commands.c
     event.c
+    control.c
     engine.c
     turn-engine.c
     claude.c
@@ -28,6 +29,8 @@ add_executable(yai
     editor-vi.c
     methods.gen.c
     rpc.gen.c
+    # External msgpack-RPC control server reuses yetty's framing layer.
+    ${YETTY_ROOT}/src/yetty/yctl/rpc-message.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
 )
 
@@ -43,7 +46,7 @@ find_package(Threads REQUIRED)
 # yetty_yfont_shader_glyph is the name->codepoint table for the activity
 # status line's animated glyph (PUA-B, rendered by the host text layer).
 target_link_libraries(yai PRIVATE yetty_ygui yetty_yclass yetty_yfont_shader_glyph
-                                  yyjson::yyjson uv_a Threads::Threads)
+                                  yyjson::yyjson uv_a Threads::Threads msgpack-c)
 
 # The engine classes carry `[[clang::annotate(...)]]` (C23 attribute
 # syntax); see ygrid/CMakeLists.txt for the rationale.

@@ -68,6 +68,15 @@
 #define YAI_HUD_CONFIG_TITLE_H 32.0f
 #define YAI_HUD_CONFIG_CLOSE_W 32.0f
 
+/* yetty brand palette → the HUD. The bar paints a dark-mint background
+ * (the brand mint accent darkened), and each kind of value gets its own
+ * light brand color so they read clearly against it. set_bg_color wants
+ * a packed 0xAABBGGRR word; the label colors use struct yetty_ycore_rgba. */
+#define YAI_HUD_RGBA(red, green, blue)                                                             \
+    ((uint32_t)(0xFF000000u | ((uint32_t)(blue) << 16) | ((uint32_t)(green) << 8) |                \
+                (uint32_t)(red)))
+#define YAI_HUD_BG_DARK_MINT YAI_HUD_RGBA(20, 42, 35) /* dark mint canvas */
+
 /*---------------------------------------------------------------------------
  * Blocking stdout pty shim. The framework writes its compositor envelope
  * through this; stdout is fflushed first, so envelope bytes can never be
@@ -376,9 +385,22 @@ static struct yetty_ycore_void_result hud_build(struct yai_hud *hud)
     struct yetty_ycore_void_result place_res = hud_apply_viewport(hud);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, place_res, "hud_build: apply_viewport");
 
-    struct yetty_ycore_rgba accent = {.r = 107, .g = 168, .b = 146, .a = 255};
-    struct yetty_ycore_rgba secondary = {.r = 159, .g = 167, .b = 168, .a = 255};
-    struct yetty_ycore_rgba muted = {.r = 133, .g = 141, .b = 143, .a = 255};
+    /* Dark mint canvas for the whole bar. */
+    struct yetty_ycore_void_result bg_res =
+        yetty_ygui_widget_set_bg_color(hud->window, YAI_HUD_BG_DARK_MINT);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, bg_res, "hud_build: bg color");
+
+    /* Light brand colors, one role each, all readable on the dark mint:
+     *   accent_bright — the live activity / token estimate (brightest mint)
+     *   primary       — the model name (off-white, prominent)
+     *   accent        — token totals (brand mint)
+     *   secondary     — turn line / cost (cool gray)
+     *   muted         — the session id (dim) */
+    struct yetty_ycore_rgba accent_bright = {.r = 116, .g = 197, .b = 165, .a = 255}; /* #74C5A5 */
+    struct yetty_ycore_rgba accent = {.r = 107, .g = 168, .b = 146, .a = 255};        /* #6BA892 */
+    struct yetty_ycore_rgba primary = {.r = 224, .g = 229, .b = 228, .a = 255};       /* #E0E5E4 */
+    struct yetty_ycore_rgba secondary = {.r = 159, .g = 167, .b = 168, .a = 255};     /* #9FA7A8 */
+    struct yetty_ycore_rgba muted = {.r = 85, .g = 97, .b = 98, .a = 255};            /* #556162 */
 
     /* Two-column body: left = live status, right = model + statistics.
      * An hbox splits the window body; each column flex-grows so the bar
@@ -409,24 +431,24 @@ static struct yetty_ycore_void_result hud_build(struct yai_hud *hud)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, right_css_res, "hud_build: right css");
     struct yetty_yclass_object *right = right_res.value;
 
-    struct yetty_yclass_object_ptr_result state_res = hud_add_label(left, "idle", accent);
+    struct yetty_yclass_object_ptr_result state_res = hud_add_label(left, "idle", accent_bright);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, state_res, "hud_build: state label");
     hud->state_label = state_res.value;
     struct yetty_yclass_object_ptr_result turn_res =
         hud_add_label(left, "waiting for first turn…", secondary);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, turn_res, "hud_build: turn label");
     hud->turn_label = turn_res.value;
-    struct yetty_yclass_object_ptr_result session_res = hud_add_label(left, "", secondary);
+    struct yetty_yclass_object_ptr_result session_res = hud_add_label(left, "", muted);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, session_res, "hud_build: session label");
     hud->session_label = session_res.value;
 
-    struct yetty_yclass_object_ptr_result model_res = hud_add_label(right, "", accent);
+    struct yetty_yclass_object_ptr_result model_res = hud_add_label(right, "", primary);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, model_res, "hud_build: model label");
     hud->model_label = model_res.value;
-    struct yetty_yclass_object_ptr_result stats_res = hud_add_label(right, "", secondary);
+    struct yetty_yclass_object_ptr_result stats_res = hud_add_label(right, "", accent);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stats_res, "hud_build: stats label");
     hud->stats_label = stats_res.value;
-    struct yetty_yclass_object_ptr_result stats2_res = hud_add_label(right, "", muted);
+    struct yetty_yclass_object_ptr_result stats2_res = hud_add_label(right, "", secondary);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stats2_res, "hud_build: stats2 label");
     hud->stats2_label = stats2_res.value;
 

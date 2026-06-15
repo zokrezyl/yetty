@@ -565,6 +565,19 @@ static struct yetty_ycore_void_result claude_handle_event(struct yetty_yclass_ct
             if (session_id) {
                 snprintf(app->session_id, sizeof(app->session_id), "%s", session_id);
             }
+        } else if (subtype && strcmp(subtype, "thinking_tokens") == 0) {
+            /* Running estimate for the in-flight request (cumulative). Show
+             * it next to the "thinking" activity on the left of the HUD. */
+            app->estimated_tokens =
+                (uint64_t)yyjson_get_uint(yyjson_obj_get(event, "estimated_tokens"));
+            char tokens_text[16];
+            yai_format_tokens(app->estimated_tokens, tokens_text, sizeof(tokens_text));
+            char state[64];
+            snprintf(state, sizeof(state), "… thinking · %s", tokens_text);
+            struct yetty_ycore_void_result activity_res =
+                yai_set_activity(app, "typing-dots", state);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, activity_res,
+                                "claude handle_event: thinking activity");
         }
         return YETTY_OK_VOID();
     }

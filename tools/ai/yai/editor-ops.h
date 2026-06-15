@@ -17,6 +17,7 @@
 
 #include "app.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #define YAI_EDIT_NONE 0      /* byte consumed, nothing to do */
@@ -142,6 +143,101 @@ static inline int editor_ops_insert(struct yai_app *app, const char *bytes, size
 static inline int editor_ops_yank(struct yai_app *app)
 {
     return editor_ops_insert(app, app->kill_buf, app->kill_len);
+}
+
+/*---------------------------------------------------------------------------
+ * Multi-level undo (vi `u`). A normal-mode command opens and commits one
+ * group per keystroke; an insert session keeps a group open from the first
+ * inserted byte until ESC, so the whole insertion is a single undo step.
+ * `u` pops the stack, so repeated `u` walks back through the edits.
+ *---------------------------------------------------------------------------*/
+
+/* Free the whole undo stack and drop any open group. Call when the line
+ * is reset (submitted / cancelled). */
+static inline void editor_ops_undo_clear(struct yai_app *app)
+{
+    for (int index = 0; index < app->undo_depth; index++) {
+        free(app->undo_stack[index].bytes);
+        app->undo_stack[index].bytes = NULL;
+    }
+    app->undo_depth = 0;
+    app->undo_group_open = 0;
+    app->undo_group_dirty = 0;
+}
+
+/* Push a pre-change snapshot onto the stack. Drops the oldest entry when
+ * full so recent history survives. Best-effort: silently no-ops on OOM. */
+static inline void editor_ops_undo_push(struct yai_app *app, const char *bytes, size_t len,
+                                        size_t cursor)
+{
+    char *copy = malloc(len ? len : 1);
+    if (!copy) {
+        return;
+    }
+    memcpy(copy, bytes, len);
+    if (app->undo_depth == YAI_UNDO_MAX) {
+        free(app->undo_stack[0].bytes);
+        memmove(&app->undo_stack[0], &app->undo_stack[1],
+                (YAI_UNDO_MAX - 1) * sizeof(app->undo_stack[0]));
+        app->undo_depth--;
+    }
+    app->undo_stack[app->undo_depth].bytes = copy;
+    app->undo_stack[app->undo_depth].len = len;
+    app->undo_stack[app->undo_depth].cursor = cursor;
+    app->undo_depth++;
+}
+
+/* Open an undo group with the given pre-change snapshot, unless one is
+ * already open (so an insert session keeps its original pre-state). */
+static inline void editor_ops_undo_begin(struct yai_app *app, const char *bytes, size_t len,
+                                         size_t cursor)
+{
+    if (app->undo_group_open) {
+        return;
+    }
+    size_t span = len <= sizeof(app->undo_group_buf) ? len : sizeof(app->undo_group_buf);
+    memcpy(app->undo_group_buf, bytes, span);
+    app->undo_group_len = span;
+    app->undo_group_cursor = cursor;
+    app->undo_group_open = 1;
+    app->undo_group_dirty = 0;
+}
+
+/* Mark the open group as having actually changed text. */
+static inline void editor_ops_undo_mark_dirty(struct yai_app *app)
+{
+    if (app->undo_group_open) {
+        app->undo_group_dirty = 1;
+    }
+}
+
+/* Commit the open group: push its pre-state only if text actually changed,
+ * then close the group. */
+static inline void editor_ops_undo_commit(struct yai_app *app)
+{
+    if (app->undo_group_open && app->undo_group_dirty) {
+        editor_ops_undo_push(app, app->undo_group_buf, app->undo_group_len, app->undo_group_cursor);
+    }
+    app->undo_group_open = 0;
+    app->undo_group_dirty = 0;
+}
+
+/* Pop one undo level into the live buffer. Returns 1 if something was
+ * restored, 0 if the stack was empty. */
+static inline int editor_ops_undo_pop(struct yai_app *app)
+{
+    if (app->undo_depth == 0) {
+        return 0;
+    }
+    app->undo_depth--;
+    struct yai_undo_entry *entry = &app->undo_stack[app->undo_depth];
+    size_t span = entry->len <= sizeof(app->stdin_buf) ? entry->len : sizeof(app->stdin_buf);
+    memcpy(app->stdin_buf, entry->bytes, span);
+    app->stdin_len = span;
+    app->stdin_cursor = entry->cursor <= span ? entry->cursor : span;
+    free(entry->bytes);
+    entry->bytes = NULL;
+    return 1;
 }
 
 /*---------------------------------------------------------------------------
