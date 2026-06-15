@@ -71,6 +71,14 @@ classes:
         type: float
         get: false
         set: false
+      - name: insert_rolling_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: rolling_row_0
+        type: uint32_t
+        get: false
+        set: false
       - name: content_scale
         type: float
         get: false

@@ -56,6 +56,7 @@ void yetty_yvterm_vterm_cursor(struct yetty_yclass_object *obj, uint32_t *out_ro
                                uint32_t *out_col, uint32_t *out_visible);
 void yetty_yvterm_vterm_word_bounds(struct yetty_yclass_object *obj, uint32_t row, uint32_t col,
                                     uint32_t *out_start_col, uint32_t *out_end_col);
+uint32_t yetty_yvterm_vterm_scroll_origin(struct yetty_yclass_object *obj);
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_append_primitive(
     struct yetty_yclass_object *obj, uint32_t row, const uint32_t *words, uint32_t word_count);
 struct yetty_ycore_void_result yetty_yvterm_vterm_add_primitive_ref(struct yetty_yclass_object *obj,

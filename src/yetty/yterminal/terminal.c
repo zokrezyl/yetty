@@ -40,6 +40,7 @@
 #include <yetty/ydraw-core/font-resource.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/ysdf/handler.h>
+#include <yetty/ygrid/ygrid.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yterminal/terminal.h>
@@ -200,6 +201,12 @@ struct yetty_yterminal_terminal {
      * the iterator can step SDF primitives and composite (FAM) records. */
     struct yetty_ydraw_drawable_list_registry *ydraw_registry;
 
+    /* Scrolling rich-content surface: ycat/ypdf/markdown emit YDRAW_BIN streams
+     * of SDF + text-drawable-list + composite records. They are rasterised by a
+     * ygrid figure (the same renderer the chrome uses) seated in the root
+     * container above the text. The container owns the figure; this is a borrow. */
+    struct yetty_ygrid_grid *ydraw_grid;
+
     /* Bundle handed as registry user-data on every kind ygrid handles.
      * Lives on the terminal because the registry stores a pointer to it,
      * and the host has to outlive every ygrid the registry might still
@@ -323,6 +330,17 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
             if (grid_dirty) {
                 terminal->context.yetty_context.event_loop->ops->request_render(
                     terminal->context.yetty_context.event_loop);
+            }
+            /* Keep the ydraw rolling-row origin in lockstep with text scroll:
+             * the top of the screen is at absolute row scroll_origin, so anchored
+             * rich content shifts up by (its rolling_row - scroll_origin) rows.
+             * While scrolled back the view is frozen at view_top_total_idx, so the
+             * rich layer must match that row, not the (still-advancing) live top. */
+            if (terminal->ydraw_grid) {
+                uint32_t roll0 = terminal->scrollback_active
+                                     ? terminal->view_top_total_idx
+                                     : yetty_yvterm_vterm_scroll_origin(terminal->grid);
+                yetty_ygrid_set_rolling_row_0(terminal->ydraw_grid, roll0);
             }
         }
         /* Root-container path: the wire-SM dispatch into consume_envelope
@@ -695,6 +713,14 @@ static struct yetty_ycore_void_result terminal_push_view_top(
     struct yetty_ycore_void_result r = yetty_yvterm_vterm_set_view_top(
         terminal->grid, terminal->scrollback_active, terminal->view_top_total_idx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_push_view_top: set_view_top failed");
+    /* Anchored rich content (plots/images in the ydraw grid) scrolls in lockstep:
+     * pin its rolling origin to the row currently shown at the top of the view. */
+    if (terminal->ydraw_grid) {
+        uint32_t roll0 = terminal->scrollback_active
+                             ? terminal->view_top_total_idx
+                             : yetty_yvterm_vterm_scroll_origin(terminal->grid);
+        yetty_ygrid_set_rolling_row_0(terminal->ydraw_grid, roll0);
+    }
     terminal->context.yetty_context.event_loop->ops->request_render(
         terminal->context.yetty_context.event_loop);
     return YETTY_OK_VOID();
@@ -1020,23 +1046,40 @@ static struct yetty_ycore_void_result terminal_content_inset_process_input(
     }
 }
 
-/* Ingest one YDRAW_BIN envelope into the content grid's anchored rich model.
- * Records are streamed via the drawable iterator; each ADD is anchored at the
- * current cursor row (where the producer placed its drawing). Composite records
- * (FAM, type >= 0x80000000 — yplot/yimage/…) are built through the shared
- * factory and attached; SDF primitive records are copied into the line arena.
- * Both get a downward ref (rel_line 0) on the anchor cell so the model is
- * consistent for the render walk. */
+/* Ingest one YDRAW_BIN envelope into the scrolling rich-content ygrid. Records
+ * are streamed via the drawable iterator and handed verbatim to the ygrid, which
+ * rasterises SDF shapes, text-drawable-lists (with wire-shipped fonts), and
+ * composite figures alike — the same renderer the chrome uses. ycat/ypdf/
+ * markdown all flow through here. */
 static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
     struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)
 {
-    uint32_t anchor_row = 0, anchor_col = 0, cursor_visible = 0;
-    yetty_yvterm_vterm_cursor(terminal->grid, &anchor_row, &anchor_col, &cursor_visible);
+    /* Anchor every record in this envelope at the cursor's ABSOLUTE output row
+     * (rows scrolled off + visible cursor row). The ygrid stamps this as each
+     * prim's rolling_row; combined with rolling_row_0 (set per feed below) the
+     * content scrolls in lockstep with the terminal text instead of stacking. */
+    uint32_t cur_row = 0, cur_col = 0, cur_vis = 0;
+    yetty_yvterm_vterm_cursor(terminal->grid, &cur_row, &cur_col, &cur_vis);
+    uint32_t scroll_origin = yetty_yvterm_vterm_scroll_origin(terminal->grid);
+    uint32_t abs_row = scroll_origin + cur_row;
+    yetty_ygrid_set_insert_rolling_row(terminal->ydraw_grid, abs_row);
+
+    /* Drive the grid's rolling-row placement off the authoritative text cell
+     * height so anchored figures align with the terminal rows regardless of the
+     * grid's own bucketing geometry. */
+    struct yetty_ycore_pixel_size text_cell = yetty_yvterm_vterm_cell_size(terminal->grid);
+    yetty_ygrid_set_rolling_cell_height(terminal->ydraw_grid, text_cell.height);
 
     struct yetty_ydraw_drawable_iterator iter = {0};
     struct yetty_ycore_void_result init_res =
         yetty_ydraw_drawable_iterator_init(&iter, sm, terminal->ydraw_registry);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, init_res, "terminal_ydraw: iterator init");
+
+    /* Tallest composite figure in this envelope (px, measured from the insert
+     * row's top). Used after ingestion to reserve that many terminal rows so
+     * the next output — and the next figure — lands below this one instead of
+     * overlapping. SDF / text records lay themselves out and reserve nothing. */
+    float figure_bottom_px = 0.0f;
 
     struct yetty_ycore_void_result result = YETTY_OK_VOID();
     for (;;) {
@@ -1061,46 +1104,51 @@ static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
             yetty_ycore_error_destroy(size_res.error);
             continue;
         }
-        size_t record_bytes = size_res.value;
-        uint32_t type = data[0];
-
-        if (yetty_ydraw_is_composite(type)) {
-            struct yetty_ydraw_composite_ptr_result comp_res =
-                yetty_ydraw_composite_factory_create_instance(terminal->composite_factory, data,
-                                                              record_bytes, anchor_row);
-            if (YETTY_IS_ERR(comp_res)) {
-                yetty_ycore_error_destroy(comp_res.error);
-                continue; /* unknown composite type — skip, keep parsing */
+        if (yetty_ydraw_is_composite(data[0])) {
+            struct rectangle_result aabb = yetty_ydraw_composite_record_aabb(data);
+            if (YETTY_IS_OK(aabb)) {
+                if (aabb.value.max.y > figure_bottom_px) {
+                    figure_bottom_px = aabb.value.max.y;
+                }
+            } else {
+                yetty_ycore_error_destroy(aabb.error);
             }
-            struct yetty_ycore_uint32_result idx_res =
-                yetty_yvterm_vterm_attach_composite(terminal->grid, anchor_row, comp_res.value);
-            if (YETTY_IS_ERR(idx_res)) {
-                yetty_ydraw_composite_destroy(comp_res.value);
-                yetty_ycore_error_destroy(idx_res.error);
-                continue;
-            }
-            struct yetty_ycore_void_result ref_res = yetty_yvterm_vterm_add_composite_ref(
-                terminal->grid, anchor_row, anchor_col, /*rel_line=*/0, (uint16_t)idx_res.value);
-            if (YETTY_IS_ERR(ref_res)) {
-                yetty_ycore_error_destroy(ref_res.error);
-            }
-        } else {
-            uint32_t word_count = (uint32_t)(record_bytes / sizeof(uint32_t));
-            struct yetty_ycore_uint32_result idx_res =
-                yetty_yvterm_vterm_append_primitive(terminal->grid, anchor_row, data, word_count);
-            if (YETTY_IS_ERR(idx_res)) {
-                yetty_ycore_error_destroy(idx_res.error);
-                continue;
-            }
-            struct yetty_ycore_void_result ref_res = yetty_yvterm_vterm_add_primitive_ref(
-                terminal->grid, anchor_row, anchor_col, /*rel_line=*/0, (uint16_t)idx_res.value);
-            if (YETTY_IS_ERR(ref_res)) {
-                yetty_ycore_error_destroy(ref_res.error);
-            }
+        }
+        struct yetty_ycore_void_result ar = yetty_ygrid_add_record_local(
+            terminal->ydraw_grid, (const uint8_t *)data, size_res.value);
+        if (YETTY_IS_ERR(ar)) {
+            yetty_ycore_error_destroy(ar.error); /* skip one bad record, keep parsing */
         }
     }
 
     yetty_ydraw_drawable_iterator_destroy(&iter);
+
+    /* Reserve vertical space for the tallest figure by advancing the libvterm
+     * cursor that many rows (newlines drive normal scrollback + rolling_row
+     * bookkeeping). Only the receiver knows the cell height, so this row count
+     * cannot be computed by the producer. */
+    if (YETTY_IS_OK(result) && figure_bottom_px > 0.0f) {
+        if (text_cell.height > 0) {
+            uint32_t cell_h = (uint32_t)text_cell.height;
+            uint32_t reserve_rows = ((uint32_t)figure_bottom_px + cell_h - 1u) / cell_h;
+            if (reserve_rows > 0u) {
+                char newlines[256];
+                memset(newlines, '\n', sizeof(newlines));
+                while (reserve_rows > 0u) {
+                    uint32_t chunk =
+                        reserve_rows < sizeof(newlines) ? reserve_rows : (uint32_t)sizeof(newlines);
+                    struct yetty_ycore_void_result feed_res =
+                        yetty_yvterm_vterm_feed(terminal->grid, newlines, chunk);
+                    if (YETTY_IS_ERR(feed_res)) {
+                        yetty_ycore_error_destroy(feed_res.error);
+                        break;
+                    }
+                    reserve_rows -= chunk;
+                }
+            }
+        }
+    }
+
     return result;
 }
 
@@ -1116,7 +1164,7 @@ static struct yetty_ycore_void_result terminal_ydraw_process_input(
         int code = yetty_ywire_wire_statemachine_code(sm);
         if (code == YETTY_DCS_YDRAW_CLEAR) {
             struct yetty_ycore_void_result clear_res =
-                yetty_yvterm_vterm_clear_rich_all(terminal->grid);
+                yetty_ygrid_clear_local(terminal->ydraw_grid);
             if (YETTY_IS_ERR(clear_res)) {
                 yetty_ycore_error_destroy(clear_res.error);
             }
@@ -1771,6 +1819,42 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
                             "terminal_create: protect grid figure failed");
     }
 
+    /* Scrolling rich-content surface (ycat/ypdf/markdown). A ygrid figure
+     * rasterises the inbound YDRAW SDF + text-drawable-list + composite records.
+     * Seated just above the text floor and below producer figures so the
+     * document draws over the (mostly blank) text plane. The container owns it. */
+    {
+        /* Bucket prims across a cell grid (terminal dims) for batched dispatch —
+         * a 1×1 grid piles every PDF prim into one bucket and overflows it. */
+        struct yetty_ygrid_grid_ptr_result yg =
+            yetty_ygrid_create(root_rect, cols ? cols : 1u, rows ? rows : 1u, yetty_context);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, yg, "terminal_create: ydraw ygrid create");
+        terminal->ydraw_grid = yg.value;
+        yetty_ygrid_set_composite_factory(terminal->ydraw_grid, terminal->composite_factory);
+        if (terminal->compositor_font) {
+            struct yetty_ycore_void_result fr =
+                yetty_ygrid_set_font(terminal->ydraw_grid, 0u, terminal->compositor_font);
+            if (YETTY_IS_ERR(fr)) {
+                yetty_ycore_error_destroy(fr.error);
+            }
+        }
+        struct yetty_yfigure_figure *yg_fig = yetty_ygrid_as_figure(terminal->ydraw_grid);
+        struct yetty_ycore_void_result zr =
+            yetty_yfigure_figure_z_set((struct yetty_yclass_object *)yg_fig - 1, -1000000000);
+        if (YETTY_IS_ERR(zr)) {
+            yetty_ycore_error_destroy(zr.error);
+        }
+        struct yetty_ycore_void_result add_yg =
+            yetty_yfigure_container_add_child(terminal->root_container_obj, yg_fig, 0xFFFFFFFCu);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, add_yg,
+                            "terminal_create: add ydraw ygrid to container");
+        struct yetty_ycore_void_result pr =
+            yetty_yfigure_container_protect_child(terminal->root_container_obj, 0xFFFFFFFCu);
+        if (YETTY_IS_ERR(pr)) {
+            yetty_ycore_error_destroy(pr.error);
+        }
+    }
+
     /* On a full-screen erase / reset (CSI 2J/3J or RIS — e.g. `clear`, Ctrl-L,
      * `reset`) the content grid wipes the text grid and ydraw canvas, but the
      * positioned compositor figures live in the root container, which it does
@@ -2060,6 +2144,23 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
                 yetty_yfigure_figure_rect_set(terminal->grid, new_rect);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_rect_res,
                                 "yetty_yterminal_terminal_resize_grid: grid figure rect_set");
+        }
+
+        /* Keep the rich-content ydraw grid in lockstep too. Its rolling-row
+         * figure placement derives the per-row pixel height from
+         * content_extent / grid_rows, so both its rect AND its cell dims must
+         * track the text grid or anchored figures drift after a resize. Set
+         * the rect first — yetty_ygrid_resize re-buckets against it. */
+        if (terminal->ydraw_grid) {
+            struct yetty_yfigure_figure *yg_fig = yetty_ygrid_as_figure(terminal->ydraw_grid);
+            struct yetty_ycore_void_result yg_rect_res =
+                yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)yg_fig - 1, new_rect);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, yg_rect_res,
+                                "yetty_yterminal_terminal_resize_grid: ydraw grid rect_set");
+            struct yetty_ycore_void_result yg_resize_res =
+                yetty_ygrid_resize(terminal->ydraw_grid, grid_size.cols, grid_size.rows);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, yg_resize_res,
+                                "yetty_yterminal_terminal_resize_grid: ydraw grid resize");
         }
     }
     /* The shader-glyph figure tracks the resize through the content grid's

@@ -59,7 +59,9 @@ struct vterm_uniforms {
     uint32_t sel_start_col;
     uint32_t sel_end_row;
     uint32_t sel_end_col;
-    uint32_t pad_a;
+    /* Full line-ring size (visible + scrollback) — the shader's slot modulo is
+     * over this, so a scrolled-back root_row addresses retained history rows. */
+    uint32_t ring_rows;
     uint32_t pad_b;
     uint32_t pad_c;
 };
@@ -214,7 +216,7 @@ static const char *vterm_text_wgsl(void)
         "    sel_start_col: u32,\n"
         "    sel_end_row: u32,\n"
         "    sel_end_col: u32,\n"
-        "    pad_a: u32, pad_b: u32, pad_c: u32,\n"
+        "    ring_rows: u32, pad_b: u32, pad_c: u32,\n"
         "};\n"
         "@group(0) @binding(0) var<storage, read> cells: array<u32>;\n"
         "@group(0) @binding(1) var<storage, read> glyph_meta: array<u32>;\n"
@@ -280,7 +282,7 @@ static const char *vterm_text_wgsl(void)
         "    let col = u32(colf);\n"
         "    let row = u32(rowf);\n"
         "    let gcols = u32(uni.grid_size.x);\n"
-        "    let slot = (row + uni.root_row) % u32(uni.grid_size.y);\n"
+        "    let slot = (row + uni.root_row) % uni.ring_rows;\n"
         "    let cell_index = slot * gcols + col;\n"
         "    var local = vec2<f32>(px.x - colf*uni.cell_size.x, px.y - rowf*uni.cell_size.y);\n"
         "    var glyph = cells[cell_index*4u + 0u];\n"
@@ -497,12 +499,19 @@ static struct yetty_ycore_void_result vterm_create_cell_buffer(struct yetty_yvte
 {
     uint32_t cols = 0, rows = 0;
     yetty_yvterm_grid_dims(vterm->grid_obj, &cols, &rows, NULL);
+    /* The buffer is ring-slot-indexed and must cover the FULL ring (visible +
+     * scrollback), not just the visible rows, so retained history stays
+     * resident for the scrolled-back view. */
+    uint32_t ring_rows = yetty_yvterm_grid_slot_count(vterm->grid_obj);
+    if (ring_rows < rows) {
+        ring_rows = rows;
+    }
     if (vterm->cell_buffer) {
         wgpuBufferDestroy(vterm->cell_buffer);
         wgpuBufferRelease(vterm->cell_buffer);
         vterm->cell_buffer = NULL;
     }
-    uint64_t size = (uint64_t)rows * cols * YVTERM_WORDS_PER_CELL * sizeof(uint32_t);
+    uint64_t size = (uint64_t)ring_rows * cols * YVTERM_WORDS_PER_CELL * sizeof(uint32_t);
     WGPUBufferDescriptor desc = {0};
     desc.label = vterm_sv("yvterm cells");
     desc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
@@ -511,7 +520,7 @@ static struct yetty_ycore_void_result vterm_create_cell_buffer(struct yetty_yvte
     if (!vterm->cell_buffer) {
         return YETTY_ERR(yetty_ycore_void, "vterm: cell buffer");
     }
-    vterm->cell_buffer_cells = rows * cols;
+    vterm->cell_buffer_cells = ring_rows * cols;
     vterm->bind_group_valid = 0;
 
     if (!vterm->uniform_buffer) {
@@ -808,18 +817,21 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     if (cols == 0 || rows == 0) {
         return YETTY_OK_VOID();
     }
-    /* The model may have been resized since the cell buffer was sized. */
-    if (vterm->cell_buffer_cells != rows * cols) {
+    uint32_t slot_count = yetty_yvterm_grid_slot_count(grid);
+    /* The model may have been resized since the cell buffer was sized. The buffer
+     * covers the full ring (visible + scrollback), so compare against that. */
+    if (vterm->cell_buffer_cells != slot_count * cols) {
         struct yetty_ycore_void_result br = vterm_create_cell_buffer(vterm);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "vterm_render: resize cell buffer");
+        slot_count = yetty_yvterm_grid_slot_count(grid);
     }
     struct yetty_ycore_void_result rsr = vterm_ensure_row_scratch(vterm, cols);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rsr, "vterm_render: row scratch");
 
     /* The cell buffer is ring-slot-indexed; the shader maps visible row →
-     * (row + root_row) % rows, so upload by raw slot and pass base as root_row. */
+     * (row + root_row) % ring_rows, so upload by raw slot and pass the view's
+     * top slot as root_row. */
     size_t row_bytes = (size_t)cols * YVTERM_WORDS_PER_CELL * sizeof(uint32_t);
-    uint32_t slot_count = yetty_yvterm_grid_slot_count(grid);
     for (uint32_t slot = 0; slot < slot_count; ++slot) {
         if (!yetty_yvterm_grid_slot_dirty(grid, slot)) {
             continue;
@@ -844,10 +856,28 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     vterm->uniforms.grid_size[1] = (float)rows;
     vterm->uniforms.cell_size[0] = vterm->cell_size.width;
     vterm->uniforms.cell_size[1] = vterm->cell_size.height;
-    vterm->uniforms.root_row = base;
+    vterm->uniforms.ring_rows = slot_count;
+    /* root_row is the ring slot drawn at visible row 0. Live view: the ring
+     * base. Scrolled-back view: shift base back by how far the requested top row
+     * (view_top_total_idx) sits behind the live top (total_scrolled), wrapping
+     * over the ring so the retained history slots are addressed. */
+    uint32_t root_row = base;
+    if (vterm->view_top_active) {
+        uint32_t live_top = yetty_yvterm_grid_scroll_origin(grid);
+        if (vterm->view_top_total_idx < live_top) {
+            uint32_t back = live_top - vterm->view_top_total_idx;
+            if (slot_count > 0) {
+                back %= slot_count;
+                root_row = (base + slot_count - back) % slot_count;
+            }
+        }
+    }
+    vterm->uniforms.root_row = root_row;
     vterm->uniforms.cursor_col = cursor_col;
     vterm->uniforms.cursor_row = cursor_row;
-    vterm->uniforms.cursor_visible = cursor_visible;
+    /* Hide the cursor while scrolled back — it belongs to the live bottom, not
+     * the historical rows on screen. */
+    vterm->uniforms.cursor_visible = vterm->view_top_active ? 0u : cursor_visible;
     /* Selection highlight: normalise (anchor, head) to reading order so the
      * shader's start<=end stream test is simple. */
     int sel_active = 0;
@@ -860,7 +890,7 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
         sh_row = tr;
         sh_col = tc;
     }
-    vterm->uniforms.sel_active = sel_active ? 1u : 0u;
+    vterm->uniforms.sel_active = (sel_active && !vterm->view_top_active) ? 1u : 0u;
     vterm->uniforms.sel_start_row = sa_row;
     vterm->uniforms.sel_start_col = sa_col;
     vterm->uniforms.sel_end_row = sh_row;
@@ -1280,6 +1310,13 @@ void yetty_yvterm_vterm_word_bounds(struct yetty_yclass_object *obj, uint32_t ro
     yetty_yvterm_grid_word_bounds(vterm->grid_obj, row, col, out_start_col, out_end_col);
 }
 
+[[clang::annotate("expose")]]
+uint32_t yetty_yvterm_vterm_scroll_origin(struct yetty_yclass_object *obj)
+{
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    return vterm ? yetty_yvterm_grid_scroll_origin(vterm->grid_obj) : 0u;
+}
+
 /*===========================================================================
  * Rich-content insertion — delegated to the grid model.
  *=========================================================================*/
@@ -1411,18 +1448,34 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_get_selection_text(
 
 /* Scrollback is not yet backed by a history ring; the live screen is all there
  * is, so the anchor and floor are both 0 (no wheel-up range). */
+/* Absolute index of the line at the live screen top: everything scrolled off so
+ * far. A wheel-up anchors one line below this and walks toward the floor. */
 [[clang::annotate("expose")]]
 uint32_t yetty_yvterm_vterm_get_live_anchor(struct yetty_yclass_object *obj)
 {
-    (void)obj;
-    return 0u;
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    if (!vterm || !vterm->grid_obj) {
+        return 0u;
+    }
+    return yetty_yvterm_grid_scroll_origin(vterm->grid_obj);
 }
 
+/* Oldest absolute line index still retained in the scrollback ring. Lines below
+ * this have been evicted, so a wheel-up clamps here. The ring keeps
+ * (slot_count - visible_rows) history lines. */
 [[clang::annotate("expose")]]
 uint32_t yetty_yvterm_vterm_get_scrollback_floor(struct yetty_yclass_object *obj)
 {
-    (void)obj;
-    return 0u;
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    if (!vterm || !vterm->grid_obj) {
+        return 0u;
+    }
+    uint32_t live = yetty_yvterm_grid_scroll_origin(vterm->grid_obj);
+    uint32_t cols = 0, rows = 0;
+    yetty_yvterm_grid_dims(vterm->grid_obj, &cols, &rows, NULL);
+    uint32_t ring = yetty_yvterm_grid_slot_count(vterm->grid_obj);
+    uint32_t history_cap = ring > rows ? ring - rows : 0u;
+    return live > history_cap ? live - history_cap : 0u;
 }
 
 [[clang::annotate("expose")]]

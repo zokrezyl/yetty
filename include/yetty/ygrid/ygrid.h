@@ -163,6 +163,29 @@ void yetty_ygrid_set_content_size(struct yetty_ygrid_grid *grid, float content_w
  * single offset update + redraw, no re-emit. */
 void yetty_ygrid_set_scroll(struct yetty_ygrid_grid *grid, float scroll_x, float scroll_y);
 
+/* Rolling-row scroll for terminal scrollback content. `set_insert_rolling_row`
+ * stamps the absolute output row onto every record added afterwards (call it
+ * before add_record with the cursor's absolute row); `set_rolling_row_0` sets
+ * the absolute row currently at the top of the view. The shader draws each prim
+ * at (its rolling_row - rolling_row_0) * cell_h, so figures scroll in lockstep
+ * with the terminal text. Both default 0 (compositor figures don't scroll). */
+void yetty_ygrid_set_insert_rolling_row(struct yetty_ygrid_grid *grid, uint32_t rolling_row);
+void yetty_ygrid_set_rolling_row_0(struct yetty_ygrid_grid *grid, uint32_t rolling_row_0);
+
+/* Per-row pixel height used for rolling-row figure placement. The host sets
+ * this to the authoritative text cell height so anchored composite figures
+ * line up with the terminal's text rows independent of the grid's bucketing
+ * geometry. 0 (default) falls back to content_extent / grid_rows. */
+void yetty_ygrid_set_rolling_cell_height(struct yetty_ygrid_grid *grid, float cell_h);
+
+/* Resize the cell grid to cols×rows, re-bucketing existing prims. The caller
+ * must also update the figure's rect (via the figure rect setter) so the cell
+ * height (content_extent / rows) tracks the terminal's text cell height — this
+ * keeps rolling-row figure placement aligned with the text after a window
+ * resize. No-op when the dims are unchanged. */
+struct yetty_ycore_void_result yetty_ygrid_resize(struct yetty_ygrid_grid *grid, uint32_t cols,
+                                                  uint32_t rows);
+
 #ifdef __cplusplus
 }
 #endif

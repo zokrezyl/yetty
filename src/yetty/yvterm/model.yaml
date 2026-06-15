@@ -121,6 +121,10 @@ classes:
         type: int
         get: false
         set: false
+      - name: total_scrolled
+        type: uint32_t
+        get: false
+        set: false
     ops: []
   - name: vterm
     domain: yvterm
@@ -406,6 +410,12 @@ exposed:
         type: "uint32_t *"
       - name: out_visible
         type: "uint32_t *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_scroll_origin
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_append_primitive
     return_type: struct yetty_ycore_uint32_result
@@ -744,6 +754,12 @@ exposed:
         type: "uint32_t *"
       - name: out_end_col
         type: "uint32_t *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_scroll_origin
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_append_primitive
     return_type: struct yetty_ycore_uint32_result

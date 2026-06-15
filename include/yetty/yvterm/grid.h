@@ -75,6 +75,7 @@ struct yetty_ycore_void_result yetty_yvterm_grid_resize(struct yetty_yclass_obje
 int yetty_yvterm_grid_is_dirty(struct yetty_yclass_object *obj);
 void yetty_yvterm_grid_cursor(struct yetty_yclass_object *obj, uint32_t *out_row, uint32_t *out_col,
                               uint32_t *out_visible);
+uint32_t yetty_yvterm_grid_scroll_origin(struct yetty_yclass_object *obj);
 struct yetty_ycore_uint32_result yetty_yvterm_grid_append_primitive(struct yetty_yclass_object *obj,
                                                                     uint32_t row,
                                                                     const uint32_t *words,

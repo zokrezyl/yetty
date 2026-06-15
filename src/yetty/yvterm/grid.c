@@ -169,6 +169,12 @@ struct [[clang::annotate("class@yvterm:grid")]] yetty_yvterm_grid {
     uint32_t selection_head_col;
 
     int has_dirty;
+
+    /* Absolute count of rows scrolled off the top — the rolling-row origin. The
+     * top of the screen is at absolute row `total_scrolled`; the cursor's
+     * absolute row is `total_scrolled + cursor_row`. Anchored rich content (the
+     * ydraw ygrid) uses this to scroll in lockstep with the text. */
+    uint32_t total_scrolled;
 };
 
 /* Result wrapper for the grid handle. Declared here (this TU does not include
@@ -189,14 +195,23 @@ static inline uint32_t pack_color(VTermColor color)
            (0xFFu << 24);
 }
 
+/* Lines retained above the visible screen for mouse-wheel / copy-mode
+ * scrollback. The line ring is sized to visible_rows + this; rolled-off lines
+ * stay in the ring as history (their GPU cells persist), and the oldest is
+ * evicted only when the ring wraps. */
+#define YVTERM_SCROLLBACK_ROWS 2000u
+
+/* Map a visible row [0, visible_rows) to its slot in the line ring. The ring
+ * spans line_count = visible_rows + scrollback, so the modulo is over the FULL
+ * ring (not visible_rows) — that is what keeps rolled-off history addressable. */
 static inline uint32_t ring_slot(const struct yetty_yvterm_grid *grid, uint32_t row)
 {
-    if (!grid->visible_rows) {
+    if (!grid->line_count) {
         return row;
     }
     uint32_t slot = grid->base + row;
-    if (slot >= grid->visible_rows) {
-        slot -= grid->visible_rows;
+    while (slot >= grid->line_count) {
+        slot -= grid->line_count;
     }
     return slot;
 }
@@ -456,27 +471,33 @@ static void mark_dirty_all(struct yetty_yvterm_grid *grid)
     grid->has_dirty = 1;
 }
 
-/* O(1) whole-screen scroll-up: blank rolled-off slots (dropping rich
- * ownership) and advance the ring base so everything below moves together. */
+/* O(1) whole-screen scroll-up. The rolled-off top lines are NOT blanked — they
+ * stay in the ring as scrollback history (their GPU cells persist for the
+ * scrolled-back view). Instead the freshly-exposed bottom rows are blanked.
+ * Because line_count = visible_rows + scrollback, slot (base + visible_rows)
+ * aliases the oldest history slot, so blanking it there naturally evicts the
+ * oldest line and reuses it as the new blank bottom. Advancing base moves the
+ * whole view down by one row over the ring. */
 static void roll_up(struct yetty_yvterm_grid *grid, uint32_t count)
 {
-    if (grid->visible_rows == 0) {
+    if (grid->visible_rows == 0 || grid->line_count == 0) {
         return;
     }
     if (count > grid->visible_rows) {
         count = grid->visible_rows;
     }
     for (uint32_t step = 0; step < count; ++step) {
-        uint32_t slot = grid->base + step;
-        if (slot >= grid->visible_rows) {
-            slot -= grid->visible_rows;
+        uint32_t slot = grid->base + grid->visible_rows + step;
+        while (slot >= grid->line_count) {
+            slot -= grid->line_count;
         }
         reset_line(grid, &grid->lines[slot]);
         grid->lines[slot].dirty = 1;
     }
     grid->base += count;
-    while (grid->base >= grid->visible_rows) {
-        grid->base -= grid->visible_rows;
+    grid->total_scrolled += count; /* rolling-row origin advances with scroll */
+    while (grid->base >= grid->line_count) {
+        grid->base -= grid->line_count;
     }
     grid->has_dirty = 1;
 }
@@ -891,7 +912,10 @@ static struct yetty_ycore_void_result grid_model_init(struct yetty_yvterm_grid *
     grid->cols = cols;
     grid->visible_rows = rows;
 
-    struct yetty_ycore_void_result lines_r = grid_alloc_lines(grid, rows, cols);
+    /* Allocate visible + scrollback lines; only the first `rows` are on screen,
+     * the rest hold rolled-off history (see ring_slot / roll_up). */
+    struct yetty_ycore_void_result lines_r =
+        grid_alloc_lines(grid, rows + YVTERM_SCROLLBACK_ROWS, cols);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lines_r, "yvterm: grid_model_init alloc_lines");
 
     grid->vterm = vterm_new((int)rows, (int)cols);
@@ -939,7 +963,10 @@ static struct yetty_ycore_void_result grid_model_resize(struct yetty_yvterm_grid
     tmp.visible_rows = rows;
     tmp.default_fg = grid->default_fg;
     tmp.default_bg = grid->default_bg;
-    struct yetty_ycore_void_result lines_r = grid_alloc_lines(&tmp, rows, cols);
+    /* Reallocate the full ring (visible + scrollback). Resize drops the old
+     * scrollback history rather than reflowing it to the new width. */
+    struct yetty_ycore_void_result lines_r =
+        grid_alloc_lines(&tmp, rows + YVTERM_SCROLLBACK_ROWS, cols);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lines_r, "yvterm: grid_model_resize alloc_lines");
 
     grid_free_lines(grid);
@@ -948,6 +975,7 @@ static struct yetty_ycore_void_result grid_model_resize(struct yetty_yvterm_grid
     grid->cols = cols;
     grid->visible_rows = rows;
     grid->base = 0;
+    grid->total_scrolled = 0;
 
     for (uint32_t row = 0; row < rows; ++row) {
         blank_line(grid, row);
@@ -1087,6 +1115,20 @@ void yetty_yvterm_grid_cursor(struct yetty_yclass_object *obj, uint32_t *out_row
     if (out_visible) {
         *out_visible = grid ? grid->cursor_visible : 0u;
     }
+}
+
+/* Absolute row at the top of the screen (rows scrolled off so far). The cursor's
+ * absolute output row is this + the visible cursor row — used to place anchored
+ * rich content on the rolling-row scroll. */
+[[clang::annotate("expose")]]
+uint32_t yetty_yvterm_grid_scroll_origin(struct yetty_yclass_object *obj)
+{
+    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
+    if (YETTY_IS_ERR(grid_res)) {
+        yetty_ycore_error_destroy(grid_res.error);
+        return 0u;
+    }
+    return grid_res.value->total_scrolled;
 }
 
 /*===========================================================================

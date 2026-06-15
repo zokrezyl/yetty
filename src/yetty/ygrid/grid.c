@@ -93,6 +93,10 @@ struct ygrid_prim_meta {
      * its prims are tombstoned by setting entity_slot = UINT32_MAX; the
      * staging rebuild skips tombstoned prims. */
     uint32_t entity_slot;
+    /* Absolute terminal row this prim was inserted at (rolling-row scroll).
+     * Emitted as the staging prefix word; the shader offsets the prim by
+     * (rolling_row - rolling_row_0) * cell_h. 0 = compositor no-scroll. */
+    uint32_t rolling_row;
 };
 
 /*===========================================================================
@@ -195,6 +199,19 @@ yetty_ygrid_grid {
      * here; the per-figure scissor clips. 0 = top-left. */
     float scroll_x;
     float scroll_y;
+    /* Rolling-row scroll (terminal scrollback content). `insert_rolling_row` is
+     * stamped onto every prim added next (the absolute output row at insert);
+     * `rolling_row_0` is the absolute row currently at the top of the view. The
+     * shader draws each prim at (rolling_row - rolling_row_0) * cell_h. Both 0
+     * by default → compositor figures don't scroll. */
+    uint32_t insert_rolling_row;
+    uint32_t rolling_row_0;
+    /* Explicit per-row pixel height for rolling-row figure placement. When > 0
+     * the composite rolling offset uses this instead of content_extent /
+     * grid_rows — the host (terminal) sets it to the authoritative text cell
+     * height so anchored figures align with the text rows regardless of the
+     * grid's own bucketing geometry. 0 → fall back to content_extent/grid_rows. */
+    float rolling_cell_h;
     /* HiDPI scale = framebuffer px / logical px, captured from the host's
      * gpu context at create time (1.0 on non-HiDPI, and on the headless
      * test path). Producers (ygui chrome, …) author and ship their wire
@@ -1507,7 +1524,7 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
             g->figure_instance_cap = cap;
         }
         struct yetty_ydraw_composite_ptr_result ir = yetty_ydraw_composite_factory_create_instance(
-            g->composite_factory, hdr, record_len, /*rolling_row=*/0u);
+            g->composite_factory, hdr, record_len, g->insert_rolling_row);
         if (YETTY_IS_ERR(ir)) {
             ydebug("ygrid: composite_factory create_instance failed for type=0x%08x: %s", type,
                    ir.error.msg);
@@ -1567,6 +1584,7 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
     meta->max_x = ar.value.max.x;
     meta->max_y = ar.value.max.y;
     meta->entity_slot = g->current_entity_slot;
+    meta->rolling_row = g->insert_rolling_row;
 
     uint32_t prim_index = g->prim_count++;
     /* Record the prim's index on its owning entity so a future
@@ -1680,7 +1698,7 @@ static struct yetty_ycore_void_result rebuild_prim_staging(struct yetty_ygrid_gr
         uint32_t data_offset = cursor - (uint32_t)g->prim_count;
         g->prim_staging[i] = data_offset;
 
-        g->prim_staging[cursor++] = 0u; /* rolling_row prefix */
+        g->prim_staging[cursor++] = m->rolling_row; /* rolling_row prefix */
         /* Copy the WHOLE wire record (starting from the type word). */
         memcpy(&g->prim_staging[cursor], g->bytes + m->prim_payload_offset,
                (size_t)m->prim_payload_words * sizeof(uint32_t));
@@ -1780,6 +1798,70 @@ void yetty_ygrid_set_scroll(struct yetty_ygrid_grid *grid, float scroll_x, float
      * are unchanged, so no re-stage, just a redraw. */
     grid->scroll_x = scroll_x;
     grid->scroll_y = scroll_y;
+}
+
+void yetty_ygrid_set_insert_rolling_row(struct yetty_ygrid_grid *grid, uint32_t rolling_row)
+{
+    if (grid) {
+        grid->insert_rolling_row = rolling_row;
+    }
+}
+
+void yetty_ygrid_set_rolling_row_0(struct yetty_ygrid_grid *grid, uint32_t rolling_row_0)
+{
+    if (grid) {
+        grid->rolling_row_0 = rolling_row_0;
+    }
+}
+
+void yetty_ygrid_set_rolling_cell_height(struct yetty_ygrid_grid *grid, float cell_h)
+{
+    if (grid) {
+        grid->rolling_cell_h = cell_h;
+    }
+}
+
+struct yetty_ycore_void_result yetty_ygrid_resize(struct yetty_ygrid_grid *grid, uint32_t cols,
+                                                  uint32_t rows)
+{
+    if (!grid) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygrid_resize: NULL grid");
+    }
+    if (cols == 0u || rows == 0u) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygrid_resize: zero dims");
+    }
+    if (grid->grid_cols == cols && grid->grid_rows == rows) {
+        return YETTY_OK_VOID();
+    }
+    /* Free the old cell buckets at the OLD dims first; cells_alloc frees
+     * g->cells using the NEW dims, so g->cells must be NULL when it runs or
+     * it would walk the wrong length. */
+    cells_free(grid->cells, (size_t)grid->grid_cols * (size_t)grid->grid_rows);
+    grid->cells = NULL;
+    grid->grid_cols = cols;
+    grid->grid_rows = rows;
+    struct yetty_ycore_void_result ca = cells_alloc(grid);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ca, "yetty_ygrid_resize: cells_alloc");
+
+    /* Re-bucket every live prim into the new grid. Composite figures live in
+     * figure_instances (not the cell buckets), so they are unaffected — their
+     * rolling-row placement just picks up the new cell height on next render. */
+    for (uint32_t i = 0; i < grid->prim_count; ++i) {
+        if (grid->prims[i].entity_slot == YGRID_INVALID_SLOT) {
+            continue; /* tombstoned */
+        }
+        struct yetty_ycore_void_result br = bucket_prim(grid, i);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "yetty_ygrid_resize: re-bucket");
+    }
+
+    grid->staging_dirty = 1;
+    {
+        struct yetty_yclass_object_ptr_result obj_r = ygrid_obj_from_body(grid);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_r, "yetty_ygrid_resize: obj");
+        struct yetty_ycore_void_result set_dirty_r = yetty_yfigure_figure_dirty_set(obj_r.value, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_dirty_r, "yetty_ygrid_resize: set dirty");
+    }
+    return YETTY_OK_VOID();
 }
 
 /* Defined further down (alongside the other shader-build helpers, after
@@ -1903,6 +1985,9 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
     float ch = ygrid_content_extent_h(g, base_rect);
     g->rs.uniforms[U_CELL_SIZE].vec2[0] = cw / (float)g->grid_cols;
     g->rs.uniforms[U_CELL_SIZE].vec2[1] = ch / (float)g->grid_rows;
+    /* Rolling-row scroll origin (absolute top row); shader offsets each prim by
+     * (prim.rolling_row - rolling_row_0) * cell_h. 0 for non-scrolling grids. */
+    g->rs.uniforms[U_ROLLING_ROW_0].u32 = g->rolling_row_0;
     /* View size = what the NDC quad maps onto. Local figures map the rect;
      * absolute figures map the whole target so prim coords are screen
      * coords (content_w/h was set to the target above). cz_off is the
@@ -2070,6 +2155,15 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
             sx = base_rect.min.x + inst->bounds.min.x;
             sy = base_rect.min.y + inst->bounds.min.y;
         }
+        /* Rolling-row scroll: place a composite at the absolute output row it
+         * was inserted at, and move it up as the terminal scrolls. Mirrors the
+         * SDF/glyph shader math (prim.rolling_row - rolling_row_0) * cell_h. For
+         * non-scrolling grids both are 0, so this is a no-op. */
+        /* Per-row height for the rolling offset: the host-set text cell height
+         * when available (keeps figures aligned with the text rows), else the
+         * grid's own cell height. */
+        float cell_h = g->rolling_cell_h > 0.0f ? g->rolling_cell_h : ch / (float)g->grid_rows;
+        sy += ((float)inst->rolling_row - (float)g->rolling_row_0) * cell_h;
         struct yetty_ycore_void_result fr = inst->render(inst, target, sx, sy);
         if (YETTY_IS_ERR(fr)) {
             ydebug("ygrid_render: figure instance render failed: %s", fr.error.msg);
