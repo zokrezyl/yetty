@@ -4,40 +4,35 @@ methods:
     owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
   - slot: render
     domain: yfigure
     owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: target
         type: "struct yetty_ydraw_target *"
     local: true
+    return_payload_type: null
   - slot: constructor
     domain: yfigure
     owning_class: container
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: null
   - slot: add_child
     domain: yfigure
     owning_class: container
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: child
@@ -45,61 +40,56 @@ methods:
       - name: id
         type: uint32_t
     local: false
+    return_payload_type: null
   - slot: remove_child_by_id
     domain: yfigure
     owning_class: container
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: id
         type: uint32_t
     local: false
+    return_payload_type: null
   - slot: raise_child_by_id
     domain: yfigure
     owning_class: container
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: id
         type: uint32_t
     local: false
+    return_payload_type: null
   - slot: process_records
     domain: yfigure
     owning_class: container
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: bytes
         type: struct yetty_ycore_buffer
     local: false
+    return_payload_type: null
   - slot: process_input
     domain: yfigure
     owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: statemachine
         type: "struct yetty_ywire_wire_statemachine *"
     local: true
+    return_payload_type: null
   - slot: process_bytes
     domain: yfigure
     owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: bytes
@@ -107,35 +97,32 @@ methods:
       - name: bytes_len
         type: size_t
     local: true
+    return_payload_type: null
   - slot: dump_state
     domain: yfigure
     owning_class: figure
     return_type: struct yetty_ycore_char_ptr_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: indent
         type: int
     local: true
+    return_payload_type: "char *"
   - slot: reset_content
     domain: yfigure
     owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
   - slot: set_scroll
     domain: yfigure
     owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: scroll_x
@@ -143,13 +130,12 @@ methods:
       - name: scroll_y
         type: float
     local: true
+    return_payload_type: null
   - slot: set_content_size
     domain: yfigure
     owning_class: figure
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: content_w
@@ -157,6 +143,7 @@ methods:
       - name: content_h
         type: float
     local: true
+    return_payload_type: null
 classes:
   - name: container
     domain: yfigure
@@ -503,3 +490,32 @@ types:
         type: float
       - name: local_y
         type: float
+local_types:
+  yetty_yfigure_hit: src/yetty/yfigure/container.c
+  child_entry: src/yetty/yfigure/container.c
+  yetty_yfigure_container: src/yetty/yfigure/container.c
+  yetty_yfigure_container_ptr_result: src/yetty/yfigure/container.c
+  container_record_header: src/yetty/yfigure/container.c
+  sm_read_status: src/yetty/yfigure/container.c
+  hit_visitor_state: src/yetty/yfigure/container.c
+  yetty_yfigure_figure: src/yetty/yfigure/figure.c
+  yetty_yfigure_figure_ptr_result: src/yetty/yfigure/figure.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/yfigure/container.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/yfigure/container.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/yfigure/container.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/yfigure/container.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/yfigure/container.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  container_visitor_fn:
+    source_file: src/yetty/yfigure/container.c
+    text: "typedef int (*container_visitor_fn)(uint32_t, struct yetty_yfigure_figure *, void *);"

@@ -5,29 +5,87 @@ classes:
     accessor: yetty_yvterm_grid_class_get
     type: regular
     source_file: src/yetty/yvterm/grid.c
-    parent:
-      domain: yfigure
-      name: figure
+    parent: null
     mixins: []
     data: struct yetty_yvterm_grid
     data_fields:
-      - name: text
-        type: "struct yetty_yrender_terminal_layer *"
+      - name: lines
+        type: "struct yetty_yvterm_line *"
         get: false
         set: false
-      - name: ydraw
-        type: "struct yetty_yrender_terminal_layer *"
+      - name: line_count
+        type: uint32_t
         get: false
         set: false
-      - name: term_request_render_fn
-        type: yetty_yterminal_request_render_fn
+      - name: visible_rows
+        type: uint32_t
         get: false
         set: false
-      - name: term_request_render_userdata
-        type: "void *"
+      - name: cols
+        type: uint32_t
         get: false
         set: false
-      - name: new_osc_path_active
+      - name: base
+        type: uint32_t
+        get: false
+        set: false
+      - name: vterm
+        type: "int *"
+        get: false
+        set: false
+      - name: state
+        type: "int *"
+        get: false
+        set: false
+      - name: pen_fg
+        type: uint32_t
+        get: false
+        set: false
+      - name: pen_bg
+        type: uint32_t
+        get: false
+        set: false
+      - name: default_fg
+        type: uint32_t
+        get: false
+        set: false
+      - name: default_bg
+        type: uint32_t
+        get: false
+        set: false
+      - name: pen_attrs
+        type: uint16_t
+        get: false
+        set: false
+      - name: pen_reverse
+        type: int
+        get: false
+        set: false
+      - name: cursor_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: cursor_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: cursor_visible
+        type: uint32_t
+        get: false
+        set: false
+      - name: alt_screen
+        type: int
+        get: false
+        set: false
+      - name: mouse_mode
+        type: int
+        get: false
+        set: false
+      - name: card_click
+        type: int
+        get: false
+        set: false
+      - name: card_move
         type: int
         get: false
         set: false
@@ -39,12 +97,76 @@ classes:
         type: "void *"
         get: false
         set: false
+      - name: card_sub_fn
+        type: yetty_yvterm_grid_card_sub_fn
+        get: false
+        set: false
+      - name: card_sub_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: pty_write_fn
+        type: yetty_yvterm_grid_pty_write_fn
+        get: false
+        set: false
+      - name: pty_write_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: selection_active
+        type: int
+        get: false
+        set: false
+      - name: selection_anchor_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: selection_anchor_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: selection_head_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: selection_head_col
+        type: uint32_t
+        get: false
+        set: false
+      - name: has_dirty
+        type: int
+        get: false
+        set: false
+      - name: total_scrolled
+        type: uint32_t
+        get: false
+        set: false
+    ops: []
+  - name: vterm
+    domain: yvterm
+    accessor: yetty_yvterm_vterm_class_get
+    type: regular
+    source_file: src/yetty/yvterm/vterm.c
+    parent:
+      domain: yfigure
+      name: figure
+    mixins: []
+    data: struct yetty_yvterm_vterm
+    data_fields:
+      - name: grid_obj
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
       - name: grid_size
         type: struct yetty_ycore_grid_size
         get: false
         set: false
       - name: cell_size
         type: struct yetty_ycore_pixel_size
+        get: false
+        set: false
+      - name: baseline_cell_height
+        type: float
         get: false
         set: false
       - name: content_inset_top
@@ -63,32 +185,6 @@ classes:
         type: float
         get: false
         set: false
-    ops:
-      - slot: render
-        slot_domain: yfigure
-        impl: grid_figure_render_slot
-      - slot: destroy
-        slot_domain: yfigure
-        impl: grid_figure_destroy_slot
-  - name: shader_glyph
-    domain: yvterm
-    accessor: yetty_yvterm_shader_glyph_class_get
-    type: regular
-    source_file: src/yetty/yvterm/shader-glyph-figure.c
-    parent:
-      domain: yfigure
-      name: figure
-    mixins: []
-    data: struct yetty_yvterm_shader_glyph
-    data_fields:
-      - name: text_layer
-        type: "struct yetty_yrender_terminal_layer *"
-        get: false
-        set: false
-      - name: context
-        type: "const struct yetty_context *"
-        get: false
-        set: false
       - name: request_render_fn
         type: yetty_yterminal_request_render_fn
         get: false
@@ -97,199 +193,765 @@ classes:
         type: "void *"
         get: false
         set: false
-      - name: grid_size
-        type: struct yetty_ycore_grid_size
+      - name: mouse_sub_fn
+        type: yetty_yterminal_mouse_sub_fn
         get: false
         set: false
-      - name: cell_size
-        type: struct yetty_ycore_pixel_size
+      - name: mouse_sub_userdata
+        type: "void *"
         get: false
         set: false
-      - name: shader_source
-        type: "char *"
-        get: false
-        set: false
-      - name: shader_source_size
-        type: size_t
-        get: false
-        set: false
-      - name: rs
-        type: struct yetty_yrender_gpu_resource_set
-        get: false
-        set: false
-      - name: binder
-        type: "struct yetty_yrender_gpu_resource_binder *"
-        get: false
-        set: false
-      - name: binder_finalized
+      - name: view_top_active
         type: int
         get: false
         set: false
-      - name: t0
-        type: struct timespec
-        get: false
-        set: false
-      - name: instances
-        type: "struct shader_glyph_instance *"
-        get: false
-        set: false
-      - name: instance_cap
-        type: size_t
-        get: false
-        set: false
-      - name: instance_count
+      - name: view_top_total_idx
         type: uint32_t
         get: false
         set: false
-      - name: event_loop
-        type: "struct yetty_yevent_event_loop *"
-        get: false
-        set: false
-      - name: timer_id
-        type: yetty_yevent_timer_id
-        get: false
-        set: false
-      - name: timer_created
+      - name: view_dirty
         type: int
         get: false
         set: false
-      - name: timer_running
+      - name: visual_zoom_scale
+        type: float
+        get: false
+        set: false
+      - name: visual_zoom_offset_x
+        type: float
+        get: false
+        set: false
+      - name: visual_zoom_offset_y
+        type: float
+        get: false
+        set: false
+      - name: device
         type: int
         get: false
         set: false
-      - name: listener
-        type: struct yetty_yevent_event_listener
+      - name: queue
+        type: int
+        get: false
+        set: false
+      - name: target_format
+        type: int
+        get: false
+        set: false
+      - name: font
+        type: "struct yetty_yfont_ms_font *"
+        get: false
+        set: false
+      - name: shader_module
+        type: int
+        get: false
+        set: false
+      - name: bind_group_layout
+        type: int
+        get: false
+        set: false
+      - name: pipeline
+        type: int
+        get: false
+        set: false
+      - name: sampler
+        type: int
+        get: false
+        set: false
+      - name: cell_buffer
+        type: int
+        get: false
+        set: false
+      - name: meta_buffer
+        type: int
+        get: false
+        set: false
+      - name: uniform_buffer
+        type: int
+        get: false
+        set: false
+      - name: atlas_texture
+        type: int
+        get: false
+        set: false
+      - name: atlas_view
+        type: int
+        get: false
+        set: false
+      - name: atlas_width
+        type: uint32_t
+        get: false
+        set: false
+      - name: atlas_height
+        type: uint32_t
+        get: false
+        set: false
+      - name: meta_capacity
+        type: size_t
+        get: false
+        set: false
+      - name: bind_group
+        type: int
+        get: false
+        set: false
+      - name: bind_group_valid
+        type: int
+        get: false
+        set: false
+      - name: cell_buffer_cells
+        type: uint32_t
+        get: false
+        set: false
+      - name: uniforms
+        type: struct vterm_uniforms
+        get: false
+        set: false
+      - name: row_scratch
+        type: "uint32_t *"
+        get: false
+        set: false
+      - name: row_scratch_cols
+        type: uint32_t
+        get: false
+        set: false
+      - name: gpu_ready
+        type: int
+        get: false
+        set: false
+      - name: sdf_layer
+        type: "struct yetty_yvterm_sdf_layer *"
         get: false
         set: false
     ops:
       - slot: render
         slot_domain: yfigure
-        impl: figure_render_slot
+        impl: vterm_render_slot
       - slot: destroy
         slot_domain: yfigure
-        impl: figure_destroy_slot
+        impl: vterm_destroy_slot
 exposed:
-  - source_file: src/yetty/yvterm/shader-glyph-figure.c
-    verbatim: "/* Header-destined content for the generated shader-glyph-figure.h (skipped by the real build, which takes it from that header). */
-#include <stdint.h>
-
-#include <yetty/ycore/result.h>
-#include <yetty/ycore/types.h>
-#include <yetty/yetty/yetty.h>
-#include <yetty/yfigure/figure.h>
-#include <yetty/yterminal/terminal.h>
-
-#ifdef __cplusplus
-extern \"C\" {
-#endif
-
-/*
- * Shader-glyph figure — animated procedural glyphs as a compositor figure.
- *
- * Subclass of yetty_yfigure_figure. Created once per terminal, added as a
- * child of the root container under a reserved id. The container's render
- * walks the figure each frame; the figure scans the text-layer's cell
- * buffer for cells whose glyph_index has bit-31 set (PUA-B codepoints)
- * and issues a single instanced draw covering every shader-glyph cell.
- *
- * PUA range U+100000..U+100FFF (Supplementary PUA-B) is mapped 1:1 to
- * local_id 0..4095 by the text-layer's glyph resolver. Print a PUA
- * codepoint and you get an animated shader glyph at that cell.
- *
- * Why PUA-B and not BMP PUA or PUA-A: verified against the bundled
- * DejaVuSansM Nerd Font — BMP PUA has 3,488 codepoints in use, PUA-A has
- * 6,896, PUA-B has 0. Using anything other than PUA-B collides with Nerd
- * Font icons whose codepoints match a shader local-id, pinning the anim
- * timer on and burning the GPU on idle terminals.
- */
-
-#define YETTY_SHADER_GLYPH_BASE 0x80000000u
-#define YETTY_SHADER_GLYPH_PUA_BASE 0x00100000u
-#define YETTY_SHADER_GLYPH_PUA_END 0x00101000u /* exclusive — 4096-slot window */
-
-static inline int yetty_shader_glyph_is(uint32_t glyph_index)
-{
-    return glyph_index >= YETTY_SHADER_GLYPH_BASE;
-}
-
-static inline uint32_t yetty_shader_glyph_id_from_local(uint32_t local_id)
-{
-    return 0xFFFFFFFFu - local_id;
-}
-
-static inline uint32_t yetty_shader_glyph_local_id(uint32_t glyph_index)
-{
-    return 0xFFFFFFFFu - glyph_index;
-}
-
-static inline int yetty_shader_glyph_codepoint_in_range(uint32_t cp)
-{
-    return cp >= YETTY_SHADER_GLYPH_PUA_BASE && cp < YETTY_SHADER_GLYPH_PUA_END;
-}
-
-static inline uint32_t yetty_shader_glyph_id_from_codepoint(uint32_t cp)
-{
-    return yetty_shader_glyph_id_from_local(cp - YETTY_SHADER_GLYPH_PUA_BASE);
-}
-
-/* Inverse of _id_from_codepoint — recover the PUA codepoint that produced
- * this shader-glyph id. Used by selection extraction so a PUA cell on the
- * clipboard round-trips to itself. */
-static inline uint32_t yetty_shader_glyph_codepoint_from_id(uint32_t glyph_index)
-{
-    return YETTY_SHADER_GLYPH_PUA_BASE + yetty_shader_glyph_local_id(glyph_index);
-}
-
-struct yetty_yvterm_shader_glyph;
-
-/* yetty_yvterm_shader_glyph_ptr is generated (the `_from` downcast in the
- * generated header). */
-
-/* Create the shader-glyph figure.
- *
- * `text_layer` is borrowed for cell-buffer access and must outlive the
- * figure. `rect` is the figure's absolute pixel space within its parent
- * container; for the terminal's root container this is (0,0)-(cols*cw,
- * rows*ch). `request_render_fn` is invoked from the anim timer thread
- * to nudge the event loop. Returns the yclass object handle; route it through
- * the helpers below for add_child / resize / zoom.
- *
- * Named `_figure_create` rather than `_create` so it does not collide with the
- * yclass auto-emitted `yetty_yvterm_shader_glyph_create(struct yetty_yclass_ctx
- * *)` constructor stub. */
-struct yetty_yclass_object_ptr_result yetty_yvterm_shader_glyph_figure_create(
-    struct yetty_ycore_rectangle rect, uint32_t cols, uint32_t rows, float cell_width,
-    float cell_height, struct yetty_yrender_terminal_layer *text_layer,
-    const struct yetty_context *context, yetty_yterminal_request_render_fn request_render_fn,
-    void *request_render_userdata);
-
-/* Upcast the shader-glyph object to the figure base. Stable pointer. */
-struct yetty_yfigure_figure *yetty_yvterm_shader_glyph_as_figure(struct yetty_yclass_object *obj);
-
-/* Push a new grid + cell size after a terminal resize. The figure
- * updates uniforms and its own rect to (0,0)-(cols*cw, rows*ch). Takes the
- * shader-glyph object. */
-struct yetty_ycore_void_result yetty_yvterm_shader_glyph_resize(
-    struct yetty_yclass_object *obj, struct yetty_ycore_grid_size grid_size,
-    struct yetty_ycore_pixel_size cell_size);
-
-/* Apply visual (shader-level) zoom. Mirrors the layer op of the same
- * name — terminal broadcasts ZOOM_VISUAL_APPLY events here. Takes the
- * shader-glyph object. */
-struct yetty_ycore_void_result yetty_yvterm_shader_glyph_set_visual_zoom(
-    struct yetty_yclass_object *obj, float scale, float offset_x, float offset_y);
-
-#ifdef __cplusplus
-}
-#endif"
+  - source_file: src/yetty/yvterm/grid.c
+    type_text: "enum yetty_yvterm_text_attr {
+    YETTY_YVTERM_ATTR_BOLD = 1,
+    YETTY_YVTERM_ATTR_UNDERLINE = 2,
+    YETTY_YVTERM_ATTR_UNDERLINE2 = 4,
+    YETTY_YVTERM_ATTR_ITALIC = 8,
+    YETTY_YVTERM_ATTR_REVERSE = 16,
+    YETTY_YVTERM_ATTR_BLINK = 32,
+    YETTY_YVTERM_ATTR_STRIKE = 64,
+    YETTY_YVTERM_ATTR_CONCEAL = 128,
+};"
+  - source_file: src/yetty/yvterm/grid.c
+    type_text: "struct yetty_yvterm_text_cell {
+    uint32_t glyph_index;
+    uint32_t codepoint;
+    uint32_t fg;
+    uint32_t bg;
+    uint16_t attrs;
+    uint8_t width;
+    uint8_t flags;
+};"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_make
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: cols
+        type: uint32_t
+      - name: rows
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_dispose
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_pty_write
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fn
+        type: yetty_yvterm_grid_pty_write_fn
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_clear_hook
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fn
+        type: yetty_yvterm_grid_clear_hook_fn
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_card_sub
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fn
+        type: yetty_yvterm_grid_card_sub_fn
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_feed
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bytes
+        type: "const char *"
+      - name: len
+        type: size_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_resize
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: cols
+        type: uint32_t
+      - name: rows
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_is_dirty
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_cursor
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_row
+        type: "uint32_t *"
+      - name: out_col
+        type: "uint32_t *"
+      - name: out_visible
+        type: "uint32_t *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_scroll_origin
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_append_primitive
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: words
+        type: "const uint32_t *"
+      - name: word_count
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_attach_composite
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: composite
+        type: "struct yetty_ydraw_composite *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_clear_rich_line
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_clear_rich_all
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_register_wire
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: sm
+        type: "struct yetty_ywire_wire_statemachine *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_on_char
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: codepoint
+        type: uint32_t
+      - name: mods
+        type: int
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_on_key
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: key
+        type: int
+      - name: mods
+        type: int
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_selection
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: active
+        type: int
+      - name: anchor_row
+        type: uint32_t
+      - name: anchor_col
+        type: uint32_t
+      - name: head_row
+        type: uint32_t
+      - name: head_col
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_get_selection_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out
+        type: "struct yetty_ycore_buffer *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_word_bounds
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: col
+        type: uint32_t
+      - name: out_start_col
+        type: "uint32_t *"
+      - name: out_end_col
+        type: "uint32_t *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_dims
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_cols
+        type: "uint32_t *"
+      - name: out_rows
+        type: "uint32_t *"
+      - name: out_base
+        type: "uint32_t *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_line_cells
+    return_type: "const struct yetty_yvterm_text_cell *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_line_dirty
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_line_composites
+    return_type: "struct yetty_ydraw_composite *const *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: out_count
+        type: "uint32_t *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_composites
+    return_type: "struct yetty_ydraw_composite *const *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: slot
+        type: uint32_t
+      - name: out_count
+        type: "uint32_t *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_primitive_count
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: slot
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_primitive_words
+    return_type: "const uint32_t *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: slot
+        type: uint32_t
+      - name: index
+        type: uint32_t
+      - name: out_word_count
+        type: "uint32_t *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_selection
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_active
+        type: "int *"
+      - name: out_anchor_row
+        type: "uint32_t *"
+      - name: out_anchor_col
+        type: "uint32_t *"
+      - name: out_head_row
+        type: "uint32_t *"
+      - name: out_head_col
+        type: "uint32_t *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_clear_dirty
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_count
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_cells
+    return_type: "const struct yetty_yvterm_text_cell *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: slot
+        type: uint32_t
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_dirty
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: slot
+        type: uint32_t
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_figure_create
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: cols
+        type: uint32_t
+      - name: rows
+        type: uint32_t
+      - name: context
+        type: "const struct yetty_context *"
+      - name: pty_write_fn
+        type: yetty_yterminal_pty_write_fn
+      - name: pty_write_userdata
+        type: "void *"
+      - name: request_render_fn
+        type: yetty_yterminal_request_render_fn
+      - name: request_render_userdata
+        type: "void *"
+      - name: mouse_sub_fn
+        type: yetty_yterminal_mouse_sub_fn
+      - name: mouse_sub_userdata
+        type: "void *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_as_figure
+    return_type: "struct yetty_yfigure_figure *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_feed
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bytes
+        type: "const char *"
+      - name: len
+        type: size_t
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_resize
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: grid_size
+        type: struct yetty_ycore_grid_size
+      - name: cell_size
+        type: struct yetty_ycore_pixel_size
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_cell_size
+    return_type: struct yetty_ycore_pixel_size
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_is_dirty
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_content_inset
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: top
+        type: float
+      - name: right
+        type: float
+      - name: bottom
+        type: float
+      - name: left
+        type: float
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_get_content_inset
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_top
+        type: "float *"
+      - name: out_right
+        type: "float *"
+      - name: out_bottom
+        type: "float *"
+      - name: out_left
+        type: "float *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_clear_hook
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fn
+        type: yetty_yvterm_clear_hook_fn
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_cursor
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_row
+        type: "uint32_t *"
+      - name: out_col
+        type: "uint32_t *"
+      - name: out_visible
+        type: "uint32_t *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_word_bounds
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: col
+        type: uint32_t
+      - name: out_start_col
+        type: "uint32_t *"
+      - name: out_end_col
+        type: "uint32_t *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_scroll_origin
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_append_primitive
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: words
+        type: "const uint32_t *"
+      - name: word_count
+        type: uint32_t
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_attach_composite
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: composite
+        type: "struct yetty_ydraw_composite *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_clear_rich_line
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_clear_rich_all
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_register_wire
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: sm
+        type: "struct yetty_ywire_wire_statemachine *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_on_char
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: codepoint
+        type: uint32_t
+      - name: mods
+        type: int
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_on_key
+    return_type: int
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: key
+        type: int
+      - name: mods
+        type: int
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_selection
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: active
+        type: int
+      - name: anchor_row
+        type: uint32_t
+      - name: anchor_col
+        type: uint32_t
+      - name: head_row
+        type: uint32_t
+      - name: head_col
+        type: uint32_t
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_get_selection_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out
+        type: "struct yetty_ycore_buffer *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_get_live_anchor
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_get_scrollback_floor
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_view_top
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: active
+        type: int
+      - name: view_top_total_idx
+        type: uint32_t
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_visual_zoom
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: scale
+        type: float
+      - name: offset_x
+        type: float
+      - name: offset_y
+        type: float
 types:
-  - name: timespec
+  - name: vterm_uniforms
     kind: struct
     fields:
-      - name: tv_sec
-        type: __time_t
-      - name: tv_nsec
-        type: __syscall_slong_t
+      - name: grid_size
+        type: "float[2]"
+      - name: cell_size
+        type: "float[2]"
+      - name: scale
+        type: float
+      - name: baseline_y
+        type: float
+      - name: glyph_left
+        type: float
+      - name: pixel_range
+        type: float
+      - name: root_row
+        type: uint32_t
+      - name: cursor_col
+        type: uint32_t
+      - name: cursor_row
+        type: uint32_t
+      - name: cursor_visible
+        type: uint32_t
+      - name: sel_active
+        type: uint32_t
+      - name: sel_start_row
+        type: uint32_t
+      - name: sel_start_col
+        type: uint32_t
+      - name: sel_end_row
+        type: uint32_t
+      - name: sel_end_col
+        type: uint32_t
+      - name: ring_rows
+        type: uint32_t
+      - name: visual_zoom_scale
+        type: float
+      - name: visual_zoom_offset_x
+        type: float
+      - name: visual_zoom_offset_y
+        type: float
+      - name: pad_b
+        type: uint32_t
+      - name: pad_c
+        type: uint32_t
+      - name: pad_d
+        type: uint32_t
   - name: yetty_yclass_object_ptr_result
     kind: result
     fields:
@@ -329,123 +991,69 @@ types:
         type: float
       - name: height
         type: float
-  - name: yetty_yevent_event_listener
-    kind: struct
+  - name: yetty_ycore_uint32_result
+    kind: result
     fields:
-      - name: handler
-        type: yetty_ycore_event_handler
-  - name: yetty_yrender_buffer
-    kind: struct
-    fields:
-      - name: data
-        type: "uint8_t *"
-      - name: size
-        type: size_t
-      - name: capacity
-        type: size_t
-      - name: name
-        type: "char[64]"
-      - name: wgsl_type
-        type: "char[64]"
-      - name: readonly
+      - name: ok
         type: int
-      - name: dirty
-        type: int
-  - name: yetty_yrender_gpu_resource_set
-    kind: struct
-    fields:
-      - name: namespace
-        type: "char[64]"
-      - name: pixel_size
-        type: struct yetty_ycore_pixel_size
-      - name: textures
-        type: "struct yetty_yrender_texture[4]"
-      - name: texture_count
-        type: size_t
-      - name: buffers
-        type: "struct yetty_yrender_buffer[4]"
-      - name: buffer_count
-        type: size_t
-      - name: uniforms
-        type: "struct yetty_yrender_uniform[32]"
-      - name: uniform_count
-        type: size_t
-      - name: shader
-        type: struct yetty_yrender_shader_code
-      - name: children
-        type: "struct yetty_yrender_gpu_resource_set *[64]"
-      - name: children_count
-        type: size_t
-      - name: instance_count
-        type: uint32_t
-  - name: yetty_yrender_shader_code
-    kind: struct
-    fields:
-      - name: data
-        type: "const char *"
-      - name: size
-        type: size_t
-      - name: hash
-        type: uint64_t
-  - name: yetty_yrender_texture
-    kind: struct
-    fields:
-      - name: data
-        type: "uint8_t *"
-      - name: width
-        type: uint32_t
-      - name: height
-        type: uint32_t
-      - name: format
-        type: uint32_t
-      - name: name
-        type: "char[64]"
-      - name: wgsl_type
-        type: "char[64]"
-      - name: sampler_name
-        type: "char[64]"
-      - name: sampler_filter
-        type: uint32_t
-      - name: dirty
-        type: int
-  - name: yetty_yrender_uniform
-    kind: struct
-    fields:
-      - name: name
-        type: "char[64]"
-      - name: type
-        type: enum yetty_yrender_uniform_type
       - name: 
         kind: union
         fields:
-          - name: f32
-            type: float
-          - name: vec2
-            type: "float[2]"
-          - name: vec3
-            type: "float[3]"
-          - name: vec4
-            type: "float[4]"
-          - name: mat4
-            type: "float[16]"
-          - name: u32
+          - name: value
             type: uint32_t
-          - name: i32
-            type: int32_t
-  - name: yetty_yrender_uniform_type
-    kind: enum
-    values:
-      - name: YETTY_YRENDER_UNIFORM_F32
-        value: 0
-      - name: YETTY_YRENDER_UNIFORM_VEC2
-        value: 1
-      - name: YETTY_YRENDER_UNIFORM_VEC3
-        value: 2
-      - name: YETTY_YRENDER_UNIFORM_VEC4
-        value: 3
-      - name: YETTY_YRENDER_UNIFORM_MAT4
-        value: 4
-      - name: YETTY_YRENDER_UNIFORM_U32
-        value: 5
-      - name: YETTY_YRENDER_UNIFORM_I32
-        value: 6
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+local_types:
+  yetty_yvterm_text_attr: src/yetty/yvterm/grid.c
+  yetty_yvterm_text_cell: src/yetty/yvterm/grid.c
+  yetty_yvterm_primitive: src/yetty/yvterm/grid.c
+  yetty_yvterm_line: src/yetty/yvterm/grid.c
+  yetty_yvterm_grid: src/yetty/yvterm/grid.c
+  yetty_yvterm_grid_ptr_result: src/yetty/yvterm/grid.c
+  yetty_yvterm_reflow_source: src/yetty/yvterm/grid.c
+  yetty_yvterm_reflow_logical: src/yetty/yvterm/grid.c
+  vterm_uniforms: src/yetty/yvterm/vterm.c
+  yetty_yvterm_vterm: src/yetty/yvterm/vterm.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/yvterm/grid.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/yvterm/grid.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/yvterm/grid.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/yvterm/grid.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/yvterm/grid.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_yvterm_grid_pty_write_fn:
+    source_file: src/yetty/yvterm/grid.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_pty_write_fn)(const char *, size_t, void *);"
+  yetty_yvterm_grid_clear_hook_fn:
+    source_file: src/yetty/yvterm/grid.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *);"
+  yetty_yvterm_grid_card_sub_fn:
+    source_file: src/yetty/yvterm/grid.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int, int, void *);"
+  yetty_yvterm_clear_hook_fn:
+    source_file: src/yetty/yvterm/vterm.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_clear_hook_fn)(void *);"
+includes:
+  src/yetty/yvterm/vterm.c:
+    - yetty/yterminal/terminal.h

@@ -86,6 +86,13 @@ struct yetty_yclass_op {
 
 struct yetty_yclass_object {
     const struct yetty_yclass *klass;
+    /* RPC session this object is bound to. NULL → local object, methods
+     * dispatch in-process; set → remote proxy, methods marshal over the
+     * session to the server-side handle. Linked at create time (see the
+     * generated `<class>_create`); methods read it instead of taking a ctx
+     * argument. calloc in object_alloc zero-fills it, so local objects are
+     * NULL with no extra work. */
+    struct yetty_yclass_rpc_session *session;
 };
 
 /* Remote-object proxy. Allocated on the client side by the generated

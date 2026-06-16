@@ -158,11 +158,9 @@ static int emacs_plain(struct yai_app *app, char byte)
 }
 
 [[clang::annotate("override@yai:emacs:feed_byte")]]
-static struct yetty_ycore_int_result emacs_feed_byte(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *obj,
+static struct yetty_ycore_int_result emacs_feed_byte(struct yetty_yclass_object *obj,
                                                      struct yai_app *app, int byte)
 {
-    (void)ctx;
     (void)obj;
     app->edit_status[0] = '\0'; /* emacs has no modal indicator */
     /* No undo bookkeeping here: each command records its own step when it

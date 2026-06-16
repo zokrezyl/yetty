@@ -84,10 +84,8 @@ yetty_yrich_cell {
 };
 
 [[clang::annotate("override@yrich:cell:constructor")]]
-static struct yetty_ycore_void_result cell_constructor(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result cell_constructor(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_ycore_void_result super_res = yetty_yrich_super_void(
         obj, yetty_yrich_cell_class_get().value, (yetty_yclass_method_id_t)yetty_yrich_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, super_res, "cell_constructor: super");
@@ -106,10 +104,8 @@ static struct yetty_ycore_void_result cell_constructor(struct yetty_yclass_ctx *
 }
 
 [[clang::annotate("override@yrich:cell:element_destroy")]]
-static struct yetty_ycore_void_result cell_destroy(struct yetty_yclass_ctx *ctx,
-                                                   struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result cell_destroy(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_cell_ptr_result data_res = yetty_yrich_cell_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "cell_destroy: data_get");
     free(data_res.value->text);
@@ -119,11 +115,9 @@ static struct yetty_ycore_void_result cell_destroy(struct yetty_yclass_ctx *ctx,
 }
 
 [[clang::annotate("override@yrich:cell:element_bounds")]]
-static struct yetty_ycore_void_result cell_bounds(struct yetty_yclass_ctx *ctx,
-                                                  struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result cell_bounds(struct yetty_yclass_object *obj,
                                                   struct yetty_yrich_rect *out_bounds)
 {
-    (void)ctx;
     if (!out_bounds) {
         return YETTY_ERR(yetty_ycore_void, "cell_bounds: NULL out_bounds");
     }
@@ -134,19 +128,15 @@ static struct yetty_ycore_void_result cell_bounds(struct yetty_yclass_ctx *ctx,
 }
 
 [[clang::annotate("override@yrich:cell:element_is_editable")]]
-static struct yetty_ycore_int_result cell_is_editable(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj)
+static struct yetty_ycore_int_result cell_is_editable(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     (void)obj;
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
 [[clang::annotate("override@yrich:cell:element_begin_edit")]]
-static struct yetty_ycore_void_result cell_begin_edit(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result cell_begin_edit(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_cell_ptr_result data_res = yetty_yrich_cell_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "cell_begin_edit: data_get");
     struct yetty_yrich_cell *cell = data_res.value;
@@ -158,10 +148,8 @@ static struct yetty_ycore_void_result cell_begin_edit(struct yetty_yclass_ctx *c
 }
 
 [[clang::annotate("override@yrich:cell:element_end_edit")]]
-static struct yetty_ycore_void_result cell_end_edit(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result cell_end_edit(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_cell_ptr_result data_res = yetty_yrich_cell_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "cell_end_edit: data_get");
     struct yetty_yrich_cell *cell = data_res.value;
@@ -171,22 +159,18 @@ static struct yetty_ycore_void_result cell_end_edit(struct yetty_yclass_ctx *ctx
 }
 
 [[clang::annotate("override@yrich:cell:element_is_editing")]]
-static struct yetty_ycore_int_result cell_is_editing(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *obj)
+static struct yetty_ycore_int_result cell_is_editing(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_cell_ptr_result data_res = yetty_yrich_cell_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, data_res, "cell_is_editing: data_get");
     return YETTY_OK(yetty_ycore_int, data_res.value->editing);
 }
 
 [[clang::annotate("override@yrich:cell:element_render")]]
-static struct yetty_ycore_void_result cell_render(struct yetty_yclass_ctx *ctx,
-                                                  struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result cell_render(struct yetty_yclass_object *obj,
                                                   struct yetty_ydraw_drawable_list *drawable_list,
                                                   uint32_t layer, int selected)
 {
-    (void)ctx;
     if (!drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "cell_render: NULL drawable list");
     }
@@ -256,11 +240,9 @@ static struct yetty_ycore_void_result cell_render(struct yetty_yclass_ctx *ctx,
 }
 
 [[clang::annotate("override@yrich:cell:element_insert_text")]]
-static struct yetty_ycore_void_result cell_insert_text(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result cell_insert_text(struct yetty_yclass_object *obj,
                                                        struct yetty_ycore_buffer text)
 {
-    (void)ctx;
     if (!text.data || text.size == 0) {
         return YETTY_OK_VOID();
     }
@@ -292,10 +274,8 @@ static struct yetty_ycore_void_result cell_insert_text(struct yetty_yclass_ctx *
 }
 
 [[clang::annotate("override@yrich:cell:element_delete_sel")]]
-static struct yetty_ycore_void_result cell_delete_sel(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result cell_delete_sel(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_cell_ptr_result data_res = yetty_yrich_cell_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "cell_delete_sel: data_get");
     struct yetty_yrich_cell *cell = data_res.value;
@@ -366,8 +346,9 @@ struct yetty_yrich_col_size {
     float width;
 };
 
-struct [[clang::annotate("class@yrich:spreadsheet")]] [[clang::annotate("parent@yrich:document")]]
-yetty_yrich_spreadsheet {
+struct [[clang::annotate("class@yrich:spreadsheet"),
+         clang::annotate("include@yetty/yrich/yrich-types.h")]] [[clang::annotate(
+    "parent@yrich:document")]] yetty_yrich_spreadsheet {
     int32_t row_count;
     int32_t col_count;
     float default_row_height;
@@ -464,10 +445,8 @@ static void rebuild_cache(struct yetty_yrich_spreadsheet *sheet)
 }
 
 [[clang::annotate("override@yrich:spreadsheet:constructor")]]
-static struct yetty_ycore_void_result spreadsheet_constructor(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result spreadsheet_constructor(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_ycore_void_result super_res =
         yetty_yrich_super_void(obj, yetty_yrich_spreadsheet_class_get().value,
                                (yetty_yclass_method_id_t)yetty_yrich_constructor);
@@ -483,10 +462,8 @@ static struct yetty_ycore_void_result spreadsheet_constructor(struct yetty_yclas
 }
 
 [[clang::annotate("override@yrich:spreadsheet:document_destroy")]]
-static struct yetty_ycore_void_result spreadsheet_destroy(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result spreadsheet_destroy(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_spreadsheet_ptr_result data_res = yetty_yrich_spreadsheet_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "spreadsheet_destroy: data_get");
     struct yetty_yrich_spreadsheet *sheet = data_res.value;
@@ -501,10 +478,8 @@ static struct yetty_ycore_void_result spreadsheet_destroy(struct yetty_yclass_ct
 }
 
 [[clang::annotate("override@yrich:spreadsheet:document_content_width")]]
-static struct yetty_ycore_float_result spreadsheet_content_width(struct yetty_yclass_ctx *ctx,
-                                                                 struct yetty_yclass_object *obj)
+static struct yetty_ycore_float_result spreadsheet_content_width(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_spreadsheet_ptr_result data_res = yetty_yrich_spreadsheet_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_float, data_res, "spreadsheet_content_width: data_get");
     struct yetty_yrich_spreadsheet *sheet = data_res.value;
@@ -516,10 +491,8 @@ static struct yetty_ycore_float_result spreadsheet_content_width(struct yetty_yc
 }
 
 [[clang::annotate("override@yrich:spreadsheet:document_content_height")]]
-static struct yetty_ycore_float_result spreadsheet_content_height(struct yetty_yclass_ctx *ctx,
-                                                                  struct yetty_yclass_object *obj)
+static struct yetty_ycore_float_result spreadsheet_content_height(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_spreadsheet_ptr_result data_res = yetty_yrich_spreadsheet_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_float, data_res, "spreadsheet_content_height: data_get");
     struct yetty_yrich_spreadsheet *sheet = data_res.value;
@@ -535,11 +508,9 @@ static struct yetty_ycore_float_result spreadsheet_content_height(struct yetty_y
  *=========================================================================*/
 
 [[clang::annotate("virtual@yrich:spreadsheet:spreadsheet_set_grid_size")]]
-static struct yetty_ycore_void_result spreadsheet_set_grid_size(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result spreadsheet_set_grid_size(struct yetty_yclass_object *obj,
                                                                 int32_t rows, int32_t cols)
 {
-    (void)ctx;
     struct yetty_yrich_spreadsheet_ptr_result data_res = yetty_yrich_spreadsheet_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "spreadsheet_set_grid_size: data_get");
     data_res.value->row_count = rows;
@@ -597,11 +568,9 @@ static struct yetty_ycore_void_result set_col_override(struct yetty_yrich_spread
 static void recalculate_cell_bounds(struct yetty_yrich_spreadsheet *sheet);
 
 [[clang::annotate("virtual@yrich:spreadsheet:spreadsheet_set_row_height")]]
-static struct yetty_ycore_void_result spreadsheet_set_row_height(struct yetty_yclass_ctx *ctx,
-                                                                 struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result spreadsheet_set_row_height(struct yetty_yclass_object *obj,
                                                                  int32_t row, float height)
 {
-    (void)ctx;
     struct yetty_yrich_spreadsheet_ptr_result data_res = yetty_yrich_spreadsheet_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "spreadsheet_set_row_height: data_get");
     struct yetty_ycore_void_result override_res = set_row_override(data_res.value, row, height);
@@ -612,11 +581,9 @@ static struct yetty_ycore_void_result spreadsheet_set_row_height(struct yetty_yc
 }
 
 [[clang::annotate("virtual@yrich:spreadsheet:spreadsheet_set_col_width")]]
-static struct yetty_ycore_void_result spreadsheet_set_col_width(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result spreadsheet_set_col_width(struct yetty_yclass_object *obj,
                                                                 int32_t col, float width)
 {
-    (void)ctx;
     struct yetty_yrich_spreadsheet_ptr_result data_res = yetty_yrich_spreadsheet_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "spreadsheet_set_col_width: data_get");
     struct yetty_ycore_void_result override_res = set_col_override(data_res.value, col, width);
@@ -765,7 +732,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_spreadsheet_ensure_cell(
     struct yetty_yclass_object *cell_obj = create_res.value;
     struct yetty_yrich_cell_ptr_result cell_res = yetty_yrich_cell_from(cell_obj);
     if (YETTY_IS_ERR(cell_res)) {
-        struct yetty_ycore_void_result destroy_res = yetty_yrich_element_destroy(NULL, cell_obj);
+        struct yetty_ycore_void_result destroy_res = yetty_yrich_element_destroy(cell_obj);
         if (YETTY_IS_ERR(destroy_res)) {
             yetty_ycore_error_destroy(destroy_res.error);
         }
@@ -820,12 +787,10 @@ struct yetty_yclass_object_ptr_result yetty_yrich_spreadsheet_ensure_cell(
 
 /* Set a cell's text value — wire-marshallable slot (scalars + buffer). */
 [[clang::annotate("virtual@yrich:spreadsheet:spreadsheet_set_cell_value")]]
-static struct yetty_ycore_void_result spreadsheet_set_cell_value(struct yetty_yclass_ctx *ctx,
-                                                                 struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result spreadsheet_set_cell_value(struct yetty_yclass_object *obj,
                                                                  int32_t row, int32_t col,
                                                                  struct yetty_ycore_buffer value)
 {
-    (void)ctx;
     struct yetty_yclass_object_ptr_result cell_res =
         yetty_yrich_spreadsheet_ensure_cell(obj, row, col);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "set_cell_value: ensure_cell failed");
@@ -875,11 +840,5 @@ struct yetty_yrich_cell_addr yetty_yrich_spreadsheet_cell_addr_at(struct yetty_y
     }
     return addr;
 }
-
-#ifdef YCLASS_CODEGEN
-/* Header-destined: the shared yrich value types (cell address) the public
- * spreadsheet API above references. */
-#include <yetty/yrich/yrich-types.h>
-#endif
 
 #include "spreadsheet.gen.c"

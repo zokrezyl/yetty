@@ -362,6 +362,25 @@ static int phr_name_is(const struct phr_header *header, const char *name)
            strncasecmp(header->name, name, name_len) == 0;
 }
 
+/* libcurl progress hook: abort the in-flight transfer when the proxy is
+ * stopping. Without it a worker blocked in curl_easy_perform on an idle
+ * upstream stream (e.g. claude's last turn at exit) never returns, so the
+ * shutdown pthread_join wedges forever — shutdown(conn->fd) only unblocks
+ * the client-side recv, not the upstream socket curl waits on. The easy
+ * interface caps its internal poll at ~1s, so this fires at least once a
+ * second even with no bytes flowing; returning non-zero makes
+ * curl_easy_perform return CURLE_ABORTED_BY_CALLBACK. */
+static int proxy_xferinfo(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal,
+                          curl_off_t ulnow)
+{
+    struct yai_proxy_conn *conn = clientp;
+    (void)dltotal;
+    (void)dlnow;
+    (void)ultotal;
+    (void)ulnow;
+    return atomic_load(&conn->proxy->stop) ? 1 : 0;
+}
+
 /* Forward one request (already parsed into url/method/header-list by the
  * caller) to the upstream and stream the response back. Returns 0 to keep the
  * connection alive, -1 to close it. */
@@ -384,6 +403,10 @@ static int proxy_forward(struct yai_proxy_conn *conn, const char *method, const 
     curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, method);
     curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
+    /* Let proxy_stop abort an in-flight transfer (see proxy_xferinfo). */
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, proxy_xferinfo);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, conn);
     /* Stay fully transparent on compression: do NOT set CURLOPT_ACCEPT_ENCODING
      * (which would make curl advertise + auto-decompress). The client's own
      * Accept-Encoding header is forwarded as-is, the upstream body is relayed

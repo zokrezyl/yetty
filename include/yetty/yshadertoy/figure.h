@@ -2,8 +2,8 @@
 /* Public interface for regular class(es) `figure` (module: yshadertoy).
  * Fully generated from the source .c — do not edit. This single
  * header is the source's complete public interface: class
- * accessors, method stubs, create()/register(), and any
- * `expose`d API. Public types come from `expose` annotations. */
+ * accessors, method stubs, create()/register(), exposed
+ * functions, and the public types the signatures use. */
 #ifndef YETTY_YCLASSGEN_YSHADERTOY_FIGURE_H
 #define YETTY_YCLASSGEN_YSHADERTOY_FIGURE_H
 
@@ -12,6 +12,14 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct yetty_context;
+struct yetty_ycore_rectangle;
+struct yetty_yfigure_registry;
+
 struct yetty_yclass_ptr_result yetty_yshadertoy_figure_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct
@@ -19,7 +27,13 @@ struct yetty_yclass_ptr_result yetty_yshadertoy_figure_class_get(void);
  * bad object surfaces rather than corrupting. Reach members
  * through the per-property getters/setters below. */
 struct yetty_yshadertoy_figure;
-YETTY_YRESULT_DECLARE(yetty_yshadertoy_figure_ptr, struct yetty_yshadertoy_figure *);
+struct yetty_yshadertoy_figure_ptr_result {
+    int ok;
+    union {
+        struct yetty_yshadertoy_figure *value;
+        struct yetty_ycore_error error;
+    };
+};
 struct yetty_yshadertoy_figure_ptr_result yetty_yshadertoy_figure_from(
     struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yshadertoy_figure_to(struct yetty_yshadertoy_figure *data);
@@ -27,10 +41,6 @@ struct yetty_yclass_object *yetty_yshadertoy_figure_to(struct yetty_yshadertoy_f
 struct yetty_yclass_object_ptr_result yetty_yshadertoy_figure_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_yshadertoy_register(void);
-
-struct yetty_context;
-struct yetty_ycore_rectangle;
-struct yetty_yfigure_registry;
 
 struct yetty_yclass_object_ptr_result yetty_yshadertoy_create(struct yetty_ycore_rectangle rect,
                                                               const char *shader_src,
@@ -42,5 +52,9 @@ struct yetty_ycore_void_result yetty_yshadertoy_set_source(struct yetty_yclass_o
                                                            size_t shader_len);
 struct yetty_ycore_void_result yetty_yshadertoy_register_factory(
     struct yetty_yfigure_registry *registry);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

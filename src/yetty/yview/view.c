@@ -15,10 +15,10 @@
  * methods so the binding generators can emit them.
  *
  * Usage:  obj = yetty_yview_view_create(NULL);
- *         yetty_yview_configure(NULL, obj, fd, child_id, kind, bg, rect…);
- *         yetty_yview_set_content(NULL, obj, drawables);
+ *         yetty_yview_configure(obj, fd, child_id, kind, bg, rect…);
+ *         yetty_yview_set_content(obj, drawables);
  *         yetty_yview_scroll_to / _scroll_by / _set_rect / _set_content_size;
- *         yetty_yview_destroy(NULL, obj);   // clears the surface + frees
+ *         yetty_yview_destroy(obj);   // clears the surface + frees
  *
  * This TU deliberately does NOT include its own generated header
  * `yetty/yview/view.h` — that header is a downstream artifact for other
@@ -165,13 +165,11 @@ static float clamp_scroll(float offset, float content, float viewport)
 /* configure: set the output fd, figure id/kind, opaque background, and rect.
  * Call once after create(), before set_content(). */
 [[clang::annotate("virtual@yview:view:configure")]] [[clang::annotate("local@yview:configure")]]
-static struct yetty_ycore_void_result view_configure(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *obj, int fd,
+static struct yetty_ycore_void_result view_configure(struct yetty_yclass_object *obj, int fd,
                                                      uint32_t child_id, uint32_t kind,
                                                      uint32_t bg_color, float min_x, float min_y,
                                                      float max_x, float max_y)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview configure: object");
     struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
@@ -253,10 +251,8 @@ static struct yetty_ycore_void_result view_ship(struct yetty_yview_view *view,
 
 [[clang::annotate("virtual@yview:view:set_content")]] [[clang::annotate("local@yview:set_content")]]
 static struct yetty_ycore_void_result view_set_content(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    const struct yetty_ydraw_drawable_list *content)
+    struct yetty_yclass_object *obj, const struct yetty_ydraw_drawable_list *content)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview set_content: object");
     struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
@@ -322,11 +318,9 @@ static struct yetty_ycore_void_result append_text_line(struct yetty_ydraw_drawab
  * want when they have text but no drawable list (the pager / nvim case).
  * font_size <= 0 selects a default. */
 [[clang::annotate("virtual@yview:view:set_text")]] [[clang::annotate("local@yview:set_text")]]
-static struct yetty_ycore_void_result view_set_text(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result view_set_text(struct yetty_yclass_object *obj,
                                                     const char *text, float font_size)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview set_text: object");
     struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
@@ -382,12 +376,10 @@ static struct yetty_ycore_void_result view_set_text(struct yetty_yclass_ctx *ctx
  * default ranges. The ygrid figure renders the yplot composite prim via the
  * terminal's composite factory. */
 [[clang::annotate("virtual@yview:view:set_plot")]] [[clang::annotate("local@yview:set_plot")]]
-static struct yetty_ycore_void_result view_set_plot(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result view_set_plot(struct yetty_yclass_object *obj,
                                                     const char *expr, float x_min, float x_max,
                                                     float y_min, float y_max)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview set_plot: object");
     struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
@@ -430,11 +422,9 @@ static struct yetty_ycore_void_result view_set_plot(struct yetty_yclass_ctx *ctx
 
 [[clang::annotate("virtual@yview:view:set_content_size")]] [[clang::annotate(
     "local@yview:set_content_size")]]
-static struct yetty_ycore_void_result view_set_content_size(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result view_set_content_size(struct yetty_yclass_object *obj,
                                                             float content_w, float content_h)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview set_content_size: object");
     struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
@@ -459,11 +449,9 @@ static struct yetty_ycore_void_result view_set_content_size(struct yetty_yclass_
 }
 
 [[clang::annotate("virtual@yview:view:scroll_to")]] [[clang::annotate("local@yview:scroll_to")]]
-static struct yetty_ycore_void_result view_scroll_to(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result view_scroll_to(struct yetty_yclass_object *obj,
                                                      float scroll_x, float scroll_y)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview scroll_to: object");
     struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
@@ -492,25 +480,22 @@ static struct yetty_ycore_void_result view_scroll_to(struct yetty_yclass_ctx *ct
 }
 
 [[clang::annotate("virtual@yview:view:scroll_by")]] [[clang::annotate("local@yview:scroll_by")]]
-static struct yetty_ycore_void_result view_scroll_by(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *obj, float delta_x,
+static struct yetty_ycore_void_result view_scroll_by(struct yetty_yclass_object *obj, float delta_x,
                                                      float delta_y)
 {
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview scroll_by: object");
     struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
     struct yetty_ycore_void_result r =
-        view_scroll_to(ctx, obj, view->scroll_x + delta_x, view->scroll_y + delta_y);
+        view_scroll_to(obj, view->scroll_x + delta_x, view->scroll_y + delta_y);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yview scroll_by");
     return YETTY_OK_VOID();
 }
 
 [[clang::annotate("virtual@yview:view:set_rect")]] [[clang::annotate("local@yview:set_rect")]]
-static struct yetty_ycore_void_result view_set_rect(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj, float min_x,
+static struct yetty_ycore_void_result view_set_rect(struct yetty_yclass_object *obj, float min_x,
                                                     float min_y, float max_x, float max_y)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview set_rect: object");
     struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
@@ -535,10 +520,8 @@ static struct yetty_ycore_void_result view_set_rect(struct yetty_yclass_ctx *ctx
 
 /* destroy: clear the surface (DELETE_CHILD) and free the object. */
 [[clang::annotate("virtual@yview:view:destroy")]] [[clang::annotate("local@yview:destroy")]]
-static struct yetty_ycore_void_result view_destroy(struct yetty_yclass_ctx *ctx,
-                                                   struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result view_destroy(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     /* Best-effort teardown: even if the slice can't be resolved we still free
      * the object. Stash (not swallow) any resolve error as the first error. */
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);

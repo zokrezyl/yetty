@@ -22,20 +22,10 @@
 #include "../internal.h"
 #include <yetty/ygui/widget.h>
 
-/* Drag callback typedef. Header-destined: codegen copies the
- * `#ifdef YCLASS_CODEGEN` block verbatim into the generated header (it must
- * appear BEFORE the exposed functions that take it, so they resolve to it
- * rather than an unrelated visible typedef). The real build gets its own
- * copy from the parallel `#ifndef YCLASS_CODEGEN` block. The two never
- * coexist in one parse. */
-#ifdef YCLASS_CODEGEN
+/* Drag callback type. Defined here in the owning .c; codegen reproduces it
+ * into the generated header for any public signature that references it. */
 typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *obj,
                                                              float dx, float dy, void *userdata);
-#endif
-#ifndef YCLASS_CODEGEN
-typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *obj,
-                                                             float dx, float dy, void *userdata);
-#endif
 
 struct [[clang::annotate("mixin@ygui:draggable")]] yetty_ygui_draggable {
     int dragging;
@@ -56,11 +46,9 @@ struct yetty_yclass_ptr_result yetty_ygui_draggable_mixin_get(void);
 struct yetty_ygui_draggable_ptr_result yetty_ygui_draggable_from(struct yetty_yclass_object *obj);
 
 [[clang::annotate("override@ygui:draggable:widget_on_press")]]
-static struct yetty_ycore_int_result draggable_on_press(struct yetty_yclass_ctx *yclass_ctx,
-                                                        struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result draggable_on_press(struct yetty_yclass_object *yclass_obj,
                                                         float x, float y, int button)
 {
-    (void)yclass_ctx;
     (void)button;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_draggable_ptr_result dd_dr = yetty_ygui_draggable_from(obj);
@@ -79,11 +67,9 @@ static struct yetty_ycore_int_result draggable_on_press(struct yetty_yclass_ctx 
 }
 
 [[clang::annotate("override@ygui:draggable:widget_on_motion")]]
-static struct yetty_ycore_int_result draggable_on_motion(struct yetty_yclass_ctx *yclass_ctx,
-                                                         struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result draggable_on_motion(struct yetty_yclass_object *yclass_obj,
                                                          float x, float y)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_draggable_ptr_result dd_dr = yetty_ygui_draggable_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dd_dr, "draggable_on_motion: data_get");
@@ -108,11 +94,9 @@ static struct yetty_ycore_int_result draggable_on_motion(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@ygui:draggable:widget_on_release")]]
-static struct yetty_ycore_int_result draggable_on_release(struct yetty_yclass_ctx *yclass_ctx,
-                                                          struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result draggable_on_release(struct yetty_yclass_object *yclass_obj,
                                                           float x, float y, int button)
 {
-    (void)yclass_ctx;
     (void)x;
     (void)y;
     (void)button;

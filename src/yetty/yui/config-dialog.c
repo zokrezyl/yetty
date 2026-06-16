@@ -154,11 +154,9 @@ static struct yetty_ycore_void_result show_path(struct yetty_yui_config_dialog *
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result on_tree_toggle(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *node,
+static struct yetty_ycore_void_result on_tree_toggle(struct yetty_yclass_object *node,
                                                      void *userdata)
 {
-    (void)ctx;
     (void)node;
     struct path_bundle *pb = userdata;
     if (!pb || !pb->dlg) {
@@ -169,10 +167,8 @@ static struct yetty_ycore_void_result on_tree_toggle(struct yetty_yclass_ctx *ct
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result on_close(struct yetty_yclass_ctx *ctx,
-                                               struct yetty_yclass_object *button, void *userdata)
+static struct yetty_ycore_void_result on_close(struct yetty_yclass_object *button, void *userdata)
 {
-    (void)ctx;
     (void)button;
     struct yetty_ycore_void_result hide_r = yetty_yui_config_dialog_hide(userdata);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, hide_r, "on_close: config_dialog_hide");

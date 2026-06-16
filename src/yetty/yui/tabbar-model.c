@@ -812,7 +812,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_model_on_event(struct yetty_yui_t
         struct yetty_yclass_object *wm =
             bar->yetty_ctx ? bar->yetty_ctx->runtime->window_manager : NULL;
         if (wm) {
-            wm_absorb(yetty_yplatform_window_manager_toggle_maximize(NULL, wm));
+            wm_absorb(yetty_yplatform_window_manager_toggle_maximize(wm));
         }
         bar->dragging = 0;
         ydebug("tabbar: double-click → toggle maximize");
@@ -844,14 +844,14 @@ struct yetty_ycore_int_result yetty_yui_tabbar_model_on_event(struct yetty_yui_t
                  * it's a no-op and the per-pixel drag_by below keeps
                  * driving glfwSetWindowPos. */
                 bar->drag_move_grab_sent = 1;
-                wm_absorb(yetty_yplatform_window_manager_begin_interactive_move(NULL, wm));
+                wm_absorb(yetty_yplatform_window_manager_begin_interactive_move(wm));
             }
             ydebug("DRAGTRACE: [render-thread] tabbar MOVE during drag: "
                    "mouse=(%.1f,%.1f) anchor=(%.1f,%.1f) dx=%d dy=%d wm=%p",
                    event->mouse.x, event->mouse.y, bar->drag_anchor_x, bar->drag_anchor_y, dx, dy,
                    (void *)wm);
             if (wm && (dx != 0 || dy != 0)) {
-                wm_absorb(yetty_yplatform_window_manager_drag_by(NULL, wm, dx, dy));
+                wm_absorb(yetty_yplatform_window_manager_drag_by(wm, dx, dy));
                 /* Don't update the anchor: glfwSetWindowPos absolutely
                  * repositions, which leaves the cursor exactly at the
                  * anchor in the moved window's frame. Resetting would
@@ -963,7 +963,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_model_on_event(struct yetty_yui_t
                      * glfwSetWindowSize. */
                     bar->resize_grab_sent = 1;
                     wm_absorb(yetty_yplatform_window_manager_begin_interactive_resize(
-                        NULL, wm, bar->resize_edge));
+                        wm, bar->resize_edge));
                 }
                 /* Per-axis delta: right/bottom track incrementally (top-left
                  * fixed); left measures from the fixed anchor (the window-move
@@ -980,7 +980,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_model_on_event(struct yetty_yui_t
                     bar->resize_last_y = my;
                 }
                 if (wm && (step_dx != 0 || step_dy != 0)) {
-                    wm_absorb(yetty_yplatform_window_manager_resize_by(NULL, wm, step_dx, step_dy,
+                    wm_absorb(yetty_yplatform_window_manager_resize_by(wm, step_dx, step_dy,
                                                                        bar->resize_edge));
                 }
                 return YETTY_OK(yetty_ycore_int, 1);
@@ -1102,7 +1102,7 @@ void yetty_yui_tabbar_model_iconify(struct yetty_yui_tabbar_model *bar)
     }
     struct yetty_yclass_object *wm = bar->yetty_ctx->runtime->window_manager;
     if (wm) {
-        wm_absorb(yetty_yplatform_window_manager_iconify(NULL, wm));
+        wm_absorb(yetty_yplatform_window_manager_iconify(wm));
     }
 }
 
@@ -1113,7 +1113,7 @@ void yetty_yui_tabbar_model_toggle_maximize(struct yetty_yui_tabbar_model *bar)
     }
     struct yetty_yclass_object *wm = bar->yetty_ctx->runtime->window_manager;
     if (wm) {
-        wm_absorb(yetty_yplatform_window_manager_toggle_maximize(NULL, wm));
+        wm_absorb(yetty_yplatform_window_manager_toggle_maximize(wm));
     }
 }
 
@@ -1124,7 +1124,7 @@ void yetty_yui_tabbar_model_close_window(struct yetty_yui_tabbar_model *bar)
     }
     struct yetty_yclass_object *wm = bar->yetty_ctx->runtime->window_manager;
     if (wm) {
-        wm_absorb(yetty_yplatform_window_manager_request_close(NULL, wm));
+        wm_absorb(yetty_yplatform_window_manager_request_close(wm));
     }
 }
 

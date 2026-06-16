@@ -176,8 +176,16 @@ struct yetty_ycore_void_result yai_renderer_hud_quota(struct yai_renderer *rende
  * DECSTBM scroll region (conversation text scrolls above it). Call
  * reserve at startup and after a resize / shell / alt-screen, release at
  * shutdown and before handing the terminal to a shell or the alt screen.
- * No-ops unless the text HUD is active. */
-struct yetty_ycore_void_result yai_renderer_text_hud_reserve(struct yai_renderer *renderer);
+ * No-ops unless the text HUD is active.
+ *
+ * anchor_top selects where the cursor lands after the region is set:
+ *   - non-zero (startup): clear the screen and home the cursor to the top,
+ *     so the banner + prompt start at the top of a fresh screen;
+ *   - zero (mid-session re-reserve: resume, resize, config close): park the
+ *     cursor at the bottom of the region so the prompt continues below the
+ *     conversation already on screen. */
+struct yetty_ycore_void_result yai_renderer_text_hud_reserve(struct yai_renderer *renderer,
+                                                             int anchor_top);
 struct yetty_ycore_void_result yai_renderer_text_hud_release(struct yai_renderer *renderer);
 
 /* One tool invocation line: "⚙ name <one-line input summary>". */

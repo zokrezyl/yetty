@@ -127,10 +127,8 @@ static float ynode_view_zoom(struct yetty_yclass_object *node)
  * Lifecycle.
  *---------------------------------------------------------------------------*/
 [[clang::annotate("override@ygui:ynode:constructor")]]
-static struct yetty_ycore_void_result ynode_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                        struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ynode_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, ynode_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -175,10 +173,8 @@ static void ynode_free_pins(struct ynode_pin *pins, size_t count)
 }
 
 [[clang::annotate("override@ygui:ynode:destructor")]]
-static struct yetty_ycore_void_result ynode_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                       struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ynode_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_ynode *d = ynode_data(obj);
 
@@ -318,11 +314,9 @@ static int ynode_resize_grip_at(struct yetty_yclass_object *node, float x, float
  * (the engine's pre-order walk recurses into them).
  *---------------------------------------------------------------------------*/
 [[clang::annotate("override@ygui:ynode:widget_paint")]]
-static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                  struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_object *yclass_obj,
                                                   struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "ynode_paint: NULL ctx");
@@ -429,11 +423,9 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_ctx *yclas
  * Pointer handling — move the node, or start/drive a link off a pin.
  *---------------------------------------------------------------------------*/
 [[clang::annotate("override@ygui:ynode:widget_on_press")]]
-static struct yetty_ycore_int_result ynode_on_press(struct yetty_yclass_ctx *yclass_ctx,
-                                                    struct yetty_yclass_object *yclass_obj, float x,
+static struct yetty_ycore_int_result ynode_on_press(struct yetty_yclass_object *yclass_obj, float x,
                                                     float y, int button)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_ynode *d = ynode_data(obj);
     struct yetty_yclass_object *editor = ynode_editor(obj);
@@ -488,11 +480,9 @@ static struct yetty_ycore_int_result ynode_on_press(struct yetty_yclass_ctx *ycl
 }
 
 [[clang::annotate("override@ygui:ynode:widget_on_motion")]]
-static struct yetty_ycore_int_result ynode_on_motion(struct yetty_yclass_ctx *yclass_ctx,
-                                                     struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result ynode_on_motion(struct yetty_yclass_object *yclass_obj,
                                                      float x, float y)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_ynode *d = ynode_data(obj);
     struct yetty_yclass_object *editor = ynode_editor(obj);
@@ -575,11 +565,9 @@ static struct yetty_ycore_int_result ynode_on_motion(struct yetty_yclass_ctx *yc
 }
 
 [[clang::annotate("override@ygui:ynode:widget_on_release")]]
-static struct yetty_ycore_int_result ynode_on_release(struct yetty_yclass_ctx *yclass_ctx,
-                                                      struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result ynode_on_release(struct yetty_yclass_object *yclass_obj,
                                                       float x, float y, int button)
 {
-    (void)yclass_ctx;
     (void)button;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_ynode *d = ynode_data(obj);

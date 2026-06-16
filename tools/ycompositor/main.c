@@ -606,7 +606,7 @@ static struct yetty_ycore_void_result ycomp_worker(struct yetty_yinit_runtime *r
             yerror("ycompositor: clear failed: %s", cl.error.msg);
             yetty_ycore_error_destroy(cl.error);
         }
-        struct yetty_ycore_void_result rr = yetty_yfigure_render(NULL, app->root, target);
+        struct yetty_ycore_void_result rr = yetty_yfigure_render(app->root, target);
         if (YETTY_IS_ERR(rr)) {
             yerror("ycompositor: root render failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
@@ -633,7 +633,7 @@ static struct yetty_ycore_void_result ycomp_worker(struct yetty_yinit_runtime *r
     /* Strict teardown: root container + figures before yframework so any
      * pending GPU work bound to the runtime's device flushes first. */
     {
-        struct yetty_ycore_void_result dr = yetty_yfigure_destroy(NULL, app->root);
+        struct yetty_ycore_void_result dr = yetty_yfigure_destroy(app->root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "root destroy");
     }
     app->root = NULL;

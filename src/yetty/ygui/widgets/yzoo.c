@@ -33,10 +33,8 @@ yetty_ygui_yzoo {
 };
 
 [[clang::annotate("override@ygui:yzoo:constructor")]]
-static struct yetty_ycore_void_result yzoo_ctor(struct yetty_yclass_ctx *yclass_ctx,
-                                                struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result yzoo_ctor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_yzoo_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -56,10 +54,8 @@ static struct yetty_ycore_void_result yzoo_ctor(struct yetty_yclass_ctx *yclass_
 }
 
 [[clang::annotate("override@ygui:yzoo:destructor")]]
-static struct yetty_ycore_void_result yzoo_dtor(struct yetty_yclass_ctx *yclass_ctx,
-                                                struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result yzoo_dtor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_yzoo_ptr_result d_dr = yetty_ygui_yzoo_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yzoo_dtor: data_get");
@@ -71,11 +67,9 @@ static struct yetty_ycore_void_result yzoo_dtor(struct yetty_yclass_ctx *yclass_
 }
 
 [[clang::annotate("override@ygui:yzoo:widget_emit_body")]]
-static struct yetty_ycore_void_result yzoo_emit_body(struct yetty_yclass_ctx *yclass_ctx,
-                                                     struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result yzoo_emit_body(struct yetty_yclass_object *yclass_obj,
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_yzoo_ptr_result d_dr = yetty_ygui_yzoo_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yzoo_emit_body: data_get");
@@ -117,9 +111,9 @@ static struct yetty_ycore_void_result yzoo_emit_body(struct yetty_yclass_ctx *yc
     if (!impl) {
         return YETTY_OK_VOID();
     }
-    typedef struct yetty_ycore_void_result (*fn_t)(
-        struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
-    return ((fn_t)impl)(NULL, yclass_obj, ctx);
+    typedef struct yetty_ycore_void_result (*fn_t)(struct yetty_yclass_object *,
+                                                   struct yetty_ygui_emit_ctx *);
+    return ((fn_t)impl)(yclass_obj, ctx);
 }
 
 #include "yzoo.gen.c"

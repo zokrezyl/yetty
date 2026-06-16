@@ -57,10 +57,8 @@ yetty_ygui_ydiagram {
 };
 
 [[clang::annotate("override@ygui:ydiagram:constructor")]]
-static struct yetty_ycore_void_result ydiagram_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ydiagram_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_ydiagram_class_get().value,
@@ -75,10 +73,8 @@ static struct yetty_ycore_void_result ydiagram_constructor(struct yetty_yclass_c
 }
 
 [[clang::annotate("override@ygui:ydiagram:destructor")]]
-static struct yetty_ycore_void_result ydiagram_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                          struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ydiagram_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_ydiagram_ptr_result d_dr = yetty_ygui_ydiagram_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ydiagram_destructor: data_get");

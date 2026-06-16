@@ -64,8 +64,7 @@
 #include <stdlib.h> /* malloc/free for buffer-arg marshalling */
 #include <string.h>
 
-struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_object *obj, float x,
                                                          float y, int button)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -83,10 +82,9 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_ctx
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_widget_on_press: NULL object");
     }
 
-    struct yetty_yclass_ctx *rpc_ctx = ctx;
-    if (rpc_ctx && rpc_ctx->session) {
+    if (obj->session) {
         struct uint32_result remote_id_r =
-            yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
+            yetty_yclass_rpc_session_ensure_remote_id(obj->session, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, remote_id_r,
                             "yetty_ygui_widget_on_press: ensure_remote_id failed");
         uint32_t remote_id = remote_id_r.value;
@@ -106,7 +104,7 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_ctx
 #pragma pack(pop)
         uint8_t resp_buf[1 + sizeof(int)];
         struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
+            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
                                   sizeof(wire_args), resp_buf, sizeof(resp_buf));
         YETTY_RETURN_IF_ERR(yetty_ycore_int, rpc_call_r,
                             "yetty_ygui_widget_on_press: RPC call failed");
@@ -132,12 +130,11 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_ctx
             yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                             "yetty_ygui_widget_on_press: dispatch_lookup failed");
-        return ((yetty_ygui_widget_on_press_fn)dispatch_impl_r.value)(ctx, obj, x, y, button);
+        return ((yetty_ygui_widget_on_press_fn)dispatch_impl_r.value)(obj, x, y, button);
     }
 }
 
-struct yetty_ycore_int_result yetty_ygui_widget_on_release(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ygui_widget_on_release(struct yetty_yclass_object *obj, float x,
                                                            float y, int button)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -155,10 +152,9 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_release(struct yetty_yclass_c
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_widget_on_release: NULL object");
     }
 
-    struct yetty_yclass_ctx *rpc_ctx = ctx;
-    if (rpc_ctx && rpc_ctx->session) {
+    if (obj->session) {
         struct uint32_result remote_id_r =
-            yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
+            yetty_yclass_rpc_session_ensure_remote_id(obj->session, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, remote_id_r,
                             "yetty_ygui_widget_on_release: ensure_remote_id failed");
         uint32_t remote_id = remote_id_r.value;
@@ -178,7 +174,7 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_release(struct yetty_yclass_c
 #pragma pack(pop)
         uint8_t resp_buf[1 + sizeof(int)];
         struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
+            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
                                   sizeof(wire_args), resp_buf, sizeof(resp_buf));
         YETTY_RETURN_IF_ERR(yetty_ycore_int, rpc_call_r,
                             "yetty_ygui_widget_on_release: RPC call failed");
@@ -205,12 +201,11 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_release(struct yetty_yclass_c
             yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                             "yetty_ygui_widget_on_release: dispatch_lookup failed");
-        return ((yetty_ygui_widget_on_release_fn)dispatch_impl_r.value)(ctx, obj, x, y, button);
+        return ((yetty_ygui_widget_on_release_fn)dispatch_impl_r.value)(obj, x, y, button);
     }
 }
 
-struct yetty_ycore_int_result yetty_ygui_widget_on_motion(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ygui_widget_on_motion(struct yetty_yclass_object *obj, float x,
                                                           float y)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -228,10 +223,9 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_motion(struct yetty_yclass_ct
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_widget_on_motion: NULL object");
     }
 
-    struct yetty_yclass_ctx *rpc_ctx = ctx;
-    if (rpc_ctx && rpc_ctx->session) {
+    if (obj->session) {
         struct uint32_result remote_id_r =
-            yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
+            yetty_yclass_rpc_session_ensure_remote_id(obj->session, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, remote_id_r,
                             "yetty_ygui_widget_on_motion: ensure_remote_id failed");
         uint32_t remote_id = remote_id_r.value;
@@ -250,7 +244,7 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_motion(struct yetty_yclass_ct
 #pragma pack(pop)
         uint8_t resp_buf[1 + sizeof(int)];
         struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
+            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
                                   sizeof(wire_args), resp_buf, sizeof(resp_buf));
         YETTY_RETURN_IF_ERR(yetty_ycore_int, rpc_call_r,
                             "yetty_ygui_widget_on_motion: RPC call failed");
@@ -276,12 +270,11 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_motion(struct yetty_yclass_ct
             yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                             "yetty_ygui_widget_on_motion: dispatch_lookup failed");
-        return ((yetty_ygui_widget_on_motion_fn)dispatch_impl_r.value)(ctx, obj, x, y);
+        return ((yetty_ygui_widget_on_motion_fn)dispatch_impl_r.value)(obj, x, y);
     }
 }
 
-struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_object *obj,
                                                            struct yetty_ygui_emit_ctx *emit_ctx)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -306,11 +299,10 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_c
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ygui_widget_emit_body: dispatch_lookup failed");
-    return ((yetty_ygui_widget_emit_body_fn)dispatch_impl_r.value)(ctx, obj, emit_ctx);
+    return ((yetty_ygui_widget_emit_body_fn)dispatch_impl_r.value)(obj, emit_ctx);
 }
 
-struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj)
+struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -327,10 +319,9 @@ struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_ctx *c
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_constructor: NULL object");
     }
 
-    struct yetty_yclass_ctx *rpc_ctx = ctx;
-    if (rpc_ctx && rpc_ctx->session) {
+    if (obj->session) {
         struct uint32_result remote_id_r =
-            yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
+            yetty_yclass_rpc_session_ensure_remote_id(obj->session, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, remote_id_r,
                             "yetty_ygui_constructor: ensure_remote_id failed");
         uint32_t remote_id = remote_id_r.value;
@@ -346,7 +337,7 @@ struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_ctx *c
 #pragma pack(pop)
         uint8_t resp_buf[1];
         struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
+            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
                                   sizeof(wire_args), resp_buf, sizeof(resp_buf));
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
                             "yetty_ygui_constructor: RPC call failed");
@@ -367,12 +358,11 @@ struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_ctx *c
             yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                             "yetty_ygui_constructor: dispatch_lookup failed");
-        return ((yetty_ygui_constructor_fn)dispatch_impl_r.value)(ctx, obj);
+        return ((yetty_ygui_constructor_fn)dispatch_impl_r.value)(obj);
     }
 }
 
-struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *obj)
+struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -389,10 +379,9 @@ struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_ctx *ct
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_destructor: NULL object");
     }
 
-    struct yetty_yclass_ctx *rpc_ctx = ctx;
-    if (rpc_ctx && rpc_ctx->session) {
+    if (obj->session) {
         struct uint32_result remote_id_r =
-            yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
+            yetty_yclass_rpc_session_ensure_remote_id(obj->session, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, remote_id_r,
                             "yetty_ygui_destructor: ensure_remote_id failed");
         uint32_t remote_id = remote_id_r.value;
@@ -408,7 +397,7 @@ struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_ctx *ct
 #pragma pack(pop)
         uint8_t resp_buf[1];
         struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
+            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
                                   sizeof(wire_args), resp_buf, sizeof(resp_buf));
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r, "yetty_ygui_destructor: RPC call failed");
         size_t response_len = rpc_call_r.value;
@@ -427,12 +416,11 @@ struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_ctx *ct
             yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                             "yetty_ygui_destructor: dispatch_lookup failed");
-        return ((yetty_ygui_destructor_fn)dispatch_impl_r.value)(ctx, obj);
+        return ((yetty_ygui_destructor_fn)dispatch_impl_r.value)(obj);
     }
 }
 
-struct yetty_ycore_int_result yetty_ygui_widget_on_scroll(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ygui_widget_on_scroll(struct yetty_yclass_object *obj, float x,
                                                           float y, float dx, float dy)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -450,10 +438,9 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_scroll(struct yetty_yclass_ct
         return YETTY_ERR(yetty_ycore_int, "yetty_ygui_widget_on_scroll: NULL object");
     }
 
-    struct yetty_yclass_ctx *rpc_ctx = ctx;
-    if (rpc_ctx && rpc_ctx->session) {
+    if (obj->session) {
         struct uint32_result remote_id_r =
-            yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
+            yetty_yclass_rpc_session_ensure_remote_id(obj->session, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, remote_id_r,
                             "yetty_ygui_widget_on_scroll: ensure_remote_id failed");
         uint32_t remote_id = remote_id_r.value;
@@ -474,7 +461,7 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_scroll(struct yetty_yclass_ct
 #pragma pack(pop)
         uint8_t resp_buf[1 + sizeof(int)];
         struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
+            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
                                   sizeof(wire_args), resp_buf, sizeof(resp_buf));
         YETTY_RETURN_IF_ERR(yetty_ycore_int, rpc_call_r,
                             "yetty_ygui_widget_on_scroll: RPC call failed");
@@ -500,12 +487,11 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_scroll(struct yetty_yclass_ct
             yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                             "yetty_ygui_widget_on_scroll: dispatch_lookup failed");
-        return ((yetty_ygui_widget_on_scroll_fn)dispatch_impl_r.value)(ctx, obj, x, y, dx, dy);
+        return ((yetty_ygui_widget_on_scroll_fn)dispatch_impl_r.value)(obj, x, y, dx, dy);
     }
 }
 
-struct yetty_ycore_void_result yetty_ygui_widget_paint(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ygui_widget_paint(struct yetty_yclass_object *obj,
                                                        struct yetty_ygui_emit_ctx *emit_ctx)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -530,12 +516,11 @@ struct yetty_ycore_void_result yetty_ygui_widget_paint(struct yetty_yclass_ctx *
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ygui_widget_paint: dispatch_lookup failed");
-    return ((yetty_ygui_widget_paint_fn)dispatch_impl_r.value)(ctx, obj, emit_ctx);
+    return ((yetty_ygui_widget_paint_fn)dispatch_impl_r.value)(obj, emit_ctx);
 }
 
 struct yetty_ycore_void_result yetty_ygui_widget_emit_container(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    struct yetty_ygui_emit_ctx *emit_ctx)
+    struct yetty_yclass_object *obj, struct yetty_ygui_emit_ctx *emit_ctx)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -560,5 +545,5 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit_container(
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ygui_widget_emit_container: dispatch_lookup failed");
-    return ((yetty_ygui_widget_emit_container_fn)dispatch_impl_r.value)(ctx, obj, emit_ctx);
+    return ((yetty_ygui_widget_emit_container_fn)dispatch_impl_r.value)(obj, emit_ctx);
 }

@@ -346,8 +346,11 @@ static struct yetty_ycore_void_result text_hud_redraw(struct yai_renderer *rende
     int quota_cols = text_hud_cols(renderer->hud_quota);
     /* Save cursor, jump to the reserved last row, clear it, then paint the
      * mint band: activity on the left, quota centered, stats on the right,
-     * with the dark-mint background filling the gaps. */
-    printf("\033[s\033[%d;1H\033[2K" YAI_HUD_BG, rows);
+     * with the dark-mint background filling the gaps. Use DECSC/DECRC
+     * (ESC 7 / ESC 8) for save/restore, NOT CSI s / CSI u: libvterm (yetty,
+     * nvim, …) treats CSI s as DECSLRM and ignores CSI u, so the restore
+     * would no-op and strand the cursor on the bar row. */
+    printf("\0337\033[%d;1H\033[2K" YAI_HUD_BG, rows);
     printf(YAI_MINT_BRIGHT "%s" YAI_FG_DEFAULT, renderer->hud_state);
     int gap = columns - left_cols - right_cols - quota_cols;
     if (quota_cols > 0 && gap >= 2) {
@@ -363,7 +366,7 @@ static struct yetty_ycore_void_result text_hud_redraw(struct yai_renderer *rende
         }
     }
     fputs(renderer->hud_stats, stdout);
-    fputs(YAI_RESET "\033[u", stdout);
+    fputs(YAI_RESET "\0338", stdout);
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "text_hud_redraw: flush");
     return YETTY_OK_VOID();
@@ -371,8 +374,9 @@ static struct yetty_ycore_void_result text_hud_redraw(struct yai_renderer *rende
 
 /* Reserve the bottom row for the text HUD via a DECSTBM scroll region
  * (rows 1..N-1 scroll; row N is the fixed bar), then paint the bar.
- * Setting the region homes the cursor, so save/restore around it. */
-struct yetty_ycore_void_result yai_renderer_text_hud_reserve(struct yai_renderer *renderer)
+ * See the header for what anchor_top selects. */
+struct yetty_ycore_void_result yai_renderer_text_hud_reserve(struct yai_renderer *renderer,
+                                                             int anchor_top)
 {
     if (!renderer->text_hud) {
         return YETTY_OK_VOID();
@@ -381,12 +385,20 @@ struct yetty_ycore_void_result yai_renderer_text_hud_reserve(struct yai_renderer
     if (rows < 3) {
         return YETTY_OK_VOID(); /* too short to spare a row */
     }
-    /* Reserve rows 1..rows-1 to scroll, then PARK the cursor at the bottom
-     * of that region (row rows-1). Restoring the prior cursor would be
-     * wrong: if the screen was full when yai started, the cursor sat on
-     * the last row — now the bar row, outside the region — so the prompt
-     * and all output would land there and nothing would scroll. */
-    printf("\033[1;%dr\033[%d;1H", rows - 1, rows - 1);
+    if (anchor_top) {
+        /* Startup: no conversation yet. Reserve rows 1..rows-1 to scroll,
+         * clear the screen, and home the cursor to the top — the caller
+         * prints the banner + prompt AFTER this, so they start at the top
+         * instead of jumping down to a cursor parked at the bottom. */
+        printf("\033[1;%dr\033[2J\033[H", rows - 1);
+    } else {
+        /* Mid-session re-reserve: PARK the cursor at the bottom of the
+         * region (row rows-1). Restoring the prior cursor would be wrong:
+         * if the screen was full the cursor sat on the last row — now the
+         * bar row, outside the region — so the prompt and all output would
+         * land there and nothing would scroll. */
+        printf("\033[1;%dr\033[%d;1H", rows - 1, rows - 1);
+    }
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "text_hud_reserve: region");
     return text_hud_redraw(renderer);
@@ -403,8 +415,10 @@ struct yetty_ycore_void_result yai_renderer_text_hud_release(struct yai_renderer
      * cursor to row 1. Saving after the reset would capture (1,1), and the
      * restore would strand the cursor at the top — the caller's final output
      * (and the shell prompt after exit) would then land mid-screen over the
-     * conversation. Save real position, reset, clear the bar row, restore. */
-    printf("\033[s\033[r\033[%d;1H\033[2K\033[u", rows);
+     * conversation. Save real position, reset, clear the bar row, restore.
+     * DECSC/DECRC (ESC 7 / ESC 8), not CSI s / CSI u — libvterm ignores the
+     * latter (CSI s is DECSLRM there). */
+    printf("\0337\033[r\033[%d;1H\033[2K\0338", rows);
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "text_hud_release: reset");
     return YETTY_OK_VOID();

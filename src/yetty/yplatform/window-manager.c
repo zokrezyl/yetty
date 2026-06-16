@@ -34,10 +34,10 @@
  * Lifecycle:
  *   yetty_yplatform_register();
  *   obj = yetty_yplatform_window_manager_create(NULL);
- *   yetty_yplatform_window_manager_configure(NULL, obj, glfw_window,
+ *   yetty_yplatform_window_manager_configure(obj, glfw_window,
  *                                            output_pipe, input_pipe);
- *   ... yetty_yplatform_window_manager_drag_by(NULL, obj, dx, dy); ...
- *   yetty_yplatform_window_manager_destroy(NULL, obj);  // frees cursors + object
+ *   ... yetty_yplatform_window_manager_drag_by(obj, dx, dy); ...
+ *   yetty_yplatform_window_manager_destroy(obj);  // frees cursors + object
  */
 #include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
@@ -145,11 +145,10 @@ static void post_event(struct yetty_yplatform_window_manager *manager,
 [[clang::annotate("local@yplatform:window_manager_configure")]]
 /* clang-format on */
 static struct yetty_ycore_void_result window_manager_configure(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, void *os_window,
+    struct yetty_yclass_object *obj, void *os_window,
     struct yetty_ycore_xthread_event_pipe *output_pipe,
     struct yetty_ycore_xthread_event_pipe *input_pipe)
 {
-    (void)ctx;
     if (!os_window || !output_pipe || !input_pipe) {
         return YETTY_ERR(yetty_ycore_void,
                          "window_manager configure: os_window, output_pipe, input_pipe required");
@@ -167,10 +166,8 @@ static struct yetty_ycore_void_result window_manager_configure(
 [[clang::annotate("virtual@yplatform:window_manager:window_manager_destroy")]]
 [[clang::annotate("local@yplatform:window_manager_destroy")]]
 /* clang-format on */
-static struct yetty_ycore_void_result window_manager_destroy(struct yetty_yclass_ctx *ctx,
-                                                             struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result window_manager_destroy(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     /* Best-effort teardown: even if the slice can't be resolved we still free
      * the object. Stash (not swallow) any resolve error as the first error. */
     struct yetty_yclass_void_ptr_result data_r = window_manager_from_obj(obj);
@@ -204,10 +201,8 @@ static struct yetty_ycore_void_result window_manager_destroy(struct yetty_yclass
 [[clang::annotate("virtual@yplatform:window_manager:window_manager_iconify")]]
 [[clang::annotate("local@yplatform:window_manager_iconify")]]
 /* clang-format on */
-static struct yetty_ycore_void_result window_manager_iconify(struct yetty_yclass_ctx *ctx,
-                                                             struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result window_manager_iconify(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result data_r = window_manager_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "window_manager iconify: object");
     struct yetty_yui_event event = {.type = YETTY_YCORE_WINDOW_ICONIFY};
@@ -220,9 +215,8 @@ static struct yetty_ycore_void_result window_manager_iconify(struct yetty_yclass
 [[clang::annotate("local@yplatform:window_manager_toggle_maximize")]]
 /* clang-format on */
 static struct yetty_ycore_void_result window_manager_toggle_maximize(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+    struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result data_r = window_manager_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "window_manager toggle_maximize: object");
     struct yetty_yui_event event = {.type = YETTY_YCORE_WINDOW_TOGGLE_MAXIMIZE};
@@ -234,10 +228,8 @@ static struct yetty_ycore_void_result window_manager_toggle_maximize(
 [[clang::annotate("virtual@yplatform:window_manager:window_manager_request_close")]]
 [[clang::annotate("local@yplatform:window_manager_request_close")]]
 /* clang-format on */
-static struct yetty_ycore_void_result window_manager_request_close(struct yetty_yclass_ctx *ctx,
-                                                                   struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result window_manager_request_close(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result data_r = window_manager_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "window_manager request_close: object");
     struct yetty_yui_event event = {.type = YETTY_YCORE_WINDOW_CLOSE};
@@ -249,11 +241,9 @@ static struct yetty_ycore_void_result window_manager_request_close(struct yetty_
 [[clang::annotate("virtual@yplatform:window_manager:window_manager_drag_by")]]
 [[clang::annotate("local@yplatform:window_manager_drag_by")]]
 /* clang-format on */
-static struct yetty_ycore_void_result window_manager_drag_by(struct yetty_yclass_ctx *ctx,
-                                                             struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result window_manager_drag_by(struct yetty_yclass_object *obj,
                                                              int dx, int dy)
 {
-    (void)ctx;
     if (dx == 0 && dy == 0) {
         ydebug("DRAGTRACE: drag_by called with zero delta — skipping");
         return YETTY_OK_VOID();
@@ -275,11 +265,9 @@ static struct yetty_ycore_void_result window_manager_drag_by(struct yetty_yclass
 [[clang::annotate("virtual@yplatform:window_manager:window_manager_resize_by")]] [[clang::annotate(
     "local@yplatform:window_manager_resize_by")]]
 /* clang-format on */
-static struct yetty_ycore_void_result window_manager_resize_by(struct yetty_yclass_ctx *ctx,
-                                                               struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result window_manager_resize_by(struct yetty_yclass_object *obj,
                                                                int dx, int dy, int edge)
 {
-    (void)ctx;
     if (dx == 0 && dy == 0) {
         return YETTY_OK_VOID();
     }
@@ -298,9 +286,8 @@ static struct yetty_ycore_void_result window_manager_resize_by(struct yetty_ycla
 [[clang::annotate("local@yplatform:window_manager_begin_interactive_move")]]
 /* clang-format on */
 static struct yetty_ycore_void_result window_manager_begin_interactive_move(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+    struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result data_r = window_manager_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "window_manager begin_interactive_move: object");
     ydebug("WMOVETRACE: [render-thread] begin_interactive_move -> posting "
@@ -319,9 +306,8 @@ static struct yetty_ycore_void_result window_manager_begin_interactive_move(
 [[clang::annotate("local@yplatform:window_manager_begin_interactive_resize")]]
 /* clang-format on */
 static struct yetty_ycore_void_result window_manager_begin_interactive_resize(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int edge)
+    struct yetty_yclass_object *obj, int edge)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result data_r = window_manager_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r,
                         "window_manager begin_interactive_resize: object");
@@ -341,11 +327,9 @@ static struct yetty_ycore_void_result window_manager_begin_interactive_resize(
 [[clang::annotate("virtual@yplatform:window_manager:window_manager_set_cursor")]]
 [[clang::annotate("local@yplatform:window_manager_set_cursor")]]
 /* clang-format on */
-static struct yetty_ycore_void_result window_manager_set_cursor(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result window_manager_set_cursor(struct yetty_yclass_object *obj,
                                                                 int shape)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result data_r = window_manager_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "window_manager set_cursor: object");
     struct yetty_yui_event event = {.type = YETTY_YCORE_SET_CURSOR, .set_cursor = {.shape = shape}};
@@ -362,10 +346,8 @@ static struct yetty_ycore_void_result window_manager_set_cursor(struct yetty_ycl
 [[clang::annotate("local@yplatform:window_manager_handle_event")]]
 /* clang-format on */
 static struct yetty_ycore_void_result window_manager_handle_event(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    const struct yetty_yui_event *event)
+    struct yetty_yclass_object *obj, const struct yetty_yui_event *event)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result data_r = window_manager_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "window_manager handle_event: object");
     struct yetty_yplatform_window_manager *manager = data_r.value;

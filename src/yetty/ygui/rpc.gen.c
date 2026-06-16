@@ -93,7 +93,6 @@ static size_t yetty_ygui_widget_on_press_skel(const void *body, size_t body_len,
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -107,8 +106,8 @@ static size_t yetty_ygui_widget_on_press_skel(const void *body, size_t body_len,
         return 1;
     }
     struct yetty_ycore_int_result call_r =
-        yetty_ygui_widget_on_press(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value,
-                                   wire_args.x, wire_args.y, wire_args.button);
+        yetty_ygui_widget_on_press((struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x,
+                                   wire_args.y, wire_args.button);
     if (resp_max < 1) {
         return 0;
     }
@@ -153,7 +152,6 @@ static size_t yetty_ygui_widget_on_release_skel(const void *body, size_t body_le
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -167,8 +165,8 @@ static size_t yetty_ygui_widget_on_release_skel(const void *body, size_t body_le
         return 1;
     }
     struct yetty_ycore_int_result call_r =
-        yetty_ygui_widget_on_release(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value,
-                                     wire_args.x, wire_args.y, wire_args.button);
+        yetty_ygui_widget_on_release((struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x,
+                                     wire_args.y, wire_args.button);
     if (resp_max < 1) {
         return 0;
     }
@@ -212,7 +210,6 @@ static size_t yetty_ygui_widget_on_motion_skel(const void *body, size_t body_len
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -226,7 +223,7 @@ static size_t yetty_ygui_widget_on_motion_skel(const void *body, size_t body_len
         return 1;
     }
     struct yetty_ycore_int_result call_r = yetty_ygui_widget_on_motion(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x, wire_args.y);
+        (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x, wire_args.y);
     if (resp_max < 1) {
         return 0;
     }
@@ -268,7 +265,6 @@ static size_t yetty_ygui_constructor_skel(const void *body, size_t body_len, voi
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -282,7 +278,7 @@ static size_t yetty_ygui_constructor_skel(const void *body, size_t body_len, voi
         return 1;
     }
     struct yetty_ycore_void_result call_r =
-        yetty_ygui_constructor(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+        yetty_ygui_constructor((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -320,7 +316,6 @@ static size_t yetty_ygui_destructor_skel(const void *body, size_t body_len, void
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -334,7 +329,7 @@ static size_t yetty_ygui_destructor_skel(const void *body, size_t body_len, void
         return 1;
     }
     struct yetty_ycore_void_result call_r =
-        yetty_ygui_destructor(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+        yetty_ygui_destructor((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -376,7 +371,6 @@ static size_t yetty_ygui_widget_on_scroll_skel(const void *body, size_t body_len
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -390,8 +384,8 @@ static size_t yetty_ygui_widget_on_scroll_skel(const void *body, size_t body_len
         return 1;
     }
     struct yetty_ycore_int_result call_r =
-        yetty_ygui_widget_on_scroll(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value,
-                                    wire_args.x, wire_args.y, wire_args.dx, wire_args.dy);
+        yetty_ygui_widget_on_scroll((struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x,
+                                    wire_args.y, wire_args.dx, wire_args.dy);
     if (resp_max < 1) {
         return 0;
     }
@@ -430,7 +424,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_primitive_widget_create(
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -485,6 +479,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_primitive_widget_create(
                          "yetty_ygui_primitive_widget_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -508,7 +505,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_widget_create(struct yetty_ycla
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -561,6 +558,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_widget_create(struct yetty_ycla
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_widget_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -584,7 +584,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_breadcrumbs_create(struct yetty
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -639,6 +639,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_breadcrumbs_create(struct yetty
                          "yetty_ygui_breadcrumbs_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -662,7 +665,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_button_create(struct yetty_ycla
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -715,6 +718,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_button_create(struct yetty_ycla
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_button_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -738,7 +744,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_checkbox_create(struct yetty_yc
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -793,6 +799,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_checkbox_create(struct yetty_yc
                          "yetty_ygui_checkbox_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -816,7 +825,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_chip_create(struct yetty_yclass
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -869,6 +878,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_chip_create(struct yetty_yclass
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_chip_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -892,7 +904,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_choicebox_create(struct yetty_y
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -947,6 +959,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_choicebox_create(struct yetty_y
                          "yetty_ygui_choicebox_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -972,7 +987,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_collapsing_header_create(
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1027,6 +1042,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_collapsing_header_create(
                          "yetty_ygui_collapsing_header_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1050,7 +1068,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_colorpicker_create(struct yetty
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1105,6 +1123,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_colorpicker_create(struct yetty
                          "yetty_ygui_colorpicker_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1128,7 +1149,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_combobox_create(struct yetty_yc
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1183,6 +1204,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_combobox_create(struct yetty_yc
                          "yetty_ygui_combobox_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1206,7 +1230,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_datepicker_create(struct yetty_
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1261,6 +1285,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_datepicker_create(struct yetty_
                          "yetty_ygui_datepicker_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1284,7 +1311,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_dialog_create(struct yetty_ycla
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1337,6 +1364,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_dialog_create(struct yetty_ycla
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_dialog_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1360,7 +1390,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_dropdown_create(struct yetty_yc
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1415,6 +1445,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_dropdown_create(struct yetty_yc
                          "yetty_ygui_dropdown_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1438,7 +1471,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_filepicker_create(struct yetty_
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1493,6 +1526,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_filepicker_create(struct yetty_
                          "yetty_ygui_filepicker_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1516,7 +1552,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_hbox_create(struct yetty_yclass
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1569,6 +1605,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_hbox_create(struct yetty_yclass
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_hbox_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1592,7 +1631,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_label_create(struct yetty_yclas
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1645,6 +1684,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_label_create(struct yetty_yclas
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_label_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1668,7 +1710,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_list_create(struct yetty_yclass
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1721,6 +1763,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_list_create(struct yetty_yclass
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_list_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1744,7 +1789,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_menubar_create(struct yetty_ycl
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1798,6 +1843,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_menubar_create(struct yetty_ycl
                          "yetty_ygui_menubar_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1821,7 +1869,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_panel_create(struct yetty_yclas
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1874,6 +1922,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_panel_create(struct yetty_yclas
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_panel_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1897,7 +1948,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_popup_menu_create(struct yetty_
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -1952,6 +2003,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_popup_menu_create(struct yetty_
                          "yetty_ygui_popup_menu_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -1975,7 +2029,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_progress_create(struct yetty_yc
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2030,6 +2084,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_progress_create(struct yetty_yc
                          "yetty_ygui_progress_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2053,7 +2110,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_radio_create(struct yetty_yclas
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2106,6 +2163,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_radio_create(struct yetty_yclas
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_radio_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2129,7 +2189,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_rich_create(struct yetty_yclass
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2182,6 +2242,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_rich_create(struct yetty_yclass
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_rich_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2205,7 +2268,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_scrollarea_create(struct yetty_
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2260,6 +2323,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_scrollarea_create(struct yetty_
                          "yetty_ygui_scrollarea_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2283,7 +2349,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_selectable_create(struct yetty_
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2338,6 +2404,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_selectable_create(struct yetty_
                          "yetty_ygui_selectable_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2361,7 +2430,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_separator_create(struct yetty_y
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2416,6 +2485,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_separator_create(struct yetty_y
                          "yetty_ygui_separator_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2439,7 +2511,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_slider_create(struct yetty_ycla
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2492,6 +2564,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_slider_create(struct yetty_ycla
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_slider_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2515,7 +2590,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_spinner_create(struct yetty_ycl
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2569,6 +2644,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_spinner_create(struct yetty_ycl
                          "yetty_ygui_spinner_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2592,7 +2670,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_splitter_create(struct yetty_yc
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2647,6 +2725,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_splitter_create(struct yetty_yc
                          "yetty_ygui_splitter_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2670,7 +2751,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_statusbar_create(struct yetty_y
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2725,6 +2806,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_statusbar_create(struct yetty_y
                          "yetty_ygui_statusbar_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2748,7 +2832,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_stepper_create(struct yetty_ycl
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2802,6 +2886,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_stepper_create(struct yetty_ycl
                          "yetty_ygui_stepper_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2825,7 +2912,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_tabbar_create(struct yetty_ycla
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2878,6 +2965,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_tabbar_create(struct yetty_ycla
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_tabbar_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2901,7 +2991,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_table_create(struct yetty_yclas
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -2954,6 +3044,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_table_create(struct yetty_yclas
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_table_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -2977,7 +3070,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_textarea_create(struct yetty_yc
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -3032,6 +3125,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_textarea_create(struct yetty_yc
                          "yetty_ygui_textarea_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -3055,7 +3151,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_textinput_create(struct yetty_y
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -3110,6 +3206,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_textinput_create(struct yetty_y
                          "yetty_ygui_textinput_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -3133,7 +3232,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_toggle_create(struct yetty_ycla
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -3186,6 +3285,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_toggle_create(struct yetty_ycla
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_toggle_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -3209,7 +3311,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_tooltip_create(struct yetty_ycl
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -3263,6 +3365,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_tooltip_create(struct yetty_ycl
                          "yetty_ygui_tooltip_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -3286,7 +3391,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_tree_node_create(struct yetty_y
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -3341,6 +3446,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_tree_node_create(struct yetty_y
                          "yetty_ygui_tree_node_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -3364,7 +3472,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_vbox_create(struct yetty_yclass
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -3417,6 +3525,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_vbox_create(struct yetty_yclass
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_vbox_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -3440,7 +3551,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_window_create(struct yetty_ycla
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -3493,6 +3604,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_window_create(struct yetty_ycla
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_window_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -3516,7 +3630,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ybrowser_create(struct yetty_yc
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -3571,6 +3685,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ybrowser_create(struct yetty_yc
                          "yetty_ygui_ybrowser_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -3594,7 +3711,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ydiagram_create(struct yetty_yc
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -3649,6 +3766,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ydiagram_create(struct yetty_yc
                          "yetty_ygui_ydiagram_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -3672,7 +3792,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ydraw_embed_create(struct yetty
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -3727,6 +3847,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ydraw_embed_create(struct yetty
                          "yetty_ygui_ydraw_embed_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -3750,7 +3873,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yimage_create(struct yetty_ycla
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -3803,6 +3926,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yimage_create(struct yetty_ycla
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_yimage_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -3826,7 +3952,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yjungle_create(struct yetty_ycl
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -3880,6 +4006,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yjungle_create(struct yetty_ycl
                          "yetty_ygui_yjungle_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -3903,7 +4032,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ymarkdown_create(struct yetty_y
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -3958,6 +4087,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ymarkdown_create(struct yetty_y
                          "yetty_ygui_ymarkdown_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -3981,7 +4113,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ymaze_create(struct yetty_yclas
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -4034,6 +4166,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ymaze_create(struct yetty_yclas
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_ymaze_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -4057,7 +4192,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ynode_create(struct yetty_yclas
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -4110,6 +4245,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ynode_create(struct yetty_yclas
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_ynode_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -4133,7 +4271,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ynodes_create(struct yetty_ycla
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -4186,6 +4324,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ynodes_create(struct yetty_ycla
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_ynodes_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -4209,7 +4350,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ypdf_create(struct yetty_yclass
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -4262,6 +4403,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ypdf_create(struct yetty_yclass
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_ypdf_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -4285,7 +4429,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yplot_create(struct yetty_yclas
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -4338,6 +4482,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yplot_create(struct yetty_yclas
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_yplot_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -4361,7 +4508,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yrich_view_create(struct yetty_
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -4416,6 +4563,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yrich_view_create(struct yetty_
                          "yetty_ygui_yrich_view_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -4439,7 +4589,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yshadertoy_create(struct yetty_
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -4494,6 +4644,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yshadertoy_create(struct yetty_
                          "yetty_ygui_yshadertoy_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -4517,7 +4670,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yvideo_create(struct yetty_ycla
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -4570,6 +4723,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yvideo_create(struct yetty_ycla
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_yvideo_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -4593,7 +4749,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yzoo_create(struct yetty_yclass
         if (YETTY_IS_ERR(alloc_r)) {
             return alloc_r;
         }
-        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(ctx, alloc_r.value);
+        struct yetty_ycore_void_result ctor_r = yetty_ygui_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {
             struct yetty_ycore_void_result free_r = yetty_yclass_object_free(alloc_r.value);
             if (YETTY_IS_ERR(free_r)) {
@@ -4646,6 +4802,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yzoo_create(struct yetty_yclass
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_yzoo_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }

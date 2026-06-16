@@ -546,7 +546,7 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
         }
         destroy_safe(app->target->ops->clear(app->target));
         struct yetty_ycore_void_result rr =
-            yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rrf - 1, app->target);
+            yetty_yfigure_render((struct yetty_yclass_object *)rrf - 1, app->target);
         if (YETTY_IS_ERR(rr)) {
             yerror("yrich-app: root render failed: %s", rr.error.msg);
             yetty_ycore_error_destroy(rr.error);
@@ -571,7 +571,7 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
     /* Teardown — container first so pending GPU work flushes. */
     {
         struct yetty_yfigure_figure *rrf = yetty_yfigure_container_as_figure(app->root_obj);
-        destroy_safe(yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rrf - 1));
+        destroy_safe(yetty_yfigure_destroy((struct yetty_yclass_object *)rrf - 1));
     }
     app->root_obj = NULL;
     if (app->registry) {

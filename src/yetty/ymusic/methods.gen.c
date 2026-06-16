@@ -8,8 +8,7 @@
 #include <stdlib.h> /* malloc/free for buffer-arg marshalling */
 #include <string.h>
 
-struct yetty_ycore_void_result yetty_ymusic_configure(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj, float width,
+struct yetty_ycore_void_result yetty_ymusic_configure(struct yetty_yclass_object *obj, float width,
                                                       float staff_space, uint32_t flags)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -34,11 +33,10 @@ struct yetty_ycore_void_result yetty_ymusic_configure(struct yetty_yclass_ctx *c
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ymusic_configure: dispatch_lookup failed");
-    return ((yetty_ymusic_configure_fn)dispatch_impl_r.value)(ctx, obj, width, staff_space, flags);
+    return ((yetty_ymusic_configure_fn)dispatch_impl_r.value)(obj, width, staff_space, flags);
 }
 
-struct yetty_ycore_void_result yetty_ymusic_parse(struct yetty_yclass_ctx *ctx,
-                                                  struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ymusic_parse(struct yetty_yclass_object *obj,
                                                   const char *input, size_t len)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -63,11 +61,10 @@ struct yetty_ycore_void_result yetty_ymusic_parse(struct yetty_yclass_ctx *ctx,
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ymusic_parse: dispatch_lookup failed");
-    return ((yetty_ymusic_parse_fn)dispatch_impl_r.value)(ctx, obj, input, len);
+    return ((yetty_ymusic_parse_fn)dispatch_impl_r.value)(obj, input, len);
 }
 
-struct yetty_ydraw_drawable_list_result yetty_ymusic_render(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj)
+struct yetty_ydraw_drawable_list_result yetty_ymusic_render(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -91,11 +88,10 @@ struct yetty_ydraw_drawable_list_result yetty_ymusic_render(struct yetty_yclass_
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, dispatch_impl_r,
                         "yetty_ymusic_render: dispatch_lookup failed");
-    return ((yetty_ymusic_render_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_ymusic_render_fn)dispatch_impl_r.value)(obj);
 }
 
-struct yetty_ycore_int_result yetty_ymusic_hit_test(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ymusic_hit_test(struct yetty_yclass_object *obj, float x,
                                                     float y)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -120,11 +116,10 @@ struct yetty_ycore_int_result yetty_ymusic_hit_test(struct yetty_yclass_ctx *ctx
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                         "yetty_ymusic_hit_test: dispatch_lookup failed");
-    return ((yetty_ymusic_hit_test_fn)dispatch_impl_r.value)(ctx, obj, x, y);
+    return ((yetty_ymusic_hit_test_fn)dispatch_impl_r.value)(obj, x, y);
 }
 
-struct yetty_ycore_void_result yetty_ymusic_set_highlight(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ymusic_set_highlight(struct yetty_yclass_object *obj,
                                                           int32_t element_id)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -149,11 +144,10 @@ struct yetty_ycore_void_result yetty_ymusic_set_highlight(struct yetty_yclass_ct
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ymusic_set_highlight: dispatch_lookup failed");
-    return ((yetty_ymusic_set_highlight_fn)dispatch_impl_r.value)(ctx, obj, element_id);
+    return ((yetty_ymusic_set_highlight_fn)dispatch_impl_r.value)(obj, element_id);
 }
 
-struct yetty_ycore_void_result yetty_ymusic_destroy(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj)
+struct yetty_ycore_void_result yetty_ymusic_destroy(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -177,5 +171,5 @@ struct yetty_ycore_void_result yetty_ymusic_destroy(struct yetty_yclass_ctx *ctx
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ymusic_destroy: dispatch_lookup failed");
-    return ((yetty_ymusic_destroy_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_ymusic_destroy_fn)dispatch_impl_r.value)(obj);
 }

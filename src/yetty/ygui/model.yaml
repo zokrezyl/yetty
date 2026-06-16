@@ -4,8 +4,6 @@ methods:
     owning_class: widget
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -15,13 +13,12 @@ methods:
       - name: button
         type: int
     local: false
+    return_payload_type: int
   - slot: widget_on_release
     domain: ygui
     owning_class: widget
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -31,13 +28,12 @@ methods:
       - name: button
         type: int
     local: false
+    return_payload_type: int
   - slot: widget_on_motion
     domain: ygui
     owning_class: widget
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -45,45 +41,41 @@ methods:
       - name: y
         type: float
     local: false
+    return_payload_type: int
   - slot: widget_emit_body
     domain: ygui
     owning_class: widget
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: emit_ctx
         type: "struct yetty_ygui_emit_ctx *"
     local: true
+    return_payload_type: null
   - slot: constructor
     domain: ygui
     owning_class: widget
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: null
   - slot: destructor
     domain: ygui
     owning_class: widget
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: null
   - slot: widget_on_scroll
     domain: ygui
     owning_class: widget
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -95,30 +87,29 @@ methods:
       - name: dy
         type: float
     local: false
+    return_payload_type: int
   - slot: widget_paint
     domain: ygui
     owning_class: widget
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: emit_ctx
         type: "struct yetty_ygui_emit_ctx *"
     local: true
+    return_payload_type: null
   - slot: widget_emit_container
     domain: ygui
     owning_class: widget
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: emit_ctx
         type: "struct yetty_ygui_emit_ctx *"
     local: true
+    return_payload_type: null
 classes:
   - name: clickable
     domain: ygui
@@ -2309,10 +2300,6 @@ classes:
         impl: yzoo_emit_body
 exposed:
   - source_file: src/yetty/ygui/mixins/clickable.c
-    verbatim: "typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj,
-                                                              void *userdata);"
-  - source_file: src/yetty/ygui/mixins/clickable.c
     name: yetty_ygui_clickable_on_click_set
     return_type: struct yetty_ycore_void_result
     args:
@@ -2339,9 +2326,6 @@ exposed:
       - name: y
         type: "float *"
   - source_file: src/yetty/ygui/mixins/draggable.c
-    verbatim: "typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *obj,
-                                                             float dx, float dy, void *userdata);"
-  - source_file: src/yetty/ygui/mixins/draggable.c
     name: yetty_ygui_draggable_on_drag_set
     return_type: struct yetty_ycore_void_result
     args:
@@ -2358,183 +2342,145 @@ exposed:
       - name: obj
         type: "const struct yetty_yclass_object *"
   - source_file: src/yetty/ygui/widget.c
-    verbatim: "/* Header-destined content for the generated widget.h (skipped by the real build, which takes it from that header). */
-/*-----------------------------------------------------------------------------
- * Flex / CSS layout — the field set the flex layout pass in layout.c
- * consumes. Apps author these values directly or via apply_css.
- *---------------------------------------------------------------------------*/
-enum yetty_ygui_flex_direction {
-    YETTY_YGUI_FLEX_ROW = 0,
-    YETTY_YGUI_FLEX_COLUMN = 1,
-};
-
-enum yetty_ygui_flex_justify {
-    YETTY_YGUI_JUSTIFY_START = 0,
-    YETTY_YGUI_JUSTIFY_CENTER,
-    YETTY_YGUI_JUSTIFY_END,
-    YETTY_YGUI_JUSTIFY_SPACE_BETWEEN,
-};
-
-enum yetty_ygui_flex_align {
-    YETTY_YGUI_ALIGN_START = 0,
-    YETTY_YGUI_ALIGN_CENTER,
-    YETTY_YGUI_ALIGN_END,
-    YETTY_YGUI_ALIGN_STRETCH,
-};
-
-struct yetty_ygui_layout {
-    enum yetty_ygui_flex_direction direction;
-    enum yetty_ygui_flex_justify justify;
-    enum yetty_ygui_flex_align align;
-    float gap;
-    float padding_top;
-    float padding_right;
-    float padding_bottom;
-    float padding_left;
-    /* Authored intrinsic size — used as the starting point for the main-
-     * axis distribution and as the cross-axis size unless overridden by
-     * align=stretch. -1.0f means \"unset\" (the layout treats as 0 on the
-     * main axis, parent-cross-content on the cross axis). */
-    float width;
-    float height;
-    /* flex factors — main-axis space distribution. */
-    float flex_grow;
-    float flex_shrink;
-    /* min / max constraints; -1.0f means \"unset\". */
-    float min_width;
-    float max_width;
-    float min_height;
-    float max_height;
-    /* Absolute positioning. When `absolute` is non-zero, the layout
-     * pass skips this widget in its parent's flex flow and instead
-     * places it at (parent_content_min.x + pos_x, parent_content_min.y +
-     * pos_y) with size (width, height). Used by overlays (popup_menu,
-     * dialog) that need to float over their siblings. */
-    int absolute;
-    float pos_x;
-    float pos_y;
-    /* When non-zero, this widget and its subtree are excluded from both
-     * the layout pass (consumes no main-axis space, contributes no flex
-     * sum) and the emit walk (no container record, no body prims). Used
-     * by collapsible containers (collapsing_header, tree_node) to fold
-     * away their children when closed without disturbing the children's
-     * authored sizes — restoring visibility is a single flag flip. */
-    int hidden;
-};
-
-/* Initial layout — all enums zeroed (row / start / start), no gap, no
- * padding, no flex grow/shrink, unbounded min/max. */
-struct yetty_ygui_layout yetty_ygui_layout_default(void);
-
-/*-----------------------------------------------------------------------------
- * Widget geometry / layout setters. Setters take effect on the next
- * engine emit; the engine flags the widget dirty.
- *---------------------------------------------------------------------------*/
-struct yetty_ycore_void_result yetty_ygui_widget_set_rect(struct yetty_yclass_object *obj,
-                                                          struct yetty_ycore_rectangle rect);
-
-struct yetty_ycore_rectangle yetty_ygui_widget_rect(const struct yetty_yclass_object *obj);
-
-struct yetty_ycore_void_result yetty_ygui_widget_layout_set(struct yetty_yclass_object *obj,
-                                                            const struct yetty_ygui_layout *layout);
-
-const struct yetty_ygui_layout *yetty_ygui_widget_layout_get(const struct yetty_yclass_object *obj);
-
-/*-----------------------------------------------------------------------------
- * Convenience geometry / visibility setters — thin wrappers over the
- * layout struct, exposing geometry/visibility as first-class widget
- * calls. Each marks the widget dirty.
- *---------------------------------------------------------------------------*/
-/* Toggle the widget (and its subtree) in/out of layout + paint via the
- * layout `hidden` flag. */
-struct yetty_ycore_void_result yetty_ygui_widget_set_visible(struct yetty_yclass_object *obj,
-                                                             int visible);
-int yetty_ygui_widget_is_visible(const struct yetty_yclass_object *obj);
-
-/* Author the widget's main/cross size (width, height). */
-struct yetty_ycore_void_result yetty_ygui_widget_set_size(struct yetty_yclass_object *obj, float w,
-                                                          float h);
-
-/* Place the widget at an absolute (pos_x, pos_y) inside its parent's
- * content box (sets layout.absolute). */
-struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_yclass_object *obj,
-                                                              float x, float y);
-
-/* Promote this widget to its own receiver-side child figure of `kind`
- * (e.g. YETTY_YFIGURE_KIND_YGRID) stacked at `z`. The whole subtree
- * then paints into that figure's own draw list instead of the shared
- * chrome ygrid — giving floating windows / menus an independent z and
- * damage region. kind=0 reverts to inline. */
-struct yetty_ycore_void_result yetty_ygui_widget_make_figure(struct yetty_yclass_object *obj,
-                                                             uint32_t kind, int32_t z);
-
-/* Update only the figure z (for raise-on-click). No-op if unchanged. */
-struct yetty_ycore_void_result yetty_ygui_widget_set_figure_z(struct yetty_yclass_object *obj,
-                                                              int32_t z);
-
-uint32_t yetty_ygui_widget_figure_kind(const struct yetty_yclass_object *obj);
-int32_t yetty_ygui_widget_figure_z(const struct yetty_yclass_object *obj);
-
-/* Mark this widget a floating overlay (dialog / debug window): a press
- * anywhere inside it moves it to the end of its parent's child list, so
- * it paints last (front) and wins the hit-test — click-to-front, no
- * figures involved. */
-struct yetty_ycore_void_result yetty_ygui_widget_set_floating(struct yetty_yclass_object *obj,
-                                                              int floating);
-int yetty_ygui_widget_is_floating(const struct yetty_yclass_object *obj);
-
-/* Apply a small CSS-like declaration string to the widget's layout.
- * Supported properties (others ignored): width, height, flex,
- * flex-grow, flex-shrink, gap, padding, align-items, justify-content,
- * (flex-)direction, align-self. Values may carry a trailing \"px\".
- * Eases the yui port, which authored layout via CSS strings. */
-struct yetty_ycore_void_result yetty_ygui_widget_apply_css(struct yetty_yclass_object *obj,
-                                                           const char *css);
-
-/* Background fill (packed 0xAABBGGRR; 0 = transparent). Painted by the
- * primitive_widget base before the widget's own paint. */
-struct yetty_ycore_void_result yetty_ygui_widget_set_bg_color(struct yetty_yclass_object *obj,
-                                                              uint32_t color);
-
-/* Current background fill (0 = transparent). Used by primitive_widget. */
-uint32_t yetty_ygui_widget_bg(const struct yetty_yclass_object *obj);
-
-/*-----------------------------------------------------------------------------
- * Flex layout pass.
- *
- * Walks the widget tree top-down assigning rects according to each
- * widget's layout struct + the parent's content box. Call this before
- * yetty_ygui_framework_emit when the tree's geometry might have changed
- * (set_rect, set_layout, add / del). The engine's emit pass uses the
- * rects assigned here.
- *
- * `root_rect` is the absolute pixel rect the root widget should fit
- * into — typically the engine's viewport.
- *---------------------------------------------------------------------------*/
-struct yetty_ycore_void_result yetty_ygui_layout_compute(struct yetty_yclass_object *root,
-                                                         struct yetty_ycore_rectangle root_rect);
-
-/*-----------------------------------------------------------------------------
- * Wire emission — two explicit passes. The engine invokes these via
- * dispatch as it walks the widget tree.
- *
- * Defaults (provided by the base widget class):
- *
- *   emit_container — if figure_kind != 0, writes CREATE_CHILD /
- *     SET_CHILD_RECT / DELETE_CHILD admin records into the engine's
- *     container record stream using obj->id as the figure id. Otherwise
- *     no-op. Subclasses with figure_kind==0 do not override.
- *
- *   emit_body — if figure_kind == 0, opens CMD_GROUP(obj->id, ...) in
- *     the engine's ygrid, calls the widget_paint hook to write prims,
- *     closes the group. If figure_kind != 0, the widget's own override
- *     writes figure-specific body bytes into the per-figure stream.
- *---------------------------------------------------------------------------*/
-/* Method public-stub declarations — emit_container, emit_body,
- * widget_paint, widget_on_press, widget_on_release, widget_on_motion
- * — come from the codegen-emitted module-wide methods.h pulled
- * in by class.h's include chain. The yclass slot signature is
- * `(struct yetty_yclass_ctx *, struct yetty_yclass_object *, …)`. */"
+    name: yetty_ygui_layout_compute
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: root
+        type: "struct yetty_yclass_object *"
+      - name: root_rect
+        type: struct yetty_ycore_rectangle
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_layout_default
+    return_type: struct yetty_ygui_layout
+    args: []
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_set_rect
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rect
+        type: struct yetty_ycore_rectangle
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_rect
+    return_type: struct yetty_ycore_rectangle
+    args:
+      - name: obj
+        type: "const struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_layout_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: layout
+        type: "const struct yetty_ygui_layout *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_layout_get
+    return_type: "const struct yetty_ygui_layout *"
+    args:
+      - name: obj
+        type: "const struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_set_visible
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: visible
+        type: int
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_is_visible
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_set_size
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: w
+        type: float
+      - name: h
+        type: float
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_set_position
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_make_figure
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: kind
+        type: uint32_t
+      - name: z
+        type: int32_t
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_set_figure_z
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: z
+        type: int32_t
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_set_floating
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: floating
+        type: int
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_is_floating
+    return_type: int
+    args:
+      - name: obj
+        type: "const struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_figure_kind
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "const struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_figure_z
+    return_type: int32_t
+    args:
+      - name: obj
+        type: "const struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_set_bg_color
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: color
+        type: uint32_t
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_bg
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "const struct yetty_yclass_object *"
+  - source_file: src/yetty/ygui/widget.c
+    name: yetty_ygui_widget_apply_css
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: css
+        type: "const char *"
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_super_void
     return_type: struct yetty_ycore_void_result
@@ -2984,10 +2930,6 @@ struct yetty_ycore_void_result yetty_ygui_layout_compute(struct yetty_yclass_obj
       - name: width_px
         type: float
   - source_file: src/yetty/ygui/widgets/popup_menu.c
-    verbatim: "typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_ctx *ctx,
-                                                                  struct yetty_yclass_object *menu,
-                                                                  int item_index, void *userdata);"
-  - source_file: src/yetty/ygui/widgets/popup_menu.c
     name: yetty_ygui_popup_menu_add_item
     return_type: struct yetty_ycore_void_result
     args:
@@ -3224,10 +3166,6 @@ struct yetty_ycore_void_result yetty_ygui_layout_compute(struct yetty_yclass_obj
       - name: obj
         type: "const struct yetty_yclass_object *"
   - source_file: src/yetty/ygui/widgets/splitter.c
-    verbatim: "struct yetty_yclass_object;
-typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_yclass_object *splitter, float delta,
-                                              void *userdata);"
-  - source_file: src/yetty/ygui/widgets/splitter.c
     name: yetty_ygui_splitter_set_axis
     return_type: struct yetty_ycore_void_result
     args:
@@ -3291,11 +3229,6 @@ typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_yclass_object *splitt
         type: "struct yetty_yclass_object *"
       - name: i
         type: int
-  - source_file: src/yetty/ygui/widgets/tabbar.c
-    verbatim: "struct yetty_yclass_object;
-typedef void (*yetty_ygui_tab_close_cb)(struct yetty_yclass_object *tabbar, int index,
-                                        void *userdata);
-typedef void (*yetty_ygui_tab_new_cb)(struct yetty_yclass_object *tabbar, void *userdata);"
   - source_file: src/yetty/ygui/widgets/tabbar.c
     name: yetty_ygui_tabbar_add_tab
     return_type: struct yetty_yclass_object_ptr_result
@@ -3729,12 +3662,6 @@ typedef void (*yetty_ygui_tab_new_cb)(struct yetty_yclass_object *tabbar, void *
       - name: node
         type: "const struct yetty_yclass_object *"
   - source_file: src/yetty/ygui/widgets/ynodes.c
-    verbatim: "#include <yetty/ycore/result.h>
-#include <yetty/ygui/widget.h>
-typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(
-    struct yetty_yclass_object *editor, struct yetty_yclass_object *from, int out_idx,
-    struct yetty_yclass_object *to, int in_idx, void *userdata);"
-  - source_file: src/yetty/ygui/widgets/ynodes.c
     name: yetty_ygui_ynodes_view
     return_type: void
     args:
@@ -3901,17 +3828,13 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(
       - name: path
         type: "const char *"
   - source_file: src/yetty/ygui/widgets/yplot.c
-    verbatim: "#include <stddef.h>
-#include <stdint.h>
-struct yetty_yclass_object;
-struct yetty_ygui_yplot_config {
+    type_text: "struct yetty_ygui_yplot_config {
     float x_min;
     float x_max;
     float y_min;
     float y_max;
     uint32_t flags;
-};
-struct yetty_yplot_buffer_input;"
+};"
   - source_file: src/yetty/ygui/widgets/yplot.c
     name: yetty_ygui_yplot_set_source
     return_type: struct yetty_ycore_void_result
@@ -3944,11 +3867,6 @@ struct yetty_yplot_buffer_input;"
         type: size_t
       - name: config
         type: "const struct yetty_ygui_yplot_config *"
-  - source_file: src/yetty/ygui/widgets/yrich_view.c
-    verbatim: "/* Header-destined: the exposed prototypes below take yrich key/mod types,
- * so the generated header must pull these in. The document itself is a
- * yclass object — no yrich document header needed. */
-#include <yetty/yrich/yrich-types.h>"
   - source_file: src/yetty/ygui/widgets/yrich_view.c
     name: yetty_ygui_yrich_view_set_document
     return_type: struct yetty_ycore_void_result
@@ -4282,3 +4200,176 @@ types:
         value: 2
       - name: YNODE_DRAG_RESIZE
         value: 3
+local_types:
+  yetty_ygui_clickable: src/yetty/ygui/mixins/clickable.c
+  yetty_ygui_clickable_ptr_result: src/yetty/ygui/mixins/clickable.c
+  yetty_ygui_draggable: src/yetty/ygui/mixins/draggable.c
+  yetty_ygui_draggable_ptr_result: src/yetty/ygui/mixins/draggable.c
+  yetty_ygui_primitive_widget: src/yetty/ygui/primitive-widget.c
+  yetty_ygui_primitive_widget_ptr_result: src/yetty/ygui/primitive-widget.c
+  yetty_ygui_flex_direction: src/yetty/ygui/widget.c
+  yetty_ygui_flex_justify: src/yetty/ygui/widget.c
+  yetty_ygui_flex_align: src/yetty/ygui/widget.c
+  yetty_ygui_layout: src/yetty/ygui/widget.c
+  yetty_ygui_widget: src/yetty/ygui/widget.c
+  yetty_ygui_widget_ptr_result: src/yetty/ygui/widget.c
+  yetty_ygui_breadcrumbs_ptr_result: src/yetty/ygui/widgets/breadcrumbs.c
+  yetty_ygui_breadcrumbs: src/yetty/ygui/widgets/breadcrumbs.c
+  yetty_ygui_button_ptr_result: src/yetty/ygui/widgets/button.c
+  yetty_ygui_button: src/yetty/ygui/widgets/button.c
+  yetty_ygui_checkbox_ptr_result: src/yetty/ygui/widgets/checkbox.c
+  yetty_ygui_checkbox: src/yetty/ygui/widgets/checkbox.c
+  yetty_ygui_chip_ptr_result: src/yetty/ygui/widgets/chip.c
+  yetty_ygui_chip: src/yetty/ygui/widgets/chip.c
+  yetty_ygui_choicebox_ptr_result: src/yetty/ygui/widgets/choicebox.c
+  cb_row: src/yetty/ygui/widgets/choicebox.c
+  yetty_ygui_choicebox: src/yetty/ygui/widgets/choicebox.c
+  yetty_ygui_collapsing_header_ptr_result: src/yetty/ygui/widgets/collapsing_header.c
+  yetty_ygui_collapsing_header: src/yetty/ygui/widgets/collapsing_header.c
+  yetty_ygui_colorpicker_ptr_result: src/yetty/ygui/widgets/colorpicker.c
+  yetty_ygui_colorpicker: src/yetty/ygui/widgets/colorpicker.c
+  yetty_ygui_combobox_ptr_result: src/yetty/ygui/widgets/combobox.c
+  yetty_ygui_combobox: src/yetty/ygui/widgets/combobox.c
+  yetty_ygui_datepicker_ptr_result: src/yetty/ygui/widgets/datepicker.c
+  yetty_ygui_datepicker: src/yetty/ygui/widgets/datepicker.c
+  yetty_ygui_dialog_ptr_result: src/yetty/ygui/widgets/dialog.c
+  yetty_ygui_dialog: src/yetty/ygui/widgets/dialog.c
+  yetty_ygui_dropdown_ptr_result: src/yetty/ygui/widgets/dropdown.c
+  yetty_ygui_dropdown: src/yetty/ygui/widgets/dropdown.c
+  yetty_ygui_filepicker_ptr_result: src/yetty/ygui/widgets/filepicker.c
+  yetty_ygui_filepicker: src/yetty/ygui/widgets/filepicker.c
+  yetty_ygui_hbox_ptr_result: src/yetty/ygui/widgets/hbox.c
+  yetty_ygui_hbox: src/yetty/ygui/widgets/hbox.c
+  yetty_ygui_label_ptr_result: src/yetty/ygui/widgets/label.c
+  yetty_ygui_label: src/yetty/ygui/widgets/label.c
+  yetty_ygui_list_ptr_result: src/yetty/ygui/widgets/list.c
+  yetty_ygui_list: src/yetty/ygui/widgets/list.c
+  yetty_ygui_menubar_ptr_result: src/yetty/ygui/widgets/menubar.c
+  yetty_ygui_menubar: src/yetty/ygui/widgets/menubar.c
+  yetty_ygui_panel_ptr_result: src/yetty/ygui/widgets/panel.c
+  yetty_ygui_panel: src/yetty/ygui/widgets/panel.c
+  yetty_ygui_popup_menu_ptr_result: src/yetty/ygui/widgets/popup_menu.c
+  menu_item: src/yetty/ygui/widgets/popup_menu.c
+  yetty_ygui_popup_menu: src/yetty/ygui/widgets/popup_menu.c
+  yetty_ygui_progress_ptr_result: src/yetty/ygui/widgets/progress.c
+  yetty_ygui_progress: src/yetty/ygui/widgets/progress.c
+  yetty_ygui_radio_ptr_result: src/yetty/ygui/widgets/radio.c
+  yetty_ygui_radio: src/yetty/ygui/widgets/radio.c
+  yetty_ygui_rich_ptr_result: src/yetty/ygui/widgets/rich.c
+  rich_span: src/yetty/ygui/widgets/rich.c
+  rich_line: src/yetty/ygui/widgets/rich.c
+  yetty_ygui_rich: src/yetty/ygui/widgets/rich.c
+  yetty_ygui_scrollarea_ptr_result: src/yetty/ygui/widgets/scrollarea.c
+  yetty_ygui_scrollarea: src/yetty/ygui/widgets/scrollarea.c
+  yetty_ygui_selectable_ptr_result: src/yetty/ygui/widgets/selectable.c
+  yetty_ygui_selectable: src/yetty/ygui/widgets/selectable.c
+  yetty_ygui_separator_ptr_result: src/yetty/ygui/widgets/separator.c
+  yetty_ygui_separator: src/yetty/ygui/widgets/separator.c
+  yetty_ygui_slider_ptr_result: src/yetty/ygui/widgets/slider.c
+  yetty_ygui_slider: src/yetty/ygui/widgets/slider.c
+  yetty_ygui_spinner_ptr_result: src/yetty/ygui/widgets/spinner.c
+  yetty_ygui_spinner: src/yetty/ygui/widgets/spinner.c
+  yetty_ygui_splitter_ptr_result: src/yetty/ygui/widgets/splitter.c
+  yetty_ygui_splitter: src/yetty/ygui/widgets/splitter.c
+  yetty_ygui_statusbar_ptr_result: src/yetty/ygui/widgets/statusbar.c
+  yetty_ygui_statusbar: src/yetty/ygui/widgets/statusbar.c
+  yetty_ygui_stepper_ptr_result: src/yetty/ygui/widgets/stepper.c
+  yetty_ygui_stepper: src/yetty/ygui/widgets/stepper.c
+  yetty_ygui_tabbar_ptr_result: src/yetty/ygui/widgets/tabbar.c
+  yetty_ygui_tabbar: src/yetty/ygui/widgets/tabbar.c
+  header_data: src/yetty/ygui/widgets/tabbar.c
+  yetty_ygui_table_ptr_result: src/yetty/ygui/widgets/table.c
+  yetty_ygui_table: src/yetty/ygui/widgets/table.c
+  yetty_ygui_textarea_ptr_result: src/yetty/ygui/widgets/textarea.c
+  yetty_ygui_textarea: src/yetty/ygui/widgets/textarea.c
+  yetty_ygui_textinput_ptr_result: src/yetty/ygui/widgets/textinput.c
+  yetty_ygui_textinput: src/yetty/ygui/widgets/textinput.c
+  yetty_ygui_toggle_ptr_result: src/yetty/ygui/widgets/toggle.c
+  yetty_ygui_toggle: src/yetty/ygui/widgets/toggle.c
+  yetty_ygui_tooltip_ptr_result: src/yetty/ygui/widgets/tooltip.c
+  yetty_ygui_tooltip: src/yetty/ygui/widgets/tooltip.c
+  yetty_ygui_tree_node_ptr_result: src/yetty/ygui/widgets/tree_node.c
+  yetty_ygui_tree_node: src/yetty/ygui/widgets/tree_node.c
+  yetty_ygui_vbox_ptr_result: src/yetty/ygui/widgets/vbox.c
+  yetty_ygui_vbox: src/yetty/ygui/widgets/vbox.c
+  yetty_ygui_window_ptr_result: src/yetty/ygui/widgets/window.c
+  yetty_ygui_window: src/yetty/ygui/widgets/window.c
+  yetty_ygui_ybrowser_ptr_result: src/yetty/ygui/widgets/ybrowser.c
+  yetty_ygui_ybrowser: src/yetty/ygui/widgets/ybrowser.c
+  yetty_ygui_ydiagram_ptr_result: src/yetty/ygui/widgets/ydiagram.c
+  yetty_ygui_ydiagram: src/yetty/ygui/widgets/ydiagram.c
+  yetty_ygui_ydraw_embed_ptr_result: src/yetty/ygui/widgets/ydraw_embed.c
+  yetty_ygui_ydraw_embed: src/yetty/ygui/widgets/ydraw_embed.c
+  yetty_ygui_yimage_ptr_result: src/yetty/ygui/widgets/yimage.c
+  yetty_ygui_yimage: src/yetty/ygui/widgets/yimage.c
+  yetty_ygui_yjungle_ptr_result: src/yetty/ygui/widgets/yjungle.c
+  yetty_ygui_yjungle: src/yetty/ygui/widgets/yjungle.c
+  yetty_ygui_ymarkdown_ptr_result: src/yetty/ygui/widgets/ymarkdown.c
+  yetty_ygui_ymarkdown: src/yetty/ygui/widgets/ymarkdown.c
+  yetty_ygui_ymaze_ptr_result: src/yetty/ygui/widgets/ymaze.c
+  yetty_ygui_ymaze: src/yetty/ygui/widgets/ymaze.c
+  yetty_ygui_ynode_ptr_result: src/yetty/ygui/widgets/ynode.c
+  ynode_drag_mode: src/yetty/ygui/widgets/ynode.c
+  ynode_pin: src/yetty/ygui/widgets/ynode.c
+  yetty_ygui_ynode: src/yetty/ygui/widgets/ynode.c
+  yetty_ygui_ynodes_ptr_result: src/yetty/ygui/widgets/ynodes.c
+  ynodes_link: src/yetty/ygui/widgets/ynodes.c
+  ynodes_palette_entry: src/yetty/ygui/widgets/ynodes.c
+  yetty_ygui_ynodes: src/yetty/ygui/widgets/ynodes.c
+  yetty_ygui_ypdf_ptr_result: src/yetty/ygui/widgets/ypdf.c
+  yetty_ygui_ypdf: src/yetty/ygui/widgets/ypdf.c
+  yetty_ygui_yplot_ptr_result: src/yetty/ygui/widgets/yplot.c
+  yetty_ygui_yplot_config: src/yetty/ygui/widgets/yplot.c
+  yplot_buf_slot: src/yetty/ygui/widgets/yplot.c
+  yetty_ygui_yplot: src/yetty/ygui/widgets/yplot.c
+  yetty_ygui_yrich_view_ptr_result: src/yetty/ygui/widgets/yrich_view.c
+  yetty_ygui_yrich_view: src/yetty/ygui/widgets/yrich_view.c
+  yetty_ygui_yshadertoy_ptr_result: src/yetty/ygui/widgets/yshadertoy.c
+  yetty_ygui_yshadertoy: src/yetty/ygui/widgets/yshadertoy.c
+  yetty_ygui_yvideo_ptr_result: src/yetty/ygui/widgets/yvideo.c
+  yetty_ygui_yvideo: src/yetty/ygui/widgets/yvideo.c
+  yetty_ygui_yzoo_ptr_result: src/yetty/ygui/widgets/yzoo.c
+  yetty_ygui_yzoo: src/yetty/ygui/widgets/yzoo.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ygui/mixins/clickable.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ygui/mixins/clickable.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ygui/mixins/clickable.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ygui/mixins/clickable.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ygui/mixins/clickable.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_ygui_click_cb:
+    source_file: src/yetty/ygui/mixins/clickable.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_object *, void *);"
+  yetty_ygui_drag_cb:
+    source_file: src/yetty/ygui/mixins/draggable.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *, float, float, void *);"
+  fn_t:
+    source_file: src/yetty/ygui/widget.c
+    text: "typedef struct yetty_ycore_void_result (*fn_t)(struct yetty_yclass_object *);"
+  yetty_ygui_menu_item_cb:
+    source_file: src/yetty/ygui/widgets/popup_menu.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_object *, int, void *);"
+  yetty_ygui_splitter_change_cb:
+    source_file: src/yetty/ygui/widgets/splitter.c
+    text: "typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_yclass_object *, float, void *);"
+  yetty_ygui_tab_close_cb:
+    source_file: src/yetty/ygui/widgets/tabbar.c
+    text: "typedef void (*yetty_ygui_tab_close_cb)(struct yetty_yclass_object *, int, void *);"
+  yetty_ygui_tab_new_cb:
+    source_file: src/yetty/ygui/widgets/tabbar.c
+    text: "typedef void (*yetty_ygui_tab_new_cb)(struct yetty_yclass_object *, void *);"
+  yetty_ygui_ynodes_link_cb:
+    source_file: src/yetty/ygui/widgets/ynodes.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, struct yetty_yclass_object *, int, void *);"
+includes:
+  src/yetty/ygui/widgets/yrich_view.c:
+    - yetty/yrich/yrich-types.h

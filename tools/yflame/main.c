@@ -221,9 +221,9 @@ int main(int argc, char **argv)
     }
     struct yetty_yclass_object *flame = obj_r.value;
 
-    yetty_yflame_configure(NULL, flame, opts.width, opts.frame_height, opts.min_width, flags);
+    yetty_yflame_configure(flame, opts.width, opts.frame_height, opts.min_width, flags);
 
-    struct yetty_ycore_void_result pr = yetty_yflame_parse(NULL, flame, input, input_len);
+    struct yetty_ycore_void_result pr = yetty_yflame_parse(flame, input, input_len);
     free(input);
     if (YETTY_IS_ERR(pr)) {
         fprintf(stderr, "yflame: parse failed: %s\n", pr.error.msg);
@@ -231,18 +231,18 @@ int main(int argc, char **argv)
             fprintf(stderr, "  caused by: %s\n", e->msg);
         }
         yetty_ycore_error_destroy(pr.error);
-        (void)yetty_yflame_destroy(NULL, flame);
+        (void)yetty_yflame_destroy(flame);
         return 1;
     }
 
-    struct yetty_ydraw_drawable_list_result rr = yetty_yflame_render(NULL, flame);
+    struct yetty_ydraw_drawable_list_result rr = yetty_yflame_render(flame);
     if (YETTY_IS_ERR(rr)) {
         fprintf(stderr, "yflame: render failed: %s\n", rr.error.msg);
         for (const struct yetty_ycore_error *e = rr.error.cause; e; e = e->cause) {
             fprintf(stderr, "  caused by: %s\n", e->msg);
         }
         yetty_ycore_error_destroy(rr.error);
-        (void)yetty_yflame_destroy(NULL, flame);
+        (void)yetty_yflame_destroy(flame);
         return 1;
     }
 
@@ -258,7 +258,7 @@ int main(int argc, char **argv)
         rc = 1;
     }
 
-    (void)yetty_yflame_destroy(NULL, flame);
+    (void)yetty_yflame_destroy(flame);
 
     if (!opts.no_newline) {
         fputc('\n', stdout);

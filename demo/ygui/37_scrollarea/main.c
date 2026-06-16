@@ -114,12 +114,11 @@ static void show_scene(int idx)
     }
 }
 
-static struct yetty_ycore_void_result on_tab_changed(struct yetty_yclass_ctx *ctx,
+static struct yetty_ycore_void_result on_tab_changed(
                                                      struct yetty_yclass_object *target,
                                                      const struct yetty_ygui_event *event,
                                                      void *userdata)
 {
-    (void)ctx;
     (void)target;
     (void)userdata;
     int idx = event ? event->i0 : 0;

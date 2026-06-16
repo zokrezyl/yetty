@@ -299,7 +299,7 @@ static struct yetty_ycore_void_result yzoo_worker(struct yetty_yinit_runtime *rt
         if (YETTY_IS_ERR(cl)) {
             yetty_ycore_error_destroy(cl.error);
         }
-        struct yetty_ycore_void_result rrr = yetty_yfigure_render(NULL, app->root, target);
+        struct yetty_ycore_void_result rrr = yetty_yfigure_render(app->root, target);
         if (YETTY_IS_ERR(rrr)) {
             yetty_ycore_error_destroy(rrr.error);
         } else {
@@ -312,7 +312,7 @@ static struct yetty_ycore_void_result yzoo_worker(struct yetty_yinit_runtime *rt
     }
 
     {
-        struct yetty_ycore_void_result dr = yetty_yfigure_destroy(NULL, app->root);
+        struct yetty_ycore_void_result dr = yetty_yfigure_destroy(app->root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "root destroy");
     }
     if (app->chrome) {

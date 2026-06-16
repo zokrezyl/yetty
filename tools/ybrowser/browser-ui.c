@@ -312,7 +312,6 @@ static struct yetty_ycore_void_result so_resize(struct yetty_platform_pty *self,
                                                 uint32_t r, uint32_t pw, uint32_t ph)
 {
     (void)self;
-    (void)c;
     (void)r;
     (void)pw;
     (void)ph;
@@ -861,26 +860,20 @@ static void ui_close_tab(struct app *a, int idx)
 /* ===========================================================================
  * Callbacks.
  * ===========================================================================*/
-static struct yetty_ycore_void_result on_back_click(struct yetty_yclass_ctx *c,
-                                                    struct yetty_yclass_object *o, void *ud)
+static struct yetty_ycore_void_result on_back_click(struct yetty_yclass_object *o, void *ud)
 {
-    (void)c;
     (void)o;
     go_back((struct app *)ud);
     return YETTY_OK_VOID();
 }
-static struct yetty_ycore_void_result on_fwd_click(struct yetty_yclass_ctx *c,
-                                                   struct yetty_yclass_object *o, void *ud)
+static struct yetty_ycore_void_result on_fwd_click(struct yetty_yclass_object *o, void *ud)
 {
-    (void)c;
     (void)o;
     go_forward((struct app *)ud);
     return YETTY_OK_VOID();
 }
-static struct yetty_ycore_void_result on_reload_click(struct yetty_yclass_ctx *c,
-                                                      struct yetty_yclass_object *o, void *ud)
+static struct yetty_ycore_void_result on_reload_click(struct yetty_yclass_object *o, void *ud)
 {
-    (void)c;
     (void)o;
     reload((struct app *)ud);
     return YETTY_OK_VOID();
@@ -896,11 +889,9 @@ static void on_close_cb(struct yetty_yclass_object *tb, int idx, void *ud)
     (void)tb;
     ui_close_tab((struct app *)ud, idx);
 }
-static struct yetty_ycore_void_result on_tab_changed(struct yetty_yclass_ctx *c,
-                                                     struct yetty_yclass_object *target,
+static struct yetty_ycore_void_result on_tab_changed(struct yetty_yclass_object *target,
                                                      const struct yetty_ygui_event *event, void *ud)
 {
-    (void)c;
     (void)target;
     struct app *a = ud;
     if (event && event->i0 >= 0 && event->i0 != a->active) {
@@ -1776,7 +1767,7 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
         }
         if (s->root_container) {
             struct yetty_ycore_void_result rr =
-                yetty_yfigure_render(NULL, s->root_container, s->render_target);
+                yetty_yfigure_render(s->root_container, s->render_target);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
             }
@@ -2243,7 +2234,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
         s->chrome = NULL;
     }
     if (s->root_container) {
-        err_ok(yetty_yfigure_destroy(NULL, s->root_container));
+        err_ok(yetty_yfigure_destroy(s->root_container));
         s->root_container = NULL;
     }
     if (s->figure_registry) {

@@ -27,10 +27,8 @@ struct yetty_ygui_menubar_ptr_result yetty_ygui_menubar_from(struct yetty_yclass
 #include <stdlib.h>
 
 [[clang::annotate("override@ygui:menubar:constructor")]]
-static struct yetty_ycore_void_result menubar_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                          struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result menubar_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_menubar_class_get().value,
@@ -42,11 +40,9 @@ static struct yetty_ycore_void_result menubar_constructor(struct yetty_yclass_ct
     return yetty_ygui_widget_layout_set(obj, &l);
 }
 
-static struct yetty_ycore_void_result on_trigger_click(struct yetty_yclass_ctx *yclass_ctx,
-                                                       struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result on_trigger_click(struct yetty_yclass_object *yclass_obj,
                                                        void *userdata)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_yclass_object *menu = (struct yetty_yclass_object *)userdata;
     if (!menu) {

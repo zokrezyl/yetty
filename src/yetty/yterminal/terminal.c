@@ -33,17 +33,24 @@
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ydraw-factory/composite-factory.h>
+#include <yetty/ydraw-core/cmds.h>
+#include <yetty/ydraw-core/composite.h>
+#include <yetty/ydraw-core/drawable-iterator.h>
+#include <yetty/ydraw-core/drawable-list-registry.h>
+#include <yetty/ydraw-core/font-resource.h>
+#include <yetty/ydraw-core/text-drawable-list.h>
+#include <yetty/ysdf/handler.h>
+#include <yetty/ygrid/ygrid.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yterminal/terminal.h>
-#include <yetty/yvterm/grid-api.h>
+#include <yetty/yvterm/vterm.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/ygrid/grid.h>
-#include <yetty/yvterm/shader-glyph-figure.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yui-core/view.h>
 
@@ -127,6 +134,9 @@ struct yetty_yterminal_terminal {
      * fn; the handler recovers the terminal by dereferencing it. */
     struct yetty_yterminal_terminal *inset_handler_self;
 
+    /* Same self-back-pointer trick for the YDRAW handler coroutine. */
+    struct yetty_yterminal_terminal *ydraw_handler_self;
+
     /* Reusable read buffer handed back from terminal_pty_pipe_alloc.
      * Lazily allocated on the first read; freed in destroy. */
     char *pty_read_buf;
@@ -168,7 +178,7 @@ struct yetty_yterminal_terminal {
      * seated as the lowest-z child of root_container and rendered through the
      * figure path. It directly owns its two sub-renderers; the container owns
      * the figure (destroys it on teardown). The terminal borrows this handle to
-     * drive scroll / selection / resize / input via the yetty_yvterm_grid_* API.
+     * drive scroll / selection / resize / input via the yetty_yvterm_vterm_* API.
      * Everything else on screen — ymgui, yrdawn, yplot, the shader-glyph — is a
      * figure in the root container too. NULL until terminal_create wires it. */
     struct yetty_yclass_object *grid;
@@ -185,6 +195,11 @@ struct yetty_yterminal_terminal {
      * borrows the same pointer via figure_args (below) so they all share
      * the same per-type pipeline cache. */
     struct yetty_ydraw_composite_factory *composite_factory;
+
+    /* Drawable-list registry for parsing inbound YDRAW_BIN record streams into
+     * the content grid's anchored rich model. Same handler set ygrid uses, so
+     * the iterator can step SDF primitives and composite (FAM) records. */
+    struct yetty_ydraw_drawable_list_registry *ydraw_registry;
 
     /* Bundle handed as registry user-data on every kind ygrid handles.
      * Lives on the terminal because the registry stores a pointer to it,
@@ -212,6 +227,14 @@ struct yetty_yterminal_terminal {
     uint32_t sel_anchor_col;
     uint32_t sel_head_row;
     uint32_t sel_head_col;
+
+    /* Multi-click detection for word (double) / line (triple) selection. A
+     * press within sel_multiclick_sec of the previous one on the SAME cell bumps
+     * the count; otherwise it resets to a single click. */
+    double sel_last_click_sec;
+    uint32_t sel_last_click_row;
+    uint32_t sel_last_click_col;
+    int sel_click_count;
 };
 
 /* How many lines a single mouse-wheel notch moves the scrollback view. */
@@ -295,13 +318,16 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
             /* Ask the content grid whether anything went dirty this feed. Its
              * own figure dirty bit is never set — the real dirty bits live on
              * the text grid + ydraw canvas it owns, which is_dirty aggregates. */
-            int grid_dirty = yetty_yvterm_grid_is_dirty(terminal->grid);
+            int grid_dirty = yetty_yvterm_vterm_is_dirty(terminal->grid);
             ydebug("terminal_pty_pipe_read: after feed grid=%p dirty=%d", (void *)terminal->grid,
                    grid_dirty);
             if (grid_dirty) {
                 terminal->context.yetty_context.event_loop->ops->request_render(
                     terminal->context.yetty_context.event_loop);
             }
+            /* Rich content lives on yvterm's own line ring now, so it scrolls
+             * with the text automatically — no separate rolling-row origin to
+             * keep in sync. */
         }
         /* Root-container path: the wire-SM dispatch into consume_envelope
          * lands new figure data here. The legacy text-layer dirty check
@@ -655,7 +681,7 @@ static struct yetty_ycore_int_result terminal_emit_figure_key(
 /* Live anchor of the content grid (it maxes its own text + ydraw anchors). */
 static uint32_t terminal_live_anchor(struct yetty_yterminal_terminal *terminal)
 {
-    return yetty_yvterm_grid_get_live_anchor(terminal->grid);
+    return yetty_yvterm_vterm_get_live_anchor(terminal->grid);
 }
 
 /* Oldest absolute line index a scrollback view may scroll up to. Lines below
@@ -663,16 +689,18 @@ static uint32_t terminal_live_anchor(struct yetty_yterminal_terminal *terminal)
  * wheel-up clamps here instead of marching into blank evicted rows. */
 static uint32_t terminal_scrollback_floor(struct yetty_yterminal_terminal *terminal)
 {
-    return yetty_yvterm_grid_get_scrollback_floor(terminal->grid);
+    return yetty_yvterm_vterm_get_scrollback_floor(terminal->grid);
 }
 
 /* Push the current scrollback view state into the content grid. */
 static struct yetty_ycore_void_result terminal_push_view_top(
     struct yetty_yterminal_terminal *terminal)
 {
-    struct yetty_ycore_void_result r = yetty_yvterm_grid_set_view_top(
+    struct yetty_ycore_void_result r = yetty_yvterm_vterm_set_view_top(
         terminal->grid, terminal->scrollback_active, terminal->view_top_total_idx);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_push_view_top: set_view_top failed");
+    /* Rich content rides yvterm's own line ring, so set_view_top already scrolls
+     * it with the text — nothing extra to pin. */
     terminal->context.yetty_context.event_loop->ops->request_render(
         terminal->context.yetty_context.event_loop);
     return YETTY_OK_VOID();
@@ -924,7 +952,7 @@ static struct yetty_ycore_void_result terminal_content_inset_apply(
     float bottom = inset->bottom > 0.0f ? inset->bottom : 0.0f;
     float left = inset->left > 0.0f ? inset->left : 0.0f;
 
-    yetty_yvterm_grid_set_content_inset(terminal->grid, top, right, bottom, left);
+    yetty_yvterm_vterm_set_content_inset(terminal->grid, top, right, bottom, left);
     ydebug("terminal: content inset t=%.0f r=%.0f b=%.0f l=%.0f", top, right, bottom, left);
 
     /* Reflow at the last applied pane size; the grid figure picks the new
@@ -998,6 +1026,178 @@ static struct yetty_ycore_void_result terminal_content_inset_process_input(
     }
 }
 
+/* Ingest one YDRAW_BIN envelope into the scrolling rich-content ygrid. Records
+ * are streamed via the drawable iterator and handed verbatim to the ygrid, which
+ * rasterises SDF shapes, text-drawable-lists (with wire-shipped fonts), and
+ * composite figures alike — the same renderer the chrome uses. ycat/ypdf/
+ * markdown all flow through here. */
+static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
+    struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)
+{
+    /* Anchor rich content on the cursor's current visible line in yvterm's OWN
+     * grid. The grid owns a primitive/composite list per line on its scroll
+     * ring, so whatever sits at that line scrolls with the text for free — no
+     * separate ygrid, no rolling-row bookkeeping. Composites render via vterm's
+     * rich pass; raw SDF / text records are stored on the line for the SDF pass. */
+    uint32_t cur_row = 0, cur_col = 0, cur_vis = 0;
+    yetty_yvterm_vterm_cursor(terminal->grid, &cur_row, &cur_col, &cur_vis);
+    struct yetty_ycore_pixel_size text_cell = yetty_yvterm_vterm_cell_size(terminal->grid);
+
+    struct yetty_ydraw_drawable_iterator iter = {0};
+    struct yetty_ycore_void_result init_res =
+        yetty_ydraw_drawable_iterator_init(&iter, sm, terminal->ydraw_registry);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, init_res, "terminal_ydraw: iterator init");
+
+    /* Bottom extent of this envelope's drawn content (px, envelope-local, from
+     * the insert row's top). After ingestion the cursor is advanced past it so
+     * the next envelope's content (the next plot, the next PDF page, …) lands
+     * below instead of on top. Covers composites, SDF prims, and text alike —
+     * ycat ships one envelope per PDF page with y=0 origin, so without this the
+     * pages would all stack at the same row. */
+    float content_bottom_px = 0.0f;
+
+    struct yetty_ycore_void_result result = YETTY_OK_VOID();
+    for (;;) {
+        struct yetty_ydraw_drawable_iterator_status_result step =
+            yetty_ydraw_drawable_iterator_next(&iter);
+        if (YETTY_IS_ERR(step)) {
+            result = YETTY_ERR(yetty_ycore_void, "terminal_ydraw: iterator next", step);
+            break;
+        }
+        if (step.value == YETTY_YDRAW_ITERATOR_EOE) {
+            break;
+        }
+        if (step.value != YETTY_YDRAW_ITERATOR_OK || iter.command.kind != YETTY_YDRAW_COMMAND_ADD) {
+            continue; /* DELETE/UPDATE not modelled yet — skip cleanly */
+        }
+        const uint32_t *data = iter.command.entry.data;
+        if (!data || !iter.command.entry.ops || !iter.command.entry.ops->size) {
+            continue;
+        }
+        struct yetty_ycore_size_result size_res = iter.command.entry.ops->size(data);
+        if (YETTY_IS_ERR(size_res)) {
+            yetty_ycore_error_destroy(size_res.error);
+            continue;
+        }
+        /* Track the content's bottom for the space-reservation pass below. The
+         * FONT resource record ships glyph bytes, not drawn geometry, so it has
+         * no meaningful extent — skip it. Composites carry their bounds at a
+         * fixed payload offset; SDF / text records expose them via the entry
+         * ops aabb. */
+        if (data[0] != YETTY_YDRAW_RESOURCE_FONT) {
+            struct rectangle_result aabb;
+            int have_aabb = 0;
+            if (yetty_ydraw_is_composite(data[0])) {
+                aabb = yetty_ydraw_composite_record_aabb(data);
+                have_aabb = 1;
+            } else if (iter.command.entry.ops->aabb) {
+                aabb = iter.command.entry.ops->aabb(data);
+                have_aabb = 1;
+            }
+            if (have_aabb) {
+                if (YETTY_IS_OK(aabb)) {
+                    if (aabb.value.max.y > content_bottom_px) {
+                        content_bottom_px = aabb.value.max.y;
+                    }
+                } else {
+                    yetty_ycore_error_destroy(aabb.error);
+                }
+            }
+        }
+        if (yetty_ydraw_is_composite(data[0]) && terminal->composite_factory) {
+            /* Mint the figure instance and hand it to the line; the grid owns it
+             * and vterm's rich pass draws it at the line's pixel origin. */
+            struct yetty_ydraw_composite_ptr_result ir =
+                yetty_ydraw_composite_factory_create_instance(terminal->composite_factory, data,
+                                                              size_res.value, /*rolling_row=*/0u);
+            if (YETTY_IS_OK(ir)) {
+                struct yetty_ycore_uint32_result at =
+                    yetty_yvterm_vterm_attach_composite(terminal->grid, cur_row, ir.value);
+                if (YETTY_IS_ERR(at)) {
+                    yetty_ydraw_composite_destroy(ir.value);
+                    yetty_ycore_error_destroy(at.error);
+                }
+            } else {
+                yetty_ycore_error_destroy(ir.error);
+            }
+        } else {
+            /* Raw SDF prim / glyph / text-drawable-list / font record: store the
+             * whole wire record on the line for the SDF render pass to consume. */
+            struct yetty_ycore_uint32_result ap = yetty_yvterm_vterm_append_primitive(
+                terminal->grid, cur_row, data, (uint32_t)(size_res.value / sizeof(uint32_t)));
+            if (YETTY_IS_ERR(ap)) {
+                yetty_ycore_error_destroy(ap.error); /* skip one bad record, keep parsing */
+            }
+        }
+    }
+
+    yetty_ydraw_drawable_iterator_destroy(&iter);
+
+    /* Reserve vertical space for this envelope's content by advancing the
+     * libvterm cursor that many rows (newlines drive normal scrollback +
+     * rolling_row bookkeeping). Only the receiver knows the cell height, so this
+     * row count cannot be computed by the producer. */
+    if (YETTY_IS_OK(result) && content_bottom_px > 0.0f) {
+        if (text_cell.height > 0) {
+            uint32_t cell_h = (uint32_t)text_cell.height;
+            uint32_t reserve_rows = ((uint32_t)content_bottom_px + cell_h - 1u) / cell_h;
+            if (reserve_rows > 0u) {
+                char newlines[256];
+                memset(newlines, '\n', sizeof(newlines));
+                while (reserve_rows > 0u) {
+                    uint32_t chunk =
+                        reserve_rows < sizeof(newlines) ? reserve_rows : (uint32_t)sizeof(newlines);
+                    struct yetty_ycore_void_result feed_res =
+                        yetty_yvterm_vterm_feed(terminal->grid, newlines, chunk);
+                    if (YETTY_IS_ERR(feed_res)) {
+                        yetty_ycore_error_destroy(feed_res.error);
+                        break;
+                    }
+                    reserve_rows -= chunk;
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+/* Wire handler for the YDRAW_* DCS codes: CLEAR drops all anchored rich
+ * content, BIN/OVERLAY stream records into the model. Loops across envelopes
+ * (one persistent coroutine), draining CLEAR's empty body and yielding between
+ * envelopes so the SM can advance. */
+static struct yetty_ycore_void_result terminal_ydraw_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_yterminal_terminal *terminal = *(struct yetty_yterminal_terminal **)userdata;
+    for (;;) {
+        int code = yetty_ywire_wire_statemachine_code(sm);
+        if (code == YETTY_DCS_YDRAW_CLEAR) {
+            struct yetty_ycore_void_result clear_res =
+                yetty_yvterm_vterm_clear_rich_all(terminal->grid);
+            if (YETTY_IS_ERR(clear_res)) {
+                yetty_ycore_error_destroy(clear_res.error);
+            }
+            /* CLEAR has no body; drain the terminator so the SM advances. */
+            while (!yetty_ywire_wire_statemachine_at_end(sm)) {
+                uint8_t drain[16];
+                struct yetty_ycore_size_result drain_res =
+                    yetty_ywire_wire_statemachine_read(sm, drain, sizeof(drain));
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, drain_res, "terminal_ydraw: clear drain");
+                if (drain_res.value == 0 && !yetty_ywire_wire_statemachine_at_end(sm)) {
+                    yetty_yplatform_coro_yield();
+                }
+            }
+        } else {
+            struct yetty_ycore_void_result bin_res = terminal_ydraw_consume_bin(terminal, sm);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, bin_res, "terminal_ydraw: consume bin");
+        }
+        terminal->context.yetty_context.event_loop->ops->request_render(
+            terminal->context.yetty_context.event_loop);
+        yetty_yplatform_coro_yield();
+    }
+}
+
 /* yetty_yterminal_mouse_sub_fn impl — fired by the text-layer when libvterm
  * flips DEC mode 1500/1501. Latch state on the terminal, and on the
  * rising edge ship the current pane pixel size to the client via
@@ -1066,7 +1266,7 @@ static struct yetty_ycore_void_result terminal_request_render_callback(void *use
 static struct yetty_ycore_void_result terminal_push_selection(
     struct yetty_yterminal_terminal *terminal)
 {
-    struct yetty_ycore_void_result r = yetty_yvterm_grid_set_selection(
+    struct yetty_ycore_void_result r = yetty_yvterm_vterm_set_selection(
         terminal->grid, terminal->sel_active, terminal->sel_anchor_row, terminal->sel_anchor_col,
         terminal->sel_head_row, terminal->sel_head_col);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_push_selection: set_selection failed");
@@ -1085,7 +1285,7 @@ static void terminal_cell_from_local(const struct yetty_yterminal_terminal *term
 {
     float cell_w = 10.0f;
     float cell_h = 20.0f;
-    struct yetty_ycore_pixel_size cell = yetty_yvterm_grid_cell_size(terminal->grid);
+    struct yetty_ycore_pixel_size cell = yetty_yvterm_vterm_cell_size(terminal->grid);
     if (cell.width > 0.0f) {
         cell_w = cell.width;
     }
@@ -1118,7 +1318,7 @@ static struct yetty_ycore_void_result terminal_collect_selection_text(
     if (!terminal->sel_active) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result r = yetty_yvterm_grid_get_selection_text(terminal->grid, out);
+    struct yetty_ycore_void_result r = yetty_yvterm_vterm_get_selection_text(terminal->grid, out);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "grid selection text");
     return YETTY_OK_VOID();
 }
@@ -1266,7 +1466,7 @@ static struct yetty_ycore_void_result terminal_render_frame(
         struct yetty_yfigure_figure *rf =
             yetty_yfigure_container_as_figure(terminal->root_container_obj);
         struct yetty_ycore_void_result render_res =
-            yetty_yfigure_render(NULL, (struct yetty_yclass_object *)rf - 1, target);
+            yetty_yfigure_render((struct yetty_yclass_object *)rf - 1, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, render_res,
                             "terminal_render_frame: root container render");
         struct yetty_ycore_void_result dirty_clear_res =
@@ -1290,7 +1490,7 @@ static struct yetty_ycore_void_result terminal_read_pty(struct yetty_yterminal_t
     /* Same as the async pipe-read path: the content grid aggregates its
      * sub-renderers' dirty bits via is_dirty; its own figure dirty is never
      * set. */
-    if (yetty_yvterm_grid_is_dirty(terminal->grid)) {
+    if (yetty_yvterm_vterm_is_dirty(terminal->grid)) {
         terminal->context.yetty_context.event_loop->ops->request_render(
             terminal->context.yetty_context.event_loop);
     }
@@ -1391,19 +1591,19 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * mouse-subscription callback still targets the terminal because it mutates
      * terminal-side state (focused figure, outbound resize OSC). It is seated as
      * the lowest-z child of the root container further below. */
-    struct yetty_yclass_object_ptr_result grid_res = yetty_yvterm_grid_figure_create(
+    struct yetty_yclass_object_ptr_result grid_res = yetty_yvterm_vterm_figure_create(
         cols, rows, yetty_context, terminal_pty_write_callback, terminal,
         terminal_request_render_callback, terminal, terminal_mouse_sub_callback, terminal);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, grid_res,
                         "terminal_create: grid figure create failed");
     terminal->grid = grid_res.value;
-    struct yetty_ycore_pixel_size content_cell = yetty_yvterm_grid_cell_size(terminal->grid);
+    struct yetty_ycore_pixel_size content_cell = yetty_yvterm_vterm_cell_size(terminal->grid);
     ydebug("terminal_create: content grid figure created");
 
     /* Register the grid's wire handlers: text grid as the default
      * (raw-passthrough) sink, ydraw canvas for the YDRAW OSC codes. */
     struct yetty_ycore_void_result rr =
-        yetty_yvterm_grid_register_wire(terminal->grid, terminal->sm);
+        yetty_yvterm_vterm_register_wire(terminal->grid, terminal->sm);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: grid register_wire failed");
     ydebug("terminal_create: content grid wire handlers registered");
 
@@ -1504,6 +1704,37 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
             }
         }
     }
+
+    /* Drawable-list registry for ingesting inbound YDRAW_BIN record streams.
+     * Same handler set ygrid registers, so the iterator can step SDF primitives,
+     * cmd/font/text-list records, and composite (FAM) records alike. */
+    {
+        struct yetty_ydraw_drawable_list_registry_ptr_result reg_res =
+            yetty_ydraw_drawable_list_registry_create();
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, reg_res,
+                            "terminal_create: ydraw registry create");
+        terminal->ydraw_registry = reg_res.value;
+        yetty_ydraw_drawable_list_registry_set_default(terminal->ydraw_registry,
+                                                       yetty_ysdf_handler);
+        struct yetty_ycore_void_result hr;
+        hr = yetty_ydraw_drawable_list_registry_add(terminal->ydraw_registry, YETTY_YDRAW_CMD_BASE,
+                                                    YETTY_YDRAW_CMD_END, yetty_ydraw_cmd_handler);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr, "terminal_create: ydraw registry cmd");
+        hr = yetty_ydraw_drawable_list_registry_add(
+            terminal->ydraw_registry, YETTY_YDRAW_RESOURCE_FONT, YETTY_YDRAW_RESOURCE_FONT,
+            yetty_ydraw_font_resource_handler);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr, "terminal_create: ydraw registry font");
+        hr = yetty_ydraw_drawable_list_registry_add(
+            terminal->ydraw_registry, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST,
+            YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST, yetty_ydraw_text_drawable_list_handler);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr, "terminal_create: ydraw registry text");
+        hr = yetty_ydraw_drawable_list_registry_add(terminal->ydraw_registry,
+                                                    YETTY_YDRAW_COMPOSITE_TYPE_BASE, 0xFFFFFFFFu,
+                                                    yetty_ydraw_composite_record_handler);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr,
+                            "terminal_create: ydraw registry complex");
+    }
+
     terminal->figure_args.default_font = terminal->compositor_font;
     terminal->figure_args.composite_factory = terminal->composite_factory;
 
@@ -1584,7 +1815,7 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * figure; the terminal borrows terminal->grid. */
     {
         struct yetty_ycore_void_result add_res = yetty_yfigure_container_add_child(
-            terminal->root_container_obj, yetty_yvterm_grid_as_figure(terminal->grid),
+            terminal->root_container_obj, yetty_yvterm_vterm_as_figure(terminal->grid),
             YETTY_YTERMINAL_GRID_FIGURE_ID);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, add_res,
                             "terminal_create: add grid figure to root container failed");
@@ -1598,11 +1829,15 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
                             "terminal_create: protect grid figure failed");
     }
 
+    /* Rich content (ycat/ypdf/markdown/plots) is owned by yvterm's own grid —
+     * composites + raw SDF/text records are anchored per line on its scroll ring
+     * and drawn by vterm's render. No separate ygrid surface. */
+
     /* On a full-screen erase / reset (CSI 2J/3J or RIS — e.g. `clear`, Ctrl-L,
      * `reset`) the content grid wipes the text grid and ydraw canvas, but the
      * positioned compositor figures live in the root container, which it does
      * not own. Hook into the same clear path to wipe them too. */
-    yetty_yvterm_grid_set_clear_hook(terminal->grid, terminal_clear_figures_callback, terminal);
+    yetty_yvterm_vterm_set_clear_hook(terminal->grid, terminal_clear_figures_callback, terminal);
 
     /* Register the root container directly with the wire SM —
      * userdata is the container itself; no terminal-local wrapper. */
@@ -1637,6 +1872,24 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
         terminal_content_inset_process_input, &terminal->inset_handler_self);
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr, "terminal_create: register content inset");
     ydebug("terminal_create: content inset registered for DCS %d", YETTY_OSC_CS_CONTENT_INSET);
+
+    /* Anchored rich content (yplot/yimage/SDF drawings) arrives as YDRAW DCS
+     * envelopes from producers (yplot, ycat, …). One handler coroutine (distinct
+     * userdata) serves CLEAR + BIN + OVERLAY, parsing records into the content
+     * grid's per-line rich model, which the grid figure then renders. */
+    terminal->ydraw_handler_self = terminal;
+    {
+        const int ydraw_codes[] = {YETTY_DCS_YDRAW_CLEAR, YETTY_DCS_YDRAW_BIN,
+                                   YETTY_DCS_YDRAW_OVERLAY};
+        for (size_t i = 0; i < sizeof(ydraw_codes) / sizeof(ydraw_codes[0]); ++i) {
+            rr = yetty_ywire_wire_statemachine_register(
+                terminal->sm, YETTY_YWIRE_ENVELOPE_DCS, ydraw_codes[i], /*has_args=*/1,
+                terminal_ydraw_process_input, &terminal->ydraw_handler_self);
+            YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr,
+                                "terminal_create: register ydraw handler");
+        }
+    }
+    ydebug("terminal_create: ydraw handlers registered (CLEAR/BIN/OVERLAY)");
 
     /* This process is about to act as a yclass RPC / remote-object
      * server, so bring up the per-module discovery hooks explicitly.
@@ -1717,7 +1970,7 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
         struct yetty_yfigure_figure *rf =
             yetty_yfigure_container_as_figure(terminal->root_container_obj);
         struct yetty_ycore_void_result r =
-            yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)rf - 1);
+            yetty_yfigure_destroy((struct yetty_yclass_object *)rf - 1);
         if (YETTY_IS_ERR(r)) {
             yerror("terminal_destroy: root_container destroy failed: %s", r.error.msg);
             if (!have_err) {
@@ -1743,6 +1996,10 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
     if (terminal->composite_factory) {
         yetty_ydraw_composite_factory_destroy(terminal->composite_factory);
         terminal->composite_factory = NULL;
+    }
+    if (terminal->ydraw_registry) {
+        yetty_ydraw_drawable_list_registry_destroy(terminal->ydraw_registry);
+        terminal->ydraw_registry = NULL;
     }
     if (terminal->compositor_font) {
         terminal->compositor_font->ops->destroy(terminal->compositor_font);
@@ -1817,7 +2074,7 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
 
     if (terminal->grid) {
         struct yetty_ycore_void_result r =
-            yetty_yvterm_grid_resize(terminal->grid, grid_size, cell_size);
+            yetty_yvterm_vterm_resize(terminal->grid, grid_size, cell_size);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
                             "yetty_yterminal_terminal_resize_grid: grid resize failed");
     }
@@ -1884,10 +2141,10 @@ static struct yetty_ycore_void_result terminal_apply_pane_geometry(
     if (!terminal->grid || pane_w <= 0.0f || pane_h <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_pixel_size cell = yetty_yvterm_grid_cell_size(terminal->grid);
+    struct yetty_ycore_pixel_size cell = yetty_yvterm_vterm_cell_size(terminal->grid);
     float inset_top = 0.0f, inset_right = 0.0f, inset_bottom = 0.0f, inset_left = 0.0f;
-    yetty_yvterm_grid_get_content_inset(terminal->grid, &inset_top, &inset_right, &inset_bottom,
-                                        &inset_left);
+    yetty_yvterm_vterm_get_content_inset(terminal->grid, &inset_top, &inset_right, &inset_bottom,
+                                         &inset_left);
 
     float cell_w_target = cell.width > 0 ? cell.width : 10.0f;
     float cell_h_target = cell.height > 0 ? cell.height : 20.0f;
@@ -2113,7 +2370,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 return YETTY_OK(yetty_ycore_int, 1);
             }
         }
-        if (yetty_yvterm_grid_on_key(terminal->grid, event->key.key, event->key.mods)) {
+        if (yetty_yvterm_vterm_on_key(terminal->grid, event->key.key, event->key.mods)) {
             return YETTY_OK(yetty_ycore_int, 1);
         }
         return YETTY_OK(yetty_ycore_int, 1);
@@ -2151,7 +2408,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 return YETTY_OK(yetty_ycore_int, 1);
             }
         }
-        if (yetty_yvterm_grid_on_char(terminal->grid, event->chr.codepoint, event->chr.mods)) {
+        if (yetty_yvterm_vterm_on_char(terminal->grid, event->chr.codepoint, event->chr.mods)) {
             return YETTY_OK(yetty_ycore_int, 1);
         }
         return YETTY_OK(yetty_ycore_int, 1);
@@ -2214,7 +2471,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         }
 
         if (terminal->grid) {
-            struct yetty_ycore_pixel_size cell = yetty_yvterm_grid_cell_size(terminal->grid);
+            struct yetty_ycore_pixel_size cell = yetty_yvterm_vterm_cell_size(terminal->grid);
             float cell_w_target = (cell.width > 0 ? cell.width : 10.0f) * factor;
             float cell_h_target = (cell.height > 0 ? cell.height : 20.0f) * factor;
             uint32_t new_cols = (uint32_t)(view_w / cell_w_target + 0.5f);
@@ -2254,7 +2511,7 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         float oy = event->zoom_visual_apply.offset_y;
         if (terminal->grid) {
             struct yetty_ycore_void_result vr =
-                yetty_yvterm_grid_set_visual_zoom(terminal->grid, scale, ox, oy);
+                yetty_yvterm_vterm_set_visual_zoom(terminal->grid, scale, ox, oy);
             YETTY_RETURN_IF_ERR(yetty_ycore_int, vr,
                                 "terminal_view_on_event: grid set_visual_zoom failed");
         }
@@ -2364,15 +2621,71 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             if (event->type == YETTY_YCORE_MOUSE_DOWN) {
                 uint32_t r, c;
                 terminal_cell_from_local(terminal, lx_sel, ly_sel, &r, &c);
-                terminal->sel_anchor_row = r;
-                terminal->sel_anchor_col = c;
-                terminal->sel_head_row = r;
-                terminal->sel_head_col = c;
-                terminal->sel_active = 1;
-                terminal->sel_dragging = 1;
+
+                /* Multi-click: a press within 0.4s of the previous one on the
+                 * same cell escalates single → word (double) → line (triple),
+                 * then wraps back to single. Mirrors xterm. */
+                double now = yetty_yplatform_ytime_monotonic_sec();
+                if (now - terminal->sel_last_click_sec <= 0.4 &&
+                    r == terminal->sel_last_click_row && c == terminal->sel_last_click_col) {
+                    terminal->sel_click_count++;
+                    if (terminal->sel_click_count > 3) {
+                        terminal->sel_click_count = 1;
+                    }
+                } else {
+                    terminal->sel_click_count = 1;
+                }
+                terminal->sel_last_click_sec = now;
+                terminal->sel_last_click_row = r;
+                terminal->sel_last_click_col = c;
+
+                if (terminal->sel_click_count == 2) {
+                    /* Word select: snap the anchor/head to the word boundaries
+                     * around the clicked cell. Not a drag — finalised here. */
+                    uint32_t sc = c, ec = c;
+                    yetty_yvterm_vterm_word_bounds(terminal->grid, r, c, &sc, &ec);
+                    terminal->sel_anchor_row = r;
+                    terminal->sel_anchor_col = sc;
+                    terminal->sel_head_row = r;
+                    terminal->sel_head_col = ec;
+                    terminal->sel_active = 1;
+                    terminal->sel_dragging = 0;
+                } else if (terminal->sel_click_count == 3) {
+                    /* Line select: the whole visible row (trailing blanks stream
+                     * as nothing in get_selection_text). */
+                    terminal->sel_anchor_row = r;
+                    terminal->sel_anchor_col = 0;
+                    terminal->sel_head_row = r;
+                    terminal->sel_head_col = terminal->cols ? terminal->cols - 1u : 0u;
+                    terminal->sel_active = 1;
+                    terminal->sel_dragging = 0;
+                } else {
+                    /* Single click: anchor a fresh drag selection. */
+                    terminal->sel_anchor_row = r;
+                    terminal->sel_anchor_col = c;
+                    terminal->sel_head_row = r;
+                    terminal->sel_head_col = c;
+                    terminal->sel_active = 1;
+                    terminal->sel_dragging = 1;
+                }
                 struct yetty_ycore_void_result psr = terminal_push_selection(terminal);
                 YETTY_RETURN_IF_ERR(yetty_ycore_int, psr,
                                     "terminal_view_on_event: push_selection (anchor) failed");
+                /* Word/line selections are complete on the press — auto-copy now
+                 * (honouring the same config as drag auto-copy). */
+                if (terminal->sel_click_count >= 2) {
+                    struct yetty_yconfig_config *cfg =
+                        terminal->context.yetty_context.runtime->config;
+                    int auto_copy = 1;
+                    if (cfg && cfg->ops && cfg->ops->get_bool) {
+                        auto_copy = cfg->ops->get_bool(cfg, "terminal/selection/auto-copy", 1);
+                    }
+                    if (auto_copy) {
+                        struct yetty_ycore_void_result cs = terminal_copy_selection(terminal);
+                        YETTY_RETURN_IF_ERR(yetty_ycore_int, cs,
+                                            "terminal_view_on_event: word/line auto-copy failed");
+                    }
+                }
                 return YETTY_OK(yetty_ycore_int, 1);
             }
             /* MOUSE_UP for our drag — finalise. A pure click (no movement)

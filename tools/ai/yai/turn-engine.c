@@ -52,12 +52,10 @@ static void turn_engine_handle_closed_cb(uv_handle_t *handle)
 }
 
 [[clang::annotate("override@yai:turn_engine:on_child_exit")]]
-static struct yetty_ycore_void_result turn_engine_on_child_exit(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result turn_engine_on_child_exit(struct yetty_yclass_object *obj,
                                                                 struct yai_app *app,
                                                                 int64_t exit_status)
 {
-    (void)ctx;
     (void)obj;
     /* Best-effort: the process handle MUST be closed whatever the
      * rendering does — stash the first error, surface it at the end. */
@@ -76,11 +74,9 @@ static struct yetty_ycore_void_result turn_engine_on_child_exit(struct yetty_ycl
 }
 
 [[clang::annotate("override@yai:turn_engine:on_child_eof")]]
-static struct yetty_ycore_void_result turn_engine_on_child_eof(struct yetty_yclass_ctx *ctx,
-                                                               struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result turn_engine_on_child_eof(struct yetty_yclass_object *obj,
                                                                struct yai_app *app)
 {
-    (void)ctx;
     (void)obj;
     /* Normal end of a per-turn stream. Flush any unterminated tail —
      * best-effort: the pipe handle MUST be closed regardless. */
@@ -99,11 +95,9 @@ static struct yetty_ycore_void_result turn_engine_on_child_eof(struct yetty_ycla
 }
 
 [[clang::annotate("override@yai:turn_engine:interrupt")]]
-static struct yetty_ycore_void_result turn_engine_interrupt(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result turn_engine_interrupt(struct yetty_yclass_object *obj,
                                                             struct yai_app *app)
 {
-    (void)ctx;
     (void)obj;
     if (!app->child_alive) {
         return YETTY_OK_VOID();

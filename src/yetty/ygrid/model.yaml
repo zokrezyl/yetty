@@ -4,33 +4,30 @@ methods:
     owning_class: grid
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: record
         type: struct yetty_ycore_buffer
     local: false
+    return_payload_type: null
   - slot: clear
     domain: ygrid
     owning_class: grid
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: null
   - slot: destroy
     domain: ygrid
     owning_class: grid
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: false
+    return_payload_type: null
 classes:
   - name: grid
     domain: ygrid
@@ -68,6 +65,14 @@ classes:
         get: false
         set: false
       - name: scroll_y
+        type: float
+        get: false
+        set: false
+      - name: insert_rolling_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: rolling_cell_height
         type: float
         get: false
         set: false
@@ -467,3 +472,27 @@ types:
         value: 5
       - name: YETTY_YRENDER_UNIFORM_I32
         value: 6
+local_types:
+  ygrid_prim_meta: src/yetty/ygrid/grid.c
+  ygrid_cell: src/yetty/ygrid/grid.c
+  ygrid_entity: src/yetty/ygrid/grid.c
+  ygrid_id_index_entry: src/yetty/ygrid/grid.c
+  yetty_ygrid_grid: src/yetty/ygrid/grid.c
+  yetty_ygrid_grid_ptr_result: src/yetty/ygrid/grid.c
+  yetty_ygrid_factory_args: src/yetty/ygrid/grid.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ygrid/grid.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ygrid/grid.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ygrid/grid.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ygrid/grid.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ygrid/grid.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

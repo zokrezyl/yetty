@@ -8,8 +8,7 @@
 #include <stdlib.h> /* malloc/free for buffer-arg marshalling */
 #include <string.h>
 
-struct yetty_ycore_void_result yetty_ychrome_configure(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ychrome_configure(struct yetty_yclass_object *obj,
                                                        struct yetty_yclass_object *window_manager,
                                                        float caption_height, float edge_size,
                                                        uint32_t flags)
@@ -36,12 +35,11 @@ struct yetty_ycore_void_result yetty_ychrome_configure(struct yetty_yclass_ctx *
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ychrome_configure: dispatch_lookup failed");
-    return ((yetty_ychrome_configure_fn)dispatch_impl_r.value)(ctx, obj, window_manager,
-                                                               caption_height, edge_size, flags);
+    return ((yetty_ychrome_configure_fn)dispatch_impl_r.value)(obj, window_manager, caption_height,
+                                                               edge_size, flags);
 }
 
-struct yetty_ycore_void_result yetty_ychrome_set_size(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj, float width,
+struct yetty_ycore_void_result yetty_ychrome_set_size(struct yetty_yclass_object *obj, float width,
                                                       float height)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -66,11 +64,10 @@ struct yetty_ycore_void_result yetty_ychrome_set_size(struct yetty_yclass_ctx *c
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ychrome_set_size: dispatch_lookup failed");
-    return ((yetty_ychrome_set_size_fn)dispatch_impl_r.value)(ctx, obj, width, height);
+    return ((yetty_ychrome_set_size_fn)dispatch_impl_r.value)(obj, width, height);
 }
 
-struct yetty_ycore_void_result yetty_ychrome_destroy(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *obj)
+struct yetty_ycore_void_result yetty_ychrome_destroy(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -94,11 +91,10 @@ struct yetty_ycore_void_result yetty_ychrome_destroy(struct yetty_yclass_ctx *ct
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ychrome_destroy: dispatch_lookup failed");
-    return ((yetty_ychrome_destroy_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_ychrome_destroy_fn)dispatch_impl_r.value)(obj);
 }
 
-struct yetty_ycore_int_result yetty_ychrome_edge_cursor_at(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ychrome_edge_cursor_at(struct yetty_yclass_object *obj, float x,
                                                            float y)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -123,11 +119,10 @@ struct yetty_ycore_int_result yetty_ychrome_edge_cursor_at(struct yetty_yclass_c
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                         "yetty_ychrome_edge_cursor_at: dispatch_lookup failed");
-    return ((yetty_ychrome_edge_cursor_at_fn)dispatch_impl_r.value)(ctx, obj, x, y);
+    return ((yetty_ychrome_edge_cursor_at_fn)dispatch_impl_r.value)(obj, x, y);
 }
 
-struct yetty_ydraw_drawable_list_result yetty_ychrome_render(struct yetty_yclass_ctx *ctx,
-                                                             struct yetty_yclass_object *obj)
+struct yetty_ydraw_drawable_list_result yetty_ychrome_render(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -151,11 +146,10 @@ struct yetty_ydraw_drawable_list_result yetty_ychrome_render(struct yetty_yclass
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, dispatch_impl_r,
                         "yetty_ychrome_render: dispatch_lookup failed");
-    return ((yetty_ychrome_render_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_ychrome_render_fn)dispatch_impl_r.value)(obj);
 }
 
-struct yetty_ycore_int_result yetty_ychrome_handle_event(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj,
+struct yetty_ycore_int_result yetty_ychrome_handle_event(struct yetty_yclass_object *obj,
                                                          const struct yetty_yui_event *event)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -180,5 +174,5 @@ struct yetty_ycore_int_result yetty_ychrome_handle_event(struct yetty_yclass_ctx
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                         "yetty_ychrome_handle_event: dispatch_lookup failed");
-    return ((yetty_ychrome_handle_event_fn)dispatch_impl_r.value)(ctx, obj, event);
+    return ((yetty_ychrome_handle_event_fn)dispatch_impl_r.value)(obj, event);
 }

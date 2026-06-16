@@ -74,7 +74,7 @@ static void feed_grid(struct yetty_ygrid_grid *grid, const struct yetty_ydraw_dr
     const uint8_t *bytes = (const uint8_t *)yetty_ydraw_drawable_list_data(buf);
     size_t len = yetty_ydraw_drawable_list_size(buf);
     struct yetty_ycore_void_result r =
-        yetty_yfigure_process_bytes(NULL, ((struct yetty_yclass_object *)(fig)-1), bytes, len);
+        yetty_yfigure_process_bytes(((struct yetty_yclass_object *)(fig)-1), bytes, len);
     if (YETTY_IS_ERR(r)) {
         fprintf(stderr, "ygrid process_bytes failed: %s\n", r.error.msg);
         yetty_ycore_error_destroy(r.error);
@@ -97,7 +97,7 @@ static char *dump_grid(struct yetty_ygrid_grid *grid)
 static void destroy_grid(struct yetty_ygrid_grid *grid)
 {
     struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(grid);
-    yetty_yfigure_destroy(NULL, (struct yetty_yclass_object *)fig - 1);
+    yetty_yfigure_destroy((struct yetty_yclass_object *)fig - 1);
 }
 
 /* Append a small SDF box record to buf. Coordinates are figure-local. */

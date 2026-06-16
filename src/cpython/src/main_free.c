@@ -1,21 +1,23 @@
 /* Libpython-free driver: parse a Python file with the ported PEG parser and
  * dump the AST. Part of the yetty project (see ../LICENSE.md). */
 #include "Python.h"
-#include "pycore_parser.h"   /* _PyParser_ASTFromString */
-#include "pycore_ast.h"      /* mod_ty */
+#include "pycore_parser.h" /* _PyParser_ASTFromString */
+#include "pycore_ast.h"    /* mod_ty */
 #include "arena.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 
-void pyp_dump_mod(mod_ty mod);            /* ast_dump.gen.c */
-const char *pyp_error_message(void);      /* errors.c */
+void pyp_dump_mod(mod_ty mod);       /* ast_dump.gen.c */
+const char *pyp_error_message(void); /* errors.c */
 
-static char *
-read_source(const char *path)
+static char *read_source(const char *path)
 {
     FILE *f = fopen(path, "rb");
-    if (!f) { fprintf(stderr, "py-parse: cannot open '%s'\n", path); return NULL; }
+    if (!f) {
+        fprintf(stderr, "py-parse: cannot open '%s'\n", path);
+        return NULL;
+    }
     fseek(f, 0, SEEK_END);
     long n = ftell(f);
     fseek(f, 0, SEEK_SET);
@@ -26,8 +28,7 @@ read_source(const char *path)
     return buf;
 }
 
-int
-main(int argc, char **argv)
+int main(int argc, char **argv)
 {
     if (argc != 2) {
         fprintf(stderr, "usage: %s <file.py>\n", argv[0]);

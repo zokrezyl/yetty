@@ -32,9 +32,10 @@ Symbol naming:
   wire label — one canonical name, three uses.
 
 Method signature contract:
-  RetT slot(struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, <rest...>);
+  RetT slot(struct yetty_yclass_object *obj, <rest...>);
 
-  ctx is *not* on the wire. Public stub branches on ctx->session:
+  Methods take no ctx — the RPC session is linked onto the object at create
+  time (obj->session). The public stub branches on obj->session:
     NULL → local: vtable dispatch via obj->klass.
     set  → remote: look up remote_id via xlat (batched per-class via
            yetty_yclass_rpc_session_translate_class, lazy fallback via
@@ -42,10 +43,11 @@ Method signature contract:
            yetty_yclass_rpc_call(YETTY_YCLASS_RPC_OP_CALL, rid).
 
 Object creation:
-  <class>_create(ctx) — local: yetty_yclass_object_alloc; remote: triggers
-  per-class translate handshake, then yetty_yclass_rpc_call(CREATE,
-  "<name>"), wraps the returned handle in a proxy with the same class
-  accessor.
+  <class>_create(ctx) — the ONLY entry point that takes a ctx; it links
+  ctx->session onto the object. Local (ctx/session NULL):
+  yetty_yclass_object_alloc; remote: per-class translate handshake, then
+  yetty_yclass_rpc_call(CREATE, "<name>"), wraps the returned handle in a
+  proxy whose header.session = ctx->session.
 
 Usage:
   ./codegen.py <module> <include_base> <module_src_dir> <source.c>...
@@ -136,37 +138,30 @@ def result_type(ret: str) -> str:
     return f"struct {result_type_id(ret)}_result"
 
 
-def ret_value_type(rid: str):
-    """Underlying value C type for a Result identifier. None for void
-    (no payload).
+def result_payload_type(return_type: str, types_by_name: dict):
+    """The wire payload C type a Result return carries — the type of the
+    `value` member inside its union, read straight from the parsed struct (no
+    hand-maintained type table). None for the void Result, which carries no
+    success payload. `types_by_name` maps a struct tag to its harvested entry.
 
-    Mirrors:
-      - `YETTY_YRESULT_DECLARE` table in yetty/ycore/result.h
-        (yetty_ycore_void / _int / _size)
-      - Public scalar entries in yetty/ycore/types.h
-        (uint32, float)
-      - Module-local convention: `_ptr` suffix → `struct <prefix> *`,
-        any other id → `struct <id>` (matches the standard
-        `YETTY_YRESULT_DECLARE(<id>, struct <id>)` idiom modules use).
-
-    Result ids declared over scalar typedefs / primitives MUST be
-    listed here — otherwise the fallback `struct <id>` produces
-    invalid C (e.g. `struct uint32` for `YETTY_YRESULT_DECLARE(uint32,
-    uint32_t)`). Add entries as ycore grows."""
-    known_scalars = {
-        "yetty_ycore_void": None,
-        "yetty_ycore_int": "int",
-        "yetty_ycore_size": "size_t",
-        "yetty_ycore_uint32": "uint32_t",
-        "yetty_ycore_float": "float",
-        "uint32": "uint32_t",
-        "float": "float",
-    }
-    if rid in known_scalars:
-        return known_scalars[rid]
-    if rid.endswith("_ptr"):
-        return f"struct {rid[:-4]} *"
-    return f"struct {rid}"
+    Used only to stamp `m['return_payload_type']` at model-build time so the
+    RPC/dispatch marshalling — the one place that needs the success value's
+    layout — reads it off the method instead of recomputing type knowledge."""
+    rt = return_type.strip()
+    if rt == "struct yetty_ycore_void_result":
+        return None
+    m = re.match(r"^struct\s+(\w+)\s*$", rt)
+    if not m:
+        return None
+    entry = types_by_name.get(m.group(1))
+    if not entry:
+        return None
+    for field in entry.get("fields", []):
+        if field.get("kind") == "union":
+            for sub in field.get("fields", []):
+                if sub.get("name") == "value":
+                    return sub.get("type")
+    return None
 
 
 # ============== model — annotated C → in-memory dict ====================
@@ -218,22 +213,14 @@ def ast_dump(path: Path, include_dirs: list) -> dict:
     # etc.) that won't exist until the generated per-class <stem>.h files
     # have been written. We let clang emit "undeclared identifier" errors
     # but still produce JSON AST as long as the file parses syntactically.
-    # -DYCLASS_CODEGEN: header-destined content (types, typedefs, enums,
-    # vtable structs, result-decls, forward-decls, includes) is written in
-    # the .c inside `#ifdef YCLASS_CODEGEN` blocks. Defining it here makes
-    # those declarations visible to the parse (so function signatures that
-    # use them resolve to the real type, not int via error-recovery); the
-    # real build leaves it undefined so the single definition lives in the
-    # generated header the .c includes.
+    # Public types the signatures use (structs, enums, typedefs) are authored
+    # plainly in the .c — visible to this parse and to the real build alike —
+    # and codegen reproduces the needed ones into the generated header, so no
+    # special define is required for them to resolve here.
     cmd = [clang, "-Xclang", "-ast-dump=json", "-fsyntax-only", "-std=c2x",
-           "-DYCLASS_CODEGEN", "-ferror-limit=0", "-Wno-error", "-Wno-everything"]
+           "-ferror-limit=0", "-Wno-error", "-Wno-everything"]
     for d in include_dirs:
         cmd.append(f"-I{d}")
-    extra = os.environ.get("YCLASS_CODEGEN_INCLUDES", "")
-    for d in extra.split(":") if extra else []:
-        d = d.strip()
-        if d:
-            cmd.append(f"-I{d}")
     cmd.append(str(path))
     r = subprocess.run(cmd, capture_output=True, text=True, check=False)
     # Don't abort on returncode != 0 — clang exits non-zero on any
@@ -371,42 +358,6 @@ def _fmt_proto(return_type: str, name: str, args: list) -> str:
     return f"{return_type}{sep}{name}({_fmt_params(args)});"
 
 
-def _scan_codegen_blocks(text: str) -> list:
-    """Bodies of `#ifdef YCLASS_CODEGEN ... #endif` blocks in a source
-    file. This is the header-destined content the real build skips
-    (types, typedefs, enums, vtable structs, result-decls, forward-decls,
-    includes); codegen copies each block verbatim into the generated
-    header. Matches the closing #endif with proper nesting so a block may
-    itself contain feature `#if`/#ifdef/#ifndef ... #endif pairs."""
-    out = []
-    lines = text.split("\n")
-    i = 0
-    open_re = re.compile(r'^[ \t]*#[ \t]*(if|ifdef|ifndef)\b')
-    endif_re = re.compile(r'^[ \t]*#[ \t]*endif\b')
-    start_re = re.compile(r'^[ \t]*#[ \t]*ifdef[ \t]+YCLASS_CODEGEN[ \t]*$')
-    while i < len(lines):
-        if start_re.match(lines[i]):
-            depth = 1
-            j = i + 1
-            body = []
-            while j < len(lines) and depth > 0:
-                if open_re.match(lines[j]):
-                    depth += 1
-                elif endif_re.match(lines[j]):
-                    depth -= 1
-                    if depth == 0:
-                        break
-                body.append(lines[j])
-                j += 1
-            chunk = "\n".join(body).strip("\n")
-            if chunk.strip():
-                out.append(chunk)
-            i = j + 1
-        else:
-            i += 1
-    return out
-
-
 def _parse_return_type(qual_type: str) -> str:
     m = re.match(r"^(.*?)\s*\((.*)\)$", qual_type.strip())
     return m.group(1).strip() if m else qual_type
@@ -456,7 +407,7 @@ def _walk_decls(node: dict, current_file: str = None):
             begin_file = file_of(rng.get("begin"))
             if begin_file:
                 state[0] = begin_file
-        if n.get("kind") in ("FunctionDecl", "RecordDecl"):
+        if n.get("kind") in ("FunctionDecl", "RecordDecl", "EnumDecl", "TypedefDecl"):
             yield n, state[0]
         for child in n.get("inner", []) or []:
             yield from visit(child)
@@ -484,6 +435,18 @@ def _split_ann(ann: str):
 # to the per-language runtime, so only NON-pointer struct / enum types are
 # emitted, resolved transitively through struct fields.
 # ---------------------------------------------------------------------------
+
+def _typedef_text(decl: dict) -> str:
+    """Reconstruct a `typedef …;` line from a TypedefDecl AST node. Function-
+    pointer typedefs carry their underlying type as `RET (*)(ARGS)`; splice the
+    name into the `(*)`. Plain typedefs become `typedef <underlying> <name>;`."""
+    name = decl.get("name") or ""
+    underlying = decl.get("type", {}).get("qualType", "")
+    if "(*)" in underlying:
+        return "typedef " + underlying.replace("(*)", "(*" + name + ")", 1) + ";"
+    sep = "" if underlying.endswith("*") else " "
+    return f"typedef {underlying}{sep}{name};"
+
 
 def _record_field_list(decl: dict) -> list:
     """Field list for a RecordDecl, inlining anonymous nested struct/union
@@ -666,6 +629,19 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     # definition seen across the parsed TUs, keyed by tag.
     record_reg: dict = {}
     enum_reg: dict = {}
+    # Tag -> the module .c that DEFINES it (has a body). Only types authored
+    # in the module's own sources are safe to reproduce as a full definition
+    # in a generated header; types from #include'd third-party/ycore headers
+    # are reached through those includes, never re-defined.
+    local_type_files: dict = {}
+    # Typedef name -> {source_file, text}. Locally-authored typedefs (callback
+    # function pointers, …) reproduced into the header when a public signature
+    # or type references them.
+    local_typedefs: dict = {}
+    # Source file -> ordered list of header-destined #include paths, harvested
+    # from `include@<path>` annotations (foreign by-value types the generated
+    # header must pull in).
+    includes_by_file: dict = {}
 
     def bucket(name: str) -> dict:
         if name not in classes:
@@ -698,13 +674,6 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
         # of whether clang emits a `loc.file` on its top-level decls
         # (it usually does, but seeding here removes the dependency).
         file_bytes_cache[str(path)] = path.read_bytes()
-        # Header-destined content authored in `#ifdef YCLASS_CODEGEN` blocks
-        # is copied verbatim into this file's header (before its exposed
-        # function prototypes, since types must precede the functions
-        # that use them).
-        for block in _scan_codegen_blocks(
-                file_bytes_cache[str(path)].decode("utf-8", errors="replace")):
-            exposed.append({"source_file": str(path), "verbatim": block})
         tu = ast_dump(path, include_dirs)
         # Index every struct/enum definition this TU sees, for `types:`.
         _collect_type_decls(tu, record_reg, enum_reg)
@@ -712,9 +681,34 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
         # top-level translation unit — clang annotates the file change
         # only on the FIRST declaration that moves into a header.
         for decl, decl_file in _walk_decls(tu, current_file=str(path)):
-            anns = _collect_annotations(decl, file_bytes_cache, decl_file)
-            if not anns: continue
             kind = decl.get("kind")
+            # Record every named struct/enum/typedef DEFINED in this .c. This
+            # lets the header emitter reproduce the full definition of such a
+            # type when a public signature uses it (by value for a struct/enum,
+            # or by name for a typedef) — without the type itself carrying an
+            # `expose` annotation.
+            if decl_file == str(path) and decl.get("name"):
+                if kind in ("RecordDecl", "EnumDecl"):
+                    has_body = (bool(_record_field_list(decl)) if kind == "RecordDecl"
+                                else bool(_enum_values(decl)))
+                    if has_body:
+                        local_type_files.setdefault(decl["name"], str(path))
+                elif kind == "TypedefDecl":
+                    local_typedefs.setdefault(
+                        decl["name"],
+                        {"source_file": str(path), "text": _typedef_text(decl)})
+            anns = _collect_annotations(decl, file_bytes_cache, decl_file)
+            # Header-destined #include directives: `include@<path>` pulls a
+            # foreign header into the generated <stem>.h (for a by-value type
+            # the public signatures need complete).
+            for ann in anns:
+                if ann.startswith("include@") and decl_file == str(path):
+                    inc = ann[len("include@"):].strip()
+                    if inc:
+                        bucket_list = includes_by_file.setdefault(str(path), [])
+                        if inc not in bucket_list:
+                            bucket_list.append(inc)
+            if not anns: continue
 
             # `expose` on a function — emit its prototype into the generated
             # header for the file it is DEFINED in (not one seen via an
@@ -733,9 +727,9 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
             # emits the full `struct X { … };`; a bare forward declaration
             # emits `struct X;`. Same single-source model as functions: the
             # type is authored ONCE in the owning .c and reproduced into its
-            # header, so there is no `#ifdef YCLASS_CODEGEN` verbatim block to
-            # keep in sync. (The owning .c must NOT include its own generated
-            # header, or its definition would clash with the emitted copy.)
+            # header, so there is no separate header-destined copy to keep in
+            # sync. (The owning .c must NOT include its own generated header,
+            # or its definition would clash with the emitted copy.)
             if "expose" in anns and decl_file == str(path) and kind == "RecordDecl":
                 name = decl.get("name")
                 if name:
@@ -745,6 +739,18 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                         type_text = f"struct {name} {{\n{body}\n}};"
                     else:
                         type_text = f"struct {name};"
+                    exposed.append({"source_file": str(path), "type_text": type_text})
+                continue
+
+            # `expose` on an enum — public type. Force its full definition into
+            # the header even when no signature uses it by value (e.g. public
+            # flag/constant enums consumers reference directly).
+            if "expose" in anns and decl_file == str(path) and kind == "EnumDecl":
+                name = decl.get("name")
+                if name:
+                    values = _enum_values(decl)
+                    body = "\n".join(f"    {v['name']} = {v['value']}," for v in values)
+                    type_text = f"enum {name} {{\n{body}\n}};"
                     exposed.append({"source_file": str(path), "type_text": type_text})
                 continue
 
@@ -980,6 +986,22 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     harvested = _harvest_types(model, record_reg, enum_reg)
     if harvested:
         model["types"] = harvested
+    # Stamp each method's success-payload C type (read from its Result's union
+    # in the harvested types) so the RPC/dispatch marshalling reads it off the
+    # method — the value-type knowledge stays out of the emitters.
+    payload_types = {t["name"]: t for t in harvested}
+    for method in model["methods"]:
+        method["return_payload_type"] = result_payload_type(
+            method["return_type"], payload_types)
+    # Map of module-locally-defined type tags -> defining source file, so the
+    # header emitter knows which by-value types it may reproduce in full (and
+    # in which stem's header) versus which arrive via an #include.
+    if local_type_files:
+        model["local_types"] = local_type_files
+    if local_typedefs:
+        model["local_typedefs"] = local_typedefs
+    if includes_by_file:
+        model["includes"] = includes_by_file
     return model
 
 
@@ -1132,19 +1154,16 @@ def validate_method(m: dict):
             f"  YETTY_YRESULT_DECLARE. Use `struct yetty_ycore_void_result` for\n"
             f"  methods that have no success value.\n")
         sys.exit(1)
-    if len(args) < 2:
+    if len(args) < 1:
         sys.stderr.write(
-            f"error: method {m['slot']} needs (ctx*, obj*, ...). got {len(args)}\n")
+            f"error: method {m['slot']} needs (obj*, ...). got {len(args)}\n")
         sys.exit(1)
-    if not is_specific_struct_ptr(args[0]["type"], "yetty_yclass_ctx"):
+    # First arg is the target object — methods no longer take a ctx; the
+    # session is linked onto the object at create time and read from there.
+    if not is_specific_struct_ptr(args[0]["type"], "yetty_yclass_object"):
         sys.stderr.write(
-            f"error: method {m['slot']}: first arg must be 'struct yetty_yclass_ctx *' "
+            f"error: method {m['slot']}: first arg must be 'struct yetty_yclass_object *' "
             f"(got '{args[0]['type']}')\n")
-        sys.exit(1)
-    if not is_specific_struct_ptr(args[1]["type"], "yetty_yclass_object"):
-        sys.stderr.write(
-            f"error: method {m['slot']}: second arg must be 'struct yetty_yclass_object *' "
-            f"(got '{args[1]['type']}')\n")
         sys.exit(1)
     # Local-only slots are never marshalled, so the wire-shape rules
     # below don't apply: they may freely take raw pointers to producer-
@@ -1158,7 +1177,7 @@ def validate_method(m: dict):
     # (char *, void *, int *, struct yetty_ycore_buffer *, …) is
     # rejected: marshalling a raw address would write the producer's
     # local heap pointer onto the wire, meaningless on the peer.
-    for a in args[2:]:
+    for a in args[1:]:
         if is_buffer(a["type"]):
             continue  # length-prefixed payload after the packed header
         if is_struct_ptr(a["type"]):
@@ -1200,8 +1219,11 @@ def validate_method(m: dict):
 
 
 def wire_args(m: dict) -> list:
-    """All args except ctx."""
-    return m["args"][1:]
+    """The args that cross the wire: every method arg. The first is the target
+    object (marshalled as its handle); the rest follow it. Methods no longer
+    take a ctx parameter — the session is read from the object — so there is
+    nothing to skip."""
+    return m["args"]
 
 
 def args_struct_body(args: list, indent: str) -> str:
@@ -1215,10 +1237,9 @@ def args_struct_body(args: list, indent: str) -> str:
 def emit_dispatch_body(m: dict) -> str:
     args = m["args"]
     rid = result_type_id(m["return_type"])
-    vt = ret_value_type(rid)
+    vt = m["return_payload_type"]
     slot_fn = f"{qualified_slot(m)}_fn"
-    ctx_name = args[0]["name"]
-    obj_name = args[1]["name"]
+    obj_name = args[0]["name"]
     call_args = ", ".join(a["name"] for a in args)
     qs = qualified_slot(m)
 
@@ -1311,7 +1332,7 @@ def emit_dispatch_body(m: dict) -> str:
 {body_setup}\
         uint8_t resp_buf[1];
         struct yetty_ycore_size_result rpc_call_r = yetty_yclass_rpc_call(
-            rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, {body_arg},
+            {obj_name}->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, {body_arg},
             resp_buf, sizeof(resp_buf));
 {body_cleanup}\
         YETTY_RETURN_IF_ERR({rid}, rpc_call_r, "{qs}: RPC call failed");
@@ -1325,7 +1346,7 @@ def emit_dispatch_body(m: dict) -> str:
 {body_setup}\
         uint8_t resp_buf[1 + sizeof({vt})];
         struct yetty_ycore_size_result rpc_call_r = yetty_yclass_rpc_call(
-            rpc_ctx->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, {body_arg},
+            {obj_name}->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, {body_arg},
             resp_buf, sizeof(resp_buf));
 {body_cleanup}\
         YETTY_RETURN_IF_ERR({rid}, rpc_call_r, "{qs}: RPC call failed");
@@ -1350,10 +1371,9 @@ def emit_dispatch_body(m: dict) -> str:
 
     if (!{obj_name}) return YETTY_ERR({rid}, "{qs}: NULL object");
 
-    struct yetty_yclass_ctx *rpc_ctx = {ctx_name};
-    if (rpc_ctx && rpc_ctx->session) {{
+    if ({obj_name}->session) {{
         struct uint32_result remote_id_r =
-            yetty_yclass_rpc_session_ensure_remote_id(rpc_ctx->session, method_slot);
+            yetty_yclass_rpc_session_ensure_remote_id({obj_name}->session, method_slot);
         YETTY_RETURN_IF_ERR({rid}, remote_id_r, "{qs}: ensure_remote_id failed");
         uint32_t remote_id = remote_id_r.value;
 /* Byte-exact wire layout — #pragma pack matches the first-party
@@ -1626,6 +1646,91 @@ struct yetty_yclass_ptr_result {accessor}(void)
 {property_block}"""
 
 
+def _field_value_types(field: dict) -> list:
+    """The C type string(s) a harvested field contributes for by-value
+    dependency tracking. A named member yields its one type; an inlined
+    anonymous record yields its members' types recursively."""
+    if "fields" in field:
+        out = []
+        for sub in field["fields"]:
+            out.extend(_field_value_types(sub))
+        return out
+    t = field.get("type")
+    return [t] if t else []
+
+
+def _render_field(field: dict, indent: str = "    ") -> str:
+    """Render one harvested field back to a C member declaration, mirroring
+    the no-space-before-`*` style of the hand-written prototypes."""
+    if "fields" in field:
+        nested_kind = field.get("kind", "struct")
+        inner = "\n".join(_render_field(f, indent + "    ") for f in field["fields"])
+        return f"{indent}{nested_kind} {{\n{inner}\n{indent}}} {field.get('name', '')};"
+    type_str = field.get("type", "")
+    name = field.get("name", "")
+    if not name:
+        return f"{indent}{type_str};"
+    sep = "" if type_str.endswith("*") else " "
+    return f"{indent}{type_str}{sep}{name};"
+
+
+def _render_type_def(entry: dict) -> str:
+    """Render a harvested `types:` entry as its full C definition. Every struct
+    — including a Result struct, which is just `{ int ok; union { value;
+    error; } }` — emits its complete `struct name { … };`; enums emit their
+    values. No type is treated specially."""
+    name = entry["name"]
+    if entry.get("kind") == "enum":
+        body = "\n".join(f"    {v['name']} = {v['value']}," for v in entry.get("values", []))
+        return f"enum {name} {{\n{body}\n}};"
+    body = "\n".join(_render_field(f) for f in entry.get("fields", []))
+    return f"struct {name} {{\n{body}\n}};"
+
+
+def _local_byvalue_type_defs(model: dict, src_file: str, byval_tags: set,
+                             exclude: set = None):
+    """Full C definitions for the module-local struct/enum types used BY VALUE
+    by an exposed function in `src_file`, transitively closed over their own
+    by-value members and ordered so a dependency precedes the type that embeds
+    it. Returns (list_of_definition_strings, set_of_defined_tag_names).
+
+    The same rule covers every kind of type a signature uses by value —
+    including Result structs: a `*_result` used by value is reproduced via its
+    `YETTY_YRESULT_DECLARE` just like a plain struct is reproduced via its full
+    body. Only types DEFINED in this stem's own .c (`model['local_types']`) are
+    reproduced — types reached via an #include (ycore/yclass results, foreign
+    structs) stay where they are."""
+    types_by_name = {t["name"]: t for t in model.get("types", [])}
+    local_types = model.get("local_types", {})
+    exclude = exclude or set()
+
+    def emittable(tag: str) -> bool:
+        return (tag in types_by_name
+                and tag not in exclude  # already emitted (expose / data-block)
+                and local_types.get(tag) == src_file  # excludes ycore/foreign
+                and not tag.startswith("yetty_yclass"))  # from class.h / rpc.h
+
+    selected: list = []
+    seen: set = set()
+
+    def visit(tag: str):
+        if tag in seen or not emittable(tag):
+            return
+        seen.add(tag)
+        entry = types_by_name[tag]
+        # Follow every by-value member to a dependency (a Result's union `value`
+        # member is reached the same way as any other field — no special case).
+        if entry.get("kind") != "enum":
+            for field in entry.get("fields", []):
+                for field_type in _field_value_types(field):
+                    category, dep = _classify_type(field_type)
+                    if category in ("struct", "union", "enum") and dep:
+                        visit(dep)  # dependency-first: appended before this tag
+        selected.append(tag)
+
+    for tag in sorted(byval_tags):
+        visit(tag)
+    return [_render_type_def(types_by_name[t]) for t in selected], set(selected)
 
 
 def emit_class_public_headers(model: dict, module: str, include_module_dir: Path):
@@ -1637,10 +1742,10 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
     generated).
 
     The header is 100% generated — there is no hand-written section.
-    Function APIs come from `expose` annotations; any other header-
-    destined content (types, typedefs, enums, vtable structs,
-    result-decls, forward-decls, includes) is authored in the source's
-    `#ifdef YCLASS_CODEGEN` blocks and copied verbatim here."""
+    Function APIs come from `expose` annotations and method slots; the public
+    types they use (structs/enums used by value or `expose`d, typedefs, and
+    `include@` directives) are authored plainly in the source .c and
+    reproduced here, ordered so a type precedes whatever uses it."""
     # Group classes by source file: each output header is named after
     # the source's stem (so `widgets/button.c` → `widgets/button.h`,
     # `primitive-widget.c` → `primitive-widget.h` — preserving the
@@ -1680,19 +1785,30 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
         data_decls = ""
         property_decls = ""
         prop_blocks = []
+        # Result types the data-block already declares via YETTY_YRESULT_DECLARE
+        # (the opaque data-handle `<class>_ptr_result`) — excluded from the
+        # by-value result-dependency emission below so it isn't declared twice.
+        data_block_result_tags = set()
         for c in classes:
             if not c.get("data"):
                 continue
             pfields = [f for f in c.get("data_fields", []) if f.get("get") or f.get("set")]
             q = qualified_class(c)
             rid = f"{q}_ptr"
+            data_block_result_tags.add(f"{rid}_result")
             lines = [
                 "/* Data-block handle — opaque outside the owning .c. The struct\n"
                 " * stays private; only its pointer crosses here, in a Result so a\n"
                 " * bad object surfaces rather than corrupting. Reach members\n"
                 " * through the per-property getters/setters below. */",
                 f"{c['data']};",
-                f"YETTY_YRESULT_DECLARE({rid}, {c['data']} *);",
+                f"struct {rid}_result {{\n"
+                f"    int ok;\n"
+                f"    union {{\n"
+                f"        {c['data']} *value;\n"
+                f"        struct yetty_ycore_error error;\n"
+                f"    }};\n"
+                f"}};",
                 f"struct {rid}_result {q}_from(struct yetty_yclass_object *obj);",
             ]
             # Inverse accessor — recover the owning object from a data-slice
@@ -1713,48 +1829,35 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             prop_blocks.append("\n".join(lines))
         if prop_blocks:
             property_decls = "\n\n" + "\n\n".join(prop_blocks)
-        # `expose`d functions defined in this source file — concrete,
-        # non-slot public API. Emit their prototypes here so they live in
-        # the generated section instead of the hand-maintained MANUAL block.
+        # `expose`d functions defined in this source file — concrete, non-slot
+        # public API — and the public types the file authors. Function
+        # prototypes go in `exposed_protos`; full struct/enum definitions
+        # (authored via `expose` on the type) go in `header_type_texts`.
         exposed_protos = []
-        exposed_type_names = set()
-        proto_struct_types = set()
+        header_type_texts = []
+        exposed_type_names = set()   # type tags this header fully defines itself
+        proto_struct_types = set()   # struct tags named (any position) in a signature
+        byval_type_tags = set()      # struct/enum tags used BY VALUE by a signature
         for e in model.get("exposed", []):
             if e["source_file"] != src_file:
                 continue
-            if "verbatim" in e:
-                exposed_protos.append(e["verbatim"])
-            elif "type_text" in e:
-                exposed_protos.append(e["type_text"])
-                for m in re.finditer(r"struct\s+(\w+)", e["type_text"]):
+            if "type_text" in e:
+                header_type_texts.append(e["type_text"])
+                for m in re.finditer(r"\b(?:struct|enum)\s+(\w+)\s*\{", e["type_text"]):
                     exposed_type_names.add(m.group(1))
             else:
                 exposed_protos.append(_fmt_proto(e["return_type"], e["name"], e["args"]))
                 for typ in [e["return_type"]] + [a["type"] for a in e["args"]]:
                     for m in re.finditer(r"struct\s+(\w+)", typ):
                         proto_struct_types.add(m.group(1))
-        # Forward declarations for the struct types named in the exposed
-        # prototypes. A forward declaration is sufficient even for by-value
-        # parameters here — completeness is only required at the call site and
-        # the definition, both of which include the full type. This is what
-        # lets the public types be authored once (in the owning .c, with the
-        # `expose` annotation) and reproduced into the header with no `#ifdef
-        # YCLASS_CODEGEN` verbatim block. Skip result structs and yclass core
-        # types (already provided by the always-included class.h) and anything
-        # this header fully defines itself (an exposed type like a hit struct).
-        proto_struct_types -= exposed_type_names
-        fwd_decls = "".join(
-            f"struct {n};\n" for n in sorted(proto_struct_types)
-            if not n.endswith("_result") and not n.startswith("yetty_yclass"))
-        method_decls = ""
-        if fwd_decls:
-            method_decls += "\n\n" + fwd_decls.rstrip()
-        if exposed_protos:
-            method_decls += "\n\n" + "\n".join(exposed_protos)
+                    # Used BY VALUE (no pointer) → needs the complete type.
+                    category, tag = _classify_type(typ)
+                    if category in ("struct", "union", "enum") and tag:
+                        byval_type_tags.add(tag)
 
         # Public method-dispatch stubs whose owning class is defined in THIS
-        # source. Folded in so the source's single header is its complete
-        # public interface — there is no module-wide methods.h.
+        # source. Folded in so the source's single header is its complete public
+        # interface — there is no module-wide methods.h.
         group_class_names = {c["name"] for c in classes}
         group_methods = [m for m in model["methods"]
                          if m.get("owning_class") in group_class_names]
@@ -1763,11 +1866,13 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             stub_struct_names |= struct_names_in(m["return_type"])
             for a in m["args"]:
                 stub_struct_names |= struct_names_in(a["type"])
+            for typ in [m["return_type"]] + [a["type"] for a in m["args"]]:
+                category, tag = _classify_type(typ)
+                if category in ("struct", "union", "enum") and tag:
+                    byval_type_tags.add(tag)
         for known in ("yetty_yclass_ctx", "yetty_yclass_object", "yetty_yclass",
                       "yetty_ycore_buffer"):
             stub_struct_names.discard(known)
-        stub_struct_names -= exposed_type_names
-        stub_fwd = "".join(f"struct {n};\n" for n in sorted(stub_struct_names))
         stub_decls = "".join(
             f"{result_type(m['return_type'])} {qualified_slot(m)}("
             + ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
@@ -1791,9 +1896,58 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             for c in classes if c.get("type") != "mixin")
         register_decl = (f"struct yetty_ycore_void_result "
                          f"yetty_{module}_register(void);\n")
+
+        # Full definitions for module-local struct/enum types used BY VALUE by
+        # an exposed function or a method — reproduced whole (transitively, deps
+        # first) so a by-value parameter/return has the complete type at every
+        # call site. Authoring the type in the owning .c and using it by value
+        # is enough to publish it; no annotation on the type is required.
+        # Pointer-only uses get a forward declaration below.
+        local_type_defs, local_def_names = _local_byvalue_type_defs(
+            model, src_file, byval_type_tags,
+            exclude=exposed_type_names | data_block_result_tags)
+        exposed_type_names |= local_def_names
+
+        # Locally-authored typedefs (callback function pointers, …) referenced
+        # by any emitted prototype, stub or type definition — reproduced so the
+        # public header is self-contained, emitted before the structs/functions
+        # that use them.
+        local_typedefs = model.get("local_typedefs", {})
+        typedef_scan = "\n".join(exposed_protos + header_type_texts + local_type_defs
+                                 + [stub_decls, stub_typedefs])
+        typedef_defs = [
+            info["text"]
+            for name, info in sorted(local_typedefs.items())
+            if info.get("source_file") == src_file
+            and re.search(r"\b" + re.escape(name) + r"\b", typedef_scan)]
+
+        # Forward declarations for struct tags named only in pointer position
+        # (completeness is only required at the call site and the definition).
+        # Skip result/yclass-core types and anything this header fully defines.
+        proto_struct_types |= stub_struct_names
+        proto_struct_types -= exposed_type_names
+        fwd_decls = "".join(
+            f"struct {n};\n" for n in sorted(proto_struct_types)
+            if not n.endswith("_result") and not n.startswith("yetty_yclass"))
+
+        # Header-destined #include directives (`include@<path>`) for by-value
+        # foreign types the public signatures need complete.
+        extra_includes = "".join(
+            f"#include <{inc}>\n"
+            for inc in model.get("includes", {}).get(src_file, []))
+
+        # Public type region, ordered for C: forward decls, then typedefs, then
+        # the full struct/enum definitions (already dependency-ordered).
+        type_block = ""
+        if fwd_decls:
+            type_block += fwd_decls + "\n"
+        if typedef_defs:
+            type_block += "\n".join(typedef_defs) + "\n\n"
+        full_defs = local_type_defs + header_type_texts
+        if full_defs:
+            type_block += "\n".join(full_defs) + "\n\n"
+
         rpc_decls = ""
-        if stub_fwd:
-            rpc_decls += "\n\n" + stub_fwd.rstrip()
         if stub_decls:
             rpc_decls += "\n\n" + stub_decls.rstrip()
         if stub_typedefs:
@@ -1801,6 +1955,10 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
         if create_decls:
             rpc_decls += "\n\n" + create_decls.rstrip()
         rpc_decls += "\n\n" + register_decl.rstrip()
+
+        method_decls = ""
+        if exposed_protos:
+            method_decls += "\n\n" + "\n".join(exposed_protos)
 
         kind = "mixin" if all(c['type'] == "mixin" for c in classes) else "regular class"
         # Class-name list for the file header banner.
@@ -1811,14 +1969,18 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             + f"(module: {module}).\n"
             + " * Fully generated from the source .c — do not edit. This single\n"
             + " * header is the source's complete public interface: class\n"
-            + " * accessors, method stubs, create()/register(), and any\n"
-            + " * `expose`d API. Public types come from `expose` annotations. */\n"
+            + " * accessors, method stubs, create()/register(), exposed\n"
+            + " * functions, and the public types the signatures use. */\n"
             + f"#ifndef {guard}\n#define {guard}\n\n"
             + '#include <yetty/yclass/class.h>\n'
             + '#include <yetty/yclass/rpc.h>\n'
             + '#include <yetty/ycore/result.h>\n'
-            + '#include <yetty/ycore/types.h>\n\n'
+            + '#include <yetty/ycore/types.h>\n'
+            + extra_includes + "\n"
+            + "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n"
+            + type_block
             + decls + data_decls + property_decls + rpc_decls + method_decls + "\n\n"
+            + "#ifdef __cplusplus\n}\n#endif\n\n"
             + "#endif\n"
         )
         header_path.write_text(body)
@@ -1994,7 +2156,7 @@ def emit_skel(m: dict) -> str:
     1-byte status=1 wire response and the skel returns 1."""
     slot = qualified_slot(m)
     rid = result_type_id(m["return_type"])
-    vt = ret_value_type(rid)
+    vt = m["return_payload_type"]
     args = wire_args(m)
     fields = args_struct_body(args, indent="        ")
 
@@ -2006,7 +2168,10 @@ def emit_skel(m: dict) -> str:
     # server side — the impl sees the bytes for the duration of the
     # call, and is forbidden from holding onto `.data` past return).
     resolves = []
-    call_parts = ["&local_ctx"]
+    # The resolved server-side object is local (session NULL), so re-entering
+    # the public stub dispatches in-process. No ctx argument — the stub reads
+    # the session off the object.
+    call_parts = []
     buf_args = [a for a in args if is_buffer(a["type"])]
     for a in args:
         if is_struct_ptr(a["type"]):
@@ -2115,7 +2280,6 @@ static size_t {slot}_skel(const void *body, size_t body_len,
     }} wire_args;
 #pragma pack(pop)
 {unpack_block}\
-    struct yetty_yclass_ctx local_ctx = {{0}};
 {resolve_block}\
 {body}}}
 """
@@ -2140,7 +2304,7 @@ def emit_create_fn(cls: dict, model: dict, module: str) -> str:
         ctor_call = f"""\
 
         struct yetty_ycore_void_result ctor_r =
-            yetty_{module}_constructor(ctx, alloc_r.value);
+            yetty_{module}_constructor(alloc_r.value);
         if (YETTY_IS_ERR(ctor_r)) {{
             struct yetty_ycore_void_result free_r =
                 yetty_yclass_object_free(alloc_r.value);
@@ -2209,6 +2373,9 @@ struct yetty_yclass_object_ptr_result {qname}_create(struct yetty_yclass_ctx *ct
     if (!proxy)
         return YETTY_ERR(yetty_yclass_object_ptr, "{qname}_create: calloc(proxy) failed");
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }}
@@ -2428,10 +2595,16 @@ def main():
         if stale.exists():
             stale.unlink()
 
-    # Clang search path: shared include/, the module's own generated-
-    # header dir (include/<module>/), and the module src dir (for
-    # any neighbour .h that might still exist transiently).
-    model = parse_sources([include_base, include_module, module_src], sources, module)
+    # Clang search path, all derived from the two path arguments — no
+    # environment variable needed. `include_base` is <root>/include/yetty and
+    # `module_src` is <root>/src/yetty/<module>, so the project include/ and
+    # src/ roots (which resolve the `<yetty/...>` includes) are their parents.
+    project_include_root = include_base.parent  # <root>/include
+    project_src_root = module_src.parent.parent  # <root>/src
+    model = parse_sources(
+        [project_include_root, include_base, include_module,
+         project_src_root, module_src],
+        sources, module)
     # Collect every non-conforming class and report them all at once, rather
     # than aborting on the first — a module like ygui has dozens to rename.
     class_errors = [e for e in (validate_class(c) for c in model["classes"]) if e]

@@ -6,12 +6,12 @@
 
 struct yai_app;
 struct yetty_ycore_void_result;
-struct yetty_ycore_void_result yetty_yai_on_child_exit(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yai_app * app, int64_t exit_status);
-struct yetty_ycore_void_result yetty_yai_on_child_eof(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yai_app * app);
-struct yetty_ycore_void_result yetty_yai_interrupt(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yai_app * app);
-typedef struct yetty_ycore_void_result (*yetty_yai_on_child_exit_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yai_app *, int64_t);
-typedef struct yetty_ycore_void_result (*yetty_yai_on_child_eof_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yai_app *);
-typedef struct yetty_ycore_void_result (*yetty_yai_interrupt_fn)(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yai_app *);
+struct yetty_ycore_void_result yetty_yai_on_child_exit(struct yetty_yclass_object * obj, struct yai_app * app, int64_t exit_status);
+struct yetty_ycore_void_result yetty_yai_on_child_eof(struct yetty_yclass_object * obj, struct yai_app * app);
+struct yetty_ycore_void_result yetty_yai_interrupt(struct yetty_yclass_object * obj, struct yai_app * app);
+typedef struct yetty_ycore_void_result (*yetty_yai_on_child_exit_fn)(struct yetty_yclass_object *, struct yai_app *, int64_t);
+typedef struct yetty_ycore_void_result (*yetty_yai_on_child_eof_fn)(struct yetty_yclass_object *, struct yai_app *);
+typedef struct yetty_ycore_void_result (*yetty_yai_interrupt_fn)(struct yetty_yclass_object *, struct yai_app *);
 
 [[maybe_unused]]
 static yetty_yai_on_child_exit_fn yetty_yai_turn_engine_yetty_yai_on_child_exit_check = turn_engine_on_child_exit;

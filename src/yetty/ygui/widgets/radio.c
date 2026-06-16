@@ -27,10 +27,8 @@ struct [[clang::annotate("class@ygui:radio")]] [[clang::annotate(
     int selected;
 };
 
-static struct yetty_ycore_void_result on_click(struct yetty_yclass_ctx *yclass_ctx,
-                                               struct yetty_yclass_object *yclass_obj, void *ud)
+static struct yetty_ycore_void_result on_click(struct yetty_yclass_object *yclass_obj, void *ud)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)ud;
     struct yetty_ygui_radio_ptr_result d_dr = yetty_ygui_radio_from(obj);
@@ -46,10 +44,8 @@ static struct yetty_ycore_void_result on_click(struct yetty_yclass_ctx *yclass_c
 }
 
 [[clang::annotate("override@ygui:radio:constructor")]]
-static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
-                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_radio_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -63,10 +59,8 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 [[clang::annotate("override@ygui:radio:destructor")]]
-static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
-                                           struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_radio_ptr_result d_dr = yetty_ygui_radio_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dtor: data_get");
@@ -77,11 +71,9 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_ctx *yclass_ctx,
 }
 
 [[clang::annotate("override@ygui:radio:widget_paint")]]
-static struct yetty_ycore_void_result paint(struct yetty_yclass_ctx *yclass_ctx,
-                                            struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "radio paint: NULL ctx");

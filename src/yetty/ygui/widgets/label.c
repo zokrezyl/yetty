@@ -36,10 +36,8 @@ yetty_ygui_label {
 };
 
 [[clang::annotate("override@ygui:label:constructor")]]
-static struct yetty_ycore_void_result label_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                        struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result label_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_label_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -54,10 +52,8 @@ static struct yetty_ycore_void_result label_constructor(struct yetty_yclass_ctx 
 }
 
 [[clang::annotate("override@ygui:label:destructor")]]
-static struct yetty_ycore_void_result label_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                       struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result label_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_label_ptr_result d_dr = yetty_ygui_label_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "label_destructor: data_get");
@@ -74,11 +70,9 @@ static uint32_t pack_rgba(struct yetty_ycore_rgba c)
 }
 
 [[clang::annotate("override@ygui:label:widget_paint")]]
-static struct yetty_ycore_void_result label_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                  struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result label_paint(struct yetty_yclass_object *yclass_obj,
                                                   struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "label_paint: NULL ctx");

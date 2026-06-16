@@ -2,9 +2,9 @@
 #include "ast.gen.h"
 #include <stdio.h>
 
-FILE *pyp_dump_fp;                        /* dump sink; defaults to stdout */
-void pyp_emit_identifier(PyObject *o);   /* pyp_dump.c */
-void pyp_emit_constant(PyObject *o);      /* pyp_dump.c */
+FILE *pyp_dump_fp;                     /* dump sink; defaults to stdout */
+void pyp_emit_identifier(PyObject *o); /* pyp_dump.c */
+void pyp_emit_constant(PyObject *o);   /* pyp_dump.c */
 
 static void dump_stmt(stmt_ty node);
 static void dump_excepthandler(excepthandler_ty node);
@@ -26,1464 +26,2733 @@ static void dump_operator(int v);
 static void dump_unaryop(int v);
 static void dump_boolop(int v);
 
-static void dump_expr_context(int v) {
+static void dump_expr_context(int v)
+{
     switch (v) {
-    case Load: fputs("Load()", pyp_dump_fp); break;
-    case Store: fputs("Store()", pyp_dump_fp); break;
-    case Del: fputs("Del()", pyp_dump_fp); break;
-    default: fputs("?()", pyp_dump_fp);
+    case Load:
+        fputs("Load()", pyp_dump_fp);
+        break;
+    case Store:
+        fputs("Store()", pyp_dump_fp);
+        break;
+    case Del:
+        fputs("Del()", pyp_dump_fp);
+        break;
+    default:
+        fputs("?()", pyp_dump_fp);
     }
 }
-static void dump_boolop(int v) {
+static void dump_boolop(int v)
+{
     switch (v) {
-    case And: fputs("And()", pyp_dump_fp); break;
-    case Or: fputs("Or()", pyp_dump_fp); break;
-    default: fputs("?()", pyp_dump_fp);
+    case And:
+        fputs("And()", pyp_dump_fp);
+        break;
+    case Or:
+        fputs("Or()", pyp_dump_fp);
+        break;
+    default:
+        fputs("?()", pyp_dump_fp);
     }
 }
-static void dump_operator(int v) {
+static void dump_operator(int v)
+{
     switch (v) {
-    case Add: fputs("Add()", pyp_dump_fp); break;
-    case Sub: fputs("Sub()", pyp_dump_fp); break;
-    case Mult: fputs("Mult()", pyp_dump_fp); break;
-    case MatMult: fputs("MatMult()", pyp_dump_fp); break;
-    case Div: fputs("Div()", pyp_dump_fp); break;
-    case Mod: fputs("Mod()", pyp_dump_fp); break;
-    case Pow: fputs("Pow()", pyp_dump_fp); break;
-    case LShift: fputs("LShift()", pyp_dump_fp); break;
-    case RShift: fputs("RShift()", pyp_dump_fp); break;
-    case BitOr: fputs("BitOr()", pyp_dump_fp); break;
-    case BitXor: fputs("BitXor()", pyp_dump_fp); break;
-    case BitAnd: fputs("BitAnd()", pyp_dump_fp); break;
-    case FloorDiv: fputs("FloorDiv()", pyp_dump_fp); break;
-    default: fputs("?()", pyp_dump_fp);
+    case Add:
+        fputs("Add()", pyp_dump_fp);
+        break;
+    case Sub:
+        fputs("Sub()", pyp_dump_fp);
+        break;
+    case Mult:
+        fputs("Mult()", pyp_dump_fp);
+        break;
+    case MatMult:
+        fputs("MatMult()", pyp_dump_fp);
+        break;
+    case Div:
+        fputs("Div()", pyp_dump_fp);
+        break;
+    case Mod:
+        fputs("Mod()", pyp_dump_fp);
+        break;
+    case Pow:
+        fputs("Pow()", pyp_dump_fp);
+        break;
+    case LShift:
+        fputs("LShift()", pyp_dump_fp);
+        break;
+    case RShift:
+        fputs("RShift()", pyp_dump_fp);
+        break;
+    case BitOr:
+        fputs("BitOr()", pyp_dump_fp);
+        break;
+    case BitXor:
+        fputs("BitXor()", pyp_dump_fp);
+        break;
+    case BitAnd:
+        fputs("BitAnd()", pyp_dump_fp);
+        break;
+    case FloorDiv:
+        fputs("FloorDiv()", pyp_dump_fp);
+        break;
+    default:
+        fputs("?()", pyp_dump_fp);
     }
 }
-static void dump_unaryop(int v) {
+static void dump_unaryop(int v)
+{
     switch (v) {
-    case Invert: fputs("Invert()", pyp_dump_fp); break;
-    case Not: fputs("Not()", pyp_dump_fp); break;
-    case UAdd: fputs("UAdd()", pyp_dump_fp); break;
-    case USub: fputs("USub()", pyp_dump_fp); break;
-    default: fputs("?()", pyp_dump_fp);
+    case Invert:
+        fputs("Invert()", pyp_dump_fp);
+        break;
+    case Not:
+        fputs("Not()", pyp_dump_fp);
+        break;
+    case UAdd:
+        fputs("UAdd()", pyp_dump_fp);
+        break;
+    case USub:
+        fputs("USub()", pyp_dump_fp);
+        break;
+    default:
+        fputs("?()", pyp_dump_fp);
     }
 }
-static void dump_cmpop(int v) {
+static void dump_cmpop(int v)
+{
     switch (v) {
-    case Eq: fputs("Eq()", pyp_dump_fp); break;
-    case NotEq: fputs("NotEq()", pyp_dump_fp); break;
-    case Lt: fputs("Lt()", pyp_dump_fp); break;
-    case LtE: fputs("LtE()", pyp_dump_fp); break;
-    case Gt: fputs("Gt()", pyp_dump_fp); break;
-    case GtE: fputs("GtE()", pyp_dump_fp); break;
-    case Is: fputs("Is()", pyp_dump_fp); break;
-    case IsNot: fputs("IsNot()", pyp_dump_fp); break;
-    case In: fputs("In()", pyp_dump_fp); break;
-    case NotIn: fputs("NotIn()", pyp_dump_fp); break;
-    default: fputs("?()", pyp_dump_fp);
+    case Eq:
+        fputs("Eq()", pyp_dump_fp);
+        break;
+    case NotEq:
+        fputs("NotEq()", pyp_dump_fp);
+        break;
+    case Lt:
+        fputs("Lt()", pyp_dump_fp);
+        break;
+    case LtE:
+        fputs("LtE()", pyp_dump_fp);
+        break;
+    case Gt:
+        fputs("Gt()", pyp_dump_fp);
+        break;
+    case GtE:
+        fputs("GtE()", pyp_dump_fp);
+        break;
+    case Is:
+        fputs("Is()", pyp_dump_fp);
+        break;
+    case IsNot:
+        fputs("IsNot()", pyp_dump_fp);
+        break;
+    case In:
+        fputs("In()", pyp_dump_fp);
+        break;
+    case NotIn:
+        fputs("NotIn()", pyp_dump_fp);
+        break;
+    default:
+        fputs("?()", pyp_dump_fp);
     }
 }
 
-static void dump_mod(mod_ty node) {
+static void dump_mod(mod_ty node)
+{
     switch (node->kind) {
     case Module_kind: {
         fputs("Module(", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Module.body); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Module.body);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("type_ignores=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Module.type_ignores); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_type_ignore((type_ignore_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Module.type_ignores);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_type_ignore((type_ignore_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Interactive_kind: {
         fputs("Interactive(", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Interactive.body); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Interactive.body);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Expression_kind: {
         fputs("Expression(", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    if (node->v.Expression.body) dump_expr(node->v.Expression.body); else fputs("None", pyp_dump_fp);
+        if (node->v.Expression.body) {
+            dump_expr(node->v.Expression.body);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case FunctionType_kind: {
         fputs("FunctionType(", pyp_dump_fp);
         fputs("argtypes=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.FunctionType.argtypes); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.FunctionType.argtypes);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("returns=", pyp_dump_fp);
-    if (node->v.FunctionType.returns) dump_expr(node->v.FunctionType.returns); else fputs("None", pyp_dump_fp);
+        if (node->v.FunctionType.returns) {
+            dump_expr(node->v.FunctionType.returns);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
-    default: fputs("<?>", pyp_dump_fp);
+        break;
+    }
+    default:
+        fputs("<?>", pyp_dump_fp);
     }
 }
 
-static void dump_stmt(stmt_ty node) {
+static void dump_stmt(stmt_ty node)
+{
     switch (node->kind) {
     case FunctionDef_kind: {
         fputs("FunctionDef(", pyp_dump_fp);
         fputs("name=", pyp_dump_fp);
-    pyp_emit_identifier(node->v.FunctionDef.name);
+        pyp_emit_identifier(node->v.FunctionDef.name);
         fputs(", ", pyp_dump_fp);
         fputs("args=", pyp_dump_fp);
-    if (node->v.FunctionDef.args) dump_arguments(node->v.FunctionDef.args); else fputs("None", pyp_dump_fp);
+        if (node->v.FunctionDef.args) {
+            dump_arguments(node->v.FunctionDef.args);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.FunctionDef.body); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.FunctionDef.body);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("decorator_list=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.FunctionDef.decorator_list); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.FunctionDef.decorator_list);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("returns=", pyp_dump_fp);
-    if (node->v.FunctionDef.returns) dump_expr(node->v.FunctionDef.returns); else fputs("None", pyp_dump_fp);
+        if (node->v.FunctionDef.returns) {
+            dump_expr(node->v.FunctionDef.returns);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("type_comment=", pyp_dump_fp);
-    pyp_emit_constant(node->v.FunctionDef.type_comment);
+        pyp_emit_constant(node->v.FunctionDef.type_comment);
         fputs(", ", pyp_dump_fp);
         fputs("type_params=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.FunctionDef.type_params); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_type_param((type_param_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.FunctionDef.type_params);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_type_param((type_param_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case AsyncFunctionDef_kind: {
         fputs("AsyncFunctionDef(", pyp_dump_fp);
         fputs("name=", pyp_dump_fp);
-    pyp_emit_identifier(node->v.AsyncFunctionDef.name);
+        pyp_emit_identifier(node->v.AsyncFunctionDef.name);
         fputs(", ", pyp_dump_fp);
         fputs("args=", pyp_dump_fp);
-    if (node->v.AsyncFunctionDef.args) dump_arguments(node->v.AsyncFunctionDef.args); else fputs("None", pyp_dump_fp);
+        if (node->v.AsyncFunctionDef.args) {
+            dump_arguments(node->v.AsyncFunctionDef.args);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.AsyncFunctionDef.body); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.AsyncFunctionDef.body);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("decorator_list=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.AsyncFunctionDef.decorator_list); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.AsyncFunctionDef.decorator_list);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("returns=", pyp_dump_fp);
-    if (node->v.AsyncFunctionDef.returns) dump_expr(node->v.AsyncFunctionDef.returns); else fputs("None", pyp_dump_fp);
+        if (node->v.AsyncFunctionDef.returns) {
+            dump_expr(node->v.AsyncFunctionDef.returns);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("type_comment=", pyp_dump_fp);
-    pyp_emit_constant(node->v.AsyncFunctionDef.type_comment);
+        pyp_emit_constant(node->v.AsyncFunctionDef.type_comment);
         fputs(", ", pyp_dump_fp);
         fputs("type_params=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.AsyncFunctionDef.type_params); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_type_param((type_param_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.AsyncFunctionDef.type_params);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_type_param((type_param_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case ClassDef_kind: {
         fputs("ClassDef(", pyp_dump_fp);
         fputs("name=", pyp_dump_fp);
-    pyp_emit_identifier(node->v.ClassDef.name);
+        pyp_emit_identifier(node->v.ClassDef.name);
         fputs(", ", pyp_dump_fp);
         fputs("bases=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ClassDef.bases); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ClassDef.bases);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("keywords=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ClassDef.keywords); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_keyword((keyword_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ClassDef.keywords);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_keyword((keyword_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ClassDef.body); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ClassDef.body);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("decorator_list=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ClassDef.decorator_list); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ClassDef.decorator_list);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("type_params=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ClassDef.type_params); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_type_param((type_param_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ClassDef.type_params);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_type_param((type_param_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Return_kind: {
         fputs("Return(", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.Return.value) dump_expr(node->v.Return.value); else fputs("None", pyp_dump_fp);
+        if (node->v.Return.value) {
+            dump_expr(node->v.Return.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Delete_kind: {
         fputs("Delete(", pyp_dump_fp);
         fputs("targets=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Delete.targets); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Delete.targets);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Assign_kind: {
         fputs("Assign(", pyp_dump_fp);
         fputs("targets=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Assign.targets); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Assign.targets);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.Assign.value) dump_expr(node->v.Assign.value); else fputs("None", pyp_dump_fp);
+        if (node->v.Assign.value) {
+            dump_expr(node->v.Assign.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("type_comment=", pyp_dump_fp);
-    pyp_emit_constant(node->v.Assign.type_comment);
+        pyp_emit_constant(node->v.Assign.type_comment);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case TypeAlias_kind: {
         fputs("TypeAlias(", pyp_dump_fp);
         fputs("name=", pyp_dump_fp);
-    if (node->v.TypeAlias.name) dump_expr(node->v.TypeAlias.name); else fputs("None", pyp_dump_fp);
+        if (node->v.TypeAlias.name) {
+            dump_expr(node->v.TypeAlias.name);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("type_params=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.TypeAlias.type_params); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_type_param((type_param_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.TypeAlias.type_params);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_type_param((type_param_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.TypeAlias.value) dump_expr(node->v.TypeAlias.value); else fputs("None", pyp_dump_fp);
+        if (node->v.TypeAlias.value) {
+            dump_expr(node->v.TypeAlias.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case AugAssign_kind: {
         fputs("AugAssign(", pyp_dump_fp);
         fputs("target=", pyp_dump_fp);
-    if (node->v.AugAssign.target) dump_expr(node->v.AugAssign.target); else fputs("None", pyp_dump_fp);
+        if (node->v.AugAssign.target) {
+            dump_expr(node->v.AugAssign.target);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("op=", pyp_dump_fp);
-    dump_operator(node->v.AugAssign.op);
+        dump_operator(node->v.AugAssign.op);
         fputs(", ", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.AugAssign.value) dump_expr(node->v.AugAssign.value); else fputs("None", pyp_dump_fp);
+        if (node->v.AugAssign.value) {
+            dump_expr(node->v.AugAssign.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case AnnAssign_kind: {
         fputs("AnnAssign(", pyp_dump_fp);
         fputs("target=", pyp_dump_fp);
-    if (node->v.AnnAssign.target) dump_expr(node->v.AnnAssign.target); else fputs("None", pyp_dump_fp);
+        if (node->v.AnnAssign.target) {
+            dump_expr(node->v.AnnAssign.target);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("annotation=", pyp_dump_fp);
-    if (node->v.AnnAssign.annotation) dump_expr(node->v.AnnAssign.annotation); else fputs("None", pyp_dump_fp);
+        if (node->v.AnnAssign.annotation) {
+            dump_expr(node->v.AnnAssign.annotation);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.AnnAssign.value) dump_expr(node->v.AnnAssign.value); else fputs("None", pyp_dump_fp);
+        if (node->v.AnnAssign.value) {
+            dump_expr(node->v.AnnAssign.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("simple=", pyp_dump_fp);
-    fprintf(pyp_dump_fp, "%d", node->v.AnnAssign.simple);
+        fprintf(pyp_dump_fp, "%d", node->v.AnnAssign.simple);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case For_kind: {
         fputs("For(", pyp_dump_fp);
         fputs("target=", pyp_dump_fp);
-    if (node->v.For.target) dump_expr(node->v.For.target); else fputs("None", pyp_dump_fp);
+        if (node->v.For.target) {
+            dump_expr(node->v.For.target);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("iter=", pyp_dump_fp);
-    if (node->v.For.iter) dump_expr(node->v.For.iter); else fputs("None", pyp_dump_fp);
+        if (node->v.For.iter) {
+            dump_expr(node->v.For.iter);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.For.body); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.For.body);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("orelse=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.For.orelse); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.For.orelse);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("type_comment=", pyp_dump_fp);
-    pyp_emit_constant(node->v.For.type_comment);
+        pyp_emit_constant(node->v.For.type_comment);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case AsyncFor_kind: {
         fputs("AsyncFor(", pyp_dump_fp);
         fputs("target=", pyp_dump_fp);
-    if (node->v.AsyncFor.target) dump_expr(node->v.AsyncFor.target); else fputs("None", pyp_dump_fp);
+        if (node->v.AsyncFor.target) {
+            dump_expr(node->v.AsyncFor.target);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("iter=", pyp_dump_fp);
-    if (node->v.AsyncFor.iter) dump_expr(node->v.AsyncFor.iter); else fputs("None", pyp_dump_fp);
+        if (node->v.AsyncFor.iter) {
+            dump_expr(node->v.AsyncFor.iter);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.AsyncFor.body); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.AsyncFor.body);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("orelse=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.AsyncFor.orelse); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.AsyncFor.orelse);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("type_comment=", pyp_dump_fp);
-    pyp_emit_constant(node->v.AsyncFor.type_comment);
+        pyp_emit_constant(node->v.AsyncFor.type_comment);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case While_kind: {
         fputs("While(", pyp_dump_fp);
         fputs("test=", pyp_dump_fp);
-    if (node->v.While.test) dump_expr(node->v.While.test); else fputs("None", pyp_dump_fp);
+        if (node->v.While.test) {
+            dump_expr(node->v.While.test);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.While.body); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.While.body);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("orelse=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.While.orelse); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.While.orelse);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case If_kind: {
         fputs("If(", pyp_dump_fp);
         fputs("test=", pyp_dump_fp);
-    if (node->v.If.test) dump_expr(node->v.If.test); else fputs("None", pyp_dump_fp);
+        if (node->v.If.test) {
+            dump_expr(node->v.If.test);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.If.body); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.If.body);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("orelse=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.If.orelse); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.If.orelse);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case With_kind: {
         fputs("With(", pyp_dump_fp);
         fputs("items=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.With.items); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_withitem((withitem_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.With.items);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_withitem((withitem_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.With.body); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.With.body);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("type_comment=", pyp_dump_fp);
-    pyp_emit_constant(node->v.With.type_comment);
+        pyp_emit_constant(node->v.With.type_comment);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case AsyncWith_kind: {
         fputs("AsyncWith(", pyp_dump_fp);
         fputs("items=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.AsyncWith.items); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_withitem((withitem_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.AsyncWith.items);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_withitem((withitem_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.AsyncWith.body); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.AsyncWith.body);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("type_comment=", pyp_dump_fp);
-    pyp_emit_constant(node->v.AsyncWith.type_comment);
+        pyp_emit_constant(node->v.AsyncWith.type_comment);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Match_kind: {
         fputs("Match(", pyp_dump_fp);
         fputs("subject=", pyp_dump_fp);
-    if (node->v.Match.subject) dump_expr(node->v.Match.subject); else fputs("None", pyp_dump_fp);
+        if (node->v.Match.subject) {
+            dump_expr(node->v.Match.subject);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("cases=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Match.cases); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_match_case((match_case_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Match.cases);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_match_case((match_case_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Raise_kind: {
         fputs("Raise(", pyp_dump_fp);
         fputs("exc=", pyp_dump_fp);
-    if (node->v.Raise.exc) dump_expr(node->v.Raise.exc); else fputs("None", pyp_dump_fp);
+        if (node->v.Raise.exc) {
+            dump_expr(node->v.Raise.exc);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("cause=", pyp_dump_fp);
-    if (node->v.Raise.cause) dump_expr(node->v.Raise.cause); else fputs("None", pyp_dump_fp);
+        if (node->v.Raise.cause) {
+            dump_expr(node->v.Raise.cause);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Try_kind: {
         fputs("Try(", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Try.body); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Try.body);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("handlers=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Try.handlers); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_excepthandler((excepthandler_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Try.handlers);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_excepthandler((excepthandler_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("orelse=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Try.orelse); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Try.orelse);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("finalbody=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Try.finalbody); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Try.finalbody);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case TryStar_kind: {
         fputs("TryStar(", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.TryStar.body); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.TryStar.body);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("handlers=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.TryStar.handlers); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_excepthandler((excepthandler_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.TryStar.handlers);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_excepthandler((excepthandler_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("orelse=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.TryStar.orelse); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.TryStar.orelse);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("finalbody=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.TryStar.finalbody); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.TryStar.finalbody);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Assert_kind: {
         fputs("Assert(", pyp_dump_fp);
         fputs("test=", pyp_dump_fp);
-    if (node->v.Assert.test) dump_expr(node->v.Assert.test); else fputs("None", pyp_dump_fp);
+        if (node->v.Assert.test) {
+            dump_expr(node->v.Assert.test);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("msg=", pyp_dump_fp);
-    if (node->v.Assert.msg) dump_expr(node->v.Assert.msg); else fputs("None", pyp_dump_fp);
+        if (node->v.Assert.msg) {
+            dump_expr(node->v.Assert.msg);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Import_kind: {
         fputs("Import(", pyp_dump_fp);
         fputs("names=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Import.names); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_alias((alias_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Import.names);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_alias((alias_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case ImportFrom_kind: {
         fputs("ImportFrom(", pyp_dump_fp);
         fputs("module=", pyp_dump_fp);
-    pyp_emit_identifier(node->v.ImportFrom.module);
+        pyp_emit_identifier(node->v.ImportFrom.module);
         fputs(", ", pyp_dump_fp);
         fputs("names=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ImportFrom.names); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_alias((alias_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ImportFrom.names);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_alias((alias_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("level=", pyp_dump_fp);
-    fprintf(pyp_dump_fp, "%d", node->v.ImportFrom.level);
+        fprintf(pyp_dump_fp, "%d", node->v.ImportFrom.level);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Global_kind: {
         fputs("Global(", pyp_dump_fp);
         fputs("names=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Global.names); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        pyp_emit_identifier((PyObject *)_s->typed_elements[_i]);
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Global.names);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                pyp_emit_identifier((PyObject *)_s->typed_elements[_i]);
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Nonlocal_kind: {
         fputs("Nonlocal(", pyp_dump_fp);
         fputs("names=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Nonlocal.names); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        pyp_emit_identifier((PyObject *)_s->typed_elements[_i]);
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Nonlocal.names);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                pyp_emit_identifier((PyObject *)_s->typed_elements[_i]);
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Expr_kind: {
         fputs("Expr(", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.Expr.value) dump_expr(node->v.Expr.value); else fputs("None", pyp_dump_fp);
+        if (node->v.Expr.value) {
+            dump_expr(node->v.Expr.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Pass_kind: {
         fputs("Pass(", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Break_kind: {
         fputs("Break(", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Continue_kind: {
         fputs("Continue(", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
-    default: fputs("<?>", pyp_dump_fp);
+        break;
+    }
+    default:
+        fputs("<?>", pyp_dump_fp);
     }
 }
 
-static void dump_expr(expr_ty node) {
+static void dump_expr(expr_ty node)
+{
     switch (node->kind) {
     case BoolOp_kind: {
         fputs("BoolOp(", pyp_dump_fp);
         fputs("op=", pyp_dump_fp);
-    dump_boolop(node->v.BoolOp.op);
+        dump_boolop(node->v.BoolOp.op);
         fputs(", ", pyp_dump_fp);
         fputs("values=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.BoolOp.values); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.BoolOp.values);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case NamedExpr_kind: {
         fputs("NamedExpr(", pyp_dump_fp);
         fputs("target=", pyp_dump_fp);
-    if (node->v.NamedExpr.target) dump_expr(node->v.NamedExpr.target); else fputs("None", pyp_dump_fp);
+        if (node->v.NamedExpr.target) {
+            dump_expr(node->v.NamedExpr.target);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.NamedExpr.value) dump_expr(node->v.NamedExpr.value); else fputs("None", pyp_dump_fp);
+        if (node->v.NamedExpr.value) {
+            dump_expr(node->v.NamedExpr.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case BinOp_kind: {
         fputs("BinOp(", pyp_dump_fp);
         fputs("left=", pyp_dump_fp);
-    if (node->v.BinOp.left) dump_expr(node->v.BinOp.left); else fputs("None", pyp_dump_fp);
+        if (node->v.BinOp.left) {
+            dump_expr(node->v.BinOp.left);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("op=", pyp_dump_fp);
-    dump_operator(node->v.BinOp.op);
+        dump_operator(node->v.BinOp.op);
         fputs(", ", pyp_dump_fp);
         fputs("right=", pyp_dump_fp);
-    if (node->v.BinOp.right) dump_expr(node->v.BinOp.right); else fputs("None", pyp_dump_fp);
+        if (node->v.BinOp.right) {
+            dump_expr(node->v.BinOp.right);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case UnaryOp_kind: {
         fputs("UnaryOp(", pyp_dump_fp);
         fputs("op=", pyp_dump_fp);
-    dump_unaryop(node->v.UnaryOp.op);
+        dump_unaryop(node->v.UnaryOp.op);
         fputs(", ", pyp_dump_fp);
         fputs("operand=", pyp_dump_fp);
-    if (node->v.UnaryOp.operand) dump_expr(node->v.UnaryOp.operand); else fputs("None", pyp_dump_fp);
+        if (node->v.UnaryOp.operand) {
+            dump_expr(node->v.UnaryOp.operand);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Lambda_kind: {
         fputs("Lambda(", pyp_dump_fp);
         fputs("args=", pyp_dump_fp);
-    if (node->v.Lambda.args) dump_arguments(node->v.Lambda.args); else fputs("None", pyp_dump_fp);
+        if (node->v.Lambda.args) {
+            dump_arguments(node->v.Lambda.args);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    if (node->v.Lambda.body) dump_expr(node->v.Lambda.body); else fputs("None", pyp_dump_fp);
+        if (node->v.Lambda.body) {
+            dump_expr(node->v.Lambda.body);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case IfExp_kind: {
         fputs("IfExp(", pyp_dump_fp);
         fputs("test=", pyp_dump_fp);
-    if (node->v.IfExp.test) dump_expr(node->v.IfExp.test); else fputs("None", pyp_dump_fp);
+        if (node->v.IfExp.test) {
+            dump_expr(node->v.IfExp.test);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    if (node->v.IfExp.body) dump_expr(node->v.IfExp.body); else fputs("None", pyp_dump_fp);
+        if (node->v.IfExp.body) {
+            dump_expr(node->v.IfExp.body);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("orelse=", pyp_dump_fp);
-    if (node->v.IfExp.orelse) dump_expr(node->v.IfExp.orelse); else fputs("None", pyp_dump_fp);
+        if (node->v.IfExp.orelse) {
+            dump_expr(node->v.IfExp.orelse);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Dict_kind: {
         fputs("Dict(", pyp_dump_fp);
         fputs("keys=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Dict.keys); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Dict.keys);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("values=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Dict.values); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Dict.values);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Set_kind: {
         fputs("Set(", pyp_dump_fp);
         fputs("elts=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Set.elts); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Set.elts);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case ListComp_kind: {
         fputs("ListComp(", pyp_dump_fp);
         fputs("elt=", pyp_dump_fp);
-    if (node->v.ListComp.elt) dump_expr(node->v.ListComp.elt); else fputs("None", pyp_dump_fp);
+        if (node->v.ListComp.elt) {
+            dump_expr(node->v.ListComp.elt);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("generators=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ListComp.generators); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_comprehension((comprehension_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ListComp.generators);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_comprehension((comprehension_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case SetComp_kind: {
         fputs("SetComp(", pyp_dump_fp);
         fputs("elt=", pyp_dump_fp);
-    if (node->v.SetComp.elt) dump_expr(node->v.SetComp.elt); else fputs("None", pyp_dump_fp);
+        if (node->v.SetComp.elt) {
+            dump_expr(node->v.SetComp.elt);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("generators=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.SetComp.generators); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_comprehension((comprehension_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.SetComp.generators);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_comprehension((comprehension_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case DictComp_kind: {
         fputs("DictComp(", pyp_dump_fp);
         fputs("key=", pyp_dump_fp);
-    if (node->v.DictComp.key) dump_expr(node->v.DictComp.key); else fputs("None", pyp_dump_fp);
+        if (node->v.DictComp.key) {
+            dump_expr(node->v.DictComp.key);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.DictComp.value) dump_expr(node->v.DictComp.value); else fputs("None", pyp_dump_fp);
+        if (node->v.DictComp.value) {
+            dump_expr(node->v.DictComp.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("generators=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.DictComp.generators); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_comprehension((comprehension_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.DictComp.generators);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_comprehension((comprehension_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case GeneratorExp_kind: {
         fputs("GeneratorExp(", pyp_dump_fp);
         fputs("elt=", pyp_dump_fp);
-    if (node->v.GeneratorExp.elt) dump_expr(node->v.GeneratorExp.elt); else fputs("None", pyp_dump_fp);
+        if (node->v.GeneratorExp.elt) {
+            dump_expr(node->v.GeneratorExp.elt);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("generators=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.GeneratorExp.generators); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_comprehension((comprehension_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.GeneratorExp.generators);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_comprehension((comprehension_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Await_kind: {
         fputs("Await(", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.Await.value) dump_expr(node->v.Await.value); else fputs("None", pyp_dump_fp);
+        if (node->v.Await.value) {
+            dump_expr(node->v.Await.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Yield_kind: {
         fputs("Yield(", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.Yield.value) dump_expr(node->v.Yield.value); else fputs("None", pyp_dump_fp);
+        if (node->v.Yield.value) {
+            dump_expr(node->v.Yield.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case YieldFrom_kind: {
         fputs("YieldFrom(", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.YieldFrom.value) dump_expr(node->v.YieldFrom.value); else fputs("None", pyp_dump_fp);
+        if (node->v.YieldFrom.value) {
+            dump_expr(node->v.YieldFrom.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Compare_kind: {
         fputs("Compare(", pyp_dump_fp);
         fputs("left=", pyp_dump_fp);
-    if (node->v.Compare.left) dump_expr(node->v.Compare.left); else fputs("None", pyp_dump_fp);
+        if (node->v.Compare.left) {
+            dump_expr(node->v.Compare.left);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("ops=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Compare.ops); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        dump_cmpop(((asdl_int_seq *)_s)->typed_elements[_i]);
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Compare.ops);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                dump_cmpop(((asdl_int_seq *)_s)->typed_elements[_i]);
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("comparators=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Compare.comparators); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Compare.comparators);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Call_kind: {
         fputs("Call(", pyp_dump_fp);
         fputs("func=", pyp_dump_fp);
-    if (node->v.Call.func) dump_expr(node->v.Call.func); else fputs("None", pyp_dump_fp);
+        if (node->v.Call.func) {
+            dump_expr(node->v.Call.func);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("args=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Call.args); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Call.args);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("keywords=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Call.keywords); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_keyword((keyword_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Call.keywords);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_keyword((keyword_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case FormattedValue_kind: {
         fputs("FormattedValue(", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.FormattedValue.value) dump_expr(node->v.FormattedValue.value); else fputs("None", pyp_dump_fp);
+        if (node->v.FormattedValue.value) {
+            dump_expr(node->v.FormattedValue.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("conversion=", pyp_dump_fp);
-    fprintf(pyp_dump_fp, "%d", node->v.FormattedValue.conversion);
+        fprintf(pyp_dump_fp, "%d", node->v.FormattedValue.conversion);
         fputs(", ", pyp_dump_fp);
         fputs("format_spec=", pyp_dump_fp);
-    if (node->v.FormattedValue.format_spec) dump_expr(node->v.FormattedValue.format_spec); else fputs("None", pyp_dump_fp);
+        if (node->v.FormattedValue.format_spec) {
+            dump_expr(node->v.FormattedValue.format_spec);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Interpolation_kind: {
         fputs("Interpolation(", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.Interpolation.value) dump_expr(node->v.Interpolation.value); else fputs("None", pyp_dump_fp);
+        if (node->v.Interpolation.value) {
+            dump_expr(node->v.Interpolation.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("str=", pyp_dump_fp);
-    pyp_emit_constant(node->v.Interpolation.str);
+        pyp_emit_constant(node->v.Interpolation.str);
         fputs(", ", pyp_dump_fp);
         fputs("conversion=", pyp_dump_fp);
-    fprintf(pyp_dump_fp, "%d", node->v.Interpolation.conversion);
+        fprintf(pyp_dump_fp, "%d", node->v.Interpolation.conversion);
         fputs(", ", pyp_dump_fp);
         fputs("format_spec=", pyp_dump_fp);
-    if (node->v.Interpolation.format_spec) dump_expr(node->v.Interpolation.format_spec); else fputs("None", pyp_dump_fp);
+        if (node->v.Interpolation.format_spec) {
+            dump_expr(node->v.Interpolation.format_spec);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case JoinedStr_kind: {
         fputs("JoinedStr(", pyp_dump_fp);
         fputs("values=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.JoinedStr.values); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.JoinedStr.values);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case TemplateStr_kind: {
         fputs("TemplateStr(", pyp_dump_fp);
         fputs("values=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.TemplateStr.values); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.TemplateStr.values);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Constant_kind: {
         fputs("Constant(", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    pyp_emit_constant(node->v.Constant.value);
+        pyp_emit_constant(node->v.Constant.value);
         fputs(", ", pyp_dump_fp);
         fputs("kind=", pyp_dump_fp);
-    pyp_emit_constant(node->v.Constant.kind);
+        pyp_emit_constant(node->v.Constant.kind);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Attribute_kind: {
         fputs("Attribute(", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.Attribute.value) dump_expr(node->v.Attribute.value); else fputs("None", pyp_dump_fp);
+        if (node->v.Attribute.value) {
+            dump_expr(node->v.Attribute.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("attr=", pyp_dump_fp);
-    pyp_emit_identifier(node->v.Attribute.attr);
+        pyp_emit_identifier(node->v.Attribute.attr);
         fputs(", ", pyp_dump_fp);
         fputs("ctx=", pyp_dump_fp);
-    dump_expr_context(node->v.Attribute.ctx);
+        dump_expr_context(node->v.Attribute.ctx);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Subscript_kind: {
         fputs("Subscript(", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.Subscript.value) dump_expr(node->v.Subscript.value); else fputs("None", pyp_dump_fp);
+        if (node->v.Subscript.value) {
+            dump_expr(node->v.Subscript.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("slice=", pyp_dump_fp);
-    if (node->v.Subscript.slice) dump_expr(node->v.Subscript.slice); else fputs("None", pyp_dump_fp);
+        if (node->v.Subscript.slice) {
+            dump_expr(node->v.Subscript.slice);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("ctx=", pyp_dump_fp);
-    dump_expr_context(node->v.Subscript.ctx);
+        dump_expr_context(node->v.Subscript.ctx);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Starred_kind: {
         fputs("Starred(", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.Starred.value) dump_expr(node->v.Starred.value); else fputs("None", pyp_dump_fp);
+        if (node->v.Starred.value) {
+            dump_expr(node->v.Starred.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("ctx=", pyp_dump_fp);
-    dump_expr_context(node->v.Starred.ctx);
+        dump_expr_context(node->v.Starred.ctx);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Name_kind: {
         fputs("Name(", pyp_dump_fp);
         fputs("id=", pyp_dump_fp);
-    pyp_emit_identifier(node->v.Name.id);
+        pyp_emit_identifier(node->v.Name.id);
         fputs(", ", pyp_dump_fp);
         fputs("ctx=", pyp_dump_fp);
-    dump_expr_context(node->v.Name.ctx);
+        dump_expr_context(node->v.Name.ctx);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case List_kind: {
         fputs("List(", pyp_dump_fp);
         fputs("elts=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.List.elts); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.List.elts);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("ctx=", pyp_dump_fp);
-    dump_expr_context(node->v.List.ctx);
+        dump_expr_context(node->v.List.ctx);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Tuple_kind: {
         fputs("Tuple(", pyp_dump_fp);
         fputs("elts=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Tuple.elts); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.Tuple.elts);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("ctx=", pyp_dump_fp);
-    dump_expr_context(node->v.Tuple.ctx);
+        dump_expr_context(node->v.Tuple.ctx);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case Slice_kind: {
         fputs("Slice(", pyp_dump_fp);
         fputs("lower=", pyp_dump_fp);
-    if (node->v.Slice.lower) dump_expr(node->v.Slice.lower); else fputs("None", pyp_dump_fp);
+        if (node->v.Slice.lower) {
+            dump_expr(node->v.Slice.lower);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("upper=", pyp_dump_fp);
-    if (node->v.Slice.upper) dump_expr(node->v.Slice.upper); else fputs("None", pyp_dump_fp);
+        if (node->v.Slice.upper) {
+            dump_expr(node->v.Slice.upper);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("step=", pyp_dump_fp);
-    if (node->v.Slice.step) dump_expr(node->v.Slice.step); else fputs("None", pyp_dump_fp);
+        if (node->v.Slice.step) {
+            dump_expr(node->v.Slice.step);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
-    default: fputs("<?>", pyp_dump_fp);
+        break;
+    }
+    default:
+        fputs("<?>", pyp_dump_fp);
     }
 }
 
-static void dump_comprehension(comprehension_ty node) {
+static void dump_comprehension(comprehension_ty node)
+{
     fputs("comprehension(", pyp_dump_fp);
-        fputs("target=", pyp_dump_fp);
-    if (node->target) dump_expr(node->target); else fputs("None", pyp_dump_fp);
-        fputs(", ", pyp_dump_fp);
-        fputs("iter=", pyp_dump_fp);
-    if (node->iter) dump_expr(node->iter); else fputs("None", pyp_dump_fp);
-        fputs(", ", pyp_dump_fp);
-        fputs("ifs=", pyp_dump_fp);
+    fputs("target=", pyp_dump_fp);
+    if (node->target) {
+        dump_expr(node->target);
+    } else {
+        fputs("None", pyp_dump_fp);
+    }
+    fputs(", ", pyp_dump_fp);
+    fputs("iter=", pyp_dump_fp);
+    if (node->iter) {
+        dump_expr(node->iter);
+    } else {
+        fputs("None", pyp_dump_fp);
+    }
+    fputs(", ", pyp_dump_fp);
+    fputs("ifs=", pyp_dump_fp);
     fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->ifs); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
+    {
+        asdl_generic_seq *_s = (asdl_generic_seq *)(node->ifs);
+        Py_ssize_t _i;
+        for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+            if (_i) {
+                fputs(", ", pyp_dump_fp);
+            }
+            {
+                void *_e = _s->typed_elements[_i];
+                if (_e) {
+                    dump_expr((expr_ty)_e);
+                } else {
+                    fputs("None", pyp_dump_fp);
+                }
+            }
+        }
+    }
     fputs("]", pyp_dump_fp);
-        fputs(", ", pyp_dump_fp);
-        fputs("is_async=", pyp_dump_fp);
+    fputs(", ", pyp_dump_fp);
+    fputs("is_async=", pyp_dump_fp);
     fprintf(pyp_dump_fp, "%d", node->is_async);
     fputs(")", pyp_dump_fp);
 }
 
-static void dump_excepthandler(excepthandler_ty node) {
+static void dump_excepthandler(excepthandler_ty node)
+{
     switch (node->kind) {
     case ExceptHandler_kind: {
         fputs("ExceptHandler(", pyp_dump_fp);
         fputs("type=", pyp_dump_fp);
-    if (node->v.ExceptHandler.type) dump_expr(node->v.ExceptHandler.type); else fputs("None", pyp_dump_fp);
+        if (node->v.ExceptHandler.type) {
+            dump_expr(node->v.ExceptHandler.type);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("name=", pyp_dump_fp);
-    pyp_emit_identifier(node->v.ExceptHandler.name);
+        pyp_emit_identifier(node->v.ExceptHandler.name);
         fputs(", ", pyp_dump_fp);
         fputs("body=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ExceptHandler.body); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.ExceptHandler.body);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_stmt((stmt_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
-    default: fputs("<?>", pyp_dump_fp);
+        break;
+    }
+    default:
+        fputs("<?>", pyp_dump_fp);
     }
 }
 
-static void dump_arguments(arguments_ty node) {
+static void dump_arguments(arguments_ty node)
+{
     fputs("arguments(", pyp_dump_fp);
-        fputs("posonlyargs=", pyp_dump_fp);
+    fputs("posonlyargs=", pyp_dump_fp);
     fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->posonlyargs); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_arg((arg_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
+    {
+        asdl_generic_seq *_s = (asdl_generic_seq *)(node->posonlyargs);
+        Py_ssize_t _i;
+        for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+            if (_i) {
+                fputs(", ", pyp_dump_fp);
+            }
+            {
+                void *_e = _s->typed_elements[_i];
+                if (_e) {
+                    dump_arg((arg_ty)_e);
+                } else {
+                    fputs("None", pyp_dump_fp);
+                }
+            }
+        }
+    }
     fputs("]", pyp_dump_fp);
-        fputs(", ", pyp_dump_fp);
-        fputs("args=", pyp_dump_fp);
+    fputs(", ", pyp_dump_fp);
+    fputs("args=", pyp_dump_fp);
     fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->args); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_arg((arg_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
+    {
+        asdl_generic_seq *_s = (asdl_generic_seq *)(node->args);
+        Py_ssize_t _i;
+        for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+            if (_i) {
+                fputs(", ", pyp_dump_fp);
+            }
+            {
+                void *_e = _s->typed_elements[_i];
+                if (_e) {
+                    dump_arg((arg_ty)_e);
+                } else {
+                    fputs("None", pyp_dump_fp);
+                }
+            }
+        }
+    }
     fputs("]", pyp_dump_fp);
-        fputs(", ", pyp_dump_fp);
-        fputs("vararg=", pyp_dump_fp);
-    if (node->vararg) dump_arg(node->vararg); else fputs("None", pyp_dump_fp);
-        fputs(", ", pyp_dump_fp);
-        fputs("kwonlyargs=", pyp_dump_fp);
+    fputs(", ", pyp_dump_fp);
+    fputs("vararg=", pyp_dump_fp);
+    if (node->vararg) {
+        dump_arg(node->vararg);
+    } else {
+        fputs("None", pyp_dump_fp);
+    }
+    fputs(", ", pyp_dump_fp);
+    fputs("kwonlyargs=", pyp_dump_fp);
     fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->kwonlyargs); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_arg((arg_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
+    {
+        asdl_generic_seq *_s = (asdl_generic_seq *)(node->kwonlyargs);
+        Py_ssize_t _i;
+        for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+            if (_i) {
+                fputs(", ", pyp_dump_fp);
+            }
+            {
+                void *_e = _s->typed_elements[_i];
+                if (_e) {
+                    dump_arg((arg_ty)_e);
+                } else {
+                    fputs("None", pyp_dump_fp);
+                }
+            }
+        }
+    }
     fputs("]", pyp_dump_fp);
-        fputs(", ", pyp_dump_fp);
-        fputs("kw_defaults=", pyp_dump_fp);
+    fputs(", ", pyp_dump_fp);
+    fputs("kw_defaults=", pyp_dump_fp);
     fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->kw_defaults); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
+    {
+        asdl_generic_seq *_s = (asdl_generic_seq *)(node->kw_defaults);
+        Py_ssize_t _i;
+        for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+            if (_i) {
+                fputs(", ", pyp_dump_fp);
+            }
+            {
+                void *_e = _s->typed_elements[_i];
+                if (_e) {
+                    dump_expr((expr_ty)_e);
+                } else {
+                    fputs("None", pyp_dump_fp);
+                }
+            }
+        }
+    }
     fputs("]", pyp_dump_fp);
-        fputs(", ", pyp_dump_fp);
-        fputs("kwarg=", pyp_dump_fp);
-    if (node->kwarg) dump_arg(node->kwarg); else fputs("None", pyp_dump_fp);
-        fputs(", ", pyp_dump_fp);
-        fputs("defaults=", pyp_dump_fp);
+    fputs(", ", pyp_dump_fp);
+    fputs("kwarg=", pyp_dump_fp);
+    if (node->kwarg) {
+        dump_arg(node->kwarg);
+    } else {
+        fputs("None", pyp_dump_fp);
+    }
+    fputs(", ", pyp_dump_fp);
+    fputs("defaults=", pyp_dump_fp);
     fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->defaults); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
+    {
+        asdl_generic_seq *_s = (asdl_generic_seq *)(node->defaults);
+        Py_ssize_t _i;
+        for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+            if (_i) {
+                fputs(", ", pyp_dump_fp);
+            }
+            {
+                void *_e = _s->typed_elements[_i];
+                if (_e) {
+                    dump_expr((expr_ty)_e);
+                } else {
+                    fputs("None", pyp_dump_fp);
+                }
+            }
+        }
+    }
     fputs("]", pyp_dump_fp);
     fputs(")", pyp_dump_fp);
 }
 
-static void dump_arg(arg_ty node) {
+static void dump_arg(arg_ty node)
+{
     fputs("arg(", pyp_dump_fp);
-        fputs("arg=", pyp_dump_fp);
+    fputs("arg=", pyp_dump_fp);
     pyp_emit_identifier(node->arg);
-        fputs(", ", pyp_dump_fp);
-        fputs("annotation=", pyp_dump_fp);
-    if (node->annotation) dump_expr(node->annotation); else fputs("None", pyp_dump_fp);
-        fputs(", ", pyp_dump_fp);
-        fputs("type_comment=", pyp_dump_fp);
+    fputs(", ", pyp_dump_fp);
+    fputs("annotation=", pyp_dump_fp);
+    if (node->annotation) {
+        dump_expr(node->annotation);
+    } else {
+        fputs("None", pyp_dump_fp);
+    }
+    fputs(", ", pyp_dump_fp);
+    fputs("type_comment=", pyp_dump_fp);
     pyp_emit_constant(node->type_comment);
     fputs(")", pyp_dump_fp);
 }
 
-static void dump_keyword(keyword_ty node) {
+static void dump_keyword(keyword_ty node)
+{
     fputs("keyword(", pyp_dump_fp);
-        fputs("arg=", pyp_dump_fp);
+    fputs("arg=", pyp_dump_fp);
     pyp_emit_identifier(node->arg);
-        fputs(", ", pyp_dump_fp);
-        fputs("value=", pyp_dump_fp);
-    if (node->value) dump_expr(node->value); else fputs("None", pyp_dump_fp);
+    fputs(", ", pyp_dump_fp);
+    fputs("value=", pyp_dump_fp);
+    if (node->value) {
+        dump_expr(node->value);
+    } else {
+        fputs("None", pyp_dump_fp);
+    }
     fputs(")", pyp_dump_fp);
 }
 
-static void dump_alias(alias_ty node) {
+static void dump_alias(alias_ty node)
+{
     fputs("alias(", pyp_dump_fp);
-        fputs("name=", pyp_dump_fp);
+    fputs("name=", pyp_dump_fp);
     pyp_emit_identifier(node->name);
-        fputs(", ", pyp_dump_fp);
-        fputs("asname=", pyp_dump_fp);
+    fputs(", ", pyp_dump_fp);
+    fputs("asname=", pyp_dump_fp);
     pyp_emit_identifier(node->asname);
     fputs(")", pyp_dump_fp);
 }
 
-static void dump_withitem(withitem_ty node) {
+static void dump_withitem(withitem_ty node)
+{
     fputs("withitem(", pyp_dump_fp);
-        fputs("context_expr=", pyp_dump_fp);
-    if (node->context_expr) dump_expr(node->context_expr); else fputs("None", pyp_dump_fp);
-        fputs(", ", pyp_dump_fp);
-        fputs("optional_vars=", pyp_dump_fp);
-    if (node->optional_vars) dump_expr(node->optional_vars); else fputs("None", pyp_dump_fp);
+    fputs("context_expr=", pyp_dump_fp);
+    if (node->context_expr) {
+        dump_expr(node->context_expr);
+    } else {
+        fputs("None", pyp_dump_fp);
+    }
+    fputs(", ", pyp_dump_fp);
+    fputs("optional_vars=", pyp_dump_fp);
+    if (node->optional_vars) {
+        dump_expr(node->optional_vars);
+    } else {
+        fputs("None", pyp_dump_fp);
+    }
     fputs(")", pyp_dump_fp);
 }
 
-static void dump_match_case(match_case_ty node) {
+static void dump_match_case(match_case_ty node)
+{
     fputs("match_case(", pyp_dump_fp);
-        fputs("pattern=", pyp_dump_fp);
-    if (node->pattern) dump_pattern(node->pattern); else fputs("None", pyp_dump_fp);
-        fputs(", ", pyp_dump_fp);
-        fputs("guard=", pyp_dump_fp);
-    if (node->guard) dump_expr(node->guard); else fputs("None", pyp_dump_fp);
-        fputs(", ", pyp_dump_fp);
-        fputs("body=", pyp_dump_fp);
+    fputs("pattern=", pyp_dump_fp);
+    if (node->pattern) {
+        dump_pattern(node->pattern);
+    } else {
+        fputs("None", pyp_dump_fp);
+    }
+    fputs(", ", pyp_dump_fp);
+    fputs("guard=", pyp_dump_fp);
+    if (node->guard) {
+        dump_expr(node->guard);
+    } else {
+        fputs("None", pyp_dump_fp);
+    }
+    fputs(", ", pyp_dump_fp);
+    fputs("body=", pyp_dump_fp);
     fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->body); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_stmt((stmt_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
+    {
+        asdl_generic_seq *_s = (asdl_generic_seq *)(node->body);
+        Py_ssize_t _i;
+        for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+            if (_i) {
+                fputs(", ", pyp_dump_fp);
+            }
+            {
+                void *_e = _s->typed_elements[_i];
+                if (_e) {
+                    dump_stmt((stmt_ty)_e);
+                } else {
+                    fputs("None", pyp_dump_fp);
+                }
+            }
+        }
+    }
     fputs("]", pyp_dump_fp);
     fputs(")", pyp_dump_fp);
 }
 
-static void dump_pattern(pattern_ty node) {
+static void dump_pattern(pattern_ty node)
+{
     switch (node->kind) {
     case MatchValue_kind: {
         fputs("MatchValue(", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    if (node->v.MatchValue.value) dump_expr(node->v.MatchValue.value); else fputs("None", pyp_dump_fp);
+        if (node->v.MatchValue.value) {
+            dump_expr(node->v.MatchValue.value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case MatchSingleton_kind: {
         fputs("MatchSingleton(", pyp_dump_fp);
         fputs("value=", pyp_dump_fp);
-    pyp_emit_constant(node->v.MatchSingleton.value);
+        pyp_emit_constant(node->v.MatchSingleton.value);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case MatchSequence_kind: {
         fputs("MatchSequence(", pyp_dump_fp);
         fputs("patterns=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.MatchSequence.patterns); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_pattern((pattern_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.MatchSequence.patterns);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_pattern((pattern_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case MatchMapping_kind: {
         fputs("MatchMapping(", pyp_dump_fp);
         fputs("keys=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.MatchMapping.keys); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_expr((expr_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.MatchMapping.keys);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_expr((expr_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("patterns=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.MatchMapping.patterns); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_pattern((pattern_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.MatchMapping.patterns);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_pattern((pattern_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("rest=", pyp_dump_fp);
-    pyp_emit_identifier(node->v.MatchMapping.rest);
+        pyp_emit_identifier(node->v.MatchMapping.rest);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case MatchClass_kind: {
         fputs("MatchClass(", pyp_dump_fp);
         fputs("cls=", pyp_dump_fp);
-    if (node->v.MatchClass.cls) dump_expr(node->v.MatchClass.cls); else fputs("None", pyp_dump_fp);
+        if (node->v.MatchClass.cls) {
+            dump_expr(node->v.MatchClass.cls);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("patterns=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.MatchClass.patterns); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_pattern((pattern_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.MatchClass.patterns);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_pattern((pattern_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("kwd_attrs=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.MatchClass.kwd_attrs); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        pyp_emit_identifier((PyObject *)_s->typed_elements[_i]);
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.MatchClass.kwd_attrs);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                pyp_emit_identifier((PyObject *)_s->typed_elements[_i]);
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(", ", pyp_dump_fp);
         fputs("kwd_patterns=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.MatchClass.kwd_patterns); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_pattern((pattern_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.MatchClass.kwd_patterns);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_pattern((pattern_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case MatchStar_kind: {
         fputs("MatchStar(", pyp_dump_fp);
         fputs("name=", pyp_dump_fp);
-    pyp_emit_identifier(node->v.MatchStar.name);
+        pyp_emit_identifier(node->v.MatchStar.name);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case MatchAs_kind: {
         fputs("MatchAs(", pyp_dump_fp);
         fputs("pattern=", pyp_dump_fp);
-    if (node->v.MatchAs.pattern) dump_pattern(node->v.MatchAs.pattern); else fputs("None", pyp_dump_fp);
+        if (node->v.MatchAs.pattern) {
+            dump_pattern(node->v.MatchAs.pattern);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("name=", pyp_dump_fp);
-    pyp_emit_identifier(node->v.MatchAs.name);
+        pyp_emit_identifier(node->v.MatchAs.name);
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case MatchOr_kind: {
         fputs("MatchOr(", pyp_dump_fp);
         fputs("patterns=", pyp_dump_fp);
-    fputs("[", pyp_dump_fp);
-    { asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.MatchOr.patterns); Py_ssize_t _i;
-      for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
-        if (_i) fputs(", ", pyp_dump_fp);
-        { void *_e = _s->typed_elements[_i];
-          if (_e) dump_pattern((pattern_ty)_e); else fputs("None", pyp_dump_fp); }
-      } }
-    fputs("]", pyp_dump_fp);
+        fputs("[", pyp_dump_fp);
+        {
+            asdl_generic_seq *_s = (asdl_generic_seq *)(node->v.MatchOr.patterns);
+            Py_ssize_t _i;
+            for (_i = 0; _i < asdl_seq_LEN(_s); _i++) {
+                if (_i) {
+                    fputs(", ", pyp_dump_fp);
+                }
+                {
+                    void *_e = _s->typed_elements[_i];
+                    if (_e) {
+                        dump_pattern((pattern_ty)_e);
+                    } else {
+                        fputs("None", pyp_dump_fp);
+                    }
+                }
+            }
+        }
+        fputs("]", pyp_dump_fp);
         fputs(")", pyp_dump_fp);
-        break; }
-    default: fputs("<?>", pyp_dump_fp);
+        break;
+    }
+    default:
+        fputs("<?>", pyp_dump_fp);
     }
 }
 
-static void dump_type_ignore(type_ignore_ty node) {
+static void dump_type_ignore(type_ignore_ty node)
+{
     switch (node->kind) {
     case TypeIgnore_kind: {
         fputs("TypeIgnore(", pyp_dump_fp);
         fputs("lineno=", pyp_dump_fp);
-    fprintf(pyp_dump_fp, "%d", node->v.TypeIgnore.lineno);
+        fprintf(pyp_dump_fp, "%d", node->v.TypeIgnore.lineno);
         fputs(", ", pyp_dump_fp);
         fputs("tag=", pyp_dump_fp);
-    pyp_emit_constant(node->v.TypeIgnore.tag);
+        pyp_emit_constant(node->v.TypeIgnore.tag);
         fputs(")", pyp_dump_fp);
-        break; }
-    default: fputs("<?>", pyp_dump_fp);
+        break;
+    }
+    default:
+        fputs("<?>", pyp_dump_fp);
     }
 }
 
-static void dump_type_param(type_param_ty node) {
+static void dump_type_param(type_param_ty node)
+{
     switch (node->kind) {
     case TypeVar_kind: {
         fputs("TypeVar(", pyp_dump_fp);
         fputs("name=", pyp_dump_fp);
-    pyp_emit_identifier(node->v.TypeVar.name);
+        pyp_emit_identifier(node->v.TypeVar.name);
         fputs(", ", pyp_dump_fp);
         fputs("bound=", pyp_dump_fp);
-    if (node->v.TypeVar.bound) dump_expr(node->v.TypeVar.bound); else fputs("None", pyp_dump_fp);
+        if (node->v.TypeVar.bound) {
+            dump_expr(node->v.TypeVar.bound);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(", ", pyp_dump_fp);
         fputs("default_value=", pyp_dump_fp);
-    if (node->v.TypeVar.default_value) dump_expr(node->v.TypeVar.default_value); else fputs("None", pyp_dump_fp);
+        if (node->v.TypeVar.default_value) {
+            dump_expr(node->v.TypeVar.default_value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case ParamSpec_kind: {
         fputs("ParamSpec(", pyp_dump_fp);
         fputs("name=", pyp_dump_fp);
-    pyp_emit_identifier(node->v.ParamSpec.name);
+        pyp_emit_identifier(node->v.ParamSpec.name);
         fputs(", ", pyp_dump_fp);
         fputs("default_value=", pyp_dump_fp);
-    if (node->v.ParamSpec.default_value) dump_expr(node->v.ParamSpec.default_value); else fputs("None", pyp_dump_fp);
+        if (node->v.ParamSpec.default_value) {
+            dump_expr(node->v.ParamSpec.default_value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
+        break;
+    }
     case TypeVarTuple_kind: {
         fputs("TypeVarTuple(", pyp_dump_fp);
         fputs("name=", pyp_dump_fp);
-    pyp_emit_identifier(node->v.TypeVarTuple.name);
+        pyp_emit_identifier(node->v.TypeVarTuple.name);
         fputs(", ", pyp_dump_fp);
         fputs("default_value=", pyp_dump_fp);
-    if (node->v.TypeVarTuple.default_value) dump_expr(node->v.TypeVarTuple.default_value); else fputs("None", pyp_dump_fp);
+        if (node->v.TypeVarTuple.default_value) {
+            dump_expr(node->v.TypeVarTuple.default_value);
+        } else {
+            fputs("None", pyp_dump_fp);
+        }
         fputs(")", pyp_dump_fp);
-        break; }
-    default: fputs("<?>", pyp_dump_fp);
+        break;
+    }
+    default:
+        fputs("<?>", pyp_dump_fp);
     }
 }
 
-void pyp_dump_mod(mod_ty mod) {
-    if (!pyp_dump_fp) pyp_dump_fp = stdout;
-    if (!mod) { fputs("None\n", pyp_dump_fp); return; }
+void pyp_dump_mod(mod_ty mod)
+{
+    if (!pyp_dump_fp) {
+        pyp_dump_fp = stdout;
+    }
+    if (!mod) {
+        fputs("None\n", pyp_dump_fp);
+        return;
+    }
     dump_mod(mod);
     putc('\n', pyp_dump_fp);
 }

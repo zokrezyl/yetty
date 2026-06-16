@@ -424,20 +424,20 @@ static struct yetty_ydraw_drawable_list *render_lilypond(const uint8_t *bytes, s
     if (staff_space < 8.0f) {
         staff_space = 8.0f;
     }
-    (void)yetty_ymusic_configure(NULL, music, width_px, staff_space, 0);
+    (void)yetty_ymusic_configure(music, width_px, staff_space, 0);
 
-    struct yetty_ycore_void_result pr = yetty_ymusic_parse(NULL, music, (const char *)bytes, len);
+    struct yetty_ycore_void_result pr = yetty_ymusic_parse(music, (const char *)bytes, len);
     if (YETTY_IS_ERR(pr)) {
         fprintf(stderr, "yless: lilypond parse failed: %s\n", pr.error.msg);
         yetty_ycore_error_destroy(pr.error);
-        (void)yetty_ymusic_destroy(NULL, music);
+        (void)yetty_ymusic_destroy(music);
         return NULL;
     }
 
-    struct yetty_ydraw_drawable_list_result rr = yetty_ymusic_render(NULL, music);
+    struct yetty_ydraw_drawable_list_result rr = yetty_ymusic_render(music);
     /* The rendered list owns its own bytes (primitives + a font-name ref, not
      * the font itself), so the model can go now. */
-    (void)yetty_ymusic_destroy(NULL, music);
+    (void)yetty_ymusic_destroy(music);
     if (YETTY_IS_ERR(rr)) {
         fprintf(stderr, "yless: lilypond render failed: %s\n", rr.error.msg);
         for (const struct yetty_ycore_error *cause = rr.error.cause; cause; cause = cause->cause) {
@@ -649,12 +649,12 @@ int main(int argc, char **argv)
     struct yetty_yclass_object *view = view_r.value;
 
     struct yetty_ycore_void_result cfg_r =
-        yetty_yview_configure(NULL, view, YLESS_STDOUT_FD, YLESS_GETPID(), /*kind=*/0u, bg_color,
+        yetty_yview_configure(view, YLESS_STDOUT_FD, YLESS_GETPID(), /*kind=*/0u, bg_color,
                               origin_x, origin_y, origin_x + rect_w, origin_y + rect_h);
     if (YETTY_IS_ERR(cfg_r)) {
         fprintf(stderr, "yless: configure failed: %s\n", cfg_r.error.msg);
         yetty_ycore_error_destroy(cfg_r.error);
-        struct yetty_ycore_void_result dr = yetty_yview_destroy(NULL, view);
+        struct yetty_ycore_void_result dr = yetty_yview_destroy(view);
         if (YETTY_IS_ERR(dr)) {
             yetty_ycore_error_destroy(dr.error);
         }
@@ -663,12 +663,12 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    struct yetty_ycore_void_result content_r = yetty_yview_set_content(NULL, view, content);
+    struct yetty_ycore_void_result content_r = yetty_yview_set_content(view, content);
     yetty_ydraw_drawable_list_destroy(content); /* envelope copied the bytes */
     if (YETTY_IS_ERR(content_r)) {
         fprintf(stderr, "yless: set_content failed: %s\n", content_r.error.msg);
         yetty_ycore_error_destroy(content_r.error);
-        struct yetty_ycore_void_result dr = yetty_yview_destroy(NULL, view);
+        struct yetty_ycore_void_result dr = yetty_yview_destroy(view);
         if (YETTY_IS_ERR(dr)) {
             yetty_ycore_error_destroy(dr.error);
         }
@@ -709,22 +709,22 @@ int main(int argc, char **argv)
                         running = false;
                         break;
                     case KEY_LINE_DOWN:
-                        sr = yetty_yview_scroll_by(NULL, view, 0.0f, line);
+                        sr = yetty_yview_scroll_by(view, 0.0f, line);
                         break;
                     case KEY_LINE_UP:
-                        sr = yetty_yview_scroll_by(NULL, view, 0.0f, -line);
+                        sr = yetty_yview_scroll_by(view, 0.0f, -line);
                         break;
                     case KEY_PAGE_DOWN:
-                        sr = yetty_yview_scroll_by(NULL, view, 0.0f, page);
+                        sr = yetty_yview_scroll_by(view, 0.0f, page);
                         break;
                     case KEY_PAGE_UP:
-                        sr = yetty_yview_scroll_by(NULL, view, 0.0f, -page);
+                        sr = yetty_yview_scroll_by(view, 0.0f, -page);
                         break;
                     case KEY_TOP:
-                        sr = yetty_yview_scroll_to(NULL, view, 0.0f, 0.0f);
+                        sr = yetty_yview_scroll_to(view, 0.0f, 0.0f);
                         break;
                     case KEY_BOTTOM:
-                        sr = yetty_yview_scroll_to(NULL, view, 0.0f, to_bottom);
+                        sr = yetty_yview_scroll_to(view, 0.0f, to_bottom);
                         break;
                     case KEY_NONE:
                     default:
@@ -741,7 +741,7 @@ int main(int argc, char **argv)
     }
 
     /* Clear the surface: DELETE_CHILD removes the figure from the container. */
-    struct yetty_ycore_void_result dr = yetty_yview_destroy(NULL, view);
+    struct yetty_ycore_void_result dr = yetty_yview_destroy(view);
     if (YETTY_IS_ERR(dr)) {
         yetty_ycore_error_destroy(dr.error);
     }

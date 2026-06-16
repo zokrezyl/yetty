@@ -58,11 +58,9 @@ struct yetty_ygui_primitive_widget_ptr_result yetty_ygui_primitive_widget_from(
     struct yetty_yclass_object *obj);
 
 [[clang::annotate("override@ygui:primitive_widget:widget_emit_body")]]
-static struct yetty_ycore_void_result primitive_emit_body(struct yetty_yclass_ctx *yclass_ctx,
-                                                          struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result primitive_emit_body(struct yetty_yclass_object *yclass_obj,
                                                           struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     /* Optional background fill (set via yetty_ygui_widget_set_bg_color),
      * painted under the widget's own paint. Skipped when transparent so
@@ -82,7 +80,7 @@ static struct yetty_ycore_void_result primitive_emit_body(struct yetty_yclass_ct
             YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "primitive_emit_body: bg");
         }
     }
-    return yetty_ygui_widget_paint(NULL, yclass_obj, ctx);
+    return yetty_ygui_widget_paint(yclass_obj, ctx);
 }
 
 #include "primitive-widget.gen.c"

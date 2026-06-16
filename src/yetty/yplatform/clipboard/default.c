@@ -313,7 +313,7 @@ static struct yetty_ycore_void_result glfw_clipboard_drain(
                  * handle_event failure so one bad event can't abort draining
                  * the rest of the pipe. */
                 struct yetty_ycore_void_result handle_result =
-                    yetty_yplatform_window_manager_handle_event(NULL, m->window_manager, &ev);
+                    yetty_yplatform_window_manager_handle_event(m->window_manager, &ev);
                 if (YETTY_IS_ERR(handle_result)) {
                     yetty_ycore_error_destroy(handle_result.error);
                 }

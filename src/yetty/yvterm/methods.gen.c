@@ -1,6 +1,6 @@
 /* GENERATED — do not edit. */
 #include "yetty/yvterm/grid.h"
-#include "yetty/yvterm/shader-glyph-figure.h"
+#include "yetty/yvterm/vterm.h"
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h> /* container_of */

@@ -4,8 +4,6 @@ methods:
     owning_class: chrome
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: window_manager
@@ -17,13 +15,12 @@ methods:
       - name: flags
         type: uint32_t
     local: true
+    return_payload_type: null
   - slot: set_size
     domain: ychrome
     owning_class: chrome
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: width
@@ -31,23 +28,21 @@ methods:
       - name: height
         type: float
     local: true
+    return_payload_type: null
   - slot: destroy
     domain: ychrome
     owning_class: chrome
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
   - slot: edge_cursor_at
     domain: ychrome
     owning_class: chrome
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -55,28 +50,27 @@ methods:
       - name: y
         type: float
     local: true
+    return_payload_type: int
   - slot: render
     domain: ychrome
     owning_class: chrome
     return_type: struct yetty_ydraw_drawable_list_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: "struct yetty_ydraw_drawable_list *"
   - slot: handle_event
     domain: ychrome
     owning_class: chrome
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: event
         type: "const struct yetty_yui_event *"
     local: true
+    return_payload_type: int
 classes:
   - name: chrome
     domain: ychrome
@@ -200,17 +194,12 @@ classes:
         impl: chrome_handle_event
 exposed:
   - source_file: src/yetty/ychrome/chrome.c
-    verbatim: "/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated chrome.h (and the dispatch TU that includes it) needs the complete
- * type — pull its defining header into the public header. */
-#include <yetty/ydraw-core/drawable-list.h>
-/* Feature flags for configure(). OR them together; FLAG_ALL enables the lot.
- * Copied verbatim into the generated chrome.h. */
-#define YETTY_YCHROME_FLAG_DRAG 0x1u     /* caption drag moves the window      */
-#define YETTY_YCHROME_FLAG_RESIZE 0x2u   /* right/bottom edges resize          */
-#define YETTY_YCHROME_FLAG_MAXIMIZE 0x4u /* caption double-click toggles max   */
-#define YETTY_YCHROME_FLAG_ALL                                                                     \\
-    (YETTY_YCHROME_FLAG_DRAG | YETTY_YCHROME_FLAG_RESIZE | YETTY_YCHROME_FLAG_MAXIMIZE)"
+    type_text: "enum yetty_ychrome_flag {
+    YETTY_YCHROME_FLAG_DRAG = 1,
+    YETTY_YCHROME_FLAG_RESIZE = 2,
+    YETTY_YCHROME_FLAG_MAXIMIZE = 4,
+    YETTY_YCHROME_FLAG_ALL = 7,
+};"
   - source_file: src/yetty/ychrome/chrome.c
     name: yetty_ychrome_hover_button
     return_type: struct yetty_ycore_int_result
@@ -279,3 +268,26 @@ types:
             type: "struct yetty_ydraw_drawable_list *"
           - name: error
             type: struct yetty_ycore_error
+local_types:
+  yetty_ychrome_flag: src/yetty/ychrome/chrome.c
+  yetty_ychrome_chrome: src/yetty/ychrome/chrome.c
+  yetty_ychrome_chrome_ptr_result: src/yetty/ychrome/chrome.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ychrome/chrome.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ychrome/chrome.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ychrome/chrome.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ychrome/chrome.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ychrome/chrome.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+includes:
+  src/yetty/ychrome/chrome.c:
+    - yetty/ydraw-core/drawable-list.h

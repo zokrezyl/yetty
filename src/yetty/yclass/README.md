@@ -324,8 +324,8 @@ Driven from the `Makefile`:
 - Discovery: every `.c` under `src/yetty/<module>/` (excluding `*.gen.c`) that
   contains a `class@<module>:` or `mixin@<module>:` annotation is fed in as a
   source for that module.
-- `YCLASS_CODEGEN_INCLUDES` passes project-local include roots; the clang step
-  tolerates missing third-party headers.
+- The clang include roots are derived from the `include/` and `src/` paths
+  codegen is passed; the clang step tolerates missing third-party headers.
 
 Platform builds compile what is in the tree and never invoke the generator.
 

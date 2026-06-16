@@ -4,8 +4,6 @@ methods:
     owning_class: flame
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: width
@@ -17,13 +15,12 @@ methods:
       - name: flags
         type: uint32_t
     local: true
+    return_payload_type: null
   - slot: parse
     domain: yflame
     owning_class: flame
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: input
@@ -31,23 +28,21 @@ methods:
       - name: len
         type: size_t
     local: true
+    return_payload_type: null
   - slot: render
     domain: yflame
     owning_class: flame
     return_type: struct yetty_ydraw_drawable_list_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: "struct yetty_ydraw_drawable_list *"
   - slot: hit_test
     domain: yflame
     owning_class: flame
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -55,60 +50,56 @@ methods:
       - name: y
         type: float
     local: true
+    return_payload_type: int
   - slot: focus
     domain: yflame
     owning_class: flame
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: node_id
         type: int32_t
     local: true
+    return_payload_type: null
   - slot: focus_parent
     domain: yflame
     owning_class: flame
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
   - slot: reset
     domain: yflame
     owning_class: flame
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
   - slot: set_highlight
     domain: yflame
     owning_class: flame
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: node_id
         type: int32_t
     local: true
+    return_payload_type: null
   - slot: destroy
     domain: yflame
     owning_class: flame
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
 classes:
   - name: flame
     domain: yflame
@@ -193,17 +184,12 @@ classes:
         impl: flame_obj_destroy
 exposed:
   - source_file: src/yetty/yflame/flame.c
-    verbatim: "/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated flame.h (and the dispatch TU that includes it) needs the complete
- * type — pull its defining header into the public header. */
-#include <yetty/ydraw-core/drawable-list.h>
-/* Public flags — copied verbatim into the generated flame.h. */
-#define YETTY_YFLAME_FLAG_LABELS 0x1u /* draw truncated frame-name labels */
-#define YETTY_YFLAME_FLAG_ICICLE 0x2u /* root at top, growing down (vs flame: bottom-up) */
-/* hit_test returns these (in place of a node id) when a navigation button is
- * under the point: the caller should focus the parent / reset to root. */
-#define YETTY_YFLAME_HIT_UP (-2)
-#define YETTY_YFLAME_HIT_ROOT (-3)"
+    type_text: "enum yetty_yflame_constant {
+    YETTY_YFLAME_FLAG_LABELS = 1,
+    YETTY_YFLAME_FLAG_ICICLE = 2,
+    YETTY_YFLAME_HIT_UP = -2,
+    YETTY_YFLAME_HIT_ROOT = -3,
+};"
   - source_file: src/yetty/yflame/flame.c
     name: yetty_yflame_emit_osc
     return_type: struct yetty_ycore_void_result
@@ -274,3 +260,27 @@ types:
             type: "struct yetty_ydraw_drawable_list *"
           - name: error
             type: struct yetty_ycore_error
+local_types:
+  yetty_yflame_constant: src/yetty/yflame/flame.c
+  yflame_frame: src/yetty/yflame/flame.c
+  yetty_yflame_flame: src/yetty/yflame/flame.c
+  yetty_yflame_flame_ptr_result: src/yetty/yflame/flame.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/yflame/flame.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/yflame/flame.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/yflame/flame.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/yflame/flame.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/yflame/flame.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+includes:
+  src/yetty/yflame/flame.c:
+    - yetty/ydraw-core/drawable-list.h

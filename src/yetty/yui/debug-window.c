@@ -177,10 +177,8 @@ static void debug_window_sync_grips(struct yetty_yui_debug_window *dw)
 
 /* ygui CLOSE-event trampoline — forwards to the owner's close callback. */
 static struct yetty_ycore_void_result debug_window_on_close_event(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *target,
-    const struct yetty_ygui_event *event, void *userdata)
+    struct yetty_yclass_object *target, const struct yetty_ygui_event *event, void *userdata)
 {
-    (void)ctx;
     (void)target;
     (void)event;
     struct yetty_yui_debug_window *dw = userdata;

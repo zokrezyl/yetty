@@ -48,10 +48,8 @@ yetty_ygui_rich {
 };
 
 [[clang::annotate("override@ygui:rich:constructor")]]
-static struct yetty_ycore_void_result rich_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                       struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result rich_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_rich_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -77,10 +75,8 @@ static void free_line(struct rich_line *line)
 }
 
 [[clang::annotate("override@ygui:rich:destructor")]]
-static struct yetty_ycore_void_result rich_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                      struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result rich_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_rich_ptr_result d_dr = yetty_ygui_rich_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "rich_destructor: data_get");
@@ -95,11 +91,9 @@ static struct yetty_ycore_void_result rich_destructor(struct yetty_yclass_ctx *y
 }
 
 [[clang::annotate("override@ygui:rich:widget_paint")]]
-static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                 struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_object *yclass_obj,
                                                  struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "rich_paint: NULL ctx");

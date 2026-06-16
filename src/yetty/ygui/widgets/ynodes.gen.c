@@ -7,41 +7,30 @@
 struct yetty_ycore_int_result;
 struct yetty_ycore_void_result;
 struct yetty_ygui_emit_ctx;
-struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_widget_paint(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_widget_paint(struct yetty_yclass_object *obj,
                                                        struct yetty_ygui_emit_ctx *emit_ctx);
-struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_object *obj, float x,
                                                          float y, int button);
-struct yetty_ycore_int_result yetty_ygui_widget_on_motion(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ygui_widget_on_motion(struct yetty_yclass_object *obj, float x,
                                                           float y);
-struct yetty_ycore_int_result yetty_ygui_widget_on_release(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ygui_widget_on_release(struct yetty_yclass_object *obj, float x,
                                                            float y, int button);
-struct yetty_ycore_int_result yetty_ygui_widget_on_scroll(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ygui_widget_on_scroll(struct yetty_yclass_object *obj, float x,
                                                           float y, float dx, float dy);
-typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_ctx *,
-                                                                    struct yetty_yclass_object *);
-typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_yclass_ctx *,
-                                                                   struct yetty_yclass_object *);
-typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yetty_yclass_ctx *,
-                                                                     struct yetty_yclass_object *,
+typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yetty_yclass_object *,
                                                                      struct yetty_ygui_emit_ctx *);
-typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct yetty_yclass_ctx *,
-                                                                       struct yetty_yclass_object *,
+typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct yetty_yclass_object *,
                                                                        float, float, int);
 typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_motion_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float);
+    struct yetty_yclass_object *, float, float);
 typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_release_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, int);
+    struct yetty_yclass_object *, float, float, int);
 typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_scroll_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, float, float);
+    struct yetty_yclass_object *, float, float, float, float);
 
 [[maybe_unused]]
 static yetty_ygui_constructor_fn yetty_ygui_ynodes_yetty_ygui_constructor_check =

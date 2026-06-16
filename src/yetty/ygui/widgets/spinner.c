@@ -42,10 +42,8 @@ static inline void yetty_ycore_error_destroy_unused(struct yetty_ycore_void_resu
 }
 
 [[clang::annotate("override@ygui:spinner:constructor")]]
-static struct yetty_ycore_void_result spinner_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                          struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result spinner_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_spinner_class_get().value,
@@ -62,11 +60,9 @@ static struct yetty_ycore_void_result spinner_constructor(struct yetty_yclass_ct
 }
 
 [[clang::annotate("override@ygui:spinner:widget_on_press")]]
-static struct yetty_ycore_int_result spinner_on_press(struct yetty_yclass_ctx *yclass_ctx,
-                                                      struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result spinner_on_press(struct yetty_yclass_object *yclass_obj,
                                                       float x, float y, int button)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)y;
     (void)button;
@@ -139,11 +135,9 @@ static struct yetty_ycore_void_result paint_text(struct yetty_ygui_emit_ctx *ctx
 }
 
 [[clang::annotate("override@ygui:spinner:widget_paint")]]
-static struct yetty_ycore_void_result spinner_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                    struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result spinner_paint(struct yetty_yclass_object *yclass_obj,
                                                     struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "spinner_paint: NULL ctx");

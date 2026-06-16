@@ -10,80 +10,65 @@ struct yetty_ycore_int_result;
 struct yetty_ycore_void_result;
 struct yetty_ydraw_drawable_list;
 struct yetty_yrich_rect;
-struct yetty_ycore_void_result yetty_yrich_constructor(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_element_destroy(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_element_bounds(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_yrich_constructor(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_element_destroy(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_element_bounds(struct yetty_yclass_object *obj,
                                                           struct yetty_yrich_rect *out_bounds);
-struct yetty_ycore_int_result yetty_yrich_element_is_editable(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_element_begin_edit(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_element_end_edit(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj);
-struct yetty_ycore_int_result yetty_yrich_element_is_editing(struct yetty_yclass_ctx *ctx,
-                                                             struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_yrich_element_is_editable(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_element_begin_edit(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_element_end_edit(struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_yrich_element_is_editing(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yrich_element_render(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    struct yetty_ydraw_drawable_list *drawable_list, uint32_t layer, int selected);
-struct yetty_ycore_void_result yetty_yrich_element_insert_text(struct yetty_yclass_ctx *ctx,
-                                                               struct yetty_yclass_object *obj,
+    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *drawable_list,
+    uint32_t layer, int selected);
+struct yetty_ycore_void_result yetty_yrich_element_insert_text(struct yetty_yclass_object *obj,
                                                                struct yetty_ycore_buffer text);
-struct yetty_ycore_void_result yetty_yrich_element_delete_sel(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrich_document_destroy(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj);
-struct yetty_ycore_float_result yetty_yrich_document_content_width(struct yetty_yclass_ctx *ctx,
-                                                                   struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_element_delete_sel(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrich_document_destroy(struct yetty_yclass_object *obj);
+struct yetty_ycore_float_result yetty_yrich_document_content_width(struct yetty_yclass_object *obj);
 struct yetty_ycore_float_result yetty_yrich_document_content_height(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj);
+    struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_grid_size(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int32_t rows, int32_t cols);
+    struct yetty_yclass_object *obj, int32_t rows, int32_t cols);
 struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_row_height(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int32_t row, float height);
+    struct yetty_yclass_object *obj, int32_t row, float height);
 struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_col_width(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int32_t col, float width);
+    struct yetty_yclass_object *obj, int32_t col, float width);
 struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_cell_value(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int32_t row, int32_t col,
-    struct yetty_ycore_buffer value);
-typedef struct yetty_ycore_void_result (*yetty_yrich_constructor_fn)(struct yetty_yclass_ctx *,
-                                                                     struct yetty_yclass_object *);
+    struct yetty_yclass_object *obj, int32_t row, int32_t col, struct yetty_ycore_buffer value);
+typedef struct yetty_ycore_void_result (*yetty_yrich_constructor_fn)(struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_element_destroy_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_element_bounds_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_yrich_rect *);
+    struct yetty_yclass_object *, struct yetty_yrich_rect *);
 typedef struct yetty_ycore_int_result (*yetty_yrich_element_is_editable_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_element_begin_edit_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_element_end_edit_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_int_result (*yetty_yrich_element_is_editing_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_element_render_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ydraw_drawable_list *,
-    uint32_t, int);
+    struct yetty_yclass_object *, struct yetty_ydraw_drawable_list *, uint32_t, int);
 typedef struct yetty_ycore_void_result (*yetty_yrich_element_insert_text_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ycore_buffer);
+    struct yetty_yclass_object *, struct yetty_ycore_buffer);
 typedef struct yetty_ycore_void_result (*yetty_yrich_element_delete_sel_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_document_destroy_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_float_result (*yetty_yrich_document_content_width_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_float_result (*yetty_yrich_document_content_height_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *);
+    struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yrich_spreadsheet_set_grid_size_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, int32_t, int32_t);
+    struct yetty_yclass_object *, int32_t, int32_t);
 typedef struct yetty_ycore_void_result (*yetty_yrich_spreadsheet_set_row_height_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, int32_t, float);
+    struct yetty_yclass_object *, int32_t, float);
 typedef struct yetty_ycore_void_result (*yetty_yrich_spreadsheet_set_col_width_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, int32_t, float);
+    struct yetty_yclass_object *, int32_t, float);
 typedef struct yetty_ycore_void_result (*yetty_yrich_spreadsheet_set_cell_value_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, int32_t, int32_t,
-    struct yetty_ycore_buffer);
+    struct yetty_yclass_object *, int32_t, int32_t, struct yetty_ycore_buffer);
 
 [[maybe_unused]]
 static yetty_yrich_constructor_fn yetty_yrich_cell_yetty_yrich_constructor_check = cell_constructor;

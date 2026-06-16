@@ -49,7 +49,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit(struct yetty_yclass_object
             continue;
         }
         struct yetty_ycore_void_result r =
-            s->cb(NULL, (struct yetty_yclass_object *)source, event, s->userdata);
+            s->cb((struct yetty_yclass_object *)source, event, s->userdata);
         if (YETTY_IS_ERR(r)) {
             return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_emit: callback failed", r);
         }

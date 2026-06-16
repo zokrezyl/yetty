@@ -722,8 +722,9 @@ static struct yetty_ycore_void_result resume_terminal_ownership(struct yai_app *
     if (app->hud) {
         resume = yetty_ycore_void_chain(resume, subscribe_mouse(app));
     }
-    /* Re-reserve the text-HUD bottom row on the restored screen. */
-    resume = yetty_ycore_void_chain(resume, yai_renderer_text_hud_reserve(&app->renderer));
+    /* Re-reserve the text-HUD bottom row on the restored screen; the
+     * conversation is still on screen, so keep the prompt at the bottom. */
+    resume = yetty_ycore_void_chain(resume, yai_renderer_text_hud_reserve(&app->renderer, 0));
     if (uv_poll_start(&app->stdin_poll, UV_READABLE, on_stdin_readable) != 0) {
         resume = yetty_ycore_void_chain(
             resume, YETTY_ERR(yetty_ycore_void, "resume_terminal: uv_poll_start failed"));
@@ -1050,7 +1051,7 @@ struct yetty_ycore_void_result yai_handle_child_line(struct yai_app *app, const 
         yyjson_val *root = yyjson_doc_get_root(doc);
         struct yetty_ycore_void_result dispatch_res = YETTY_OK_VOID();
         if (yyjson_is_obj(root)) {
-            dispatch_res = yetty_yai_handle_event(NULL, app->engine, app, root);
+            dispatch_res = yetty_yai_handle_event(app->engine, app, root);
         }
         yyjson_doc_free(doc);
         app->pending_json_len = 0;
@@ -1089,7 +1090,7 @@ void yai_child_stdout_read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t
         /* A new child starts fresh: drop any partial (truncated) JSON
          * document so it can't bleed into the next turn's reassembly. */
         app->pending_json_len = 0;
-        yai_report_error(app, "engine eof", yetty_yai_on_child_eof(NULL, app->engine, app));
+        yai_report_error(app, "engine eof", yetty_yai_on_child_eof(app->engine, app));
         return;
     }
     if (nread == 0) {
@@ -1157,7 +1158,7 @@ void yai_child_exit_cb(uv_process_t *process, int64_t exit_status, int term_sign
     app->child_alive = 0;
     uv_timer_stop(&app->kill_timer);
     yai_report_error(app, "engine exit",
-                     yetty_yai_on_child_exit(NULL, app->engine, app, exit_status));
+                     yetty_yai_on_child_exit(app->engine, app, exit_status));
 }
 
 /*---------------------------------------------------------------------------
@@ -1441,7 +1442,7 @@ struct yetty_ycore_void_result yai_begin_shutdown(struct yai_app *app)
     }
     if (app->pending_permission.active) {
         teardown = yetty_ycore_void_chain(teardown,
-                                          yetty_yai_resolve_permission(NULL, app->engine, app, 0));
+                                          yetty_yai_resolve_permission(app->engine, app, 0));
     }
     /* No animated glyph may survive the session — drop the pinned zone
      * for good before the teardown output. */
@@ -1808,7 +1809,7 @@ static struct yetty_ycore_void_result build_config_knobs_text(struct yai_app *ap
 {
     char knob_spec[512];
     struct yetty_ycore_void_result knob_res =
-        yetty_yai_config_knob(NULL, app->engine, app, knob_spec, sizeof(knob_spec));
+        yetty_yai_config_knob(app->engine, app, knob_spec, sizeof(knob_spec));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, knob_res, "build_config_knobs_text: knob spec");
     memset(app->config_knobs, 0, sizeof(app->config_knobs));
     struct yai_hud_config_knob throwaway;
@@ -1890,7 +1891,7 @@ static struct yetty_ycore_void_result config_tui_close(struct yai_app *app, int 
         yai_report_error(app, "config save", yai_config_save(app));
     }
     /* Re-reserve the text-HUD row, then repaint the prompt above it. */
-    struct yetty_ycore_void_result reserve_res = yai_renderer_text_hud_reserve(&app->renderer);
+    struct yetty_ycore_void_result reserve_res = yai_renderer_text_hud_reserve(&app->renderer, 0);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, reserve_res, "config_tui_close: text hud reserve");
     struct yetty_ycore_void_result show_res = yai_renderer_pin_show(&app->renderer);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, show_res, "config_tui_close: pin show");
@@ -1999,7 +2000,7 @@ static struct yetty_ycore_void_result show_config(struct yai_app *app)
 {
     char engine_rows[1024];
     struct yetty_ycore_void_result describe_res =
-        yetty_yai_describe_config(NULL, app->engine, app, engine_rows, sizeof(engine_rows));
+        yetty_yai_describe_config(app->engine, app, engine_rows, sizeof(engine_rows));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, describe_res, "show_config: engine rows");
 
     if (app->hud) {
@@ -2007,7 +2008,7 @@ static struct yetty_ycore_void_result show_config(struct yai_app *app)
          * for an engine that exposes multiple knobs (claude: 3). */
         char knob_spec[512];
         struct yetty_ycore_void_result knob_res =
-            yetty_yai_config_knob(NULL, app->engine, app, knob_spec, sizeof(knob_spec));
+            yetty_yai_config_knob(app->engine, app, knob_spec, sizeof(knob_spec));
         YETTY_RETURN_IF_ERR(yetty_ycore_void, knob_res, "show_config: knob spec");
 
         /* Reset the apply-side knob mapping; show_config fully rebuilds it. */
@@ -2267,18 +2268,18 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
     if (app->pending_permission.active) {
         if (verdict_is(line, len, "y") || verdict_is(line, len, "yes")) {
             struct yetty_ycore_void_result allow_res =
-                yetty_yai_resolve_permission(NULL, app->engine, app, 1);
+                yetty_yai_resolve_permission(app->engine, app, 1);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, allow_res, "handle_input_line: allow");
         } else if (verdict_is(line, len, "n") || verdict_is(line, len, "no")) {
             struct yetty_ycore_void_result deny_res =
-                yetty_yai_resolve_permission(NULL, app->engine, app, 0);
+                yetty_yai_resolve_permission(app->engine, app, 0);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, deny_res, "handle_input_line: deny");
         } else if (verdict_is(line, len, "a") || verdict_is(line, len, "always")) {
             /* Remember this tool BEFORE resolving (resolve clears the
              * pending request and its tool_name), then allow it. */
             yai_tool_remember_allow(app, app->pending_permission.tool_name);
             struct yetty_ycore_void_result allow_res =
-                yetty_yai_resolve_permission(NULL, app->engine, app, 1);
+                yetty_yai_resolve_permission(app->engine, app, 1);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, allow_res, "handle_input_line: always-allow");
         } else if (verdict_is(line, len, "auto")) {
             /* Switch the engine to auto-approve, then allow the current one.
@@ -2287,13 +2288,13 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
              * shows "auto" selected. */
             yai_config_set(app, "permission_mode", "auto");
             struct yetty_ycore_void_result mode_res =
-                yetty_yai_apply_config(NULL, app->engine, app, "permission_mode", "auto");
+                yetty_yai_apply_config(app->engine, app, "permission_mode", "auto");
             YETTY_RETURN_IF_ERR(yetty_ycore_void, mode_res, "handle_input_line: auto mode");
             /* The permission mode is a persisted config knob — keep the file
              * in step with the live change. */
             yai_report_error(app, "config save", yai_config_save(app));
             struct yetty_ycore_void_result allow_res =
-                yetty_yai_resolve_permission(NULL, app->engine, app, 1);
+                yetty_yai_resolve_permission(app->engine, app, 1);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, allow_res, "handle_input_line: auto allow");
         } else {
             struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
@@ -2411,7 +2412,7 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
         yai_report_error(app, "activity", activity_res);
     }
     struct yetty_ycore_void_result send_res =
-        yetty_yai_send_user_message(NULL, app->engine, app, copy);
+        yetty_yai_send_user_message(app->engine, app, copy);
     free(copy);
     if (YETTY_IS_ERR(send_res)) {
         /* Recoverable UI flow: the prompt comes back, the user retries.
@@ -2548,7 +2549,7 @@ static struct yetty_ycore_void_result editor_interrupt(struct yai_app *app)
      * turn — Ctrl-C must work the same here as during any other request. */
     if (app->pending_permission.active) {
         struct yetty_ycore_void_result deny_res =
-            yetty_yai_resolve_permission(NULL, app->engine, app, 0);
+            yetty_yai_resolve_permission(app->engine, app, 0);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, deny_res, "editor_interrupt: deny pending");
     }
     if (app->waiting && app->child_alive) {
@@ -2557,7 +2558,7 @@ static struct yetty_ycore_void_result editor_interrupt(struct yai_app *app)
         printf("\n" YAI_MUTED "(interrupt requested)" YAI_RESET "\n");
         struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
         YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "editor_interrupt: flush");
-        struct yetty_ycore_void_result interrupt_res = yetty_yai_interrupt(NULL, app->engine, app);
+        struct yetty_ycore_void_result interrupt_res = yetty_yai_interrupt(app->engine, app);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, interrupt_res, "editor_interrupt: interrupt");
         struct yetty_ycore_void_result resume_res = yai_renderer_zone_resume(&app->renderer);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, resume_res, "editor_interrupt: resume");
@@ -2639,27 +2640,27 @@ static struct yetty_ycore_void_result permission_key(struct yai_app *app, unsign
     switch (key) {
     case 'y':
     case 'Y':
-        return yetty_yai_resolve_permission(NULL, app->engine, app, 1);
+        return yetty_yai_resolve_permission(app->engine, app, 1);
     case 'n':
     case 'N':
     case 0x1b: /* Esc — cancel = deny */
-        return yetty_yai_resolve_permission(NULL, app->engine, app, 0);
+        return yetty_yai_resolve_permission(app->engine, app, 0);
     case 'a':
     case 'A':
         /* Always allow THIS tool: remember before resolving (resolve
          * clears the pending request and its tool name), then allow. */
         yai_tool_remember_allow(app, app->pending_permission.tool_name);
-        return yetty_yai_resolve_permission(NULL, app->engine, app, 1);
+        return yetty_yai_resolve_permission(app->engine, app, 1);
     case '!': {
         /* Auto: approve everything from now on, then allow the current. */
         yai_config_set(app, "permission_mode", "auto");
         struct yetty_ycore_void_result mode_res =
-            yetty_yai_apply_config(NULL, app->engine, app, "permission_mode", "auto");
+            yetty_yai_apply_config(app->engine, app, "permission_mode", "auto");
         YETTY_RETURN_IF_ERR(yetty_ycore_void, mode_res, "permission_key: auto mode");
         /* The permission mode is a persisted config knob — keep the file in
          * step with the live change. */
         yai_report_error(app, "config save", yai_config_save(app));
-        return yetty_yai_resolve_permission(NULL, app->engine, app, 1);
+        return yetty_yai_resolve_permission(app->engine, app, 1);
     }
     case 0x03: /* Ctrl-C: deny the prompt and interrupt the turn. */
         return editor_interrupt(app);
@@ -2718,7 +2719,7 @@ static struct yetty_ycore_void_result keyboard_input(struct yai_app *app, const 
             continue;
         }
         struct yetty_ycore_int_result action_res =
-            yetty_yai_feed_byte(NULL, app->editor, app, (unsigned char)bytes[index]);
+            yetty_yai_feed_byte(app->editor, app, (unsigned char)bytes[index]);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, action_res, "keyboard_input: feed byte");
         struct yetty_ycore_void_result apply_res = apply_editor_action(app, action_res.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "keyboard_input: apply action");
@@ -2841,7 +2842,7 @@ static struct yetty_ycore_void_result apply_config_knob(struct yai_app *app, int
      * permission mode into the running session). */
     const char *key = app->config_knobs[knob_index].key;
     yai_config_set(app, key, value);
-    struct yetty_ycore_void_result apply_res = yetty_yai_apply_config(NULL, app->engine, app, key, value);
+    struct yetty_ycore_void_result apply_res = yetty_yai_apply_config(app->engine, app, key, value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "apply_config_knob: apply");
     return config_note(app, key, value);
 }
@@ -3104,8 +3105,9 @@ static void on_sigwinch(uv_signal_t *signal_handle, int signum)
     }
     /* Re-reserve the docked bar's rows, then re-clip the pinned zone. */
     yai_report_error(app, "hud dock", yai_apply_dock_reservation(app));
-    /* Re-establish the text-HUD scroll region for the new size. */
-    yai_report_error(app, "text hud", yai_renderer_text_hud_reserve(&app->renderer));
+    /* Re-establish the text-HUD scroll region for the new size; keep the
+     * prompt at the bottom of the resized region. */
+    yai_report_error(app, "text hud", yai_renderer_text_hud_reserve(&app->renderer, 0));
     yai_report_error(app, "zone re-clip", yai_renderer_pin_redraw(&app->renderer));
 }
 
@@ -3605,7 +3607,7 @@ int main(int argc, char **argv)
         yai_report_error(app, "usage proxy", yai_usage_proxy_start(app));
     }
 
-    struct yetty_ycore_void_result start_res = yetty_yai_start(NULL, app->engine, app);
+    struct yetty_ycore_void_result start_res = yetty_yai_start(app->engine, app);
     if (YETTY_IS_OK(start_res)) {
         start_res = input_watchers_start(app);
     }
@@ -3630,11 +3632,15 @@ int main(int argc, char **argv)
         yai_report_error(app, "control server", yai_control_start(app, rpc_port));
     }
 
-    yai_report_error(app, "banner", print_banner(app));
     yai_report_error(app, "hud dock", yai_apply_dock_reservation(app));
     /* Reserve the bottom row for the text HUD (non-yetty tty) before the
-     * prompt, so the prompt zone stays above the bar. */
-    yai_report_error(app, "text hud", yai_renderer_text_hud_reserve(&app->renderer));
+     * banner and prompt. At startup there is no conversation yet, so anchor
+     * at the top: this clears the screen and homes the cursor, and the
+     * banner + prompt below then start at the top instead of jumping to the
+     * bottom of the reserved region. In yetty mode reserve is a no-op and
+     * the banner just prints into the conversation as before. */
+    yai_report_error(app, "text hud", yai_renderer_text_hud_reserve(&app->renderer, 1));
+    yai_report_error(app, "banner", print_banner(app));
     yai_report_error(app, "prompt", show_prompt(app));
 
     uv_run(&app->loop, UV_RUN_DEFAULT);

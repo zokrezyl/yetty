@@ -624,9 +624,9 @@ function(yetty_embed_assets TARGET)
     target_compile_definitions(${TARGET} PRIVATE
         YETTY_BUILD_VERSION="${YETTY_BUILD_VERSION_STR}")
 
-    # Collect shaders from module locations
-    file(COPY "${YETTY_ROOT}/src/yetty/yvterm/text-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
-    file(COPY "${YETTY_ROOT}/src/yetty/yvterm/ydraw-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
+    # Collect shaders from module locations. yvterm's terminal content is
+    # rendered by the ygrid layer (ygrid.wgsl) + the vterm figure's inlined
+    # text shader, so the old yvterm text-layer/ydraw-layer shaders are gone.
     file(COPY "${YETTY_ROOT}/src/yetty/ygrid/ygrid.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/ymgui/ymgui-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yterminal/background-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
@@ -646,10 +646,9 @@ function(yetty_embed_assets TARGET)
     # default font → per-glyph layout broken.
     file(COPY "${YETTY_ROOT}/src/yetty/ymsdf-wgsl/shaders/msdf_gen.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
 
-    # Shader-glyph layer + per-glyph procedurals. Layer reads the .wgsl
-    # template AND scans glyph-shaders/*.wgsl at runtime, splices them into
-    # one compiled shader. Adding a glyph is dropping a .wgsl file.
-    file(COPY "${YETTY_ROOT}/src/yetty/yvterm/shader-glyph-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
+    # Per-glyph procedural shaders (glyph-shaders/*.wgsl). The shader-glyph
+    # layer template itself was retired with the yvterm consolidation; the
+    # per-glyph sources still ship for any consumer that assembles them.
     file(MAKE_DIRECTORY "${EMBED_DATA_DIR}/shaders/glyph-shaders")
     # Glob both 0x*.wgsl (per-glyph procedurals) AND _*.wgsl (shared prelude
     # libs). The layer's runtime assembler reads `_*.wgsl` first, then glyphs.

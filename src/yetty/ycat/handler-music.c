@@ -21,7 +21,7 @@
  * original error is the one that surfaces. */
 static void music_destroy_best_effort(struct yetty_yclass_object *music)
 {
-    struct yetty_ycore_void_result destroy_res = yetty_ymusic_destroy(NULL, music);
+    struct yetty_ycore_void_result destroy_res = yetty_ymusic_destroy(music);
     if (YETTY_IS_ERR(destroy_res)) {
         yetty_ycore_error_destroy(destroy_res.error);
     }
@@ -52,20 +52,19 @@ struct yetty_ydraw_drawable_list_result yetty_ycat_handler_music(
     }
 
     struct yetty_ycore_void_result configure_res =
-        yetty_ymusic_configure(NULL, music, width_px, staff_space, YETTY_YMUSIC_FLAG_NONE);
+        yetty_ymusic_configure(music, width_px, staff_space, YETTY_YMUSIC_FLAG_NONE);
     if (YETTY_IS_ERR(configure_res)) {
         music_destroy_best_effort(music);
         return YETTY_ERR(yetty_ydraw_drawable_list, "ymusic configure failed", configure_res);
     }
 
-    struct yetty_ycore_void_result parse_res =
-        yetty_ymusic_parse(NULL, music, (const char *)bytes, len);
+    struct yetty_ycore_void_result parse_res = yetty_ymusic_parse(music, (const char *)bytes, len);
     if (YETTY_IS_ERR(parse_res)) {
         music_destroy_best_effort(music);
         return YETTY_ERR(yetty_ydraw_drawable_list, "lilypond parse failed", parse_res);
     }
 
-    struct yetty_ydraw_drawable_list_result render_res = yetty_ymusic_render(NULL, music);
+    struct yetty_ydraw_drawable_list_result render_res = yetty_ymusic_render(music);
     /* The rendered list owns its own bytes (primitives + a font-name ref, not
      * the font itself) — the score
      * model can go regardless of the render outcome. */

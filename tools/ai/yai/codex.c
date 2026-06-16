@@ -27,11 +27,9 @@ yetty_yai_codex {
 YETTY_YRESULT_DECLARE(yetty_yai_codex_ptr, struct yetty_yai_codex *);
 
 [[clang::annotate("override@yai:codex:start")]]
-static struct yetty_ycore_void_result codex_start(struct yetty_yclass_ctx *ctx,
-                                                  struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result codex_start(struct yetty_yclass_object *obj,
                                                   struct yai_app *app)
 {
-    (void)ctx;
     (void)obj;
     /* yai owns the terminal: route the yetty MCP server's figures back
      * through us (parent mode) instead of letting it race us to /dev/tty.
@@ -53,11 +51,9 @@ static struct yetty_ycore_void_result codex_start(struct yetty_yclass_ctx *ctx,
 }
 
 [[clang::annotate("override@yai:codex:send_user_message")]]
-static struct yetty_ycore_void_result codex_send_user_message(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result codex_send_user_message(struct yetty_yclass_object *obj,
                                                               struct yai_app *app, const char *text)
 {
-    (void)ctx;
     (void)obj;
     if (app->child_open_handles > 0 || app->child_alive) {
         return YETTY_ERR(yetty_ycore_void, "codex send_user_message: previous turn still open");
@@ -230,12 +226,10 @@ static struct yetty_ycore_void_result codex_render_usage(struct yai_app *app, yy
 }
 
 [[clang::annotate("override@yai:codex:describe_config")]]
-static struct yetty_ycore_void_result codex_describe_config(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result codex_describe_config(struct yetty_yclass_object *obj,
                                                             struct yai_app *app, char *out,
                                                             size_t out_size)
 {
-    (void)ctx;
     (void)obj;
     const char *model = app->config.model;
     int written = snprintf(out, out_size,
@@ -254,12 +248,10 @@ static struct yetty_ycore_void_result codex_describe_config(struct yetty_yclass_
 }
 
 [[clang::annotate("override@yai:codex:config_knob")]]
-static struct yetty_ycore_void_result codex_config_knob(struct yetty_yclass_ctx *ctx,
-                                                        struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result codex_config_knob(struct yetty_yclass_object *obj,
                                                         struct yai_app *app, char *out,
                                                         size_t out_size)
 {
-    (void)ctx;
     (void)obj;
     /* One knob spec per line: ENGINE_FIELD|label|options|current. Sandbox and
      * approval are independent axes (the earlier design conflated them).
@@ -277,12 +269,10 @@ static struct yetty_ycore_void_result codex_config_knob(struct yetty_yclass_ctx 
 }
 
 [[clang::annotate("override@yai:codex:handle_event")]]
-static struct yetty_ycore_void_result codex_handle_event(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result codex_handle_event(struct yetty_yclass_object *obj,
                                                          struct yai_app *app,
                                                          struct yyjson_val *event)
 {
-    (void)ctx;
     (void)obj;
     const char *kind = yyjson_get_str(yyjson_obj_get(event, "type"));
     if (!kind) {

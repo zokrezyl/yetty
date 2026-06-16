@@ -6,19 +6,14 @@
 
 struct yetty_ycore_void_result;
 struct yetty_ygui_emit_ctx;
-struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_object *obj,
                                                            struct yetty_ygui_emit_ctx *emit_ctx);
-typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_ctx *,
-                                                                    struct yetty_yclass_object *);
-typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_yclass_ctx *,
-                                                                   struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
+    struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 
 [[maybe_unused]]
 static yetty_ygui_constructor_fn yetty_ygui_ybrowser_yetty_ygui_constructor_check = ybr_constructor;

@@ -15,7 +15,7 @@
  * original error is the one that surfaces. */
 static void circuit_destroy_best_effort(struct yetty_yclass_object *circuit)
 {
-    struct yetty_ycore_void_result destroy_res = yetty_ycircuit_destroy(NULL, circuit);
+    struct yetty_ycore_void_result destroy_res = yetty_ycircuit_destroy(circuit);
     if (YETTY_IS_ERR(destroy_res)) {
         yetty_ycore_error_destroy(destroy_res.error);
     }
@@ -43,20 +43,20 @@ struct yetty_ydraw_drawable_list_result yetty_ycat_handler_circuit(
     }
 
     struct yetty_ycore_void_result configure_res =
-        yetty_ycircuit_configure(NULL, circuit, grid_px, YETTY_YCIRCUIT_FLAG_NONE);
+        yetty_ycircuit_configure(circuit, grid_px, YETTY_YCIRCUIT_FLAG_NONE);
     if (YETTY_IS_ERR(configure_res)) {
         circuit_destroy_best_effort(circuit);
         return YETTY_ERR(yetty_ydraw_drawable_list, "ycircuit configure failed", configure_res);
     }
 
     struct yetty_ycore_void_result parse_res =
-        yetty_ycircuit_parse(NULL, circuit, (const char *)bytes, len);
+        yetty_ycircuit_parse(circuit, (const char *)bytes, len);
     if (YETTY_IS_ERR(parse_res)) {
         circuit_destroy_best_effort(circuit);
         return YETTY_ERR(yetty_ydraw_drawable_list, "circuit parse failed", parse_res);
     }
 
-    struct yetty_ydraw_drawable_list_result render_res = yetty_ycircuit_render(NULL, circuit);
+    struct yetty_ydraw_drawable_list_result render_res = yetty_ycircuit_render(circuit);
     /* The rendered list owns its own bytes — the circuit model can go
      * regardless of the render outcome. */
     circuit_destroy_best_effort(circuit);

@@ -38,10 +38,8 @@ yetty_ygui_tooltip {
 };
 
 [[clang::annotate("override@ygui:tooltip:constructor")]]
-static struct yetty_ycore_void_result tooltip_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                          struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result tooltip_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     /* Chain to parent first so the widget data slice is initialised
      * before we touch our own. */
@@ -58,10 +56,8 @@ static struct yetty_ycore_void_result tooltip_constructor(struct yetty_yclass_ct
 }
 
 [[clang::annotate("override@ygui:tooltip:destructor")]]
-static struct yetty_ycore_void_result tooltip_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                         struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result tooltip_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_tooltip_ptr_result td_dr = yetty_ygui_tooltip_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, td_dr, "tooltip_destructor: data_get");
@@ -73,11 +69,9 @@ static struct yetty_ycore_void_result tooltip_destructor(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@ygui:tooltip:widget_paint")]]
-static struct yetty_ycore_void_result tooltip_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                    struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result tooltip_paint(struct yetty_yclass_object *yclass_obj,
                                                     struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "tooltip_paint: NULL ctx");

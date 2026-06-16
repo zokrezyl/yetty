@@ -30,7 +30,7 @@ DEF_EXC(_PyExc_IncompleteInputError, 15);
 
 /* ----- current error state ----------------------------------------------- */
 struct pyp_error {
-    PyObject *type;          /* one of the PyExc_* sentinels, or NULL */
+    PyObject *type; /* one of the PyExc_* sentinels, or NULL */
     char message[1024];
     int has_message;
 };
@@ -41,10 +41,12 @@ static struct pyp_error pyp_error;
  * Py_TYPE(tstate->current_exception) == PyExc_ValueError checks work. */
 static PyThreadState g_tstate;
 static PyObject g_exc_value;
-PyThreadState *pyp_tstate(void) { return &g_tstate; }
+PyThreadState *pyp_tstate(void)
+{
+    return &g_tstate;
+}
 
-static void
-sync_tstate(PyObject *exc)
+static void sync_tstate(PyObject *exc)
 {
     if (exc) {
         g_exc_value.ob_type = (PyTypeObject *)exc;
@@ -54,11 +56,16 @@ sync_tstate(PyObject *exc)
     }
 }
 
-const char *pyp_error_message(void) { return pyp_error.has_message ? pyp_error.message : NULL; }
-PyObject *pyp_error_type(void) { return pyp_error.type; }
+const char *pyp_error_message(void)
+{
+    return pyp_error.has_message ? pyp_error.message : NULL;
+}
+PyObject *pyp_error_type(void)
+{
+    return pyp_error.type;
+}
 
-static void
-set_error_v(PyObject *exc, const char *format, va_list va)
+static void set_error_v(PyObject *exc, const char *format, va_list va)
 {
     pyp_error.type = exc;
     sync_tstate(exc);
@@ -68,8 +75,7 @@ set_error_v(PyObject *exc, const char *format, va_list va)
     }
 }
 
-void
-PyErr_SetString(PyObject *exc, const char *msg)
+void PyErr_SetString(PyObject *exc, const char *msg)
 {
     pyp_error.type = exc;
     sync_tstate(exc);
@@ -79,8 +85,7 @@ PyErr_SetString(PyObject *exc, const char *msg)
     }
 }
 
-void
-PyErr_SetObject(PyObject *exc, PyObject *value)
+void PyErr_SetObject(PyObject *exc, PyObject *value)
 {
     pyp_error.type = exc;
     sync_tstate(exc);
@@ -106,10 +111,13 @@ PyErr_SetObject(PyObject *exc, PyObject *value)
     }
 }
 
-void PyErr_SetNone(PyObject *exc) { pyp_error.type = exc; sync_tstate(exc); }
+void PyErr_SetNone(PyObject *exc)
+{
+    pyp_error.type = exc;
+    sync_tstate(exc);
+}
 
-PyObject *
-PyErr_Format(PyObject *exc, const char *format, ...)
+PyObject *PyErr_Format(PyObject *exc, const char *format, ...)
 {
     va_list va;
     va_start(va, format);
@@ -118,10 +126,12 @@ PyErr_Format(PyObject *exc, const char *format, ...)
     return NULL;
 }
 
-PyObject *PyErr_Occurred(void) { return pyp_error.type; }
+PyObject *PyErr_Occurred(void)
+{
+    return pyp_error.type;
+}
 
-void
-PyErr_Clear(void)
+void PyErr_Clear(void)
 {
     pyp_error.type = NULL;
     pyp_error.has_message = 0;
@@ -129,11 +139,16 @@ PyErr_Clear(void)
     sync_tstate(NULL);
 }
 
-int PyErr_ExceptionMatches(PyObject *exc) { return pyp_error.type == exc; }
-int PyErr_GivenExceptionMatches(PyObject *given, PyObject *exc) { return given == exc; }
+int PyErr_ExceptionMatches(PyObject *exc)
+{
+    return pyp_error.type == exc;
+}
+int PyErr_GivenExceptionMatches(PyObject *given, PyObject *exc)
+{
+    return given == exc;
+}
 
-PyObject *
-PyErr_NoMemory(void)
+PyObject *PyErr_NoMemory(void)
 {
     pyp_error.type = PyExc_MemoryError;
     sync_tstate(PyExc_MemoryError);
@@ -142,19 +157,24 @@ PyErr_NoMemory(void)
     return NULL;
 }
 
-void
-PyErr_Fetch(PyObject **ptype, PyObject **pvalue, PyObject **ptraceback)
+void PyErr_Fetch(PyObject **ptype, PyObject **pvalue, PyObject **ptraceback)
 {
-    if (ptype) *ptype = pyp_error.type;
-    if (pvalue) *pvalue = NULL;
-    if (ptraceback) *ptraceback = NULL;
+    if (ptype) {
+        *ptype = pyp_error.type;
+    }
+    if (pvalue) {
+        *pvalue = NULL;
+    }
+    if (ptraceback) {
+        *ptraceback = NULL;
+    }
     PyErr_Clear();
 }
 
-void
-PyErr_Restore(PyObject *type, PyObject *value, PyObject *traceback)
+void PyErr_Restore(PyObject *type, PyObject *value, PyObject *traceback)
 {
-    (void)value; (void)traceback;
+    (void)value;
+    (void)traceback;
     pyp_error.type = type;
     sync_tstate(type);
 }
@@ -162,8 +182,7 @@ PyErr_Restore(PyObject *type, PyObject *value, PyObject *traceback)
 /* Hand back the pending error as an object that carries BOTH the type and the
  * message, so a Get/Set round-trip (used by the parser's error finalizer)
  * doesn't lose the message. */
-PyObject *
-PyErr_GetRaisedException(void)
+PyObject *PyErr_GetRaisedException(void)
 {
     if (pyp_error.type == NULL) {
         return NULL;
@@ -181,8 +200,7 @@ PyErr_GetRaisedException(void)
     return exc;
 }
 
-void
-PyErr_SetRaisedException(PyObject *exc)
+void PyErr_SetRaisedException(PyObject *exc)
 {
     if (exc == NULL) {
         PyErr_Clear();
@@ -197,41 +215,48 @@ PyErr_SetRaisedException(PyObject *exc)
     }
 }
 
-PyObject *
-PyErr_SetFromErrnoWithFilename(PyObject *exc, const char *filename)
+PyObject *PyErr_SetFromErrnoWithFilename(PyObject *exc, const char *filename)
 {
     PyErr_Format(exc, "%s: %s", filename ? filename : "?", strerror(errno));
     return NULL;
 }
 
-int
-PyErr_WarnExplicitObject(PyObject *category, PyObject *message, PyObject *filename,
-                         int lineno, PyObject *module, PyObject *registry)
+int PyErr_WarnExplicitObject(PyObject *category, PyObject *message, PyObject *filename, int lineno,
+                             PyObject *module, PyObject *registry)
 {
-    (void)category; (void)message; (void)filename; (void)lineno; (void)module; (void)registry;
-    return 0;   /* warnings are ignored */
+    (void)category;
+    (void)message;
+    (void)filename;
+    (void)lineno;
+    (void)module;
+    (void)registry;
+    return 0; /* warnings are ignored */
 }
 
-void
-_PyErr_BadInternalCall(const char *filename, int lineno)
+void _PyErr_BadInternalCall(const char *filename, int lineno)
 {
     PyErr_Format(PyExc_SystemError, "%s:%d: bad internal call", filename, lineno);
 }
 
 /* Returns the decoded source line for an error message. We don't keep the
  * source around here, so return NULL — the parser handles a missing line. */
-PyObject *
-_PyErr_ProgramDecodedTextObject(PyObject *filename, int lineno, const char *encoding)
+PyObject *_PyErr_ProgramDecodedTextObject(PyObject *filename, int lineno, const char *encoding)
 {
-    (void)filename; (void)lineno; (void)encoding;
+    (void)filename;
+    (void)lineno;
+    (void)encoding;
     return NULL;
 }
 
 /* ----- sys / audit stubs ------------------------------------------------- */
-int PySys_Audit(const char *event, const char *format, ...) { (void)event; (void)format; return 0; }
+int PySys_Audit(const char *event, const char *format, ...)
+{
+    (void)event;
+    (void)format;
+    return 0;
+}
 
-void
-PySys_WriteStderr(const char *format, ...)
+void PySys_WriteStderr(const char *format, ...)
 {
     va_list va;
     va_start(va, format);

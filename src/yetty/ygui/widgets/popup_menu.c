@@ -25,22 +25,10 @@
 YETTY_YRESULT_DECLARE(yetty_ygui_popup_menu_ptr, struct yetty_ygui_popup_menu *);
 struct yetty_yclass_ptr_result yetty_ygui_popup_menu_class_get(void);
 struct yetty_ygui_popup_menu_ptr_result yetty_ygui_popup_menu_from(struct yetty_yclass_object *obj);
-/* Menu-item callback typedef. Header-destined: codegen copies the
- * `#ifdef YCLASS_CODEGEN` block verbatim into the generated header (it must
- * appear BEFORE the exposed functions that take it, so they resolve to it
- * rather than an unrelated visible typedef). The real build gets its own
- * copy from the parallel `#ifndef YCLASS_CODEGEN` block. The two never
- * coexist in one parse. */
-#ifdef YCLASS_CODEGEN
-typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_ctx *ctx,
-                                                                  struct yetty_yclass_object *menu,
+/* Menu-item callback type. Defined here in the owning .c; codegen reproduces
+ * it into the generated header for any public signature that references it. */
+typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_object *menu,
                                                                   int item_index, void *userdata);
-#endif
-#ifndef YCLASS_CODEGEN
-typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_ctx *ctx,
-                                                                  struct yetty_yclass_object *menu,
-                                                                  int item_index, void *userdata);
-#endif
 
 /* Forward declarations of this TU's own exposed helpers that are called
  * before their definitions below (the generated header — which this TU no
@@ -94,10 +82,8 @@ struct [[clang::annotate("class@ygui:popup_menu")]] [[clang::annotate(
 };
 
 [[clang::annotate("override@ygui:popup_menu:constructor")]]
-static struct yetty_ycore_void_result popup_menu_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                             struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result popup_menu_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr =
         yetty_ygui_super_void(obj, yetty_ygui_popup_menu_class_get().value,
@@ -123,10 +109,8 @@ static struct yetty_ycore_void_result popup_menu_constructor(struct yetty_yclass
 }
 
 [[clang::annotate("override@ygui:popup_menu:destructor")]]
-static struct yetty_ycore_void_result popup_menu_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                            struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result popup_menu_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_popup_menu_ptr_result d_dr = yetty_ygui_popup_menu_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "popup_menu_destructor: data_get");
@@ -236,11 +220,9 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
 }
 
 [[clang::annotate("override@ygui:popup_menu:widget_paint")]]
-static struct yetty_ycore_void_result popup_menu_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                       struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result popup_menu_paint(struct yetty_yclass_object *yclass_obj,
                                                        struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_popup_menu_ptr_result d_dr = yetty_ygui_popup_menu_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "popup_menu_paint: data_get");
@@ -286,11 +268,9 @@ static struct yetty_ycore_void_result popup_menu_paint(struct yetty_yclass_ctx *
 }
 
 [[clang::annotate("override@ygui:popup_menu:widget_on_press")]]
-static struct yetty_ycore_int_result popup_menu_on_press(struct yetty_yclass_ctx *yclass_ctx,
-                                                         struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result popup_menu_on_press(struct yetty_yclass_object *yclass_obj,
                                                          float x, float y, int button)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)button;
     struct yetty_ygui_popup_menu_ptr_result d_dr = yetty_ygui_popup_menu_from(obj);
@@ -316,8 +296,7 @@ static struct yetty_ycore_int_result popup_menu_on_press(struct yetty_yclass_ctx
             }
         }
         if (cb) {
-            struct yetty_ycore_void_result fr =
-                cb(NULL, (struct yetty_yclass_object *)obj, idx, ud);
+            struct yetty_ycore_void_result fr = cb((struct yetty_yclass_object *)obj, idx, ud);
             if (YETTY_IS_ERR(fr)) {
                 return YETTY_ERR(yetty_ycore_int, "popup_menu_on_press: item cb", fr);
             }
@@ -345,11 +324,9 @@ static struct yetty_ycore_int_result popup_menu_on_press(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@ygui:popup_menu:widget_on_motion")]]
-static struct yetty_ycore_int_result popup_menu_on_motion(struct yetty_yclass_ctx *yclass_ctx,
-                                                          struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result popup_menu_on_motion(struct yetty_yclass_object *yclass_obj,
                                                           float x, float y)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     (void)x;
     struct yetty_ygui_popup_menu_ptr_result d_dr = yetty_ygui_popup_menu_from(obj);

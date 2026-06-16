@@ -7,23 +7,18 @@
 struct yetty_ycore_int_result;
 struct yetty_ycore_void_result;
 struct yetty_ygui_emit_ctx;
-struct yetty_ycore_void_result yetty_ygui_widget_paint(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ygui_widget_paint(struct yetty_yclass_object *obj,
                                                        struct yetty_ygui_emit_ctx *emit_ctx);
-struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_object *obj, float x,
                                                          float y, int button);
-struct yetty_ycore_int_result yetty_ygui_widget_on_motion(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ygui_widget_on_motion(struct yetty_yclass_object *obj, float x,
                                                           float y);
-typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yetty_yclass_ctx *,
-                                                                     struct yetty_yclass_object *,
+typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yetty_yclass_object *,
                                                                      struct yetty_ygui_emit_ctx *);
-typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct yetty_yclass_ctx *,
-                                                                       struct yetty_yclass_object *,
+typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct yetty_yclass_object *,
                                                                        float, float, int);
 typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_motion_fn)(
-    struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float);
+    struct yetty_yclass_object *, float, float);
 
 [[maybe_unused]]
 static yetty_ygui_widget_paint_fn yetty_ygui_splitter_yetty_ygui_widget_paint_check = paint;

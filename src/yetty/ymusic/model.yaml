@@ -4,8 +4,6 @@ methods:
     owning_class: music
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: width
@@ -15,13 +13,12 @@ methods:
       - name: flags
         type: uint32_t
     local: true
+    return_payload_type: null
   - slot: parse
     domain: ymusic
     owning_class: music
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: input
@@ -29,23 +26,21 @@ methods:
       - name: len
         type: size_t
     local: true
+    return_payload_type: null
   - slot: render
     domain: ymusic
     owning_class: music
     return_type: struct yetty_ydraw_drawable_list_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: "struct yetty_ydraw_drawable_list *"
   - slot: hit_test
     domain: ymusic
     owning_class: music
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -53,28 +48,27 @@ methods:
       - name: y
         type: float
     local: true
+    return_payload_type: int
   - slot: set_highlight
     domain: ymusic
     owning_class: music
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: element_id
         type: int32_t
     local: true
+    return_payload_type: null
   - slot: destroy
     domain: ymusic
     owning_class: music
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
 classes:
   - name: music
     domain: ymusic
@@ -142,13 +136,10 @@ classes:
         impl: music_obj_destroy
 exposed:
   - source_file: src/yetty/ymusic/music.c
-    verbatim: "/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated music.h (and the dispatch TU that includes it) needs the complete
- * type — pull its defining header into the public header. */
-#include <yetty/ydraw-core/drawable-list.h>
-/* Public constants — copied verbatim into the generated music.h. */
-#define YETTY_YMUSIC_NO_ELEMENT (-1) /* hit_test: no element under the point */
-#define YETTY_YMUSIC_FLAG_NONE 0x0u  /* reserved render flags */"
+    type_text: "enum yetty_ymusic_constant {
+    YETTY_YMUSIC_NO_ELEMENT = -1,
+    YETTY_YMUSIC_FLAG_NONE = 0,
+};"
   - source_file: src/yetty/ymusic/music.c
     name: yetty_ymusic_emit_osc
     return_type: struct yetty_ycore_void_result
@@ -247,3 +238,34 @@ types:
         type: size_t
       - name: cap
         type: size_t
+local_types:
+  yetty_ymusic_constant: src/yetty/ymusic/music.c
+  ymusic_clef: src/yetty/ymusic/music.c
+  ymusic_element_type: src/yetty/ymusic/music.c
+  ymusic_note: src/yetty/ymusic/music.c
+  ymusic_element: src/yetty/ymusic/music.c
+  ymusic_measure: src/yetty/ymusic/music.c
+  ymusic_staff: src/yetty/ymusic/music.c
+  yetty_ymusic_music: src/yetty/ymusic/music.c
+  yetty_ymusic_music_ptr_result: src/yetty/ymusic/music.c
+  parse_state: src/yetty/ymusic/music.c
+  layout_geom: src/yetty/ymusic/music.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ymusic/music.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ymusic/music.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ymusic/music.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ymusic/music.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ymusic/music.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+includes:
+  src/yetty/ymusic/music.c:
+    - yetty/ydraw-core/drawable-list.h

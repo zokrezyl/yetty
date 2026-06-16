@@ -93,6 +93,11 @@ struct ygrid_prim_meta {
      * its prims are tombstoned by setting entity_slot = UINT32_MAX; the
      * staging rebuild skips tombstoned prims. */
     uint32_t entity_slot;
+    /* Absolute rolling-row this prim was added at (captured from the grid's
+     * `insert_rolling_row` at add time). The shader offsets the prim by
+     * (rolling_row - rolling_row_0) * cell_height, giving O(1) scroll. 0 for
+     * non-scrolling compositor grids (insert_rolling_row stays 0). */
+    uint32_t rolling_row;
 };
 
 /*===========================================================================
@@ -195,6 +200,15 @@ yetty_ygrid_grid {
      * here; the per-figure scissor clips. 0 = top-left. */
     float scroll_x;
     float scroll_y;
+    /* Rolling-row scroll state (used when the grid backs scrolling content,
+     * e.g. the terminal's ydraw layer; 0 for static compositor grids).
+     * `insert_rolling_row` is stamped onto each prim added (its creation row);
+     * the shader offsets each prim by (rolling_row - rolling_row_0)*cell_height.
+     * `rolling_cell_height`, when > 0, overrides the cell height the shader
+     * uses for that offset so anchored content aligns to the text rows
+     * regardless of the grid's own bucketing geometry. */
+    uint32_t insert_rolling_row;
+    float rolling_cell_height;
     /* HiDPI scale = framebuffer px / logical px, captured from the host's
      * gpu context at create time (1.0 on non-HiDPI, and on the headless
      * test path). Producers (ygui chrome, …) author and ship their wire
@@ -1509,7 +1523,7 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
             g->figure_instance_cap = cap;
         }
         struct yetty_ydraw_composite_ptr_result ir = yetty_ydraw_composite_factory_create_instance(
-            g->composite_factory, hdr, record_len, /*rolling_row=*/0u);
+            g->composite_factory, hdr, record_len, g->insert_rolling_row);
         if (YETTY_IS_ERR(ir)) {
             ydebug("ygrid: composite_factory create_instance failed for type=0x%08x: %s", type,
                    ir.error.msg);
@@ -1569,6 +1583,7 @@ static struct yetty_ycore_void_result parse_and_index_record(struct yetty_ygrid_
     meta->max_x = ar.value.max.x;
     meta->max_y = ar.value.max.y;
     meta->entity_slot = g->current_entity_slot;
+    meta->rolling_row = g->insert_rolling_row;
 
     uint32_t prim_index = g->prim_count++;
     /* Record the prim's index on its owning entity so a future
@@ -1682,7 +1697,7 @@ static struct yetty_ycore_void_result rebuild_prim_staging(struct yetty_ygrid_gr
         uint32_t data_offset = cursor - (uint32_t)g->prim_count;
         g->prim_staging[i] = data_offset;
 
-        g->prim_staging[cursor++] = 0u; /* rolling_row prefix */
+        g->prim_staging[cursor++] = m->rolling_row; /* rolling_row prefix */
         /* Copy the WHOLE wire record (starting from the type word). */
         memcpy(&g->prim_staging[cursor], g->bytes + m->prim_payload_offset,
                (size_t)m->prim_payload_words * sizeof(uint32_t));
@@ -1838,6 +1853,77 @@ static struct yetty_ycore_void_result resize_grid_dims_if_needed(struct yetty_yg
     return YETTY_OK_VOID();
 }
 
+/*===========================================================================
+ * Rolling-row scroll API (object-keyed-free C helpers on the data struct,
+ * matching set_scroll / set_content_size). Used when the grid backs scrolling
+ * content — e.g. the terminal's ydraw layer, which scrolls in lockstep with
+ * the text grid. Static compositor grids never call these; their prims keep
+ * rolling_row 0 and rolling_row_0 0, so the shader offset is a no-op.
+ *=========================================================================*/
+
+/* The row origin the shader subtracts from each prim's rolling_row. Pure view
+ * shift — no re-stage, just a redraw on the next frame. */
+void yetty_ygrid_set_rolling_row_0(struct yetty_ygrid_grid *grid, uint32_t rolling_row_0)
+{
+    if (!grid) {
+        return;
+    }
+    grid->rs.uniforms[U_ROLLING_ROW_0].u32 = rolling_row_0;
+}
+
+/* The creation row stamped onto every prim added from now on. The staging
+ * rebuild writes it as the prim's rolling_row prefix; changing it re-stages. */
+void yetty_ygrid_set_insert_rolling_row(struct yetty_ygrid_grid *grid, uint32_t rolling_row)
+{
+    if (!grid) {
+        return;
+    }
+    grid->insert_rolling_row = rolling_row;
+}
+
+/* The cell height the shader uses for the rolling-row Y offset (overrides the
+ * grid's own bucket height so anchored content aligns to the text rows). */
+void yetty_ygrid_set_rolling_cell_height(struct yetty_ygrid_grid *grid, float cell_height)
+{
+    if (!grid) {
+        return;
+    }
+    grid->rolling_cell_height = cell_height > 0.0f ? cell_height : 0.0f;
+}
+
+/* Explicitly re-bucket the grid to `grid_cols` x `grid_rows` (the terminal
+ * sizes its ydraw grid to the text columns/rows after a resize). Frees the old
+ * cell grid, allocates a fresh one, and re-buckets every live prim. */
+struct yetty_ycore_void_result yetty_ygrid_resize(struct yetty_ygrid_grid *grid, uint32_t grid_cols,
+                                                  uint32_t grid_rows)
+{
+    if (!grid) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygrid_resize: NULL grid");
+    }
+    if (grid_cols == 0u || grid_rows == 0u) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygrid_resize: zero dimension");
+    }
+    if (grid_cols == grid->grid_cols && grid_rows == grid->grid_rows) {
+        return YETTY_OK_VOID();
+    }
+    size_t old_n = (size_t)grid->grid_cols * (size_t)grid->grid_rows;
+    cells_free(grid->cells, old_n);
+    grid->cells = NULL;
+    grid->grid_cols = grid_cols;
+    grid->grid_rows = grid_rows;
+    struct yetty_ycore_void_result alloc_res = cells_alloc(grid);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, alloc_res, "yetty_ygrid_resize: cells_alloc");
+    for (uint32_t i = 0; i < grid->prim_count; i++) {
+        if (grid->prims[i].entity_slot == YGRID_INVALID_SLOT) {
+            continue;
+        }
+        struct yetty_ycore_void_result bucket_res = bucket_prim(grid, i);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, bucket_res, "yetty_ygrid_resize: re-bucket");
+    }
+    grid->staging_dirty = 1;
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *self,
                                                    struct yetty_ydraw_target *target)
 {
@@ -1905,6 +1991,13 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
     float ch = ygrid_content_extent_h(g, base_rect);
     g->rs.uniforms[U_CELL_SIZE].vec2[0] = cw / (float)g->grid_cols;
     g->rs.uniforms[U_CELL_SIZE].vec2[1] = ch / (float)g->grid_rows;
+    /* Scrolling grids drive the rolling-row Y offset off the authoritative
+     * text cell height (set via yetty_ygrid_set_rolling_cell_height), not the
+     * grid's own bucket height, so anchored content aligns to the terminal
+     * rows. 0 = unset → keep the bucketing height (static compositor grids). */
+    if (g->rolling_cell_height > 0.0f) {
+        g->rs.uniforms[U_CELL_SIZE].vec2[1] = g->rolling_cell_height;
+    }
     /* View size = what the NDC quad maps onto. Local figures map the rect;
      * absolute figures map the whole target so prim coords are screen
      * coords (content_w/h was set to the target above). cz_off is the
@@ -2482,20 +2575,16 @@ static struct yetty_ycore_char_ptr_result ygrid_dump(const struct yetty_yfigure_
  * typed body from the object header (body begins at obj + 1) and forwards
  * to the existing render impl. */
 [[clang::annotate("override@ygrid:grid:yfigure:render")]]
-static struct yetty_ycore_void_result ygrid_render_slot(struct yetty_yclass_ctx *ctx,
-                                                        struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result ygrid_render_slot(struct yetty_yclass_object *obj,
                                                         struct yetty_ydraw_target *target)
 {
-    (void)ctx;
     return ygrid_render((struct yetty_yfigure_figure *)(obj + 1), target);
 }
 
 /* yclass cross-domain override of yfigure:destroy. Body sits at obj + 1. */
 [[clang::annotate("override@ygrid:grid:yfigure:destroy")]]
-static struct yetty_ycore_void_result ygrid_destroy_slot(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result ygrid_destroy_slot(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     return ygrid_destroy((struct yetty_yfigure_figure *)(obj + 1));
 }
 
@@ -3171,7 +3260,7 @@ struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *gri
  *
  * One wrapper impl per ygrid public/vtable method whose signature can
  * survive RPC marshalling. The wrapper conforms to the yclass slot
- * shape `(struct yetty_yclass_ctx *ctx, struct yetty_yclass_object
+ * shape `(struct yetty_yclass_object
  * *obj, …)`, then forwards to the existing C impl below. Keeping the
  * old impls intact preserves the legacy callsites that still pass a
  * raw `struct yetty_yfigure_figure *` while every figure-kind gets
@@ -3200,9 +3289,8 @@ struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *gri
 
 [[clang::annotate("virtual@ygrid:grid:add_record")]]
 static struct yetty_ycore_void_result yetty_ygrid_grid_add_record_impl(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, struct yetty_ycore_buffer record)
+    struct yetty_yclass_object *obj, struct yetty_ycore_buffer record)
 {
-    (void)ctx;
     struct yetty_ygrid_grid_ptr_result grid_r = ygrid_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_r, "ygrid: from_obj");
     struct yetty_ygrid_grid *grid = grid_r.value;
@@ -3210,10 +3298,8 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_add_record_impl(
 }
 
 [[clang::annotate("virtual@ygrid:grid:clear")]]
-static struct yetty_ycore_void_result yetty_ygrid_grid_clear_impl(struct yetty_yclass_ctx *ctx,
-                                                                  struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result yetty_ygrid_grid_clear_impl(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_ygrid_grid_ptr_result grid_r = ygrid_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_r, "ygrid: from_obj");
     struct yetty_ygrid_grid *grid = grid_r.value;
@@ -3221,35 +3307,29 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_clear_impl(struct yetty_y
 }
 
 [[clang::annotate("virtual@ygrid:grid:destroy")]]
-static struct yetty_ycore_void_result yetty_ygrid_grid_destroy_impl(struct yetty_yclass_ctx *ctx,
-                                                                    struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result yetty_ygrid_grid_destroy_impl(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     return ygrid_destroy((struct yetty_yfigure_figure *)(obj + 1));
 }
 
 [[clang::annotate("override@ygrid:grid:yfigure:process_bytes")]]
 static struct yetty_ycore_void_result yetty_ygrid_grid_process_bytes_impl(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, const uint8_t *bytes,
-    size_t bytes_len)
+    struct yetty_yclass_object *obj, const uint8_t *bytes, size_t bytes_len)
 {
-    (void)ctx;
     return ygrid_process_bytes((struct yetty_yfigure_figure *)(obj + 1), bytes, bytes_len);
 }
 
 [[clang::annotate("override@ygrid:grid:yfigure:reset_content")]]
 static struct yetty_ycore_void_result yetty_ygrid_grid_reset_content_impl(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj)
+    struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     return ygrid_reset_content((struct yetty_yfigure_figure *)(obj + 1));
 }
 
 [[clang::annotate("override@ygrid:grid:yfigure:dump_state")]]
 static struct yetty_ycore_char_ptr_result yetty_ygrid_grid_dump_state_impl(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, int indent)
+    struct yetty_yclass_object *obj, int indent)
 {
-    (void)ctx;
     return ygrid_dump((struct yetty_yfigure_figure *)(obj + 1), indent);
 }
 
@@ -3259,9 +3339,8 @@ static struct yetty_ycore_char_ptr_result yetty_ygrid_grid_dump_state_impl(
  * base dirty so the compositor repaints the (re-clipped) viewport. */
 [[clang::annotate("override@ygrid:grid:yfigure:set_scroll")]]
 static struct yetty_ycore_void_result yetty_ygrid_grid_set_scroll_impl(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, float scroll_x, float scroll_y)
+    struct yetty_yclass_object *obj, float scroll_x, float scroll_y)
 {
-    (void)ctx;
     struct yetty_ygrid_grid_ptr_result grid_r = ygrid_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_r, "ygrid: from_obj");
     struct yetty_ygrid_grid *grid = grid_r.value;
@@ -3271,9 +3350,8 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_set_scroll_impl(
 
 [[clang::annotate("override@ygrid:grid:yfigure:set_content_size")]]
 static struct yetty_ycore_void_result yetty_ygrid_grid_set_content_size_impl(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, float content_w, float content_h)
+    struct yetty_yclass_object *obj, float content_w, float content_h)
 {
-    (void)ctx;
     struct yetty_ygrid_grid_ptr_result grid_r = ygrid_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_r, "ygrid: from_obj");
     struct yetty_ygrid_grid *grid = grid_r.value;

@@ -41,7 +41,6 @@ static size_t yetty_ygrid_add_record_skel(const void *body, size_t body_len, voi
         .capacity = (size_t)wire_args.record_len,
     };
     body_offset += (size_t)wire_args.record_len;
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -54,8 +53,8 @@ static size_t yetty_ygrid_add_record_skel(const void *body, size_t body_len, voi
         ((uint8_t *)resp)[0] = 1;
         return 1;
     }
-    struct yetty_ycore_void_result call_r = yetty_ygrid_add_record(
-        &local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value, record_buf);
+    struct yetty_ycore_void_result call_r =
+        yetty_ygrid_add_record((struct yetty_yclass_object *)obj_resolve_r.value, record_buf);
     if (resp_max < 1) {
         return 0;
     }
@@ -92,7 +91,6 @@ static size_t yetty_ygrid_clear_skel(const void *body, size_t body_len, void *re
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -106,7 +104,7 @@ static size_t yetty_ygrid_clear_skel(const void *body, size_t body_len, void *re
         return 1;
     }
     struct yetty_ycore_void_result call_r =
-        yetty_ygrid_clear(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+        yetty_ygrid_clear((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -144,7 +142,6 @@ static size_t yetty_ygrid_destroy_skel(const void *body, size_t body_len, void *
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_ctx local_ctx = {0};
     struct yetty_yclass_void_ptr_result obj_resolve_r =
         yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
     if (YETTY_IS_ERR(obj_resolve_r)) {
@@ -158,7 +155,7 @@ static size_t yetty_ygrid_destroy_skel(const void *body, size_t body_len, void *
         return 1;
     }
     struct yetty_ycore_void_result call_r =
-        yetty_ygrid_destroy(&local_ctx, (struct yetty_yclass_object *)obj_resolve_r.value);
+        yetty_ygrid_destroy((struct yetty_yclass_object *)obj_resolve_r.value);
     if (resp_max < 1) {
         return 0;
     }
@@ -235,6 +232,9 @@ struct yetty_yclass_object_ptr_result yetty_ygrid_grid_create(struct yetty_yclas
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygrid_grid_create: calloc(proxy) failed");
     }
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }

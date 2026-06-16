@@ -41,7 +41,7 @@ static struct yetty_ycore_void_result set_cell(struct yetty_yclass_object *sheet
         .capacity = strlen(value),
     };
     struct yetty_ycore_void_result set_res =
-        yetty_yrich_spreadsheet_set_cell_value(NULL, sheet_obj, row, col, text);
+        yetty_yrich_spreadsheet_set_cell_value(sheet_obj, row, col, text);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, set_res, "seed_demo: set_cell_value failed");
     return YETTY_OK_VOID();
 }
@@ -49,7 +49,7 @@ static struct yetty_ycore_void_result set_cell(struct yetty_yclass_object *sheet
 static struct yetty_ycore_void_result seed_demo(struct yetty_yclass_object *sheet_obj)
 {
     struct yetty_ycore_void_result grid_res =
-        yetty_yrich_spreadsheet_set_grid_size(NULL, sheet_obj, 50, 20);
+        yetty_yrich_spreadsheet_set_grid_size(sheet_obj, 50, 20);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "seed_demo: set_grid_size failed");
     struct yetty_ycore_void_result cell_res = set_cell(sheet_obj, 0, 0, "yrich spreadsheet");
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "seed_demo");
@@ -104,7 +104,7 @@ int main(int argc, char **argv)
             yetty_ycore_error_print(stderr, "ysheet: seed demo", seed_res.error);
             yetty_ycore_error_destroy(seed_res.error);
             struct yetty_ycore_void_result destroy_res =
-                yetty_yrich_document_destroy(NULL, sheet_obj);
+                yetty_yrich_document_destroy(sheet_obj);
             if (YETTY_IS_ERR(destroy_res)) {
                 yetty_ycore_error_destroy(destroy_res.error);
             }

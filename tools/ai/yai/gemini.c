@@ -41,11 +41,9 @@ yetty_yai_gemini {
 YETTY_YRESULT_DECLARE(yetty_yai_gemini_ptr, struct yetty_yai_gemini *);
 
 [[clang::annotate("override@yai:gemini:start")]]
-static struct yetty_ycore_void_result gemini_start(struct yetty_yclass_ctx *ctx,
-                                                   struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result gemini_start(struct yetty_yclass_object *obj,
                                                    struct yai_app *app)
 {
-    (void)ctx;
     (void)obj;
     (void)app; /* nothing runs until the first turn spawns */
     /* yai owns the terminal: route the yetty MCP server's figures back
@@ -64,12 +62,10 @@ static struct yetty_ycore_void_result gemini_start(struct yetty_yclass_ctx *ctx,
 }
 
 [[clang::annotate("override@yai:gemini:send_user_message")]]
-static struct yetty_ycore_void_result gemini_send_user_message(struct yetty_yclass_ctx *ctx,
-                                                               struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result gemini_send_user_message(struct yetty_yclass_object *obj,
                                                                struct yai_app *app,
                                                                const char *text)
 {
-    (void)ctx;
     (void)obj;
     if (app->child_open_handles > 0 || app->child_alive) {
         return YETTY_ERR(yetty_ycore_void, "gemini send_user_message: previous turn still open");
@@ -105,12 +101,10 @@ static struct yetty_ycore_void_result gemini_send_user_message(struct yetty_ycla
 }
 
 [[clang::annotate("override@yai:gemini:describe_config")]]
-static struct yetty_ycore_void_result gemini_describe_config(struct yetty_yclass_ctx *ctx,
-                                                             struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result gemini_describe_config(struct yetty_yclass_object *obj,
                                                              struct yai_app *app, char *out,
                                                              size_t out_size)
 {
-    (void)ctx;
     (void)obj;
     const char *model = app->config.model;
     const char *approval_mode = app->config.gemini_approval_mode;
@@ -126,12 +120,10 @@ static struct yetty_ycore_void_result gemini_describe_config(struct yetty_yclass
 }
 
 [[clang::annotate("override@yai:gemini:config_knob")]]
-static struct yetty_ycore_void_result gemini_config_knob(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result gemini_config_knob(struct yetty_yclass_object *obj,
                                                          struct yai_app *app, char *out,
                                                          size_t out_size)
 {
-    (void)ctx;
     (void)obj;
     int written = snprintf(out, out_size,
                            "gemini_approval_mode|approval mode|"
@@ -144,12 +136,10 @@ static struct yetty_ycore_void_result gemini_config_knob(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@yai:gemini:handle_event")]]
-static struct yetty_ycore_void_result gemini_handle_event(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result gemini_handle_event(struct yetty_yclass_object *obj,
                                                           struct yai_app *app,
                                                           struct yyjson_val *event)
 {
-    (void)ctx;
     (void)obj;
     const char *type = yyjson_get_str(yyjson_obj_get(event, "type"));
     if (!type) {

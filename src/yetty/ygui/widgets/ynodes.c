@@ -32,21 +32,11 @@
 YETTY_YRESULT_DECLARE(yetty_ygui_ynodes_ptr, struct yetty_ygui_ynodes *);
 struct yetty_yclass_ptr_result yetty_ygui_ynodes_class_get(void);
 struct yetty_ygui_ynodes_ptr_result yetty_ygui_ynodes_from(struct yetty_yclass_object *obj);
-/* Real-build copy of the header-destined link callback typedef. Codegen
- * reads the `#ifdef YCLASS_CODEGEN` block at the foot (copied verbatim into
- * the generated header); the two never coexist in one parse. */
-#ifdef YCLASS_CODEGEN
-#include <yetty/ycore/result.h>
-#include <yetty/ygui/widget.h>
+/* Link callback type. Defined here in the owning .c; codegen reproduces it
+ * into the generated header for any public signature that references it. */
 typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(
     struct yetty_yclass_object *editor, struct yetty_yclass_object *from, int out_idx,
     struct yetty_yclass_object *to, int in_idx, void *userdata);
-#endif
-#ifndef YCLASS_CODEGEN
-typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(
-    struct yetty_yclass_object *editor, struct yetty_yclass_object *from, int out_idx,
-    struct yetty_yclass_object *to, int in_idx, void *userdata);
-#endif
 #include "paint-helpers.h"
 
 #include <yetty/yfigure/wire.h>
@@ -148,10 +138,8 @@ static int ynodes_child_is_node(struct yetty_yclass_object *child)
  * Lifecycle.
  *---------------------------------------------------------------------------*/
 [[clang::annotate("override@ygui:ynodes:constructor")]]
-static struct yetty_ycore_void_result ynodes_constructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                         struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ynodes_constructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, ynodes_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
@@ -185,10 +173,8 @@ static struct yetty_ycore_void_result ynodes_constructor(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@ygui:ynodes:destructor")]]
-static struct yetty_ycore_void_result ynodes_destructor(struct yetty_yclass_ctx *yclass_ctx,
-                                                        struct yetty_yclass_object *yclass_obj)
+static struct yetty_ycore_void_result ynodes_destructor(struct yetty_yclass_object *yclass_obj)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_ynodes *d = yyetty_ygui_ynodes(obj);
     free(d->links);
@@ -492,11 +478,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ynodes_add_node(struct yetty_yc
  *---------------------------------------------------------------------------*/
 /* "Add node" (canvas menu): create a node at the recorded graph point,
  * with a default input + output pin. userdata = the editor. */
-static struct yetty_ycore_void_result menu_add_node_cb(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result menu_add_node_cb(struct yetty_yclass_object *menu,
                                                        int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     struct yetty_yclass_object *editor = userdata;
@@ -514,22 +498,18 @@ static struct yetty_ycore_void_result menu_add_node_cb(struct yetty_yclass_ctx *
 }
 
 /* "Reset view" (canvas menu): pan to origin, zoom to 1. */
-static struct yetty_ycore_void_result menu_reset_view_cb(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result menu_reset_view_cb(struct yetty_yclass_object *menu,
                                                          int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     return yetty_ygui_ynodes_set_view(userdata, 0.0f, 0.0f, 1.0f);
 }
 
 /* Node menu rows operate on the node passed as userdata. */
-static struct yetty_ycore_void_result menu_node_add_input_cb(struct yetty_yclass_ctx *ctx,
-                                                             struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result menu_node_add_input_cb(struct yetty_yclass_object *menu,
                                                              int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     struct uint32_result r = yetty_ygui_ynode_add_input(userdata, "in");
@@ -537,11 +517,9 @@ static struct yetty_ycore_void_result menu_node_add_input_cb(struct yetty_yclass
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result menu_node_add_output_cb(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result menu_node_add_output_cb(struct yetty_yclass_object *menu,
                                                               int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     struct uint32_result r = yetty_ygui_ynode_add_output(userdata, "out");
@@ -549,11 +527,9 @@ static struct yetty_ycore_void_result menu_node_add_output_cb(struct yetty_yclas
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result menu_node_delete_cb(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result menu_node_delete_cb(struct yetty_yclass_object *menu,
                                                           int item_index, void *userdata)
 {
-    (void)ctx;
     (void)menu;
     (void)item_index;
     /* del runs the node's destructor, which drops its links, then frees. */
@@ -562,11 +538,9 @@ static struct yetty_ycore_void_result menu_node_delete_cb(struct yetty_yclass_ct
 
 /* "Add <widget>" (node menu): instantiate the palette entry `userdata`
  * (its index) as a child of the menu's target node, then grow the node. */
-static struct yetty_ycore_void_result insert_widget_cb(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *menu,
+static struct yetty_ycore_void_result insert_widget_cb(struct yetty_yclass_object *menu,
                                                        int item_index, void *userdata)
 {
-    (void)ctx;
     (void)item_index;
     struct yetty_yclass_object *editor =
         yetty_ygui_widget_parent((struct yetty_yclass_object *)menu);
@@ -779,11 +753,9 @@ static struct yetty_ycore_void_result ynodes_draw_link(struct yetty_ygui_emit_ct
 }
 
 [[clang::annotate("override@ygui:ynodes:widget_paint")]]
-static struct yetty_ycore_void_result ynodes_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                   struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result ynodes_paint(struct yetty_yclass_object *yclass_obj,
                                                    struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "ynodes_paint: NULL ctx");
@@ -863,11 +835,9 @@ static struct yetty_ycore_void_result ynodes_paint(struct yetty_yclass_ctx *ycla
  * Pointer — pan the canvas.
  *---------------------------------------------------------------------------*/
 [[clang::annotate("override@ygui:ynodes:widget_on_press")]]
-static struct yetty_ycore_int_result ynodes_on_press(struct yetty_yclass_ctx *yclass_ctx,
-                                                     struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result ynodes_on_press(struct yetty_yclass_object *yclass_obj,
                                                      float x, float y, int button)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_ynodes *d = yyetty_ygui_ynodes(obj);
 
@@ -899,11 +869,9 @@ static struct yetty_ycore_int_result ynodes_on_press(struct yetty_yclass_ctx *yc
 }
 
 [[clang::annotate("override@ygui:ynodes:widget_on_motion")]]
-static struct yetty_ycore_int_result ynodes_on_motion(struct yetty_yclass_ctx *yclass_ctx,
-                                                      struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result ynodes_on_motion(struct yetty_yclass_object *yclass_obj,
                                                       float x, float y)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_ynodes *d = yyetty_ygui_ynodes(obj);
     if (!d->panning) {
@@ -921,11 +889,9 @@ static struct yetty_ycore_int_result ynodes_on_motion(struct yetty_yclass_ctx *y
 }
 
 [[clang::annotate("override@ygui:ynodes:widget_on_release")]]
-static struct yetty_ycore_int_result ynodes_on_release(struct yetty_yclass_ctx *yclass_ctx,
-                                                       struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result ynodes_on_release(struct yetty_yclass_object *yclass_obj,
                                                        float x, float y, int button)
 {
-    (void)yclass_ctx;
     (void)x;
     (void)y;
     (void)button;
@@ -938,11 +904,9 @@ static struct yetty_ycore_int_result ynodes_on_release(struct yetty_yclass_ctx *
 /* Wheel → zoom toward the cursor (the graph point under the pointer stays
  * put). */
 [[clang::annotate("override@ygui:ynodes:widget_on_scroll")]]
-static struct yetty_ycore_int_result ynodes_on_scroll(struct yetty_yclass_ctx *yclass_ctx,
-                                                      struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_int_result ynodes_on_scroll(struct yetty_yclass_object *yclass_obj,
                                                       float x, float y, float dx, float dy)
 {
-    (void)yclass_ctx;
     (void)dx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     struct yetty_ygui_ynodes *d = yyetty_ygui_ynodes(obj);

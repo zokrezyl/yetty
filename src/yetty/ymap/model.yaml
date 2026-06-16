@@ -4,8 +4,6 @@ methods:
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: latitude
@@ -19,25 +17,23 @@ methods:
       - name: height_px
         type: uint32_t
     local: true
+    return_payload_type: null
   - slot: set_provider
     domain: ymap
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: name
         type: "const char *"
     local: true
+    return_payload_type: null
   - slot: set_custom_provider
     domain: ymap
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: url_template
@@ -51,13 +47,12 @@ methods:
       - name: attribution
         type: "const char *"
     local: true
+    return_payload_type: null
   - slot: set_center
     domain: ymap
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: latitude
@@ -65,25 +60,23 @@ methods:
       - name: longitude
         type: double
     local: true
+    return_payload_type: null
   - slot: set_zoom
     domain: ymap
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: zoom
         type: uint32_t
     local: true
+    return_payload_type: null
   - slot: set_viewport
     domain: ymap
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: width_px
@@ -91,13 +84,12 @@ methods:
       - name: height_px
         type: uint32_t
     local: true
+    return_payload_type: null
   - slot: pan_by_pixels
     domain: ymap
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: delta_x
@@ -105,13 +97,12 @@ methods:
       - name: delta_y
         type: double
     local: true
+    return_payload_type: null
   - slot: zoom_by_at
     domain: ymap
     owning_class: map
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: step
@@ -121,66 +112,61 @@ methods:
       - name: anchor_y
         type: double
     local: true
+    return_payload_type: int
   - slot: get_zoom
     domain: ymap
     owning_class: map
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: int
   - slot: geolocate
     domain: ymap
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
   - slot: attribution
     domain: ymap
     owning_class: map
     return_type: struct yetty_ycore_const_char_ptr_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: "const char *"
   - slot: is_vector
     domain: ymap
     owning_class: map
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: int
   - slot: render
     domain: ymap
     owning_class: map
     return_type: struct yetty_ydraw_drawable_list_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: "struct yetty_ydraw_drawable_list *"
   - slot: destroy
     domain: ymap
     owning_class: map
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
 classes:
   - name: map
     domain: ymap
@@ -279,10 +265,6 @@ classes:
         slot_domain: ymap
         impl: map_destroy
 exposed:
-  - source_file: src/yetty/ymap/map.c
-    verbatim: "/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated map.h needs the complete type. */
-#include <yetty/ydraw-core/drawable-list.h>"
   - source_file: src/yetty/ymap/map.c
     name: yetty_ymap_provider_count
     return_type: uint32_t
@@ -383,3 +365,26 @@ types:
             type: "struct yetty_ydraw_drawable_list *"
           - name: error
             type: struct yetty_ycore_error
+local_types:
+  ymap_provider: src/yetty/ymap/map.c
+  yetty_ymap_map: src/yetty/ymap/map.c
+  yetty_ymap_map_ptr_result: src/yetty/ymap/map.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ymap/map.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ymap/map.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ymap/map.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ymap/map.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ymap/map.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+includes:
+  src/yetty/ymap/map.c:
+    - yetty/ydraw-core/drawable-list.h

@@ -23,11 +23,9 @@ struct yetty_ygui_separator_ptr_result yetty_ygui_separator_from(struct yetty_yc
 #define COLOR_BORDER 0xFF474A36u
 
 [[clang::annotate("override@ygui:separator:widget_paint")]]
-static struct yetty_ycore_void_result separator_paint(struct yetty_yclass_ctx *yclass_ctx,
-                                                      struct yetty_yclass_object *yclass_obj,
+static struct yetty_ycore_void_result separator_paint(struct yetty_yclass_object *yclass_obj,
                                                       struct yetty_ygui_emit_ctx *ctx)
 {
-    (void)yclass_ctx;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "separator_paint: NULL ctx");

@@ -4,8 +4,6 @@ methods:
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: fd
@@ -25,25 +23,23 @@ methods:
       - name: max_y
         type: float
     local: true
+    return_payload_type: null
   - slot: set_content
     domain: yview
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: content
         type: "const struct yetty_ydraw_drawable_list *"
     local: true
+    return_payload_type: null
   - slot: set_text
     domain: yview
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: text
@@ -51,13 +47,12 @@ methods:
       - name: font_size
         type: float
     local: true
+    return_payload_type: null
   - slot: set_plot
     domain: yview
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: expr
@@ -71,13 +66,12 @@ methods:
       - name: y_max
         type: float
     local: true
+    return_payload_type: null
   - slot: set_content_size
     domain: yview
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: content_w
@@ -85,13 +79,12 @@ methods:
       - name: content_h
         type: float
     local: true
+    return_payload_type: null
   - slot: scroll_to
     domain: yview
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: scroll_x
@@ -99,13 +92,12 @@ methods:
       - name: scroll_y
         type: float
     local: true
+    return_payload_type: null
   - slot: scroll_by
     domain: yview
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: delta_x
@@ -113,13 +105,12 @@ methods:
       - name: delta_y
         type: float
     local: true
+    return_payload_type: null
   - slot: set_rect
     domain: yview
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: min_x
@@ -131,16 +122,16 @@ methods:
       - name: max_y
         type: float
     local: true
+    return_payload_type: null
   - slot: destroy
     domain: yview
     owning_class: view
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
 classes:
   - name: view
     domain: yview
@@ -267,3 +258,22 @@ types:
             type: int
           - name: error
             type: struct yetty_ycore_error
+local_types:
+  yetty_yview_view: src/yetty/yview/view.c
+  yetty_yview_view_ptr_result: src/yetty/yview/view.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/yview/view.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/yview/view.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/yview/view.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/yview/view.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/yview/view.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

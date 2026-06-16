@@ -4,8 +4,6 @@ methods:
     owning_class: circuit
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: grid_px
@@ -13,13 +11,12 @@ methods:
       - name: flags
         type: uint32_t
     local: true
+    return_payload_type: null
   - slot: parse
     domain: ycircuit
     owning_class: circuit
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: input
@@ -27,23 +24,21 @@ methods:
       - name: len
         type: size_t
     local: true
+    return_payload_type: null
   - slot: clear
     domain: ycircuit
     owning_class: circuit
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
   - slot: add_component
     domain: ycircuit
     owning_class: circuit
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: kind
@@ -59,13 +54,12 @@ methods:
       - name: value
         type: "const char *"
     local: true
+    return_payload_type: int
   - slot: add_ic
     domain: ycircuit
     owning_class: circuit
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -87,13 +81,12 @@ methods:
       - name: pins_bottom
         type: "const char *"
     local: true
+    return_payload_type: int
   - slot: add_wire
     domain: ycircuit
     owning_class: circuit
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x0
@@ -105,13 +98,12 @@ methods:
       - name: y1
         type: float
     local: true
+    return_payload_type: int
   - slot: add_junction
     domain: ycircuit
     owning_class: circuit
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -119,13 +111,12 @@ methods:
       - name: y
         type: float
     local: true
+    return_payload_type: int
   - slot: add_label
     domain: ycircuit
     owning_class: circuit
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -135,23 +126,21 @@ methods:
       - name: text
         type: "const char *"
     local: true
+    return_payload_type: int
   - slot: render
     domain: ycircuit
     owning_class: circuit
     return_type: struct yetty_ydraw_drawable_list_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: "struct yetty_ydraw_drawable_list *"
   - slot: hit_test
     domain: ycircuit
     owning_class: circuit
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: x
@@ -159,28 +148,27 @@ methods:
       - name: y
         type: float
     local: true
+    return_payload_type: int
   - slot: set_highlight
     domain: ycircuit
     owning_class: circuit
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: element_id
         type: int32_t
     local: true
+    return_payload_type: null
   - slot: destroy
     domain: ycircuit
     owning_class: circuit
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct yetty_yclass_ctx *"
       - name: obj
         type: "struct yetty_yclass_object *"
     local: true
+    return_payload_type: null
 classes:
   - name: circuit
     domain: ycircuit
@@ -270,13 +258,10 @@ classes:
         impl: circuit_obj_destroy
 exposed:
   - source_file: src/yetty/ycircuit/circuit.c
-    verbatim: "/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated circuit.h (and the dispatch TU that includes it) needs the
- * complete type — pull its defining header into the public header. */
-#include <yetty/ydraw-core/drawable-list.h>
-/* Public constants — copied verbatim into the generated circuit.h. */
-#define YETTY_YCIRCUIT_NO_ELEMENT (-1) /* hit_test: no element under the point */
-#define YETTY_YCIRCUIT_FLAG_NONE 0x0u  /* reserved render flags */"
+    type_text: "enum yetty_ycircuit_constant {
+    YETTY_YCIRCUIT_NO_ELEMENT = -1,
+    YETTY_YCIRCUIT_FLAG_NONE = 0,
+};"
   - source_file: src/yetty/ycircuit/circuit.c
     name: yetty_ycircuit_emit_osc
     return_type: struct yetty_ycore_void_result
@@ -347,3 +332,32 @@ types:
             type: "struct yetty_ydraw_drawable_list *"
           - name: error
             type: struct yetty_ycore_error
+local_types:
+  yetty_ycircuit_constant: src/yetty/ycircuit/circuit.c
+  ycircuit_component_kind: src/yetty/ycircuit/circuit.c
+  ycircuit_element_type: src/yetty/ycircuit/circuit.c
+  ycircuit_element: src/yetty/ycircuit/circuit.c
+  yetty_ycircuit_circuit: src/yetty/ycircuit/circuit.c
+  yetty_ycircuit_circuit_ptr_result: src/yetty/ycircuit/circuit.c
+  parsed_line: src/yetty/ycircuit/circuit.c
+  emit_geom: src/yetty/ycircuit/circuit.c
+  ic_geom: src/yetty/ycircuit/circuit.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ycircuit/circuit.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ycircuit/circuit.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ycircuit/circuit.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ycircuit/circuit.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ycircuit/circuit.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+includes:
+  src/yetty/ycircuit/circuit.c:
+    - yetty/ydraw-core/drawable-list.h

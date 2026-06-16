@@ -332,12 +332,10 @@ static void shadertoy_apply(int idx)
         yetty_ygui_yshadertoy_set_source(g_shadertoy_widget, wgsl, strlen(wgsl)));
 }
 
-static struct yetty_ycore_void_result on_shadertoy_subtab(struct yetty_yclass_ctx *yc_ctx,
-                                                          struct yetty_yclass_object *yc_obj,
+static struct yetty_ycore_void_result on_shadertoy_subtab(struct yetty_yclass_object *yc_obj,
                                                           const struct yetty_ygui_event *event,
                                                           void *userdata)
 {
-    (void)yc_ctx;
     (void)yc_obj;
     (void)userdata;
     shadertoy_apply(event->i0);
@@ -680,11 +678,9 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
                                                        int scene_index);
 static struct yetty_ycore_void_result rebuild_top(struct app *app, int top_index);
 
-static struct yetty_ycore_void_result load_plot_entry(struct yetty_yclass_ctx *_yc_ctx,
-                                                      struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result load_plot_entry(struct yetty_yclass_object *_yc_obj,
                                                       const struct nav_entry *entry)
 {
-    (void)_yc_ctx;
     struct yetty_yclass_object *plot = (struct yetty_yclass_object *)_yc_obj;
     struct yetty_ygui_yplot_config cfg = {
         .x_min = entry->x_min,
@@ -728,11 +724,9 @@ static uint8_t *slurp_file(const char *path, size_t *out_len)
     return buf;
 }
 
-static struct yetty_ycore_void_result load_image_entry(struct yetty_yclass_ctx *_yc_ctx,
-                                                       struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result load_image_entry(struct yetty_yclass_object *_yc_obj,
                                                        const char *path)
 {
-    (void)_yc_ctx;
     struct yetty_yclass_object *image = (struct yetty_yclass_object *)_yc_obj;
     if (!path) {
         return yetty_ygui_yimage_set_bytes(image, NULL, 0);
@@ -747,11 +741,9 @@ static struct yetty_ycore_void_result load_image_entry(struct yetty_yclass_ctx *
     return r;
 }
 
-static struct yetty_ycore_void_result load_video_entry(struct yetty_yclass_ctx *_yc_ctx,
-                                                       struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result load_video_entry(struct yetty_yclass_object *_yc_obj,
                                                        const char *path)
 {
-    (void)_yc_ctx;
     struct yetty_yclass_object *video = (struct yetty_yclass_object *)_yc_obj;
     if (!path) {
         return yetty_ygui_yvideo_set_bytes(video, NULL, 0);
@@ -794,11 +786,9 @@ static const char YBROWSER_SAMPLE_HTML[] =
  * renders a stack of collapsing-header sections, one ybrowser each, so
  * YBROWSER_SAMPLE_HTML above is reused as the "Overview" section. */
 
-static struct yetty_ycore_void_result write_code_snippet(struct yetty_yclass_ctx *_yc_ctx,
-                                                         struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result write_code_snippet(struct yetty_yclass_object *_yc_obj,
                                                          const char *snippet_id)
 {
-    (void)_yc_ctx;
     struct yetty_yclass_object *rich = (struct yetty_yclass_object *)_yc_obj;
     const struct code_snippet *snip = code_snippet_at(snippet_id);
     if (!snip) {
@@ -823,12 +813,10 @@ static struct yetty_ycore_void_result write_code_snippet(struct yetty_yclass_ctx
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result write_welcome_spans(struct yetty_yclass_ctx *_yc_ctx,
-                                                          struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result write_welcome_spans(struct yetty_yclass_object *_yc_obj,
                                                           const struct rich_span *spans,
                                                           size_t n_spans)
 {
-    (void)_yc_ctx;
     struct yetty_yclass_object *rich = (struct yetty_yclass_object *)_yc_obj;
     for (size_t i = 0; i < n_spans; ++i) {
         if (spans[i].new_line_first) {
@@ -850,8 +838,7 @@ struct row_link {
     int entry;
 };
 
-static struct yetty_ycore_void_result on_row_clicked(struct yetty_yclass_ctx *ctx,
-                                                     struct yetty_yclass_object *btn,
+static struct yetty_ycore_void_result on_row_clicked(struct yetty_yclass_object *btn,
                                                      void *userdata);
 
 /*-----------------------------------------------------------------------------
@@ -1093,29 +1080,23 @@ static void el_finalize_section(struct yetty_yclass_object *sec)
 
 /* ---- Overlay trigger callbacks ---- */
 
-static struct yetty_ycore_void_result el_menu_item(struct yetty_yclass_ctx *yc,
-                                                   struct yetty_yclass_object *menu, int idx,
+static struct yetty_ycore_void_result el_menu_item(struct yetty_yclass_object *menu, int idx,
                                                    void *ud)
 {
-    (void)yc;
     (void)menu;
     (void)idx;
     (void)ud;
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result el_open_dialog(struct yetty_yclass_ctx *yc,
-                                                     struct yetty_yclass_object *obj, void *ud)
+static struct yetty_ycore_void_result el_open_dialog(struct yetty_yclass_object *obj, void *ud)
 {
-    (void)yc;
     (void)obj;
     return yetty_ygui_dialog_open_at((struct yetty_yclass_object *)ud, 260, 200, 380, 180);
 }
 
-static struct yetty_ycore_void_result el_open_menu(struct yetty_yclass_ctx *yc,
-                                                   struct yetty_yclass_object *obj, void *ud)
+static struct yetty_ycore_void_result el_open_menu(struct yetty_yclass_object *obj, void *ud)
 {
-    (void)yc;
     struct yetty_ycore_rectangle r = yetty_ygui_widget_rect((struct yetty_yclass_object *)obj);
     return yetty_ygui_popup_menu_toggle_at((struct yetty_yclass_object *)ud, r.min.x, r.max.y + 2.0f);
 }
@@ -1913,10 +1894,10 @@ static void circuit_add(struct yetty_yclass_object *sec, const char *dsl)
     }
     struct yetty_yclass_object *circuit = cr.value;
     yetty_ycore_error_destroy_safe(
-        yetty_ycircuit_configure(NULL, circuit, YGREETER_CIRCUIT_GRID_PX, YETTY_YCIRCUIT_FLAG_NONE));
-    yetty_ycore_error_destroy_safe(yetty_ycircuit_parse(NULL, circuit, dsl, strlen(dsl)));
-    struct yetty_ydraw_drawable_list_result lr = yetty_ycircuit_render(NULL, circuit);
-    yetty_ycore_error_destroy_safe(yetty_ycircuit_destroy(NULL, circuit));
+        yetty_ycircuit_configure(circuit, YGREETER_CIRCUIT_GRID_PX, YETTY_YCIRCUIT_FLAG_NONE));
+    yetty_ycore_error_destroy_safe(yetty_ycircuit_parse(circuit, dsl, strlen(dsl)));
+    struct yetty_ydraw_drawable_list_result lr = yetty_ycircuit_render(circuit);
+    yetty_ycore_error_destroy_safe(yetty_ycircuit_destroy(circuit));
     if (YETTY_IS_ERR(lr)) {
         yetty_ycore_error_destroy(lr.error);
         return;
@@ -2102,11 +2083,10 @@ static void music_add(struct yetty_yclass_object *sec, const char *score)
         return;
     }
     struct yetty_yclass_object *music = mr.value;
-    yetty_ycore_error_destroy_safe(yetty_ymusic_configure(
-        NULL, music, YGREETER_MUSIC_WIDTH, YGREETER_MUSIC_STAFF, YETTY_YMUSIC_FLAG_NONE));
-    yetty_ycore_error_destroy_safe(yetty_ymusic_parse(NULL, music, score, strlen(score)));
-    struct yetty_ydraw_drawable_list_result lr = yetty_ymusic_render(NULL, music);
-    yetty_ycore_error_destroy_safe(yetty_ymusic_destroy(NULL, music));
+    yetty_ycore_error_destroy_safe(yetty_ymusic_configure(music, YGREETER_MUSIC_WIDTH, YGREETER_MUSIC_STAFF, YETTY_YMUSIC_FLAG_NONE));
+    yetty_ycore_error_destroy_safe(yetty_ymusic_parse(music, score, strlen(score)));
+    struct yetty_ydraw_drawable_list_result lr = yetty_ymusic_render(music);
+    yetty_ycore_error_destroy_safe(yetty_ymusic_destroy(music));
     if (YETTY_IS_ERR(lr)) {
         yetty_ycore_error_destroy(lr.error);
         return;
@@ -2616,7 +2596,7 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
     case TAB_KIND_PLOTS: {
         const struct nav_entry *e = &plot_nav_entries[t->active_entry];
         yetty_ycore_error_destroy_safe(
-            load_plot_entry(NULL, (struct yetty_yclass_object *)content, e));
+            load_plot_entry((struct yetty_yclass_object *)content, e));
         break;
     }
     case TAB_KIND_IMAGES: {
@@ -2624,7 +2604,7 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
                                ? app->image_paths[t->active_entry]
                                : NULL;
         yetty_ycore_error_destroy_safe(
-            load_image_entry(NULL, (struct yetty_yclass_object *)content, path));
+            load_image_entry((struct yetty_yclass_object *)content, path));
         break;
     }
     case TAB_KIND_VIDEO: {
@@ -2632,7 +2612,7 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
                                ? app->video_paths[t->active_entry]
                                : NULL;
         yetty_ycore_error_destroy_safe(
-            load_video_entry(NULL, (struct yetty_yclass_object *)content, path));
+            load_video_entry((struct yetty_yclass_object *)content, path));
         break;
     }
     case TAB_KIND_ELEMENTS:
@@ -2670,11 +2650,10 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
     default: {
         if (tab_index == 0) {
             const struct welcome_nav *e = &welcome_nav_entries[t->active_entry];
-            yetty_ycore_error_destroy_safe(write_welcome_spans(
-                NULL, (struct yetty_yclass_object *)content, e->spans, e->n_spans));
+            yetty_ycore_error_destroy_safe(write_welcome_spans((struct yetty_yclass_object *)content, e->spans, e->n_spans));
         } else {
             yetty_ycore_error_destroy_safe(
-                write_code_snippet(NULL, (struct yetty_yclass_object *)content,
+                write_code_snippet((struct yetty_yclass_object *)content,
                                    code_nav_entries[t->active_entry].payload));
         }
         break;
@@ -2687,12 +2666,10 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
 
 /* Sub-tabbar change inside a grouped top tab → rebuild the selected scene
  * into the group's subbody (the sub-tabbar itself is left intact). */
-static struct yetty_ycore_void_result on_subtab_change(struct yetty_yclass_ctx *_yc_ctx,
-                                                       struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result on_subtab_change(struct yetty_yclass_object *_yc_obj,
                                                        const struct yetty_ygui_event *event,
                                                        void *userdata)
 {
-    (void)_yc_ctx;
     struct app *app = (struct app *)userdata;
     /* Ignore events from a sub-tabbar that is not the active group's — e.g.
      * one being torn down while switching top tabs. */
@@ -2782,11 +2759,9 @@ static struct yetty_ycore_void_result rebuild_top(struct app *app, int top_index
     return build_scene_body(app, sb.value, tt->subs[sub]);
 }
 
-static struct yetty_ycore_void_result on_row_clicked(struct yetty_yclass_ctx *_yc_ctx,
-                                                     struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result on_row_clicked(struct yetty_yclass_object *_yc_obj,
                                                      void *userdata)
 {
-    (void)_yc_ctx;
     struct yetty_yclass_object *btn = (struct yetty_yclass_object *)_yc_obj;
     (void)btn;
     struct row_link *rl = (struct row_link *)userdata;
@@ -2801,12 +2776,10 @@ static struct yetty_ycore_void_result on_row_clicked(struct yetty_yclass_ctx *_y
     return build_scene_body(rl->app, rl->app->scene_parent, rl->tab);
 }
 
-static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_ctx *_yc_ctx,
-                                                    struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_object *_yc_obj,
                                                     const struct yetty_ygui_event *event,
                                                     void *userdata)
 {
-    (void)_yc_ctx;
     struct yetty_yclass_object *target = (struct yetty_yclass_object *)_yc_obj;
     (void)target;
     int idx = event->i0;
@@ -3974,7 +3947,7 @@ static struct yetty_ycore_int_result standalone_event_handler(
         }
         if (app->root_container) {
             struct yetty_ycore_void_result rr =
-                yetty_yfigure_render(NULL, app->root_container, app->render_target);
+                yetty_yfigure_render(app->root_container, app->render_target);
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
             }
@@ -4440,7 +4413,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
         app->has_pty_pair = 0;
     }
     if (app->root_container) {
-        struct yetty_ycore_void_result dr = yetty_yfigure_destroy(NULL, app->root_container);
+        struct yetty_ycore_void_result dr = yetty_yfigure_destroy(app->root_container);
         if (YETTY_IS_ERR(dr)) {
             yetty_ycore_error_destroy(dr.error);
         }

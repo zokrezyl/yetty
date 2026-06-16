@@ -53,37 +53,45 @@ typedef Py_ssize_t Py_hash_t;
 #define _Py_STATIC_CAST(type, expr) ((type)(expr))
 
 /* ASCII ctype (parser only ever classifies ASCII bytes here). */
-#define Py_ISDIGIT(c)  ((c) >= '0' && (c) <= '9')
-#define Py_ISALPHA(c)  (((c) >= 'a' && (c) <= 'z') || ((c) >= 'A' && (c) <= 'Z'))
-#define Py_ISALNUM(c)  (Py_ISALPHA(c) || Py_ISDIGIT(c))
+#define Py_ISDIGIT(c) ((c) >= '0' && (c) <= '9')
+#define Py_ISALPHA(c) (((c) >= 'a' && (c) <= 'z') || ((c) >= 'A' && (c) <= 'Z'))
+#define Py_ISALNUM(c) (Py_ISALPHA(c) || Py_ISDIGIT(c))
 #define Py_ISXDIGIT(c) (Py_ISDIGIT(c) || ((c) >= 'a' && (c) <= 'f') || ((c) >= 'A' && (c) <= 'F'))
-#define Py_ISSPACE(c)  ((c) == ' ' || ((c) >= '\t' && (c) <= '\r'))
-#define Py_ISLOWER(c)  ((c) >= 'a' && (c) <= 'z')
-#define Py_ISUPPER(c)  ((c) >= 'A' && (c) <= 'Z')
-#define Py_TOLOWER(c)  (Py_ISUPPER(c) ? (c) - 'A' + 'a' : (c))
-#define Py_TOUPPER(c)  (Py_ISLOWER(c) ? (c) - 'a' + 'A' : (c))
+#define Py_ISSPACE(c) ((c) == ' ' || ((c) >= '\t' && (c) <= '\r'))
+#define Py_ISLOWER(c) ((c) >= 'a' && (c) <= 'z')
+#define Py_ISUPPER(c) ((c) >= 'A' && (c) <= 'Z')
+#define Py_TOLOWER(c) (Py_ISUPPER(c) ? (c) - 'A' + 'a' : (c))
+#define Py_TOUPPER(c) (Py_ISLOWER(c) ? (c) - 'a' + 'A' : (c))
 
 /* ----- object model ------------------------------------------------------ */
 enum pyp_kind {
-    PYP_NONE, PYP_BOOL, PYP_ELLIPSIS,
-    PYP_LONG, PYP_FLOAT, PYP_COMPLEX,
-    PYP_STR, PYP_BYTES,
-    PYP_TUPLE, PYP_LIST,
-    PYP_TYPE, PYP_EXC, PYP_OTHER
+    PYP_NONE,
+    PYP_BOOL,
+    PYP_ELLIPSIS,
+    PYP_LONG,
+    PYP_FLOAT,
+    PYP_COMPLEX,
+    PYP_STR,
+    PYP_BYTES,
+    PYP_TUPLE,
+    PYP_LIST,
+    PYP_TYPE,
+    PYP_EXC,
+    PYP_OTHER
 };
 
 typedef struct _typeobject PyTypeObject;
 
 typedef struct _object {
-    Py_ssize_t ob_refcnt;        /* tracked but never freed (one-shot CLI) */
+    Py_ssize_t ob_refcnt; /* tracked but never freed (one-shot CLI) */
     PyTypeObject *ob_type;
     enum pyp_kind kind;
-    char *data;                  /* UTF-8 text (str), raw bytes, or numeric spelling */
-    Py_ssize_t len;              /* byte length of data */
-    long ival;                   /* bool / small int */
-    double dval;                 /* float / complex real */
-    double imag;                 /* complex imag */
-    struct _object **items;      /* tuple / list elements */
+    char *data;             /* UTF-8 text (str), raw bytes, or numeric spelling */
+    Py_ssize_t len;         /* byte length of data */
+    long ival;              /* bool / small int */
+    double dval;            /* float / complex real */
+    double imag;            /* complex imag */
+    struct _object **items; /* tuple / list elements */
     Py_ssize_t nitems;
 } PyObject;
 
@@ -103,54 +111,79 @@ PyAPI_DATA(PyObject) _Py_NoneStruct;
 PyAPI_DATA(PyObject) _Py_TrueStruct;
 PyAPI_DATA(PyObject) _Py_FalseStruct;
 PyAPI_DATA(PyObject) _Py_EllipsisObject;
-#define Py_None       (&_Py_NoneStruct)
-#define Py_True       (&_Py_TrueStruct)
-#define Py_False      (&_Py_FalseStruct)
-#define Py_Ellipsis   (&_Py_EllipsisObject)
+#define Py_None (&_Py_NoneStruct)
+#define Py_True (&_Py_TrueStruct)
+#define Py_False (&_Py_FalseStruct)
+#define Py_Ellipsis (&_Py_EllipsisObject)
 #define Py_RETURN_NONE return Py_NewRef(Py_None)
 
-typedef enum { Py_CONSTANT_NONE, Py_CONSTANT_FALSE, Py_CONSTANT_TRUE,
-               Py_CONSTANT_ELLIPSIS, Py_CONSTANT_ZERO, Py_CONSTANT_ONE,
-               Py_CONSTANT_EMPTY_STR, Py_CONSTANT_EMPTY_BYTES,
-               Py_CONSTANT_EMPTY_TUPLE } _py_constant_id;
+typedef enum {
+    Py_CONSTANT_NONE,
+    Py_CONSTANT_FALSE,
+    Py_CONSTANT_TRUE,
+    Py_CONSTANT_ELLIPSIS,
+    Py_CONSTANT_ZERO,
+    Py_CONSTANT_ONE,
+    Py_CONSTANT_EMPTY_STR,
+    Py_CONSTANT_EMPTY_BYTES,
+    Py_CONSTANT_EMPTY_TUPLE
+} _py_constant_id;
 PyObject *Py_GetConstant(unsigned int constant_id);
 
 /* refcounting — values are arena/leak owned; keep ops cheap and safe. */
-static inline PyObject *Py_NewRef(PyObject *o) { if (o) o->ob_refcnt++; return o; }
-static inline PyObject *Py_XNewRef(PyObject *o) { return o ? Py_NewRef(o) : o; }
+static inline PyObject *Py_NewRef(PyObject *o)
+{
+    if (o) {
+        o->ob_refcnt++;
+    }
+    return o;
+}
+static inline PyObject *Py_XNewRef(PyObject *o)
+{
+    return o ? Py_NewRef(o) : o;
+}
 void _Py_Dealloc(PyObject *o);
-#define Py_INCREF(o)   ((void)((PyObject *)(o))->ob_refcnt++)
-#define Py_DECREF(o)   ((void)0)            /* never free: one-shot lifetime */
-#define Py_XDECREF(o)  ((void)0)
-#define Py_CLEAR(o)    do { (o) = NULL; } while (0)
-#define Py_SETREF(dst, src) do { (dst) = (src); } while (0)
-#define Py_XSETREF(dst, src) do { (dst) = (src); } while (0)
-#define Py_TYPE(o)     (((PyObject *)(o))->ob_type)
-#define Py_REFCNT(o)   (((PyObject *)(o))->ob_refcnt)
-#define Py_SIZE(o)     (((PyObject *)(o))->nitems)
+#define Py_INCREF(o) ((void)((PyObject *)(o))->ob_refcnt++)
+#define Py_DECREF(o) ((void)0) /* never free: one-shot lifetime */
+#define Py_XDECREF(o) ((void)0)
+#define Py_CLEAR(o)                                                                                \
+    do {                                                                                           \
+        (o) = NULL;                                                                                \
+    } while (0)
+#define Py_SETREF(dst, src)                                                                        \
+    do {                                                                                           \
+        (dst) = (src);                                                                             \
+    } while (0)
+#define Py_XSETREF(dst, src)                                                                       \
+    do {                                                                                           \
+        (dst) = (src);                                                                             \
+    } while (0)
+#define Py_TYPE(o) (((PyObject *)(o))->ob_type)
+#define Py_REFCNT(o) (((PyObject *)(o))->ob_refcnt)
+#define Py_SIZE(o) (((PyObject *)(o))->nitems)
 #define Py_IS_TYPE(o, t) (Py_TYPE(o) == (t))
-#define Py_Is(a, b)    ((a) == (b))
+#define Py_Is(a, b) ((a) == (b))
 
 /* type checks via the kind tag */
-#define PyUnicode_Check(o)  ((o) && ((PyObject *)(o))->kind == PYP_STR)
+#define PyUnicode_Check(o) ((o) && ((PyObject *)(o))->kind == PYP_STR)
 #define PyUnicode_CheckExact(o) PyUnicode_Check(o)
-#define PyBytes_Check(o)    ((o) && ((PyObject *)(o))->kind == PYP_BYTES)
-#define PyLong_Check(o)     ((o) && ((PyObject *)(o))->kind == PYP_LONG)
+#define PyBytes_Check(o) ((o) && ((PyObject *)(o))->kind == PYP_BYTES)
+#define PyLong_Check(o) ((o) && ((PyObject *)(o))->kind == PYP_LONG)
 #define PyLong_CheckExact(o) PyLong_Check(o)
-#define PyFloat_Check(o)    ((o) && ((PyObject *)(o))->kind == PYP_FLOAT)
-#define PyComplex_Check(o)  ((o) && ((PyObject *)(o))->kind == PYP_COMPLEX)
+#define PyFloat_Check(o) ((o) && ((PyObject *)(o))->kind == PYP_FLOAT)
+#define PyComplex_Check(o) ((o) && ((PyObject *)(o))->kind == PYP_COMPLEX)
 #define PyComplex_CheckExact(o) PyComplex_Check(o)
 #define PyFloat_CheckExact(o) PyFloat_Check(o)
 #define PyBytes_CheckExact(o) PyBytes_Check(o)
-#define PyTuple_Check(o)    ((o) && ((PyObject *)(o))->kind == PYP_TUPLE)
-#define PyList_Check(o)     ((o) && ((PyObject *)(o))->kind == PYP_LIST)
+#define PyTuple_Check(o) ((o) && ((PyObject *)(o))->kind == PYP_TUPLE)
+#define PyList_Check(o) ((o) && ((PyObject *)(o))->kind == PYP_LIST)
 
 /* ----- memory ------------------------------------------------------------ */
 void *PyMem_Malloc(size_t size);
 void *PyMem_Calloc(size_t nelem, size_t elsize);
 void *PyMem_Realloc(void *ptr, size_t size);
 void PyMem_Free(void *ptr);
-#define PyMem_New(type, n)  ((type *)PyMem_Malloc((n) * sizeof(type)))
+#define PyMem_New(type, n) ((type *)PyMem_Malloc((n) * sizeof(type)))
 #define PyMem_RawMalloc PyMem_Malloc
 #define PyMem_RawCalloc PyMem_Calloc
 #define PyMem_RawRealloc PyMem_Realloc
@@ -172,23 +205,28 @@ PyObject *PyUnicode_InternFromString(const char *str);
 void _PyUnicode_InternImmortal(void *interp, PyObject **p);
 int PyUnicode_CompareWithASCIIString(PyObject *unicode, const char *str);
 int _PyUnicode_EqualToASCIIString(PyObject *unicode, const char *str);
-PyObject *PyUnicode_Decode(const char *s, Py_ssize_t size, const char *encoding, const char *errors);
+PyObject *PyUnicode_Decode(const char *s, Py_ssize_t size, const char *encoding,
+                           const char *errors);
 PyObject *PyUnicode_DecodeUTF8(const char *s, Py_ssize_t size, const char *errors);
-PyObject *PyUnicode_DecodeUTF8Stateful(const char *s, Py_ssize_t size, const char *errors, Py_ssize_t *consumed);
-PyObject *_PyUnicode_DecodeUnicodeEscapeInternal2(const char *string, Py_ssize_t length, const char *errors, Py_ssize_t *consumed, int *first_invalid_escape_char, const char **first_invalid_escape_ptr);
+PyObject *PyUnicode_DecodeUTF8Stateful(const char *s, Py_ssize_t size, const char *errors,
+                                       Py_ssize_t *consumed);
+PyObject *_PyUnicode_DecodeUnicodeEscapeInternal2(const char *string, Py_ssize_t length,
+                                                  const char *errors, Py_ssize_t *consumed,
+                                                  int *first_invalid_escape_char,
+                                                  const char **first_invalid_escape_ptr);
 int _PyUnicode_ScanIdentifier(PyObject *u);
 int _PyUnicode_IsPrintable(Py_UCS4 ch);
 int _PyUnicode_IsWhitespace(Py_UCS4 ch);
 #define Py_UNICODE_ISPRINTABLE(ch) _PyUnicode_IsPrintable(ch)
 
 /* code-point access over the UTF-8 backing store (byte view) */
-#define PyUnicode_GET_LENGTH(u)  (((PyObject *)(u))->len)
-#define PyUnicode_KIND(u)        (1)            /* expose as 1-byte/UTF-8 */
-#define PyUnicode_DATA(u)        ((void *)((PyObject *)(u))->data)
-#define PyUnicode_1BYTE_DATA(u)  ((unsigned char *)((PyObject *)(u))->data)
-#define PyUnicode_IS_ASCII(u)    (1)
-#define PyUnicode_READ(kind, data, index)  ((Py_UCS4)((unsigned char *)(data))[(index)])
-#define PyUnicode_READ_CHAR(u, index)      ((Py_UCS4)(unsigned char)((PyObject *)(u))->data[(index)])
+#define PyUnicode_GET_LENGTH(u) (((PyObject *)(u))->len)
+#define PyUnicode_KIND(u) (1) /* expose as 1-byte/UTF-8 */
+#define PyUnicode_DATA(u) ((void *)((PyObject *)(u))->data)
+#define PyUnicode_1BYTE_DATA(u) ((unsigned char *)((PyObject *)(u))->data)
+#define PyUnicode_IS_ASCII(u) (1)
+#define PyUnicode_READ(kind, data, index) ((Py_UCS4)((unsigned char *)(data))[(index)])
+#define PyUnicode_READ_CHAR(u, index) ((Py_UCS4)(unsigned char)((PyObject *)(u))->data[(index)])
 
 PyUnicodeWriter *PyUnicodeWriter_Create(Py_ssize_t length);
 void PyUnicodeWriter_Discard(PyUnicodeWriter *writer);
@@ -203,12 +241,16 @@ char *PyBytes_AsString(PyObject *o);
 int PyBytes_AsStringAndSize(PyObject *obj, char **buffer, Py_ssize_t *length);
 Py_ssize_t PyBytes_Size(PyObject *o);
 void PyBytes_Concat(PyObject **pv, PyObject *w);
-PyObject *_PyBytes_DecodeEscape2(const char *s, Py_ssize_t len, const char *errors, int *first_invalid_escape_char, const char **first_invalid_escape);
+PyObject *_PyBytes_DecodeEscape2(const char *s, Py_ssize_t len, const char *errors,
+                                 int *first_invalid_escape_char, const char **first_invalid_escape);
 #define PyBytes_GET_SIZE(o) (((PyObject *)(o))->len)
 #define PyBytes_AS_STRING(o) (((PyObject *)(o))->data)
 
 /* ----- numbers ----------------------------------------------------------- */
-typedef struct { double real; double imag; } Py_complex;
+typedef struct {
+    double real;
+    double imag;
+} Py_complex;
 PyObject *PyLong_FromLong(long v);
 PyObject *PyLong_FromString(const char *str, char **pend, int base);
 PyObject *PyFloat_FromDouble(double v);
@@ -225,9 +267,12 @@ int PyObject_SetAttr(PyObject *o, PyObject *name, PyObject *value);
 PyObject *PyObject_CallNoArgs(PyObject *func);
 #define _PyObject_CallNoArgs(func) PyObject_CallNoArgs(func)
 PyObject *PyObject_CallFunction(PyObject *callable, const char *format, ...);
-PyObject *PyObject_Vectorcall(PyObject *callable, PyObject *const *args, size_t nargsf, PyObject *kwnames);
-PyObject *_PyObject_MakeTpCall(void *ts, PyObject *callable, PyObject *const *args, Py_ssize_t nargs, PyObject *keywords);
-PyObject *_Py_CheckFunctionResult(void *ts, PyObject *callable, PyObject *result, const char *where);
+PyObject *PyObject_Vectorcall(PyObject *callable, PyObject *const *args, size_t nargsf,
+                              PyObject *kwnames);
+PyObject *_PyObject_MakeTpCall(void *ts, PyObject *callable, PyObject *const *args,
+                               Py_ssize_t nargs, PyObject *keywords);
+PyObject *_Py_CheckFunctionResult(void *ts, PyObject *callable, PyObject *result,
+                                  const char *where);
 int PyType_IsSubtype(PyTypeObject *a, PyTypeObject *b);
 PyObject *_PyType_Name(PyTypeObject *type);
 PyObject *PyImport_ImportModuleAttrString(const char *modname, const char *attrname);
@@ -265,7 +310,8 @@ void PyErr_Restore(PyObject *type, PyObject *value, PyObject *traceback);
 PyObject *PyErr_GetRaisedException(void);
 void PyErr_SetRaisedException(PyObject *exc);
 PyObject *PyErr_SetFromErrnoWithFilename(PyObject *exc, const char *filename);
-int PyErr_WarnExplicitObject(PyObject *category, PyObject *message, PyObject *filename, int lineno, PyObject *module, PyObject *registry);
+int PyErr_WarnExplicitObject(PyObject *category, PyObject *message, PyObject *filename, int lineno,
+                             PyObject *module, PyObject *registry);
 void _PyErr_BadInternalCall(const char *filename, int lineno);
 #define PyErr_BadInternalCall() _PyErr_BadInternalCall(__FILE__, __LINE__)
 PyObject *_PyErr_ProgramDecodedTextObject(PyObject *filename, int lineno, const char *encoding);
@@ -281,10 +327,12 @@ void _Py_FatalErrorFunc(const char *func, const char *msg);
 #define Py_FatalError(msg) _Py_FatalErrorFunc(__func__, msg)
 int _Py_ReachedRecursionLimitWithMargin(void *tstate, int margin_count);
 
-typedef struct { PyObject *current_exception; } PyThreadState;
+typedef struct {
+    PyObject *current_exception;
+} PyThreadState;
 PyThreadState *PyThreadState_Get(void);
-PyThreadState *pyp_tstate(void);   /* the single global thread state */
-int _Py_dup(int fd);   /* fd dup wrapper used by the file tokenizer */
+PyThreadState *pyp_tstate(void); /* the single global thread state */
+int _Py_dup(int fd);             /* fd dup wrapper used by the file tokenizer */
 
 /* ----- compiler flags / input modes ------------------------------------- */
 typedef struct {

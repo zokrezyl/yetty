@@ -25,8 +25,7 @@
  * (yclass identity, Result, basic C types) are pulled in directly here, and
  * this TU declares its own `yetty_yflame_flame_ptr_result` below (the same
  * one flame.h publishes for consumers). The public flags / hit-test sentinels
- * are defined unconditionally (and re-emitted into flame.h via the
- * `#ifdef YCLASS_CODEGEN` verbatim block at the foot of the include list). */
+ * are defined here as an exposed enum that codegen reproduces into flame.h. */
 #include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
@@ -42,27 +41,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Public flags. */
-#define YETTY_YFLAME_FLAG_LABELS 0x1u /* draw truncated frame-name labels */
-#define YETTY_YFLAME_FLAG_ICICLE 0x2u /* root at top, growing down (vs flame: bottom-up) */
-/* hit_test returns these (in place of a node id) when a navigation button is
- * under the point: the caller should focus the parent / reset to root. */
-#define YETTY_YFLAME_HIT_UP (-2)
-#define YETTY_YFLAME_HIT_ROOT (-3)
-
-#ifdef YCLASS_CODEGEN
-/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated flame.h (and the dispatch TU that includes it) needs the complete
- * type — pull its defining header into the public header. */
-#include <yetty/ydraw-core/drawable-list.h>
-/* Public flags — copied verbatim into the generated flame.h. */
-#define YETTY_YFLAME_FLAG_LABELS 0x1u /* draw truncated frame-name labels */
-#define YETTY_YFLAME_FLAG_ICICLE 0x2u /* root at top, growing down (vs flame: bottom-up) */
-/* hit_test returns these (in place of a node id) when a navigation button is
- * under the point: the caller should focus the parent / reset to root. */
-#define YETTY_YFLAME_HIT_UP (-2)
-#define YETTY_YFLAME_HIT_ROOT (-3)
-#endif
+/* Public flags / hit-test sentinels. Defined here in the owning .c; codegen
+ * reproduces the enum into the generated flame.h for consumers. */
+enum [[clang::annotate("expose")]] yetty_yflame_constant {
+    YETTY_YFLAME_FLAG_LABELS = 0x1, /* draw truncated frame-name labels */
+    YETTY_YFLAME_FLAG_ICICLE = 0x2, /* root at top, growing down (vs flame: bottom-up) */
+    /* hit_test returns these (in place of a node id) when a navigation button is
+     * under the point: the caller should focus the parent / reset to root. */
+    YETTY_YFLAME_HIT_UP = -2,
+    YETTY_YFLAME_HIT_ROOT = -3,
+};
 
 enum {
     YFLAME_DEFAULT_FRAME_HEIGHT = 18,
@@ -102,7 +90,8 @@ struct yflame_frame {
  * Class data
  *===========================================================================*/
 
-struct [[clang::annotate("class@yflame:flame")]] yetty_yflame_flame {
+struct [[clang::annotate("class@yflame:flame"),
+         clang::annotate("include@yetty/ydraw-core/drawable-list.h")]] yetty_yflame_flame {
     /* Render configuration. */
     float width;
     float frame_height;
@@ -586,12 +575,10 @@ static int button_hit(float x, float y)
 /* configure: set graph width, row height, min visible box width, and flags.
  * 0 selects the default for each. Call after create(), before parse(). */
 [[clang::annotate("virtual@yflame:flame:configure")]] [[clang::annotate("local@yflame:configure")]]
-static struct yetty_ycore_void_result flame_configure(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj, float width,
+static struct yetty_ycore_void_result flame_configure(struct yetty_yclass_object *obj, float width,
                                                       float frame_height, float min_width,
                                                       uint32_t flags)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame configure: from_obj");
     struct yetty_yflame_flame *flame = flame_r.value;
@@ -605,11 +592,9 @@ static struct yetty_ycore_void_result flame_configure(struct yetty_yclass_ctx *c
 /* parse: ingest folded-stack text, build the call tree, index it. Resets focus
  * to the root and clears any hover highlight. */
 [[clang::annotate("virtual@yflame:flame:parse")]] [[clang::annotate("local@yflame:parse")]]
-static struct yetty_ycore_void_result flame_parse(struct yetty_yclass_ctx *ctx,
-                                                  struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result flame_parse(struct yetty_yclass_object *obj,
                                                   const char *input, size_t len)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame parse: from_obj");
     struct yetty_yflame_flame *flame = flame_r.value;
@@ -659,10 +644,8 @@ static struct yetty_ycore_void_result flame_parse(struct yetty_yclass_ctx *ctx,
 /* render: lay out the focus subtree and emit it as a fresh ydraw drawable list
  * (caller owns it). Pointer return -> local-only. */
 [[clang::annotate("virtual@yflame:flame:render")]] [[clang::annotate("local@yflame:render")]]
-static struct yetty_ydraw_drawable_list_result flame_render(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj)
+static struct yetty_ydraw_drawable_list_result flame_render(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, flame_r, "yflame render: from_obj");
     struct yetty_yflame_flame *flame = flame_r.value;
@@ -719,11 +702,9 @@ static struct yetty_ydraw_drawable_list_result flame_render(struct yetty_yclass_
 /* hit_test: id of the frame at content-coordinate (x,y) in the current focus
  * layout, or -1 if none. */
 [[clang::annotate("virtual@yflame:flame:hit_test")]] [[clang::annotate("local@yflame:hit_test")]]
-static struct yetty_ycore_int_result flame_hit_test(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj, float x,
+static struct yetty_ycore_int_result flame_hit_test(struct yetty_yclass_object *obj, float x,
                                                     float y)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, flame_r, "yflame hit_test: from_obj");
     struct yetty_yflame_flame *flame = flame_r.value;
@@ -761,10 +742,8 @@ static struct yetty_ycore_int_result flame_hit_test(struct yetty_yclass_ctx *ctx
 
 /* focus: zoom so the given node fills the full width (its subtree is shown). */
 [[clang::annotate("virtual@yflame:flame:focus")]] [[clang::annotate("local@yflame:focus")]]
-static struct yetty_ycore_void_result flame_focus(struct yetty_yclass_ctx *ctx,
-                                                  struct yetty_yclass_object *obj, int32_t node_id)
+static struct yetty_ycore_void_result flame_focus(struct yetty_yclass_object *obj, int32_t node_id)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame focus: from_obj");
     struct yetty_yflame_flame *flame = flame_r.value;
@@ -778,10 +757,8 @@ static struct yetty_ycore_void_result flame_focus(struct yetty_yclass_ctx *ctx,
 /* focus_parent: zoom out one level (focus the current node's parent). */
 [[clang::annotate("virtual@yflame:flame:focus_parent")]] [[clang::annotate(
     "local@yflame:focus_parent")]]
-static struct yetty_ycore_void_result flame_focus_parent(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result flame_focus_parent(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame focus_parent: from_obj");
     struct yetty_yflame_flame *flame = flame_r.value;
@@ -796,10 +773,8 @@ static struct yetty_ycore_void_result flame_focus_parent(struct yetty_yclass_ctx
 
 /* reset: zoom back out to the whole graph (root). */
 [[clang::annotate("virtual@yflame:flame:reset")]] [[clang::annotate("local@yflame:reset")]]
-static struct yetty_ycore_void_result flame_reset(struct yetty_yclass_ctx *ctx,
-                                                  struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result flame_reset(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame reset: from_obj");
     struct yetty_yflame_flame *flame = flame_r.value;
@@ -810,11 +785,9 @@ static struct yetty_ycore_void_result flame_reset(struct yetty_yclass_ctx *ctx,
 /* set_highlight: mark a node as hovered (-1 clears) for the next render. */
 [[clang::annotate("virtual@yflame:flame:set_highlight")]] [[clang::annotate(
     "local@yflame:set_highlight")]]
-static struct yetty_ycore_void_result flame_set_highlight(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result flame_set_highlight(struct yetty_yclass_object *obj,
                                                           int32_t node_id)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame set_highlight: from_obj");
     struct yetty_yflame_flame *flame = flame_r.value;
@@ -824,10 +797,8 @@ static struct yetty_ycore_void_result flame_set_highlight(struct yetty_yclass_ct
 
 /* destroy: free the tree, the node index, and the object. */
 [[clang::annotate("virtual@yflame:flame:destroy")]] [[clang::annotate("local@yflame:destroy")]]
-static struct yetty_ycore_void_result flame_obj_destroy(struct yetty_yclass_ctx *ctx,
-                                                        struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result flame_obj_destroy(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     if (YETTY_IS_ERR(flame_r)) {
         yetty_ycore_error_destroy(flame_r.error);

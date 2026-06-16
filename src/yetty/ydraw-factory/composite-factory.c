@@ -225,3 +225,37 @@ void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance)
     free(instance->buffer_data);
     free(instance);
 }
+
+/* Render one composite instance into `target` at (x, y). Thin public wrapper
+ * over the per-instance `render` op (the host grid supplies the position for
+ * its scrolling/anchored placement). A figure type with no render op simply
+ * doesn't paint — not an error. */
+struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_composite *instance,
+                                                            struct yetty_ydraw_target *target,
+                                                            float x, float y)
+{
+    if (!instance) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ydraw_composite_render: NULL instance");
+    }
+    if (!instance->render) {
+        return YETTY_OK_VOID();
+    }
+    return instance->render(instance, target, x, y);
+}
+
+float yetty_ydraw_composite_pixel_height(const struct yetty_ydraw_composite *instance)
+{
+    if (!instance) {
+        return 0.0f;
+    }
+    float height = instance->bounds.max.y - instance->bounds.min.y;
+    return height > 0.0f ? height : 0.0f;
+}
+
+void yetty_ydraw_composite_set_content_scale(struct yetty_ydraw_composite *instance, float scale)
+{
+    if (!instance) {
+        return;
+    }
+    instance->content_scale = scale > 0.0f ? scale : 1.0f;
+}

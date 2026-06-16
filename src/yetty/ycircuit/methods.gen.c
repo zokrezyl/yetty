@@ -8,8 +8,7 @@
 #include <stdlib.h> /* malloc/free for buffer-arg marshalling */
 #include <string.h>
 
-struct yetty_ycore_void_result yetty_ycircuit_configure(struct yetty_yclass_ctx *ctx,
-                                                        struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ycircuit_configure(struct yetty_yclass_object *obj,
                                                         float grid_px, uint32_t flags)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -34,11 +33,10 @@ struct yetty_ycore_void_result yetty_ycircuit_configure(struct yetty_yclass_ctx 
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ycircuit_configure: dispatch_lookup failed");
-    return ((yetty_ycircuit_configure_fn)dispatch_impl_r.value)(ctx, obj, grid_px, flags);
+    return ((yetty_ycircuit_configure_fn)dispatch_impl_r.value)(obj, grid_px, flags);
 }
 
-struct yetty_ycore_void_result yetty_ycircuit_parse(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ycircuit_parse(struct yetty_yclass_object *obj,
                                                     const char *input, size_t len)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -63,11 +61,10 @@ struct yetty_ycore_void_result yetty_ycircuit_parse(struct yetty_yclass_ctx *ctx
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ycircuit_parse: dispatch_lookup failed");
-    return ((yetty_ycircuit_parse_fn)dispatch_impl_r.value)(ctx, obj, input, len);
+    return ((yetty_ycircuit_parse_fn)dispatch_impl_r.value)(obj, input, len);
 }
 
-struct yetty_ycore_void_result yetty_ycircuit_clear(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj)
+struct yetty_ycore_void_result yetty_ycircuit_clear(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -91,11 +88,10 @@ struct yetty_ycore_void_result yetty_ycircuit_clear(struct yetty_yclass_ctx *ctx
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ycircuit_clear: dispatch_lookup failed");
-    return ((yetty_ycircuit_clear_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_ycircuit_clear_fn)dispatch_impl_r.value)(obj);
 }
 
-struct yetty_ycore_int_result yetty_ycircuit_add_component(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj,
+struct yetty_ycore_int_result yetty_ycircuit_add_component(struct yetty_yclass_object *obj,
                                                            const char *kind, float x, float y,
                                                            int32_t rotation_deg, const char *name,
                                                            const char *value)
@@ -122,12 +118,11 @@ struct yetty_ycore_int_result yetty_ycircuit_add_component(struct yetty_yclass_c
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                         "yetty_ycircuit_add_component: dispatch_lookup failed");
-    return ((yetty_ycircuit_add_component_fn)dispatch_impl_r.value)(ctx, obj, kind, x, y,
-                                                                    rotation_deg, name, value);
+    return ((yetty_ycircuit_add_component_fn)dispatch_impl_r.value)(obj, kind, x, y, rotation_deg,
+                                                                    name, value);
 }
 
-struct yetty_ycore_int_result yetty_ycircuit_add_ic(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ycircuit_add_ic(struct yetty_yclass_object *obj, float x,
                                                     float y, int32_t rotation_deg, const char *name,
                                                     const char *value, const char *pins_left,
                                                     const char *pins_right, const char *pins_top,
@@ -156,11 +151,10 @@ struct yetty_ycore_int_result yetty_ycircuit_add_ic(struct yetty_yclass_ctx *ctx
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                         "yetty_ycircuit_add_ic: dispatch_lookup failed");
     return ((yetty_ycircuit_add_ic_fn)dispatch_impl_r.value)(
-        ctx, obj, x, y, rotation_deg, name, value, pins_left, pins_right, pins_top, pins_bottom);
+        obj, x, y, rotation_deg, name, value, pins_left, pins_right, pins_top, pins_bottom);
 }
 
-struct yetty_ycore_int_result yetty_ycircuit_add_wire(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj, float x0,
+struct yetty_ycore_int_result yetty_ycircuit_add_wire(struct yetty_yclass_object *obj, float x0,
                                                       float y0, float x1, float y1)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -185,11 +179,10 @@ struct yetty_ycore_int_result yetty_ycircuit_add_wire(struct yetty_yclass_ctx *c
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                         "yetty_ycircuit_add_wire: dispatch_lookup failed");
-    return ((yetty_ycircuit_add_wire_fn)dispatch_impl_r.value)(ctx, obj, x0, y0, x1, y1);
+    return ((yetty_ycircuit_add_wire_fn)dispatch_impl_r.value)(obj, x0, y0, x1, y1);
 }
 
-struct yetty_ycore_int_result yetty_ycircuit_add_junction(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ycircuit_add_junction(struct yetty_yclass_object *obj, float x,
                                                           float y)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -214,11 +207,10 @@ struct yetty_ycore_int_result yetty_ycircuit_add_junction(struct yetty_yclass_ct
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                         "yetty_ycircuit_add_junction: dispatch_lookup failed");
-    return ((yetty_ycircuit_add_junction_fn)dispatch_impl_r.value)(ctx, obj, x, y);
+    return ((yetty_ycircuit_add_junction_fn)dispatch_impl_r.value)(obj, x, y);
 }
 
-struct yetty_ycore_int_result yetty_ycircuit_add_label(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ycircuit_add_label(struct yetty_yclass_object *obj, float x,
                                                        float y, const char *text)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -243,11 +235,10 @@ struct yetty_ycore_int_result yetty_ycircuit_add_label(struct yetty_yclass_ctx *
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                         "yetty_ycircuit_add_label: dispatch_lookup failed");
-    return ((yetty_ycircuit_add_label_fn)dispatch_impl_r.value)(ctx, obj, x, y, text);
+    return ((yetty_ycircuit_add_label_fn)dispatch_impl_r.value)(obj, x, y, text);
 }
 
-struct yetty_ydraw_drawable_list_result yetty_ycircuit_render(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj)
+struct yetty_ydraw_drawable_list_result yetty_ycircuit_render(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -271,11 +262,10 @@ struct yetty_ydraw_drawable_list_result yetty_ycircuit_render(struct yetty_yclas
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, dispatch_impl_r,
                         "yetty_ycircuit_render: dispatch_lookup failed");
-    return ((yetty_ycircuit_render_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_ycircuit_render_fn)dispatch_impl_r.value)(obj);
 }
 
-struct yetty_ycore_int_result yetty_ycircuit_hit_test(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_ycircuit_hit_test(struct yetty_yclass_object *obj, float x,
                                                       float y)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -300,11 +290,10 @@ struct yetty_ycore_int_result yetty_ycircuit_hit_test(struct yetty_yclass_ctx *c
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                         "yetty_ycircuit_hit_test: dispatch_lookup failed");
-    return ((yetty_ycircuit_hit_test_fn)dispatch_impl_r.value)(ctx, obj, x, y);
+    return ((yetty_ycircuit_hit_test_fn)dispatch_impl_r.value)(obj, x, y);
 }
 
-struct yetty_ycore_void_result yetty_ycircuit_set_highlight(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_ycircuit_set_highlight(struct yetty_yclass_object *obj,
                                                             int32_t element_id)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -329,11 +318,10 @@ struct yetty_ycore_void_result yetty_ycircuit_set_highlight(struct yetty_yclass_
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ycircuit_set_highlight: dispatch_lookup failed");
-    return ((yetty_ycircuit_set_highlight_fn)dispatch_impl_r.value)(ctx, obj, element_id);
+    return ((yetty_ycircuit_set_highlight_fn)dispatch_impl_r.value)(obj, element_id);
 }
 
-struct yetty_ycore_void_result yetty_ycircuit_destroy(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj)
+struct yetty_ycore_void_result yetty_ycircuit_destroy(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -357,5 +345,5 @@ struct yetty_ycore_void_result yetty_ycircuit_destroy(struct yetty_yclass_ctx *c
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ycircuit_destroy: dispatch_lookup failed");
-    return ((yetty_ycircuit_destroy_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_ycircuit_destroy_fn)dispatch_impl_r.value)(obj);
 }

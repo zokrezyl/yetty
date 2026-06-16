@@ -799,37 +799,29 @@ static struct yetty_ycore_void_result ymgui_figure_process_bytes(struct yetty_yc
  *=========================================================================*/
 
 [[clang::annotate("override@ymgui:figure:yfigure:render")]]
-static struct yetty_ycore_void_result ymgui_figure_render_slot(struct yetty_yclass_ctx *ctx,
-                                                               struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result ymgui_figure_render_slot(struct yetty_yclass_object *obj,
                                                                struct yetty_ydraw_target *target)
 {
-    (void)ctx;
     return ymgui_figure_render(obj, target);
 }
 
 [[clang::annotate("override@ymgui:figure:yfigure:destroy")]]
-static struct yetty_ycore_void_result ymgui_figure_destroy_slot(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result ymgui_figure_destroy_slot(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     return ymgui_figure_destroy(obj);
 }
 
 [[clang::annotate("override@ymgui:figure:yfigure:process_input")]]
 static struct yetty_ycore_void_result ymgui_figure_process_input_slot(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    struct yetty_ywire_wire_statemachine *statemachine)
+    struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *statemachine)
 {
-    (void)ctx;
     return ymgui_figure_process_input(obj, statemachine);
 }
 
 [[clang::annotate("override@ymgui:figure:yfigure:process_bytes")]]
 static struct yetty_ycore_void_result ymgui_figure_process_bytes_slot(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, const uint8_t *bytes,
-    size_t bytes_len)
+    struct yetty_yclass_object *obj, const uint8_t *bytes, size_t bytes_len)
 {
-    (void)ctx;
     return ymgui_figure_process_bytes(obj, bytes, bytes_len);
 }
 

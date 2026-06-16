@@ -8,8 +8,7 @@
 #include <stdlib.h> /* malloc/free for buffer-arg marshalling */
 #include <string.h>
 
-struct yetty_ycore_void_result yetty_yflame_configure(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj, float width,
+struct yetty_ycore_void_result yetty_yflame_configure(struct yetty_yclass_object *obj, float width,
                                                       float frame_height, float min_width,
                                                       uint32_t flags)
 {
@@ -35,12 +34,11 @@ struct yetty_ycore_void_result yetty_yflame_configure(struct yetty_yclass_ctx *c
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yflame_configure: dispatch_lookup failed");
-    return ((yetty_yflame_configure_fn)dispatch_impl_r.value)(ctx, obj, width, frame_height,
-                                                              min_width, flags);
+    return ((yetty_yflame_configure_fn)dispatch_impl_r.value)(obj, width, frame_height, min_width,
+                                                              flags);
 }
 
-struct yetty_ycore_void_result yetty_yflame_parse(struct yetty_yclass_ctx *ctx,
-                                                  struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_yflame_parse(struct yetty_yclass_object *obj,
                                                   const char *input, size_t len)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -65,11 +63,10 @@ struct yetty_ycore_void_result yetty_yflame_parse(struct yetty_yclass_ctx *ctx,
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yflame_parse: dispatch_lookup failed");
-    return ((yetty_yflame_parse_fn)dispatch_impl_r.value)(ctx, obj, input, len);
+    return ((yetty_yflame_parse_fn)dispatch_impl_r.value)(obj, input, len);
 }
 
-struct yetty_ydraw_drawable_list_result yetty_yflame_render(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj)
+struct yetty_ydraw_drawable_list_result yetty_yflame_render(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -93,11 +90,10 @@ struct yetty_ydraw_drawable_list_result yetty_yflame_render(struct yetty_yclass_
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, dispatch_impl_r,
                         "yetty_yflame_render: dispatch_lookup failed");
-    return ((yetty_yflame_render_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_yflame_render_fn)dispatch_impl_r.value)(obj);
 }
 
-struct yetty_ycore_int_result yetty_yflame_hit_test(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj, float x,
+struct yetty_ycore_int_result yetty_yflame_hit_test(struct yetty_yclass_object *obj, float x,
                                                     float y)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -122,11 +118,10 @@ struct yetty_ycore_int_result yetty_yflame_hit_test(struct yetty_yclass_ctx *ctx
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r,
                         "yetty_yflame_hit_test: dispatch_lookup failed");
-    return ((yetty_yflame_hit_test_fn)dispatch_impl_r.value)(ctx, obj, x, y);
+    return ((yetty_yflame_hit_test_fn)dispatch_impl_r.value)(obj, x, y);
 }
 
-struct yetty_ycore_void_result yetty_yflame_focus(struct yetty_yclass_ctx *ctx,
-                                                  struct yetty_yclass_object *obj, int32_t node_id)
+struct yetty_ycore_void_result yetty_yflame_focus(struct yetty_yclass_object *obj, int32_t node_id)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -150,11 +145,10 @@ struct yetty_ycore_void_result yetty_yflame_focus(struct yetty_yclass_ctx *ctx,
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yflame_focus: dispatch_lookup failed");
-    return ((yetty_yflame_focus_fn)dispatch_impl_r.value)(ctx, obj, node_id);
+    return ((yetty_yflame_focus_fn)dispatch_impl_r.value)(obj, node_id);
 }
 
-struct yetty_ycore_void_result yetty_yflame_focus_parent(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj)
+struct yetty_ycore_void_result yetty_yflame_focus_parent(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -178,11 +172,10 @@ struct yetty_ycore_void_result yetty_yflame_focus_parent(struct yetty_yclass_ctx
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yflame_focus_parent: dispatch_lookup failed");
-    return ((yetty_yflame_focus_parent_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_yflame_focus_parent_fn)dispatch_impl_r.value)(obj);
 }
 
-struct yetty_ycore_void_result yetty_yflame_reset(struct yetty_yclass_ctx *ctx,
-                                                  struct yetty_yclass_object *obj)
+struct yetty_ycore_void_result yetty_yflame_reset(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -206,11 +199,10 @@ struct yetty_ycore_void_result yetty_yflame_reset(struct yetty_yclass_ctx *ctx,
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yflame_reset: dispatch_lookup failed");
-    return ((yetty_yflame_reset_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_yflame_reset_fn)dispatch_impl_r.value)(obj);
 }
 
-struct yetty_ycore_void_result yetty_yflame_set_highlight(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
+struct yetty_ycore_void_result yetty_yflame_set_highlight(struct yetty_yclass_object *obj,
                                                           int32_t node_id)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
@@ -235,11 +227,10 @@ struct yetty_ycore_void_result yetty_yflame_set_highlight(struct yetty_yclass_ct
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yflame_set_highlight: dispatch_lookup failed");
-    return ((yetty_yflame_set_highlight_fn)dispatch_impl_r.value)(ctx, obj, node_id);
+    return ((yetty_yflame_set_highlight_fn)dispatch_impl_r.value)(obj, node_id);
 }
 
-struct yetty_ycore_void_result yetty_yflame_destroy(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj)
+struct yetty_ycore_void_result yetty_yflame_destroy(struct yetty_yclass_object *obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -263,5 +254,5 @@ struct yetty_ycore_void_result yetty_yflame_destroy(struct yetty_yclass_ctx *ctx
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_yflame_destroy: dispatch_lookup failed");
-    return ((yetty_yflame_destroy_fn)dispatch_impl_r.value)(ctx, obj);
+    return ((yetty_yflame_destroy_fn)dispatch_impl_r.value)(obj);
 }

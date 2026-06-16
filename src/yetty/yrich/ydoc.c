@@ -579,10 +579,8 @@ static int32_t paragraph_caret_from_point(const struct yetty_yrich_paragraph *pa
 }
 
 [[clang::annotate("override@yrich:paragraph:constructor")]]
-static struct yetty_ycore_void_result paragraph_constructor(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result paragraph_constructor(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_ycore_void_result super_res =
         yetty_yrich_super_void(obj, yetty_yrich_paragraph_class_get().value,
                                (yetty_yclass_method_id_t)yetty_yrich_constructor);
@@ -597,10 +595,8 @@ static struct yetty_ycore_void_result paragraph_constructor(struct yetty_yclass_
 }
 
 [[clang::annotate("override@yrich:paragraph:element_destroy")]]
-static struct yetty_ycore_void_result paragraph_destroy(struct yetty_yclass_ctx *ctx,
-                                                        struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result paragraph_destroy(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "paragraph_destroy: data_get");
     free(data_res.value->text);
@@ -610,11 +606,9 @@ static struct yetty_ycore_void_result paragraph_destroy(struct yetty_yclass_ctx 
 }
 
 [[clang::annotate("override@yrich:paragraph:element_bounds")]]
-static struct yetty_ycore_void_result paragraph_bounds(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result paragraph_bounds(struct yetty_yclass_object *obj,
                                                        struct yetty_yrich_rect *out_bounds)
 {
-    (void)ctx;
     if (!out_bounds) {
         return YETTY_ERR(yetty_ycore_void, "paragraph_bounds: NULL out_bounds");
     }
@@ -625,19 +619,15 @@ static struct yetty_ycore_void_result paragraph_bounds(struct yetty_yclass_ctx *
 }
 
 [[clang::annotate("override@yrich:paragraph:element_is_editable")]]
-static struct yetty_ycore_int_result paragraph_is_editable(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj)
+static struct yetty_ycore_int_result paragraph_is_editable(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     (void)obj;
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
 [[clang::annotate("override@yrich:paragraph:element_begin_edit")]]
-static struct yetty_ycore_void_result paragraph_begin_edit(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result paragraph_begin_edit(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "paragraph_begin_edit: data_get");
     struct yetty_yrich_paragraph *paragraph = data_res.value;
@@ -649,10 +639,8 @@ static struct yetty_ycore_void_result paragraph_begin_edit(struct yetty_yclass_c
 }
 
 [[clang::annotate("override@yrich:paragraph:element_end_edit")]]
-static struct yetty_ycore_void_result paragraph_end_edit(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result paragraph_end_edit(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "paragraph_end_edit: data_get");
     struct yetty_yrich_paragraph *paragraph = data_res.value;
@@ -662,10 +650,8 @@ static struct yetty_ycore_void_result paragraph_end_edit(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@yrich:paragraph:element_is_editing")]]
-static struct yetty_ycore_int_result paragraph_is_editing(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj)
+static struct yetty_ycore_int_result paragraph_is_editing(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, data_res, "paragraph_is_editing: data_get");
     return YETTY_OK(yetty_ycore_int, data_res.value->editing);
@@ -790,10 +776,9 @@ static int paragraph_render_line_visitor(const struct paragraph_line *line, size
 
 [[clang::annotate("override@yrich:paragraph:element_render")]]
 static struct yetty_ycore_void_result paragraph_render(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    struct yetty_ydraw_drawable_list *drawable_list, uint32_t layer, int selected)
+    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *drawable_list,
+    uint32_t layer, int selected)
 {
-    (void)ctx;
     (void)selected; /* element-set selection unused — text selection paints */
     if (!drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "paragraph_render: NULL drawable list");
@@ -896,11 +881,9 @@ static struct yetty_ycore_void_result paragraph_text_delete_range(
 }
 
 [[clang::annotate("override@yrich:paragraph:element_insert_text")]]
-static struct yetty_ycore_void_result paragraph_insert_text(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result paragraph_insert_text(struct yetty_yclass_object *obj,
                                                             struct yetty_ycore_buffer text)
 {
-    (void)ctx;
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "paragraph_insert_text: data_get");
     return paragraph_text_insert_at(data_res.value, data_res.value->cursor_pos,
@@ -908,10 +891,8 @@ static struct yetty_ycore_void_result paragraph_insert_text(struct yetty_yclass_
 }
 
 [[clang::annotate("override@yrich:paragraph:element_delete_sel")]]
-static struct yetty_ycore_void_result paragraph_delete_sel(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result paragraph_delete_sel(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "paragraph_delete_sel: data_get");
     struct yetty_yrich_paragraph *paragraph = data_res.value;
@@ -996,10 +977,8 @@ yetty_yrich_inline_image {
 };
 
 [[clang::annotate("override@yrich:inline_image:constructor")]]
-static struct yetty_ycore_void_result inline_image_constructor(struct yetty_yclass_ctx *ctx,
-                                                               struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result inline_image_constructor(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_ycore_void_result super_res =
         yetty_yrich_super_void(obj, yetty_yrich_inline_image_class_get().value,
                                (yetty_yclass_method_id_t)yetty_yrich_constructor);
@@ -1011,10 +990,8 @@ static struct yetty_ycore_void_result inline_image_constructor(struct yetty_ycla
 }
 
 [[clang::annotate("override@yrich:inline_image:element_destroy")]]
-static struct yetty_ycore_void_result inline_image_destroy(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result inline_image_destroy(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_inline_image_ptr_result data_res = yetty_yrich_inline_image_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "inline_image_destroy: data_get");
     free(data_res.value->source);
@@ -1025,11 +1002,9 @@ static struct yetty_ycore_void_result inline_image_destroy(struct yetty_yclass_c
 }
 
 [[clang::annotate("override@yrich:inline_image:element_bounds")]]
-static struct yetty_ycore_void_result inline_image_bounds(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result inline_image_bounds(struct yetty_yclass_object *obj,
                                                           struct yetty_yrich_rect *out_bounds)
 {
-    (void)ctx;
     if (!out_bounds) {
         return YETTY_ERR(yetty_ycore_void, "inline_image_bounds: NULL out_bounds");
     }
@@ -1041,10 +1016,9 @@ static struct yetty_ycore_void_result inline_image_bounds(struct yetty_yclass_ct
 
 [[clang::annotate("override@yrich:inline_image:element_render")]]
 static struct yetty_ycore_void_result inline_image_render(
-    struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj,
-    struct yetty_ydraw_drawable_list *drawable_list, uint32_t layer, int selected)
+    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *drawable_list,
+    uint32_t layer, int selected)
 {
-    (void)ctx;
     if (!drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "inline_image_render: NULL drawable list");
     }
@@ -1087,8 +1061,9 @@ static struct yetty_ycore_void_result inline_image_render(
  * Document
  *=========================================================================*/
 
-struct [[clang::annotate("class@yrich:ydoc")]] [[clang::annotate("parent@yrich:document")]]
-yetty_yrich_ydoc {
+struct [[clang::annotate("class@yrich:ydoc"),
+         clang::annotate("include@yetty/yrich/yrich-types.h")]] [[clang::annotate(
+    "parent@yrich:document")]] yetty_yrich_ydoc {
     float page_width;
     float margin;
 
@@ -1107,10 +1082,8 @@ yetty_yrich_ydoc {
 };
 
 [[clang::annotate("override@yrich:ydoc:constructor")]]
-static struct yetty_ycore_void_result ydoc_constructor(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result ydoc_constructor(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_ycore_void_result super_res = yetty_yrich_super_void(
         obj, yetty_yrich_ydoc_class_get().value, (yetty_yclass_method_id_t)yetty_yrich_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, super_res, "ydoc_constructor: super");
@@ -1122,10 +1095,8 @@ static struct yetty_ycore_void_result ydoc_constructor(struct yetty_yclass_ctx *
 }
 
 [[clang::annotate("override@yrich:ydoc:document_destroy")]]
-static struct yetty_ycore_void_result ydoc_destroy(struct yetty_yclass_ctx *ctx,
-                                                   struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result ydoc_destroy(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_destroy: data_get");
     free(data_res.value->paragraphs);
@@ -1137,20 +1108,16 @@ static struct yetty_ycore_void_result ydoc_destroy(struct yetty_yclass_ctx *ctx,
 }
 
 [[clang::annotate("override@yrich:ydoc:document_content_width")]]
-static struct yetty_ycore_float_result ydoc_content_width(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj)
+static struct yetty_ycore_float_result ydoc_content_width(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_float, data_res, "ydoc_content_width: data_get");
     return YETTY_OK(yetty_ycore_float, data_res.value->page_width);
 }
 
 [[clang::annotate("override@yrich:ydoc:document_content_height")]]
-static struct yetty_ycore_float_result ydoc_content_height(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj)
+static struct yetty_ycore_float_result ydoc_content_height(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_float, data_res, "ydoc_content_height: data_get");
     struct yetty_yrich_ydoc *ydoc = data_res.value;
@@ -1232,8 +1199,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_add_paragraph(
     struct yetty_yrich_paragraph_ptr_result paragraph_res =
         yetty_yrich_paragraph_from(paragraph_obj);
     if (YETTY_IS_ERR(paragraph_res)) {
-        struct yetty_ycore_void_result destroy_res =
-            yetty_yrich_element_destroy(NULL, paragraph_obj);
+        struct yetty_ycore_void_result destroy_res = yetty_yrich_element_destroy(paragraph_obj);
         if (YETTY_IS_ERR(destroy_res)) {
             yetty_ycore_error_destroy(destroy_res.error);
         }
@@ -1259,8 +1225,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_add_paragraph(
         struct yetty_ycore_void_result text_res =
             yetty_yrich_paragraph_set_text(paragraph_obj, text, text_len);
         if (YETTY_IS_ERR(text_res)) {
-            struct yetty_ycore_void_result destroy_res =
-                yetty_yrich_element_destroy(NULL, paragraph_obj);
+            struct yetty_ycore_void_result destroy_res = yetty_yrich_element_destroy(paragraph_obj);
             if (YETTY_IS_ERR(destroy_res)) {
                 yetty_ycore_error_destroy(destroy_res.error);
             }
@@ -1346,7 +1311,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_insert_image(struct yetty
     struct yetty_yclass_object *image_obj = create_res.value;
     struct yetty_yrich_inline_image_ptr_result image_res = yetty_yrich_inline_image_from(image_obj);
     if (YETTY_IS_ERR(image_res)) {
-        struct yetty_ycore_void_result destroy_res = yetty_yrich_element_destroy(NULL, image_obj);
+        struct yetty_ycore_void_result destroy_res = yetty_yrich_element_destroy(image_obj);
         if (YETTY_IS_ERR(destroy_res)) {
             yetty_ycore_error_destroy(destroy_res.error);
         }
@@ -1678,7 +1643,7 @@ static struct yetty_ycore_void_result ydoc_split_paragraph(struct yetty_yclass_o
     struct yetty_yrich_paragraph_ptr_result tail_res = yetty_yrich_paragraph_from(tail_obj);
     if (YETTY_IS_ERR(tail_res)) {
         free(tail);
-        struct yetty_ycore_void_result destroy_res = yetty_yrich_element_destroy(NULL, tail_obj);
+        struct yetty_ycore_void_result destroy_res = yetty_yrich_element_destroy(tail_obj);
         if (YETTY_IS_ERR(destroy_res)) {
             yetty_ycore_error_destroy(destroy_res.error);
         }
@@ -1768,11 +1733,9 @@ static struct yetty_ycore_void_result ydoc_merge_paragraphs(struct yetty_yclass_
  *-------------------------------------------------------------------------*/
 
 /* Formatting slot impls — defined below, used by the keyboard shortcuts. */
-static struct yetty_ycore_void_result ydoc_toggle_format_impl(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result ydoc_toggle_format_impl(struct yetty_yclass_object *obj,
                                                               uint32_t format_flag);
-static struct yetty_ycore_void_result ydoc_change_font_size_impl(struct yetty_yclass_ctx *ctx,
-                                                                 struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result ydoc_change_font_size_impl(struct yetty_yclass_object *obj,
                                                                  float delta);
 
 /* Word boundaries — alnum/underscore words, everything else is a gap. */
@@ -1809,11 +1772,9 @@ static int32_t word_jump_right(const struct yetty_yrich_paragraph *paragraph, in
 }
 
 [[clang::annotate("override@yrich:ydoc:document_on_mouse_down")]]
-static struct yetty_ycore_void_result ydoc_on_mouse_down(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj, float x,
+static struct yetty_ycore_void_result ydoc_on_mouse_down(struct yetty_yclass_object *obj, float x,
                                                          float y, uint32_t button, uint32_t mods)
 {
-    (void)ctx;
     if (button != YETTY_YRICH_MOUSE_LEFT) {
         return YETTY_OK_VOID();
     }
@@ -1852,11 +1813,9 @@ static struct yetty_ycore_void_result ydoc_on_mouse_down(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@yrich:ydoc:document_on_mouse_drag")]]
-static struct yetty_ycore_void_result ydoc_on_mouse_drag(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj, float x,
+static struct yetty_ycore_void_result ydoc_on_mouse_drag(struct yetty_yclass_object *obj, float x,
                                                          float y, uint32_t button, uint32_t mods)
 {
-    (void)ctx;
     (void)button;
     (void)mods;
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
@@ -1915,11 +1874,9 @@ static struct yetty_ycore_void_result ydoc_caret_vertical(struct yetty_yclass_ob
 }
 
 [[clang::annotate("override@yrich:ydoc:document_on_key_down")]]
-static struct yetty_ycore_void_result ydoc_on_key_down(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result ydoc_on_key_down(struct yetty_yclass_object *obj,
                                                        uint32_t key, uint32_t mods)
 {
-    (void)ctx;
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_on_key_down: data_get");
     struct yetty_yrich_ydoc *ydoc = data_res.value;
@@ -1931,11 +1888,11 @@ static struct yetty_ycore_void_result ydoc_on_key_down(struct yetty_yclass_ctx *
         switch (key) {
         case YETTY_YRICH_KEY_Z:
             if (mods & YETTY_YRICH_MOD_SHIFT) {
-                return yetty_yrich_document_redo(NULL, obj);
+                return yetty_yrich_document_redo(obj);
             }
-            return yetty_yrich_document_undo(NULL, obj);
+            return yetty_yrich_document_undo(obj);
         case YETTY_YRICH_KEY_Y:
-            return yetty_yrich_document_redo(NULL, obj);
+            return yetty_yrich_document_redo(obj);
         case YETTY_YRICH_KEY_A:
             if (have_active) {
                 return ydoc_set_caret(obj, active.paragraph_obj, 0,
@@ -1943,11 +1900,11 @@ static struct yetty_ycore_void_result ydoc_on_key_down(struct yetty_yclass_ctx *
             }
             return YETTY_OK_VOID();
         case YETTY_YRICH_KEY_B:
-            return ydoc_toggle_format_impl(NULL, obj, YETTY_YRICH_FMT_BOLD);
+            return ydoc_toggle_format_impl(obj, YETTY_YRICH_FMT_BOLD);
         case YETTY_YRICH_KEY_I:
-            return ydoc_toggle_format_impl(NULL, obj, YETTY_YRICH_FMT_ITALIC);
+            return ydoc_toggle_format_impl(obj, YETTY_YRICH_FMT_ITALIC);
         case YETTY_YRICH_KEY_U:
-            return ydoc_toggle_format_impl(NULL, obj, YETTY_YRICH_FMT_UNDERLINE);
+            return ydoc_toggle_format_impl(obj, YETTY_YRICH_FMT_UNDERLINE);
         case YETTY_YRICH_KEY_LEFT:
         case YETTY_YRICH_KEY_RIGHT: {
             if (!have_active) {
@@ -2051,11 +2008,9 @@ static struct yetty_ycore_void_result ydoc_on_key_down(struct yetty_yclass_ctx *
 }
 
 [[clang::annotate("override@yrich:ydoc:document_on_text_input")]]
-static struct yetty_ycore_void_result ydoc_on_text_input(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result ydoc_on_text_input(struct yetty_yclass_object *obj,
                                                          struct yetty_ycore_buffer text)
 {
-    (void)ctx;
     if (!text.data || text.size == 0) {
         return YETTY_OK_VOID();
     }
@@ -2086,12 +2041,10 @@ static struct yetty_ycore_void_result ydoc_on_text_input(struct yetty_yclass_ctx
 }
 
 [[clang::annotate("override@yrich:ydoc:document_on_mouse_double_click")]]
-static struct yetty_ycore_void_result ydoc_on_mouse_double_click(struct yetty_yclass_ctx *ctx,
-                                                                 struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result ydoc_on_mouse_double_click(struct yetty_yclass_object *obj,
                                                                  float x, float y, uint32_t button,
                                                                  uint32_t mods)
 {
-    (void)ctx;
     (void)mods;
     if (button != YETTY_YRICH_MOUSE_LEFT) {
         return YETTY_OK_VOID();
@@ -2162,16 +2115,14 @@ static struct yetty_ycore_void_result ydoc_super_apply_op(struct yetty_yclass_ob
     if (!impl_res.value) {
         return YETTY_OK_VOID();
     }
-    return ((yetty_yrich_document_apply_op_fn)impl_res.value)(NULL, obj, op, local_flag);
+    return ((yetty_yrich_document_apply_op_fn)impl_res.value)(obj, op, local_flag);
 }
 
 [[clang::annotate("override@yrich:ydoc:document_apply_op")]]
-static struct yetty_ycore_void_result ydoc_apply_op(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result ydoc_apply_op(struct yetty_yclass_object *obj,
                                                     struct yetty_yrich_operation *op,
                                                     int local_flag)
 {
-    (void)ctx;
     if (!op) {
         return YETTY_ERR(yetty_ycore_void, "ydoc_apply_op: NULL op");
     }
@@ -2229,10 +2180,8 @@ static struct yetty_ycore_void_result ydoc_apply_op(struct yetty_yclass_ctx *ctx
  *-------------------------------------------------------------------------*/
 
 [[clang::annotate("override@yrich:ydoc:document_render")]]
-static struct yetty_ycore_void_result ydoc_render(struct yetty_yclass_ctx *ctx,
-                                                  struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result ydoc_render(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_render: data_get");
     ydoc_relayout(data_res.value);
@@ -2245,11 +2194,9 @@ static struct yetty_ycore_void_result ydoc_render(struct yetty_yclass_ctx *ctx,
  *-------------------------------------------------------------------------*/
 
 [[clang::annotate("virtual@yrich:ydoc:ydoc_toggle_format")]]
-static struct yetty_ycore_void_result ydoc_toggle_format_impl(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result ydoc_toggle_format_impl(struct yetty_yclass_object *obj,
                                                               uint32_t format_flag)
 {
-    (void)ctx;
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_toggle_format: data_get");
     struct ydoc_active_paragraph active;
@@ -2277,11 +2224,9 @@ static struct yetty_ycore_void_result ydoc_toggle_format_impl(struct yetty_yclas
 
 /* Text colour — selection-scoped like toggle_format, absolute (no toggle). */
 [[clang::annotate("virtual@yrich:ydoc:ydoc_set_text_color")]]
-static struct yetty_ycore_void_result ydoc_set_text_color_impl(struct yetty_yclass_ctx *ctx,
-                                                               struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result ydoc_set_text_color_impl(struct yetty_yclass_object *obj,
                                                                uint32_t color)
 {
-    (void)ctx;
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_set_text_color: data_get");
     struct ydoc_active_paragraph active;
@@ -2307,11 +2252,9 @@ static struct yetty_ycore_void_result ydoc_set_text_color_impl(struct yetty_ycla
 
 /* Paragraph alignment (enum yetty_yrich_halign). */
 [[clang::annotate("virtual@yrich:ydoc:ydoc_set_alignment")]]
-static struct yetty_ycore_void_result ydoc_set_alignment_impl(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result ydoc_set_alignment_impl(struct yetty_yclass_object *obj,
                                                               uint32_t halign)
 {
-    (void)ctx;
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_set_alignment: data_get");
     struct ydoc_active_paragraph active;
@@ -2324,11 +2267,9 @@ static struct yetty_ycore_void_result ydoc_set_alignment_impl(struct yetty_yclas
 
 /* Heading levels — 0 = normal text, 1..3 = headings (size + bold base). */
 [[clang::annotate("virtual@yrich:ydoc:ydoc_set_heading")]]
-static struct yetty_ycore_void_result ydoc_set_heading_impl(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result ydoc_set_heading_impl(struct yetty_yclass_object *obj,
                                                             uint32_t level)
 {
-    (void)ctx;
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_set_heading: data_get");
     struct ydoc_active_paragraph active;
@@ -2362,11 +2303,9 @@ static struct yetty_ycore_void_result ydoc_set_heading_impl(struct yetty_yclass_
 }
 
 [[clang::annotate("virtual@yrich:ydoc:ydoc_change_font_size")]]
-static struct yetty_ycore_void_result ydoc_change_font_size_impl(struct yetty_yclass_ctx *ctx,
-                                                                 struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result ydoc_change_font_size_impl(struct yetty_yclass_object *obj,
                                                                  float delta)
 {
-    (void)ctx;
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_change_font_size: data_get");
     struct ydoc_active_paragraph active;
@@ -2606,11 +2545,5 @@ struct yetty_ycore_void_result yetty_yrich_paragraph_add_run(struct yetty_yclass
     run->style.color = color;
     return YETTY_OK_VOID();
 }
-
-#ifdef YCLASS_CODEGEN
-/* Header-destined: the shared yrich value types the public ydoc API above
- * references. */
-#include <yetty/yrich/yrich-types.h>
-#endif
 
 #include "ydoc.gen.c"

@@ -4,8 +4,7 @@
 
 PyObject *pyp_new(enum pyp_kind kind, PyTypeObject *type);
 
-PyObject *
-PyBytes_FromStringAndSize(const char *v, Py_ssize_t len)
+PyObject *PyBytes_FromStringAndSize(const char *v, Py_ssize_t len)
 {
     PyObject *o = pyp_new(PYP_BYTES, &PyBytes_Type);
     if (o == NULL) {
@@ -24,8 +23,7 @@ PyBytes_FromStringAndSize(const char *v, Py_ssize_t len)
     return o;
 }
 
-char *
-PyBytes_AsString(PyObject *o)
+char *PyBytes_AsString(PyObject *o)
 {
     if (!PyBytes_Check(o)) {
         PyErr_SetString(PyExc_TypeError, "expected bytes");
@@ -34,26 +32,27 @@ PyBytes_AsString(PyObject *o)
     return o->data;
 }
 
-int
-PyBytes_AsStringAndSize(PyObject *obj, char **buffer, Py_ssize_t *length)
+int PyBytes_AsStringAndSize(PyObject *obj, char **buffer, Py_ssize_t *length)
 {
     if (!PyBytes_Check(obj)) {
         PyErr_SetString(PyExc_TypeError, "expected bytes");
         return -1;
     }
-    if (buffer) *buffer = obj->data;
-    if (length) *length = obj->len;
+    if (buffer) {
+        *buffer = obj->data;
+    }
+    if (length) {
+        *length = obj->len;
+    }
     return 0;
 }
 
-Py_ssize_t
-PyBytes_Size(PyObject *o)
+Py_ssize_t PyBytes_Size(PyObject *o)
 {
     return PyBytes_Check(o) ? o->len : -1;
 }
 
-void
-PyBytes_Concat(PyObject **pv, PyObject *w)
+void PyBytes_Concat(PyObject **pv, PyObject *w)
 {
     if (pv == NULL || *pv == NULL) {
         return;
@@ -78,13 +77,16 @@ PyBytes_Concat(PyObject **pv, PyObject *w)
 }
 
 /* Decode the escapes inside a bytes literal body (b"...\\n..."). */
-PyObject *
-_PyBytes_DecodeEscape2(const char *s, Py_ssize_t len, const char *errors,
-                       int *first_invalid_escape_char, const char **first_invalid_escape)
+PyObject *_PyBytes_DecodeEscape2(const char *s, Py_ssize_t len, const char *errors,
+                                 int *first_invalid_escape_char, const char **first_invalid_escape)
 {
     (void)errors;
-    if (first_invalid_escape) *first_invalid_escape = NULL;
-    if (first_invalid_escape_char) *first_invalid_escape_char = -1;
+    if (first_invalid_escape) {
+        *first_invalid_escape = NULL;
+    }
+    if (first_invalid_escape_char) {
+        *first_invalid_escape_char = -1;
+    }
 
     char *out = malloc((size_t)len + 1);
     if (out == NULL) {
@@ -105,21 +107,63 @@ _PyBytes_DecodeEscape2(const char *s, Py_ssize_t len, const char *errors,
             break;
         }
         switch (*p) {
-        case '\n': p++; break;
-        case '\\': out[oi++] = '\\'; p++; break;
-        case '\'': out[oi++] = '\''; p++; break;
-        case '"':  out[oi++] = '"';  p++; break;
-        case 'a':  out[oi++] = '\a'; p++; break;
-        case 'b':  out[oi++] = '\b'; p++; break;
-        case 'f':  out[oi++] = '\f'; p++; break;
-        case 'n':  out[oi++] = '\n'; p++; break;
-        case 'r':  out[oi++] = '\r'; p++; break;
-        case 't':  out[oi++] = '\t'; p++; break;
-        case 'v':  out[oi++] = '\v'; p++; break;
-        case '0': case '1': case '2': case '3':
-        case '4': case '5': case '6': case '7': {
+        case '\n':
+            p++;
+            break;
+        case '\\':
+            out[oi++] = '\\';
+            p++;
+            break;
+        case '\'':
+            out[oi++] = '\'';
+            p++;
+            break;
+        case '"':
+            out[oi++] = '"';
+            p++;
+            break;
+        case 'a':
+            out[oi++] = '\a';
+            p++;
+            break;
+        case 'b':
+            out[oi++] = '\b';
+            p++;
+            break;
+        case 'f':
+            out[oi++] = '\f';
+            p++;
+            break;
+        case 'n':
+            out[oi++] = '\n';
+            p++;
+            break;
+        case 'r':
+            out[oi++] = '\r';
+            p++;
+            break;
+        case 't':
+            out[oi++] = '\t';
+            p++;
+            break;
+        case 'v':
+            out[oi++] = '\v';
+            p++;
+            break;
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7': {
             int v = 0, k = 0;
-            while (k < 3 && p < end && *p >= '0' && *p <= '7') { v = v * 8 + (*p - '0'); p++; k++; }
+            while (k < 3 && p < end && *p >= '0' && *p <= '7') {
+                v = v * 8 + (*p - '0');
+                p++;
+                k++;
+            }
             out[oi++] = (char)v;
             break;
         }
@@ -128,7 +172,9 @@ _PyBytes_DecodeEscape2(const char *s, Py_ssize_t len, const char *errors,
             int v = 0, k = 0;
             while (k < 2 && p < end && Py_ISXDIGIT(*p)) {
                 int d = Py_ISDIGIT(*p) ? *p - '0' : (Py_TOLOWER(*p) - 'a' + 10);
-                v = v * 16 + d; p++; k++;
+                v = v * 16 + d;
+                p++;
+                k++;
             }
             out[oi++] = (char)v;
             break;
@@ -137,7 +183,9 @@ _PyBytes_DecodeEscape2(const char *s, Py_ssize_t len, const char *errors,
             /* unknown escape: keep the backslash and the char (CPython warns) */
             if (first_invalid_escape && *first_invalid_escape == NULL) {
                 *first_invalid_escape = p;
-                if (first_invalid_escape_char) *first_invalid_escape_char = (unsigned char)*p;
+                if (first_invalid_escape_char) {
+                    *first_invalid_escape_char = (unsigned char)*p;
+                }
             }
             out[oi++] = '\\';
             out[oi++] = *p++;

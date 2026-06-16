@@ -68,23 +68,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef YCLASS_CODEGEN
-/* render() returns struct yetty_ydraw_drawable_list_result by value, so the
- * generated circuit.h (and the dispatch TU that includes it) needs the
- * complete type — pull its defining header into the public header. */
-#include <yetty/ydraw-core/drawable-list.h>
-/* Public constants — copied verbatim into the generated circuit.h. */
-#define YETTY_YCIRCUIT_NO_ELEMENT (-1) /* hit_test: no element under the point */
-#define YETTY_YCIRCUIT_FLAG_NONE 0x0u  /* reserved render flags */
-#endif
-
-#ifndef YCLASS_CODEGEN
-/* Same public constants, defined for the real build of this TU (which does
- * not include circuit.h). The codegen block above re-emits them into the
- * generated public header for consumers. */
-#define YETTY_YCIRCUIT_NO_ELEMENT (-1) /* hit_test: no element under the point */
-#define YETTY_YCIRCUIT_FLAG_NONE 0x0u  /* reserved render flags */
-#endif
+/* Public constants. Defined here in the owning .c; codegen reproduces the
+ * enum into the generated circuit.h for consumers. */
+enum [[clang::annotate("expose")]] yetty_ycircuit_constant {
+    YETTY_YCIRCUIT_NO_ELEMENT = -1, /* hit_test: no element under the point */
+    YETTY_YCIRCUIT_FLAG_NONE = 0,   /* reserved render flags */
+};
 
 enum {
     YCIRCUIT_DEFAULT_GRID = 14, /* px per grid unit */
@@ -166,7 +155,8 @@ struct ycircuit_element {
  * Class data
  *===========================================================================*/
 
-struct [[clang::annotate("class@ycircuit:circuit")]] yetty_ycircuit_circuit {
+struct [[clang::annotate("class@ycircuit:circuit"),
+         clang::annotate("include@yetty/ydraw-core/drawable-list.h")]] yetty_ycircuit_circuit {
     /* Render configuration. 0 = default. */
     float grid;     /* px per grid unit (configure() wins over the DSL hint) */
     uint32_t flags; /* reserved */
@@ -1494,11 +1484,9 @@ static struct yetty_ycore_void_result emit_component_labels(const struct emit_ge
  * after create(), before render(). */
 [[clang::annotate("virtual@ycircuit:circuit:configure")]] [[clang::annotate(
     "local@ycircuit:configure")]]
-static struct yetty_ycore_void_result circuit_configure(struct yetty_yclass_ctx *ctx,
-                                                        struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result circuit_configure(struct yetty_yclass_object *obj,
                                                         float grid_px, uint32_t flags)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, circuit_r, "ycircuit configure: from_obj");
     struct yetty_ycircuit_circuit *circuit = circuit_r.value;
@@ -1510,11 +1498,9 @@ static struct yetty_ycore_void_result circuit_configure(struct yetty_yclass_ctx 
 /* parse: ingest schematic-DSL text and build the circuit model. Resets the
  * model and clears any selection. */
 [[clang::annotate("virtual@ycircuit:circuit:parse")]] [[clang::annotate("local@ycircuit:parse")]]
-static struct yetty_ycore_void_result circuit_parse(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result circuit_parse(struct yetty_yclass_object *obj,
                                                     const char *input, size_t len)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, circuit_r, "ycircuit parse: from_obj");
     struct yetty_ycircuit_circuit *circuit = circuit_r.value;
@@ -1530,10 +1516,8 @@ static struct yetty_ycore_void_result circuit_parse(struct yetty_yclass_ctx *ctx
 /* clear: drop every element, the title and the selection (configuration is
  * kept). The programmatic counterpart of parse(""). */
 [[clang::annotate("virtual@ycircuit:circuit:clear")]] [[clang::annotate("local@ycircuit:clear")]]
-static struct yetty_ycore_void_result circuit_clear(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result circuit_clear(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, circuit_r, "ycircuit clear: from_obj");
     model_clear(circuit_r.value);
@@ -1545,13 +1529,11 @@ static struct yetty_ycore_void_result circuit_clear(struct yetty_yclass_ctx *ctx
  * empty). Returns the new element id. */
 [[clang::annotate("virtual@ycircuit:circuit:add_component")]] [[clang::annotate(
     "local@ycircuit:add_component")]]
-static struct yetty_ycore_int_result circuit_add_component(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj,
+static struct yetty_ycore_int_result circuit_add_component(struct yetty_yclass_object *obj,
                                                            const char *kind, float x, float y,
                                                            int32_t rotation_deg, const char *name,
                                                            const char *value)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, circuit_r, "ycircuit add_component: from_obj");
     struct yetty_ycircuit_circuit *circuit = circuit_r.value;
@@ -1580,14 +1562,12 @@ static struct yetty_ycore_int_result circuit_add_component(struct yetty_yclass_c
  * lists like "GND,TRIG,OUT"; NULL or empty = no pins on that side). The body
  * grows to fit the longest side. Returns the new element id. */
 [[clang::annotate("virtual@ycircuit:circuit:add_ic")]] [[clang::annotate("local@ycircuit:add_ic")]]
-static struct yetty_ycore_int_result circuit_add_ic(struct yetty_yclass_ctx *ctx,
-                                                    struct yetty_yclass_object *obj, float x,
+static struct yetty_ycore_int_result circuit_add_ic(struct yetty_yclass_object *obj, float x,
                                                     float y, int32_t rotation_deg, const char *name,
                                                     const char *value, const char *pins_left,
                                                     const char *pins_right, const char *pins_top,
                                                     const char *pins_bottom)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, circuit_r, "ycircuit add_ic: from_obj");
     struct ycircuit_element *element = model_append(circuit_r.value);
@@ -1611,11 +1591,9 @@ static struct yetty_ycore_int_result circuit_add_ic(struct yetty_yclass_ctx *ctx
 /* add_wire: append one straight wire segment. Returns the new element id. */
 [[clang::annotate("virtual@ycircuit:circuit:add_wire")]] [[clang::annotate(
     "local@ycircuit:add_wire")]]
-static struct yetty_ycore_int_result circuit_add_wire(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj, float x0,
+static struct yetty_ycore_int_result circuit_add_wire(struct yetty_yclass_object *obj, float x0,
                                                       float y0, float x1, float y1)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, circuit_r, "ycircuit add_wire: from_obj");
     struct ycircuit_element *element = model_append(circuit_r.value);
@@ -1633,11 +1611,9 @@ static struct yetty_ycore_int_result circuit_add_wire(struct yetty_yclass_ctx *c
 /* add_junction: append a connection dot. Returns the new element id. */
 [[clang::annotate("virtual@ycircuit:circuit:add_junction")]] [[clang::annotate(
     "local@ycircuit:add_junction")]]
-static struct yetty_ycore_int_result circuit_add_junction(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj, float x,
+static struct yetty_ycore_int_result circuit_add_junction(struct yetty_yclass_object *obj, float x,
                                                           float y)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, circuit_r, "ycircuit add_junction: from_obj");
     struct ycircuit_element *element = model_append(circuit_r.value);
@@ -1654,11 +1630,9 @@ static struct yetty_ycore_int_result circuit_add_junction(struct yetty_yclass_ct
  * element id. */
 [[clang::annotate("virtual@ycircuit:circuit:add_label")]] [[clang::annotate(
     "local@ycircuit:add_label")]]
-static struct yetty_ycore_int_result circuit_add_label(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj, float x,
+static struct yetty_ycore_int_result circuit_add_label(struct yetty_yclass_object *obj, float x,
                                                        float y, const char *text)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, circuit_r, "ycircuit add_label: from_obj");
     if (!text || !text[0]) {
@@ -1681,10 +1655,8 @@ static struct yetty_ycore_int_result circuit_add_label(struct yetty_yclass_ctx *
 /* render: lay out the circuit and emit it as a fresh ydraw drawable list
  * (caller owns it). Pointer return -> local-only. */
 [[clang::annotate("virtual@ycircuit:circuit:render")]] [[clang::annotate("local@ycircuit:render")]]
-static struct yetty_ydraw_drawable_list_result circuit_render(struct yetty_yclass_ctx *ctx,
-                                                              struct yetty_yclass_object *obj)
+static struct yetty_ydraw_drawable_list_result circuit_render(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, circuit_r, "ycircuit render: from_obj");
     struct yetty_ycircuit_circuit *circuit = circuit_r.value;
@@ -1858,11 +1830,9 @@ static struct yetty_ydraw_drawable_list_result circuit_render(struct yetty_yclas
  * overlap the most recently added element wins (it draws on top). */
 [[clang::annotate("virtual@ycircuit:circuit:hit_test")]] [[clang::annotate(
     "local@ycircuit:hit_test")]]
-static struct yetty_ycore_int_result circuit_hit_test(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj, float x,
+static struct yetty_ycore_int_result circuit_hit_test(struct yetty_yclass_object *obj, float x,
                                                       float y)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, circuit_r, "ycircuit hit_test: from_obj");
     struct yetty_ycircuit_circuit *circuit = circuit_r.value;
@@ -1880,11 +1850,9 @@ static struct yetty_ycore_int_result circuit_hit_test(struct yetty_yclass_ctx *c
  * render. */
 [[clang::annotate("virtual@ycircuit:circuit:set_highlight")]] [[clang::annotate(
     "local@ycircuit:set_highlight")]]
-static struct yetty_ycore_void_result circuit_set_highlight(struct yetty_yclass_ctx *ctx,
-                                                            struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result circuit_set_highlight(struct yetty_yclass_object *obj,
                                                             int32_t element_id)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, circuit_r, "ycircuit set_highlight: from_obj");
     struct yetty_ycircuit_circuit *circuit = circuit_r.value;
@@ -1896,10 +1864,8 @@ static struct yetty_ycore_void_result circuit_set_highlight(struct yetty_yclass_
 /* destroy: free the circuit model and the object. */
 [[clang::annotate("virtual@ycircuit:circuit:destroy")]] [[clang::annotate(
     "local@ycircuit:destroy")]]
-static struct yetty_ycore_void_result circuit_obj_destroy(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result circuit_obj_destroy(struct yetty_yclass_object *obj)
 {
-    (void)ctx;
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     if (YETTY_IS_ERR(circuit_r)) {
         yetty_ycore_error_destroy(circuit_r.error);
