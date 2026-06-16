@@ -146,10 +146,17 @@ static inline int editor_ops_yank(struct yai_app *app)
 }
 
 /*---------------------------------------------------------------------------
- * Multi-level undo (vi `u`). A normal-mode command opens and commits one
- * group per keystroke; an insert session keeps a group open from the first
- * inserted byte until ESC, so the whole insertion is a single undo step.
- * `u` pops the stack, so repeated `u` walks back through the edits.
+ * Multi-level undo, shared by both editor modes (vi `u`, emacs Ctrl-_ /
+ * Ctrl-/). One undo step == one logical edit: every discrete command
+ * (delete, kill, paste, replace, …) is its own step, and a run of typed
+ * text is split into words (a space typed after a non-space ends a word).
+ * Popping a step restores the line as it was before that edit, so repeated
+ * undo walks back command by command / word by word.
+ *
+ * Each text-changing keystroke is recorded through one of two helpers, so
+ * the granularity is identical in both modes:
+ *   editor_ops_undo_note_insert   — extend the current typed-word group
+ *   editor_ops_undo_note_discrete — a self-contained single-step edit
  *---------------------------------------------------------------------------*/
 
 /* Free the whole undo stack and drop any open group. Call when the line
@@ -222,10 +229,42 @@ static inline void editor_ops_undo_commit(struct yai_app *app)
     app->undo_group_dirty = 0;
 }
 
+/* Record a self-inserted byte into the current typed-word group. Consecutive
+ * inserts accumulate into one group (one word); a space typed right after a
+ * non-space first commits the finished word, so each word is its own step.
+ * The group stays open — it is committed when the typing run ends (a word
+ * boundary, a discrete edit, leaving insert mode, or an undo). */
+static inline void editor_ops_undo_note_insert(struct yai_app *app, const char *pre_bytes,
+                                               size_t pre_len, size_t pre_cursor,
+                                               char inserted_byte)
+{
+    if (inserted_byte == ' ' && pre_cursor > 0 && pre_bytes[pre_cursor - 1] != ' ') {
+        editor_ops_undo_commit(app);
+    }
+    editor_ops_undo_begin(app, pre_bytes, pre_len, pre_cursor);
+    editor_ops_undo_mark_dirty(app);
+}
+
+/* Record a discrete edit (delete, kill, paste, replace, …) as its own undo
+ * step: close any open typed-word group first, then push this operation's
+ * pre-state alone, so one undo reverses exactly this one command. */
+static inline void editor_ops_undo_note_discrete(struct yai_app *app, const char *pre_bytes,
+                                                 size_t pre_len, size_t pre_cursor)
+{
+    editor_ops_undo_commit(app);
+    editor_ops_undo_begin(app, pre_bytes, pre_len, pre_cursor);
+    editor_ops_undo_mark_dirty(app);
+    editor_ops_undo_commit(app);
+}
+
 /* Pop one undo level into the live buffer. Returns 1 if something was
  * restored, 0 if the stack was empty. */
 static inline int editor_ops_undo_pop(struct yai_app *app)
 {
+    /* A typed-word group may still be open (emacs has no mode switch to
+     * close it) — commit it first so undo reverses the in-progress word
+     * before walking into earlier steps. */
+    editor_ops_undo_commit(app);
     if (app->undo_depth == 0) {
         return 0;
     }
@@ -238,6 +277,106 @@ static inline int editor_ops_undo_pop(struct yai_app *app)
     free(entry->bytes);
     entry->bytes = NULL;
     return 1;
+}
+
+/*---------------------------------------------------------------------------
+ * Abstract editing commands — the unit of undo.
+ *
+ * Keystrokes in EVERY mode (vi, emacs) translate to these calls; each command
+ * performs its edit AND records its own undo step, so undo is identical
+ * regardless of editor mode: one undo reverses exactly one command. The mode
+ * layers are pure key→command mappers — they never touch the undo stack.
+ *
+ * A self-inserted character accumulates into a word (a space after a
+ * non-space ends the word); every other command is one discrete undo step.
+ * Each returns a YAI_EDIT_* action code (CHANGED on success, NONE on no-op).
+ *---------------------------------------------------------------------------*/
+
+/* Insert one typed character at the cursor (word-grouped undo). */
+static inline int editor_cmd_insert_char(struct yai_app *app, char byte)
+{
+    char pre[sizeof(app->stdin_buf)];
+    size_t pre_len = app->stdin_len;
+    size_t pre_cursor = app->stdin_cursor;
+    memcpy(pre, app->stdin_buf, pre_len);
+    if (!editor_ops_insert(app, &byte, 1)) {
+        return YAI_EDIT_NONE;
+    }
+    editor_ops_undo_note_insert(app, pre, pre_len, pre_cursor, byte);
+    return YAI_EDIT_CHANGED;
+}
+
+/* Delete the byte range [from, to) (one discrete undo step). */
+static inline int editor_cmd_delete(struct yai_app *app, size_t from, size_t to)
+{
+    if (to <= from || to > app->stdin_len) {
+        return YAI_EDIT_NONE;
+    }
+    char pre[sizeof(app->stdin_buf)];
+    size_t pre_len = app->stdin_len;
+    size_t pre_cursor = app->stdin_cursor;
+    memcpy(pre, app->stdin_buf, pre_len);
+    editor_ops_delete_range(app, from, to);
+    editor_ops_undo_note_discrete(app, pre, pre_len, pre_cursor);
+    return YAI_EDIT_CHANGED;
+}
+
+/* Kill the byte range [from, to) into the register (one discrete undo step). */
+static inline int editor_cmd_kill(struct yai_app *app, size_t from, size_t to)
+{
+    if (to <= from || to > app->stdin_len) {
+        return YAI_EDIT_NONE;
+    }
+    char pre[sizeof(app->stdin_buf)];
+    size_t pre_len = app->stdin_len;
+    size_t pre_cursor = app->stdin_cursor;
+    memcpy(pre, app->stdin_buf, pre_len);
+    editor_ops_kill_range(app, from, to);
+    editor_ops_undo_note_discrete(app, pre, pre_len, pre_cursor);
+    return YAI_EDIT_CHANGED;
+}
+
+/* Paste the register at the cursor (one discrete undo step). */
+static inline int editor_cmd_yank(struct yai_app *app)
+{
+    if (app->kill_len == 0) {
+        return YAI_EDIT_NONE;
+    }
+    char pre[sizeof(app->stdin_buf)];
+    size_t pre_len = app->stdin_len;
+    size_t pre_cursor = app->stdin_cursor;
+    memcpy(pre, app->stdin_buf, pre_len);
+    if (!editor_ops_yank(app)) {
+        return YAI_EDIT_NONE;
+    }
+    editor_ops_undo_note_discrete(app, pre, pre_len, pre_cursor);
+    return YAI_EDIT_CHANGED;
+}
+
+/* Replace the char range [from, to) with one byte and land the cursor on it
+ * (vi `r`; one discrete undo step). */
+static inline int editor_cmd_replace_char(struct yai_app *app, size_t from, size_t to, char byte)
+{
+    if (to <= from || to > app->stdin_len) {
+        return YAI_EDIT_NONE;
+    }
+    char pre[sizeof(app->stdin_buf)];
+    size_t pre_len = app->stdin_len;
+    size_t pre_cursor = app->stdin_cursor;
+    memcpy(pre, app->stdin_buf, pre_len);
+    editor_ops_delete_range(app, from, to);
+    if (!editor_ops_insert(app, &byte, 1)) {
+        return YAI_EDIT_NONE;
+    }
+    app->stdin_cursor = editor_ops_prev_char(app, app->stdin_cursor);
+    editor_ops_undo_note_discrete(app, pre, pre_len, pre_cursor);
+    return YAI_EDIT_CHANGED;
+}
+
+/* Undo the last command (pop one step). */
+static inline int editor_cmd_undo(struct yai_app *app)
+{
+    return editor_ops_undo_pop(app) ? YAI_EDIT_CHANGED : YAI_EDIT_NONE;
 }
 
 /*---------------------------------------------------------------------------

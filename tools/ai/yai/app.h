@@ -53,6 +53,7 @@ struct yai_undo_entry {
 
 struct yetty_yface;
 struct yai_control;
+struct yai_proxy;
 
 struct yai_session_usage {
     uint64_t input;
@@ -77,6 +78,30 @@ struct yai_pending_permission {
     yyjson_mut_doc *input_doc;
 };
 
+/* yai's own settings. The single source of truth: seeded with defaults,
+ * overlaid by the config file (~/.config/yetty/yai.yaml), then overridden by
+ * command-line flags. The engines read these fields directly at spawn — there
+ * are no YAI_* environment variables. `engine` and `edit_mode` live as their
+ * own app fields (engine_name / editor_mode_name); the renderer owns
+ * fold_lines / show_thinking. Everything else lives here. */
+struct yai_config {
+    char model[128];               /* "" = the engine CLI's own default */
+    /* claude */
+    char permission_mode[24];      /* default | acceptEdits | plan | auto */
+    char allowed_preset[16];       /* curated | readonly | edit | full */
+    char allowed_tools[1024];      /* explicit allowlist; "" = derive from preset */
+    char claude_effort[16];        /* auto | low | medium | high | xhigh | max */
+    /* codex */
+    char codex_sandbox[24];        /* read-only | workspace-write | danger-full-access */
+    char codex_approval[16];       /* never | on-request | untrusted */
+    char codex_effort[16];         /* default | minimal | low | medium | high */
+    /* gemini */
+    char gemini_approval_mode[16]; /* default | auto_edit | yolo */
+    /* status window */
+    int no_hud;                    /* 1 = no ygui window; stats as plain text */
+    int hud_float;                 /* 1 = float the HUD instead of docking */
+};
+
 struct yai_app {
     uv_loop_t loop;
     uv_process_t child_process;
@@ -92,6 +117,7 @@ struct yai_app {
     struct yai_hud *hud;
     struct yai_renderer renderer;
     struct yai_session_usage usage;
+    struct yai_config config;
 
     /* Input demux + routing. */
     struct yetty_yface *yface;
@@ -99,6 +125,10 @@ struct yai_app {
      * was given): lets an outside client inject commands and query state
      * over a localhost TCP port. */
     struct yai_control *control;
+    /* Usage proxy (NULL unless --usage-proxy/YAI_USAGE_PROXY was given): a
+     * localhost HTTP forwarder the child's Anthropic traffic is routed
+     * through, capturing live rate-limit/quota headers. See proxy.c. */
+    struct yai_proxy *usage_proxy;
     int focus_gui; /* 1 = the HUD window owns keyboard input */
     int mouse_subscribed;
     /* Bottom band (px) currently reserved with the yetty host for the
@@ -189,14 +219,20 @@ struct yai_app {
      * delete-into-register. */
     char kill_buf[8192];
     size_t kill_len;
-    /* Multi-level undo for the line editor (vi `u`). Each text-changing
-     * normal-mode command — and each whole insert session (i…ESC) — pushes
-     * the pre-change line onto the stack; `u` pops and restores, so
-     * repeated `u` walks back through the previous edits. Entries are heap
-     * copies, freed when the line is submitted/cancelled. The "group"
-     * fields hold the snapshot for the command/session in progress: a
-     * normal command opens and commits it in one keystroke, while an insert
-     * session keeps it open until ESC so the whole insertion is one undo. */
+    /* Multi-level undo for the line editor, recorded by the abstract command
+     * layer (editor_cmd_* in editor-ops.h) and therefore identical in every
+     * mode — vi `u` and emacs Ctrl-_/Ctrl-/ pop the same stack; the mode
+     * layers never touch it. One undo step is one command: each discrete
+     * command (delete, kill, paste, replace) pushes the pre-change line as
+     * its own step, while typed text is split at word boundaries (a space
+     * after a non-space ends a word) so each word is its own step. Popping
+     * restores the line as it was before that command, so repeated undo
+     * walks back command by command / word by word. Entries are heap copies,
+     * freed when the line is submitted/cancelled (editor_ops_undo_clear at
+     * the line-reset points in main.c). The "group" fields hold the snapshot
+     * for the edit in progress: a discrete command opens and commits it at
+     * once, while a typed word's group stays open until the next word
+     * boundary, the next discrete command, or an undo. */
     struct yai_undo_entry undo_stack[YAI_UNDO_MAX];
     int undo_depth;
     char undo_group_buf[8192];
@@ -239,8 +275,8 @@ struct yai_app {
      * engine's apply_config slot. */
     struct {
         int is_edit_mode; /* 1 = yai edit mode (swap editor object) */
-        int is_model;     /* 1 = model knob (setenv YAI_MODEL) */
-        char key[64];     /* env knob key (engine + model knobs) */
+        int is_model;     /* 1 = model knob (sets config.model) */
+        char key[64];     /* config-field key the knob writes */
         char options[YAI_HUD_CONFIG_KNOB_MAX_OPTIONS][48];
         int option_count;
         int selected;
@@ -332,6 +368,19 @@ void yai_control_stop(struct yai_app *app);
  * makes one yai drive another. Defined in control.c. */
 int yai_control_client_main(const char *host, int port, const char *method,
                             const char *const *args, int arg_count);
+
+/* Usage proxy (proxy.c): a builtin localhost HTTP→HTTPS forwarder on an
+ * ephemeral port. start() points the spawned child's ANTHROPIC_BASE_URL at
+ * it, replays the child's API traffic to the real upstream, and captures the
+ * live `anthropic-ratelimit-*` quota headers into ~/.claude/usage-status.md
+ * and app state. stop() tears it down (safe when absent). status() copies the
+ * latest one-line quota summary into `out` (empty until the first call). */
+struct yetty_ycore_void_result yai_usage_proxy_start(struct yai_app *app);
+void yai_usage_proxy_stop(struct yai_app *app);
+void yai_usage_proxy_status(struct yai_app *app, char *out, size_t out_size);
+/* Compact one-line quota for the status bar, e.g. "quota 5h 26% · 7d 55%"
+ * (empty until the first API call is captured). */
+void yai_usage_proxy_summary(struct yai_app *app, char *out, size_t out_size);
 
 /* uv callbacks shared by the engines' child spawns. Signatures are
  * dictated by libuv (YETTY_EXTERNAL_CALLBACK) — inner Results are

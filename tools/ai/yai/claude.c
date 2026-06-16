@@ -257,9 +257,9 @@ static struct yetty_ycore_void_result handle_control_request(struct yai_app *app
      * push didn't), or when this tool was marked "always allow". Preserve
      * the tool input on the response (fail closed if it can't be copied —
      * never approve with empty input). */
-    const char *perm_mode = getenv("YAI_PERMISSION_MODE");
-    int auto_mode = perm_mode && (strcmp(perm_mode, "auto") == 0 ||
-                                  strcmp(perm_mode, "bypassPermissions") == 0);
+    const char *perm_mode = app->config.permission_mode;
+    int auto_mode =
+        strcmp(perm_mode, "auto") == 0 || strcmp(perm_mode, "bypassPermissions") == 0;
     if (auto_mode || yai_tool_always_allowed(app, tool_name)) {
         yyjson_mut_doc *input_copy = yyjson_mut_doc_new(NULL);
         if (input_copy && input) {
@@ -704,6 +704,22 @@ static const char *claude_permission_ui_mode(const char *mode)
     return mode;
 }
 
+/* The concrete --allowedTools list for a tools preset name (mcp__yetty allows
+ * the whole yetty MCP server — all draw_* tools). */
+static const char *claude_preset_tools(const char *preset)
+{
+    if (strcmp(preset, "readonly") == 0) {
+        return "Read,mcp__yetty";
+    }
+    if (strcmp(preset, "edit") == 0) {
+        return "Read,Edit,Write,Bash(git *),mcp__yetty";
+    }
+    if (strcmp(preset, "full") == 0) {
+        return "Read,Edit,Write,Bash,mcp__yetty";
+    }
+    return "Read,Bash(git *),mcp__yetty"; /* curated (default) */
+}
+
 [[clang::annotate("override@yai:claude:start")]]
 static struct yetty_ycore_void_result claude_start(struct yetty_yclass_ctx *ctx,
                                                    struct yetty_yclass_object *obj,
@@ -719,18 +735,12 @@ static struct yetty_ycore_void_result claude_start(struct yetty_yclass_ctx *ctx,
         return YETTY_ERR(yetty_ycore_void, "claude start: setenv YETTY_MCP_VIA_PARENT failed");
     }
 
-    const char *permission_mode = getenv("YAI_PERMISSION_MODE");
-    if (!permission_mode || !permission_mode[0]) {
-        /* "default" makes un-allowlisted tools prompt — the whole point
-         * of the permission flow. */
-        permission_mode = "default";
-    }
-    const char *allowed_tools = getenv("YAI_ALLOWED_TOOLS");
-    if (!allowed_tools || !allowed_tools[0]) {
-        /* mcp__yetty allows the whole yetty MCP server (all draw_* tools). */
-        allowed_tools = "Read,Bash(git *),mcp__yetty";
-    }
-    const char *model = getenv("YAI_MODEL");
+    const char *permission_mode = app->config.permission_mode;
+    /* An explicit allowlist wins; otherwise expand the chosen preset. */
+    const char *allowed_tools = app->config.allowed_tools[0]
+                                    ? app->config.allowed_tools
+                                    : claude_preset_tools(app->config.allowed_preset);
+    const char *model = app->config.model;
 
     const char *args[24];
     int arg_count = 0;
@@ -757,9 +767,14 @@ static struct yetty_ycore_void_result claude_start(struct yetty_yclass_ctx *ctx,
         args[arg_count++] = "--session-id";
         args[arg_count++] = app->session_id;
     }
-    if (model && model[0]) {
+    if (model[0]) {
         args[arg_count++] = "--model";
         args[arg_count++] = model;
+    }
+    /* "auto" leaves claude to its own default; anything else is passed. */
+    if (app->config.claude_effort[0] && strcmp(app->config.claude_effort, "auto") != 0) {
+        args[arg_count++] = "--effort";
+        args[arg_count++] = app->config.claude_effort;
     }
     args[arg_count] = NULL;
 
@@ -825,21 +840,17 @@ static struct yetty_ycore_void_result claude_describe_config(struct yetty_yclass
     (void)obj;
     (void)app;
     /* Mirror the exact defaults claude_start applies. */
-    const char *permission_mode = getenv("YAI_PERMISSION_MODE");
-    if (!permission_mode || !permission_mode[0]) {
-        permission_mode = "default";
-    }
-    const char *allowed_tools = getenv("YAI_ALLOWED_TOOLS");
-    if (!allowed_tools || !allowed_tools[0]) {
-        allowed_tools = "Read,Bash(git *),mcp__yetty";
-    }
-    const char *model = getenv("YAI_MODEL");
+    const char *permission_mode = app->config.permission_mode;
+    const char *allowed_tools = app->config.allowed_tools[0]
+                                    ? app->config.allowed_tools
+                                    : claude_preset_tools(app->config.allowed_preset);
+    const char *model = app->config.model;
     int written = snprintf(out, out_size,
-                           "model: %s  [YAI_MODEL]\n"
-                           "permission mode: %s  [YAI_PERMISSION_MODE]\n"
-                           "allowed tools: %s  [YAI_ALLOWED_TOOLS]\n"
+                           "model: %s  [--model]\n"
+                           "permission mode: %s  [--permission-mode]\n"
+                           "allowed tools: %s  [--allowed-preset / --allowed-tools]\n"
                            "resume: --resume <session id> (session is persistent)",
-                           (model && model[0]) ? model : "(CLI default)",
+                           model[0] ? model : "(CLI default)",
                            claude_permission_ui_mode(permission_mode), allowed_tools);
     if (written < 0 || (size_t)written >= out_size) {
         return YETTY_ERR(yetty_ycore_void, "claude describe_config: rows truncated");
@@ -855,37 +866,28 @@ static struct yetty_ycore_void_result claude_config_knob(struct yetty_yclass_ctx
 {
     (void)ctx;
     (void)obj;
-    (void)app;
-    const char *permission_mode = getenv("YAI_PERMISSION_MODE");
-    if (!permission_mode || !permission_mode[0]) {
-        permission_mode = "default";
-    }
     /* Show the same "auto" the permission prompt offers; a legacy
-     * bypassPermissions in the env still selects the "auto" radio. */
-    permission_mode = claude_permission_ui_mode(permission_mode);
-    const char *tools_preset = getenv("YAI_ALLOWED_PRESET");
-    if (!tools_preset || !tools_preset[0]) {
-        tools_preset = "curated";
-    }
-    /* One knob spec per line. "tools" is a preset over the YAI_ALLOWED_TOOLS
-     * string (apply_config maps the preset name → the concrete tool list);
-     * radio option values must stay comma-free, hence the preset names.
-     * "auto" is yai's name for claude's bypassPermissions (apply_config /
-     * claude_start translate it). Reasoning effort is a model parameter,
-     * so it lives on the model tab (main.c build_effort_knob), not here. */
+     * bypassPermissions value still selects the "auto" radio. */
+    const char *permission_mode = claude_permission_ui_mode(app->config.permission_mode);
+    /* One knob spec per line: ENGINE_FIELD|label|options|current. "tools" is a
+     * preset; claude_preset_tools maps the preset name → the concrete tool
+     * list at spawn. Radio option values must stay comma-free, hence the
+     * preset names. "auto" is yai's name for claude's bypassPermissions
+     * (apply_config / claude_start translate it). Reasoning effort is a model
+     * parameter, so it lives on the model tab (main.c build_effort_knob). */
     int written = snprintf(out, out_size,
-                           "YAI_PERMISSION_MODE|permission mode|"
+                           "permission_mode|permission mode|"
                            "default,acceptEdits,plan,auto|%s\n"
-                           "YAI_ALLOWED_PRESET|tools|curated,readonly,edit,full|%s",
-                           permission_mode, tools_preset);
+                           "allowed_preset|tools|curated,readonly,edit,full|%s",
+                           permission_mode, app->config.allowed_preset);
     if (written < 0 || (size_t)written >= out_size) {
         return YETTY_ERR(yetty_ycore_void, "claude config_knob: spec truncated");
     }
     return YETTY_OK_VOID();
 }
 
-/* setenv (next session) + a live set_permission_mode control_request
- * into the running session, so the edit applies immediately. */
+/* A live set_permission_mode control_request into the running session, so a
+ * permission-mode change applies immediately (storage is in app->config). */
 [[clang::annotate("override@yai:claude:apply_config")]]
 static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_ctx *ctx,
                                                           struct yetty_yclass_object *obj,
@@ -899,26 +901,11 @@ static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_ct
     if (!key || !key[0] || !value) {
         return YETTY_ERR(yetty_ycore_void, "claude apply_config: missing key/value");
     }
-    if (setenv(key, value, 1) != 0) {
-        return YETTY_ERR(yetty_ycore_void, "claude apply_config: setenv failed");
-    }
-    /* The tools knob is a preset name; expand it into the concrete
-     * YAI_ALLOWED_TOOLS list claude_start reads at the next session spawn. */
-    if (strcmp(key, "YAI_ALLOWED_PRESET") == 0) {
-        const char *tools = "Read,Bash(git *),mcp__yetty"; /* curated */
-        if (strcmp(value, "readonly") == 0) {
-            tools = "Read,mcp__yetty";
-        } else if (strcmp(value, "edit") == 0) {
-            tools = "Read,Edit,Write,Bash(git *),mcp__yetty";
-        } else if (strcmp(value, "full") == 0) {
-            tools = "Read,Edit,Write,Bash,mcp__yetty";
-        }
-        if (setenv("YAI_ALLOWED_TOOLS", tools, 1) != 0) {
-            return YETTY_ERR(yetty_ycore_void, "claude apply_config: setenv tools failed");
-        }
-        return YETTY_OK_VOID();
-    }
-    if (strcmp(key, "YAI_PERMISSION_MODE") != 0 || !app->child_alive || !app->child_stdin_open) {
+    /* Storage lives in app->config (written by the caller). The only live
+     * side-effect is pushing a new permission mode into the running session
+     * so it takes effect without waiting for the next spawn; everything else
+     * (tools preset, model) is read fresh at the next spawn. */
+    if (strcmp(key, "permission_mode") != 0 || !app->child_alive || !app->child_stdin_open) {
         return YETTY_OK_VOID();
     }
     char request_id[32];

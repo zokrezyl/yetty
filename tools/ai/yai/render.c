@@ -343,16 +343,24 @@ static struct yetty_ycore_void_result text_hud_redraw(struct yai_renderer *rende
     }
     int left_cols = text_hud_cols(renderer->hud_state);
     int right_cols = text_hud_cols(renderer->hud_stats);
-    int gap = columns - left_cols - right_cols;
+    int quota_cols = text_hud_cols(renderer->hud_quota);
     /* Save cursor, jump to the reserved last row, clear it, then paint the
-     * mint band. left + gap + right == columns (gap path), so the dark
-     * mint background fills the whole row. */
+     * mint band: activity on the left, quota centered, stats on the right,
+     * with the dark-mint background filling the gaps. */
     printf("\033[s\033[%d;1H\033[2K" YAI_HUD_BG, rows);
     printf(YAI_MINT_BRIGHT "%s" YAI_FG_DEFAULT, renderer->hud_state);
-    if (gap >= 1) {
-        printf("%*s", gap, "");
+    int gap = columns - left_cols - right_cols - quota_cols;
+    if (quota_cols > 0 && gap >= 2) {
+        int left_gap = gap / 2;
+        printf("%*s" YAI_MINT "%s" YAI_FG_DEFAULT "%*s", left_gap, "", renderer->hud_quota,
+               gap - left_gap, "");
     } else {
-        fputs("  ", stdout);
+        int plain_gap = columns - left_cols - right_cols;
+        if (plain_gap >= 1) {
+            printf("%*s", plain_gap, "");
+        } else {
+            fputs("  ", stdout);
+        }
     }
     fputs(renderer->hud_stats, stdout);
     fputs(YAI_RESET "\033[u", stdout);
@@ -555,6 +563,13 @@ struct yetty_ycore_void_result yai_renderer_hud_stats(struct yai_renderer *rende
                                                       const char *text)
 {
     snprintf(renderer->hud_stats, sizeof(renderer->hud_stats), "%s", text ? text : "");
+    return text_hud_redraw(renderer);
+}
+
+struct yetty_ycore_void_result yai_renderer_hud_quota(struct yai_renderer *renderer,
+                                                      const char *text)
+{
+    snprintf(renderer->hud_quota, sizeof(renderer->hud_quota), "%s", text ? text : "");
     return text_hud_redraw(renderer);
 }
 

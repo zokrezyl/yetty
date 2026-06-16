@@ -17,10 +17,12 @@
  *   c{motion} cc      change motion / whole line   (enters insert)
  *   r{char}           replace the char under cursor
  *   p P               paste the register after / before the cursor
+ *   u                 undo the last change (repeat to walk back)
  *   Enter             submit;  Ctrl-C interrupt;  Ctrl-D (empty) quit
  *
- * INSERT: printable → insert, Backspace, Enter (submit), Tab (menu),
- *   ESC → NORMAL, Ctrl-C / Ctrl-D as in NORMAL.
+ * INSERT: printable → insert, Backspace, Ctrl-W (delete word before
+ *   cursor), Enter (submit), Tab (menu), ESC → NORMAL, Ctrl-C / Ctrl-D
+ *   as in NORMAL.
  */
 #include "app.h"
 #include "editor-ops.h"
@@ -75,9 +77,8 @@ static int vi_csi(struct yai_app *app, char final_byte, int param)
         return YAI_EDIT_MOVED;
     case '~':
         if (param == 3) {
-            editor_ops_delete_range(app, app->stdin_cursor,
-                                    editor_ops_next_char(app, app->stdin_cursor));
-            return YAI_EDIT_CHANGED;
+            return editor_cmd_delete(app, app->stdin_cursor,
+                                     editor_ops_next_char(app, app->stdin_cursor));
         }
         return YAI_EDIT_NONE;
     default:
@@ -138,13 +139,8 @@ static int vi_normal_cmd(struct yai_app *app, struct yetty_yai_vi *vi, char byte
     if (vi->pending_op == 'r') {
         vi->pending_op = 0;
         if ((unsigned char)byte >= 0x20 && app->stdin_cursor < app->stdin_len) {
-            editor_ops_delete_range(app, app->stdin_cursor,
-                                    editor_ops_next_char(app, app->stdin_cursor));
-            if (!editor_ops_insert(app, &byte, 1)) {
-                return YAI_EDIT_NONE;
-            }
-            app->stdin_cursor = editor_ops_prev_char(app, app->stdin_cursor);
-            return YAI_EDIT_CHANGED;
+            return editor_cmd_replace_char(app, app->stdin_cursor,
+                                           editor_ops_next_char(app, app->stdin_cursor), byte);
         }
         return YAI_EDIT_NONE;
     }
@@ -156,11 +152,14 @@ static int vi_normal_cmd(struct yai_app *app, struct yetty_yai_vi *vi, char byte
         if (!vi_motion_span(app, op, byte, &from, &to)) {
             return YAI_EDIT_NONE;
         }
-        editor_ops_kill_range(app, from, to);
+        int action = editor_cmd_kill(app, from, to);
         if (op == 'c') {
             vi->normal = 0; /* change → insert */
+            if (action == YAI_EDIT_NONE) {
+                action = YAI_EDIT_MOVED; /* empty change still flips the indicator */
+            }
         }
-        return YAI_EDIT_CHANGED;
+        return action;
     }
 
     switch (byte) {
@@ -189,9 +188,8 @@ static int vi_normal_cmd(struct yai_app *app, struct yetty_yai_vi *vi, char byte
         return YAI_EDIT_MOVED;
     case 'x':
         if (app->stdin_cursor < app->stdin_len) {
-            editor_ops_kill_range(app, app->stdin_cursor,
-                                  editor_ops_next_char(app, app->stdin_cursor));
-            return YAI_EDIT_CHANGED;
+            return editor_cmd_kill(app, app->stdin_cursor,
+                                   editor_ops_next_char(app, app->stdin_cursor));
         }
         return YAI_EDIT_NONE;
     case 'i':
@@ -210,12 +208,12 @@ static int vi_normal_cmd(struct yai_app *app, struct yetty_yai_vi *vi, char byte
         app->stdin_cursor = 0;
         return YAI_EDIT_MOVED;
     case 'D':
-        editor_ops_kill_range(app, app->stdin_cursor, app->stdin_len);
-        return YAI_EDIT_CHANGED;
-    case 'C':
-        editor_ops_kill_range(app, app->stdin_cursor, app->stdin_len);
+        return editor_cmd_kill(app, app->stdin_cursor, app->stdin_len);
+    case 'C': {
+        int action = editor_cmd_kill(app, app->stdin_cursor, app->stdin_len);
         vi->normal = 0;
-        return YAI_EDIT_CHANGED;
+        return action == YAI_EDIT_NONE ? YAI_EDIT_MOVED : action;
+    }
     case 'd':
     case 'c':
     case 'r':
@@ -225,11 +223,11 @@ static int vi_normal_cmd(struct yai_app *app, struct yetty_yai_vi *vi, char byte
         if (app->stdin_cursor < app->stdin_len) {
             app->stdin_cursor = editor_ops_next_char(app, app->stdin_cursor);
         }
-        return editor_ops_yank(app) ? YAI_EDIT_CHANGED : YAI_EDIT_NONE;
+        return editor_cmd_yank(app);
     case 'P': /* paste before the cursor */
-        return editor_ops_yank(app) ? YAI_EDIT_CHANGED : YAI_EDIT_NONE;
-    case 'u': /* undo the previous edit; repeat to walk further back */
-        return editor_ops_undo_pop(app) ? YAI_EDIT_CHANGED : YAI_EDIT_NONE;
+        return editor_cmd_yank(app);
+    case 'u': /* undo the previous command; repeat to walk further back */
+        return editor_cmd_undo(app);
     case '.': { /* repeat the last text-changing command */
         int action = YAI_EDIT_NONE;
         for (int index = 0; index < vi->repeat_len; index++) {
@@ -261,9 +259,14 @@ static int vi_insert(struct yai_app *app, struct yetty_yai_vi *vi, char byte)
     case 0x7F:
     case 0x08:
         if (app->stdin_cursor > 0) {
-            editor_ops_delete_range(app, editor_ops_prev_char(app, app->stdin_cursor),
-                                    app->stdin_cursor);
-            return YAI_EDIT_CHANGED;
+            return editor_cmd_delete(app, editor_ops_prev_char(app, app->stdin_cursor),
+                                     app->stdin_cursor);
+        }
+        return YAI_EDIT_NONE;
+    case 0x17: /* Ctrl-W: delete the word before the cursor (vi insert) */
+        if (app->stdin_cursor > 0) {
+            return editor_cmd_kill(app, editor_ops_word_back(app, app->stdin_cursor),
+                                   app->stdin_cursor);
         }
         return YAI_EDIT_NONE;
     case 0x03:
@@ -276,7 +279,7 @@ static int vi_insert(struct yai_app *app, struct yetty_yai_vi *vi, char byte)
     if ((unsigned char)byte < 0x20) {
         return YAI_EDIT_NONE;
     }
-    return editor_ops_insert(app, &byte, 1) ? YAI_EDIT_CHANGED : YAI_EDIT_NONE;
+    return editor_cmd_insert_char(app, byte);
 }
 
 [[clang::annotate("override@yai:vi:feed_byte")]]
@@ -295,12 +298,6 @@ static struct yetty_ycore_int_result vi_feed_byte(struct yetty_yclass_ctx *ctx,
         vi->normal = 1;
         vi->pending_op = 0;
     }
-
-    /* Snapshot the line before this keystroke mutates it, for undo. */
-    char undo_pre[sizeof(app->stdin_buf)];
-    size_t undo_pre_len = app->stdin_len;
-    size_t undo_pre_cursor = app->stdin_cursor;
-    memcpy(undo_pre, app->stdin_buf, undo_pre_len);
 
     char final_byte = 0;
     int param = 0;
@@ -343,24 +340,9 @@ static struct yetty_ycore_int_result vi_feed_byte(struct yetty_yclass_ctx *ctx,
         break;
     }
 
-    /* Undo bookkeeping. `u` is the pop itself, excluded here. A text change
-     * opens (or continues) the current group and marks it dirty; resolving
-     * back to NORMAL mode commits it — so a normal-mode command is one undo
-     * step, and an insert session (group stays open until ESC) collapses
-     * into a single step. Line resets (submit / cancel) clear the stack. */
-    if ((char)byte != 'u') {
-        if (action == YAI_EDIT_CHANGED) {
-            editor_ops_undo_begin(app, undo_pre, undo_pre_len, undo_pre_cursor);
-            editor_ops_undo_mark_dirty(app);
-        }
-        if (vi->normal) {
-            editor_ops_undo_commit(app);
-        }
-    }
-    if (action == YAI_EDIT_SUBMIT || action == YAI_EDIT_INTERRUPT || action == YAI_EDIT_EOF) {
-        editor_ops_undo_clear(app);
-    }
-
+    /* No undo bookkeeping here: each command recorded its own step when it
+     * ran (editor_cmd_*), so undo is mode-independent. This layer only maps
+     * keystrokes to commands and tracks the `.`-repeat sequence above. */
     snprintf(app->edit_status, sizeof(app->edit_status), "%s", vi->normal ? "[N]" : "[I]");
     return YETTY_OK(yetty_ycore_int, action);
 }

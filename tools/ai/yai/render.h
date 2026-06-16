@@ -61,6 +61,8 @@ struct yai_renderer {
      * (activity), hud_stats = right (model + token/cost summary). */
     int text_hud;
     char hud_state[160];
+    /* Account quota, centered between the activity and the stats. */
+    char hud_quota[160];
     /* May embed per-field foreground color escapes, so sized well past the
      * visible text. */
     char hud_stats[320];
@@ -160,12 +162,14 @@ struct yetty_ycore_void_result yai_renderer_menu_set(struct yai_renderer *render
                                                      const char *const *rows, size_t count);
 struct yetty_ycore_void_result yai_renderer_menu_clear(struct yai_renderer *renderer);
 
-/* Text-HUD status bar (non-yetty terminals). Set the left (activity) and
- * right (model/usage) segments; redraws the zone when the text HUD is
- * active, otherwise just records the text. */
+/* Text-HUD status bar (non-yetty terminals). Set the left (activity),
+ * centered (account quota), and right (model/usage) segments; redraws the
+ * zone when the text HUD is active, otherwise just records the text. */
 struct yetty_ycore_void_result yai_renderer_hud_state(struct yai_renderer *renderer,
                                                       const char *text);
 struct yetty_ycore_void_result yai_renderer_hud_stats(struct yai_renderer *renderer,
+                                                      const char *text);
+struct yetty_ycore_void_result yai_renderer_hud_quota(struct yai_renderer *renderer,
                                                       const char *text);
 
 /* Reserve / release the bottom terminal row for the text-HUD bar via a

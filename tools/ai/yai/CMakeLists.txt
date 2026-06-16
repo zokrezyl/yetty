@@ -8,6 +8,8 @@
 # 3rdparty lib) on a libuv event loop.
 
 include(${YETTY_ROOT}/build-tools/yetty/libs/yyjson.cmake)
+# Persisted config (~/.config/yetty/yai.yaml) is parsed + emitted with libyaml.
+include(${YETTY_ROOT}/build-tools/yetty/libs/libyaml.cmake)
 
 # ytrace is compiled per-final-target (not a standalone library); the
 # rest comes transitively from yetty_ygui (ydraw-core, yface, yfont,
@@ -19,6 +21,8 @@ add_executable(yai
     commands.c
     event.c
     control.c
+    proxy.c
+    picohttpparser/picohttpparser.c
     engine.c
     turn-engine.c
     claude.c
@@ -46,7 +50,17 @@ find_package(Threads REQUIRED)
 # yetty_yfont_shader_glyph is the name->codepoint table for the activity
 # status line's animated glyph (PUA-B, rendered by the host text layer).
 target_link_libraries(yai PRIVATE yetty_ygui yetty_yclass yetty_yfont_shader_glyph
-                                  yyjson::yyjson uv_a Threads::Threads msgpack-c)
+                                  yyjson::yyjson uv_a Threads::Threads msgpack-c yaml)
+
+# proxy.c forwards the child's Anthropic traffic over HTTPS with libcurl to
+# capture live rate-limit/quota headers.
+target_link_libraries(yai PRIVATE CURL::libcurl)
+# libcurl.a needs Brotli symbols for `Content-Encoding: br`, but Brotli is
+# also a transitive dep of freetype (woff2); CMake collapses it to its first
+# (early) occurrence, so re-list it after libcurl on the link line.
+if(TARGET brotlidec)
+    target_link_libraries(yai PRIVATE brotlidec brotlicommon)
+endif()
 
 # The engine classes carry `[[clang::annotate(...)]]` (C23 attribute
 # syntax); see ygrid/CMakeLists.txt for the rationale.
@@ -56,4 +70,6 @@ if(NOT MSVC)
         C_STANDARD_REQUIRED ON
     )
     target_compile_options(yai PRIVATE -Wall -Wextra)
+    # Vendored third-party parser: don't hold it to our warning flags.
+    set_source_files_properties(picohttpparser/picohttpparser.c PROPERTIES COMPILE_OPTIONS "-w")
 endif()

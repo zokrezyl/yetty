@@ -74,11 +74,11 @@ static struct yetty_ycore_void_result gemini_send_user_message(struct yetty_ycla
     if (app->child_open_handles > 0 || app->child_alive) {
         return YETTY_ERR(yetty_ycore_void, "gemini send_user_message: previous turn still open");
     }
-    const char *model = getenv("YAI_MODEL");
+    const char *model = app->config.model;
     /* Non-interactive gemini cannot prompt for tool approval; the
      * default approval mode auto-denies mutating tools. Opt into a
-     * looser mode explicitly (e.g. auto_edit, yolo). */
-    const char *approval_mode = getenv("YAI_GEMINI_APPROVAL_MODE");
+     * looser mode explicitly (--gemini-approval auto_edit | yolo). */
+    const char *approval_mode = app->config.gemini_approval_mode;
 
     const char *args[12];
     int arg_count = 0;
@@ -87,11 +87,11 @@ static struct yetty_ycore_void_result gemini_send_user_message(struct yetty_ycla
     /* stream-json is JSONL (one event per line) and streams the response
      * live; plain "json" emits a single pretty-printed object. */
     args[arg_count++] = "stream-json";
-    if (model && model[0]) {
+    if (model[0]) {
         args[arg_count++] = "--model";
         args[arg_count++] = model;
     }
-    if (approval_mode && approval_mode[0]) {
+    if (approval_mode[0] && strcmp(approval_mode, "default") != 0) {
         args[arg_count++] = "--approval-mode";
         args[arg_count++] = approval_mode;
     }
@@ -112,16 +112,13 @@ static struct yetty_ycore_void_result gemini_describe_config(struct yetty_yclass
 {
     (void)ctx;
     (void)obj;
-    (void)app;
-    const char *model = getenv("YAI_MODEL");
-    const char *approval_mode = getenv("YAI_GEMINI_APPROVAL_MODE");
+    const char *model = app->config.model;
+    const char *approval_mode = app->config.gemini_approval_mode;
     int written = snprintf(out, out_size,
-                           "model: %s  [YAI_MODEL]\n"
-                           "approval mode: %s  [YAI_GEMINI_APPROVAL_MODE]\n"
+                           "model: %s  [--model]\n"
+                           "approval mode: %s  [--gemini-approval]\n"
                            "resume: none (one fresh conversation per turn)",
-                           (model && model[0]) ? model : "(CLI default)",
-                           (approval_mode && approval_mode[0]) ? approval_mode
-                                                               : "(CLI default — auto-denies)");
+                           model[0] ? model : "(CLI default)", approval_mode);
     if (written < 0 || (size_t)written >= out_size) {
         return YETTY_ERR(yetty_ycore_void, "gemini describe_config: rows truncated");
     }
@@ -136,15 +133,10 @@ static struct yetty_ycore_void_result gemini_config_knob(struct yetty_yclass_ctx
 {
     (void)ctx;
     (void)obj;
-    (void)app;
-    const char *approval_mode = getenv("YAI_GEMINI_APPROVAL_MODE");
-    if (!approval_mode || !approval_mode[0]) {
-        approval_mode = "default";
-    }
     int written = snprintf(out, out_size,
-                           "YAI_GEMINI_APPROVAL_MODE|approval mode|"
+                           "gemini_approval_mode|approval mode|"
                            "default,auto_edit,yolo,plan|%s",
-                           approval_mode);
+                           app->config.gemini_approval_mode);
     if (written < 0 || (size_t)written >= out_size) {
         return YETTY_ERR(yetty_ycore_void, "gemini config_knob: spec truncated");
     }

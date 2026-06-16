@@ -136,10 +136,7 @@ static void control_pack_kv(msgpack_packer *packer, const char *key, const char 
 static void control_method_status(struct yai_control_conn *conn, uint32_t msgid)
 {
     struct yai_app *app = conn->control->app;
-    const char *model = getenv("YAI_MODEL");
-    if (!model || !model[0]) {
-        model = "default";
-    }
+    const char *model = app->config.model[0] ? app->config.model : "default";
     msgpack_sbuffer sbuf;
     msgpack_sbuffer_init(&sbuf);
     msgpack_packer packer;

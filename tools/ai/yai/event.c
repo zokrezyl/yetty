@@ -62,6 +62,12 @@ static struct yetty_ycore_void_result dispatch_usage(struct yai_app *app,
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "event usage: hud turn line");
         hud_res = yai_hud_set_session(app->hud, session_line);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "event usage: hud session line");
+        char quota_summary[64];
+        yai_usage_proxy_summary(app, quota_summary, sizeof(quota_summary));
+        if (quota_summary[0]) {
+            hud_res = yai_hud_set_quota(app->hud, quota_summary);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "event usage: hud quota");
+        }
         hud_res = yai_hud_set_state(app->hud, "idle");
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "event usage: hud state");
         hud_res = yai_refresh_hud_stats(app);
@@ -75,6 +81,13 @@ static struct yetty_ycore_void_result dispatch_usage(struct yai_app *app,
     if (app->renderer.text_hud) {
         struct yetty_ycore_void_result state_res = yai_renderer_hud_state(&app->renderer, "idle");
         YETTY_RETURN_IF_ERR(yetty_ycore_void, state_res, "event usage: text hud state");
+        char quota_summary[64];
+        yai_usage_proxy_summary(app, quota_summary, sizeof(quota_summary));
+        if (quota_summary[0]) {
+            struct yetty_ycore_void_result quota_res =
+                yai_renderer_hud_quota(&app->renderer, quota_summary);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, quota_res, "event usage: text hud quota");
+        }
         struct yetty_ycore_void_result stats_res = yai_refresh_hud_stats(app);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, stats_res, "event usage: text hud stats");
         return YETTY_OK_VOID();
