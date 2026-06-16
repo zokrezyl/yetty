@@ -74,16 +74,8 @@ void yetty_yvterm_vterm_word_bounds(struct yetty_yclass_object *obj, uint32_t ro
 uint32_t yetty_yvterm_vterm_scroll_origin(struct yetty_yclass_object *obj);
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_append_primitive(
     struct yetty_yclass_object *obj, uint32_t row, const uint32_t *words, uint32_t word_count);
-struct yetty_ycore_void_result yetty_yvterm_vterm_add_primitive_ref(struct yetty_yclass_object *obj,
-                                                                    uint32_t row, uint32_t col,
-                                                                    uint16_t rel_line,
-                                                                    uint16_t index_in_list);
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_attach_composite(
     struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_composite *composite);
-struct yetty_ycore_void_result yetty_yvterm_vterm_add_composite_ref(struct yetty_yclass_object *obj,
-                                                                    uint32_t row, uint32_t col,
-                                                                    uint16_t rel_line,
-                                                                    uint16_t index_in_list);
 struct yetty_ycore_void_result yetty_yvterm_vterm_clear_rich_line(struct yetty_yclass_object *obj,
                                                                   uint32_t row);
 struct yetty_ycore_void_result yetty_yvterm_vterm_clear_rich_all(struct yetty_yclass_object *obj);

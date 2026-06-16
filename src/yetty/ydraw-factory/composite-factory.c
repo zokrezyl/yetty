@@ -242,3 +242,20 @@ struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_c
     }
     return instance->render(instance, target, x, y);
 }
+
+float yetty_ydraw_composite_pixel_height(const struct yetty_ydraw_composite *instance)
+{
+    if (!instance) {
+        return 0.0f;
+    }
+    float height = instance->bounds.max.y - instance->bounds.min.y;
+    return height > 0.0f ? height : 0.0f;
+}
+
+void yetty_ydraw_composite_set_content_scale(struct yetty_ydraw_composite *instance, float scale)
+{
+    if (!instance) {
+        return;
+    }
+    instance->content_scale = scale > 0.0f ? scale : 1.0f;
+}

@@ -77,37 +77,12 @@ struct yetty_yvterm_primitive {
     uint32_t word_count;
 };
 
-/* Borrowed reference from a covered cell to a primitive anchored on another
- * line. The anchor is below the covered cell: anchor_row = row + rel_line. */
-struct yetty_yvterm_primitive_ref {
-    uint16_t rel_line;
-    uint16_t index_in_list;
-};
-
-/* Borrowed reference from a covered cell to a composite anchored on another
- * line, using the same downward-anchor convention as primitive refs. */
-struct yetty_yvterm_composite_ref {
-    uint16_t rel_line;
-    uint16_t index_in_list;
-};
-
-/* Rich content covering one terminal cell. These are borrowed refs only; owned
- * primitive/composite storage lives on the anchor line. */
-struct yetty_yvterm_drawable_refs {
-    struct yetty_yvterm_primitive_ref *primitive_refs;
-    uint16_t primitive_ref_count;
-    uint16_t primitive_ref_capacity;
-
-    struct yetty_yvterm_composite_ref *composite_refs;
-    uint16_t composite_ref_count;
-    uint16_t composite_ref_capacity;
-};
-
-/* One slot in the scrolling line ring. The line owns its text cells, per-cell
- * rich refs, primitive arena/descriptors, and anchored composites. */
+/* One slot in the scrolling line ring. The line owns its text cells, its
+ * primitive arena/descriptors, and its anchored composites. Rich content is
+ * anchored per LINE (figures/SDF records hang off the line that scrolls them);
+ * there is no per-cell coverage metadata. */
 struct yetty_yvterm_line {
     struct yetty_yvterm_text_cell *text_cells;
-    struct yetty_yvterm_drawable_refs *drawable_refs;
 
     struct yetty_yvterm_primitive *primitives;
     uint32_t primitive_count;
@@ -122,6 +97,13 @@ struct yetty_yvterm_line {
     uint32_t composite_capacity;
 
     int dirty;
+
+    /* 1 when this physical line is a soft-wrap continuation of the line above
+     * it (the previous line filled up and the text flowed onto this one). Driven
+     * from libvterm's per-line `continuation` flag and used by resize reflow to
+     * tell a single wrapped logical line from two hard-separated lines. A blank
+     * or freshly-reset line is never a continuation. */
+    int continuation;
 };
 
 /* Optional hook owned by the integration layer. Full-screen terminal clear may
@@ -232,12 +214,6 @@ static inline struct yetty_yvterm_text_cell *cell_at(struct yetty_yvterm_grid *g
     return &line_at(grid, row)->text_cells[col];
 }
 
-static inline struct yetty_yvterm_drawable_refs *refs_at(struct yetty_yvterm_grid *grid,
-                                                         uint32_t row, uint32_t col)
-{
-    return &line_at(grid, row)->drawable_refs[col];
-}
-
 static void destroy_composite(struct yetty_ydraw_composite *composite)
 {
     if (composite) {
@@ -246,52 +222,6 @@ static void destroy_composite(struct yetty_ydraw_composite *composite)
 }
 
 /* Growable backing arrays — each grows capacity (doubling, clamped to need). */
-
-static struct yetty_ycore_void_result ensure_primitive_refs(struct yetty_yvterm_drawable_refs *refs,
-                                                            uint16_t need)
-{
-    if (need <= refs->primitive_ref_capacity) {
-        return YETTY_OK_VOID();
-    }
-    uint32_t new_cap = refs->primitive_ref_capacity ? refs->primitive_ref_capacity : 2u;
-    while (new_cap < need) {
-        new_cap *= 2u;
-    }
-    if (new_cap > UINT16_MAX) {
-        new_cap = UINT16_MAX;
-    }
-    struct yetty_yvterm_primitive_ref *grown =
-        realloc(refs->primitive_refs, (size_t)new_cap * sizeof(*grown));
-    if (!grown) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm: primitive_refs grow failed");
-    }
-    refs->primitive_refs = grown;
-    refs->primitive_ref_capacity = (uint16_t)new_cap;
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result ensure_composite_refs(struct yetty_yvterm_drawable_refs *refs,
-                                                            uint16_t need)
-{
-    if (need <= refs->composite_ref_capacity) {
-        return YETTY_OK_VOID();
-    }
-    uint32_t new_cap = refs->composite_ref_capacity ? refs->composite_ref_capacity : 2u;
-    while (new_cap < need) {
-        new_cap *= 2u;
-    }
-    if (new_cap > UINT16_MAX) {
-        new_cap = UINT16_MAX;
-    }
-    struct yetty_yvterm_composite_ref *grown =
-        realloc(refs->composite_refs, (size_t)new_cap * sizeof(*grown));
-    if (!grown) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm: composite_refs grow failed");
-    }
-    refs->composite_refs = grown;
-    refs->composite_ref_capacity = (uint16_t)new_cap;
-    return YETTY_OK_VOID();
-}
 
 static struct yetty_ycore_void_result ensure_arena(struct yetty_yvterm_line *line, uint32_t need)
 {
@@ -351,36 +281,11 @@ static struct yetty_ycore_void_result ensure_composites(struct yetty_yvterm_line
     return YETTY_OK_VOID();
 }
 
-static void free_refs(struct yetty_yvterm_drawable_refs *refs)
-{
-    free(refs->primitive_refs);
-    refs->primitive_refs = NULL;
-    refs->primitive_ref_count = 0;
-    refs->primitive_ref_capacity = 0;
-
-    free(refs->composite_refs);
-    refs->composite_refs = NULL;
-    refs->composite_ref_count = 0;
-    refs->composite_ref_capacity = 0;
-}
-
-/* Per-cell borrow drop: forget which rich content covers this cell. Never
- * destroys the anchor line's owned content. */
-static void clear_refs(struct yetty_yvterm_drawable_refs *refs)
-{
-    refs->primitive_ref_count = 0;
-    refs->composite_ref_count = 0;
-}
-
-/* Full line ownership clear: drop every cell's borrows AND release the line's
- * owned rich content (arena/primitives reset, composites destroyed). */
+/* Full line clear: release the line's owned rich content (arena/primitives
+ * reset, composites destroyed). */
 static void clear_line_rich(struct yetty_yvterm_line *line, uint32_t cols)
 {
-    if (line->drawable_refs) {
-        for (uint32_t col = 0; col < cols; ++col) {
-            clear_refs(&line->drawable_refs[col]);
-        }
-    }
+    (void)cols;
     line->primitive_count = 0;
     line->arena_count = 0;
     for (uint32_t i = 0; i < line->composite_count; ++i) {
@@ -388,51 +293,6 @@ static void clear_line_rich(struct yetty_yvterm_line *line, uint32_t cols)
         line->composites[i] = NULL;
     }
     line->composite_count = 0;
-}
-
-/* Remove every borrowed ref (on any visible line) that points to anchor_row, so
- * clearing that anchor line's owned storage cannot leave a dangling ref behind.
- * The anchor convention is downward (anchor = covered_row + rel_line), so only
- * rows at or above anchor_row can reference it. */
-static void drop_refs_to_anchor(struct yetty_yvterm_grid *grid, uint32_t anchor_row)
-{
-    if (anchor_row >= grid->visible_rows) {
-        return;
-    }
-    for (uint32_t row = 0; row <= anchor_row; ++row) {
-        struct yetty_yvterm_line *line = line_at(grid, row);
-        if (!line->drawable_refs) {
-            continue;
-        }
-        int touched = 0;
-        for (uint32_t col = 0; col < grid->cols; ++col) {
-            struct yetty_yvterm_drawable_refs *refs = &line->drawable_refs[col];
-            uint16_t kept = 0;
-            for (uint16_t i = 0; i < refs->primitive_ref_count; ++i) {
-                if ((uint32_t)row + refs->primitive_refs[i].rel_line != anchor_row) {
-                    refs->primitive_refs[kept++] = refs->primitive_refs[i];
-                }
-            }
-            if (kept != refs->primitive_ref_count) {
-                refs->primitive_ref_count = kept;
-                touched = 1;
-            }
-            kept = 0;
-            for (uint16_t i = 0; i < refs->composite_ref_count; ++i) {
-                if ((uint32_t)row + refs->composite_refs[i].rel_line != anchor_row) {
-                    refs->composite_refs[kept++] = refs->composite_refs[i];
-                }
-            }
-            if (kept != refs->composite_ref_count) {
-                refs->composite_ref_count = kept;
-                touched = 1;
-            }
-        }
-        if (touched) {
-            line->dirty = 1;
-            grid->has_dirty = 1;
-        }
-    }
 }
 
 static void blank_cell(struct yetty_yvterm_text_cell *cell, uint32_t fg, uint32_t bg)
@@ -452,6 +312,7 @@ static void reset_line(struct yetty_yvterm_grid *grid, struct yetty_yvterm_line 
         blank_cell(&line->text_cells[col], grid->default_fg, grid->default_bg);
     }
     clear_line_rich(line, grid->cols);
+    line->continuation = 0;
 }
 
 static void blank_line(struct yetty_yvterm_grid *grid, uint32_t row)
@@ -474,6 +335,25 @@ static void mark_dirty_all(struct yetty_yvterm_grid *grid)
         grid->lines[i].dirty = 1;
     }
     grid->has_dirty = 1;
+}
+
+/* Mirror libvterm's per-visible-row soft-wrap flag into the line ring after a
+ * feed so resize reflow knows where logical lines wrap. libvterm sets
+ * `continuation` by direct write (not via the setlineinfo callback), so it
+ * cannot be observed incrementally; reading it for the whole visible window once
+ * per feed keeps the on-screen rows exact. A line that becomes a continuation
+ * and then scrolls off within a single bulk feed keeps whatever flag it last
+ * carried while visible — at worst that under-marks deep scrollback, which makes
+ * a paragraph keep its old wrap rather than corrupting anything. */
+static void grid_sync_continuation(struct yetty_yvterm_grid *grid)
+{
+    if (!grid->state) {
+        return;
+    }
+    for (uint32_t row = 0; row < grid->visible_rows; ++row) {
+        const VTermLineInfo *info = vterm_state_get_lineinfo(grid->state, (int)row);
+        line_at(grid, row)->continuation = (info && info->continuation) ? 1 : 0;
+    }
 }
 
 /* O(1) whole-screen scroll-up. The rolled-off top lines are NOT blanked — they
@@ -507,61 +387,13 @@ static void roll_up(struct yetty_yvterm_grid *grid, uint32_t count)
     grid->has_dirty = 1;
 }
 
-/* Move one cell's full state — text plus borrowed primitive/composite refs.
- *
- * Borrowed refs name their anchor relative to the *covered* row
- * (anchor = covered_row + rel_line). Moving a cell to a different row must keep
- * the absolute anchor fixed, so rel_line is rebased by (src_row - dst_row). A
- * ref whose rebased rel_line would point above the cell (negative — violating
- * the downward-anchor convention) or past the visible grid is dropped rather
- * than left dangling. Line-owned primitive/composite *storage* is not touched
- * here: it lives on its anchor line and is addressed by index, so a cell move
- * only needs to keep the references consistent. Best-effort on allocation: a
- * libvterm callback cannot propagate an error, so it keeps what fits. */
+/* Move one cell's text state. Line-owned primitive/composite storage is not
+ * touched: it lives on its anchor line and scrolls with that line, so a
+ * within-grid cell move (libvterm region scroll / DECSTBM) only relocates text. */
 static void move_cell(struct yetty_yvterm_grid *grid, uint32_t dst_row, uint32_t dst_col,
                       uint32_t src_row, uint32_t src_col)
 {
     *cell_at(grid, dst_row, dst_col) = *cell_at(grid, src_row, src_col);
-
-    struct yetty_yvterm_drawable_refs *dst = refs_at(grid, dst_row, dst_col);
-    struct yetty_yvterm_drawable_refs *src = refs_at(grid, src_row, src_col);
-    int rel_delta = (int)src_row - (int)dst_row;
-    dst->primitive_ref_count = 0;
-    dst->composite_ref_count = 0;
-
-    struct yetty_ycore_void_result pr = ensure_primitive_refs(dst, src->primitive_ref_count);
-    if (YETTY_IS_OK(pr)) {
-        for (uint16_t i = 0; i < src->primitive_ref_count; ++i) {
-            int new_rel = (int)src->primitive_refs[i].rel_line + rel_delta;
-            if (new_rel < 0 || new_rel > UINT16_MAX ||
-                dst_row + (uint32_t)new_rel >= grid->visible_rows) {
-                continue;
-            }
-            dst->primitive_refs[dst->primitive_ref_count].rel_line = (uint16_t)new_rel;
-            dst->primitive_refs[dst->primitive_ref_count].index_in_list =
-                src->primitive_refs[i].index_in_list;
-            dst->primitive_ref_count++;
-        }
-    } else {
-        yetty_ycore_error_destroy(pr.error);
-    }
-
-    struct yetty_ycore_void_result cr = ensure_composite_refs(dst, src->composite_ref_count);
-    if (YETTY_IS_OK(cr)) {
-        for (uint16_t i = 0; i < src->composite_ref_count; ++i) {
-            int new_rel = (int)src->composite_refs[i].rel_line + rel_delta;
-            if (new_rel < 0 || new_rel > UINT16_MAX ||
-                dst_row + (uint32_t)new_rel >= grid->visible_rows) {
-                continue;
-            }
-            dst->composite_refs[dst->composite_ref_count].rel_line = (uint16_t)new_rel;
-            dst->composite_refs[dst->composite_ref_count].index_in_list =
-                src->composite_refs[i].index_in_list;
-            dst->composite_ref_count++;
-        }
-    } else {
-        yetty_ycore_error_destroy(cr.error);
-    }
 }
 
 /*===========================================================================
@@ -588,9 +420,6 @@ static int cb_putglyph(VTermGlyphInfo *info, VTermPos pos, void *user)
     cell->width = (uint8_t)(info->width >= 2 ? 2 : 1);
     cell->flags = 0;
 
-    /* A text write overwrites the cell, so its rich-content borrows go stale. */
-    clear_refs(refs_at(grid, (uint32_t)pos.row, (uint32_t)pos.col));
-
     if (info->width == 2 && (uint32_t)pos.col + 1u < grid->cols) {
         struct yetty_yvterm_text_cell *next =
             cell_at(grid, (uint32_t)pos.row, (uint32_t)pos.col + 1u);
@@ -601,18 +430,15 @@ static int cb_putglyph(VTermGlyphInfo *info, VTermPos pos, void *user)
         next->attrs = grid->pen_attrs;
         next->width = 0;
         next->flags = 0;
-        clear_refs(refs_at(grid, (uint32_t)pos.row, (uint32_t)pos.col + 1u));
     }
 
     /* If this row anchors owned primitives/composites, writing text over it
-     * invalidates that rich content: release the owned storage and drop every
-     * borrowed ref (on any row) that pointed at this anchor, so nothing dangles.
-     * primitive_count/composite_count drop to 0, so later glyphs on the same
-     * line skip this cheaply. */
+     * invalidates that rich content: release the owned storage so the figure
+     * stops drawing. primitive_count/composite_count drop to 0, so later glyphs
+     * on the same line skip this cheaply. */
     struct yetty_yvterm_line *line = line_at(grid, (uint32_t)pos.row);
     if (line->primitive_count || line->composite_count) {
         clear_line_rich(line, grid->cols);
-        drop_refs_to_anchor(grid, (uint32_t)pos.row);
     }
 
     mark_dirty_row(grid, (uint32_t)pos.row);
@@ -696,15 +522,13 @@ static int cb_erase(VTermRect rect, int selective, void *user)
             }
             blank_cell(cell_at(grid, (uint32_t)row, (uint32_t)col), grid->default_fg,
                        grid->default_bg);
-            clear_refs(refs_at(grid, (uint32_t)row, (uint32_t)col));
         }
         /* Erasing cells on a row that anchors owned rich content invalidates
-         * that content too — release it and drop refs pointing here, mirroring
-         * cb_putglyph's anchor-line invalidation. */
+         * that content too — release it, mirroring cb_putglyph's anchor-line
+         * invalidation. */
         struct yetty_yvterm_line *line = line_at(grid, (uint32_t)row);
         if (line->primitive_count || line->composite_count) {
             clear_line_rich(line, grid->cols);
-            drop_refs_to_anchor(grid, (uint32_t)row);
         }
         mark_dirty_row(grid, (uint32_t)row);
     }
@@ -816,17 +640,22 @@ static int cb_bell(void *user)
 YETTY_EXTERNAL_CALLBACK
 static int cb_resize(int rows, int cols, VTermStateFields *fields, void *user)
 {
-    (void)cols;
-    (void)user;
+    struct yetty_yvterm_grid *grid = user;
     /* libvterm has already updated state->rows/state->cols and delegates the
      * lineinfo (re)allocation to this callback — its internal fallback is dead
      * code once a state resize callback is installed. Each non-NULL lineinfos[]
      * buffer must be grown/shrunk to `rows` entries here; otherwise the next
      * glyph indexes the old, shorter buffer out of bounds (heap corruption,
      * then a crash). The default vterm allocator is libc malloc/free, so plain
-     * calloc/free matches what libvterm will later free. Our grid model blanks
-     * every line on resize, so fresh zeroed lineinfo (no flag carry-over) is
-     * the correct semantics — mirrors libvterm's own screen-layer resize. */
+     * calloc/free matches what libvterm will later free.
+     *
+     * The grid model has already reflowed its lines (grid_resize_reflow ran
+     * before vterm_set_size) by the time we get here, so we mirror two pieces of
+     * that result back into the State — exactly what libvterm's own screen layer
+     * does in resize_buffer: the per-line continuation flags and the new cursor
+     * position. Carrying continuation keeps the NEXT resize re-wrapping from the
+     * correct soft-wrap boundaries; carrying the cursor keeps State->pos tracking
+     * the reflowed cursor instead of a stale clamp. */
     int safe_rows = rows > 0 ? rows : 1;
     for (int bufidx = 0; bufidx < 2; ++bufidx) {
         if (!fields->lineinfos[bufidx]) {
@@ -838,8 +667,30 @@ static int cb_resize(int rows, int cols, VTermStateFields *fields, void *user)
              * cursor below, so a stale-but-valid buffer is the safer failure. */
             continue;
         }
+        if (bufidx == 0 && grid && !grid->alt_screen) {
+            for (int row = 0; row < safe_rows && (uint32_t)row < grid->visible_rows; ++row) {
+                resized[row].continuation = line_at(grid, (uint32_t)row)->continuation ? 1u : 0u;
+            }
+        }
         free(fields->lineinfos[bufidx]);
         fields->lineinfos[bufidx] = resized;
+    }
+
+    if (grid) {
+        VTermPos pos = {.row = (int)grid->cursor_row, .col = (int)grid->cursor_col};
+        if (pos.row >= safe_rows) {
+            pos.row = safe_rows - 1;
+        }
+        if (cols > 0 && pos.col >= cols) {
+            pos.col = cols - 1;
+        }
+        if (pos.row < 0) {
+            pos.row = 0;
+        }
+        if (pos.col < 0) {
+            pos.col = 0;
+        }
+        fields->pos = pos;
     }
     return 1;
 }
@@ -874,16 +725,10 @@ static void grid_free_lines(struct yetty_yvterm_grid *grid)
     }
     for (uint32_t line = 0; line < grid->line_count; ++line) {
         struct yetty_yvterm_line *current = &grid->lines[line];
-        if (current->drawable_refs) {
-            for (uint32_t col = 0; col < grid->cols; ++col) {
-                free_refs(&current->drawable_refs[col]);
-            }
-        }
         for (uint32_t i = 0; i < current->composite_count; ++i) {
             destroy_composite(current->composites[i]);
         }
         free(current->text_cells);
-        free(current->drawable_refs);
         free(current->primitives);
         free(current->arena);
         free(current->composites);
@@ -902,8 +747,7 @@ static struct yetty_ycore_void_result grid_alloc_lines(struct yetty_yvterm_grid 
     grid->line_count = rows;
     for (uint32_t line = 0; line < rows; ++line) {
         grid->lines[line].text_cells = calloc(cols, sizeof(struct yetty_yvterm_text_cell));
-        grid->lines[line].drawable_refs = calloc(cols, sizeof(struct yetty_yvterm_drawable_refs));
-        if (!grid->lines[line].text_cells || !grid->lines[line].drawable_refs) {
+        if (!grid->lines[line].text_cells) {
             grid_free_lines(grid);
             return YETTY_ERR(yetty_ycore_void, "yvterm: line allocation failed");
         }
@@ -960,19 +804,160 @@ static void grid_model_teardown(struct yetty_yvterm_grid *grid)
     grid_free_lines(grid);
 }
 
-static struct yetty_ycore_void_result grid_model_resize(struct yetty_yvterm_grid *grid,
-                                                        uint32_t cols, uint32_t rows)
+/*===========================================================================
+ * Resize with reflow — re-wrap the soft-wrapped text to the new width.
+ *
+ * Models libvterm's screen-layer resize (src/libvterm-0.3.3/src/screen.c
+ * resize_buffer): physical lines are grouped into logical lines along the
+ * `continuation` flag, each logical line is re-wrapped at the new width, and
+ * the result is laid back into the ring with the bottom of the content pinned
+ * to the bottom of the visible screen (so the cursor and newest output stay in
+ * view, and a taller window reveals scrollback above). The cursor is tracked
+ * through the reflow by its absolute offset within its logical line.
+ *
+ * Scope note: only text cells reflow. Anchored rich content (primitives /
+ * composites) is released on resize, as it was before reflow existed — its
+ * placement is row-relative and re-wrapping invalidates it. Preserving rich
+ * content across reflow is a separate follow-up.
+ *=========================================================================*/
+
+/* Number of leading columns of a line that hold real content — the column after
+ * the last cell with a non-zero codepoint. Never-written / erased cells carry
+ * codepoint 0 and are trimmed; explicit spaces (codepoint 0x20) are kept. */
+static uint32_t line_used_cols(const struct yetty_yvterm_line *line, uint32_t cols)
 {
+    uint32_t used = 0;
+    for (uint32_t col = 0; col < cols; ++col) {
+        if (line->text_cells[col].codepoint != 0) {
+            used = col + 1u;
+        }
+    }
+    return used;
+}
+
+/* Ring line for a row measured from the visible top, where `row` may be negative
+ * to address retained scrollback history (row -1 is the line just above the
+ * screen). The modulo spans the full ring so history slots resolve correctly. */
+static struct yetty_yvterm_line *line_at_signed(struct yetty_yvterm_grid *grid, int row)
+{
+    int64_t count = (int64_t)grid->line_count;
+    int64_t slot = ((int64_t)grid->base + row) % count;
+    if (slot < 0) {
+        slot += count;
+    }
+    return &grid->lines[slot];
+}
+
+static void grid_blank_all_lines(struct yetty_yvterm_grid *grid)
+{
+    for (uint32_t slot = 0; slot < grid->line_count; ++slot) {
+        reset_line(grid, &grid->lines[slot]);
+    }
+}
+
+/* One physical source row feeding the reflow, paired with whether it continues
+ * the row above it within the gathered window. */
+struct yetty_yvterm_reflow_source {
+    struct yetty_yvterm_line *line;
+    int continuation;
+};
+
+/* One logical line (a maximal run of continuation-joined source rows) and how it
+ * maps onto the new width. */
+struct yetty_yvterm_reflow_logical {
+    uint32_t first;       /* index of the first source row */
+    uint32_t seg_count;   /* number of source rows joined into this logical line */
+    uint32_t content_len; /* total content cells across the joined rows */
+    uint32_t new_height;  /* physical rows this occupies at the new width */
+    uint32_t start_gidx;  /* global new-row index where this logical line begins */
+};
+
+/* Map a global new-row index to its ring slot in a freshly laid-out (base 0)
+ * ring: the bottom `new_rows` rows are visible at slots [0, new_rows); rows above
+ * them are scrollback at slot (new_line_count - back). Returns 0 (and leaves
+ * *out_slot untouched) for a row evicted past the retained scrollback. */
+static int reflow_gidx_to_slot(uint32_t gidx, uint32_t visible_top, uint32_t new_rows,
+                               uint32_t new_line_count, uint32_t *out_slot)
+{
+    if (gidx >= visible_top && gidx < visible_top + new_rows) {
+        *out_slot = gidx - visible_top;
+        return 1;
+    }
+    if (gidx < visible_top) {
+        uint32_t back = visible_top - gidx;
+        if (back > YVTERM_SCROLLBACK_ROWS) {
+            return 0;
+        }
+        *out_slot = new_line_count - back;
+        return 1;
+    }
+    return 0;
+}
+
+/* Move a source line's anchored rich content (SDF primitive arena + descriptors
+ * and owned composites) onto a destination line in the new ring, so figures and
+ * SDF drawables survive a resize instead of being dropped. Pointers are stolen,
+ * not copied — the source is left empty so the old-ring teardown frees nothing
+ * for it. If the destination already holds rich content (two source lines folded
+ * onto one new row), the source's content is left in place to be freed by the
+ * old-ring teardown rather than leaked or double-owned. */
+static void steal_line_rich(struct yetty_yvterm_line *dst, struct yetty_yvterm_line *src)
+{
+    if (dst->composites || dst->primitives || dst->arena) {
+        return;
+    }
+    dst->composites = src->composites;
+    dst->composite_count = src->composite_count;
+    dst->composite_capacity = src->composite_capacity;
+    dst->primitives = src->primitives;
+    dst->primitive_count = src->primitive_count;
+    dst->primitive_capacity = src->primitive_capacity;
+    dst->arena = src->arena;
+    dst->arena_count = src->arena_count;
+    dst->arena_capacity = src->arena_capacity;
+
+    src->composites = NULL;
+    src->composite_count = 0;
+    src->composite_capacity = 0;
+    src->primitives = NULL;
+    src->primitive_count = 0;
+    src->primitive_capacity = 0;
+    src->arena = NULL;
+    src->arena_count = 0;
+    src->arena_capacity = 0;
+
+    if (dst->composite_count || dst->primitive_count) {
+        dst->dirty = 1;
+    }
+}
+
+/* Alt-screen resize: full-screen apps own their redraw and have neither
+ * scrollback nor soft-wrap, so there is nothing to reflow. Preserve the
+ * overlapping top-left rectangle to avoid a blank flash; the app repaints the
+ * rest on the SIGWINCH it gets from the PTY resize. */
+static struct yetty_ycore_void_result grid_resize_altscreen(struct yetty_yvterm_grid *grid,
+                                                            uint32_t cols, uint32_t rows)
+{
+    uint32_t old_cols = grid->cols;
+    uint32_t old_rows = grid->visible_rows;
+
     struct yetty_yvterm_grid tmp = {0};
     tmp.cols = cols;
-    tmp.visible_rows = rows;
     tmp.default_fg = grid->default_fg;
     tmp.default_bg = grid->default_bg;
-    /* Reallocate the full ring (visible + scrollback). Resize drops the old
-     * scrollback history rather than reflowing it to the new width. */
     struct yetty_ycore_void_result lines_r =
         grid_alloc_lines(&tmp, rows + YVTERM_SCROLLBACK_ROWS, cols);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, lines_r, "yvterm: grid_model_resize alloc_lines");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, lines_r, "yvterm: grid_resize_altscreen alloc_lines");
+    grid_blank_all_lines(&tmp);
+
+    uint32_t copy_rows = old_rows < rows ? old_rows : rows;
+    uint32_t copy_cols = old_cols < cols ? old_cols : cols;
+    for (uint32_t row = 0; row < copy_rows; ++row) {
+        struct yetty_yvterm_text_cell *dst = tmp.lines[row].text_cells;
+        for (uint32_t col = 0; col < copy_cols; ++col) {
+            dst[col] = *cell_at(grid, row, col);
+        }
+    }
 
     grid_free_lines(grid);
     grid->lines = tmp.lines;
@@ -981,13 +966,210 @@ static struct yetty_ycore_void_result grid_model_resize(struct yetty_yvterm_grid
     grid->visible_rows = rows;
     grid->base = 0;
     grid->total_scrolled = 0;
-
-    for (uint32_t row = 0; row < rows; ++row) {
-        blank_line(grid, row);
+    if (grid->cursor_row >= rows) {
+        grid->cursor_row = rows - 1u;
     }
+    if (grid->cursor_col >= cols) {
+        grid->cursor_col = cols - 1u;
+    }
+    grid->selection_active = 0;
+
     vterm_set_size(grid->vterm, (int)rows, (int)cols);
     mark_dirty_all(grid);
     return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result grid_resize_reflow(struct yetty_yvterm_grid *grid,
+                                                         uint32_t new_cols, uint32_t new_rows)
+{
+    uint32_t old_cols = grid->cols;
+    uint32_t old_rows = grid->visible_rows;
+    uint32_t scrollback_cap = grid->line_count - grid->visible_rows;
+    uint32_t hist = grid->total_scrolled < scrollback_cap ? grid->total_scrolled : scrollback_cap;
+
+    /* Trim trailing blank rows below the content/cursor so the reflow does not
+     * manufacture empty scrollback, but never trim history or the cursor line. */
+    int content_bottom = -1;
+    for (uint32_t row = 0; row < old_rows; ++row) {
+        if (line_used_cols(line_at(grid, row), old_cols) > 0) {
+            content_bottom = (int)row;
+        }
+    }
+    int last_kept = content_bottom;
+    if ((int)grid->cursor_row > last_kept) {
+        last_kept = (int)grid->cursor_row;
+    }
+    uint32_t visible_kept = last_kept >= 0 ? (uint32_t)last_kept + 1u : 0u;
+    uint32_t src_count = hist + visible_kept;
+
+    struct yetty_yvterm_reflow_source *src = calloc(src_count ? src_count : 1u, sizeof(*src));
+    struct yetty_yvterm_reflow_logical *logical = calloc(src_count ? src_count : 1u, sizeof(*logical));
+    if (!src || !logical) {
+        free(src);
+        free(logical);
+        return YETTY_ERR(yetty_ycore_void, "yvterm: grid_resize_reflow scratch alloc failed");
+    }
+    for (uint32_t i = 0; i < src_count; ++i) {
+        struct yetty_yvterm_line *line = line_at_signed(grid, (int)i - (int)hist);
+        src[i].line = line;
+        /* The oldest gathered row starts a fresh logical line even if its flag is
+         * set — whatever it continued from has already been evicted. */
+        src[i].continuation = (i > 0) && line->continuation;
+    }
+    uint32_t cursor_src = hist + grid->cursor_row;
+
+    /* Pass 1: group into logical lines, size each at the new width, and locate
+     * the cursor by its absolute cell offset within its logical line. */
+    uint32_t logical_count = 0;
+    uint32_t total_new = 0;
+    uint32_t cursor_gidx = 0;
+    uint32_t cursor_new_col = 0;
+    int cursor_found = 0;
+    for (uint32_t i = 0; i < src_count;) {
+        uint32_t first = i;
+        i++;
+        while (i < src_count && src[i].continuation) {
+            i++;
+        }
+        uint32_t seg_count = i - first;
+        uint32_t content_len =
+            (seg_count - 1u) * old_cols + line_used_cols(src[i - 1u].line, old_cols);
+        uint32_t new_height = content_len ? (content_len + new_cols - 1u) / new_cols : 1u;
+
+        struct yetty_yvterm_reflow_logical *entry = &logical[logical_count];
+        entry->first = first;
+        entry->seg_count = seg_count;
+        entry->content_len = content_len;
+        entry->new_height = new_height;
+        entry->start_gidx = total_new;
+
+        if (!cursor_found && cursor_src >= first && cursor_src < i) {
+            uint32_t offset = (cursor_src - first) * old_cols + grid->cursor_col;
+            if (offset > content_len) {
+                offset = content_len;
+            }
+            uint32_t crow = new_cols ? offset / new_cols : 0u;
+            uint32_t ccol = new_cols ? offset % new_cols : 0u;
+            if (crow >= new_height) {
+                crow = new_height - 1u;
+                ccol = new_cols ? new_cols - 1u : 0u;
+            }
+            cursor_gidx = total_new + crow;
+            cursor_new_col = ccol;
+            cursor_found = 1;
+        }
+
+        total_new += new_height;
+        logical_count++;
+    }
+    if (!cursor_found) {
+        cursor_gidx = total_new ? total_new - 1u : 0u;
+        cursor_new_col = 0;
+    }
+
+    /* Bottom-align the content: the last new row sits on the last visible row, so
+     * everything above it (older output and history) becomes scrollback. */
+    uint32_t new_line_count = new_rows + YVTERM_SCROLLBACK_ROWS;
+    uint32_t visible_top = total_new > new_rows ? total_new - new_rows : 0u;
+
+    struct yetty_yvterm_grid tmp = {0};
+    tmp.cols = new_cols;
+    tmp.default_fg = grid->default_fg;
+    tmp.default_bg = grid->default_bg;
+    struct yetty_ycore_void_result lines_r = grid_alloc_lines(&tmp, new_line_count, new_cols);
+    if (YETTY_IS_ERR(lines_r)) {
+        free(src);
+        free(logical);
+        return YETTY_ERR(yetty_ycore_void, "yvterm: grid_resize_reflow alloc_lines", lines_r);
+    }
+    grid_blank_all_lines(&tmp);
+
+    /* Pass 2: emit each logical line's wrapped rows into the new ring. With base
+     * 0, visible row v lives at slot v and scrollback row -k at slot
+     * (line_count - k); rows older than the retained window are dropped. */
+    for (uint32_t li = 0; li < logical_count; ++li) {
+        struct yetty_yvterm_reflow_logical *entry = &logical[li];
+        uint32_t first = entry->first;
+        for (uint32_t rr = 0; rr < entry->new_height; ++rr) {
+            uint32_t gidx = entry->start_gidx + rr;
+            uint32_t slot;
+            if (!reflow_gidx_to_slot(gidx, visible_top, new_rows, new_line_count, &slot)) {
+                continue;
+            }
+
+            struct yetty_yvterm_line *dst = &tmp.lines[slot];
+            for (uint32_t col = 0; col < new_cols; ++col) {
+                uint32_t pos = rr * new_cols + col;
+                if (pos < entry->content_len) {
+                    uint32_t seg = first + pos / old_cols;
+                    uint32_t scol = pos % old_cols;
+                    dst->text_cells[col] = src[seg].line->text_cells[scol];
+                } else {
+                    blank_cell(&dst->text_cells[col], grid->default_fg, grid->default_bg);
+                }
+            }
+            dst->continuation = rr > 0 ? 1 : 0;
+            dst->dirty = 1;
+        }
+
+        /* Carry anchored rich content over: a figure / SDF drawable lives on one
+         * source row and must follow its text to the new ring. It re-homes onto
+         * the new row holding that source segment's first cell (its top), so it
+         * stays anchored where the reflowed text put it. */
+        for (uint32_t seg = 0; seg < entry->seg_count; ++seg) {
+            struct yetty_yvterm_line *src_line = src[first + seg].line;
+            if (!src_line->composite_count && !src_line->primitive_count) {
+                continue;
+            }
+            uint32_t seg_offset = seg * old_cols;
+            uint32_t seg_row = new_cols ? seg_offset / new_cols : 0u;
+            if (seg_row >= entry->new_height) {
+                seg_row = entry->new_height - 1u;
+            }
+            uint32_t slot;
+            if (!reflow_gidx_to_slot(entry->start_gidx + seg_row, visible_top, new_rows,
+                                     new_line_count, &slot)) {
+                continue;
+            }
+            steal_line_rich(&tmp.lines[slot], src_line);
+        }
+    }
+
+    grid_free_lines(grid);
+    grid->lines = tmp.lines;
+    grid->line_count = tmp.line_count;
+    grid->cols = new_cols;
+    grid->visible_rows = new_rows;
+    grid->base = 0;
+    grid->total_scrolled = visible_top;
+
+    uint32_t cursor_row = cursor_gidx >= visible_top ? cursor_gidx - visible_top : 0u;
+    if (cursor_row >= new_rows) {
+        cursor_row = new_rows - 1u;
+    }
+    grid->cursor_row = cursor_row;
+    grid->cursor_col = cursor_new_col < new_cols ? cursor_new_col : (new_cols ? new_cols - 1u : 0u);
+    grid->selection_active = 0;
+
+    free(src);
+    free(logical);
+
+    /* State adopts the reflowed cursor + continuation through cb_resize. */
+    vterm_set_size(grid->vterm, (int)new_rows, (int)new_cols);
+    mark_dirty_all(grid);
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result grid_model_resize(struct yetty_yvterm_grid *grid,
+                                                        uint32_t cols, uint32_t rows)
+{
+    if (cols == grid->cols && rows == grid->visible_rows) {
+        return YETTY_OK_VOID();
+    }
+    if (grid->alt_screen) {
+        return grid_resize_altscreen(grid, cols, rows);
+    }
+    return grid_resize_reflow(grid, cols, rows);
 }
 
 /*===========================================================================
@@ -1074,6 +1256,7 @@ struct yetty_ycore_void_result yetty_yvterm_grid_feed(struct yetty_yclass_object
         return YETTY_ERR(yetty_ycore_void, "yvterm grid_feed: NULL bytes");
     }
     vterm_input_write(grid_res.value->vterm, bytes, len);
+    grid_sync_continuation(grid_res.value);
     return YETTY_OK_VOID();
 }
 
@@ -1177,37 +1360,6 @@ struct yetty_ycore_uint32_result yetty_yvterm_grid_append_primitive(struct yetty
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_yvterm_grid_add_primitive_ref(struct yetty_yclass_object *obj,
-                                                                   uint32_t row, uint32_t col,
-                                                                   uint16_t rel_line,
-                                                                   uint16_t index_in_list)
-{
-    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm add_primitive_ref: from_obj");
-    struct yetty_yvterm_grid *grid = grid_res.value;
-    if (row >= grid->visible_rows || col >= grid->cols) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm add_primitive_ref: out of range");
-    }
-    uint32_t anchor_row = (uint32_t)row + rel_line;
-    if (anchor_row >= grid->visible_rows) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm add_primitive_ref: anchor out of range");
-    }
-    if (index_in_list >= line_at(grid, anchor_row)->primitive_count) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "yvterm add_primitive_ref: primitive index out of range");
-    }
-    struct yetty_yvterm_drawable_refs *refs = refs_at(grid, row, col);
-    struct yetty_ycore_void_result gr =
-        ensure_primitive_refs(refs, (uint16_t)(refs->primitive_ref_count + 1u));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "yvterm add_primitive_ref: grow");
-    refs->primitive_refs[refs->primitive_ref_count].rel_line = rel_line;
-    refs->primitive_refs[refs->primitive_ref_count].index_in_list = index_in_list;
-    refs->primitive_ref_count++;
-    mark_dirty_row(grid, row);
-    return YETTY_OK_VOID();
-}
-
-[[clang::annotate("expose")]]
 struct yetty_ycore_uint32_result yetty_yvterm_grid_attach_composite(
     struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_composite *composite)
 {
@@ -1234,37 +1386,6 @@ struct yetty_ycore_uint32_result yetty_yvterm_grid_attach_composite(
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_yvterm_grid_add_composite_ref(struct yetty_yclass_object *obj,
-                                                                   uint32_t row, uint32_t col,
-                                                                   uint16_t rel_line,
-                                                                   uint16_t index_in_list)
-{
-    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm add_composite_ref: from_obj");
-    struct yetty_yvterm_grid *grid = grid_res.value;
-    if (row >= grid->visible_rows || col >= grid->cols) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm add_composite_ref: out of range");
-    }
-    uint32_t anchor_row = (uint32_t)row + rel_line;
-    if (anchor_row >= grid->visible_rows) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm add_composite_ref: anchor out of range");
-    }
-    if (index_in_list >= line_at(grid, anchor_row)->composite_count) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "yvterm add_composite_ref: composite index out of range");
-    }
-    struct yetty_yvterm_drawable_refs *refs = refs_at(grid, row, col);
-    struct yetty_ycore_void_result gr =
-        ensure_composite_refs(refs, (uint16_t)(refs->composite_ref_count + 1u));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "yvterm add_composite_ref: grow");
-    refs->composite_refs[refs->composite_ref_count].rel_line = rel_line;
-    refs->composite_refs[refs->composite_ref_count].index_in_list = index_in_list;
-    refs->composite_ref_count++;
-    mark_dirty_row(grid, row);
-    return YETTY_OK_VOID();
-}
-
-[[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_yvterm_grid_clear_rich_line(struct yetty_yclass_object *obj,
                                                                  uint32_t row)
 {
@@ -1275,7 +1396,6 @@ struct yetty_ycore_void_result yetty_yvterm_grid_clear_rich_line(struct yetty_yc
         return YETTY_ERR(yetty_ycore_void, "yvterm clear_rich_line: row out of range");
     }
     clear_line_rich(line_at(grid, row), grid->cols);
-    drop_refs_to_anchor(grid, row);
     mark_dirty_row(grid, row);
     return YETTY_OK_VOID();
 }
@@ -1286,10 +1406,15 @@ struct yetty_ycore_void_result yetty_yvterm_grid_clear_rich_all(struct yetty_ycl
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm clear_rich_all: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
-    for (uint32_t row = 0; row < grid->visible_rows; ++row) {
-        clear_line_rich(line_at(grid, row), grid->cols);
-        mark_dirty_row(grid, row);
+    /* Clear the WHOLE ring, not just the visible window: anchored rich content
+     * persists on scrolled-off history lines too (that is the point of the
+     * scrollback ring), and a terminal CLEAR must drop every figure, including
+     * the ones currently sitting in history. */
+    for (uint32_t slot = 0; slot < grid->line_count; ++slot) {
+        clear_line_rich(&grid->lines[slot], grid->cols);
+        grid->lines[slot].dirty = 1;
     }
+    grid->has_dirty = 1;
     return YETTY_OK_VOID();
 }
 
@@ -1363,6 +1488,7 @@ static struct yetty_ycore_void_result grid_wire_default(void *userdata,
             break;
         }
         vterm_input_write(grid->vterm, (const char *)buf, rr.value);
+        grid_sync_continuation(grid);
         struct yetty_ycore_void_result fr = grid_flush_output(grid);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "grid_wire_default: flush output");
     }

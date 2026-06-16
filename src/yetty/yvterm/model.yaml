@@ -417,20 +417,6 @@ exposed:
       - name: word_count
         type: uint32_t
   - source_file: src/yetty/yvterm/grid.c
-    name: yetty_yvterm_grid_add_primitive_ref
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: row
-        type: uint32_t
-      - name: col
-        type: uint32_t
-      - name: rel_line
-        type: uint16_t
-      - name: index_in_list
-        type: uint16_t
-  - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_attach_composite
     return_type: struct yetty_ycore_uint32_result
     args:
@@ -440,20 +426,6 @@ exposed:
         type: uint32_t
       - name: composite
         type: "struct yetty_ydraw_composite *"
-  - source_file: src/yetty/yvterm/grid.c
-    name: yetty_yvterm_grid_add_composite_ref
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: row
-        type: uint32_t
-      - name: col
-        type: uint32_t
-      - name: rel_line
-        type: uint16_t
-      - name: index_in_list
-        type: uint16_t
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_clear_rich_line
     return_type: struct yetty_ycore_void_result
@@ -789,20 +761,6 @@ exposed:
       - name: word_count
         type: uint32_t
   - source_file: src/yetty/yvterm/vterm.c
-    name: yetty_yvterm_vterm_add_primitive_ref
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: row
-        type: uint32_t
-      - name: col
-        type: uint32_t
-      - name: rel_line
-        type: uint16_t
-      - name: index_in_list
-        type: uint16_t
-  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_attach_composite
     return_type: struct yetty_ycore_uint32_result
     args:
@@ -812,20 +770,6 @@ exposed:
         type: uint32_t
       - name: composite
         type: "struct yetty_ydraw_composite *"
-  - source_file: src/yetty/yvterm/vterm.c
-    name: yetty_yvterm_vterm_add_composite_ref
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: row
-        type: uint32_t
-      - name: col
-        type: uint32_t
-      - name: rel_line
-        type: uint16_t
-      - name: index_in_list
-        type: uint16_t
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_clear_rich_line
     return_type: struct yetty_ycore_void_result
@@ -962,9 +906,17 @@ types:
         type: uint32_t
       - name: ring_rows
         type: uint32_t
+      - name: visual_zoom_scale
+        type: float
+      - name: visual_zoom_offset_x
+        type: float
+      - name: visual_zoom_offset_y
+        type: float
       - name: pad_b
         type: uint32_t
       - name: pad_c
+        type: uint32_t
+      - name: pad_d
         type: uint32_t
   - name: yetty_yclass_object_ptr_result
     kind: result
@@ -1033,12 +985,11 @@ local_types:
   yetty_yvterm_text_attr: src/yetty/yvterm/grid.c
   yetty_yvterm_text_cell: src/yetty/yvterm/grid.c
   yetty_yvterm_primitive: src/yetty/yvterm/grid.c
-  yetty_yvterm_primitive_ref: src/yetty/yvterm/grid.c
-  yetty_yvterm_composite_ref: src/yetty/yvterm/grid.c
-  yetty_yvterm_drawable_refs: src/yetty/yvterm/grid.c
   yetty_yvterm_line: src/yetty/yvterm/grid.c
   yetty_yvterm_grid: src/yetty/yvterm/grid.c
   yetty_yvterm_grid_ptr_result: src/yetty/yvterm/grid.c
+  yetty_yvterm_reflow_source: src/yetty/yvterm/grid.c
+  yetty_yvterm_reflow_logical: src/yetty/yvterm/grid.c
   vterm_uniforms: src/yetty/yvterm/vterm.c
   yetty_yvterm_vterm: src/yetty/yvterm/vterm.c
 local_typedefs:

@@ -263,6 +263,19 @@ struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_c
                                                             struct yetty_ydraw_target *target,
                                                             float x, float y);
 
+// Laid-out pixel height of the figure (bounds.max.y - bounds.min.y), in the
+// host's layout space. The hosting grid uses it to keep a multi-row figure
+// drawn while any part of its vertical extent still intersects the viewport
+// (e.g. its top line has scrolled off but lower rows are still visible).
+// Returns 0 for a NULL instance or one with no/empty bounds.
+float yetty_ydraw_composite_pixel_height(const struct yetty_ydraw_composite *instance);
+
+// Set the figure's content scale (paint size relative to its laid-out bounds).
+// The hosting grid uses it to magnify a figure under visual (Ctrl+wheel) zoom in
+// lockstep with the zoomed text, so the figure keeps filling its reserved rows
+// instead of shrinking away from them. <=0 is treated as 1.0.
+void yetty_ydraw_composite_set_content_scale(struct yetty_ydraw_composite *instance, float scale);
+
 // Fan out visual-zoom state to every registered concrete factory (yplot,
 // yimage, ...). Safe to call with no registrations. Concrete factories that
 // don't implement set_visual_zoom are silently skipped.

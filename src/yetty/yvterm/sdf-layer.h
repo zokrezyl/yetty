@@ -52,7 +52,9 @@ void yetty_yvterm_sdf_layer_destroy(struct yetty_yvterm_sdf_layer *layer);
 struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
     struct yetty_yvterm_sdf_layer *layer, struct yetty_yclass_object *grid_obj,
     struct yetty_ydraw_target *target, struct yetty_ycore_rectangle rect, float cell_width,
-    float cell_height, uint32_t cols, uint32_t rows, uint32_t root_row, uint32_t slot_count);
+    float cell_height, uint32_t cols, uint32_t rows, uint32_t root_row, uint32_t slot_count,
+    float visual_zoom_scale, float visual_zoom_off_x, float visual_zoom_off_y,
+    float cell_zoom_scale);
 
 #ifdef __cplusplus
 }

@@ -43,6 +43,14 @@
 /* GPU cell layout the text shader reads: 4 u32 words per cell. */
 enum { YVTERM_WORDS_PER_CELL = 4 };
 
+/* How many rows ABOVE the visible top the rich pass scans for figure anchors, on
+ * top of one screen height. An anchored figure spans downward from its top line,
+ * so once that top line scrolls into history the figure must keep drawing until
+ * its bottom row also leaves; the scan therefore reaches back far enough to find
+ * the anchor of any figure taller than the screen. Past this, a figure is fully
+ * off the top. The per-figure extent test culls anything that doesn't reach. */
+enum { YVTERM_COMPOSITE_LOOKBACK_ROWS = 256 };
+
 /* Must match the Uniforms struct in the text shader (text_wgsl below). */
 struct vterm_uniforms {
     float grid_size[2];
@@ -64,8 +72,16 @@ struct vterm_uniforms {
     /* Full line-ring size (visible + scrollback) — the shader's slot modulo is
      * over this, so a scrolled-back root_row addresses retained history rows. */
     uint32_t ring_rows;
+    /* Visual (non-intrusive) zoom: magnify the rendered grid without changing
+     * the cell grid. The fragment shader inverts this (grid_px = (screen_px -
+     * offset) / scale) so text scales and pans in exact lockstep with anchored
+     * figures, which apply the identical scale+offset to their pixel origin. */
+    float visual_zoom_scale;
+    float visual_zoom_offset_x;
+    float visual_zoom_offset_y;
     uint32_t pad_b;
     uint32_t pad_c;
+    uint32_t pad_d;
 };
 
 /* `struct yetty_ydraw_composite` is forward-declared in grid.c and kept opaque
@@ -83,6 +99,13 @@ void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance);
 struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_composite *instance,
                                                             struct yetty_ydraw_target *target,
                                                             float x, float y);
+/* Laid-out pixel height of a figure — hand-declared for the same reason. Lets
+ * the rich pass keep a figure drawn while any of its rows is still on screen,
+ * instead of dropping it the moment its anchor (top) line scrolls off. */
+float yetty_ydraw_composite_pixel_height(const struct yetty_ydraw_composite *instance);
+/* Set a figure's content scale so it magnifies with the zoomed text — same
+ * reason for the hand declaration. */
+void yetty_ydraw_composite_set_content_scale(struct yetty_ydraw_composite *instance, float scale);
 
 /* The render slot takes the render target only by pointer and never derefs it
  * here, so a forward decl suffices — avoids pulling the webgpu-heavy
@@ -109,6 +132,11 @@ struct [[clang::annotate("class@yvterm:vterm"),
      * resize, and the figure rect. The terminal sets these via resize. */
     struct yetty_ycore_grid_size grid_size;
     struct yetty_ycore_pixel_size cell_size;
+    /* Cell height at first sizing — the reference for figure scaling under
+     * intrusive (cell-size) zoom. A figure reserves N rows at creation; when the
+     * cell later grows, the figure must grow by cell_height/baseline to keep
+     * filling those N (now taller) rows. 0 until the first resize. */
+    float baseline_cell_height;
 
     /* Content insets in pane-local pixels — a docked status bar / HUD reserved
      * a band of the pane; the render slot narrows its viewport to the rest. */
@@ -224,7 +252,11 @@ static const char *vterm_text_wgsl(void)
         "    sel_start_col: u32,\n"
         "    sel_end_row: u32,\n"
         "    sel_end_col: u32,\n"
-        "    ring_rows: u32, pad_b: u32, pad_c: u32,\n"
+        "    ring_rows: u32,\n"
+        "    visual_zoom_scale: f32,\n"
+        "    visual_zoom_offset_x: f32,\n"
+        "    visual_zoom_offset_y: f32,\n"
+        "    pad_b: u32, pad_c: u32, pad_d: u32,\n"
         "};\n"
         "@group(0) @binding(0) var<storage, read> cells: array<u32>;\n"
         "@group(0) @binding(1) var<storage, read> glyph_meta: array<u32>;\n"
@@ -281,7 +313,18 @@ static const char *vterm_text_wgsl(void)
         "fn fs_main(in: VSOut) -> @location(0) vec4<f32> {\n"
         "    let grid_w = uni.grid_size.x * uni.cell_size.x;\n"
         "    let grid_h = uni.grid_size.y * uni.cell_size.y;\n"
-        "    let px = in.grid_pixel;\n"
+        /* Invert the visual-zoom transform to find the grid pixel under this
+         * fragment. This is the canonical mouse-anchored zoom shared with the
+         * figure shaders and the zoom controller:
+         *     source = (screen - center)/scale + center + offset
+         * where offset is a SOURCE-space pan (so a drag makes content follow the
+         * cursor) and center is the pane centre. Identity at scale 1 / offset 0.
+         * Text and figures use the same formula, so they zoom, pan and stay
+         * anchored to the same row together. */
+        "    let vz = max(uni.visual_zoom_scale, 0.0001);\n"
+        "    let center = vec2<f32>(grid_w, grid_h) * 0.5;\n"
+        "    let voff = vec2<f32>(uni.visual_zoom_offset_x, uni.visual_zoom_offset_y);\n"
+        "    let px = (in.grid_pixel - center) / vz + center + voff;\n"
         "    if (px.x < 0.0 || px.y < 0.0 || px.x >= grid_w || px.y >= grid_h) {\n"
         "        return vec4<f32>(0.0,0.0,0.0,1.0);\n"
         "    }\n"
@@ -919,6 +962,13 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     vterm->uniforms.sel_start_col = sa_col;
     vterm->uniforms.sel_end_row = sh_row;
     vterm->uniforms.sel_end_col = sh_col;
+    /* Same visual-zoom transform the composite pass uses, so the text plane and
+     * anchored figures magnify and pan together (keeps a figure locked to its
+     * row under Ctrl+wheel zoom). */
+    vterm->uniforms.visual_zoom_scale =
+        vterm->visual_zoom_scale > 0.0f ? vterm->visual_zoom_scale : 1.0f;
+    vterm->uniforms.visual_zoom_offset_x = vterm->visual_zoom_offset_x;
+    vterm->uniforms.visual_zoom_offset_y = vterm->visual_zoom_offset_y;
     wgpuQueueWriteBuffer(vterm->queue, vterm->uniform_buffer, 0, &vterm->uniforms,
                          sizeof(struct vterm_uniforms));
 
@@ -995,25 +1045,77 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
      * here yet — that needs the ydraw SDF grid/binder pipeline (the deleted
      * ydraw-scrolling-layer). Composites cover the common anchored-figure case. */
     float zoom = vterm->visual_zoom_scale > 0.0f ? vterm->visual_zoom_scale : 1.0f;
-    for (uint32_t row = 0; row < rows; ++row) {
+    float pane_height = rect.max.y - rect.min.y;
+    /* Canonical visual-zoom transform, identical to the text shader's, so a
+     * figure stays welded to its text row under zoom AND pan. center is the pane
+     * centre; voff is the SOURCE-space pan; the figure's un-zoomed grid origin
+     * maps to screen via  screen = (grid - center - voff) * scale + center. */
+    float vz_center_x = (float)cols * vterm->cell_size.width * 0.5f;
+    float vz_center_y = (float)rows * vterm->cell_size.height * 0.5f;
+    float vz_off_x = vterm->visual_zoom_offset_x;
+    float vz_off_y = vterm->visual_zoom_offset_y;
+    /* Intrusive (cell-size) zoom grew the cells and reflowed; a figure's reserved
+     * rows are now taller, so scale its body by the cell ratio to keep filling
+     * them. Visual zoom multiplies on top. */
+    float cell_ratio = (vterm->baseline_cell_height > 0.0f)
+                           ? vterm->cell_size.height / vterm->baseline_cell_height
+                           : 1.0f;
+    float figure_scale = zoom * cell_ratio;
+    /* A figure is anchored on its TOP line but spans several rows downward. It
+     * must stay drawn while ANY of its rows is on screen, so the scan starts
+     * above visible row 0: an anchor that has scrolled into the history still
+     * draws (at a negative pixel offset) as long as its extent reaches back into
+     * the pane. The look-back bounds the tallest figure we keep alive — past it,
+     * a figure whose anchor is that far up is fully off the top and need not draw.
+     * Figures clip to the pane viewport, so an over-scan never bleeds upward. */
+    int comp_lookback = (int)rows + YVTERM_COMPOSITE_LOOKBACK_ROWS;
+    for (int row = -comp_lookback; row < (int)rows; ++row) {
         uint32_t comp_count = 0;
         /* Read composites by the SAME ring slot the text shader draws at this
          * visible row — slot = (row + root_row) % ring_rows — so figures scroll
          * in lockstep with the text in both live and scrolled-back views. Using
          * the visible-row (live base) accessor instead desyncs under scrollback. */
-        uint32_t comp_slot = slot_count ? (row + root_row) % slot_count : row;
+        uint32_t comp_slot;
+        if (slot_count) {
+            int wrapped = ((row + (int)root_row) % (int)slot_count + (int)slot_count) % (int)slot_count;
+            comp_slot = (uint32_t)wrapped;
+        } else {
+            if (row < 0) {
+                continue;
+            }
+            comp_slot = (uint32_t)row;
+        }
         struct yetty_ydraw_composite *const *comps =
             yetty_yvterm_grid_slot_composites(grid, comp_slot, &comp_count);
         if (!comps || comp_count == 0) {
             continue;
         }
-        float comp_x = rect.min.x + vterm->visual_zoom_offset_x;
-        float comp_y =
-            rect.min.y + vterm->visual_zoom_offset_y + (float)row * vterm->cell_size.height * zoom;
+        float anchor_y = (float)row * vterm->cell_size.height;
+        float comp_x = rect.min.x + (0.0f - vz_center_x - vz_off_x) * zoom + vz_center_x;
+        float comp_y_local = (anchor_y - vz_center_y - vz_off_y) * zoom + vz_center_y;
+        float comp_y = rect.min.y + comp_y_local;
         for (uint32_t ci = 0; ci < comp_count; ++ci) {
             if (!comps[ci]) {
                 continue;
             }
+            /* For an anchor that has scrolled above the pane top (row < 0), draw
+             * only while the figure's extent still reaches back down into view;
+             * once even its bottom row is gone it is fully off-screen. A figure
+             * with no reported height falls back to the old behaviour (drawn only
+             * while its anchor row is visible). An anchor pushed below the pane
+             * bottom (possible under zoom) draws nothing visible either. */
+            float fig_height = yetty_ydraw_composite_pixel_height(comps[ci]) * figure_scale;
+            if (row < 0 && comp_y_local + fig_height <= 0.0f) {
+                continue;
+            }
+            if (comp_y_local >= pane_height) {
+                continue;
+            }
+            /* Magnify the figure body to keep filling its reserved rows: the
+             * visual-zoom factor times the cell-size (intrusive-zoom) ratio.
+             * Position (comp_x/comp_y) already carries the visual zoom, and the
+             * row pitch already carries the larger cell. */
+            yetty_ydraw_composite_set_content_scale(comps[ci], figure_scale);
             struct yetty_ycore_void_result cr =
                 yetty_ydraw_composite_render(comps[ci], target, comp_x, comp_y);
             if (YETTY_IS_ERR(cr)) {
@@ -1029,7 +1131,7 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     if (vterm->sdf_layer) {
         struct yetty_ycore_void_result sdf_res = yetty_yvterm_sdf_layer_render(
             vterm->sdf_layer, grid, target, rect, vterm->cell_size.width, vterm->cell_size.height,
-            cols, rows, root_row, slot_count);
+            cols, rows, root_row, slot_count, zoom, vz_off_x, vz_off_y, cell_ratio);
         if (YETTY_IS_ERR(sdf_res)) {
             ywarn("vterm_render: SDF layer: %s", sdf_res.error.msg);
             yetty_ycore_error_destroy(sdf_res.error);
@@ -1238,8 +1340,27 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_resize(struct yetty_yclass_obj
     struct yetty_ycore_void_result resize_res =
         yetty_yvterm_grid_resize(vterm->grid_obj, grid_size.cols, grid_size.rows);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, resize_res, "yvterm vterm_resize: grid_resize");
+    /* Reflow re-bases the grid's absolute row numbering, so any scrolled-back
+     * view anchored on the old numbering is stale — snap back to the live tail. */
+    vterm->view_top_active = 0;
+    vterm->view_top_total_idx = 0;
     vterm->grid_size = grid_size;
     vterm->cell_size = cell_size;
+    if (vterm->baseline_cell_height <= 0.0f) {
+        vterm->baseline_cell_height = cell_size.height;
+    }
+    /* Re-scale the glyphs to the new cell. Intrusive (Ctrl+Shift) zoom changes
+     * the cell stride and reflows; without this the cells grow but the font
+     * stays the same size. set_cell_size re-derives the MSDF render scale (no
+     * re-raster — MSDF is resolution-independent); the next frame's font upload
+     * picks it up. Best-effort: a font that can't rescale keeps the old size. */
+    if (vterm->font && vterm->font->ops && vterm->font->ops->set_cell_size) {
+        struct yetty_ycore_void_result fcr =
+            vterm->font->ops->set_cell_size(vterm->font, cell_size);
+        if (YETTY_IS_ERR(fcr)) {
+            yetty_ycore_error_destroy(fcr.error);
+        }
+    }
     struct yetty_ycore_rectangle rect = {
         .min = {.x = 0.0f, .y = 0.0f},
         .max = {.x = (float)grid_size.cols * cell_size.width,
@@ -1372,19 +1493,6 @@ struct yetty_ycore_uint32_result yetty_yvterm_vterm_append_primitive(
 }
 
 [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_yvterm_vterm_add_primitive_ref(struct yetty_yclass_object *obj,
-                                                                    uint32_t row, uint32_t col,
-                                                                    uint16_t rel_line,
-                                                                    uint16_t index_in_list)
-{
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm add_primitive_ref: bad obj");
-    }
-    return yetty_yvterm_grid_add_primitive_ref(vterm->grid_obj, row, col, rel_line, index_in_list);
-}
-
-[[clang::annotate("expose")]]
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_attach_composite(
     struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_composite *composite)
 {
@@ -1393,19 +1501,6 @@ struct yetty_ycore_uint32_result yetty_yvterm_vterm_attach_composite(
         return YETTY_ERR(yetty_ycore_uint32, "yvterm attach_composite: bad obj");
     }
     return yetty_yvterm_grid_attach_composite(vterm->grid_obj, row, composite);
-}
-
-[[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_yvterm_vterm_add_composite_ref(struct yetty_yclass_object *obj,
-                                                                    uint32_t row, uint32_t col,
-                                                                    uint16_t rel_line,
-                                                                    uint16_t index_in_list)
-{
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm add_composite_ref: bad obj");
-    }
-    return yetty_yvterm_grid_add_composite_ref(vterm->grid_obj, row, col, rel_line, index_in_list);
 }
 
 [[clang::annotate("expose")]]

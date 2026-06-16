@@ -941,7 +941,9 @@ void yetty_yvterm_sdf_layer_destroy(struct yetty_yvterm_sdf_layer *layer)
 struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
     struct yetty_yvterm_sdf_layer *layer, struct yetty_yclass_object *grid_obj,
     struct yetty_ydraw_target *target, struct yetty_ycore_rectangle rect, float cell_width,
-    float cell_height, uint32_t cols, uint32_t rows, uint32_t root_row, uint32_t slot_count)
+    float cell_height, uint32_t cols, uint32_t rows, uint32_t root_row, uint32_t slot_count,
+    float visual_zoom_scale, float visual_zoom_off_x, float visual_zoom_off_y,
+    float cell_zoom_scale)
 {
     if (!layer || layer->headless || !layer->binder) {
         return YETTY_OK_VOID();
@@ -1049,6 +1051,14 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
     layer->rs.uniforms[U_PRIM_COUNT].u32 = layer->prim_count;
     layer->rs.uniforms[U_VIEW_SIZE].vec2[0] = (float)cols * cell_width;
     layer->rs.uniforms[U_VIEW_SIZE].vec2[1] = (float)rows * cell_height;
+    /* Zoom: the shader applies the same canonical visual-zoom transform
+     * (pane-centred) + structural cell-zoom (around origin) as the text/figure
+     * shaders, so SDF drawables scale and pan in lockstep. cz_off stays 0 — the
+     * cell-zoom is a pure scale. */
+    layer->rs.uniforms[U_VZ_SCALE].f32 = visual_zoom_scale > 0.0f ? visual_zoom_scale : 1.0f;
+    layer->rs.uniforms[U_VZ_OFF].vec2[0] = visual_zoom_off_x;
+    layer->rs.uniforms[U_VZ_OFF].vec2[1] = visual_zoom_off_y;
+    layer->rs.uniforms[U_CZ_SCALE].f32 = cell_zoom_scale > 0.0f ? cell_zoom_scale : 1.0f;
     layer->rs.pixel_size.width = width;
     layer->rs.pixel_size.height = height;
 
