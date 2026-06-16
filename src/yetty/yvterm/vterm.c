@@ -157,6 +157,11 @@ struct [[clang::annotate("class@yvterm:vterm"),
     int view_top_active;
     uint32_t view_top_total_idx;
 
+    /* Renderer-local dirty bit: set when view/zoom state changes (which the grid
+     * model knows nothing about) so yetty_yvterm_vterm_is_dirty() still reports a
+     * pending repaint. Cleared when the frame is rendered. */
+    int view_dirty;
+
     /* Visual zoom (applied by the renderer build-out). */
     float visual_zoom_scale;
     float visual_zoom_offset_x;
@@ -1141,6 +1146,7 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     /* Uploaded — clear model dirty now that the renderer has consumed the text
      * plane, the anchored composites, and the SDF/glyph records. */
     yetty_yvterm_grid_clear_dirty(grid);
+    vterm->view_dirty = 0;
     return YETTY_OK_VOID();
 }
 
@@ -1385,7 +1391,10 @@ struct yetty_ycore_pixel_size yetty_yvterm_vterm_cell_size(struct yetty_yclass_o
 int yetty_yvterm_vterm_is_dirty(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    return vterm ? yetty_yvterm_grid_is_dirty(vterm->grid_obj) : 0;
+    if (!vterm) {
+        return 0;
+    }
+    return vterm->view_dirty || yetty_yvterm_grid_is_dirty(vterm->grid_obj);
 }
 
 [[clang::annotate("expose")]]
@@ -1623,6 +1632,11 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_view_top(struct yetty_ycla
     }
     vterm->view_top_active = active;
     vterm->view_top_total_idx = view_top_total_idx;
+    vterm->view_dirty = 1;
+    struct yetty_ycore_void_result dr = yetty_yfigure_figure_dirty_set(obj, 1);
+    if (YETTY_IS_ERR(dr)) {
+        yetty_ycore_error_destroy(dr.error);
+    }
     return YETTY_OK_VOID();
 }
 
@@ -1638,6 +1652,11 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_visual_zoom(struct yetty_y
     vterm->visual_zoom_scale = scale;
     vterm->visual_zoom_offset_x = offset_x;
     vterm->visual_zoom_offset_y = offset_y;
+    vterm->view_dirty = 1;
+    struct yetty_ycore_void_result dr = yetty_yfigure_figure_dirty_set(obj, 1);
+    if (YETTY_IS_ERR(dr)) {
+        yetty_ycore_error_destroy(dr.error);
+    }
     return YETTY_OK_VOID();
 }
 

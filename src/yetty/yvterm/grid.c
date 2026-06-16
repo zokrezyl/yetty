@@ -894,18 +894,11 @@ static int reflow_gidx_to_slot(uint32_t gidx, uint32_t visible_top, uint32_t new
     return 0;
 }
 
-/* Move a source line's anchored rich content (SDF primitive arena + descriptors
- * and owned composites) onto a destination line in the new ring, so figures and
- * SDF drawables survive a resize instead of being dropped. Pointers are stolen,
- * not copied — the source is left empty so the old-ring teardown frees nothing
- * for it. If the destination already holds rich content (two source lines folded
- * onto one new row), the source's content is left in place to be freed by the
- * old-ring teardown rather than leaked or double-owned. */
-static void steal_line_rich(struct yetty_yvterm_line *dst, struct yetty_yvterm_line *src)
+/* Steal a source line's whole rich backing (arena + primitive descriptors +
+ * composite array) onto an empty destination line — pointers move, the source
+ * is left empty so the old-ring teardown frees nothing for it. */
+static void take_line_rich(struct yetty_yvterm_line *dst, struct yetty_yvterm_line *src)
 {
-    if (dst->composites || dst->primitives || dst->arena) {
-        return;
-    }
     dst->composites = src->composites;
     dst->composite_count = src->composite_count;
     dst->composite_capacity = src->composite_capacity;
@@ -925,10 +918,83 @@ static void steal_line_rich(struct yetty_yvterm_line *dst, struct yetty_yvterm_l
     src->arena = NULL;
     src->arena_count = 0;
     src->arena_capacity = 0;
+}
 
-    if (dst->composite_count || dst->primitive_count) {
-        dst->dirty = 1;
+/* Move a source line's anchored rich content (SDF primitive arena + descriptors
+ * and owned composites) onto a destination line in the new ring, so figures and
+ * SDF drawables survive a resize instead of being dropped. The fast path steals
+ * the whole backing when the destination is still empty; when two source rows
+ * fold onto the same new row (e.g. widening packs a wrapped logical line), the
+ * source's content is APPENDED so nothing is lost — the primitive arena is
+ * concatenated (descriptor offsets rebased), the descriptor and composite arrays
+ * grown. Each category transfers all-or-nothing: anything that can't grow is left
+ * on the source for the old-ring teardown, never leaked or double-owned. */
+static void merge_line_rich(struct yetty_yvterm_line *dst, struct yetty_yvterm_line *src)
+{
+    if (!src->composite_count && !src->primitive_count && !src->arena_count) {
+        return;
     }
+    if (!dst->composites && !dst->primitives && !dst->arena) {
+        take_line_rich(dst, src);
+        dst->dirty = 1;
+        return;
+    }
+
+    /* Primitives reference the arena by offset, so move them together: grow both
+     * first, then commit, rebasing each descriptor's offset by where the source
+     * arena lands inside the destination arena. */
+    if (src->primitive_count || src->arena_count) {
+        struct yetty_ycore_void_result arena_res =
+            ensure_arena(dst, dst->arena_count + src->arena_count);
+        struct yetty_ycore_void_result prim_res =
+            ensure_primitives(dst, dst->primitive_count + src->primitive_count);
+        if (YETTY_IS_OK(arena_res) && YETTY_IS_OK(prim_res)) {
+            uint32_t arena_base = dst->arena_count;
+            if (src->arena_count) {
+                memcpy(dst->arena + dst->arena_count, src->arena,
+                       (size_t)src->arena_count * sizeof(uint32_t));
+                dst->arena_count += src->arena_count;
+            }
+            for (uint32_t i = 0; i < src->primitive_count; ++i) {
+                dst->primitives[dst->primitive_count] = src->primitives[i];
+                dst->primitives[dst->primitive_count].arena_offset += arena_base;
+                dst->primitive_count++;
+            }
+            free(src->primitives);
+            free(src->arena);
+            src->primitives = NULL;
+            src->primitive_count = 0;
+            src->primitive_capacity = 0;
+            src->arena = NULL;
+            src->arena_count = 0;
+            src->arena_capacity = 0;
+        } else {
+            if (YETTY_IS_ERR(arena_res)) {
+                yetty_ycore_error_destroy(arena_res.error);
+            }
+            if (YETTY_IS_ERR(prim_res)) {
+                yetty_ycore_error_destroy(prim_res.error);
+            }
+        }
+    }
+
+    if (src->composite_count) {
+        struct yetty_ycore_void_result comp_res =
+            ensure_composites(dst, dst->composite_count + src->composite_count);
+        if (YETTY_IS_OK(comp_res)) {
+            for (uint32_t i = 0; i < src->composite_count; ++i) {
+                dst->composites[dst->composite_count++] = src->composites[i];
+            }
+            free(src->composites);
+            src->composites = NULL;
+            src->composite_count = 0;
+            src->composite_capacity = 0;
+        } else {
+            yetty_ycore_error_destroy(comp_res.error);
+        }
+    }
+
+    dst->dirty = 1;
 }
 
 /* Alt-screen resize: full-screen apps own their redraw and have neither
@@ -1131,7 +1197,7 @@ static struct yetty_ycore_void_result grid_resize_reflow(struct yetty_yvterm_gri
                                      new_line_count, &slot)) {
                 continue;
             }
-            steal_line_rich(&tmp.lines[slot], src_line);
+            merge_line_rich(&tmp.lines[slot], src_line);
         }
     }
 
@@ -1246,6 +1312,9 @@ void yetty_yvterm_grid_set_clear_hook(struct yetty_yclass_object *obj,
  * Model mutation — terminal/renderer facing.
  *=========================================================================*/
 
+/* Defined below; declared here so grid_feed can drain libvterm's replies. */
+static struct yetty_ycore_void_result grid_flush_output(struct yetty_yvterm_grid *grid);
+
 [[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_yvterm_grid_feed(struct yetty_yclass_object *obj,
                                                       const char *bytes, size_t len)
@@ -1257,7 +1326,11 @@ struct yetty_ycore_void_result yetty_yvterm_grid_feed(struct yetty_yclass_object
     }
     vterm_input_write(grid_res.value->vterm, bytes, len);
     grid_sync_continuation(grid_res.value);
-    return YETTY_OK_VOID();
+    /* Drain libvterm's responses (DA/DSR/cursor reports, …) back to the child,
+     * same as the wire path — otherwise input fed through this direct entry
+     * point leaves query replies stranded in libvterm's output buffer. No-op
+     * when no pty_write_fn is set or there is nothing to send. */
+    return grid_flush_output(grid_res.value);
 }
 
 [[clang::annotate("expose")]]
