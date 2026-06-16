@@ -7,7 +7,7 @@
  * pinned prompt can borrow it); the editor object carries only the
  * mode's own scratch state. The single polymorphic slot is feed_byte:
  *
- *   feed_byte(ctx, obj, app, byte) -> yetty_ycore_int_result
+ *   feed_byte(obj, app, byte) -> yetty_ycore_int_result
  *
  * whose int value is one of the YAI_EDIT_* action codes (editor-ops.h).
  * main.c maps each action to a UI effect, so menu/history/submit policy
@@ -34,11 +34,9 @@ struct [[clang::annotate("class@yai:editor")]] yetty_yai_editor {
 YETTY_YRESULT_DECLARE(yetty_yai_editor_ptr, struct yetty_yai_editor *);
 
 [[clang::annotate("virtual@yai:editor:feed_byte")]] [[clang::annotate("local@yai:feed_byte")]]
-static struct yetty_ycore_int_result editor_feed_byte(struct yetty_yclass_ctx *ctx,
-                                                      struct yetty_yclass_object *obj,
+static struct yetty_ycore_int_result editor_feed_byte(struct yetty_yclass_object *obj,
                                                       struct yai_app *app, int byte)
 {
-    (void)ctx;
     (void)obj;
     (void)app;
     (void)byte;

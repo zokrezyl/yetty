@@ -1082,7 +1082,8 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
          * the visible-row (live base) accessor instead desyncs under scrollback. */
         uint32_t comp_slot;
         if (slot_count) {
-            int wrapped = ((row + (int)root_row) % (int)slot_count + (int)slot_count) % (int)slot_count;
+            int wrapped =
+                ((row + (int)root_row) % (int)slot_count + (int)slot_count) % (int)slot_count;
             comp_slot = (uint32_t)wrapped;
         } else {
             if (row < 0) {
@@ -1255,6 +1256,13 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
      * terminal's pty_write_fn matches the grid's pty_write signature. */
     yetty_yvterm_grid_set_pty_write(vterm->grid_obj, (yetty_yvterm_grid_pty_write_fn)pty_write_fn,
                                     pty_write_userdata);
+    /* Route DEC ?1500/?1501 (CARDCLICK/CARDMOVE) subscription changes from the
+     * model straight to the terminal's mouse-subscription callback — same
+     * (click, move, userdata) signature, so register it directly. Without this,
+     * hosted clients (ygreeter, …) that enable pixel-precise input forwarding
+     * never receive forwarded mouse/resize events. */
+    yetty_yvterm_grid_set_card_sub(vterm->grid_obj, (yetty_yvterm_grid_card_sub_fn)mouse_sub_fn,
+                                   mouse_sub_userdata);
     vterm->grid_size = (struct yetty_ycore_grid_size){.cols = cols, .rows = rows};
     vterm->cell_size = (struct yetty_ycore_pixel_size){.width = 9.0f, .height = 18.0f};
     vterm->request_render_fn = request_render_fn;

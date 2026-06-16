@@ -75,6 +75,9 @@ struct yetty_yclass_object_ptr_result yetty_yai_claude_create(struct yetty_yclas
     if (!proxy)
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yai_claude_create: calloc(proxy) failed");
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -137,6 +140,9 @@ struct yetty_yclass_object_ptr_result yetty_yai_codex_create(struct yetty_yclass
     if (!proxy)
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yai_codex_create: calloc(proxy) failed");
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -199,6 +205,9 @@ struct yetty_yclass_object_ptr_result yetty_yai_emacs_create(struct yetty_yclass
     if (!proxy)
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yai_emacs_create: calloc(proxy) failed");
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -261,6 +270,9 @@ struct yetty_yclass_object_ptr_result yetty_yai_vi_create(struct yetty_yclass_ct
     if (!proxy)
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yai_vi_create: calloc(proxy) failed");
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -323,6 +335,9 @@ struct yetty_yclass_object_ptr_result yetty_yai_editor_create(struct yetty_yclas
     if (!proxy)
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yai_editor_create: calloc(proxy) failed");
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -385,6 +400,9 @@ struct yetty_yclass_object_ptr_result yetty_yai_engine_create(struct yetty_yclas
     if (!proxy)
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yai_engine_create: calloc(proxy) failed");
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -447,6 +465,9 @@ struct yetty_yclass_object_ptr_result yetty_yai_gemini_create(struct yetty_yclas
     if (!proxy)
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yai_gemini_create: calloc(proxy) failed");
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
@@ -509,6 +530,9 @@ struct yetty_yclass_object_ptr_result yetty_yai_turn_engine_create(struct yetty_
     if (!proxy)
         return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yai_turn_engine_create: calloc(proxy) failed");
     proxy->header.klass = klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    proxy->header.session = ctx->session;
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }

@@ -81,11 +81,27 @@ classes:
         type: int
         get: false
         set: false
+      - name: card_click
+        type: int
+        get: false
+        set: false
+      - name: card_move
+        type: int
+        get: false
+        set: false
       - name: clear_hook_fn
         type: yetty_yvterm_grid_clear_hook_fn
         get: false
         set: false
       - name: clear_hook_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: card_sub_fn
+        type: yetty_yvterm_grid_card_sub_fn
+        get: false
+        set: false
+      - name: card_sub_userdata
         type: "void *"
         get: false
         set: false
@@ -149,6 +165,10 @@ classes:
         type: struct yetty_ycore_pixel_size
         get: false
         set: false
+      - name: baseline_cell_height
+        type: float
+        get: false
+        set: false
       - name: content_inset_top
         type: float
         get: false
@@ -187,6 +207,10 @@ classes:
         set: false
       - name: view_top_total_idx
         type: uint32_t
+        get: false
+        set: false
+      - name: view_dirty
+        type: int
         get: false
         set: false
       - name: visual_zoom_scale
@@ -358,6 +382,16 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: fn
         type: yetty_yvterm_grid_clear_hook_fn
+      - name: userdata
+        type: "void *"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_card_sub
+    return_type: void
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fn
+        type: yetty_yvterm_grid_card_sub_fn
       - name: userdata
         type: "void *"
   - source_file: src/yetty/yvterm/grid.c
@@ -1014,6 +1048,9 @@ local_typedefs:
   yetty_yvterm_grid_clear_hook_fn:
     source_file: src/yetty/yvterm/grid.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *);"
+  yetty_yvterm_grid_card_sub_fn:
+    source_file: src/yetty/yvterm/grid.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int, int, void *);"
   yetty_yvterm_clear_hook_fn:
     source_file: src/yetty/yvterm/vterm.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_clear_hook_fn)(void *);"

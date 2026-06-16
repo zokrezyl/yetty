@@ -200,11 +200,9 @@ static struct yetty_ycore_void_result send_permission_response(struct yai_app *a
 /* resolve_permission slot: answer the pending request. `allowed`:
  * 1 = allow (echoes the input back as updatedInput), 0 = deny. */
 [[clang::annotate("override@yai:claude:resolve_permission")]]
-static struct yetty_ycore_void_result claude_resolve_permission(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result claude_resolve_permission(struct yetty_yclass_object *obj,
                                                                 struct yai_app *app, int allowed)
 {
-    (void)ctx;
     (void)obj;
     if (!app->pending_permission.active) {
         return YETTY_OK_VOID();
@@ -547,12 +545,10 @@ static struct yetty_ycore_void_result handle_result_event(struct yai_app *app, y
 }
 
 [[clang::annotate("override@yai:claude:handle_event")]]
-static struct yetty_ycore_void_result claude_handle_event(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result claude_handle_event(struct yetty_yclass_object *obj,
                                                           struct yai_app *app,
                                                           struct yyjson_val *event)
 {
-    (void)ctx;
     struct yetty_yai_claude_ptr_result claude_res = yetty_yai_claude_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, claude_res, "claude handle_event: data slice");
     struct yetty_yai_claude *claude = claude_res.value;
@@ -630,12 +626,10 @@ static struct yetty_ycore_void_result claude_handle_event(struct yetty_yclass_ct
  *---------------------------------------------------------------------------*/
 
 [[clang::annotate("override@yai:claude:send_user_message")]]
-static struct yetty_ycore_void_result claude_send_user_message(struct yetty_yclass_ctx *ctx,
-                                                               struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result claude_send_user_message(struct yetty_yclass_object *obj,
                                                                struct yai_app *app,
                                                                const char *text)
 {
-    (void)ctx;
     (void)obj;
     app->saw_result_error = 0; /* fresh turn */
     yyjson_mut_doc *doc = yyjson_mut_doc_new(NULL);
@@ -655,11 +649,9 @@ static struct yetty_ycore_void_result claude_send_user_message(struct yetty_ycla
 }
 
 [[clang::annotate("override@yai:claude:interrupt")]]
-static struct yetty_ycore_void_result claude_interrupt(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result claude_interrupt(struct yetty_yclass_object *obj,
                                                        struct yai_app *app)
 {
-    (void)ctx;
     struct yetty_yai_claude_ptr_result claude_res = yetty_yai_claude_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, claude_res, "claude interrupt: data slice");
     struct yetty_yai_claude *claude = claude_res.value;
@@ -721,11 +713,9 @@ static const char *claude_preset_tools(const char *preset)
 }
 
 [[clang::annotate("override@yai:claude:start")]]
-static struct yetty_ycore_void_result claude_start(struct yetty_yclass_ctx *ctx,
-                                                   struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result claude_start(struct yetty_yclass_object *obj,
                                                    struct yai_app *app)
 {
-    (void)ctx;
     (void)obj;
     /* The loop owns the terminal: the yetty MCP server must hand figures
      * back via the sentinel in the tool result instead of racing us to
@@ -831,12 +821,10 @@ static struct yetty_ycore_void_result claude_start(struct yetty_yclass_ctx *ctx,
 }
 
 [[clang::annotate("override@yai:claude:describe_config")]]
-static struct yetty_ycore_void_result claude_describe_config(struct yetty_yclass_ctx *ctx,
-                                                             struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result claude_describe_config(struct yetty_yclass_object *obj,
                                                              struct yai_app *app, char *out,
                                                              size_t out_size)
 {
-    (void)ctx;
     (void)obj;
     (void)app;
     /* Mirror the exact defaults claude_start applies. */
@@ -859,12 +847,10 @@ static struct yetty_ycore_void_result claude_describe_config(struct yetty_yclass
 }
 
 [[clang::annotate("override@yai:claude:config_knob")]]
-static struct yetty_ycore_void_result claude_config_knob(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result claude_config_knob(struct yetty_yclass_object *obj,
                                                          struct yai_app *app, char *out,
                                                          size_t out_size)
 {
-    (void)ctx;
     (void)obj;
     /* Show the same "auto" the permission prompt offers; a legacy
      * bypassPermissions value still selects the "auto" radio. */
@@ -889,12 +875,10 @@ static struct yetty_ycore_void_result claude_config_knob(struct yetty_yclass_ctx
 /* A live set_permission_mode control_request into the running session, so a
  * permission-mode change applies immediately (storage is in app->config). */
 [[clang::annotate("override@yai:claude:apply_config")]]
-static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_object *obj,
                                                           struct yai_app *app, const char *key,
                                                           const char *value)
 {
-    (void)ctx;
     struct yetty_yai_claude_ptr_result claude_res = yetty_yai_claude_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, claude_res, "claude apply_config: data slice");
     struct yetty_yai_claude *claude = claude_res.value;
@@ -928,12 +912,10 @@ static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_ct
 }
 
 [[clang::annotate("override@yai:claude:on_child_exit")]]
-static struct yetty_ycore_void_result claude_on_child_exit(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result claude_on_child_exit(struct yetty_yclass_object *obj,
                                                            struct yai_app *app,
                                                            int64_t exit_status)
 {
-    (void)ctx;
     (void)obj;
     /* The session child died — best-effort: every teardown step runs,
      * the first error is surfaced at the end. */
@@ -956,11 +938,9 @@ static struct yetty_ycore_void_result claude_on_child_exit(struct yetty_yclass_c
 }
 
 [[clang::annotate("override@yai:claude:on_child_eof")]]
-static struct yetty_ycore_void_result claude_on_child_eof(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result claude_on_child_eof(struct yetty_yclass_object *obj,
                                                           struct yai_app *app)
 {
-    (void)ctx;
     (void)obj;
     /* The persistent pipe closed: the session is dead — the turn (if
      * any) will never finish; never hang waiting for it. */

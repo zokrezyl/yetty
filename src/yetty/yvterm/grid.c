@@ -112,6 +112,16 @@ struct yetty_yvterm_line {
  * references it. */
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *userdata);
 
+/* Hook fired when the child toggles pixel-precise input forwarding via DEC modes
+ * ?1500 (click) / ?1501 (move) — libvterm surfaces these as VTERM_PROP_CARDCLICK
+ * / VTERM_PROP_CARDMOVE. The integration layer (terminal) uses it to start/stop
+ * forwarding mouse + resize events to the hosted client. Called with the current
+ * state of BOTH modes whenever either changes. Signature matches the terminal's
+ * mouse-subscription callback so it can be registered directly. */
+typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int click_enabled,
+                                                                        int move_enabled,
+                                                                        void *userdata);
+
 /* The unified terminal grid — the yclass data block. visible row N maps to:
  *
  *     lines[(base + N) % visible_rows]
@@ -141,8 +151,17 @@ struct [[clang::annotate("class@yvterm:grid")]] yetty_yvterm_grid {
     int alt_screen;
     int mouse_mode;
 
+    /* DEC ?1500 / ?1501 pixel-precise input-forwarding modes, surfaced to the
+     * integration layer through card_sub_fn so it can route mouse/resize events
+     * to the hosted client. */
+    int card_click;
+    int card_move;
+
     yetty_yvterm_grid_clear_hook_fn clear_hook_fn;
     void *clear_hook_userdata;
+
+    yetty_yvterm_grid_card_sub_fn card_sub_fn;
+    void *card_sub_userdata;
 
     /* Keyboard output / libvterm query responses go to the child via this. */
     yetty_yvterm_grid_pty_write_fn pty_write_fn;
@@ -624,6 +643,24 @@ static int cb_settermprop(VTermProp prop, VTermValue *val, void *user)
     case VTERM_PROP_MOUSE:
         grid->mouse_mode = (int)val->number;
         break;
+    case VTERM_PROP_CARDCLICK:
+    case VTERM_PROP_CARDMOVE:
+        if (prop == VTERM_PROP_CARDCLICK) {
+            grid->card_click = val->boolean ? 1 : 0;
+        } else {
+            grid->card_move = val->boolean ? 1 : 0;
+        }
+        /* Notify the integration layer with the current state of BOTH modes so
+         * it can start/stop forwarding mouse + resize to the hosted client. A
+         * libvterm callback can't propagate a Result — absorb at this boundary. */
+        if (grid->card_sub_fn) {
+            struct yetty_ycore_void_result sub_res =
+                grid->card_sub_fn(grid->card_click, grid->card_move, grid->card_sub_userdata);
+            if (YETTY_IS_ERR(sub_res)) {
+                yetty_ycore_error_destroy(sub_res.error);
+            }
+        }
+        break;
     default:
         break;
     }
@@ -1069,7 +1106,8 @@ static struct yetty_ycore_void_result grid_resize_reflow(struct yetty_yvterm_gri
     uint32_t src_count = hist + visible_kept;
 
     struct yetty_yvterm_reflow_source *src = calloc(src_count ? src_count : 1u, sizeof(*src));
-    struct yetty_yvterm_reflow_logical *logical = calloc(src_count ? src_count : 1u, sizeof(*logical));
+    struct yetty_yvterm_reflow_logical *logical =
+        calloc(src_count ? src_count : 1u, sizeof(*logical));
     if (!src || !logical) {
         free(src);
         free(logical);
@@ -1306,6 +1344,19 @@ void yetty_yvterm_grid_set_clear_hook(struct yetty_yclass_object *obj,
     }
     grid_res.value->clear_hook_fn = fn;
     grid_res.value->clear_hook_userdata = userdata;
+}
+
+[[clang::annotate("expose")]]
+void yetty_yvterm_grid_set_card_sub(struct yetty_yclass_object *obj,
+                                    yetty_yvterm_grid_card_sub_fn fn, void *userdata)
+{
+    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
+    if (YETTY_IS_ERR(grid_res)) {
+        yetty_ycore_error_destroy(grid_res.error);
+        return;
+    }
+    grid_res.value->card_sub_fn = fn;
+    grid_res.value->card_sub_userdata = userdata;
 }
 
 /*===========================================================================

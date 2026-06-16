@@ -15,7 +15,7 @@
 #include <stdlib.h>  /* malloc/free for buffer-arg marshalling */
 #include <string.h>
 
-struct yetty_ycore_void_result yetty_yai_resolve_permission(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yai_app * app, int allowed)
+struct yetty_ycore_void_result yetty_yai_resolve_permission(struct yetty_yclass_object * obj, struct yai_app * app, int allowed)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -34,10 +34,10 @@ struct yetty_ycore_void_result yetty_yai_resolve_permission(struct yetty_yclass_
     struct yetty_yclass_impl_t_result dispatch_impl_r =
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yai_resolve_permission: dispatch_lookup failed");
-    return ((yetty_yai_resolve_permission_fn)dispatch_impl_r.value)(ctx, obj, app, allowed);
+    return ((yetty_yai_resolve_permission_fn)dispatch_impl_r.value)(obj, app, allowed);
 }
 
-struct yetty_ycore_void_result yetty_yai_handle_event(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yai_app * app, struct yyjson_val * event)
+struct yetty_ycore_void_result yetty_yai_handle_event(struct yetty_yclass_object * obj, struct yai_app * app, struct yyjson_val * event)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -56,10 +56,10 @@ struct yetty_ycore_void_result yetty_yai_handle_event(struct yetty_yclass_ctx * 
     struct yetty_yclass_impl_t_result dispatch_impl_r =
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yai_handle_event: dispatch_lookup failed");
-    return ((yetty_yai_handle_event_fn)dispatch_impl_r.value)(ctx, obj, app, event);
+    return ((yetty_yai_handle_event_fn)dispatch_impl_r.value)(obj, app, event);
 }
 
-struct yetty_ycore_void_result yetty_yai_send_user_message(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yai_app * app, const char * text)
+struct yetty_ycore_void_result yetty_yai_send_user_message(struct yetty_yclass_object * obj, struct yai_app * app, const char * text)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -78,10 +78,10 @@ struct yetty_ycore_void_result yetty_yai_send_user_message(struct yetty_yclass_c
     struct yetty_yclass_impl_t_result dispatch_impl_r =
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yai_send_user_message: dispatch_lookup failed");
-    return ((yetty_yai_send_user_message_fn)dispatch_impl_r.value)(ctx, obj, app, text);
+    return ((yetty_yai_send_user_message_fn)dispatch_impl_r.value)(obj, app, text);
 }
 
-struct yetty_ycore_void_result yetty_yai_interrupt(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yai_app * app)
+struct yetty_ycore_void_result yetty_yai_interrupt(struct yetty_yclass_object * obj, struct yai_app * app)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -100,10 +100,10 @@ struct yetty_ycore_void_result yetty_yai_interrupt(struct yetty_yclass_ctx * ctx
     struct yetty_yclass_impl_t_result dispatch_impl_r =
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yai_interrupt: dispatch_lookup failed");
-    return ((yetty_yai_interrupt_fn)dispatch_impl_r.value)(ctx, obj, app);
+    return ((yetty_yai_interrupt_fn)dispatch_impl_r.value)(obj, app);
 }
 
-struct yetty_ycore_void_result yetty_yai_start(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yai_app * app)
+struct yetty_ycore_void_result yetty_yai_start(struct yetty_yclass_object * obj, struct yai_app * app)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -122,10 +122,10 @@ struct yetty_ycore_void_result yetty_yai_start(struct yetty_yclass_ctx * ctx, st
     struct yetty_yclass_impl_t_result dispatch_impl_r =
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yai_start: dispatch_lookup failed");
-    return ((yetty_yai_start_fn)dispatch_impl_r.value)(ctx, obj, app);
+    return ((yetty_yai_start_fn)dispatch_impl_r.value)(obj, app);
 }
 
-struct yetty_ycore_void_result yetty_yai_describe_config(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yai_app * app, char * out, size_t out_size)
+struct yetty_ycore_void_result yetty_yai_describe_config(struct yetty_yclass_object * obj, struct yai_app * app, char * out, size_t out_size)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -144,10 +144,10 @@ struct yetty_ycore_void_result yetty_yai_describe_config(struct yetty_yclass_ctx
     struct yetty_yclass_impl_t_result dispatch_impl_r =
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yai_describe_config: dispatch_lookup failed");
-    return ((yetty_yai_describe_config_fn)dispatch_impl_r.value)(ctx, obj, app, out, out_size);
+    return ((yetty_yai_describe_config_fn)dispatch_impl_r.value)(obj, app, out, out_size);
 }
 
-struct yetty_ycore_void_result yetty_yai_config_knob(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yai_app * app, char * out, size_t out_size)
+struct yetty_ycore_void_result yetty_yai_config_knob(struct yetty_yclass_object * obj, struct yai_app * app, char * out, size_t out_size)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -166,10 +166,10 @@ struct yetty_ycore_void_result yetty_yai_config_knob(struct yetty_yclass_ctx * c
     struct yetty_yclass_impl_t_result dispatch_impl_r =
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yai_config_knob: dispatch_lookup failed");
-    return ((yetty_yai_config_knob_fn)dispatch_impl_r.value)(ctx, obj, app, out, out_size);
+    return ((yetty_yai_config_knob_fn)dispatch_impl_r.value)(obj, app, out, out_size);
 }
 
-struct yetty_ycore_void_result yetty_yai_apply_config(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yai_app * app, const char * key, const char * value)
+struct yetty_ycore_void_result yetty_yai_apply_config(struct yetty_yclass_object * obj, struct yai_app * app, const char * key, const char * value)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -188,10 +188,10 @@ struct yetty_ycore_void_result yetty_yai_apply_config(struct yetty_yclass_ctx * 
     struct yetty_yclass_impl_t_result dispatch_impl_r =
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yai_apply_config: dispatch_lookup failed");
-    return ((yetty_yai_apply_config_fn)dispatch_impl_r.value)(ctx, obj, app, key, value);
+    return ((yetty_yai_apply_config_fn)dispatch_impl_r.value)(obj, app, key, value);
 }
 
-struct yetty_ycore_void_result yetty_yai_on_child_exit(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yai_app * app, int64_t exit_status)
+struct yetty_ycore_void_result yetty_yai_on_child_exit(struct yetty_yclass_object * obj, struct yai_app * app, int64_t exit_status)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -210,10 +210,10 @@ struct yetty_ycore_void_result yetty_yai_on_child_exit(struct yetty_yclass_ctx *
     struct yetty_yclass_impl_t_result dispatch_impl_r =
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yai_on_child_exit: dispatch_lookup failed");
-    return ((yetty_yai_on_child_exit_fn)dispatch_impl_r.value)(ctx, obj, app, exit_status);
+    return ((yetty_yai_on_child_exit_fn)dispatch_impl_r.value)(obj, app, exit_status);
 }
 
-struct yetty_ycore_void_result yetty_yai_on_child_eof(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yai_app * app)
+struct yetty_ycore_void_result yetty_yai_on_child_eof(struct yetty_yclass_object * obj, struct yai_app * app)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -232,10 +232,10 @@ struct yetty_ycore_void_result yetty_yai_on_child_eof(struct yetty_yclass_ctx * 
     struct yetty_yclass_impl_t_result dispatch_impl_r =
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yai_on_child_eof: dispatch_lookup failed");
-    return ((yetty_yai_on_child_eof_fn)dispatch_impl_r.value)(ctx, obj, app);
+    return ((yetty_yai_on_child_eof_fn)dispatch_impl_r.value)(obj, app);
 }
 
-struct yetty_ycore_int_result yetty_yai_feed_byte(struct yetty_yclass_ctx * ctx, struct yetty_yclass_object * obj, struct yai_app * app, int byte)
+struct yetty_ycore_int_result yetty_yai_feed_byte(struct yetty_yclass_object * obj, struct yai_app * app, int byte)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
@@ -254,6 +254,6 @@ struct yetty_ycore_int_result yetty_yai_feed_byte(struct yetty_yclass_ctx * ctx,
     struct yetty_yclass_impl_t_result dispatch_impl_r =
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, dispatch_impl_r, "yetty_yai_feed_byte: dispatch_lookup failed");
-    return ((yetty_yai_feed_byte_fn)dispatch_impl_r.value)(ctx, obj, app, byte);
+    return ((yetty_yai_feed_byte_fn)dispatch_impl_r.value)(obj, app, byte);
 }
 

@@ -62,11 +62,9 @@ YETTY_YRESULT_DECLARE(yetty_yai_engine_ptr, struct yetty_yai_engine *);
  *===========================================================================*/
 
 [[clang::annotate("virtual@yai:engine:start")]] [[clang::annotate("local@yai:start")]]
-static struct yetty_ycore_void_result engine_start(struct yetty_yclass_ctx *ctx,
-                                                   struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result engine_start(struct yetty_yclass_object *obj,
                                                    struct yai_app *app)
 {
-    (void)ctx;
     (void)obj;
     (void)app;
     return YETTY_ERR(yetty_ycore_void, "yai engine: start not implemented (abstract base)");
@@ -74,12 +72,10 @@ static struct yetty_ycore_void_result engine_start(struct yetty_yclass_ctx *ctx,
 
 [[clang::annotate("virtual@yai:engine:send_user_message")]] [[clang::annotate(
     "local@yai:send_user_message")]]
-static struct yetty_ycore_void_result engine_send_user_message(struct yetty_yclass_ctx *ctx,
-                                                               struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result engine_send_user_message(struct yetty_yclass_object *obj,
                                                                struct yai_app *app,
                                                                const char *text)
 {
-    (void)ctx;
     (void)obj;
     (void)app;
     (void)text;
@@ -88,12 +84,10 @@ static struct yetty_ycore_void_result engine_send_user_message(struct yetty_ycla
 }
 
 [[clang::annotate("virtual@yai:engine:handle_event")]] [[clang::annotate("local@yai:handle_event")]]
-static struct yetty_ycore_void_result engine_handle_event(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result engine_handle_event(struct yetty_yclass_object *obj,
                                                           struct yai_app *app,
                                                           struct yyjson_val *event)
 {
-    (void)ctx;
     (void)obj;
     (void)app;
     (void)event;
@@ -101,11 +95,9 @@ static struct yetty_ycore_void_result engine_handle_event(struct yetty_yclass_ct
 }
 
 [[clang::annotate("virtual@yai:engine:interrupt")]] [[clang::annotate("local@yai:interrupt")]]
-static struct yetty_ycore_void_result engine_interrupt(struct yetty_yclass_ctx *ctx,
-                                                       struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result engine_interrupt(struct yetty_yclass_object *obj,
                                                        struct yai_app *app)
 {
-    (void)ctx;
     (void)obj;
     (void)app;
     return YETTY_ERR(yetty_ycore_void, "yai engine: interrupt not implemented (abstract base)");
@@ -113,12 +105,10 @@ static struct yetty_ycore_void_result engine_interrupt(struct yetty_yclass_ctx *
 
 [[clang::annotate("virtual@yai:engine:on_child_exit")]] [[clang::annotate(
     "local@yai:on_child_exit")]]
-static struct yetty_ycore_void_result engine_on_child_exit(struct yetty_yclass_ctx *ctx,
-                                                           struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result engine_on_child_exit(struct yetty_yclass_object *obj,
                                                            struct yai_app *app,
                                                            int64_t exit_status)
 {
-    (void)ctx;
     (void)obj;
     (void)app;
     (void)exit_status;
@@ -126,11 +116,9 @@ static struct yetty_ycore_void_result engine_on_child_exit(struct yetty_yclass_c
 }
 
 [[clang::annotate("virtual@yai:engine:on_child_eof")]] [[clang::annotate("local@yai:on_child_eof")]]
-static struct yetty_ycore_void_result engine_on_child_eof(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result engine_on_child_eof(struct yetty_yclass_object *obj,
                                                           struct yai_app *app)
 {
-    (void)ctx;
     (void)obj;
     (void)app;
     return YETTY_ERR(yetty_ycore_void, "yai engine: on_child_eof not implemented (abstract base)");
@@ -144,12 +132,10 @@ static struct yetty_ycore_void_result engine_on_child_eof(struct yetty_yclass_ct
  * Default: an engine with no knobs writes an empty string. */
 [[clang::annotate("virtual@yai:engine:describe_config")]] [[clang::annotate(
     "local@yai:describe_config")]]
-static struct yetty_ycore_void_result engine_describe_config(struct yetty_yclass_ctx *ctx,
-                                                             struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result engine_describe_config(struct yetty_yclass_object *obj,
                                                              struct yai_app *app, char *out,
                                                              size_t out_size)
 {
-    (void)ctx;
     (void)obj;
     (void)app;
     if (!out || out_size == 0) {
@@ -164,12 +150,10 @@ static struct yetty_ycore_void_result engine_describe_config(struct yetty_yclass
  * renders it as a radio group; a selection lands back in apply_config.
  * Default: no knob (empty string). */
 [[clang::annotate("virtual@yai:engine:config_knob")]] [[clang::annotate("local@yai:config_knob")]]
-static struct yetty_ycore_void_result engine_config_knob(struct yetty_yclass_ctx *ctx,
-                                                         struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result engine_config_knob(struct yetty_yclass_object *obj,
                                                          struct yai_app *app, char *out,
                                                          size_t out_size)
 {
-    (void)ctx;
     (void)obj;
     (void)app;
     if (!out || out_size == 0) {
@@ -188,12 +172,10 @@ static struct yetty_ycore_void_result engine_config_knob(struct yetty_yclass_ctx
  * running session immediately). */
 [[clang::annotate("virtual@yai:engine:apply_config")]] [[clang::annotate(
     "local@yai:apply_config")]]
-static struct yetty_ycore_void_result engine_apply_config(struct yetty_yclass_ctx *ctx,
-                                                          struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result engine_apply_config(struct yetty_yclass_object *obj,
                                                           struct yai_app *app, const char *key,
                                                           const char *value)
 {
-    (void)ctx;
     (void)obj;
     (void)app;
     (void)key;
@@ -206,11 +188,9 @@ static struct yetty_ycore_void_result engine_apply_config(struct yetty_yclass_ct
  * at shutdown to never leave a CLI blocked on an unanswered prompt. */
 [[clang::annotate("virtual@yai:engine:resolve_permission")]] [[clang::annotate(
     "local@yai:resolve_permission")]]
-static struct yetty_ycore_void_result engine_resolve_permission(struct yetty_yclass_ctx *ctx,
-                                                                struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result engine_resolve_permission(struct yetty_yclass_object *obj,
                                                                 struct yai_app *app, int allowed)
 {
-    (void)ctx;
     (void)obj;
     (void)app;
     (void)allowed;

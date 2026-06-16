@@ -283,11 +283,9 @@ static int vi_insert(struct yai_app *app, struct yetty_yai_vi *vi, char byte)
 }
 
 [[clang::annotate("override@yai:vi:feed_byte")]]
-static struct yetty_ycore_int_result vi_feed_byte(struct yetty_yclass_ctx *ctx,
-                                                  struct yetty_yclass_object *obj,
+static struct yetty_ycore_int_result vi_feed_byte(struct yetty_yclass_object *obj,
                                                   struct yai_app *app, int byte)
 {
-    (void)ctx;
     struct yetty_yai_vi_ptr_result vi_res = yetty_yai_vi_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, vi_res, "vi feed_byte: data slice");
     struct yetty_yai_vi *vi = vi_res.value;

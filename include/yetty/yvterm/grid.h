@@ -20,6 +20,7 @@ struct yetty_ycore_buffer;
 struct yetty_ydraw_composite;
 struct yetty_ywire_wire_statemachine;
 
+typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int, int, void *);
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *);
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_pty_write_fn)(const char *, size_t,
                                                                          void *);
@@ -71,6 +72,8 @@ void yetty_yvterm_grid_set_pty_write(struct yetty_yclass_object *obj,
                                      yetty_yvterm_grid_pty_write_fn fn, void *userdata);
 void yetty_yvterm_grid_set_clear_hook(struct yetty_yclass_object *obj,
                                       yetty_yvterm_grid_clear_hook_fn fn, void *userdata);
+void yetty_yvterm_grid_set_card_sub(struct yetty_yclass_object *obj,
+                                    yetty_yvterm_grid_card_sub_fn fn, void *userdata);
 struct yetty_ycore_void_result yetty_yvterm_grid_feed(struct yetty_yclass_object *obj,
                                                       const char *bytes, size_t len);
 struct yetty_ycore_void_result yetty_yvterm_grid_resize(struct yetty_yclass_object *obj,
