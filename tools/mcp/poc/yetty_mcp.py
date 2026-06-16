@@ -111,6 +111,16 @@ def _write_to_terminal(data: bytes) -> int:
 _FIGURE_FILE_OPEN = "<<CCLOOP_FIGURE_FILE "
 _FIGURE_FILE_CLOSE = " CCLOOP_FIGURE_FILE>>"
 
+# Preferred parent-render protocol: hand the parent the RAW content plus the
+# render kind and let IT run the tool (it knows the real terminal width and is
+# the single PTY writer). The temp file holds the raw source (markdown, svg,
+# …), NOT a pre-rendered envelope. Format:
+#   <<YAI:DRAW kind=<kind> path=</abs/tmp/yetty-draw-XXXX>>>
+# Used for the text→ycat tools; plot / show_file still pre-render via
+# _emit_figure (their inputs don't fit the "raw content + ycat -c kind" shape).
+_YAI_DRAW_OPEN = "<<YAI:DRAW "
+_YAI_DRAW_CLOSE = ">>"
+
 
 def _emit_figure(data: bytes, label: str) -> str:
     """Either write the envelope to the terminal, or hand it back to a parent
@@ -124,6 +134,19 @@ def _emit_figure(data: bytes, label: str) -> str:
         return f"{_FIGURE_FILE_OPEN}{spool_path}{_FIGURE_FILE_CLOSE} drew {label}"
     written = _write_to_terminal(data)
     return f"Drew {label} to the terminal ({written} bytes)."
+
+
+def _emit_content(kind: str, content: bytes, label: str) -> str:
+    """Render `content` of the given `kind`. Under a parent loop, stage the
+    raw bytes in a temp file and return the YAI:DRAW marker so the parent
+    renders it (one PTY writer). Standalone, render here via ycat and write
+    the envelope to the terminal."""
+    if os.environ.get("YETTY_MCP_VIA_PARENT"):
+        with tempfile.NamedTemporaryFile(prefix="yetty-draw-", delete=False) as spool:
+            spool.write(content)
+            spool_path = spool.name
+        return f"{_YAI_DRAW_OPEN}kind={kind} path={spool_path}{_YAI_DRAW_CLOSE} drew {label}"
+    return _draw_via_ycat(["-c", kind, "-"], content, label)
 
 
 def _run_tool(tool: str, args: list[str], stdin: bytes | None = None) -> bytes:
@@ -192,7 +215,7 @@ def draw_markdown(markdown: str) -> str:
     """Render Markdown (headings, lists, tables, code blocks, bold/italic,
     links) as a rich figure in the yetty terminal. Use this to present
     structured explanations, summaries, or formatted notes to the user."""
-    return _draw_via_ycat(["-c", "markdown", "-"], markdown.encode(), "markdown")
+    return _emit_content("markdown", markdown.encode(), "markdown")
 
 
 @mcp.tool()
@@ -238,7 +261,7 @@ def draw_diagram(mermaid: str) -> str:
 
     Pick the family that fits; for UML class/sequence/state/ER use the matching
     keyword rather than a flowchart approximation."""
-    return _draw_via_ycat(["-c", "mermaid", "-"], mermaid.encode(), "diagram")
+    return _emit_content("mermaid", mermaid.encode(), "diagram")
 
 
 @mcp.tool()
@@ -248,7 +271,7 @@ def draw_svg(svg: str) -> str:
     the agent composes itself. Do NOT hand-draw music notation with SVG —
     use draw_music with LilyPond source instead; it produces properly
     engraved scores."""
-    return _draw_via_ycat(["-c", "svg", "-"], svg.encode(), "SVG")
+    return _emit_content("svg", svg.encode(), "SVG")
 
 
 @mcp.tool()
@@ -270,7 +293,7 @@ def draw_music(lilypond: str) -> str:
     N/D, \\key <pitch> \\major|\\minor, \\relative [<pitch>]. Wrapping such
     as \\version, \\header, \\score, \\new Staff and braces is tolerated and
     skipped. Long scores wrap into systems at the terminal width."""
-    return _draw_via_ycat(["-c", "music", "-"], lilypond.encode(), "music score")
+    return _emit_content("music", lilypond.encode(), "music score")
 
 
 @mcp.tool()

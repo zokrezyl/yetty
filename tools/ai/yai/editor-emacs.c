@@ -12,6 +12,7 @@
  *   Ctrl-U                kill whole line
  *   Ctrl-W               kill word before cursor
  *   Ctrl-Y                yank the kill ring
+ *   Ctrl-_ / Ctrl-/       undo the last change (repeat to walk back)
  *   Ctrl-C                interrupt / quit
  *   Tab                   accept the completion menu selection
  *   Meta-B / Meta-F       back / forward one word
@@ -54,9 +55,8 @@ static int emacs_csi(struct yai_app *app, char final_byte, int param)
         return YAI_EDIT_MOVED;
     case '~':
         if (param == 3) { /* delete: codepoint under the cursor */
-            editor_ops_delete_range(app, app->stdin_cursor,
-                                    editor_ops_next_char(app, app->stdin_cursor));
-            return YAI_EDIT_CHANGED;
+            return editor_cmd_delete(app, app->stdin_cursor,
+                                     editor_ops_next_char(app, app->stdin_cursor));
         }
         if (param == 1 || param == 7) {
             app->stdin_cursor = 0;
@@ -86,13 +86,12 @@ static int emacs_meta(struct yai_app *app, char byte)
         return YAI_EDIT_MOVED;
     case 'd':
     case 'D': /* kill word forward */
-        editor_ops_kill_range(app, app->stdin_cursor,
-                              editor_ops_word_forward(app, app->stdin_cursor));
-        return YAI_EDIT_CHANGED;
+        return editor_cmd_kill(app, app->stdin_cursor,
+                               editor_ops_word_forward(app, app->stdin_cursor));
     case 0x7F:
     case 0x08: /* Meta-Backspace: kill word backward */
-        editor_ops_kill_range(app, editor_ops_word_back(app, app->stdin_cursor), app->stdin_cursor);
-        return YAI_EDIT_CHANGED;
+        return editor_cmd_kill(app, editor_ops_word_back(app, app->stdin_cursor),
+                               app->stdin_cursor);
     default:
         return YAI_EDIT_NONE;
     }
@@ -127,32 +126,26 @@ static int emacs_plain(struct yai_app *app, char byte)
         if (app->stdin_len == 0) {
             return YAI_EDIT_EOF;
         }
-        if (app->stdin_cursor < app->stdin_len) {
-            editor_ops_delete_range(app, app->stdin_cursor,
-                                    editor_ops_next_char(app, app->stdin_cursor));
-            return YAI_EDIT_CHANGED;
-        }
-        return YAI_EDIT_NONE;
+        return editor_cmd_delete(app, app->stdin_cursor,
+                                 editor_ops_next_char(app, app->stdin_cursor));
     case 0x7F:
     case 0x08: /* Backspace / Ctrl-H */
         if (app->stdin_cursor > 0) {
-            editor_ops_delete_range(app, editor_ops_prev_char(app, app->stdin_cursor),
-                                    app->stdin_cursor);
-            return YAI_EDIT_CHANGED;
+            return editor_cmd_delete(app, editor_ops_prev_char(app, app->stdin_cursor),
+                                     app->stdin_cursor);
         }
         return YAI_EDIT_NONE;
     case 0x0B: /* Ctrl-K: kill to end of line */
-        editor_ops_kill_range(app, app->stdin_cursor, app->stdin_len);
-        return YAI_EDIT_CHANGED;
+        return editor_cmd_kill(app, app->stdin_cursor, app->stdin_len);
     case 0x15: /* Ctrl-U: kill the line */
-        editor_ops_kill_range(app, 0, app->stdin_len);
-        app->stdin_cursor = 0;
-        return YAI_EDIT_CHANGED;
+        return editor_cmd_kill(app, 0, app->stdin_len);
     case 0x17: /* Ctrl-W: kill word before cursor */
-        editor_ops_kill_range(app, editor_ops_word_back(app, app->stdin_cursor), app->stdin_cursor);
-        return YAI_EDIT_CHANGED;
+        return editor_cmd_kill(app, editor_ops_word_back(app, app->stdin_cursor),
+                               app->stdin_cursor);
     case 0x19: /* Ctrl-Y: yank */
-        return editor_ops_yank(app) ? YAI_EDIT_CHANGED : YAI_EDIT_NONE;
+        return editor_cmd_yank(app);
+    case 0x1F: /* Ctrl-_ / Ctrl-/ : undo the last command */
+        return editor_cmd_undo(app);
     case 0x03: /* Ctrl-C */
         return YAI_EDIT_INTERRUPT;
     default:
@@ -161,7 +154,7 @@ static int emacs_plain(struct yai_app *app, char byte)
     if ((unsigned char)byte < 0x20) {
         return YAI_EDIT_NONE; /* other control bytes: ignore */
     }
-    return editor_ops_insert(app, &byte, 1) ? YAI_EDIT_CHANGED : YAI_EDIT_NONE;
+    return editor_cmd_insert_char(app, byte);
 }
 
 [[clang::annotate("override@yai:emacs:feed_byte")]]
@@ -172,6 +165,9 @@ static struct yetty_ycore_int_result emacs_feed_byte(struct yetty_yclass_ctx *ct
     (void)ctx;
     (void)obj;
     app->edit_status[0] = '\0'; /* emacs has no modal indicator */
+    /* No undo bookkeeping here: each command records its own step when it
+     * runs (editor_cmd_*), so undo is mode-independent. This layer only
+     * decodes the byte and maps it to a command. */
     char final_byte = 0;
     int param = 0;
     int status = editor_ops_csi(app, (char)byte, &final_byte, &param);

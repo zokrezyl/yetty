@@ -33,18 +33,19 @@ static struct yetty_ycore_void_result codex_start(struct yetty_yclass_ctx *ctx,
 {
     (void)ctx;
     (void)obj;
-    (void)app; /* nothing runs until the first turn spawns */
-    /* Codex events carry no tool output back to yai, so the yetty MCP
-     * server must write its figure envelope to /dev/tty itself. */
-    if (unsetenv("YETTY_MCP_VIA_PARENT") != 0) {
-        return YETTY_ERR(yetty_ycore_void, "codex start: unsetenv YETTY_MCP_VIA_PARENT failed");
+    /* yai owns the terminal: route the yetty MCP server's figures back
+     * through us (parent mode) instead of letting it race us to /dev/tty.
+     * The server returns a YAI:DRAW / figure sentinel in the tool result,
+     * which rides codex's mcp_tool_call item output into yai_render_tool_result.
+     * (Requires --codex-sandbox danger-full-access for MCP tools to run.) */
+    if (setenv("YETTY_MCP_VIA_PARENT", "1", 1) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "codex start: setenv YETTY_MCP_VIA_PARENT failed");
     }
-    const char *sandbox_mode = getenv("YAI_CODEX_SANDBOX");
-    if (!sandbox_mode || !sandbox_mode[0]) {
+    if (strcmp(app->config.codex_sandbox, "workspace-write") == 0) {
         /* Constrained default (see send_user_message) — say so once,
          * with the explicit opt-in for MCP tools. */
         printf(YAI_DIM "(codex sandbox: workspace-write — MCP tool calls may be auto-cancelled; "
-                       "set YAI_CODEX_SANDBOX=danger-full-access to allow them)" YAI_RESET "\n");
+                       "use --codex-sandbox danger-full-access to allow them)" YAI_RESET "\n");
         struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
         YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "codex start: flush");
     }
@@ -61,12 +62,12 @@ static struct yetty_ycore_void_result codex_send_user_message(struct yetty_yclas
     if (app->child_open_handles > 0 || app->child_alive) {
         return YETTY_ERR(yetty_ycore_void, "codex send_user_message: previous turn still open");
     }
-    const char *model = getenv("YAI_MODEL");
+    const char *model = app->config.model;
     char model_override[256] = "";
-    if (model && model[0]) {
+    if (model[0]) {
         int written = snprintf(model_override, sizeof(model_override), "model=%s", model);
         if (written < 0 || (size_t)written >= sizeof(model_override)) {
-            return YETTY_ERR(yetty_ycore_void, "codex send_user_message: YAI_MODEL too long");
+            return YETTY_ERR(yetty_ycore_void, "codex send_user_message: model too long");
         }
     }
 
@@ -74,23 +75,36 @@ static struct yetty_ycore_void_result codex_send_user_message(struct yetty_yclas
      * by codex exec unless the sandbox allows them ("user cancelled MCP
      * tool call"); empirically only danger-full-access lets them run
      * non-interactively — but full filesystem/process access must be an
-     * explicit opt-in (YAI_CODEX_SANDBOX=danger-full-access), never a
-     * silent default. codex_start prints the trade-off once. */
-    const char *sandbox_mode = getenv("YAI_CODEX_SANDBOX");
-    if (!sandbox_mode || !sandbox_mode[0]) {
-        sandbox_mode = "workspace-write";
+     * explicit opt-in (--codex-sandbox danger-full-access), never a silent
+     * default. codex_start prints the trade-off once. */
+    const char *sandbox_mode = app->config.codex_sandbox;
+
+    /* Approval policy — codex's `approval_policy` config key, a SEPARATE axis
+     * from the sandbox. `codex exec` is non-interactive (stdin is UV_IGNORE,
+     * the prompt rides argv), so there is nowhere to answer an approval
+     * request; the only policy yai can actually honor is `never`, which is
+     * therefore the default. A power user externally sandboxing the whole
+     * process can opt into another policy via --codex-approval, accepting
+     * that anything codex would prompt for will instead stall/deny. Note:
+     * `codex exec` has no `--ask-for-approval` flag — it takes the policy via
+     * `-c approval_policy=…` only. */
+    char approval_override[64];
+    int approval_written = snprintf(approval_override, sizeof(approval_override),
+                                    "approval_policy=%s", app->config.codex_approval);
+    if (approval_written < 0 || (size_t)approval_written >= sizeof(approval_override)) {
+        return YETTY_ERR(yetty_ycore_void, "codex send_user_message: approval too long");
     }
 
     /* Reasoning effort for the OpenAI model — codex's model_reasoning_effort
      * config key (minimal / low / medium / high). Off by default (the
-     * model's own default applies); opt in via YAI_CODEX_EFFORT. */
-    const char *effort = getenv("YAI_CODEX_EFFORT");
+     * model's own default applies); opt in via --codex-effort. */
+    const char *effort = app->config.codex_effort;
     char effort_override[64] = "";
-    if (effort && effort[0] && strcmp(effort, "default") != 0) {
+    if (effort[0] && strcmp(effort, "default") != 0) {
         int written =
             snprintf(effort_override, sizeof(effort_override), "model_reasoning_effort=%s", effort);
         if (written < 0 || (size_t)written >= sizeof(effort_override)) {
-            return YETTY_ERR(yetty_ycore_void, "codex send_user_message: YAI_CODEX_EFFORT too long");
+            return YETTY_ERR(yetty_ycore_void, "codex send_user_message: effort too long");
         }
     }
 
@@ -102,6 +116,8 @@ static struct yetty_ycore_void_result codex_send_user_message(struct yetty_yclas
     args[arg_count++] = "--skip-git-repo-check";
     args[arg_count++] = "--sandbox";
     args[arg_count++] = sandbox_mode;
+    args[arg_count++] = "-c";
+    args[arg_count++] = approval_override;
     if (model_override[0]) {
         args[arg_count++] = "-c";
         args[arg_count++] = model_override;
@@ -200,49 +216,17 @@ static struct yetty_ycore_void_result codex_render_item(struct yai_app *app, yyj
     return YETTY_OK_VOID();
 }
 
+/* Normalize codex's turn.completed usage into a USAGE event. Codex
+ * reports no cost or duration (has_cost stays 0, seconds 0), so the
+ * shared renderer omits the "$…" and timing segments. */
 static struct yetty_ycore_void_result codex_render_usage(struct yai_app *app, yyjson_val *usage)
 {
-    uint64_t turn_input = yai_usage_field(usage, "input_tokens");
-    uint64_t cached = yai_usage_field(usage, "cached_input_tokens");
-    uint64_t turn_output = yai_usage_field(usage, "output_tokens");
-    app->usage.input += turn_input;
-    app->usage.output += turn_output;
-    app->usage.cache_read += cached;
-    app->usage.turns++;
-
-    char input_text[16];
-    char output_text[16];
-    char cached_text[16];
-    char session_output_text[16];
-    yai_format_tokens(turn_input, input_text, sizeof(input_text));
-    yai_format_tokens(turn_output, output_text, sizeof(output_text));
-    yai_format_tokens(cached, cached_text, sizeof(cached_text));
-    yai_format_tokens(app->usage.output, session_output_text, sizeof(session_output_text));
-    char turn_line[192];
-    snprintf(turn_line, sizeof(turn_line), "↑%s in · %s cached · ↓%s out", input_text, cached_text,
-             output_text);
-    char session_line[128];
-    snprintf(session_line, sizeof(session_line), "session: ↓%s out · %d turn(s)",
-             session_output_text, app->usage.turns);
-    if (app->hud) {
-        struct yetty_ycore_void_result hud_res = yai_hud_set_turn(app->hud, turn_line);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "codex_render_usage: hud turn line");
-        hud_res = yai_hud_set_session(app->hud, session_line);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "codex_render_usage: hud session line");
-        hud_res = yai_hud_set_state(app->hud, "idle");
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "codex_render_usage: hud state");
-        hud_res = yai_refresh_hud_stats(app);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "codex_render_usage: hud stats");
-        hud_res = yai_hud_flush(app->hud);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "codex_render_usage: hud flush");
-        return YETTY_OK_VOID();
-    }
-    struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "codex_render_usage: suspend");
-    printf(YAI_MUTED "  %s" YAI_RESET "\n" YAI_DIM "  %s" YAI_RESET "\n", turn_line, session_line);
-    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "codex_render_usage: flush");
-    return YETTY_OK_VOID();
+    struct yai_event usage_event = {
+        .kind = YAI_EVENT_USAGE,
+        .usage = {.input = yai_usage_field(usage, "input_tokens"),
+                  .output = yai_usage_field(usage, "output_tokens"),
+                  .cache_read = yai_usage_field(usage, "cached_input_tokens")}};
+    return yai_event_dispatch(app, &usage_event);
 }
 
 [[clang::annotate("override@yai:codex:describe_config")]]
@@ -253,18 +237,15 @@ static struct yetty_ycore_void_result codex_describe_config(struct yetty_yclass_
 {
     (void)ctx;
     (void)obj;
-    /* Mirror the exact defaults codex_send_user_message applies. */
-    const char *sandbox_mode = getenv("YAI_CODEX_SANDBOX");
-    if (!sandbox_mode || !sandbox_mode[0]) {
-        sandbox_mode = "workspace-write";
-    }
-    const char *model = getenv("YAI_MODEL");
+    const char *model = app->config.model;
     int written = snprintf(out, out_size,
-                           "model: %s  [YAI_MODEL]\n"
-                           "sandbox: %s  [YAI_CODEX_SANDBOX; danger-full-access enables MCP "
-                           "tools]\n"
+                           "model: %s  [--model]\n"
+                           "sandbox: %s  [--codex-sandbox; danger-full-access enables MCP tools]\n"
+                           "approval: %s  [--codex-approval; exec is non-interactive, so only "
+                           "'never' is serviceable]\n"
                            "resume: thread %s (one child per turn)",
-                           (model && model[0]) ? model : "(CLI default)", sandbox_mode,
+                           model[0] ? model : "(CLI default)", app->config.codex_sandbox,
+                           app->config.codex_approval,
                            app->session_id[0] ? app->session_id : "(minted on the first turn)");
     if (written < 0 || (size_t)written >= out_size) {
         return YETTY_ERR(yetty_ycore_void, "codex describe_config: rows truncated");
@@ -280,17 +261,15 @@ static struct yetty_ycore_void_result codex_config_knob(struct yetty_yclass_ctx 
 {
     (void)ctx;
     (void)obj;
-    (void)app;
-    const char *sandbox_mode = getenv("YAI_CODEX_SANDBOX");
-    if (!sandbox_mode || !sandbox_mode[0]) {
-        sandbox_mode = "workspace-write";
-    }
-    /* Reasoning effort is a model parameter — it lives on the model tab
+    /* One knob spec per line: ENGINE_FIELD|label|options|current. Sandbox and
+     * approval are independent axes (the earlier design conflated them).
+     * Reasoning effort is a model parameter — it lives on the model tab
      * (main.c build_effort_knob), not here. */
     int written = snprintf(out, out_size,
-                           "YAI_CODEX_SANDBOX|sandbox|"
-                           "read-only,workspace-write,danger-full-access|%s",
-                           sandbox_mode);
+                           "codex_sandbox|sandbox|"
+                           "read-only,workspace-write,danger-full-access|%s\n"
+                           "codex_approval|approval|never,on-request,untrusted|%s",
+                           app->config.codex_sandbox, app->config.codex_approval);
     if (written < 0 || (size_t)written >= out_size) {
         return YETTY_ERR(yetty_ycore_void, "codex config_knob: spec truncated");
     }

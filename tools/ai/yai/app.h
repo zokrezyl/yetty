@@ -20,6 +20,7 @@
 #define YAI_APP_H
 
 #include "commands.h"
+#include "event.h"
 #include "hud.h"
 #include "render.h"
 
@@ -37,8 +38,22 @@
 /* Completion menu rows under the prompt while typing a /command. */
 #define YAI_MENU_ROWS YAI_RENDERER_MENU_ROWS
 #define YAI_HISTORY_MAX 100
+/* Max line-editor undo depth (vi `u`); oldest steps drop past this. */
+#define YAI_UNDO_MAX 256
+
+/* One line-editor undo step: a heap copy of the line and its cursor as
+ * they were before an edit. See struct yai_app's undo_stack. */
+struct yai_undo_entry {
+    char *bytes; /* malloc'd; `len` bytes, not NUL-terminated */
+    size_t len;
+    size_t cursor;
+};
+/* Tools the user marked "always allow" this session (permission prompt). */
+#define YAI_ALWAYS_ALLOW_MAX 32
 
 struct yetty_yface;
+struct yai_control;
+struct yai_proxy;
 
 struct yai_session_usage {
     uint64_t input;
@@ -63,6 +78,30 @@ struct yai_pending_permission {
     yyjson_mut_doc *input_doc;
 };
 
+/* yai's own settings. The single source of truth: seeded with defaults,
+ * overlaid by the config file (~/.config/yetty/yai.yaml), then overridden by
+ * command-line flags. The engines read these fields directly at spawn — there
+ * are no YAI_* environment variables. `engine` and `edit_mode` live as their
+ * own app fields (engine_name / editor_mode_name); the renderer owns
+ * fold_lines / show_thinking. Everything else lives here. */
+struct yai_config {
+    char model[128];               /* "" = the engine CLI's own default */
+    /* claude */
+    char permission_mode[24];      /* default | acceptEdits | plan | auto */
+    char allowed_preset[16];       /* curated | readonly | edit | full */
+    char allowed_tools[1024];      /* explicit allowlist; "" = derive from preset */
+    char claude_effort[16];        /* auto | low | medium | high | xhigh | max */
+    /* codex */
+    char codex_sandbox[24];        /* read-only | workspace-write | danger-full-access */
+    char codex_approval[16];       /* never | on-request | untrusted */
+    char codex_effort[16];         /* default | minimal | low | medium | high */
+    /* gemini */
+    char gemini_approval_mode[16]; /* default | auto_edit | yolo */
+    /* status window */
+    int no_hud;                    /* 1 = no ygui window; stats as plain text */
+    int hud_float;                 /* 1 = float the HUD instead of docking */
+};
+
 struct yai_app {
     uv_loop_t loop;
     uv_process_t child_process;
@@ -78,11 +117,26 @@ struct yai_app {
     struct yai_hud *hud;
     struct yai_renderer renderer;
     struct yai_session_usage usage;
+    struct yai_config config;
 
     /* Input demux + routing. */
     struct yetty_yface *yface;
+    /* External msgpack-RPC control server (NULL unless --rpc/YAI_RPC_PORT
+     * was given): lets an outside client inject commands and query state
+     * over a localhost TCP port. */
+    struct yai_control *control;
+    /* Usage proxy (NULL unless --usage-proxy/YAI_USAGE_PROXY was given): a
+     * localhost HTTP forwarder the child's Anthropic traffic is routed
+     * through, capturing live rate-limit/quota headers. See proxy.c. */
+    struct yai_proxy *usage_proxy;
     int focus_gui; /* 1 = the HUD window owns keyboard input */
     int mouse_subscribed;
+    /* Bottom band (px) currently reserved with the yetty host for the
+     * docked HUD via YETTY_OSC_CS_CONTENT_INSET. Re-emitting an unchanged
+     * inset makes the host re-resize the grid and re-raise SIGWINCH, whose
+     * handler re-emits the inset — a reflow feedback loop. Track the last
+     * emitted value and only send on a real change. 0 = nothing reserved. */
+    float dock_reserved_px;
     int echo_input;   /* echo typed bytes (stdin is a tty in raw mode) */
     int escape_state; /* line-editor ESC/CSI decode: 0 none, 1 ESC, 2 CSI */
     int escape_param; /* numeric CSI parameter (last group) */
@@ -120,7 +174,16 @@ struct yai_app {
      * turn.failed / error event). Read and cleared at the turn
      * boundary to render a distinct failed state. */
     int turn_failed;
+    /* The most recent turn ended with an error `result` event (e.g. a
+     * failed --resume). If the child then exits, that exit is explained,
+     * so the EOF handler skips its "exited unexpectedly" warning. */
+    int saw_result_error;
     int waiting;       /* a turn is in flight */
+    /* Running token estimate for the in-flight request (claude's
+     * system/thinking_tokens events; cumulative, reset at each turn start).
+     * Shown next to the "thinking" activity on the left of the HUD, while
+     * app->usage holds the cumulative session total on the right. */
+    uint64_t estimated_tokens;
     int shutting_down; /* /quit or EOF — wind the child down */
     int exit_code;
 
@@ -128,6 +191,22 @@ struct yai_app {
     char *child_out_buf;
     size_t child_out_len;
     size_t child_out_cap;
+
+    /* JSON-document reassembly across lines. Claude/codex emit JSONL —
+     * one complete object per line, so this parses and clears on the
+     * first line. Gemini emits ONE pretty-printed (multi-line) object
+     * per turn, so its lines accumulate here until the closing brace
+     * completes the document. Reset at each child EOF. */
+    char *pending_json;
+    size_t pending_json_len;
+    size_t pending_json_cap;
+
+    /* The assistant's most recent answer text (accumulated from text
+     * deltas; reset at each message start). Ctrl-G opens the external
+     * editor with the current draft plus this, for reference/quoting. */
+    char *last_response;
+    size_t last_response_len;
+    size_t last_response_cap;
 
     /* line editor buffer (terminal-focused typing). The buffer lives
      * here (not in the editor object) so the renderer's pinned prompt
@@ -140,6 +219,27 @@ struct yai_app {
      * delete-into-register. */
     char kill_buf[8192];
     size_t kill_len;
+    /* Multi-level undo for the line editor, recorded by the abstract command
+     * layer (editor_cmd_* in editor-ops.h) and therefore identical in every
+     * mode — vi `u` and emacs Ctrl-_/Ctrl-/ pop the same stack; the mode
+     * layers never touch it. One undo step is one command: each discrete
+     * command (delete, kill, paste, replace) pushes the pre-change line as
+     * its own step, while typed text is split at word boundaries (a space
+     * after a non-space ends a word) so each word is its own step. Popping
+     * restores the line as it was before that command, so repeated undo
+     * walks back command by command / word by word. Entries are heap copies,
+     * freed when the line is submitted/cancelled (editor_ops_undo_clear at
+     * the line-reset points in main.c). The "group" fields hold the snapshot
+     * for the edit in progress: a discrete command opens and commits it at
+     * once, while a typed word's group stays open until the next word
+     * boundary, the next discrete command, or an undo. */
+    struct yai_undo_entry undo_stack[YAI_UNDO_MAX];
+    int undo_depth;
+    char undo_group_buf[8192];
+    size_t undo_group_len;
+    size_t undo_group_cursor;
+    int undo_group_open;
+    int undo_group_dirty;
     /* Editor mode indicator drawn before the prompt ("", "[N]", "[I]"). */
     char edit_status[16];
 
@@ -162,6 +262,12 @@ struct yai_app {
 
     struct yai_pending_permission pending_permission;
 
+    /* Tools the user chose "always allow" for this session — the engine's
+     * can_use_tool requests for these auto-approve without prompting
+     * (claude only; the other engines have no interactive prompt). */
+    char always_allow_tools[YAI_ALWAYS_ALLOW_MAX][80];
+    int always_allow_count;
+
     /* /config dialog knob mapping — assembled when the dialog opens
      * (knob 0 = yai edit mode; the rest = the engine's config_knob).
      * The click sync diffs each against `selected` and applies: the
@@ -169,8 +275,8 @@ struct yai_app {
      * engine's apply_config slot. */
     struct {
         int is_edit_mode; /* 1 = yai edit mode (swap editor object) */
-        int is_model;     /* 1 = model knob (setenv YAI_MODEL) */
-        char key[64];     /* env knob key (engine + model knobs) */
+        int is_model;     /* 1 = model knob (sets config.model) */
+        char key[64];     /* config-field key the knob writes */
         char options[YAI_HUD_CONFIG_KNOB_MAX_OPTIONS][48];
         int option_count;
         int selected;
@@ -178,6 +284,15 @@ struct yai_app {
     int config_knob_count;
     int config_show_thinking_applied;
     int config_fold_lines_applied;
+
+    /* Text settings TUI: a non-yetty alt-screen modal over config_knobs
+     * (the ygui dialog's text-terminal counterpart). active = on screen;
+     * selected = highlighted knob row; initial = each knob's selection
+     * when the TUI opened, so only changed knobs are applied on close. */
+    int config_tui_active;
+    int config_tui_selected;
+    int config_tui_escape; /* arrow-key decode: 0 none, 1 ESC, 2 ESC[ */
+    int config_tui_initial[YAI_HUD_CONFIG_MAX_KNOBS];
 
     /* Slash commands: locals + the CLI's list from `initialize`. */
     struct yai_command_table commands;
@@ -220,11 +335,52 @@ struct yetty_ycore_void_result yai_begin_shutdown(struct yai_app *app);
  * Pure teardown — cannot fail. */
 void yai_drop_pending_permission(struct yai_app *app);
 
+/* Session "always allow" policy for the permission prompt: an engine's
+ * tool-permission request for a remembered tool is auto-approved without
+ * prompting. yai_tool_remember_allow records one (idempotent, silently
+ * caps at YAI_ALWAYS_ALLOW_MAX); yai_tool_always_allowed queries. */
+int yai_tool_always_allowed(const struct yai_app *app, const char *tool_name);
+void yai_tool_remember_allow(struct yai_app *app, const char *tool_name);
+
 /* One decoded child stdout line: transcript mirror + JSON parse +
  * engine handle_event dispatch. Non-JSON lines are not an error;
  * dispatch failures propagate. */
 struct yetty_ycore_void_result yai_handle_child_line(struct yai_app *app, const char *line,
                                                      size_t len);
+
+/* Inject one line as if the user had typed it and pressed Enter (echoes
+ * the prompt, then dispatches through the normal input path: slash
+ * commands, shell escapes, or a message to the engine). Used by the
+ * external control server. Defined in main.c. */
+struct yetty_ycore_void_result yai_control_inject(struct yai_app *app, const char *line,
+                                                  size_t len);
+
+/* External control server (control.c): a localhost msgpack-RPC TCP server
+ * for injecting commands / querying state from outside. start binds and
+ * listens (storing the server on app->control); stop tears it down. Both
+ * are no-ops / safe when control is absent. */
+struct yetty_ycore_void_result yai_control_start(struct yai_app *app, int port);
+void yai_control_stop(struct yai_app *app);
+
+/* Client mode: connect to another running yai's --rpc control server, send
+ * one request (method + string args), print the response, and return a
+ * process exit code. This is how `yai --connect <port> <method> [args...]`
+ * makes one yai drive another. Defined in control.c. */
+int yai_control_client_main(const char *host, int port, const char *method,
+                            const char *const *args, int arg_count);
+
+/* Usage proxy (proxy.c): a builtin localhost HTTP→HTTPS forwarder on an
+ * ephemeral port. start() points the spawned child's ANTHROPIC_BASE_URL at
+ * it, replays the child's API traffic to the real upstream, and captures the
+ * live `anthropic-ratelimit-*` quota headers into ~/.claude/usage-status.md
+ * and app state. stop() tears it down (safe when absent). status() copies the
+ * latest one-line quota summary into `out` (empty until the first call). */
+struct yetty_ycore_void_result yai_usage_proxy_start(struct yai_app *app);
+void yai_usage_proxy_stop(struct yai_app *app);
+void yai_usage_proxy_status(struct yai_app *app, char *out, size_t out_size);
+/* Compact one-line quota for the status bar, e.g. "quota 5h 26% · 7d 55%"
+ * (empty until the first API call is captured). */
+void yai_usage_proxy_summary(struct yai_app *app, char *out, size_t out_size);
 
 /* uv callbacks shared by the engines' child spawns. Signatures are
  * dictated by libuv (YETTY_EXTERNAL_CALLBACK) — inner Results are

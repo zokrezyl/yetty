@@ -67,6 +67,8 @@ struct yetty_ycore_void_result yai_command_table_init(struct yai_command_table *
     YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "command_table_init: shell");
     res = table_add(table, "config", "toggle the engine + yai configuration dialog", "", 1);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "command_table_init: config");
+    res = table_add(table, "usage", "show this session's token usage and cost", "", 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "command_table_init: usage");
     qsort(table->items, table->count, sizeof(table->items[0]), command_compare);
     return YETTY_OK_VOID();
 }

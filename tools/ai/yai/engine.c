@@ -179,12 +179,13 @@ static struct yetty_ycore_void_result engine_config_knob(struct yetty_yclass_ctx
     return YETTY_OK_VOID();
 }
 
-/* apply_config: a knob edited in the config dialog. `key` is the env
- * knob name from config_knob, `value` the chosen option. The default
- * stores it in the environment — the per-turn engines read their env
- * on every spawn, so the change takes effect on the next turn. Engines
- * with a live protocol override this (claude pushes the new permission
- * mode into the running session). */
+/* apply_config: a knob edited in the config dialog. `key` is the engine
+ * field name from config_knob, `value` the chosen option. The value is
+ * already stored in app->config by the caller (yai_config_set); the per-turn
+ * engines read that struct on every spawn, so the change takes effect on the
+ * next turn. The base default therefore does nothing. Engines with a live
+ * protocol override this (claude pushes the new permission mode into the
+ * running session immediately). */
 [[clang::annotate("virtual@yai:engine:apply_config")]] [[clang::annotate(
     "local@yai:apply_config")]]
 static struct yetty_ycore_void_result engine_apply_config(struct yetty_yclass_ctx *ctx,
@@ -195,12 +196,8 @@ static struct yetty_ycore_void_result engine_apply_config(struct yetty_yclass_ct
     (void)ctx;
     (void)obj;
     (void)app;
-    if (!key || !key[0] || !value) {
-        return YETTY_ERR(yetty_ycore_void, "engine apply_config: missing key/value");
-    }
-    if (setenv(key, value, 1) != 0) {
-        return YETTY_ERR(yetty_ycore_void, "engine apply_config: setenv failed");
-    }
+    (void)key;
+    (void)value;
     return YETTY_OK_VOID();
 }
 

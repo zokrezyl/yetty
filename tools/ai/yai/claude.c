@@ -252,6 +252,36 @@ static struct yetty_ycore_void_result handle_control_request(struct yai_app *app
     }
     yyjson_val *input = yyjson_obj_get(request, "input");
 
+    /* Auto-approve without prompting when the session is in "auto" mode
+     * (yai enforces it here, so it holds even if the live set_permission_mode
+     * push didn't), or when this tool was marked "always allow". Preserve
+     * the tool input on the response (fail closed if it can't be copied —
+     * never approve with empty input). */
+    const char *perm_mode = app->config.permission_mode;
+    int auto_mode =
+        strcmp(perm_mode, "auto") == 0 || strcmp(perm_mode, "bypassPermissions") == 0;
+    if (auto_mode || yai_tool_always_allowed(app, tool_name)) {
+        yyjson_mut_doc *input_copy = yyjson_mut_doc_new(NULL);
+        if (input_copy && input) {
+            yyjson_mut_val *copy = yyjson_val_mut_copy(input_copy, input);
+            if (copy) {
+                yyjson_mut_doc_set_root(input_copy, copy);
+            } else {
+                yyjson_mut_doc_free(input_copy);
+                input_copy = NULL;
+            }
+        }
+        if (input && !input_copy) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "handle_control_request: preserve auto-allowed tool input");
+        }
+        struct yetty_ycore_void_result allow_res =
+            send_permission_response(app, request_id, 1, input_copy);
+        yyjson_mut_doc_free(input_copy);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, allow_res, "handle_control_request: auto-allow");
+        return YETTY_OK_VOID();
+    }
+
     app->pending_permission.active = 1;
     snprintf(app->pending_permission.request_id, sizeof(app->pending_permission.request_id), "%s",
              request_id);
@@ -271,7 +301,9 @@ static struct yetty_ycore_void_result handle_control_request(struct yai_app *app
     struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "handle_control_request: suspend");
     printf("\n" YAI_MINT "? permission: " YAI_RESET YAI_BOLD "%s" YAI_RESET " " YAI_DIM
-           "%s" YAI_RESET "\n" YAI_DIM "  allow? type y / n" YAI_RESET "\n",
+           "%s" YAI_RESET "\n" YAI_DIM
+           "  press a key:  y=yes  n=no  a=always this tool  !=auto (approve all)  ·  Ctrl-C "
+           "interrupts" YAI_RESET "\n",
            tool_name, summary);
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "handle_control_request: flush");
@@ -335,70 +367,6 @@ static const char *lookup_tool_name(struct yetty_yai_claude *claude, const char 
  * Stream-json event handling
  *---------------------------------------------------------------------------*/
 
-static struct yetty_ycore_void_result render_turn_usage(struct yai_app *app,
-                                                        yyjson_val *result_event)
-{
-    yyjson_val *usage = yyjson_obj_get(result_event, "usage");
-    yyjson_val *cost_value = yyjson_obj_get(result_event, "total_cost_usd");
-    yyjson_val *duration_value = yyjson_obj_get(result_event, "duration_ms");
-
-    uint64_t turn_input = yai_usage_field(usage, "input_tokens");
-    uint64_t turn_output = yai_usage_field(usage, "output_tokens");
-    uint64_t cache_read = yai_usage_field(usage, "cache_read_input_tokens");
-    uint64_t cache_creation = yai_usage_field(usage, "cache_creation_input_tokens");
-    double cost = cost_value ? yyjson_get_num(cost_value) : 0.0;
-    double seconds = duration_value ? yyjson_get_num(duration_value) / 1000.0 : 0.0;
-
-    app->usage.input += turn_input;
-    app->usage.output += turn_output;
-    app->usage.cache_read += cache_read;
-    app->usage.cache_creation += cache_creation;
-    app->usage.cost += cost;
-    app->usage.turns++;
-
-    char input_text[16];
-    char output_text[16];
-    char cached_text[16];
-    char session_output_text[16];
-    yai_format_tokens(turn_input, input_text, sizeof(input_text));
-    yai_format_tokens(turn_output, output_text, sizeof(output_text));
-    yai_format_tokens(cache_read, cached_text, sizeof(cached_text));
-    yai_format_tokens(app->usage.output, session_output_text, sizeof(session_output_text));
-
-    char timing_text[48] = "";
-    if (seconds > 0.0) {
-        snprintf(timing_text, sizeof(timing_text), " · %.1fs · %.0f tok/s", seconds,
-                 (double)turn_output / seconds);
-    }
-    char turn_line[192];
-    snprintf(turn_line, sizeof(turn_line), "↑%s in · %s cached · ↓%s out%s · $%.4f", input_text,
-             cached_text, output_text, timing_text, cost);
-    char session_line[128];
-    snprintf(session_line, sizeof(session_line), "session: ↓%s out · $%.4f · %d turn(s)",
-             session_output_text, app->usage.cost, app->usage.turns);
-
-    if (app->hud) {
-        /* Tokens go to the HUD window; the scrollback stays clean. */
-        struct yetty_ycore_void_result hud_res = yai_hud_set_turn(app->hud, turn_line);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "render_turn_usage: hud turn line");
-        hud_res = yai_hud_set_session(app->hud, session_line);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "render_turn_usage: hud session line");
-        hud_res = yai_hud_set_state(app->hud, "idle");
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "render_turn_usage: hud state");
-        hud_res = yai_refresh_hud_stats(app);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "render_turn_usage: hud stats");
-        hud_res = yai_hud_flush(app->hud);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "render_turn_usage: hud flush");
-        return YETTY_OK_VOID();
-    }
-    struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "render_turn_usage: suspend");
-    printf(YAI_MUTED "  %s" YAI_RESET "\n" YAI_DIM "  %s" YAI_RESET "\n", turn_line, session_line);
-    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "render_turn_usage: flush");
-    return YETTY_OK_VOID();
-}
-
 static struct yetty_ycore_void_result handle_stream_event(struct yai_app *app, yyjson_val *event)
 {
     yyjson_val *inner = yyjson_obj_get(event, "event");
@@ -407,7 +375,8 @@ static struct yetty_ycore_void_result handle_stream_event(struct yai_app *app, y
         return YETTY_OK_VOID();
     }
     if (strcmp(inner_type, "message_start") == 0) {
-        struct yetty_ycore_void_result begin_res = yai_renderer_begin_message(&app->renderer);
+        struct yai_event begin = {.kind = YAI_EVENT_MESSAGE_BEGIN};
+        struct yetty_ycore_void_result begin_res = yai_event_dispatch(app, &begin);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, begin_res, "handle_stream_event: begin_message");
         return YETTY_OK_VOID();
     }
@@ -420,20 +389,20 @@ static struct yetty_ycore_void_result handle_stream_event(struct yai_app *app, y
         if (strcmp(delta_type, "text_delta") == 0) {
             yyjson_val *text = yyjson_obj_get(delta, "text");
             if (yyjson_is_str(text)) {
-                struct yetty_ycore_void_result end_res =
-                    yai_renderer_end_thinking(&app->renderer);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, end_res,
-                                    "handle_stream_event: end_thinking");
-                struct yetty_ycore_void_result delta_res = yai_renderer_text_delta(
-                    &app->renderer, yyjson_get_str(text), yyjson_get_len(text));
+                struct yai_event delta_event = {
+                    .kind = YAI_EVENT_TEXT_DELTA,
+                    .text = {.text = yyjson_get_str(text), .len = yyjson_get_len(text)}};
+                struct yetty_ycore_void_result delta_res = yai_event_dispatch(app, &delta_event);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, delta_res,
                                     "handle_stream_event: text_delta");
             }
         } else if (strcmp(delta_type, "thinking_delta") == 0) {
             yyjson_val *thinking = yyjson_obj_get(delta, "thinking");
             if (yyjson_is_str(thinking)) {
-                struct yetty_ycore_void_result delta_res = yai_renderer_thinking_delta(
-                    &app->renderer, yyjson_get_str(thinking), yyjson_get_len(thinking));
+                struct yai_event delta_event = {
+                    .kind = YAI_EVENT_THINKING_DELTA,
+                    .text = {.text = yyjson_get_str(thinking), .len = yyjson_get_len(thinking)}};
+                struct yetty_ycore_void_result delta_res = yai_event_dispatch(app, &delta_event);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, delta_res,
                                     "handle_stream_event: thinking_delta");
             }
@@ -441,7 +410,8 @@ static struct yetty_ycore_void_result handle_stream_event(struct yai_app *app, y
         return YETTY_OK_VOID();
     }
     if (strcmp(inner_type, "content_block_stop") == 0) {
-        struct yetty_ycore_void_result end_res = yai_renderer_end_thinking(&app->renderer);
+        struct yai_event end = {.kind = YAI_EVENT_THINKING_END};
+        struct yetty_ycore_void_result end_res = yai_event_dispatch(app, &end);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, end_res, "handle_stream_event: block stop");
     }
     return YETTY_OK_VOID();
@@ -451,7 +421,8 @@ static struct yetty_ycore_void_result handle_assistant_event(struct yai_app *app
                                                              struct yetty_yai_claude *claude,
                                                              yyjson_val *event)
 {
-    struct yetty_ycore_void_result end_res = yai_renderer_end_thinking(&app->renderer);
+    struct yai_event thinking_end = {.kind = YAI_EVENT_THINKING_END};
+    struct yetty_ycore_void_result end_res = yai_event_dispatch(app, &thinking_end);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, end_res, "handle_assistant_event: end_thinking");
     yyjson_val *message = yyjson_obj_get(event, "message");
     yyjson_val *content = message ? yyjson_obj_get(message, "content") : NULL;
@@ -474,14 +445,11 @@ static struct yetty_ycore_void_result handle_assistant_event(struct yai_app *app
         if (tool_use_id) {
             remember_tool_name(claude, tool_use_id, name);
         }
-        struct yetty_ycore_void_result call_res =
-            yai_render_tool_call(&app->renderer, name, yyjson_obj_get(block, "input"));
+        struct yai_event call = {
+            .kind = YAI_EVENT_TOOL_CALL,
+            .tool_call = {.name = name, .input = yyjson_obj_get(block, "input")}};
+        struct yetty_ycore_void_result call_res = yai_event_dispatch(app, &call);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, call_res, "handle_assistant_event: tool call");
-        char state_line[96];
-        snprintf(state_line, sizeof(state_line), "⚙ %s", name);
-        struct yetty_ycore_void_result activity_res =
-            yai_set_activity(app, "orbit-dots", state_line);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, activity_res, "handle_assistant_event: activity");
     }
     return YETTY_OK_VOID();
 }
@@ -506,9 +474,12 @@ static struct yetty_ycore_void_result handle_user_event(struct yai_app *app,
         const char *tool_use_id = yyjson_get_str(yyjson_obj_get(block, "tool_use_id"));
         yyjson_val *is_error_value = yyjson_obj_get(block, "is_error");
         int is_error = is_error_value && yyjson_get_bool(is_error_value);
-        struct yetty_ycore_void_result result_res =
-            yai_render_tool_result(&app->renderer, yyjson_obj_get(block, "content"), is_error,
-                                   lookup_tool_name(claude, tool_use_id));
+        struct yai_event result = {
+            .kind = YAI_EVENT_TOOL_RESULT,
+            .tool_result = {.content = yyjson_obj_get(block, "content"),
+                            .is_error = is_error,
+                            .tool_name = lookup_tool_name(claude, tool_use_id)}};
+        struct yetty_ycore_void_result result_res = yai_event_dispatch(app, &result);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_res, "handle_user_event: tool result");
     }
     return YETTY_OK_VOID();
@@ -516,12 +487,60 @@ static struct yetty_ycore_void_result handle_user_event(struct yai_app *app,
 
 static struct yetty_ycore_void_result handle_result_event(struct yai_app *app, yyjson_val *event)
 {
-    struct yetty_ycore_void_result clear_res = yai_renderer_activity_clear(&app->renderer);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, clear_res, "handle_result_event: activity clear");
-    struct yetty_ycore_void_result finish_res = yai_renderer_finish_turn(&app->renderer);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, finish_res, "handle_result_event: finish turn");
-    struct yetty_ycore_void_result usage_res = render_turn_usage(app, event);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, usage_res, "handle_result_event: usage");
+    /* Flush the open streamed line and clear the activity glyph, then
+     * render the turn's accounting — both engine-neutral, so they go
+     * through the event dispatcher; the turn boundary (queue pump /
+     * re-prompt) stays app lifecycle. */
+    struct yai_event turn_end = {.kind = YAI_EVENT_TURN_END};
+    struct yetty_ycore_void_result end_res = yai_event_dispatch(app, &turn_end);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, end_res, "handle_result_event: turn end");
+
+    /* An error result (e.g. an un-resumable session: "No conversation
+     * found with session ID …") carries is_error / a non-"success"
+     * subtype and an `errors` array. Surface that message instead of the
+     * misleading all-zero usage line it ships with. */
+    yyjson_val *is_error_value = yyjson_obj_get(event, "is_error");
+    const char *subtype = yyjson_get_str(yyjson_obj_get(event, "subtype"));
+    int is_error = (is_error_value && yyjson_get_bool(is_error_value)) ||
+                   (subtype && strcmp(subtype, "success") != 0);
+    if (is_error) {
+        app->turn_failed = 1;
+        app->saw_result_error = 1;
+        const char *message = NULL;
+        yyjson_val *errors = yyjson_obj_get(event, "errors");
+        if (yyjson_is_arr(errors)) {
+            message = yyjson_get_str(yyjson_arr_get_first(errors));
+        }
+        if (!message) {
+            message = yyjson_get_str(yyjson_obj_get(event, "result"));
+        }
+        if (!message) {
+            message = subtype ? subtype : "error";
+        }
+        struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "handle_result_event: suspend");
+        printf("\n" YAI_RED "✗ claude: %s" YAI_RESET "\n", message);
+        struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "handle_result_event: flush");
+        struct yetty_ycore_void_result resume_res = yai_renderer_zone_resume(&app->renderer);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, resume_res, "handle_result_event: resume");
+    } else {
+        yyjson_val *usage = yyjson_obj_get(event, "usage");
+        yyjson_val *cost_value = yyjson_obj_get(event, "total_cost_usd");
+        yyjson_val *duration_value = yyjson_obj_get(event, "duration_ms");
+        struct yai_event usage_event = {
+            .kind = YAI_EVENT_USAGE,
+            .usage = {.input = yai_usage_field(usage, "input_tokens"),
+                      .output = yai_usage_field(usage, "output_tokens"),
+                      .cache_read = yai_usage_field(usage, "cache_read_input_tokens"),
+                      .cache_creation = yai_usage_field(usage, "cache_creation_input_tokens"),
+                      .cost = cost_value ? yyjson_get_num(cost_value) : 0.0,
+                      .seconds = duration_value ? yyjson_get_num(duration_value) / 1000.0 : 0.0,
+                      .has_cost = 1}};
+        struct yetty_ycore_void_result usage_res = yai_event_dispatch(app, &usage_event);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, usage_res, "handle_result_event: usage");
+    }
+
     struct yetty_ycore_void_result boundary_res = yai_turn_finished(app);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, boundary_res, "handle_result_event: turn boundary");
     return YETTY_OK_VOID();
@@ -546,6 +565,19 @@ static struct yetty_ycore_void_result claude_handle_event(struct yetty_yclass_ct
             if (session_id) {
                 snprintf(app->session_id, sizeof(app->session_id), "%s", session_id);
             }
+        } else if (subtype && strcmp(subtype, "thinking_tokens") == 0) {
+            /* Running estimate for the in-flight request (cumulative). Show
+             * it next to the "thinking" activity on the left of the HUD. */
+            app->estimated_tokens =
+                (uint64_t)yyjson_get_uint(yyjson_obj_get(event, "estimated_tokens"));
+            char tokens_text[16];
+            yai_format_tokens(app->estimated_tokens, tokens_text, sizeof(tokens_text));
+            char state[64];
+            snprintf(state, sizeof(state), "… thinking · %s", tokens_text);
+            struct yetty_ycore_void_result activity_res =
+                yai_set_activity(app, "typing-dots", state);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, activity_res,
+                                "claude handle_event: thinking activity");
         }
         return YETTY_OK_VOID();
     }
@@ -581,7 +613,8 @@ static struct yetty_ycore_void_result claude_handle_event(struct yetty_yclass_ct
         return YETTY_OK_VOID();
     }
     if ((kind && strstr(kind, "hook")) || yyjson_obj_get(event, "hook_event_name")) {
-        struct yetty_ycore_void_result hook_res = yai_render_hook(&app->renderer, event);
+        struct yai_event hook = {.kind = YAI_EVENT_HOOK, .hook = {.event = event}};
+        struct yetty_ycore_void_result hook_res = yai_event_dispatch(app, &hook);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hook_res, "claude handle_event: hook");
         return YETTY_OK_VOID();
     }
@@ -604,6 +637,7 @@ static struct yetty_ycore_void_result claude_send_user_message(struct yetty_ycla
 {
     (void)ctx;
     (void)obj;
+    app->saw_result_error = 0; /* fresh turn */
     yyjson_mut_doc *doc = yyjson_mut_doc_new(NULL);
     if (!doc) {
         return YETTY_ERR(yetty_ycore_void, "claude send_user_message: yyjson_mut_doc_new failed");
@@ -649,6 +683,43 @@ static struct yetty_ycore_void_result claude_interrupt(struct yetty_yclass_ctx *
     return YETTY_OK_VOID();
 }
 
+/* The config dialog and the permission prompt both call the full-bypass
+ * mode "auto"; the claude CLI names it "bypassPermissions". Translate at
+ * the CLI boundary (--permission-mode arg, set_permission_mode push) and
+ * back for display/selection, so one word — "auto" — is used everywhere
+ * in yai's UI. */
+static const char *claude_permission_cli_mode(const char *mode)
+{
+    if (mode && strcmp(mode, "auto") == 0) {
+        return "bypassPermissions";
+    }
+    return mode;
+}
+
+static const char *claude_permission_ui_mode(const char *mode)
+{
+    if (mode && strcmp(mode, "bypassPermissions") == 0) {
+        return "auto";
+    }
+    return mode;
+}
+
+/* The concrete --allowedTools list for a tools preset name (mcp__yetty allows
+ * the whole yetty MCP server — all draw_* tools). */
+static const char *claude_preset_tools(const char *preset)
+{
+    if (strcmp(preset, "readonly") == 0) {
+        return "Read,mcp__yetty";
+    }
+    if (strcmp(preset, "edit") == 0) {
+        return "Read,Edit,Write,Bash(git *),mcp__yetty";
+    }
+    if (strcmp(preset, "full") == 0) {
+        return "Read,Edit,Write,Bash,mcp__yetty";
+    }
+    return "Read,Bash(git *),mcp__yetty"; /* curated (default) */
+}
+
 [[clang::annotate("override@yai:claude:start")]]
 static struct yetty_ycore_void_result claude_start(struct yetty_yclass_ctx *ctx,
                                                    struct yetty_yclass_object *obj,
@@ -664,18 +735,12 @@ static struct yetty_ycore_void_result claude_start(struct yetty_yclass_ctx *ctx,
         return YETTY_ERR(yetty_ycore_void, "claude start: setenv YETTY_MCP_VIA_PARENT failed");
     }
 
-    const char *permission_mode = getenv("YAI_PERMISSION_MODE");
-    if (!permission_mode || !permission_mode[0]) {
-        /* "default" makes un-allowlisted tools prompt — the whole point
-         * of the permission flow. */
-        permission_mode = "default";
-    }
-    const char *allowed_tools = getenv("YAI_ALLOWED_TOOLS");
-    if (!allowed_tools || !allowed_tools[0]) {
-        /* mcp__yetty allows the whole yetty MCP server (all draw_* tools). */
-        allowed_tools = "Read,Bash(git *),mcp__yetty";
-    }
-    const char *model = getenv("YAI_MODEL");
+    const char *permission_mode = app->config.permission_mode;
+    /* An explicit allowlist wins; otherwise expand the chosen preset. */
+    const char *allowed_tools = app->config.allowed_tools[0]
+                                    ? app->config.allowed_tools
+                                    : claude_preset_tools(app->config.allowed_preset);
+    const char *model = app->config.model;
 
     const char *args[24];
     int arg_count = 0;
@@ -689,7 +754,7 @@ static struct yetty_ycore_void_result claude_start(struct yetty_yclass_ctx *ctx,
     args[arg_count++] = "--include-hook-events";
     args[arg_count++] = "--verbose";
     args[arg_count++] = "--permission-mode";
-    args[arg_count++] = permission_mode;
+    args[arg_count++] = claude_permission_cli_mode(permission_mode);
     /* Route permission prompts to us as can_use_tool control_requests. */
     args[arg_count++] = "--permission-prompt-tool";
     args[arg_count++] = "stdio";
@@ -702,9 +767,14 @@ static struct yetty_ycore_void_result claude_start(struct yetty_yclass_ctx *ctx,
         args[arg_count++] = "--session-id";
         args[arg_count++] = app->session_id;
     }
-    if (model && model[0]) {
+    if (model[0]) {
         args[arg_count++] = "--model";
         args[arg_count++] = model;
+    }
+    /* "auto" leaves claude to its own default; anything else is passed. */
+    if (app->config.claude_effort[0] && strcmp(app->config.claude_effort, "auto") != 0) {
+        args[arg_count++] = "--effort";
+        args[arg_count++] = app->config.claude_effort;
     }
     args[arg_count] = NULL;
 
@@ -770,22 +840,18 @@ static struct yetty_ycore_void_result claude_describe_config(struct yetty_yclass
     (void)obj;
     (void)app;
     /* Mirror the exact defaults claude_start applies. */
-    const char *permission_mode = getenv("YAI_PERMISSION_MODE");
-    if (!permission_mode || !permission_mode[0]) {
-        permission_mode = "default";
-    }
-    const char *allowed_tools = getenv("YAI_ALLOWED_TOOLS");
-    if (!allowed_tools || !allowed_tools[0]) {
-        allowed_tools = "Read,Bash(git *),mcp__yetty";
-    }
-    const char *model = getenv("YAI_MODEL");
+    const char *permission_mode = app->config.permission_mode;
+    const char *allowed_tools = app->config.allowed_tools[0]
+                                    ? app->config.allowed_tools
+                                    : claude_preset_tools(app->config.allowed_preset);
+    const char *model = app->config.model;
     int written = snprintf(out, out_size,
-                           "model: %s  [YAI_MODEL]\n"
-                           "permission mode: %s  [YAI_PERMISSION_MODE]\n"
-                           "allowed tools: %s  [YAI_ALLOWED_TOOLS]\n"
+                           "model: %s  [--model]\n"
+                           "permission mode: %s  [--permission-mode]\n"
+                           "allowed tools: %s  [--allowed-preset / --allowed-tools]\n"
                            "resume: --resume <session id> (session is persistent)",
-                           (model && model[0]) ? model : "(CLI default)", permission_mode,
-                           allowed_tools);
+                           model[0] ? model : "(CLI default)",
+                           claude_permission_ui_mode(permission_mode), allowed_tools);
     if (written < 0 || (size_t)written >= out_size) {
         return YETTY_ERR(yetty_ycore_void, "claude describe_config: rows truncated");
     }
@@ -800,33 +866,28 @@ static struct yetty_ycore_void_result claude_config_knob(struct yetty_yclass_ctx
 {
     (void)ctx;
     (void)obj;
-    (void)app;
-    const char *permission_mode = getenv("YAI_PERMISSION_MODE");
-    if (!permission_mode || !permission_mode[0]) {
-        permission_mode = "default";
-    }
-    const char *tools_preset = getenv("YAI_ALLOWED_PRESET");
-    if (!tools_preset || !tools_preset[0]) {
-        tools_preset = "curated";
-    }
-    /* One knob spec per line. "tools" is a preset over the YAI_ALLOWED_TOOLS
-     * string (apply_config maps the preset name → the concrete tool list);
-     * radio option values must stay comma-free, hence the preset names.
-     * Reasoning effort is a model parameter, so it lives on the model tab
-     * (main.c build_effort_knob), not here. */
+    /* Show the same "auto" the permission prompt offers; a legacy
+     * bypassPermissions value still selects the "auto" radio. */
+    const char *permission_mode = claude_permission_ui_mode(app->config.permission_mode);
+    /* One knob spec per line: ENGINE_FIELD|label|options|current. "tools" is a
+     * preset; claude_preset_tools maps the preset name → the concrete tool
+     * list at spawn. Radio option values must stay comma-free, hence the
+     * preset names. "auto" is yai's name for claude's bypassPermissions
+     * (apply_config / claude_start translate it). Reasoning effort is a model
+     * parameter, so it lives on the model tab (main.c build_effort_knob). */
     int written = snprintf(out, out_size,
-                           "YAI_PERMISSION_MODE|permission mode|"
-                           "default,acceptEdits,plan,bypassPermissions|%s\n"
-                           "YAI_ALLOWED_PRESET|tools|curated,readonly,edit,full|%s",
-                           permission_mode, tools_preset);
+                           "permission_mode|permission mode|"
+                           "default,acceptEdits,plan,auto|%s\n"
+                           "allowed_preset|tools|curated,readonly,edit,full|%s",
+                           permission_mode, app->config.allowed_preset);
     if (written < 0 || (size_t)written >= out_size) {
         return YETTY_ERR(yetty_ycore_void, "claude config_knob: spec truncated");
     }
     return YETTY_OK_VOID();
 }
 
-/* setenv (next session) + a live set_permission_mode control_request
- * into the running session, so the edit applies immediately. */
+/* A live set_permission_mode control_request into the running session, so a
+ * permission-mode change applies immediately (storage is in app->config). */
 [[clang::annotate("override@yai:claude:apply_config")]]
 static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_ctx *ctx,
                                                           struct yetty_yclass_object *obj,
@@ -840,26 +901,11 @@ static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_ct
     if (!key || !key[0] || !value) {
         return YETTY_ERR(yetty_ycore_void, "claude apply_config: missing key/value");
     }
-    if (setenv(key, value, 1) != 0) {
-        return YETTY_ERR(yetty_ycore_void, "claude apply_config: setenv failed");
-    }
-    /* The tools knob is a preset name; expand it into the concrete
-     * YAI_ALLOWED_TOOLS list claude_start reads at the next session spawn. */
-    if (strcmp(key, "YAI_ALLOWED_PRESET") == 0) {
-        const char *tools = "Read,Bash(git *),mcp__yetty"; /* curated */
-        if (strcmp(value, "readonly") == 0) {
-            tools = "Read,mcp__yetty";
-        } else if (strcmp(value, "edit") == 0) {
-            tools = "Read,Edit,Write,Bash(git *),mcp__yetty";
-        } else if (strcmp(value, "full") == 0) {
-            tools = "Read,Edit,Write,Bash,mcp__yetty";
-        }
-        if (setenv("YAI_ALLOWED_TOOLS", tools, 1) != 0) {
-            return YETTY_ERR(yetty_ycore_void, "claude apply_config: setenv tools failed");
-        }
-        return YETTY_OK_VOID();
-    }
-    if (strcmp(key, "YAI_PERMISSION_MODE") != 0 || !app->child_alive || !app->child_stdin_open) {
+    /* Storage lives in app->config (written by the caller). The only live
+     * side-effect is pushing a new permission mode into the running session
+     * so it takes effect without waiting for the next spawn; everything else
+     * (tools preset, model) is read fresh at the next spawn. */
+    if (strcmp(key, "permission_mode") != 0 || !app->child_alive || !app->child_stdin_open) {
         return YETTY_OK_VOID();
     }
     char request_id[32];
@@ -874,7 +920,7 @@ static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_ct
     yyjson_mut_obj_add_str(doc, envelope, "request_id", request_id);
     yyjson_mut_val *request = yyjson_mut_obj(doc);
     yyjson_mut_obj_add_str(doc, request, "subtype", "set_permission_mode");
-    yyjson_mut_obj_add_str(doc, request, "mode", value);
+    yyjson_mut_obj_add_str(doc, request, "mode", claude_permission_cli_mode(value));
     yyjson_mut_obj_add_val(doc, envelope, "request", request);
     struct yetty_ycore_void_result send_res = write_json_to_child(app, doc);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, send_res, "claude apply_config: live mode push");
@@ -921,10 +967,15 @@ static struct yetty_ycore_void_result claude_on_child_eof(struct yetty_yclass_ct
     if (!app->child_alive || app->shutting_down) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result teardown =
-        yai_renderer_pin_hide(&app->renderer);
-    printf("\n" YAI_RED "✗ claude exited unexpectedly — see stderr log under tmp/" YAI_RESET "\n");
-    teardown = yetty_ycore_void_chain(teardown, yai_render_flush_stdout());
+    struct yetty_ycore_void_result teardown = yai_renderer_pin_hide(&app->renderer);
+    /* If claude already reported a fatal error result (e.g. a failed
+     * --resume), its exit is explained — don't add a confusing
+     * "exited unexpectedly". Otherwise the close really is unexpected. */
+    if (!app->saw_result_error) {
+        printf("\n" YAI_RED "✗ claude exited unexpectedly — see stderr log under tmp/" YAI_RESET
+               "\n");
+        teardown = yetty_ycore_void_chain(teardown, yai_render_flush_stdout());
+    }
     app->exit_code = 1;
     teardown = yetty_ycore_void_chain(teardown, yai_begin_shutdown(app));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, teardown, "claude on_child_eof");

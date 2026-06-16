@@ -35,15 +35,16 @@
  * Scrollback: every JSONL event is mirrored to
  * tmp/transcript-<session>.jsonl.
  *
- * Usage:
- *     ./yai                      # fresh session (claude engine)
- *     ./yai --engine codex       # drive `codex exec --json` instead
- *     ./yai --engine gemini      # drive `gemini -o json` per turn
- *     ./yai --resume <id>        # resume (claude session / codex thread)
- *     YAI_ENGINE=codex ./yai     # engine via environment
- *     YAI_SHOW_THINKING=1 ./yai  # show dim thinking text
- *     YAI_FOLD_LINES=20 ./yai    # tool-output preview cap (default 8)
- *     YAI_NO_HUD=1 ./yai         # stats as plain lines, no ygui window
+ * Usage (settings come from the config file + CLI flags; see --help):
+ *     ./yai                          # fresh session (claude engine)
+ *     ./yai --engine codex           # drive `codex exec --json` instead
+ *     ./yai --engine gemini          # drive `gemini -o json` per turn
+ *     ./yai --model <id>             # model override
+ *     ./yai --show-thinking          # show dim thinking text
+ *     ./yai --fold-lines 20          # tool-output preview cap (default 8)
+ *     ./yai --no-hud                 # stats as plain lines, no ygui window
+ *     ./yai --resume <id>            # resume (claude session / codex thread)
+ *     ./yai --help                   # full CLI reference
  *
  * Type a message at the prompt. Ctrl-D or /quit to exit; Ctrl-C
  * interrupts the turn in flight. "/shell" (or "!cmd") hands the PTY to
@@ -92,6 +93,7 @@
 #include <unistd.h>
 
 #include <uv.h>
+#include <yaml.h>
 #include <yyjson.h>
 
 #define YAI_DEFAULT_FOLD_LINES 8
@@ -106,6 +108,7 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
                                                         size_t len);
 static struct yetty_ycore_void_result yai_set_edit_mode(struct yai_app *app, const char *mode);
 static struct yetty_ycore_void_result yai_release_dock_reservation(struct yai_app *app);
+static struct yetty_ycore_void_result apply_config_knob(struct yai_app *app, int knob_index);
 
 /*---------------------------------------------------------------------------
  * Error surfacing — yai_report_error is THE end consumer: print into
@@ -148,7 +151,11 @@ struct yetty_ycore_void_result yai_set_activity(struct yai_app *app, const char 
         YETTY_RETURN_IF_ERR(yetty_ycore_void, state_res, "yai_set_activity: hud state");
         struct yetty_ycore_void_result flush_res = yai_hud_flush(app->hud);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "yai_set_activity: hud flush");
+        return YETTY_OK_VOID();
     }
+    /* Non-yetty tty: the state goes to the text status bar. */
+    struct yetty_ycore_void_result hud_res = yai_renderer_hud_state(&app->renderer, state_text);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "yai_set_activity: text hud state");
     return YETTY_OK_VOID();
 }
 
@@ -160,23 +167,333 @@ void yai_drop_pending_permission(struct yai_app *app)
     memset(&app->pending_permission, 0, sizeof(app->pending_permission));
 }
 
+int yai_tool_always_allowed(const struct yai_app *app, const char *tool_name)
+{
+    if (!tool_name || !tool_name[0]) {
+        return 0;
+    }
+    for (int index = 0; index < app->always_allow_count; index++) {
+        if (strcmp(app->always_allow_tools[index], tool_name) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void yai_tool_remember_allow(struct yai_app *app, const char *tool_name)
+{
+    if (!tool_name || !tool_name[0] || yai_tool_always_allowed(app, tool_name) ||
+        app->always_allow_count >= YAI_ALWAYS_ALLOW_MAX) {
+        return;
+    }
+    snprintf(app->always_allow_tools[app->always_allow_count],
+             sizeof(app->always_allow_tools[0]), "%s", tool_name);
+    app->always_allow_count++;
+}
+
 /*---------------------------------------------------------------------------
  * Small helpers
  *---------------------------------------------------------------------------*/
 
-static int env_flag(const char *name)
+/*---------------------------------------------------------------------------
+ * Settings — yai's own configuration. There are NO environment variables:
+ * every setting lives in `app->config` (plus engine_name / editor_mode_name
+ * and the renderer's fold_lines / show_thinking). It is seeded with defaults,
+ * overlaid by the YAML config file at the standard yetty path, then overridden
+ * by command-line flags. The file is rewritten on every config change and on
+ * exit. Parsed and emitted with libyaml. The YAML keys are exactly the keys
+ * yai_config_set accepts, so the file, the CLI, and the /config dialog all
+ * route through one setter.
+ *---------------------------------------------------------------------------*/
+
+/* Seed every setting with its default. Call once, before the file load. */
+static void yai_config_defaults(struct yai_app *app)
 {
-    const char *value = getenv(name);
-    return value && strcmp(value, "") != 0 && strcmp(value, "0") != 0 && strcmp(value, "no") != 0;
+    struct yai_config *config = &app->config;
+    app->engine_name = "claude";
+    app->editor_mode_name = "emacs";
+    app->renderer.fold_lines = YAI_DEFAULT_FOLD_LINES;
+    app->renderer.show_thinking = 0;
+    config->model[0] = '\0';
+    snprintf(config->permission_mode, sizeof(config->permission_mode), "default");
+    snprintf(config->allowed_preset, sizeof(config->allowed_preset), "curated");
+    config->allowed_tools[0] = '\0';
+    snprintf(config->claude_effort, sizeof(config->claude_effort), "auto");
+    snprintf(config->codex_sandbox, sizeof(config->codex_sandbox), "workspace-write");
+    snprintf(config->codex_approval, sizeof(config->codex_approval), "never");
+    snprintf(config->codex_effort, sizeof(config->codex_effort), "default");
+    snprintf(config->gemini_approval_mode, sizeof(config->gemini_approval_mode), "default");
+    config->no_hud = 0;
+    config->hud_float = 0;
 }
 
-static int env_int(const char *name, int fallback)
+/* Parse a boolean-ish scalar ("1"/"true"/"yes" → 1). */
+static int yai_config_truthy(const char *value)
 {
-    const char *value = getenv(name);
-    if (!value || !value[0]) {
-        return fallback;
+    return strcmp(value, "1") == 0 || strcmp(value, "true") == 0 || strcmp(value, "yes") == 0;
+}
+
+/* Apply one setting by key. The single write path shared by the file loader,
+ * the CLI parser, and the /config dialog. Returns 1 if the key was known. */
+static int yai_config_set(struct yai_app *app, const char *key, const char *value)
+{
+    struct yai_config *config = &app->config;
+    if (strcmp(key, "engine") == 0) {
+        app->engine_name = (strcmp(value, "codex") == 0)    ? "codex"
+                           : (strcmp(value, "gemini") == 0) ? "gemini"
+                                                            : "claude";
+    } else if (strcmp(key, "edit_mode") == 0) {
+        app->editor_mode_name = (strcmp(value, "vi") == 0) ? "vi" : "emacs";
+    } else if (strcmp(key, "model") == 0) {
+        snprintf(config->model, sizeof(config->model), "%s", value);
+    } else if (strcmp(key, "fold_lines") == 0) {
+        int folded = atoi(value);
+        app->renderer.fold_lines = folded > 0 ? folded : YAI_DEFAULT_FOLD_LINES;
+    } else if (strcmp(key, "show_thinking") == 0) {
+        app->renderer.show_thinking = yai_config_truthy(value);
+    } else if (strcmp(key, "permission_mode") == 0) {
+        snprintf(config->permission_mode, sizeof(config->permission_mode), "%s", value);
+    } else if (strcmp(key, "allowed_preset") == 0) {
+        snprintf(config->allowed_preset, sizeof(config->allowed_preset), "%s", value);
+    } else if (strcmp(key, "allowed_tools") == 0) {
+        snprintf(config->allowed_tools, sizeof(config->allowed_tools), "%s", value);
+    } else if (strcmp(key, "claude_effort") == 0) {
+        snprintf(config->claude_effort, sizeof(config->claude_effort), "%s", value);
+    } else if (strcmp(key, "codex_sandbox") == 0) {
+        snprintf(config->codex_sandbox, sizeof(config->codex_sandbox), "%s", value);
+    } else if (strcmp(key, "codex_approval") == 0) {
+        snprintf(config->codex_approval, sizeof(config->codex_approval), "%s", value);
+    } else if (strcmp(key, "codex_effort") == 0) {
+        snprintf(config->codex_effort, sizeof(config->codex_effort), "%s", value);
+    } else if (strcmp(key, "gemini_approval_mode") == 0) {
+        snprintf(config->gemini_approval_mode, sizeof(config->gemini_approval_mode), "%s", value);
+    } else if (strcmp(key, "no_hud") == 0) {
+        config->no_hud = yai_config_truthy(value);
+    } else if (strcmp(key, "hud_float") == 0) {
+        config->hud_float = yai_config_truthy(value);
+    } else {
+        return 0;
     }
-    return (int)strtol(value, NULL, 10);
+    return 1;
+}
+
+/* $XDG_CONFIG_HOME/yetty/yai.yaml, else $HOME/.config/yetty/yai.yaml.
+ * Returns 0 on success, -1 if neither base directory is known. */
+static int yai_config_path(char *out, size_t out_size)
+{
+    const char *xdg = getenv("XDG_CONFIG_HOME");
+    int written;
+    if (xdg && xdg[0]) {
+        written = snprintf(out, out_size, "%s/yetty/yai.yaml", xdg);
+    } else {
+        const char *home = getenv("HOME");
+        if (!home || !home[0]) {
+            return -1;
+        }
+        written = snprintf(out, out_size, "%s/.config/yetty/yai.yaml", home);
+    }
+    return (written > 0 && (size_t)written < out_size) ? 0 : -1;
+}
+
+/* mkdir -p of every path component (best-effort; existing dirs are fine). */
+static void yai_mkdir_p(const char *path)
+{
+    char tmp[512];
+    if (snprintf(tmp, sizeof(tmp), "%s", path) >= (int)sizeof(tmp)) {
+        return;
+    }
+    for (char *cursor = tmp + 1; *cursor; cursor++) {
+        if (*cursor == '/') {
+            *cursor = '\0';
+            (void)mkdir(tmp, 0700);
+            *cursor = '/';
+        }
+    }
+    (void)mkdir(tmp, 0700);
+}
+
+/* Overlay the YAML config file onto app->config. Best-effort: a missing,
+ * unreadable, or malformed file just leaves the defaults (and any CLI
+ * overrides applied afterwards) in place. Unknown keys are ignored. */
+static void yai_config_load(struct yai_app *app)
+{
+    char path[512];
+    if (yai_config_path(path, sizeof(path)) != 0) {
+        return;
+    }
+    FILE *file = fopen(path, "r");
+    if (!file) {
+        return;
+    }
+    yaml_parser_t parser;
+    if (!yaml_parser_initialize(&parser)) {
+        (void)fclose(file);
+        return;
+    }
+    yaml_parser_set_input_file(&parser, file);
+
+    /* Flat top-level mapping of scalar key -> scalar value. Track depth so a
+     * (hand-added) nested value is skipped rather than mis-read as a key. */
+    int depth = 0;
+    int have_key = 0;
+    char pending_key[64] = {0};
+    int done = 0;
+    while (!done) {
+        yaml_event_t event;
+        if (!yaml_parser_parse(&parser, &event)) {
+            break; /* malformed — stop, keep whatever was restored so far */
+        }
+        switch (event.type) {
+        case YAML_MAPPING_START_EVENT:
+        case YAML_SEQUENCE_START_EVENT:
+            /* A container as a value: drop the dangling key, then descend. */
+            have_key = 0;
+            depth++;
+            break;
+        case YAML_MAPPING_END_EVENT:
+        case YAML_SEQUENCE_END_EVENT:
+            depth--;
+            break;
+        case YAML_SCALAR_EVENT:
+            if (depth == 1) {
+                const char *text = (const char *)event.data.scalar.value;
+                if (!have_key) {
+                    snprintf(pending_key, sizeof(pending_key), "%s", text);
+                    have_key = 1;
+                } else {
+                    yai_config_set(app, pending_key, text);
+                    have_key = 0;
+                }
+            }
+            break;
+        case YAML_STREAM_END_EVENT:
+            done = 1;
+            break;
+        default:
+            break;
+        }
+        yaml_event_delete(&event);
+    }
+    yaml_parser_delete(&parser);
+    (void)fclose(file);
+}
+
+/* Emit one `key: value` pair only when `value` is non-empty. */
+static int yai_config_emit_if_set(yaml_emitter_t *emitter, const char *key, const char *value);
+
+/* Emit one `key: value` pair into the open block mapping. Tag NULL +
+ * implicit lets libyaml pick the plain/quoted style; on load the raw scalar
+ * string is read back regardless. Returns the emitter success flag (0 =
+ * failure; the caller aborts). */
+static int yai_config_emit_pair(yaml_emitter_t *emitter, const char *key, const char *value)
+{
+    yaml_event_t event;
+    if (!yaml_scalar_event_initialize(&event, NULL, NULL, (const yaml_char_t *)key, -1, 1, 1,
+                                      YAML_PLAIN_SCALAR_STYLE) ||
+        !yaml_emitter_emit(emitter, &event)) {
+        return 0;
+    }
+    if (!yaml_scalar_event_initialize(&event, NULL, NULL, (const yaml_char_t *)value, -1, 1, 1,
+                                      YAML_PLAIN_SCALAR_STYLE)) {
+        return 0;
+    }
+    return yaml_emitter_emit(emitter, &event);
+}
+
+/* Emit `key: value` only when value is non-empty (skip unset settings). */
+static int yai_config_emit_if_set(yaml_emitter_t *emitter, const char *key, const char *value)
+{
+    if (!value || !value[0]) {
+        return 1;
+    }
+    return yai_config_emit_pair(emitter, key, value);
+}
+
+/* Write the live settings (app->config + engine/editor/renderer fields) as
+ * YAML to the standard path. The keys match yai_config_set exactly, so a
+ * written file reloads losslessly. Emitted with libyaml. */
+static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
+{
+    char path[512];
+    if (yai_config_path(path, sizeof(path)) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "yai_config_save: no HOME / XDG_CONFIG_HOME");
+    }
+    char dir[512];
+    snprintf(dir, sizeof(dir), "%s", path);
+    char *slash = strrchr(dir, '/');
+    if (slash) {
+        *slash = '\0';
+        yai_mkdir_p(dir);
+    }
+    FILE *file = fopen(path, "w");
+    if (!file) {
+        return YETTY_ERR(yetty_ycore_void, "yai_config_save: fopen failed");
+    }
+
+    /* Header comment first (libyaml's event API emits no comments), then the
+     * emitter appends the mapping to the same stream. */
+    fputs("# yai config — auto-written on config change and on exit.\n", file);
+
+    yaml_emitter_t emitter;
+    if (!yaml_emitter_initialize(&emitter)) {
+        (void)fclose(file);
+        return YETTY_ERR(yetty_ycore_void, "yai_config_save: emitter init failed");
+    }
+    yaml_emitter_set_output_file(&emitter, file);
+
+    yaml_event_t event;
+    int ok = yaml_stream_start_event_initialize(&event, YAML_UTF8_ENCODING) &&
+             yaml_emitter_emit(&emitter, &event);
+    if (ok) {
+        ok = yaml_document_start_event_initialize(&event, NULL, NULL, NULL, /*implicit=*/1) &&
+             yaml_emitter_emit(&emitter, &event);
+    }
+    if (ok) {
+        ok = yaml_mapping_start_event_initialize(&event, NULL, NULL, /*implicit=*/1,
+                                                 YAML_BLOCK_MAPPING_STYLE) &&
+             yaml_emitter_emit(&emitter, &event);
+    }
+    if (ok) {
+        const struct yai_config *config = &app->config;
+        char fold_lines[16];
+        snprintf(fold_lines, sizeof(fold_lines), "%d", app->renderer.fold_lines);
+        ok = yai_config_emit_pair(&emitter, "engine", app->engine_name) &&
+             yai_config_emit_pair(&emitter, "edit_mode", app->editor_mode_name) &&
+             yai_config_emit_pair(&emitter, "fold_lines", fold_lines) &&
+             yai_config_emit_pair(&emitter, "show_thinking",
+                                  app->renderer.show_thinking ? "1" : "0") &&
+             yai_config_emit_if_set(&emitter, "model", config->model) &&
+             yai_config_emit_pair(&emitter, "permission_mode", config->permission_mode) &&
+             yai_config_emit_pair(&emitter, "allowed_preset", config->allowed_preset) &&
+             yai_config_emit_if_set(&emitter, "allowed_tools", config->allowed_tools) &&
+             yai_config_emit_pair(&emitter, "claude_effort", config->claude_effort) &&
+             yai_config_emit_pair(&emitter, "codex_sandbox", config->codex_sandbox) &&
+             yai_config_emit_pair(&emitter, "codex_approval", config->codex_approval) &&
+             yai_config_emit_pair(&emitter, "codex_effort", config->codex_effort) &&
+             yai_config_emit_pair(&emitter, "gemini_approval_mode", config->gemini_approval_mode) &&
+             yai_config_emit_pair(&emitter, "no_hud", config->no_hud ? "1" : "0") &&
+             yai_config_emit_pair(&emitter, "hud_float", config->hud_float ? "1" : "0");
+    }
+    if (ok) {
+        ok = yaml_mapping_end_event_initialize(&event) && yaml_emitter_emit(&emitter, &event);
+    }
+    if (ok) {
+        ok = yaml_document_end_event_initialize(&event, /*implicit=*/1) &&
+             yaml_emitter_emit(&emitter, &event);
+    }
+    if (ok) {
+        ok = yaml_stream_end_event_initialize(&event) && yaml_emitter_emit(&emitter, &event);
+    }
+
+    yaml_emitter_delete(&emitter);
+    if (!ok) {
+        (void)fclose(file);
+        return YETTY_ERR(yetty_ycore_void, "yai_config_save: yaml emit failed");
+    }
+    if (fclose(file) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "yai_config_save: fclose failed");
+    }
+    return YETTY_OK_VOID();
 }
 
 /* RFC 4122 v4 UUID from /dev/urandom. Bails on the first error — a
@@ -379,6 +696,10 @@ static void on_sigint(uv_signal_t *signal_handle, int signum);
 /* Give the terminal back to plain processes. Mirror of resume below. */
 static struct yetty_ycore_void_result suspend_terminal_ownership(struct yai_app *app)
 {
+    /* Hand the full screen to the plain process: drop the text-HUD scroll
+     * region first, else the child's output is confined above our bar. */
+    struct yetty_ycore_void_result hud_res = yai_renderer_text_hud_release(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "suspend_terminal: text hud release");
     struct yetty_ycore_void_result unsub_res = unsubscribe_mouse(app);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, unsub_res, "suspend_terminal: unsubscribe mouse");
     struct yetty_ycore_void_result cooked_res = leave_raw_input(app);
@@ -401,6 +722,8 @@ static struct yetty_ycore_void_result resume_terminal_ownership(struct yai_app *
     if (app->hud) {
         resume = yetty_ycore_void_chain(resume, subscribe_mouse(app));
     }
+    /* Re-reserve the text-HUD bottom row on the restored screen. */
+    resume = yetty_ycore_void_chain(resume, yai_renderer_text_hud_reserve(&app->renderer));
     if (uv_poll_start(&app->stdin_poll, UV_READABLE, on_stdin_readable) != 0) {
         resume = yetty_ycore_void_chain(
             resume, YETTY_ERR(yetty_ycore_void, "resume_terminal: uv_poll_start failed"));
@@ -508,6 +831,137 @@ static struct yetty_ycore_void_result run_shell(struct yai_app *app, const char 
     return YETTY_OK_VOID();
 }
 
+/* Ctrl-G: edit the current message in an external editor ($VISUAL /
+ * $EDITOR, default nvim then vi). The compose file holds the current
+ * draft and — below a separator — the assistant's last reply, for
+ * reference/quoting. On save+quit the text ABOVE the separator becomes
+ * the prompt; it is NOT submitted (the user reviews, then presses Enter).
+ * Mirrors run_shell's terminal handoff. */
+#define YAI_COMPOSE_SEPARATOR \
+    "──────── write your message ABOVE · the assistant's last reply is below (reference) ────────"
+
+static struct yetty_ycore_void_result open_external_editor(struct yai_app *app)
+{
+    if (!app->renderer.pin_enabled) {
+        return YETTY_OK_VOID(); /* need a tty to hand off to an editor */
+    }
+    const char *temp_dir = getenv("TMPDIR");
+    if (!temp_dir || !temp_dir[0]) {
+        temp_dir = "/tmp";
+    }
+    char path[1024];
+    int written = snprintf(path, sizeof(path), "%s/yetty-compose-XXXXXX", temp_dir);
+    if (written < 0 || (size_t)written >= sizeof(path)) {
+        return YETTY_ERR(yetty_ycore_void, "open_external_editor: temp path too long");
+    }
+    int fd = mkstemp(path);
+    if (fd < 0) {
+        return YETTY_ERR(yetty_ycore_void, "open_external_editor: mkstemp failed");
+    }
+    FILE *compose = fdopen(fd, "w");
+    if (!compose) {
+        close(fd);
+        unlink(path);
+        return YETTY_ERR(yetty_ycore_void, "open_external_editor: fdopen failed");
+    }
+    fwrite(app->stdin_buf, 1, app->stdin_len, compose);
+    if (app->last_response_len > 0) {
+        fputs("\n" YAI_COMPOSE_SEPARATOR "\n", compose);
+        fwrite(app->last_response, 1, app->last_response_len, compose);
+    }
+    if (fclose(compose) != 0) {
+        unlink(path);
+        return YETTY_ERR(yetty_ycore_void, "open_external_editor: temp write failed");
+    }
+
+    const char *editor = getenv("VISUAL");
+    if (!editor || !editor[0]) {
+        editor = getenv("EDITOR");
+    }
+    if (!editor || !editor[0]) {
+        editor = "nvim";
+    }
+
+    struct yetty_ycore_void_result hide_res = yai_renderer_pin_hide(&app->renderer);
+    if (YETTY_IS_ERR(hide_res)) {
+        unlink(path);
+        return YETTY_ERR(yetty_ycore_void, "open_external_editor: pin hide", hide_res);
+    }
+    struct yetty_ycore_void_result suspend_res = suspend_terminal_ownership(app);
+    if (YETTY_IS_ERR(suspend_res)) {
+        unlink(path);
+        return YETTY_ERR(yetty_ycore_void, "open_external_editor: suspend", suspend_res);
+    }
+
+    pid_t child = fork();
+    if (child < 0) {
+        struct yetty_ycore_void_result resume_res = resume_terminal_ownership(app);
+        unlink(path);
+        if (YETTY_IS_ERR(resume_res)) {
+            return YETTY_ERR(yetty_ycore_void, "open_external_editor: fork AND resume failed",
+                             resume_res);
+        }
+        return YETTY_ERR(yetty_ycore_void, "open_external_editor: fork failed");
+    }
+    if (child == 0) {
+        setpgid(0, 0);
+        tcsetpgrp(STDIN_FILENO, getpid());
+        signal(SIGINT, SIG_DFL);
+        signal(SIGQUIT, SIG_DFL);
+        signal(SIGTSTP, SIG_DFL);
+        signal(SIGTTOU, SIG_DFL);
+        signal(SIGTTIN, SIG_DFL);
+        unsetenv("YETTY_MCP_VIA_PARENT");
+        execlp(editor, editor, path, (char *)NULL);
+        execlp("vi", "vi", path, (char *)NULL); /* fallback if $EDITOR is bad */
+        _exit(127);
+    }
+    setpgid(child, child);
+    tcsetpgrp(STDIN_FILENO, child);
+    int wait_status = 0;
+    while (waitpid(child, &wait_status, 0) < 0 && errno == EINTR) {
+    }
+    void (*saved_ttou_handler)(int) = signal(SIGTTOU, SIG_IGN);
+    tcsetpgrp(STDIN_FILENO, getpgrp());
+    signal(SIGTTOU, saved_ttou_handler);
+
+    /* Read the edited file back: the text above the separator is the new
+     * message (or the whole file if the separator was removed). */
+    FILE *result = fopen(path, "r");
+    if (result) {
+        char buffer[8192];
+        size_t got = fread(buffer, 1, sizeof(buffer) - 1, result);
+        fclose(result);
+        buffer[got] = '\0';
+        char *separator = strstr(buffer, YAI_COMPOSE_SEPARATOR);
+        size_t prompt_len = separator ? (size_t)(separator - buffer) : got;
+        while (prompt_len > 0 &&
+               (buffer[prompt_len - 1] == '\n' || buffer[prompt_len - 1] == '\r' ||
+                buffer[prompt_len - 1] == ' ' || buffer[prompt_len - 1] == '\t')) {
+            prompt_len--;
+        }
+        if (prompt_len >= sizeof(app->stdin_buf)) {
+            prompt_len = sizeof(app->stdin_buf) - 1;
+        }
+        memcpy(app->stdin_buf, buffer, prompt_len);
+        app->stdin_len = prompt_len;
+        app->stdin_cursor = prompt_len;
+        app->history_browse = -1;
+    }
+    unlink(path);
+
+    /* Re-take the terminal and repaint the prompt with the composed text
+     * (never submitted — the user presses Enter). */
+    struct yetty_ycore_void_result teardown = resume_terminal_ownership(app);
+    if (app->waiting) {
+        teardown =
+            yetty_ycore_void_chain(teardown, yai_set_activity(app, "typing-dots", "… thinking"));
+    }
+    teardown = yetty_ycore_void_chain(teardown, yai_renderer_pin_show(&app->renderer));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, teardown, "open_external_editor: resume");
+    return YETTY_OK_VOID();
+}
+
 /* Bounce an event yai did not consume back to the host for its default
  * handling (wheel → terminal scrollback, …). Subscribing made the host
  * forward everything; this is the return path for the rest. */
@@ -522,6 +976,36 @@ static struct yetty_ycore_void_result reinject_mouse(const struct yetty_client_i
 /*---------------------------------------------------------------------------
  * Child stdout pump — shared by all engines
  *---------------------------------------------------------------------------*/
+
+/* Append one stdout line (plus the joining newline that reproduces a
+ * multi-line document) to the JSON reassembly buffer. Bounded by
+ * YAI_CHILD_OUT_MAX; on overflow the buffer is reset and an error
+ * surfaced so a runaway child can't grow it without limit. */
+static struct yetty_ycore_void_result pending_json_append(struct yai_app *app, const char *line,
+                                                          size_t len)
+{
+    if (len + 1 > YAI_CHILD_OUT_MAX || app->pending_json_len > YAI_CHILD_OUT_MAX - len - 1) {
+        app->pending_json_len = 0;
+        return YETTY_ERR(yetty_ycore_void, "pending_json_append: accumulated JSON too large");
+    }
+    if (app->pending_json_len + len + 1 > app->pending_json_cap) {
+        size_t new_cap = app->pending_json_cap ? app->pending_json_cap : 64 * 1024;
+        while (new_cap < app->pending_json_len + len + 1) {
+            new_cap *= 2; /* bounded by YAI_CHILD_OUT_MAX above */
+        }
+        char *grown = realloc(app->pending_json, new_cap);
+        if (!grown) {
+            app->pending_json_len = 0;
+            return YETTY_ERR(yetty_ycore_void, "pending_json_append: realloc failed");
+        }
+        app->pending_json = grown;
+        app->pending_json_cap = new_cap;
+    }
+    memcpy(app->pending_json + app->pending_json_len, line, len);
+    app->pending_json_len += len;
+    app->pending_json[app->pending_json_len++] = '\n';
+    return YETTY_OK_VOID();
+}
 
 struct yetty_ycore_void_result yai_handle_child_line(struct yai_app *app, const char *line,
                                                      size_t len)
@@ -547,23 +1031,42 @@ struct yetty_ycore_void_result yai_handle_child_line(struct yai_app *app, const 
                 yetty_ycore_void, "yai_handle_child_line: transcript flush failed — disabled");
         }
     }
-    yyjson_doc *doc = yyjson_read(line, len, 0);
+    /* Reassemble across lines so both framings work: JSONL (claude /
+     * codex — one complete object per line) parses and clears on the
+     * first line; a single pretty-printed object (gemini) accumulates
+     * until its closing brace completes the document. */
+    struct yetty_ycore_void_result append_res = pending_json_append(app, line, len);
+    if (YETTY_IS_ERR(append_res)) {
+        if (YETTY_IS_ERR(transcript_res)) {
+            yetty_ycore_error_destroy(transcript_res.error);
+        }
+        return YETTY_ERR(yetty_ycore_void, "yai_handle_child_line: accumulate", append_res);
+    }
+
+    yyjson_read_err read_err = {0};
+    yyjson_doc *doc =
+        yyjson_read_opts(app->pending_json, app->pending_json_len, 0, NULL, &read_err);
     if (doc) {
         yyjson_val *root = yyjson_doc_get_root(doc);
+        struct yetty_ycore_void_result dispatch_res = YETTY_OK_VOID();
         if (yyjson_is_obj(root)) {
-            struct yetty_ycore_void_result dispatch_res =
-                yetty_yai_handle_event(NULL, app->engine, app, root);
-            if (YETTY_IS_ERR(dispatch_res)) {
-                yyjson_doc_free(doc);
-                if (YETTY_IS_ERR(transcript_res)) {
-                    yetty_ycore_error_destroy(transcript_res.error);
-                }
-                return YETTY_ERR(yetty_ycore_void, "yai_handle_child_line: handle_event",
-                                 dispatch_res);
-            }
+            dispatch_res = yetty_yai_handle_event(NULL, app->engine, app, root);
         }
         yyjson_doc_free(doc);
+        app->pending_json_len = 0;
+        if (YETTY_IS_ERR(dispatch_res)) {
+            if (YETTY_IS_ERR(transcript_res)) {
+                yetty_ycore_error_destroy(transcript_res.error);
+            }
+            return YETTY_ERR(yetty_ycore_void, "yai_handle_child_line: handle_event", dispatch_res);
+        }
+    } else if (read_err.code != YYJSON_READ_ERROR_UNEXPECTED_END) {
+        /* Not a truncated-but-valid prefix: a stray non-JSON log line or
+         * malformed output. Drop the buffer and resync on the next line
+         * — non-JSON lines have never been an error on this path. */
+        app->pending_json_len = 0;
     }
+    /* else: a valid but incomplete document so far — keep accumulating. */
     YETTY_RETURN_IF_ERR(yetty_ycore_void, transcript_res, "yai_handle_child_line");
     return YETTY_OK_VOID();
 }
@@ -583,6 +1086,9 @@ void yai_child_stdout_read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t
     if (nread < 0) {
         free(buffer->base);
         uv_read_stop(stream);
+        /* A new child starts fresh: drop any partial (truncated) JSON
+         * document so it can't bleed into the next turn's reassembly. */
+        app->pending_json_len = 0;
         yai_report_error(app, "engine eof", yetty_yai_on_child_eof(NULL, app->engine, app));
         return;
     }
@@ -790,6 +1296,9 @@ static void history_load_entry(struct yai_app *app, const char *text, size_t len
     memcpy(app->stdin_buf, text, len);
     app->stdin_len = len;
     app->stdin_cursor = len;
+    /* The line was replaced wholesale — undo history of the prior line no
+     * longer applies. */
+    editor_ops_undo_clear(app);
 }
 
 static struct yetty_ycore_void_result history_browse_move(struct yai_app *app, int delta)
@@ -855,10 +1364,13 @@ void yai_arm_child_kill_timer(struct yai_app *app)
  * cell metrics, so it converts the px to whole rows, shrinks the libvterm grid
  * (text reflows, we get SIGWINCH with fewer rows) and clips terminal content
  * to the inset rect — so neither conversation text nor a tall figure (sheet
- * music, a plot) renders under the bar. This is the honest "take from the
- * terminal size" reservation, unlike a DECSTBM scroll region which figures
- * ignore. Re-applied on every resize; reset with yai_release_dock_reservation.
- * A no-op when the HUD floats or stdout is not a tty. */
+ * music, a plot) renders under the bar. This genuinely takes the band out of
+ * the terminal size, unlike a DECSTBM scroll region which figures ignore.
+ * Idempotent: emits only when the reserved height actually changes, because
+ * the host re-asserts the stored inset across its own resizes and a redundant
+ * emit would re-resize the grid and re-raise SIGWINCH (a reflow loop). Reset
+ * with yai_release_dock_reservation. A no-op when the HUD floats or stdout is
+ * not a tty. */
 static struct yetty_ycore_void_result yai_apply_dock_reservation(struct yai_app *app)
 {
     if (!app->hud || !app->renderer.pin_enabled) {
@@ -866,6 +1378,16 @@ static struct yetty_ycore_void_result yai_apply_dock_reservation(struct yai_app 
     }
     float dock_px = yai_hud_dock_height(app->hud);
     if (dock_px <= 0.0f) {
+        return YETTY_OK_VOID();
+    }
+    /* Idempotent. The host resizes the grid to honor the inset and raises
+     * SIGWINCH; our SIGWINCH handler re-applies the dock. If we re-emitted
+     * the unchanged inset that would resize + SIGWINCH again — an endless
+     * reflow loop. The host persists the inset across its OWN resizes
+     * (terminal_apply_pane_geometry reads it back), so re-asserting an
+     * unchanged value is also redundant. dock_px is a literal constant
+     * (no arithmetic), so the exact compare is safe. */
+    if (dock_px == app->dock_reserved_px) {
         return YETTY_OK_VOID();
     }
     struct yetty_content_inset inset = {
@@ -876,6 +1398,7 @@ static struct yetty_ycore_void_result yai_apply_dock_reservation(struct yai_app 
     struct yetty_ycore_void_result emit_res =
         yai_emit_stdout_envelope(YETTY_OSC_CS_CONTENT_INSET, &inset, sizeof(inset));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "yai_apply_dock_reservation: emit");
+    app->dock_reserved_px = dock_px;
     return YETTY_OK_VOID();
 }
 
@@ -885,6 +1408,11 @@ static struct yetty_ycore_void_result yai_release_dock_reservation(struct yai_ap
     if (!app->renderer.pin_enabled) {
         return YETTY_OK_VOID();
     }
+    /* Nothing reserved → nothing to release (and don't send a redundant
+     * zero inset that would needlessly reflow the grid). */
+    if (app->dock_reserved_px == 0.0f) {
+        return YETTY_OK_VOID();
+    }
     struct yetty_content_inset inset = {
         .magic = YETTY_CONTENT_INSET_MAGIC,
         .version = YMGUI_WIRE_VERSION,
@@ -892,6 +1420,7 @@ static struct yetty_ycore_void_result yai_release_dock_reservation(struct yai_ap
     struct yetty_ycore_void_result emit_res =
         yai_emit_stdout_envelope(YETTY_OSC_CS_CONTENT_INSET, &inset, sizeof(inset));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "yai_release_dock_reservation: emit");
+    app->dock_reserved_px = 0.0f;
     return YETTY_OK_VOID();
 }
 
@@ -903,6 +1432,13 @@ struct yetty_ycore_void_result yai_begin_shutdown(struct yai_app *app)
     /* Best-effort: every step must run; first error surfaces at the
      * end. Never leave the CLI blocked on an unanswered permission. */
     struct yetty_ycore_void_result teardown = YETTY_OK_VOID();
+    /* If the settings TUI is up (e.g. stdin EOF'd while it was open),
+     * leave the alt screen so the user isn't stranded there. */
+    if (app->config_tui_active) {
+        app->config_tui_active = 0;
+        fputs("\033[?1049l", stdout);
+        teardown = yetty_ycore_void_chain(teardown, yai_render_flush_stdout());
+    }
     if (app->pending_permission.active) {
         teardown = yetty_ycore_void_chain(teardown,
                                           yetty_yai_resolve_permission(NULL, app->engine, app, 0));
@@ -918,6 +1454,10 @@ struct yetty_ycore_void_result yai_begin_shutdown(struct yai_app *app)
      * slow or the process is terminated before main's cleanup runs. */
     teardown = yetty_ycore_void_chain(teardown, unsubscribe_mouse(app));
     teardown = yetty_ycore_void_chain(teardown, yai_release_dock_reservation(app));
+    teardown = yetty_ycore_void_chain(teardown, yai_renderer_text_hud_release(&app->renderer));
+    /* Stop accepting / handling external control so it can't inject during
+     * the wind-down; the handles drain with the loop below. */
+    yai_control_stop(app);
     app->shutting_down = 1;
     uv_poll_stop(&app->stdin_poll);
     uv_signal_stop(&app->sigint_handle);
@@ -1079,9 +1619,8 @@ static void build_editmode_knob(struct yai_app *app, int tab, struct yai_hud_con
 }
 
 /* Fill knob 2: the model radio group for the active backend, on tab
- * `tab`. The model is the YAI_MODEL env var; "default" means unset (the
- * CLI's own default). These are the common choices — any other value
- * still works by exporting YAI_MODEL directly. */
+ * `tab`. "default" means unset (the CLI's own default). These are the common
+ * choices — any other value works via --model / the config file. */
 static void build_model_knob(struct yai_app *app, int knob_index, int tab,
                              struct yai_hud_config_knob *out)
 {
@@ -1100,15 +1639,11 @@ static void build_model_knob(struct yai_app *app, int knob_index, int tab,
     if (count > YAI_HUD_CONFIG_KNOB_MAX_OPTIONS) {
         count = YAI_HUD_CONFIG_KNOB_MAX_OPTIONS;
     }
-    const char *current = getenv("YAI_MODEL");
-    if (!current) {
-        current = "";
-    }
+    const char *current = app->config.model;
     int selected = 0; /* "default" */
     app->config_knobs[knob_index].is_edit_mode = 0;
     app->config_knobs[knob_index].is_model = 1;
-    snprintf(app->config_knobs[knob_index].key, sizeof(app->config_knobs[knob_index].key),
-             "YAI_MODEL");
+    snprintf(app->config_knobs[knob_index].key, sizeof(app->config_knobs[knob_index].key), "model");
     for (int option = 0; option < count; option++) {
         snprintf(app->config_knobs[knob_index].options[option],
                  sizeof(app->config_knobs[knob_index].options[option]), "%s", list[option]);
@@ -1128,9 +1663,8 @@ static void build_model_knob(struct yai_app *app, int knob_index, int tab,
 /* Fill the reasoning-effort knob for the active backend, on tab `tab`.
  * Effort is a MODEL parameter, so it sits on the model tab next to the
  * model knob. Returns 1 if the engine has an effort control, 0 if not
- * (gemini). claude reads CLAUDE_CODE_EFFORT_LEVEL from env directly;
- * codex maps YAI_CODEX_EFFORT → `-c model_reasoning_effort` at spawn.
- * Applied through the generic engine knob path (plain setenv of key). */
+ * (gemini). claude passes it as `--effort`; codex maps it to
+ * `-c model_reasoning_effort` at spawn. Both read app->config. */
 static int build_effort_knob(struct yai_app *app, int knob_index, int tab,
                              struct yai_hud_config_knob *out)
 {
@@ -1139,26 +1673,22 @@ static int build_effort_knob(struct yai_app *app, int knob_index, int tab,
     const char *const *list;
     int count;
     const char *key;
-    const char *fallback;
+    const char *current;
     if (strcmp(app->engine_name, "codex") == 0) {
         list = codex_efforts;
         count = 5;
-        key = "YAI_CODEX_EFFORT";
-        fallback = "default";
+        key = "codex_effort";
+        current = app->config.codex_effort;
     } else if (strcmp(app->engine_name, "claude") == 0) {
         list = claude_efforts;
         count = 6;
-        key = "CLAUDE_CODE_EFFORT_LEVEL";
-        fallback = "auto";
+        key = "claude_effort";
+        current = app->config.claude_effort;
     } else {
         return 0; /* gemini: no effort control */
     }
     if (count > YAI_HUD_CONFIG_KNOB_MAX_OPTIONS) {
         count = YAI_HUD_CONFIG_KNOB_MAX_OPTIONS;
-    }
-    const char *current = getenv(key);
-    if (!current || !current[0]) {
-        current = fallback;
     }
     int selected = 0;
     app->config_knobs[knob_index].is_edit_mode = 0;
@@ -1191,43 +1721,280 @@ static const char *backend_tab_title(const char *engine_name)
     return engine_name;
 }
 
-/* Refresh the HUD right column: active model + cumulative session usage. */
+/* Refresh the HUD's model + cumulative session usage — the ygui HUD's
+ * right column in yetty, or the text status bar's right segment elsewhere. */
 struct yetty_ycore_void_result yai_refresh_hud_stats(struct yai_app *app)
 {
-    if (!app->hud) {
-        return YETTY_OK_VOID();
-    }
-    const char *model = getenv("YAI_MODEL");
-    if (!model || !model[0]) {
-        model = "default";
-    }
-    char model_line[96];
-    snprintf(model_line, sizeof(model_line), "%s · %s", app->engine_name, model);
-    struct yetty_ycore_void_result model_res = yai_hud_set_model(app->hud, model_line);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, model_res, "yai_refresh_hud_stats: model");
-
+    const char *model = app->config.model[0] ? app->config.model : "default";
     char input_text[16];
     char output_text[16];
     char cache_text[16];
     yai_format_tokens(app->usage.input, input_text, sizeof(input_text));
     yai_format_tokens(app->usage.output, output_text, sizeof(output_text));
     yai_format_tokens(app->usage.cache_read, cache_text, sizeof(cache_text));
-    char primary[96];
-    char secondary[96];
-    snprintf(primary, sizeof(primary), "Σ ↑%s ↓%s", input_text, output_text);
-    snprintf(secondary, sizeof(secondary), "cache %s · $%.4f · %d turn%s", cache_text,
-             app->usage.cost, app->usage.turns, app->usage.turns == 1 ? "" : "s");
-    struct yetty_ycore_void_result stats_res = yai_hud_set_stats(app->hud, primary, secondary);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, stats_res, "yai_refresh_hud_stats: stats");
+
+    if (app->hud) {
+        char model_line[96];
+        snprintf(model_line, sizeof(model_line), "%s · %s", app->engine_name, model);
+        struct yetty_ycore_void_result model_res = yai_hud_set_model(app->hud, model_line);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, model_res, "yai_refresh_hud_stats: model");
+        char primary[96];
+        char secondary[96];
+        snprintf(primary, sizeof(primary), "Σ ↑%s ↓%s", input_text, output_text);
+        snprintf(secondary, sizeof(secondary), "cache %s · $%.4f · %d turn%s", cache_text,
+                 app->usage.cost, app->usage.turns, app->usage.turns == 1 ? "" : "s");
+        struct yetty_ycore_void_result stats_res = yai_hud_set_stats(app->hud, primary, secondary);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, stats_res, "yai_refresh_hud_stats: stats");
+        return YETTY_OK_VOID();
+    }
+    /* Non-yetty tty: one compact line on the text status bar, each field in
+     * its own light brand color (foreground-only, so the bar's mint
+     * background carries through). */
+    char stats_line[320];
+    snprintf(stats_line, sizeof(stats_line),
+             YAI_PRIMARY "%s · %s" YAI_FG_DEFAULT YAI_MINT "  ↑%s ↓%s" YAI_FG_DEFAULT YAI_MUTED
+                         "  $%.4f · %d turn%s" YAI_FG_DEFAULT,
+             app->engine_name, model, input_text, output_text, app->usage.cost, app->usage.turns,
+             app->usage.turns == 1 ? "" : "s");
+    struct yetty_ycore_void_result hud_res = yai_renderer_hud_stats(&app->renderer, stats_line);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "yai_refresh_hud_stats: text hud");
     return YETTY_OK_VOID();
+}
+
+/*---------------------------------------------------------------------------
+ * Text settings TUI — the non-yetty counterpart of the ygui config dialog.
+ * A temporary alt-screen modal listing the same knobs (edit mode, the
+ * engine's knob(s), model, effort) as navigable radio rows. Arrow keys or
+ * j/k select a row; ←/→ or h/l (or space) change its value; Enter/q apply
+ * & close; Ctrl-C cancels. Reuses app->config_knobs and apply_config_knob.
+ *---------------------------------------------------------------------------*/
+
+/* A human label for a knob (config_knobs has no label field; derive it
+ * from the kind / config-field key — the same names the knob specs use). */
+static const char *config_knob_label(const struct yai_app *app, int index)
+{
+    if (app->config_knobs[index].is_edit_mode) {
+        return "edit mode";
+    }
+    if (app->config_knobs[index].is_model) {
+        return "model";
+    }
+    const char *key = app->config_knobs[index].key;
+    if (strcmp(key, "permission_mode") == 0) {
+        return "permission mode";
+    }
+    if (strcmp(key, "allowed_preset") == 0) {
+        return "tools";
+    }
+    if (strcmp(key, "codex_sandbox") == 0) {
+        return "sandbox";
+    }
+    if (strcmp(key, "codex_approval") == 0) {
+        return "approval";
+    }
+    if (strcmp(key, "codex_effort") == 0 || strcmp(key, "claude_effort") == 0) {
+        return "reasoning effort";
+    }
+    if (strcmp(key, "gemini_approval_mode") == 0) {
+        return "approval mode";
+    }
+    return key;
+}
+
+/* Populate app->config_knobs for the text TUI (the same knobs the ygui
+ * dialog builds, minus the ygui widget slots — the build helpers fill
+ * config_knobs as a side effect; a throwaway slot absorbs the rest). */
+static struct yetty_ycore_void_result build_config_knobs_text(struct yai_app *app)
+{
+    char knob_spec[512];
+    struct yetty_ycore_void_result knob_res =
+        yetty_yai_config_knob(NULL, app->engine, app, knob_spec, sizeof(knob_spec));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, knob_res, "build_config_knobs_text: knob spec");
+    memset(app->config_knobs, 0, sizeof(app->config_knobs));
+    struct yai_hud_config_knob throwaway;
+    build_editmode_knob(app, 0, &throwaway);
+    int knob_index = 1;
+    char engine_labels[YAI_HUD_CONFIG_MAX_KNOBS][64];
+    const char *spec_cursor = knob_spec;
+    while (*spec_cursor && knob_index < YAI_HUD_CONFIG_MAX_KNOBS - 2) {
+        const char *line_end = strchr(spec_cursor, '\n');
+        size_t line_len = line_end ? (size_t)(line_end - spec_cursor) : strlen(spec_cursor);
+        if (line_len > 0) {
+            char one_spec[256];
+            if (line_len >= sizeof(one_spec)) {
+                line_len = sizeof(one_spec) - 1;
+            }
+            memcpy(one_spec, spec_cursor, line_len);
+            one_spec[line_len] = '\0';
+            struct yetty_ycore_int_result parse_res =
+                parse_engine_knob(app, knob_index, one_spec, engine_labels[knob_index],
+                                  sizeof(engine_labels[knob_index]), &throwaway);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, parse_res, "build_config_knobs_text: engine knob");
+            if (parse_res.value > 0) {
+                knob_index++;
+            }
+        }
+        if (!line_end) {
+            break;
+        }
+        spec_cursor = line_end + 1;
+    }
+    build_model_knob(app, knob_index, 0, &throwaway);
+    knob_index++;
+    if (build_effort_knob(app, knob_index, 0, &throwaway)) {
+        knob_index++;
+    }
+    app->config_knob_count = knob_index;
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result config_tui_render(struct yai_app *app)
+{
+    fputs("\033[H\033[2J", stdout); /* cursor home + clear the alt screen */
+    printf(YAI_MINT YAI_BOLD "  yai settings" YAI_RESET "  " YAI_DIM "(%s)" YAI_RESET "\n",
+           app->engine_name);
+    printf(YAI_DIM "  ↑/↓ or j/k: select   ←/→ or h/l: change   Enter/q: apply & close   "
+                   "Ctrl-C: cancel" YAI_RESET "\n\n");
+    for (int index = 0; index < app->config_knob_count; index++) {
+        const char *marker = (index == app->config_tui_selected) ? YAI_MINT "▸" YAI_RESET : " ";
+        printf("%s %-16s ", marker, config_knob_label(app, index));
+        for (int option = 0; option < app->config_knobs[index].option_count; option++) {
+            if (option == app->config_knobs[index].selected) {
+                printf(YAI_MINT YAI_BOLD "[%s]" YAI_RESET " ", app->config_knobs[index].options[option]);
+            } else {
+                printf(YAI_DIM "%s" YAI_RESET " ", app->config_knobs[index].options[option]);
+            }
+        }
+        fputc('\n', stdout);
+    }
+    return yai_render_flush_stdout();
+}
+
+static struct yetty_ycore_void_result config_tui_close(struct yai_app *app, int apply)
+{
+    app->config_tui_active = 0;
+    app->config_tui_escape = 0;
+    /* Leave the alt screen, restoring the conversation underneath. */
+    fputs("\033[?1049l", stdout);
+    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "config_tui_close: leave alt screen");
+    if (apply) {
+        for (int index = 0; index < app->config_knob_count; index++) {
+            if (app->config_knobs[index].selected != app->config_tui_initial[index]) {
+                struct yetty_ycore_void_result apply_res = apply_config_knob(app, index);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "config_tui_close: apply");
+            }
+        }
+        /* Persist the new config so it survives the next launch. Best-effort:
+         * a save failure is reported but must not break the close flow. */
+        yai_report_error(app, "config save", yai_config_save(app));
+    }
+    /* Re-reserve the text-HUD row, then repaint the prompt above it. */
+    struct yetty_ycore_void_result reserve_res = yai_renderer_text_hud_reserve(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, reserve_res, "config_tui_close: text hud reserve");
+    struct yetty_ycore_void_result show_res = yai_renderer_pin_show(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, show_res, "config_tui_close: pin show");
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result config_tui_key(struct yai_app *app, unsigned char key)
+{
+    /* Decode arrow keys (ESC [ A/B/C/D) into h/j/k/l. */
+    if (app->config_tui_escape == 1) {
+        app->config_tui_escape = (key == '[') ? 2 : 0;
+        return YETTY_OK_VOID();
+    }
+    if (app->config_tui_escape == 2) {
+        app->config_tui_escape = 0;
+        switch (key) {
+        case 'A':
+            key = 'k';
+            break;
+        case 'B':
+            key = 'j';
+            break;
+        case 'C':
+            key = 'l';
+            break;
+        case 'D':
+            key = 'h';
+            break;
+        default:
+            return YETTY_OK_VOID();
+        }
+    } else if (key == 0x1b) {
+        app->config_tui_escape = 1;
+        return YETTY_OK_VOID();
+    }
+
+    int count = app->config_knob_count;
+    if (count <= 0) {
+        return config_tui_close(app, 0);
+    }
+    int selected = app->config_tui_selected;
+    switch (key) {
+    case 'k':
+        app->config_tui_selected = (selected + count - 1) % count;
+        return config_tui_render(app);
+    case 'j':
+        app->config_tui_selected = (selected + 1) % count;
+        return config_tui_render(app);
+    case 'l':
+    case ' ': {
+        int options = app->config_knobs[selected].option_count;
+        if (options > 0) {
+            app->config_knobs[selected].selected = (app->config_knobs[selected].selected + 1) % options;
+        }
+        return config_tui_render(app);
+    }
+    case 'h': {
+        int options = app->config_knobs[selected].option_count;
+        if (options > 0) {
+            app->config_knobs[selected].selected =
+                (app->config_knobs[selected].selected + options - 1) % options;
+        }
+        return config_tui_render(app);
+    }
+    case '\r':
+    case '\n':
+    case 'q':
+        return config_tui_close(app, 1);
+    case 0x03: /* Ctrl-C: cancel without applying */
+        return config_tui_close(app, 0);
+    default:
+        return YETTY_OK_VOID();
+    }
+}
+
+static struct yetty_ycore_void_result config_tui_open(struct yai_app *app)
+{
+    struct yetty_ycore_void_result build_res = build_config_knobs_text(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, build_res, "config_tui_open: build knobs");
+    for (int index = 0; index < app->config_knob_count; index++) {
+        app->config_tui_initial[index] = app->config_knobs[index].selected;
+    }
+    app->config_tui_selected = 0;
+    app->config_tui_escape = 0;
+    /* Drop the pinned prompt and the text-HUD scroll region, then take
+     * the full alt screen. */
+    struct yetty_ycore_void_result hide_res = yai_renderer_pin_hide(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hide_res, "config_tui_open: pin hide");
+    struct yetty_ycore_void_result release_res = yai_renderer_text_hud_release(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, release_res, "config_tui_open: text hud release");
+    fputs("\033[?1049h", stdout);
+    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "config_tui_open: enter alt screen");
+    app->config_tui_active = 1;
+    return config_tui_render(app);
 }
 
 /* /config — an EDITABLE floating ygui dialog when the HUD is up (a
  * second /config toggles it closed): read-only info rows, a
  * show-thinking checkbox, a fold-lines slider, the yai edit-mode knob
  * (emacs / vi), and the engine's knob as a radio group (codex sandbox,
- * claude permission mode, gemini approval mode). Plain scrollback text
- * without a HUD. Runnable any time, mid-turn included. */
+ * claude permission mode, gemini approval mode). On a non-yetty tty an
+ * alt-screen text TUI (config_tui_open); plain scrollback text on a pipe.
+ * Runnable any time, mid-turn included. */
 static struct yetty_ycore_void_result show_config(struct yai_app *app)
 {
     char engine_rows[1024];
@@ -1262,15 +2029,12 @@ static struct yetty_ycore_void_result show_config(struct yai_app *app)
             return YETTY_ERR(yetty_ycore_void, "show_config: yai info truncated");
         }
 
-        const char *current_model = getenv("YAI_MODEL");
-        if (!current_model || !current_model[0]) {
-            current_model = "(CLI default)";
-        }
+        const char *current_model = app->config.model[0] ? app->config.model : "(CLI default)";
         char model_info[256];
         int model_written = snprintf(
             model_info, sizeof(model_info),
             "current: %s\n"
-            "sets YAI_MODEL · applies next turn (claude: next session)", current_model);
+            "sets the model · applies next turn (claude: next session)", current_model);
         if (model_written < 0 || (size_t)model_written >= sizeof(model_info)) {
             return YETTY_ERR(yetty_ycore_void, "show_config: model info truncated");
         }
@@ -1357,15 +2121,24 @@ static struct yetty_ycore_void_result show_config(struct yai_app *app)
         return YETTY_OK_VOID();
     }
 
+    /* Non-yetty terminal but a real tty: interactive alt-screen text TUI
+     * (toggles closed if already open). */
+    if (app->renderer.pin_enabled) {
+        if (app->config_tui_active) {
+            return config_tui_close(app, 1);
+        }
+        return config_tui_open(app);
+    }
+
     char config_text[2048];
     int written = snprintf(config_text, sizeof(config_text),
                            "## yai\n"
-                           "engine: %s  [--engine / YAI_ENGINE]\n"
+                           "engine: %s  [--engine]\n"
                            "session: %s\n"
                            "transcript: %s\n"
-                           "fold lines: %d  [YAI_FOLD_LINES]\n"
-                           "show thinking: %s  [YAI_SHOW_THINKING]\n"
-                           "hud: off  [YAI_NO_HUD]\n"
+                           "fold lines: %d  [--fold-lines]\n"
+                           "show thinking: %s  [--show-thinking]\n"
+                           "hud: off  [--no-hud]\n"
                            "turn in flight: %s · queued %d/%d\n"
                            "## %s\n"
                            "%s",
@@ -1403,6 +2176,72 @@ static struct yetty_ycore_void_result show_config(struct yai_app *app)
     return YETTY_OK_VOID();
 }
 
+/* Case-insensitive exact match of a (trimmed) input line against a
+ * lowercase keyword — used for the permission verdict words. */
+static int verdict_is(const char *line, size_t len, const char *word)
+{
+    size_t index = 0;
+    for (; index < len && word[index]; index++) {
+        char typed = line[index];
+        if (typed >= 'A' && typed <= 'Z') {
+            typed = (char)(typed - 'A' + 'a');
+        }
+        if (typed != word[index]) {
+            return 0;
+        }
+    }
+    return index == len && word[index] == '\0';
+}
+
+/* Print this session's accumulated token usage and cost to the scrollback
+ * (the `/usage` command). yai keeps these totals in app->usage, fed by the
+ * engine's per-turn usage events; this is the on-demand breakdown the HUD's
+ * one-line summary can't show in full. */
+static struct yetty_ycore_void_result show_usage(struct yai_app *app)
+{
+    char input_text[16];
+    char output_text[16];
+    char cache_read_text[16];
+    char cache_creation_text[16];
+    yai_format_tokens(app->usage.input, input_text, sizeof(input_text));
+    yai_format_tokens(app->usage.output, output_text, sizeof(output_text));
+    yai_format_tokens(app->usage.cache_read, cache_read_text, sizeof(cache_read_text));
+    yai_format_tokens(app->usage.cache_creation, cache_creation_text, sizeof(cache_creation_text));
+
+    struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "show_usage: suspend");
+
+    printf("\n" YAI_MINT "session usage" YAI_RESET " (%s · %d turn(s))\n", app->engine_name,
+           app->usage.turns);
+    printf("  " YAI_DIM "input      " YAI_RESET " ↑ %s tok\n", input_text);
+    printf("  " YAI_DIM "output     " YAI_RESET " ↓ %s tok\n", output_text);
+    printf("  " YAI_DIM "cache read " YAI_RESET "   %s tok\n", cache_read_text);
+    printf("  " YAI_DIM "cache write" YAI_RESET "   %s tok\n", cache_creation_text);
+    if (app->usage.cost > 0.0) {
+        printf("  " YAI_DIM "cost       " YAI_RESET "   $%.4f\n", app->usage.cost);
+    } else {
+        printf("  " YAI_MUTED "(cost not reported by this engine)" YAI_RESET "\n");
+    }
+    /* Live account quota, when the usage proxy captured rate-limit headers.
+     * The status is a pre-decoded multi-line block (one field per line). */
+    char quota[4096];
+    yai_usage_proxy_status(app, quota, sizeof(quota));
+    if (quota[0]) {
+        printf("\n");
+        for (char *line = strtok(quota, "\n"); line; line = strtok(NULL, "\n")) {
+            printf("  " YAI_DIM "%s" YAI_RESET "\n", line);
+        }
+    } else if (app->usage_proxy) {
+        printf("  " YAI_MUTED "(quota: no API call captured yet)" YAI_RESET "\n");
+    }
+    printf("\n");
+
+    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+    flush_res = yetty_ycore_void_chain(flush_res, yai_renderer_zone_resume(&app->renderer));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "show_usage: flush/resume");
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, const char *line,
                                                         size_t len)
 {
@@ -1426,18 +2265,41 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
     /* A pending permission consumes the next typed line as its verdict
      * — BEFORE the queue: "y" must never be shipped as a message. */
     if (app->pending_permission.active) {
-        if (len == 1 && (line[0] == 'y' || line[0] == 'Y')) {
+        if (verdict_is(line, len, "y") || verdict_is(line, len, "yes")) {
             struct yetty_ycore_void_result allow_res =
                 yetty_yai_resolve_permission(NULL, app->engine, app, 1);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, allow_res, "handle_input_line: allow");
-        } else if (len == 1 && (line[0] == 'n' || line[0] == 'N')) {
+        } else if (verdict_is(line, len, "n") || verdict_is(line, len, "no")) {
             struct yetty_ycore_void_result deny_res =
                 yetty_yai_resolve_permission(NULL, app->engine, app, 0);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, deny_res, "handle_input_line: deny");
+        } else if (verdict_is(line, len, "a") || verdict_is(line, len, "always")) {
+            /* Remember this tool BEFORE resolving (resolve clears the
+             * pending request and its tool_name), then allow it. */
+            yai_tool_remember_allow(app, app->pending_permission.tool_name);
+            struct yetty_ycore_void_result allow_res =
+                yetty_yai_resolve_permission(NULL, app->engine, app, 1);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, allow_res, "handle_input_line: always-allow");
+        } else if (verdict_is(line, len, "auto")) {
+            /* Switch the engine to auto-approve, then allow the current one.
+             * "auto" is also the permission-mode knob's value — store it and
+             * (claude) translate to bypassPermissions live; reopening /config
+             * shows "auto" selected. */
+            yai_config_set(app, "permission_mode", "auto");
+            struct yetty_ycore_void_result mode_res =
+                yetty_yai_apply_config(NULL, app->engine, app, "permission_mode", "auto");
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, mode_res, "handle_input_line: auto mode");
+            /* The permission mode is a persisted config knob — keep the file
+             * in step with the live change. */
+            yai_report_error(app, "config save", yai_config_save(app));
+            struct yetty_ycore_void_result allow_res =
+                yetty_yai_resolve_permission(NULL, app->engine, app, 1);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, allow_res, "handle_input_line: auto allow");
         } else {
             struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "handle_input_line: suspend");
-            printf(YAI_DIM "  pending permission — answer y or n" YAI_RESET "\n");
+            printf(YAI_DIM "  permission — y(es) / n(o) / a(lways this tool) / auto (approve all)"
+                           " · Ctrl-C to interrupt" YAI_RESET "\n");
             struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
             YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "handle_input_line: flush");
             struct yetty_ycore_void_result resume_res = yai_renderer_zone_resume(&app->renderer);
@@ -1467,9 +2329,21 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
             if (strcmp(command->name, "config") == 0) {
                 struct yetty_ycore_void_result config_res = show_config(app);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, config_res, "handle_input_line: config");
+                /* The text TUI owns the alt screen — don't draw the prompt
+                 * over it; it repaints the prompt itself when it closes. */
+                if (!app->config_tui_active) {
+                    struct yetty_ycore_void_result prompt_res = show_prompt(app);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_void, prompt_res,
+                                        "handle_input_line: prompt after config");
+                }
+                return YETTY_OK_VOID();
+            }
+            if (strcmp(command->name, "usage") == 0) {
+                struct yetty_ycore_void_result usage_res = show_usage(app);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, usage_res, "handle_input_line: usage");
                 struct yetty_ycore_void_result prompt_res = show_prompt(app);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, prompt_res,
-                                    "handle_input_line: prompt after config");
+                                    "handle_input_line: prompt after usage");
                 return YETTY_OK_VOID();
             }
             if (strcmp(command->name, "shell") == 0) {
@@ -1504,7 +2378,6 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
     if (app->waiting) {
         struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "handle_input_line: suspend");
-        struct yetty_ycore_void_result queue_res = YETTY_OK_VOID();
         if (app->queue_len < YAI_QUEUE_MAX) {
             char *copy = strndup(line, len);
             if (!copy) {
@@ -1513,15 +2386,17 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
             app->queue[app->queue_len++] = copy;
             printf(YAI_DIM "(queued — sends when this turn finishes)" YAI_RESET "\n");
         } else {
+            /* The queue cap is normal back-pressure, not a failure: tell the
+             * user the message was dropped and carry on. Surfacing it as a
+             * Result error would bubble an internal ✗ chain all the way up to
+             * the keyboard handler, on top of this already-friendly line. */
             printf(YAI_RED "queue full — message dropped" YAI_RESET "\n");
-            queue_res = YETTY_ERR(yetty_ycore_void, "handle_input_line: queue full");
         }
-        /* Best-effort: the zone must come back whatever happened; the
-         * first error wins, the rest still run. */
+        /* Restore the zone whatever happened; an IO failure HERE is a real
+         * error and propagates. */
         struct yetty_ycore_void_result restore_res = yai_render_flush_stdout();
         restore_res = yetty_ycore_void_chain(restore_res, yai_renderer_zone_resume(&app->renderer));
-        queue_res = yetty_ycore_void_chain(queue_res, restore_res);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, queue_res, "handle_input_line: queue");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, restore_res, "handle_input_line: queue restore");
         return YETTY_OK_VOID();
     }
     char *copy = strndup(line, len);
@@ -1529,6 +2404,7 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
         return YETTY_ERR(yetty_ycore_void, "handle_input_line: strndup failed");
     }
     app->waiting = 1;
+    app->estimated_tokens = 0; /* fresh per-request estimate */
     struct yetty_ycore_void_result activity_res =
         yai_set_activity(app, "typing-dots", "… thinking");
     if (YETTY_IS_ERR(activity_res)) {
@@ -1613,6 +2489,7 @@ static struct yetty_ycore_void_result editor_submit(struct yai_app *app)
      * bytes stay valid for handle_input_line. */
     app->stdin_len = 0;
     app->stdin_cursor = 0;
+    editor_ops_undo_clear(app); /* line consumed — its undo history ends here */
     if (app->renderer.pin_enabled) {
         struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "editor_submit: suspend");
@@ -1629,9 +2506,51 @@ static struct yetty_ycore_void_result editor_submit(struct yai_app *app)
     return YETTY_OK_VOID();
 }
 
-/* Ctrl-C: interrupt the in-flight turn, else begin shutdown. */
+/* Inject a line from the external control server as if it were typed and
+ * submitted. The user's in-progress line is stashed and restored around
+ * the injection, so an outside command never eats what they were typing;
+ * the line then flows through the normal submit path (slash command,
+ * shell escape, or a message — queued if a turn is already in flight). */
+struct yetty_ycore_void_result yai_control_inject(struct yai_app *app, const char *line, size_t len)
+{
+    if (len >= sizeof(app->stdin_buf)) {
+        len = sizeof(app->stdin_buf) - 1;
+    }
+    char stash[sizeof(app->stdin_buf)];
+    size_t stash_len = app->stdin_len;
+    size_t stash_cursor = app->stdin_cursor;
+    memcpy(stash, app->stdin_buf, stash_len);
+
+    memcpy(app->stdin_buf, line, len);
+    app->stdin_len = len;
+    app->stdin_cursor = len;
+    struct yetty_ycore_void_result submit_res = editor_submit(app);
+
+    /* editor_submit reset the buffer to empty; restore the stashed line. */
+    memcpy(app->stdin_buf, stash, stash_len);
+    app->stdin_len = stash_len;
+    app->stdin_cursor = stash_cursor;
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, submit_res, "yai_control_inject: submit");
+    struct yetty_ycore_void_result redraw_res = editor_render(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, redraw_res, "yai_control_inject: redraw");
+    return YETTY_OK_VOID();
+}
+
+/* Ctrl-C never exits yai (use /exit or Ctrl-D for that). During a turn
+ * it interrupts the request; otherwise it cancels the current input
+ * line, and on an already-empty line it reminds the user how to exit. */
 static struct yetty_ycore_void_result editor_interrupt(struct yai_app *app)
 {
+    ydebug("yai: editor_interrupt pending=%d waiting=%d child_alive=%d",
+           app->pending_permission.active, app->waiting, app->child_alive);
+    /* A permission prompt is waiting for a verdict: Ctrl-C answers it as
+     * a deny (unblocking the CLI), then falls through to interrupt the
+     * turn — Ctrl-C must work the same here as during any other request. */
+    if (app->pending_permission.active) {
+        struct yetty_ycore_void_result deny_res =
+            yetty_yai_resolve_permission(NULL, app->engine, app, 0);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, deny_res, "editor_interrupt: deny pending");
+    }
     if (app->waiting && app->child_alive) {
         struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "editor_interrupt: suspend");
@@ -1646,8 +2565,24 @@ static struct yetty_ycore_void_result editor_interrupt(struct yai_app *app)
     }
     struct yetty_ycore_void_result close_res = menu_close(app);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, close_res, "editor_interrupt: menu close");
-    struct yetty_ycore_void_result shutdown_res = yai_begin_shutdown(app);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, shutdown_res, "editor_interrupt: shutdown");
+    if (app->stdin_len > 0) {
+        /* Cancel the half-typed line rather than exit. */
+        app->stdin_len = 0;
+        app->stdin_cursor = 0;
+        editor_ops_undo_clear(app); /* line discarded — drop its undo history */
+        app->history_browse = -1;
+        struct yetty_ycore_void_result redraw_res = yai_renderer_pin_redraw(&app->renderer);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, redraw_res, "editor_interrupt: redraw");
+        return YETTY_OK_VOID();
+    }
+    /* Empty line: do not exit — tell the user how. */
+    struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "editor_interrupt: suspend");
+    printf("\n" YAI_MUTED "in order to exit, use /exit" YAI_RESET "\n");
+    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "editor_interrupt: flush");
+    struct yetty_ycore_void_result resume_res = yai_renderer_zone_resume(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, resume_res, "editor_interrupt: resume");
     return YETTY_OK_VOID();
 }
 
@@ -1696,9 +2631,78 @@ static struct yetty_ycore_void_result apply_editor_action(struct yai_app *app, i
     }
 }
 
+/* A permission prompt is pending — one keypress is the verdict (no Enter
+ * needed). Resolves the request immediately. */
+static struct yetty_ycore_void_result permission_key(struct yai_app *app, unsigned char key)
+{
+    ydebug("yai: permission_key 0x%02x", key);
+    switch (key) {
+    case 'y':
+    case 'Y':
+        return yetty_yai_resolve_permission(NULL, app->engine, app, 1);
+    case 'n':
+    case 'N':
+    case 0x1b: /* Esc — cancel = deny */
+        return yetty_yai_resolve_permission(NULL, app->engine, app, 0);
+    case 'a':
+    case 'A':
+        /* Always allow THIS tool: remember before resolving (resolve
+         * clears the pending request and its tool name), then allow. */
+        yai_tool_remember_allow(app, app->pending_permission.tool_name);
+        return yetty_yai_resolve_permission(NULL, app->engine, app, 1);
+    case '!': {
+        /* Auto: approve everything from now on, then allow the current. */
+        yai_config_set(app, "permission_mode", "auto");
+        struct yetty_ycore_void_result mode_res =
+            yetty_yai_apply_config(NULL, app->engine, app, "permission_mode", "auto");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, mode_res, "permission_key: auto mode");
+        /* The permission mode is a persisted config knob — keep the file in
+         * step with the live change. */
+        yai_report_error(app, "config save", yai_config_save(app));
+        return yetty_yai_resolve_permission(NULL, app->engine, app, 1);
+    }
+    case 0x03: /* Ctrl-C: deny the prompt and interrupt the turn. */
+        return editor_interrupt(app);
+    case '\r':
+    case '\n':
+        return YETTY_OK_VOID(); /* ignore a stray Enter */
+    default:
+        break;
+    }
+    /* Unrecognised key: remind which keys answer (the zone is repainted). */
+    struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "permission_key: suspend");
+    printf(YAI_DIM "  permission — press y / n / a (always this tool) / ! (auto) · Ctrl-C "
+                   "interrupts" YAI_RESET "\n");
+    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "permission_key: flush");
+    struct yetty_ycore_void_result resume_res = yai_renderer_zone_resume(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, resume_res, "permission_key: resume");
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result keyboard_input(struct yai_app *app, const char *bytes,
                                                      size_t len)
 {
+    /* The settings TUI owns the keyboard while it's on the alt screen. */
+    if (app->config_tui_active) {
+        for (size_t index = 0; index < len && app->config_tui_active; index++) {
+            struct yetty_ycore_void_result key_res = config_tui_key(app, (unsigned char)bytes[index]);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, key_res, "keyboard_input: config tui key");
+        }
+        return YETTY_OK_VOID();
+    }
+    /* A pending permission owns the keyboard: each keypress is the verdict,
+     * handled BEFORE GUI focus and the line editor so it works no matter
+     * where focus is (e.g. the HUD) and without needing Enter. */
+    if (app->pending_permission.active) {
+        for (size_t index = 0; index < len && app->pending_permission.active; index++) {
+            struct yetty_ycore_void_result verdict_res =
+                permission_key(app, (unsigned char)bytes[index]);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, verdict_res, "keyboard_input: permission verdict");
+        }
+        return YETTY_OK_VOID();
+    }
     ydebug("yai: keys len=%zu first=0x%02x -> %s", len, len ? (unsigned char)bytes[0] : 0,
            (app->focus_gui && app->hud) ? "gui" : "editor");
     if (app->focus_gui && app->hud) {
@@ -1707,6 +2711,12 @@ static struct yetty_ycore_void_result keyboard_input(struct yai_app *app, const 
         return YETTY_OK_VOID();
     }
     for (size_t index = 0; index < len; index++) {
+        if ((unsigned char)bytes[index] == 0x07) {
+            /* Ctrl-G: compose the message in an external editor. */
+            struct yetty_ycore_void_result editor_res = open_external_editor(app);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, editor_res, "keyboard_input: external editor");
+            continue;
+        }
         struct yetty_ycore_int_result action_res =
             yetty_yai_feed_byte(NULL, app->editor, app, (unsigned char)bytes[index]);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, action_res, "keyboard_input: feed byte");
@@ -1806,6 +2816,36 @@ static struct yetty_ycore_void_result config_note(struct yai_app *app, const cha
     return YETTY_OK_VOID();
 }
 
+/* Apply one knob's currently-selected value — swap the editor, set the
+ * model, or store the field and push the engine's live apply_config — with a
+ * scrollback note. Shared by the ygui dialog sync and the text TUI. */
+static struct yetty_ycore_void_result apply_config_knob(struct yai_app *app, int knob_index)
+{
+    const char *value = app->config_knobs[knob_index].options[app->config_knobs[knob_index].selected];
+    if (app->config_knobs[knob_index].is_edit_mode) {
+        struct yetty_ycore_void_result mode_res = yai_set_edit_mode(app, value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, mode_res, "apply_config_knob: edit mode");
+        return config_note(app, "edit mode", value);
+    }
+    if (app->config_knobs[knob_index].is_model) {
+        /* "default" clears the override; the engines read config.model at
+         * the next spawn. */
+        const char *model = strcmp(value, "default") == 0 ? "" : value;
+        yai_config_set(app, "model", model);
+        struct yetty_ycore_void_result stats_res = yai_refresh_hud_stats(app);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, stats_res, "apply_config_knob: model stats");
+        return config_note(app, "model", value);
+    }
+    /* Store the new value (the engines read the config struct at spawn), then
+     * let the engine apply any live side-effect (e.g. claude pushes the new
+     * permission mode into the running session). */
+    const char *key = app->config_knobs[knob_index].key;
+    yai_config_set(app, key, value);
+    struct yetty_ycore_void_result apply_res = yetty_yai_apply_config(NULL, app->engine, app, key, value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "apply_config_knob: apply");
+    return config_note(app, key, value);
+}
+
 /* After a GUI-owned click: read the config dialog's widgets and apply
  * what changed — renderer fields directly, the edit-mode knob by
  * swapping the editor, an engine knob through the engine's apply_config
@@ -1837,32 +2877,12 @@ static struct yetty_ycore_void_result config_dialog_sync(struct yai_app *app)
             continue;
         }
         app->config_knobs[knob].selected = chosen;
-        const char *value = app->config_knobs[knob].options[chosen];
-        if (app->config_knobs[knob].is_edit_mode) {
-            struct yetty_ycore_void_result mode_res = yai_set_edit_mode(app, value);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, mode_res, "config_dialog_sync: edit mode");
-            struct yetty_ycore_void_result note_res = config_note(app, "edit mode", value);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, note_res, "config_dialog_sync: note");
-        } else if (app->config_knobs[knob].is_model) {
-            /* "default" clears the override; any other value sets it. The
-             * engines read YAI_MODEL at the next spawn. */
-            const char *model = strcmp(value, "default") == 0 ? "" : value;
-            if (setenv("YAI_MODEL", model, 1) != 0) {
-                return YETTY_ERR(yetty_ycore_void, "config_dialog_sync: setenv YAI_MODEL");
-            }
-            struct yetty_ycore_void_result stats_res = yai_refresh_hud_stats(app);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, stats_res, "config_dialog_sync: hud model");
-            struct yetty_ycore_void_result note_res = config_note(app, "model", value);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, note_res, "config_dialog_sync: note");
-        } else {
-            struct yetty_ycore_void_result apply_res = yetty_yai_apply_config(
-                NULL, app->engine, app, app->config_knobs[knob].key, value);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "config_dialog_sync: apply");
-            struct yetty_ycore_void_result note_res =
-                config_note(app, app->config_knobs[knob].key, value);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, note_res, "config_dialog_sync: note");
-        }
+        struct yetty_ycore_void_result apply_res = apply_config_knob(app, knob);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, apply_res, "config_dialog_sync: apply knob");
     }
+    /* Persist the new config so it survives the next launch. Best-effort:
+     * a save failure is reported but must not break the dialog flow. */
+    yai_report_error(app, "config save", yai_config_save(app));
     return YETTY_OK_VOID();
 }
 
@@ -1985,6 +3005,9 @@ static struct yetty_ycore_void_result handle_key_envelope(struct yai_app *app,
     char bytes[8];
     size_t len = key_event_to_bytes(key_event.kind, key_event.key, key_event.mods,
                                     key_event.codepoint, bytes, sizeof(bytes));
+    ydebug("yai: KEY envelope kind=%u key=%d mods=%d cp=%u -> %zu bytes (0x%02x) pending=%d",
+           key_event.kind, key_event.key, key_event.mods, key_event.codepoint, len,
+           len ? (unsigned char)bytes[0] : 0, app->pending_permission.active);
     if (len > 0) {
         struct yetty_ycore_void_result keys_res = keyboard_input(app, bytes, len);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, keys_res, "key envelope: keyboard");
@@ -2024,6 +3047,8 @@ YETTY_EXTERNAL_CALLBACK
 static void on_yface_raw(void *user, const char *bytes, size_t n)
 {
     struct yai_app *app = user;
+    ydebug("yai: raw stdin n=%zu first=0x%02x pending=%d", n, n ? (unsigned char)bytes[0] : 0,
+           app->pending_permission.active);
     yai_report_error(app, "keyboard", keyboard_input(app, bytes, n));
 }
 
@@ -2059,15 +3084,14 @@ static void on_sigint(uv_signal_t *signal_handle, int signum)
 {
     struct yai_app *app = signal_handle->data;
     (void)signum;
-    if (app->waiting && app->child_alive) {
-        yai_report_error(app, "interrupt suspend", yai_renderer_zone_suspend(&app->renderer));
-        printf("\n" YAI_MUTED "(interrupt requested)" YAI_RESET "\n");
-        yai_report_error(app, "interrupt flush", yai_render_flush_stdout());
-        yai_report_error(app, "interrupt", yetty_yai_interrupt(NULL, app->engine, app));
-        yai_report_error(app, "interrupt resume", yai_renderer_zone_resume(&app->renderer));
-        return;
-    }
-    yai_report_error(app, "shutdown", yai_begin_shutdown(app));
+    ydebug("yai: SIGINT received, waiting=%d pending=%d", app->waiting,
+           app->pending_permission.active);
+    /* In many terminals (yetty included) Ctrl-C arrives as SIGINT rather
+     * than a 0x03 byte, so this — not the line-editor path — is what
+     * actually fires. Route it through the SAME handler as the byte path:
+     * deny a pending permission AND interrupt the in-flight turn; when
+     * idle, just remind how to exit. Ctrl-C never exits yai (use /exit). */
+    yai_report_error(app, "interrupt", editor_interrupt(app));
 }
 
 YETTY_EXTERNAL_CALLBACK
@@ -2080,6 +3104,8 @@ static void on_sigwinch(uv_signal_t *signal_handle, int signum)
     }
     /* Re-reserve the docked bar's rows, then re-clip the pinned zone. */
     yai_report_error(app, "hud dock", yai_apply_dock_reservation(app));
+    /* Re-establish the text-HUD scroll region for the new size. */
+    yai_report_error(app, "text hud", yai_renderer_text_hud_reserve(&app->renderer));
     yai_report_error(app, "zone re-clip", yai_renderer_pin_redraw(&app->renderer));
 }
 
@@ -2197,7 +3223,7 @@ static struct yetty_ycore_void_result print_banner(const struct yai_app *app)
            "Type a message. /quit or Ctrl-D to exit; Ctrl-C interrupts a turn; /shell or !cmd "
            "for a shell." YAI_RESET "\n",
            app->engine_name, app->session_id[0] ? app->session_id : "(new)", app->transcript_path,
-           app->hud ? "on" : "off");
+           app->hud ? "on" : (app->renderer.text_hud ? "text" : "off"));
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "print_banner: flush");
     return YETTY_OK_VOID();
@@ -2258,33 +3284,187 @@ static struct yetty_ycore_void_result yai_set_edit_mode(struct yai_app *app, con
     return YETTY_OK_VOID();
 }
 
+/* Print CLI usage. Plain fprintf to the given stream — a --help / bad-arg
+ * path that exits immediately, so no Result (matching the other argv
+ * diagnostics in main()). */
+static void print_usage(FILE *stream, const char *program)
+{
+    fprintf(stream,
+            "yai — a hackable AI-CLI TUI for yetty (Claude Code / Codex / Gemini)\n"
+            "\n"
+            "Usage:\n"
+            "  %s [options]\n"
+            "\n"
+            "Options (all engines):\n"
+            "  --engine <claude|codex|gemini>  AI CLI to drive (default: claude)\n"
+            "  --model <id>                    model override (engine-specific id)\n"
+            "  --edit-mode <emacs|vi>          line-editor mode (default: emacs)\n"
+            "  --show-thinking                 stream dim \"thinking\" text\n"
+            "  --fold-lines <n>                tool-output preview cap (default: 8)\n"
+            "  --no-hud                        no ygui status window; stats as plain text\n"
+            "  --hud-float                     float the HUD window instead of docking it\n"
+            "  --resume <id>                   resume a conversation (claude session / codex "
+            "thread)\n"
+            "  --markdown                      render answers as yetty markdown figures "
+            "(yetty host only)\n"
+            "  --animate                       animated activity glyph (costs ~100%% CPU; "
+            "default static)\n"
+            "  --rpc <port>                    msgpack-RPC control server on 127.0.0.1:<port>\n"
+            "  --connect <port> <method> [a…]  client: drive another running yai's --rpc server, "
+            "print reply, exit\n"
+            "                                  (methods: run \"<line>\" · status)\n"
+            "  -h, --help                      show this help and exit\n"
+            "\n"
+            "Options (claude):\n"
+            "  --permission-mode <default|acceptEdits|plan|auto>   (auto = approve all)\n"
+            "  --allowed-preset <curated|readonly|edit|full>\n"
+            "  --allowed-tools <comma-list>    explicit allowlist (overrides the preset)\n"
+            "  --claude-effort <auto|low|medium|high|xhigh|max>\n"
+            "\n"
+            "Options (codex):\n"
+            "  --codex-sandbox <read-only|workspace-write|danger-full-access>\n"
+            "  --codex-approval <never|on-request|untrusted>   (exec: only 'never' is serviceable)\n"
+            "  --codex-effort <minimal|low|medium|high>\n"
+            "\n"
+            "Options (gemini):\n"
+            "  --gemini-approval <default|auto_edit|yolo>\n"
+            "\n"
+            "Settings persist to the yetty config file; flags override the file for the run.\n"
+            "At the prompt:\n"
+            "  <text> + Enter   send a message to the agent\n"
+            "  /quit, /exit     quit (or Ctrl-D)\n"
+            "  /config          open the config panel (model, permissions, …)\n"
+            "  /shell, !<cmd>   drop to a shell; the prompt resumes when it exits\n"
+            "  Ctrl-G           edit the message in $EDITOR (with the last reply for reference)\n"
+            "  Ctrl-C           interrupt the turn in flight\n"
+            "  Tab / Up / Down  slash-command completion menu\n"
+            "\n"
+            "Each session's JSONL transcript is written to tmp/transcript-<session>.jsonl\n",
+            program);
+}
+
 int main(int argc, char **argv)
 {
     ytrace_init();
 
-    const char *resume_session_id = NULL;
-    const char *engine_name = getenv("YAI_ENGINE");
+    /* Client mode: `yai --connect <port> <method> [args...]` makes this
+     * yai a one-shot client of ANOTHER running yai's --rpc server — send
+     * one request, print the response, exit. Handled before any terminal /
+     * engine setup, since the client needs none of it. */
     for (int arg_index = 1; arg_index < argc; arg_index++) {
-        if (strcmp(argv[arg_index], "--resume") == 0 && arg_index + 1 < argc) {
-            resume_session_id = argv[++arg_index];
-        } else if (strcmp(argv[arg_index], "--engine") == 0 && arg_index + 1 < argc) {
-            engine_name = argv[++arg_index];
+        if (strcmp(argv[arg_index], "--connect") == 0) {
+            if (arg_index + 2 >= argc) {
+                fprintf(stderr, "yai: --connect needs <port> <method> [args...]\n");
+                return 2;
+            }
+            int peer_port = (int)strtol(argv[arg_index + 1], NULL, 10);
+            const char *method = argv[arg_index + 2];
+            const char *const *params = (const char *const *)&argv[arg_index + 3];
+            int param_count = argc - (arg_index + 3);
+            return yai_control_client_main("127.0.0.1", peer_port, method, params, param_count);
         }
     }
-    if (!engine_name || !engine_name[0]) {
-        engine_name = "claude";
-    }
-    if (strcmp(engine_name, "claude") != 0 && strcmp(engine_name, "codex") != 0 &&
-        strcmp(engine_name, "gemini") != 0) {
-        fprintf(stderr, "yai: unknown engine '%s' (claude / codex / gemini)\n", engine_name);
-        return 2;
-    }
 
+    /* Settings come from three layers, lowest priority first: built-in
+     * defaults, the YAML config file, then the command-line flags below.
+     * yai has no configuration environment variables. */
     struct yai_app *app = calloc(1, sizeof(*app));
     if (!app) {
         return 1;
     }
-    app->engine_name = engine_name;
+    yai_config_defaults(app);
+    yai_config_load(app);
+
+    /* Flags that take a value and map straight onto a setting (engine and the
+     * boolean flags are handled explicitly below for validation / no-value). */
+    const struct {
+        const char *flag;
+        const char *key;
+    } value_flags[] = {
+        {"--model", "model"},
+        {"--edit-mode", "edit_mode"},
+        {"--fold-lines", "fold_lines"},
+        {"--permission-mode", "permission_mode"},
+        {"--allowed-preset", "allowed_preset"},
+        {"--allowed-tools", "allowed_tools"},
+        {"--claude-effort", "claude_effort"},
+        {"--codex-sandbox", "codex_sandbox"},
+        {"--codex-approval", "codex_approval"},
+        {"--codex-effort", "codex_effort"},
+        {"--gemini-approval", "gemini_approval_mode"},
+    };
+    const char *resume_session_id = NULL;
+    int markdown_requested = 0;
+    int animate_requested = 0;
+    int rpc_port = 0; /* external control server; 0 = off (set via --rpc) */
+    for (int arg_index = 1; arg_index < argc; arg_index++) {
+        const char *arg = argv[arg_index];
+        if (strcmp(arg, "--help") == 0 || strcmp(arg, "-h") == 0) {
+            print_usage(stdout, argv[0]);
+            free(app);
+            return 0;
+        } else if (strcmp(arg, "--markdown") == 0) {
+            markdown_requested = 1;
+        } else if (strcmp(arg, "--animate") == 0) {
+            animate_requested = 1;
+        } else if (strcmp(arg, "--show-thinking") == 0) {
+            yai_config_set(app, "show_thinking", "1");
+        } else if (strcmp(arg, "--no-hud") == 0) {
+            yai_config_set(app, "no_hud", "1");
+        } else if (strcmp(arg, "--hud-float") == 0) {
+            yai_config_set(app, "hud_float", "1");
+        } else if (strcmp(arg, "--rpc") == 0) {
+            if (arg_index + 1 >= argc) {
+                fprintf(stderr, "yai: --rpc needs a port\n");
+                free(app);
+                return 2;
+            }
+            rpc_port = (int)strtol(argv[++arg_index], NULL, 10);
+        } else if (strcmp(arg, "--resume") == 0) {
+            if (arg_index + 1 >= argc) {
+                fprintf(stderr, "yai: --resume needs an id\n");
+                free(app);
+                return 2;
+            }
+            resume_session_id = argv[++arg_index];
+        } else if (strcmp(arg, "--engine") == 0) {
+            if (arg_index + 1 >= argc) {
+                fprintf(stderr, "yai: --engine needs a name (claude / codex / gemini)\n");
+                free(app);
+                return 2;
+            }
+            const char *value = argv[++arg_index];
+            if (strcmp(value, "claude") != 0 && strcmp(value, "codex") != 0 &&
+                strcmp(value, "gemini") != 0) {
+                fprintf(stderr, "yai: unknown engine '%s' (claude / codex / gemini)\n", value);
+                free(app);
+                return 2;
+            }
+            yai_config_set(app, "engine", value);
+        } else {
+            int matched = 0;
+            for (size_t flag_index = 0; flag_index < sizeof(value_flags) / sizeof(value_flags[0]);
+                 flag_index++) {
+                if (strcmp(arg, value_flags[flag_index].flag) == 0) {
+                    if (arg_index + 1 >= argc) {
+                        fprintf(stderr, "yai: %s needs a value\n", arg);
+                        free(app);
+                        return 2;
+                    }
+                    yai_config_set(app, value_flags[flag_index].key, argv[++arg_index]);
+                    matched = 1;
+                    break;
+                }
+            }
+            if (!matched) {
+                fprintf(stderr, "yai: unrecognized argument '%s'\n", arg);
+                print_usage(stderr, argv[0]);
+                free(app);
+                return 2;
+            }
+        }
+    }
+    const char *engine_name = app->engine_name;
     struct yetty_yclass_object_ptr_result engine_res = create_engine(engine_name);
     if (YETTY_IS_ERR(engine_res)) {
         yai_report_error(app, "engine create",
@@ -2294,11 +3474,9 @@ int main(int argc, char **argv)
     }
     app->engine = engine_res.value;
 
-    /* The line-editor strategy: emacs (default) or vi. */
-    const char *edit_mode = getenv("YAI_EDIT_MODE");
-    if (!edit_mode || (strcmp(edit_mode, "vi") != 0 && strcmp(edit_mode, "emacs") != 0)) {
-        edit_mode = "emacs";
-    }
+    /* The line-editor strategy: emacs (default) or vi (resolved into
+     * app->editor_mode_name by defaults/file/CLI). */
+    const char *edit_mode = app->editor_mode_name;
     struct yetty_yclass_object_ptr_result editor_res = create_editor(edit_mode);
     if (YETTY_IS_ERR(editor_res)) {
         yai_report_error(app, "editor create",
@@ -2338,8 +3516,13 @@ int main(int argc, char **argv)
     } else if (strcmp(engine_name, "claude") == 0) {
         snprintf(app->session_id, sizeof(app->session_id), "%s", file_tag);
     }
-    yai_renderer_init(&app->renderer, env_int("YAI_FOLD_LINES", YAI_DEFAULT_FOLD_LINES),
-                      env_flag("YAI_SHOW_THINKING"), engine_name);
+    yai_renderer_init(&app->renderer, app->renderer.fold_lines, app->renderer.show_thinking,
+                      engine_name);
+    /* --markdown renders answers as yetty markdown figures; only the
+     * yetty host can display the envelope, so require it. */
+    app->renderer.render_markdown = markdown_requested && app->renderer.pin_shader_glyphs;
+    /* --animate: the animated shader glyph (default static — see render.h). */
+    app->renderer.animate_glyph = animate_requested;
     yai_renderer_pin_setup(&app->renderer, app->stdin_buf, &app->stdin_len, &app->stdin_cursor);
     app->renderer.edit_status_ptr = app->edit_status;
     app->history_browse = -1;
@@ -2367,13 +3550,21 @@ int main(int argc, char **argv)
      * echoes the ESC bytes back and the host renders "^[" garbage. */
     yai_report_error(app, "raw input", enter_raw_input(app));
 
-    struct yai_hud_ptr_result hud_res = yai_hud_create();
+    struct yai_hud_ptr_result hud_res = yai_hud_create(app->config.no_hud, app->config.hud_float);
     if (YETTY_IS_ERR(hud_res)) {
         yai_report_error(app, "hud create",
                          (struct yetty_ycore_void_result){.ok = 0, .error = hud_res.error});
         app->hud = NULL; /* run without the window */
     } else {
         app->hud = hud_res.value;
+    }
+    /* The ygui HUD window renders only under yetty. On any other tty there
+     * is no window (yai_hud_create returned NULL), so drive the renderer's
+     * text status bar instead — unless the HUD was disabled (--no-hud) or
+     * stdout is not a tty (pin_enabled is false: no bottom row to pin). */
+    if (!app->hud && app->renderer.pin_enabled && !app->renderer.pin_shader_glyphs &&
+        !app->config.no_hud) {
+        app->renderer.text_hud = 1;
     }
     /* Seed the HUD right column with the model + zeroed stats so it reads
      * sensibly before the first turn lands. */
@@ -2405,6 +3596,15 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    /* Builtin usage proxy: interpose on the claude child's API traffic to
+     * capture live quota headers. Brought up BEFORE the engine starts so it
+     * overrides ANTHROPIC_BASE_URL, which the child inherits at spawn time. A
+     * failure is reported but non-fatal — the session just runs without live
+     * quota capture. Only claude honors ANTHROPIC_BASE_URL, so skip the rest. */
+    if (strcmp(app->engine_name, "claude") == 0) {
+        yai_report_error(app, "usage proxy", yai_usage_proxy_start(app));
+    }
+
     struct yetty_ycore_void_result start_res = yetty_yai_start(NULL, app->engine, app);
     if (YETTY_IS_OK(start_res)) {
         start_res = input_watchers_start(app);
@@ -2424,13 +3624,27 @@ int main(int argc, char **argv)
         yai_report_error(app, "mouse subscribe", subscribe_mouse(app));
     }
 
+    /* Optional external control server (--rpc / YAI_RPC_PORT). A bind
+     * failure is reported but non-fatal — the session runs without it. */
+    if (rpc_port > 0) {
+        yai_report_error(app, "control server", yai_control_start(app, rpc_port));
+    }
+
     yai_report_error(app, "banner", print_banner(app));
     yai_report_error(app, "hud dock", yai_apply_dock_reservation(app));
+    /* Reserve the bottom row for the text HUD (non-yetty tty) before the
+     * prompt, so the prompt zone stays above the bar. */
+    yai_report_error(app, "text hud", yai_renderer_text_hud_reserve(&app->renderer));
     yai_report_error(app, "prompt", show_prompt(app));
 
     uv_run(&app->loop, UV_RUN_DEFAULT);
 
-    /* Drain closing handles. */
+    /* Drain closing handles. (control was already stopped in begin_shutdown
+     * for the normal paths; this covers any exit that skipped it.) The proxy
+     * is stopped after the loop, by which point the child is gone and its
+     * connections have dropped, so its worker threads exit promptly. */
+    yai_control_stop(app);
+    yai_usage_proxy_stop(app);
     uv_close((uv_handle_t *)&app->stdin_poll, yai_handle_closed_cb);
     uv_close((uv_handle_t *)&app->sigint_handle, yai_handle_closed_cb);
     uv_close((uv_handle_t *)&app->sigwinch_handle, yai_handle_closed_cb);
@@ -2447,6 +3661,21 @@ int main(int argc, char **argv)
                          YETTY_ERR(yetty_ycore_void, "main: uv_loop_close: handles still open"));
     }
 
+    /* libuv left the tty's shared file description non-blocking for the
+     * stdin poll. The loop is gone now, so restore blocking writes before
+     * the teardown envelopes below: the HUD figure-clear goes out via
+     * yetty_yface_emit_to_fd, which retries only EINTR (not EAGAIN) — on a
+     * busy PTY a non-blocking write truncates the DCS mid-stream and the
+     * tail leaks into the pane as garbage. (The session-time writers poll
+     * POLLOUT themselves; this teardown path does not.) */
+    int stdout_flags = fcntl(STDOUT_FILENO, F_GETFL);
+    if (stdout_flags != -1) {
+        (void)fcntl(STDOUT_FILENO, F_SETFL, stdout_flags & ~O_NONBLOCK);
+    }
+
+    /* Order matters: clear the HUD figure and stop mouse/dock OSC forwarding
+     * while raw mode is still on (so the host's input replies can't echo),
+     * and restore cooked mode (leave_raw_input) only afterwards, below. */
     yai_report_error(app, "hud dock release", yai_release_dock_reservation(app));
     yai_report_error(app, "mouse unsubscribe", unsubscribe_mouse(app));
     if (app->hud) {
@@ -2455,7 +3684,20 @@ int main(int argc, char **argv)
     }
     yai_report_error(app, "input demux destroy", yetty_yface_destroy(app->yface));
     yai_report_error(app, "raw input restore", leave_raw_input(app));
-    printf("\n" YAI_DIM "transcript saved to %s" YAI_RESET "\n", app->transcript_path);
+    /* Persist the final config on exit (covers changes made via the
+     * permission "auto" shortcut and any path that didn't save inline). */
+    yai_report_error(app, "config save", yai_config_save(app));
+    printf("\n");
+    /* Show the resume token so the conversation can be picked up later.
+     * For claude this id is also the transcript filename uuid; for codex
+     * it's the server thread id (differs from the file tag); gemini has
+     * none, so the line is skipped. */
+    if (app->session_id[0]) {
+        printf(YAI_MINT "session %s" YAI_RESET YAI_DIM " · resume: yai --engine %s --resume %s"
+                        YAI_RESET "\n",
+               app->session_id, app->engine_name, app->session_id);
+    }
+    printf(YAI_DIM "transcript saved to %s" YAI_RESET "\n", app->transcript_path);
     yai_report_error(app, "final flush", yai_render_flush_stdout());
 
     int exit_code = app->exit_code;
@@ -2478,6 +3720,8 @@ int main(int argc, char **argv)
         free(app->history[history_index]);
     }
     free(app->child_out_buf);
+    free(app->pending_json);
+    free(app->last_response);
     struct yetty_ycore_void_result editor_free_res = yetty_yclass_object_free(app->editor);
     if (YETTY_IS_ERR(editor_free_res)) {
         yai_report_error(app, "editor destroy", editor_free_res);

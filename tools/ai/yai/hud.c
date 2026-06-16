@@ -68,6 +68,15 @@
 #define YAI_HUD_CONFIG_TITLE_H 32.0f
 #define YAI_HUD_CONFIG_CLOSE_W 32.0f
 
+/* yetty brand palette → the HUD. The bar paints a dark-mint background
+ * (the brand mint accent darkened), and each kind of value gets its own
+ * light brand color so they read clearly against it. set_bg_color wants
+ * a packed 0xAABBGGRR word; the label colors use struct yetty_ycore_rgba. */
+#define YAI_HUD_RGBA(red, green, blue)                                                             \
+    ((uint32_t)(0xFF000000u | ((uint32_t)(blue) << 16) | ((uint32_t)(green) << 8) |                \
+                (uint32_t)(red)))
+#define YAI_HUD_BG_DARK_MINT YAI_HUD_RGBA(20, 42, 35) /* dark mint canvas */
+
 /*---------------------------------------------------------------------------
  * Blocking stdout pty shim. The framework writes its compositor envelope
  * through this; stdout is fflushed first, so envelope bytes can never be
@@ -161,6 +170,8 @@ struct yai_hud {
     struct yetty_yclass_object *state_label;
     struct yetty_yclass_object *turn_label;
     struct yetty_yclass_object *session_label;
+    /* Middle column — live account quota (from the usage proxy). */
+    struct yetty_yclass_object *quota_label;
     /* Right column — lower-priority reference (model + statistics). */
     struct yetty_yclass_object *model_label;
     struct yetty_yclass_object *stats_label;
@@ -214,7 +225,7 @@ struct yai_hud {
     float viewport_height;
     int viewport_from_host;
     int user_touched;
-    /* Docked: a fixed bottom bar (default). Floating (YAI_HUD_FLOAT):
+    /* Docked: a fixed bottom bar (default). Floating (--hud-float):
      * the old draggable/resizable top-right window. */
     int docked;
 };
@@ -376,9 +387,22 @@ static struct yetty_ycore_void_result hud_build(struct yai_hud *hud)
     struct yetty_ycore_void_result place_res = hud_apply_viewport(hud);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, place_res, "hud_build: apply_viewport");
 
-    struct yetty_ycore_rgba accent = {.r = 107, .g = 168, .b = 146, .a = 255};
-    struct yetty_ycore_rgba secondary = {.r = 159, .g = 167, .b = 168, .a = 255};
-    struct yetty_ycore_rgba muted = {.r = 133, .g = 141, .b = 143, .a = 255};
+    /* Dark mint canvas for the whole bar. */
+    struct yetty_ycore_void_result bg_res =
+        yetty_ygui_widget_set_bg_color(hud->window, YAI_HUD_BG_DARK_MINT);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, bg_res, "hud_build: bg color");
+
+    /* Light brand colors, one role each, all readable on the dark mint:
+     *   accent_bright — the live activity / token estimate (brightest mint)
+     *   primary       — the model name (off-white, prominent)
+     *   accent        — token totals (brand mint)
+     *   secondary     — turn line / cost (cool gray)
+     *   muted         — the session id (dim) */
+    struct yetty_ycore_rgba accent_bright = {.r = 116, .g = 197, .b = 165, .a = 255}; /* #74C5A5 */
+    struct yetty_ycore_rgba accent = {.r = 107, .g = 168, .b = 146, .a = 255};        /* #6BA892 */
+    struct yetty_ycore_rgba primary = {.r = 224, .g = 229, .b = 228, .a = 255};       /* #E0E5E4 */
+    struct yetty_ycore_rgba secondary = {.r = 159, .g = 167, .b = 168, .a = 255};     /* #9FA7A8 */
+    struct yetty_ycore_rgba muted = {.r = 85, .g = 97, .b = 98, .a = 255};            /* #556162 */
 
     /* Two-column body: left = live status, right = model + statistics.
      * An hbox splits the window body; each column flex-grows so the bar
@@ -401,6 +425,16 @@ static struct yetty_ycore_void_result hud_build(struct yai_hud *hud)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, left_css_res, "hud_build: left css");
     struct yetty_yclass_object *left = left_res.value;
 
+    /* Middle column — account quota. Inserted before the right column so the
+     * bar reads [status | quota | model/stats] left-to-right. */
+    struct yetty_yclass_object_ptr_result middle_res =
+        hud_add(split_res.value, yetty_ygui_vbox_class_get());
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, middle_res, "hud_build: middle column");
+    struct yetty_ycore_void_result middle_css_res =
+        yetty_ygui_widget_apply_css(middle_res.value, "flex-grow: 2");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, middle_css_res, "hud_build: middle css");
+    struct yetty_yclass_object *middle = middle_res.value;
+
     struct yetty_yclass_object_ptr_result right_res =
         hud_add(split_res.value, yetty_ygui_vbox_class_get());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, right_res, "hud_build: right column");
@@ -409,24 +443,31 @@ static struct yetty_ycore_void_result hud_build(struct yai_hud *hud)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, right_css_res, "hud_build: right css");
     struct yetty_yclass_object *right = right_res.value;
 
-    struct yetty_yclass_object_ptr_result state_res = hud_add_label(left, "idle", accent);
+    struct yetty_yclass_object_ptr_result state_res = hud_add_label(left, "idle", accent_bright);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, state_res, "hud_build: state label");
     hud->state_label = state_res.value;
     struct yetty_yclass_object_ptr_result turn_res =
         hud_add_label(left, "waiting for first turn…", secondary);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, turn_res, "hud_build: turn label");
     hud->turn_label = turn_res.value;
-    struct yetty_yclass_object_ptr_result session_res = hud_add_label(left, "", secondary);
+    struct yetty_yclass_object_ptr_result session_res = hud_add_label(left, "", muted);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, session_res, "hud_build: session label");
     hud->session_label = session_res.value;
 
-    struct yetty_yclass_object_ptr_result model_res = hud_add_label(right, "", accent);
+    struct yetty_yclass_object_ptr_result quota_title_res =
+        hud_add_label(middle, "account", muted);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, quota_title_res, "hud_build: quota title");
+    struct yetty_yclass_object_ptr_result quota_res = hud_add_label(middle, "", accent_bright);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, quota_res, "hud_build: quota label");
+    hud->quota_label = quota_res.value;
+
+    struct yetty_yclass_object_ptr_result model_res = hud_add_label(right, "", primary);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, model_res, "hud_build: model label");
     hud->model_label = model_res.value;
-    struct yetty_yclass_object_ptr_result stats_res = hud_add_label(right, "", secondary);
+    struct yetty_yclass_object_ptr_result stats_res = hud_add_label(right, "", accent);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stats_res, "hud_build: stats label");
     hud->stats_label = stats_res.value;
-    struct yetty_yclass_object_ptr_result stats2_res = hud_add_label(right, "", muted);
+    struct yetty_yclass_object_ptr_result stats2_res = hud_add_label(right, "", secondary);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, stats2_res, "hud_build: stats2 label");
     hud->stats2_label = stats2_res.value;
 
@@ -441,14 +482,20 @@ static struct yetty_ycore_void_result hud_build(struct yai_hud *hud)
     return yai_hud_flush(hud);
 }
 
-struct yai_hud_ptr_result yai_hud_create(void)
+struct yai_hud_ptr_result yai_hud_create(int no_hud, int hud_float)
 {
-    const char *no_hud = getenv("YAI_NO_HUD");
-    if (no_hud && strcmp(no_hud, "0") != 0 && strcmp(no_hud, "") != 0) {
-        return YETTY_OK(yai_hud_ptr, NULL); /* intentionally disabled */
+    if (no_hud) {
+        return YETTY_OK(yai_hud_ptr, NULL); /* intentionally disabled (--no-hud) */
     }
     if (!isatty(STDOUT_FILENO)) {
         return YETTY_OK(yai_hud_ptr, NULL); /* no pane to float over */
+    }
+    /* The ygui HUD is a compositor figure only yetty can render; on any
+     * other terminal it would emit garbage. There, yai falls back to the
+     * renderer's text status bar (render.c text_hud) instead. */
+    const char *term_program = getenv("TERM_PROGRAM");
+    if (!term_program || strcmp(term_program, "yetty") != 0) {
+        return YETTY_OK(yai_hud_ptr, NULL);
     }
 
     struct yai_hud *hud = calloc(1, sizeof(*hud));
@@ -456,9 +503,9 @@ struct yai_hud_ptr_result yai_hud_create(void)
         return YETTY_ERR(yai_hud_ptr, "yai_hud_create: calloc");
     }
     hud->pty.ops = hud_pty_ops();
-    /* Docked bottom bar by default; YAI_HUD_FLOAT restores the old
-     * draggable top-right window. */
-    hud->docked = getenv("YAI_HUD_FLOAT") == NULL;
+    /* Docked bottom bar by default; --hud-float restores the old draggable
+     * top-right window. */
+    hud->docked = !hud_float;
 
     struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_framework_create(&hud->pty);
     if (YETTY_IS_ERR(framework_res)) {
@@ -508,6 +555,16 @@ struct yetty_ycore_void_result yai_hud_set_session(struct yai_hud *hud, const ch
     }
     struct yetty_ycore_void_result res = yetty_ygui_label_set_text(hud->session_label, text);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "yai_hud_set_session: set_text");
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yai_hud_set_quota(struct yai_hud *hud, const char *text)
+{
+    if (!hud) {
+        return YETTY_ERR(yetty_ycore_void, "yai_hud_set_quota: NULL hud");
+    }
+    struct yetty_ycore_void_result res = yetty_ygui_label_set_text(hud->quota_label, text);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "yai_hud_set_quota: set_text");
     return YETTY_OK_VOID();
 }
 

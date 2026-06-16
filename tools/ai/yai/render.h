@@ -30,10 +30,42 @@
 #define YAI_RED "\033[38;2;220;100;100m"
 #define YAI_RESET "\033[0m"
 
+/* yetty brand colors for the text HUD bar: a dark-mint background with a
+ * distinct light brand color per field. The field colors are FOREGROUND
+ * only and end with YAI_FG_DEFAULT (not YAI_RESET), so the bar's mint
+ * background carries through the whole row. */
+#define YAI_HUD_BG "\033[48;2;20;42;35m"           /* dark mint canvas */
+#define YAI_MINT_BRIGHT "\033[38;2;116;197;165m"   /* brightest mint — live activity */
+#define YAI_PRIMARY "\033[38;2;224;229;228m"       /* off-white — the model */
+#define YAI_SECONDARY "\033[38;2;159;167;168m"     /* cool gray — secondary text */
+#define YAI_FG_DEFAULT "\033[39m"                  /* reset foreground only (keep bg) */
+
 /* Per-message streaming state + render configuration. */
 struct yai_renderer {
     int fold_lines;    /* tool-output preview cap */
     int show_thinking; /* stream dim thinking text */
+    /* Render completed assistant answers as a yetty markdown figure
+     * (via ycat) instead of plain text. Opt-in via --markdown, and only
+     * on the yetty host (the figure envelope can't display elsewhere);
+     * falls back to plain text if ycat is unavailable or fails. */
+    int render_markdown;
+    /* Use the animated shader glyph for the activity indicator. OFF by
+     * default: an animated glyph keeps yetty's renderer running every
+     * frame (≈100% of a CPU core for the whole turn). Opt in with
+     * --animate; otherwise a static glyph is used and yetty idles when
+     * nothing changes. */
+    int animate_glyph;
+    /* Text status bar at the bottom of the pinned zone, for non-yetty
+     * terminals (where the ygui HUD window can't render). Active when
+     * stdout is a tty but the host is not yetty. hud_state = left
+     * (activity), hud_stats = right (model + token/cost summary). */
+    int text_hud;
+    char hud_state[160];
+    /* Account quota, centered between the activity and the stats. */
+    char hud_quota[160];
+    /* May embed per-field foreground color escapes, so sized well past the
+     * visible text. */
+    char hud_stats[320];
 
     /*
      * Pinned zone — transient rows at the bottom of the scrollback,
@@ -129,6 +161,24 @@ struct yetty_ycore_void_result yai_renderer_activity_clear(struct yai_renderer *
 struct yetty_ycore_void_result yai_renderer_menu_set(struct yai_renderer *renderer,
                                                      const char *const *rows, size_t count);
 struct yetty_ycore_void_result yai_renderer_menu_clear(struct yai_renderer *renderer);
+
+/* Text-HUD status bar (non-yetty terminals). Set the left (activity),
+ * centered (account quota), and right (model/usage) segments; redraws the
+ * zone when the text HUD is active, otherwise just records the text. */
+struct yetty_ycore_void_result yai_renderer_hud_state(struct yai_renderer *renderer,
+                                                      const char *text);
+struct yetty_ycore_void_result yai_renderer_hud_stats(struct yai_renderer *renderer,
+                                                      const char *text);
+struct yetty_ycore_void_result yai_renderer_hud_quota(struct yai_renderer *renderer,
+                                                      const char *text);
+
+/* Reserve / release the bottom terminal row for the text-HUD bar via a
+ * DECSTBM scroll region (conversation text scrolls above it). Call
+ * reserve at startup and after a resize / shell / alt-screen, release at
+ * shutdown and before handing the terminal to a shell or the alt screen.
+ * No-ops unless the text HUD is active. */
+struct yetty_ycore_void_result yai_renderer_text_hud_reserve(struct yai_renderer *renderer);
+struct yetty_ycore_void_result yai_renderer_text_hud_release(struct yai_renderer *renderer);
 
 /* One tool invocation line: "⚙ name <one-line input summary>". */
 struct yetty_ycore_void_result yai_render_tool_call(struct yai_renderer *renderer, const char *name,

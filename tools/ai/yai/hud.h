@@ -17,7 +17,7 @@
  *
  * Every function that can fail returns a Result; `hud` must be non-NULL
  * (a NULL hud is an error, like everywhere else in the tree). The
- * intentional "no HUD" cases (YAI_NO_HUD=1, stdout not a tty) are an OK
+ * intentional "no HUD" cases (--no-hud, stdout not a tty) are an OK
  * result carrying a NULL value from yai_hud_create — the caller runs
  * without a HUD and never calls the other entry points.
  */
@@ -32,9 +32,9 @@ struct yai_hud;
 YETTY_YRESULT_DECLARE(yai_hud_ptr, struct yai_hud *);
 
 /* Create the window. OK with a NULL value when the HUD is intentionally
- * unavailable (YAI_NO_HUD=1, stdout not a tty); an error Result on a
+ * unavailable (--no-hud, stdout not a tty); an error Result on a
  * real init failure. */
-struct yai_hud_ptr_result yai_hud_create(void);
+struct yai_hud_ptr_result yai_hud_create(int no_hud, int hud_float);
 
 /* Update one line. Cheap; nothing is written until yai_hud_flush.
  *
@@ -45,6 +45,7 @@ struct yai_hud_ptr_result yai_hud_create(void);
 struct yetty_ycore_void_result yai_hud_set_state(struct yai_hud *hud, const char *text);
 struct yetty_ycore_void_result yai_hud_set_turn(struct yai_hud *hud, const char *text);
 struct yetty_ycore_void_result yai_hud_set_session(struct yai_hud *hud, const char *text);
+struct yetty_ycore_void_result yai_hud_set_quota(struct yai_hud *hud, const char *text);
 struct yetty_ycore_void_result yai_hud_set_model(struct yai_hud *hud, const char *text);
 struct yetty_ycore_void_result yai_hud_set_stats(struct yai_hud *hud, const char *primary,
                                                  const char *secondary);
