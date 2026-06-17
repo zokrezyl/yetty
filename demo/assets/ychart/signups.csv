@@ -1,0 +1,9 @@
+#ychart type=line title="Daily sign-ups"
+day,signups
+Mon,120
+Tue,134
+Wed,128
+Thu,151
+Fri,168
+Sat,99
+Sun,88

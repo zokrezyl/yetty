@@ -8,9 +8,9 @@ yetty-mcp — let an AI agent draw rich content into a yetty terminal.
 
 How it works
 ------------
-yetty renders rich figures (markdown, mermaid diagrams, images, SVG, PDF,
-LilyPond music scores, syntax-highlighted code) when a program prints an
-OSC envelope
+yetty renders rich figures (markdown, mermaid diagrams, data charts, images,
+SVG, PDF, LilyPond music scores, syntax-highlighted code) when a program prints
+an OSC envelope
 
     ESC ] 600001 ; <base64 args> ; <base64 body> ESC \\
 
@@ -205,6 +205,16 @@ def _draw_plot(args: list[str]) -> str:
     return _emit_figure(osc + b"\n" * _trailing_newlines(), "plot")
 
 
+def _draw_flame(args: list[str], folded: bytes) -> str:
+    """Run yflame (it emits the same OSC envelope as ycat) and write it to the
+    terminal. Like yplot, yflame's -w is a pixel width, not character columns —
+    so we do NOT inject the terminal column count here. We pass -n so yflame
+    omits its own trailing newline and let _trailing_newlines() add exactly the
+    spacing the other figure tools use."""
+    osc = _run_tool("yflame", ["-n", *args], folded)
+    return _emit_figure(osc + b"\n" * _trailing_newlines(), "flame graph")
+
+
 # ----------------------------------------------------------------------------
 # Tools
 # ----------------------------------------------------------------------------
@@ -294,6 +304,117 @@ def draw_music(lilypond: str) -> str:
     as \\version, \\header, \\score, \\new Staff and braces is tolerated and
     skipped. Long scores wrap into systems at the terminal width."""
     return _emit_content("music", lilypond.encode(), "music score")
+
+
+@mcp.tool()
+def draw_shader(wgsl: str) -> str:
+    """Render an animated GPU shader from a WGSL `mainImage` function as a live
+    figure in the yetty terminal (a Shadertoy-style fragment shader). The
+    figure animates on yetty's frame timer — use this for procedural visuals,
+    demos, generative art, and animated backgrounds.
+
+    Pass a WGSL fragment with exactly this entry-point signature (the receiving
+    factory compiles it; nothing is parsed sender-side):
+
+        fn mainImage(fragCoord: vec2<f32>, iResolution: vec3<f32>,
+                     iTime: f32, iMouse: vec4<f32>) -> vec4<f32> {
+            let uv = fragCoord / iResolution.xy;
+            let col = 0.5 + 0.5 * cos(iTime + uv.xyx + vec3<f32>(0.0, 2.0, 4.0));
+            return vec4<f32>(col, 1.0);
+        }
+
+    Inputs (Shadertoy convention): `fragCoord` is in pixels with the origin at
+    the figure's BOTTOM-LEFT; `iResolution.xy` is the figure size in pixels;
+    `iTime` is seconds since the figure appeared; `iMouse.xy` is the pointer
+    position in pixels. Return linear RGBA in `vec4<f32>`. The figure is sized
+    to the terminal width with a 16:9 default height."""
+    return _emit_content("shadertoy", wgsl.encode(), "shader")
+
+
+@mcp.tool()
+def draw_circuit(circuit: str) -> str:
+    """Render an electronic circuit schematic from the ycircuit DSL as a figure
+    in the yetty terminal — resistors, capacitors, inductors, diodes, sources,
+    transistors, op-amps, grounds and wires drawn as proper schematic symbols
+    with reference designators and values.
+
+    The DSL is line-based; `#` starts a comment; coordinates are in grid units
+    (floats allowed). The first line should be `circuit <title>`:
+
+        circuit Half-wave rectifier
+        grid 14                          # optional px-per-grid-unit hint
+
+        # component: <kind> <x> <y> [<rot>] [<name>] [<value>]
+        #   rot: h | v | r0 | r90 | r180 | r270 (default h)
+        vsource   2  6  v  V1  9V
+        diode     8  2  h  D1  1N4148
+        resistor 14  6  v  R1  10k
+
+        wire 2 2  5 2                    # wire x0 y0 x1 y1 [x2 y2 ...] (polyline)
+        wire 2 10  14 10
+        dot 14 10                        # junction dot
+        gnd 8 10                         # ground symbol
+        label 15.5 2 Vout               # free text (rest of line)
+
+    Component kinds (with aliases): resistor(r), capacitor(cap,c),
+    inductor(coil,l), diode(d), led, battery(bat), vsource(v), isource(i),
+    acsource(ac), gnd(ground), vcc, npn, pnp, switch(sw), opamp."""
+    return _emit_content("circuit", circuit.encode(), "circuit")
+
+
+@mcp.tool()
+def draw_chart(data: str) -> str:
+    """Render a data chart — bar, column, line, area, scatter, pie, donut,
+    radar, treemap, or sankey — as a figure in the yetty terminal, from a
+    small data document. Use this to visualise categorical or tabular data
+    (counts, shares, comparisons, distributions, flows) inline at the cursor.
+    For continuous math functions / sampled signals / 2D fields use draw_plot
+    instead; for call-tree costs use draw_flame.
+
+    `data` is a self-identifying chart document in one of three formats; the
+    chart KIND is taken from a directive/key inside it (default: column).
+
+    • CSV/TSV with a leading `#ychart` directive line:
+        #ychart type=column title="Quarterly revenue" y=kUSD
+        quarter,revenue
+        Q1,120
+        Q2,138
+        Q3,99
+      Extra value columns become extra series; an optional header row names
+      them. Directive keys: type/kind, title, x/xlabel, y/ylabel, legend,
+      values (label each datum), stacked (stack series instead of grouping).
+
+    • JSON with a top-level "chart" key:
+        {"chart":"pie","title":"Browser share",
+         "data":{"Chrome":65,"Safari":19,"Edge":9}}
+        {"chart":"column","categories":["Q1","Q2"],
+         "series":[{"name":"2021","values":[10,20]},
+                   {"name":"2022","color":"#5B8FF9","values":[12,18]}]}
+        {"chart":"sankey",
+         "links":[{"source":"Coal","target":"Power","value":25}]}
+      `data` may be an object {label:value}, an array of numbers, or an array
+      of {label,value} objects.
+
+    • YAML with a top-level `chart:` key (numeric lists use inline [...]):
+        chart: radar
+        title: Skills
+        categories: [speed, power, range, control]
+        series:
+          - name: Alice
+            values: [3, 5, 2, 4]
+          - name: Bob
+            color: "#F6BD16"
+            values: [4, 2, 5, 3]
+
+    Kinds (aliases): bar(hbar) | column(col,vbar) | line | area |
+    scatter(points) | pie | donut(doughnut) | radar(spider) | treemap |
+    sankey(flow). pie/donut/treemap use one series (one slice/cell per
+    category); scatter accepts per-point {x,y}; sankey uses `links`/`flows`
+    (source/target/value) instead of categories/series. Omit the kind to let
+    it pick column (single series) or grouped column / line (multi-series)
+    from the data shape; pie/donut/radar/treemap/sankey must be requested
+    explicitly via the directive/key."""
+    return _emit_content("chart", data.encode(), "chart")
 
 
 @mcp.tool()
@@ -401,12 +522,58 @@ def draw_plot(
 
 
 @mcp.tool()
+def draw_flame(
+    folded: str,
+    width: int = 0,
+    frame_height: int = 0,
+    icicle: bool = False,
+    labels: bool = True,
+) -> str:
+    """Render a flame graph as a figure in the yetty terminal, using the
+    standalone `yflame` engine. Use this to visualise where time (or any
+    additive cost) is spent across a call tree — profiler output, allocation
+    sites, or any hierarchical counts.
+
+    `folded` is collapsed/folded-stack text, one stack per line: a `;`-joined
+    frame path followed by a space and an integer count. Frames read root → leaf
+    left to right. Example:
+
+        main;parse;lex 42
+        main;parse;eval 17
+        main;render 31
+
+    This is the format produced by the FlameGraph toolkit
+    (`perf script | stackcollapse-perf.pl`) and most language profilers.
+
+    Args:
+        folded: the folded-stack text (one `path count` per line).
+        width: graph width in PIXELS (0 → yflame default, 1200).
+        frame_height: height per stack level in PIXELS (0 → yflame default, 18).
+        icicle: root at the TOP growing downward, instead of bottom-up (default
+            False — classic flame graph with the root at the bottom).
+        labels: draw frame-name labels on the boxes (default True).
+    """
+    args: list[str] = []
+    if width > 0:
+        args += ["-w", str(width)]
+    if frame_height > 0:
+        args += ["-f", str(frame_height)]
+    if icicle:
+        args.append("--icicle")
+    if not labels:
+        args.append("--no-labels")
+    return _draw_flame(args, folded.encode())
+
+
+@mcp.tool()
 def show_file(path: str, kind: str = "") -> str:
     """Display a file as a rich figure in the terminal: images (PNG/JPG/GIF),
-    PDFs, SVGs, Markdown, LilyPond music scores (.ly — engraved with the
-    Emmentaler font), or source code. Auto-detects by extension; pass `kind`
-    to force a handler: one of markdown, pdf, image, svg, mermaid, music
-    (alias: lilypond), text."""
+    PDFs, SVGs, Markdown, Mermaid diagrams, LilyPond music scores (.ly —
+    engraved with the Emmentaler font), WGSL shaders, ycircuit schematics,
+    Lottie animations, H.264 video, or source code. Auto-detects by extension;
+    pass `kind` to force a handler: one of markdown, pdf, image, svg, mermaid,
+    music (alias: lilypond), shadertoy (alias: wgsl), circuit (alias:
+    schematic), lottie, video, text."""
     p = Path(path).expanduser()
     if not p.is_file():
         raise RuntimeError(f"file not found: {p}")

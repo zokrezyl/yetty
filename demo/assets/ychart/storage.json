@@ -1,0 +1,9 @@
+{
+  "chart": "donut",
+  "title": "Disk allocation (GB)",
+  "data": [
+    {"label": "Used",  "value": 312},
+    {"label": "Cache", "value": 64},
+    {"label": "Free",  "value": 188}
+  ]
+}

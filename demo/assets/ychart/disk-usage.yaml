@@ -1,0 +1,10 @@
+chart: treemap
+title: Repository size by directory (KB)
+data:
+  src: 5400
+  include: 1200
+  tests: 2200
+  assets: 3600
+  docs: 900
+  build: 1500
+  tools: 1800

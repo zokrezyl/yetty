@@ -1,0 +1,15 @@
+{
+  "chart": "scatter",
+  "title": "Sensor readings",
+  "x": "time (s)",
+  "y": "value",
+  "series": [
+    {
+      "name": "probe A",
+      "values": [
+        {"x": 0, "y": 3.1}, {"x": 1, "y": 4.6}, {"x": 2, "y": 4.0},
+        {"x": 3, "y": 6.2}, {"x": 4, "y": 5.5}, {"x": 5, "y": 7.1}
+      ]
+    }
+  ]
+}

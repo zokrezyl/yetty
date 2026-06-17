@@ -65,6 +65,12 @@ extern struct yetty_ydraw_drawable_list_result yetty_ycat_handler_circuit(
     const struct yetty_ycat_config *config);
 #endif
 
+#ifdef YETTY_YCAT_HAS_YCHART
+extern struct yetty_ydraw_drawable_list_result yetty_ycat_handler_chart(
+    const uint8_t *bytes, size_t len, const char *path_hint,
+    const struct yetty_ycat_config *config);
+#endif
+
 /* Streaming handlers (multi-envelope: PDF page-per-envelope, markdown
  * screen-height-tile-per-envelope). */
 extern struct yetty_ycore_void_result yetty_ycat_handler_markdown_streaming(
@@ -95,6 +101,7 @@ static const struct {
     {YETTY_YCAT_TYPE_MUSIC, "music"},
     {YETTY_YCAT_TYPE_SHADERTOY, "shadertoy"},
     {YETTY_YCAT_TYPE_CIRCUIT, "circuit"},
+    {YETTY_YCAT_TYPE_CHART, "chart"},
     /* alias rows — type_name() returns the first match above, from_name()
      * accepts either spelling for --card. */
     {YETTY_YCAT_TYPE_MUSIC, "lilypond"},
@@ -160,6 +167,9 @@ static void init_handlers(void)
 #endif
 #ifdef YETTY_YCAT_HAS_YCIRCUIT
     handlers[YETTY_YCAT_TYPE_CIRCUIT] = yetty_ycat_handler_circuit;
+#endif
+#ifdef YETTY_YCAT_HAS_YCHART
+    handlers[YETTY_YCAT_TYPE_CHART] = yetty_ycat_handler_chart;
 #endif
     handlers_streaming[YETTY_YCAT_TYPE_MARKDOWN] = yetty_ycat_handler_markdown_streaming;
     handlers_streaming[YETTY_YCAT_TYPE_PDF] = yetty_ycat_handler_pdf_streaming;

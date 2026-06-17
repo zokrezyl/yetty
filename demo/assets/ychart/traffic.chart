@@ -1,0 +1,9 @@
+#ychart type=area title="Requests per hour"
+hour,requests
+00:00,120
+04:00,80
+08:00,260
+12:00,540
+16:00,610
+20:00,430
+23:00,210

@@ -1,0 +1,7 @@
+#ychart type=bar title="Survey: languages used" values=on
+language,respondents
+Python,48
+JavaScript,62
+C,29
+Rust,21
+Go,18

@@ -16,6 +16,9 @@
 #ifdef YETTY_YCAT_HAS_DIAGRAM
 #include <yetty/ydiagram/mermaid-parser.h>
 #endif
+#ifdef YETTY_YCAT_HAS_YCHART
+#include <yetty/ychart/data-parser.h>
+#endif
 #ifdef YETTY_YCAT_HAS_LOTTIE
 #include <yetty/ylottie/ylottie.h>
 #endif
@@ -148,6 +151,12 @@ enum yetty_ycat_type yetty_ycat_type_from_extension(const char *ext)
     /* ycircuit schematic DSL. */
     if (strcasecmp(noleading, "circuit") == 0 || strcasecmp(noleading, "yct") == 0) {
         return YETTY_YCAT_TYPE_CIRCUIT;
+    }
+    /* ychart data files. Generic .csv/.json/.yaml are NOT mapped here — only
+     * the explicit chart extensions, so plain data files are not hijacked
+     * (content with a `#ychart` directive or a chart key is still sniffed). */
+    if (strcasecmp(noleading, "chart") == 0 || strcasecmp(noleading, "ychart") == 0) {
+        return YETTY_YCAT_TYPE_CHART;
     }
     if (strcasecmp(noleading, "txt") == 0) {
         return YETTY_YCAT_TYPE_TEXT;
@@ -366,7 +375,7 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
         by_ext == YETTY_YCAT_TYPE_SVG || by_ext == YETTY_YCAT_TYPE_MERMAID ||
         by_ext == YETTY_YCAT_TYPE_VIDEO || by_ext == YETTY_YCAT_TYPE_LOTTIE ||
         by_ext == YETTY_YCAT_TYPE_MUSIC || by_ext == YETTY_YCAT_TYPE_SHADERTOY ||
-        by_ext == YETTY_YCAT_TYPE_CIRCUIT) {
+        by_ext == YETTY_YCAT_TYPE_CIRCUIT || by_ext == YETTY_YCAT_TYPE_CHART) {
         return by_ext;
     }
 
@@ -381,6 +390,16 @@ enum yetty_ycat_type yetty_ycat_detect(const uint8_t *bytes, size_t len, const c
     if (looks_like_h264_annex_b(bytes, len)) {
         return YETTY_YCAT_TYPE_VIDEO;
     }
+
+#ifdef YETTY_YCAT_HAS_YCHART
+    /* ychart has no libmagic signature; the sniff is conservative — only a
+     * `#ychart` directive line or JSON/YAML with a top-level chart key is
+     * claimed, so a plain CSV/JSON/YAML data file is left as text. Runs before
+     * the mermaid sniff (a chart marker never looks like `graph`/`flowchart`). */
+    if (bytes && len > 0 && yetty_ychart_can_parse((const char *)bytes, len)) {
+        return YETTY_YCAT_TYPE_CHART;
+    }
+#endif
 
 #ifdef YETTY_YCAT_HAS_DIAGRAM
     /* Mermaid has no libmagic signature, but the syntax is distinctive:

@@ -43,6 +43,7 @@ enum yetty_ycat_type {
     YETTY_YCAT_TYPE_MUSIC,     /* LilyPond score (.ly) — engraved via ymusic */
     YETTY_YCAT_TYPE_SHADERTOY, /* WGSL mainImage shader — animated yshadertoy prim */
     YETTY_YCAT_TYPE_CIRCUIT,   /* circuit schematic DSL — drawn via ycircuit */
+    YETTY_YCAT_TYPE_CHART,     /* CSV/JSON/YAML chart data — drawn via ychart */
 };
 
 const char *yetty_ycat_type_name(enum yetty_ycat_type type);

@@ -20,6 +20,12 @@ if(YETTY_ENABLE_FEATURE_YDIAGRAM)
     list(APPEND YCAT_SOURCES handler-mermaid.c)
 endif()
 
+# Chart handler — optional, only built when ychart is enabled. detect.c's
+# content sniffer also calls into ychart, guarded by the same flag.
+if(YETTY_ENABLE_FEATURE_YCHART)
+    list(APPEND YCAT_SOURCES handler-chart.c)
+endif()
+
 # Video handler (#198 item 6a). Only built when yvideo's core wire
 # emitter is available — that lib is compiled unconditionally on
 # desktop but skipped on platforms that don't enable YVIDEO.
@@ -134,6 +140,11 @@ target_link_libraries(yetty_ycat PUBLIC
 if(YETTY_ENABLE_FEATURE_YDIAGRAM)
     target_link_libraries(yetty_ycat PUBLIC yetty_ydiagram)
     target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_DIAGRAM=1)
+endif()
+
+if(YETTY_ENABLE_FEATURE_YCHART)
+    target_link_libraries(yetty_ycat PUBLIC yetty_ychart)
+    target_compile_definitions(yetty_ycat PUBLIC YETTY_YCAT_HAS_YCHART=1)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YVIDEO)
