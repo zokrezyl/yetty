@@ -136,32 +136,31 @@ void yetty_ychart_chart_destroy(struct yetty_ychart_chart *chart);
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ychart_set_title(struct yetty_ychart_chart *chart,
-                                                       const char *title);
+                                                      const char *title);
 struct yetty_ycore_void_result yetty_ychart_set_axis_labels(struct yetty_ychart_chart *chart,
-                                                             const char *x_label,
-                                                             const char *y_label);
+                                                            const char *x_label,
+                                                            const char *y_label);
 
 /* Append a category label; returns its index. */
 struct yetty_ycore_int_result yetty_ychart_add_category(struct yetty_ychart_chart *chart,
-                                                         const char *label);
+                                                        const char *label);
 
 /* Append an empty series (name may be NULL); returns its index. */
 struct yetty_ycore_int_result yetty_ychart_add_series(struct yetty_ychart_chart *chart,
-                                                       const char *name, uint32_t color);
+                                                      const char *name, uint32_t color);
 
 /* Push one value onto a series (by index). Grows the series array. */
 struct yetty_ycore_void_result yetty_ychart_series_push(struct yetty_ychart_chart *chart,
-                                                         size_t series_index, double value);
+                                                        size_t series_index, double value);
 
 /* Push an (x, y) pair onto a series — for scatter / x-valued lines. */
 struct yetty_ycore_void_result yetty_ychart_series_push_xy(struct yetty_ychart_chart *chart,
-                                                            size_t series_index, double x,
-                                                            double y);
+                                                           size_t series_index, double x, double y);
 
 /* Append a sankey flow. */
 struct yetty_ycore_void_result yetty_ychart_add_flow(struct yetty_ychart_chart *chart,
-                                                      const char *source, const char *target,
-                                                      double value);
+                                                     const char *source, const char *target,
+                                                     double value);
 
 #ifdef __cplusplus
 }

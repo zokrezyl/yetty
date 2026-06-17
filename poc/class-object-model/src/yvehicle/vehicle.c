@@ -26,9 +26,8 @@ struct [[clang::annotate("class@yvehicle:vehicle")]] vehicle_data {
 };
 
 [[clang::annotate("override@yvehicle:vehicle:vehicle_ctor")]]
-static struct yetty_ycore_void_result vehicle_default_ctor(struct ctx *ctx, struct object *obj)
+static struct yetty_ycore_void_result vehicle_default_ctor(struct object *obj)
 {
-    (void)ctx;
     struct yvehicle_vehicle_data_ptr_result self = yvehicle_vehicle_data_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self, "vehicle_default_ctor: data block");
     self.value->mileage = 0;
@@ -40,9 +39,8 @@ static struct yetty_ycore_void_result vehicle_default_ctor(struct ctx *ctx, stru
 }
 
 [[clang::annotate("override@yvehicle:vehicle:vehicle_dtor")]]
-static struct yetty_ycore_void_result vehicle_default_dtor(struct ctx *ctx, struct object *obj)
+static struct yetty_ycore_void_result vehicle_default_dtor(struct object *obj)
 {
-    (void)ctx;
     struct yvehicle_vehicle_data_ptr_result self = yvehicle_vehicle_data_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self, "vehicle_default_dtor: data block");
     ydebug("obj=%p final mileage=%d", (void *)obj, self.value->mileage);
@@ -50,9 +48,8 @@ static struct yetty_ycore_void_result vehicle_default_dtor(struct ctx *ctx, stru
 }
 
 [[clang::annotate("override@yvehicle:vehicle:vehicle_start")]]
-static struct yetty_ycore_void_result vehicle_default_start(struct ctx *ctx, struct object *obj)
+static struct yetty_ycore_void_result vehicle_default_start(struct object *obj)
 {
-    (void)ctx;
     struct yvehicle_vehicle_data_ptr_result self = yvehicle_vehicle_data_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self, "vehicle_default_start: data block");
     self.value->speed = 0;
@@ -61,10 +58,8 @@ static struct yetty_ycore_void_result vehicle_default_start(struct ctx *ctx, str
 }
 
 [[clang::annotate("override@yvehicle:vehicle:vehicle_accelerate")]]
-static struct yetty_ycore_int_result vehicle_default_accelerate(struct ctx *ctx, struct object *obj,
-                                                                float speed)
+static struct yetty_ycore_int_result vehicle_default_accelerate(struct object *obj, float speed)
 {
-    (void)ctx;
     struct yvehicle_vehicle_data_ptr_result self = yvehicle_vehicle_data_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, self, "vehicle_default_accelerate: data block");
     self.value->speed += (int)speed;
@@ -76,10 +71,8 @@ static struct yetty_ycore_int_result vehicle_default_accelerate(struct ctx *ctx,
 }
 
 [[clang::annotate("override@yvehicle:vehicle:vehicle_brake")]]
-static struct yetty_ycore_int_result vehicle_default_brake(struct ctx *ctx, struct object *obj,
-                                                           float intensity)
+static struct yetty_ycore_int_result vehicle_default_brake(struct object *obj, float intensity)
 {
-    (void)ctx;
     struct yvehicle_vehicle_data_ptr_result self = yvehicle_vehicle_data_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, self, "vehicle_default_brake: data block");
     self.value->speed -= (int)(self.value->speed * intensity);
@@ -91,10 +84,8 @@ static struct yetty_ycore_int_result vehicle_default_brake(struct ctx *ctx, stru
 }
 
 [[clang::annotate("override@yvehicle:vehicle:vehicle_describe")]]
-static struct str_result vehicle_default_describe(struct ctx *ctx, struct object *obj,
-                                                  float distance)
+static struct str_result vehicle_default_describe(struct object *obj, float distance)
 {
-    (void)ctx;
     struct yvehicle_vehicle_data_ptr_result self = yvehicle_vehicle_data_get(obj);
     YETTY_RETURN_IF_ERR(str, self, "vehicle_default_describe: data block");
     struct str r;

@@ -124,7 +124,7 @@ static bool parse_number(struct field f, double *out)
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ychart_parse_csv(const char *input, size_t len,
-                                                       struct yetty_ychart_chart *chart)
+                                                      struct yetty_ychart_chart *chart)
 {
     if (!input || !chart) {
         return YETTY_ERR(yetty_ycore_void, "parse_csv: NULL input or chart");

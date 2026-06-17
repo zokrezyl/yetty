@@ -12,14 +12,13 @@
 #                      archive would let the linker prune — same reason
 #                      the ygui demo runner is an OBJECT library.
 # Annotated yclass sources (each #includes its own <stem>.gen.c at the
-# foot); methods.gen.c / rpc.gen.c are standalone generated units.
+# foot); the per-class <stem>.gen.c are generated units (#included into each .c).
 add_library(yetty_yrich STATIC
     element.c
     document.c
     ydoc.c
     spreadsheet.c
     slides.c
-    methods.gen.c
     rpc.gen.c
     yrich-selection.c
     yrich-operation.c

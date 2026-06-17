@@ -3,7 +3,7 @@
 #
 # The engine is a yclass class hierarchy (engine.c base; claude.c,
 # codex.c, gemini.c subclasses; turn-engine.c per-turn intermediate) —
-# methods.gen.c / rpc.gen.c / *.gen.c come from `make codegen`. Drives
+# the per-class *.gen.c come from `make codegen`. Drives
 # the headless CLIs over JSONL (parsed with the prebuilt yyjson
 # 3rdparty lib) on a libuv event loop.
 
@@ -31,7 +31,6 @@ add_executable(yai
     editor.c
     editor-emacs.c
     editor-vi.c
-    methods.gen.c
     rpc.gen.c
     # External msgpack-RPC control server reuses yetty's framing layer.
     ${YETTY_ROOT}/src/yetty/yctl/rpc-message.c

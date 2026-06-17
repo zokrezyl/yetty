@@ -4,8 +4,6 @@ methods:
     owning_class: animal
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct ctx *"
       - name: obj
         type: "struct object *"
   - slot: animal_dtor
@@ -13,8 +11,6 @@ methods:
     owning_class: animal
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct ctx *"
       - name: obj
         type: "struct object *"
   - slot: animal_breathe
@@ -22,8 +18,6 @@ methods:
     owning_class: animal
     return_type: struct yetty_ycore_void_result
     args:
-      - name: ctx
-        type: "struct ctx *"
       - name: obj
         type: "struct object *"
   - slot: animal_speak
@@ -31,8 +25,6 @@ methods:
     owning_class: animal
     return_type: struct str_result
     args:
-      - name: ctx
-        type: "struct ctx *"
       - name: obj
         type: "struct object *"
       - name: volume
@@ -42,8 +34,6 @@ methods:
     owning_class: animal
     return_type: struct yetty_ycore_int_result
     args:
-      - name: ctx
-        type: "struct ctx *"
       - name: obj
         type: "struct object *"
       - name: amount

@@ -89,7 +89,6 @@ if(NOT EMSCRIPTEN)
     add_library(yetty_yrdawn_server STATIC
         figure.c
         session.c
-        methods.gen.c
         rpc.gen.c
         ${_yrdawn_server_dispatch}
     )

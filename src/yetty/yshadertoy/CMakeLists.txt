@@ -8,13 +8,12 @@
 # YETTY_YFIGURE_KIND_YSHADERTOY factory; the ygui yshadertoy widget mints
 # figures of that kind over the wire.
 #
-# methods.gen.c / rpc.gen.c / figure.gen.c are produced by `make codegen`
+# the per-class <stem>.gen.c (e.g. figure.gen.c) are produced by `make codegen`
 # from figure.c's [[clang::annotate(...)]] and committed to git. Platform
 # builds compile what is in the tree.
 
 add_library(yetty_yshadertoy STATIC
     figure.c
-    methods.gen.c
     rpc.gen.c
 )
 

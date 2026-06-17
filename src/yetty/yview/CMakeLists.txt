@@ -1,13 +1,12 @@
 # yview — yclass client emitter for server-side scrollable content surfaces.
 #
 # view.c is the hand-written annotated source (#includes view.gen.c at the
-# foot); methods.gen.c + rpc.gen.c are codegen output. Builds the figure-tree
+# foot); the per-class <stem>.gen.c files are codegen output (#included into each .c). Builds the figure-tree
 # wire records (DCS YCOMPOSITOR_BIN) from a ydraw-core drawable list and ships
 # them via yface. The yclass model.yaml drives the FFI / host-language bindings.
 
 add_library(yetty_yview STATIC
     view.c
-    methods.gen.c
     rpc.gen.c
 )
 

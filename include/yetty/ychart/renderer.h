@@ -29,7 +29,7 @@ extern "C" {
  * data is NOT NUL-terminated. Same signature as ydiagram's measure callback,
  * so a host can share one font measurer between the two. */
 typedef float (*yetty_ychart_measure_text_fn)(const char *text, size_t text_len, float font_size,
-                                               void *userdata);
+                                              void *userdata);
 
 struct yetty_ychart_render_options {
     float width;  /* canvas width in px (0 → default 900) */

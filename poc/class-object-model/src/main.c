@@ -38,61 +38,61 @@
         }                                                                                          \
     } while (0)
 
-static void exercise_vehicle(struct ctx *ctx, struct object *obj)
+static void exercise_vehicle(struct object *obj)
 {
     struct yetty_ycore_void_result vr;
     struct yetty_ycore_int_result ir;
     struct str_result sr;
 
-    vr = yvehicle_vehicle_ctor(ctx, obj);
+    vr = yvehicle_vehicle_ctor(obj);
     ABSORB("vehicle_ctor", vr);
-    vr = yvehicle_vehicle_start(ctx, obj);
+    vr = yvehicle_vehicle_start(obj);
     ABSORB("vehicle_start", vr);
 
-    ir = yvehicle_vehicle_accelerate(ctx, obj, 60.0f);
+    ir = yvehicle_vehicle_accelerate(obj, 60.0f);
     ABSORB("accelerate", ir);
-    ir = yvehicle_vehicle_accelerate(ctx, obj, 60.0f);
-    ABSORB("accelerate", ir);
-    ydebug("accelerate -> %d", ir.value);
-    ir = yvehicle_vehicle_accelerate(ctx, obj, 60.0f);
+    ir = yvehicle_vehicle_accelerate(obj, 60.0f);
     ABSORB("accelerate", ir);
     ydebug("accelerate -> %d", ir.value);
-    ir = yvehicle_vehicle_accelerate(ctx, obj, 60.0f);
+    ir = yvehicle_vehicle_accelerate(obj, 60.0f);
+    ABSORB("accelerate", ir);
+    ydebug("accelerate -> %d", ir.value);
+    ir = yvehicle_vehicle_accelerate(obj, 60.0f);
     ABSORB("accelerate", ir);
     ydebug("accelerate -> %d", ir.value);
 
-    ir = yvehicle_vehicle_brake(ctx, obj, 0.5f);
+    ir = yvehicle_vehicle_brake(obj, 0.5f);
     ABSORB("brake", ir);
     ydebug("brake -> %d", ir.value);
 
-    sr = yvehicle_vehicle_describe(ctx, obj, 123.4f);
+    sr = yvehicle_vehicle_describe(obj, 123.4f);
     ABSORB("describe", sr);
     ydebug("describe: '%s'", sr.value.buf);
 
-    vr = yvehicle_vehicle_dtor(ctx, obj);
+    vr = yvehicle_vehicle_dtor(obj);
     ABSORB("vehicle_dtor", vr);
 }
 
-static void exercise_animal(struct ctx *ctx, struct object *obj)
+static void exercise_animal(struct object *obj)
 {
     struct yetty_ycore_void_result vr;
     struct yetty_ycore_int_result ir;
     struct str_result sr;
 
-    vr = yanimal_animal_ctor(ctx, obj);
+    vr = yanimal_animal_ctor(obj);
     ABSORB("animal_ctor", vr);
-    vr = yanimal_animal_breathe(ctx, obj);
+    vr = yanimal_animal_breathe(obj);
     ABSORB("animal_breathe", vr);
 
-    sr = yanimal_animal_speak(ctx, obj, 7);
+    sr = yanimal_animal_speak(obj, 7);
     ABSORB("animal_speak", sr);
     ydebug("speak: '%s'", sr.value.buf);
 
-    ir = yanimal_animal_eat(ctx, obj, 0.8f);
+    ir = yanimal_animal_eat(obj, 0.8f);
     ABSORB("animal_eat", ir);
     ydebug("eat -> %d", ir.value);
 
-    vr = yanimal_animal_dtor(ctx, obj);
+    vr = yanimal_animal_dtor(obj);
     ABSORB("animal_dtor", vr);
 }
 
@@ -117,7 +117,7 @@ static void run_client(int fd)
     yinfo("=== local vehicle (yvehicle, base) ===");
     obj_r = yvehicle_vehicle_create(&local);
     if (YETTY_IS_OK(obj_r)) {
-        exercise_vehicle(&local, obj_r.value);
+        exercise_vehicle(obj_r.value);
         object_free(obj_r.value);
     } else {
         ABSORB("local vehicle create", obj_r);
@@ -126,7 +126,7 @@ static void run_client(int fd)
     yinfo("=== local sportscar (yvehicle) ===");
     obj_r = yvehicle_sportscar_create(&local);
     if (YETTY_IS_OK(obj_r)) {
-        exercise_vehicle(&local, obj_r.value);
+        exercise_vehicle(obj_r.value);
         object_free(obj_r.value);
     } else {
         ABSORB("local sportscar create", obj_r);
@@ -135,7 +135,7 @@ static void run_client(int fd)
     yinfo("=== local cat (yanimal) ===");
     obj_r = yanimal_cat_create(&local);
     if (YETTY_IS_OK(obj_r)) {
-        exercise_animal(&local, obj_r.value);
+        exercise_animal(obj_r.value);
         object_free(obj_r.value);
     } else {
         ABSORB("local cat create", obj_r);
@@ -144,7 +144,7 @@ static void run_client(int fd)
     yinfo("=== local tuned_sportscar (ytuning extends yvehicle) ===");
     obj_r = ytuning_tuned_sportscar_create(&local);
     if (YETTY_IS_OK(obj_r)) {
-        exercise_vehicle(&local, obj_r.value);
+        exercise_vehicle(obj_r.value);
         object_free(obj_r.value);
     } else {
         ABSORB("local tuned_sportscar create", obj_r);
@@ -153,7 +153,7 @@ static void run_client(int fd)
     yinfo("=== remote sportscar (yvehicle) ===");
     obj_r = yvehicle_sportscar_create(&remote);
     if (YETTY_IS_OK(obj_r)) {
-        exercise_vehicle(&remote, obj_r.value);
+        exercise_vehicle(obj_r.value);
         free(obj_r.value);
     } else {
         ABSORB("remote sportscar create", obj_r);
@@ -162,7 +162,7 @@ static void run_client(int fd)
     yinfo("=== remote dog (yanimal) ===");
     obj_r = yanimal_dog_create(&remote);
     if (YETTY_IS_OK(obj_r)) {
-        exercise_animal(&remote, obj_r.value);
+        exercise_animal(obj_r.value);
         free(obj_r.value);
     } else {
         ABSORB("remote dog create", obj_r);
@@ -171,7 +171,7 @@ static void run_client(int fd)
     yinfo("=== remote tuned_sportscar (ytuning extends yvehicle) ===");
     obj_r = ytuning_tuned_sportscar_create(&remote);
     if (YETTY_IS_OK(obj_r)) {
-        exercise_vehicle(&remote, obj_r.value);
+        exercise_vehicle(obj_r.value);
         free(obj_r.value);
     } else {
         ABSORB("remote tuned_sportscar create", obj_r);

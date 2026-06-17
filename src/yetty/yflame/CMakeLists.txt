@@ -1,14 +1,13 @@
 # yflame — yclass class `yflame:flame`: a flame-graph client/model.
 #
 # flame.c is the hand-written annotated source (#includes flame.gen.c at the
-# foot); methods.gen.c + rpc.gen.c are codegen output. It parses folded stacks
+# foot); the per-class <stem>.gen.c files are codegen output (#included into each .c). It parses folded stacks
 # into a call tree and renders a ydraw drawable list of boxes + MSDF labels,
 # plus hit-test / focus for interactive zoom. The yclass model.yaml drives the
 # FFI / host-language bindings. GPU-less — produces generic ydraw primitives.
 
 add_library(yetty_yflame STATIC
     flame.c
-    methods.gen.c
     rpc.gen.c
 )
 

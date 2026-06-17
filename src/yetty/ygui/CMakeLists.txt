@@ -14,7 +14,7 @@
 # header include/yetty/ygui/<name>.h (accessor decl + the public stubs
 # and `<slot>_fn` typedefs for the slots that class introduces) plus
 # rpc.h, and the internal sources next to the annotated .c files
-# (methods.gen.c, rpc.gen.c, and per-class <stem>.gen.c). The .c files
+# (per-class <stem>.gen.c, with the stubs/skels/factories folded in). The .c files
 # include their per-class `<stem>.gen.c` at the foot to pull in the
 # accessor body. All generated files are committed to git; platform
 # builds compile what is in the tree.
@@ -84,7 +84,6 @@ set(YGUI_SOURCES
     layout.c
     theme.c
     ${YGUI_ANNOTATED}
-    methods.gen.c
     rpc.gen.c
 )
 
@@ -94,7 +93,7 @@ target_include_directories(yetty_ygui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${YETTY_ROOT}/include
 )
-# Codegen-emitted internal sources (methods.gen.c, rpc.gen.c, per-class
+# Codegen-emitted internal sources (the per-class
 # <stem>.gen.c) sit under src/yetty/ygui/. The src tree is a PRIVATE -I
 # prefix for this target so those sources resolve their siblings without
 # the path leaking to consumers; public callers go through the per-class
@@ -122,7 +121,7 @@ target_link_libraries(yetty_ygui PUBLIC
 # The ypdf and ybrowser widgets wrap optional backends (pdfio, lexbor) that
 # aren't available on every platform — webasm, for instance, has no
 # pdfio/lexbor prebuilts. The widget sources compile unconditionally so the
-# codegen-emitted class accessors (referenced from rpc.gen.c / methods.gen.c)
+# codegen-emitted class accessors (in each per-class <stem>.gen.c)
 # resolve on every platform; their rendering paths are guarded by these
 # definitions, and the backend libraries are only linked where the feature
 # is actually enabled.

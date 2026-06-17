@@ -1,7 +1,14 @@
 /* GENERATED — do not edit. */
+#include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h> /* container_of, buffer */
 #include <yetty/ytrace/ytrace.h>
+#include <stdbool.h>
 #include <stddef.h> /* NULL, size_t */
+#include <stdint.h>
+#include <stdio.h>  /* stderr */
+#include <stdlib.h> /* calloc/free for proxy + buffer marshalling */
+#include <string.h> /* memcpy/strcmp/strlen */
 
 struct yetty_ycore_int_result;
 struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_object *obj, float x,

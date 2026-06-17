@@ -50,7 +50,7 @@ enum yetty_ychart_format yetty_ychart_format_from_name(const char *name);
 /* Sniff the data format from content (and optional path extension). Skips a
  * leading `#ychart` directive line before sniffing the body. */
 enum yetty_ychart_format yetty_ychart_detect_format(const char *input, size_t len,
-                                                      const char *path);
+                                                    const char *path);
 
 /* Return non-zero if these bytes look like a ychart document — i.e. they
  * carry a `#ychart` directive line, or are JSON/YAML with a top-level chart
@@ -62,27 +62,27 @@ int yetty_ychart_can_parse(const char *input, size_t len);
  * axis labels, toggles). `line`/`line_len` cover the text AFTER the leading
  * "#ychart" token. Unknown keys are ignored. */
 struct yetty_ycore_void_result yetty_ychart_parse_directive(const char *line, size_t line_len,
-                                                             struct yetty_ychart_chart *chart);
+                                                            struct yetty_ychart_chart *chart);
 
 /* Locate a leading `#ychart` directive. On success returns 1 and writes the
  * directive's argument span (after "#ychart") to out_dir and out_dir_len, and
  * the offset of the body (first byte after the directive line) to
  * out_body_off. Returns 0 when there is no directive (body starts at 0). */
 int yetty_ychart_find_directive(const char *input, size_t len, const char **out_dir,
-                                 size_t *out_dir_len, size_t *out_body_off);
+                                size_t *out_dir_len, size_t *out_body_off);
 
 /* Format-specific parsers (body only — no directive). */
 struct yetty_ycore_void_result yetty_ychart_parse_csv(const char *input, size_t len,
-                                                       struct yetty_ychart_chart *chart);
+                                                      struct yetty_ychart_chart *chart);
 struct yetty_ycore_void_result yetty_ychart_parse_json(const char *input, size_t len,
-                                                        struct yetty_ychart_chart *chart);
+                                                       struct yetty_ychart_chart *chart);
 struct yetty_ycore_void_result yetty_ychart_parse_yaml(const char *input, size_t len,
-                                                        struct yetty_ychart_chart *chart);
+                                                       struct yetty_ychart_chart *chart);
 
 /* Detect format, strip any directive, parse the body. Convenience used by the
  * high-level entry. */
 struct yetty_ycore_void_result yetty_ychart_parse(const char *input, size_t len, const char *path,
-                                                   struct yetty_ychart_chart *chart);
+                                                  struct yetty_ychart_chart *chart);
 
 #ifdef __cplusplus
 }

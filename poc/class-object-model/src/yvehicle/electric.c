@@ -20,10 +20,8 @@ struct [[clang::annotate("mixin@yvehicle:electric")]] electric_data {
 };
 
 [[clang::annotate("override@yvehicle:electric:vehicle_brake")]]
-static struct yetty_ycore_int_result electric_brake(struct ctx *ctx, struct object *obj,
-                                                    float intensity)
+static struct yetty_ycore_int_result electric_brake(struct object *obj, float intensity)
 {
-    (void)ctx;
     struct yvehicle_electric_data_ptr_result self = yvehicle_electric_data_get(obj); /* own */
     YETTY_RETURN_IF_ERR(yetty_ycore_int, self, "electric_brake: data block");
 

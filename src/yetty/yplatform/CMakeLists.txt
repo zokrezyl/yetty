@@ -68,11 +68,15 @@ endif()
 
 add_library(yetty_yplatform_core STATIC
     getopt.c
+    paths/create.c
     paths/singleton.c
     # window_manager yclass method stubs: pure yclass dispatch, no GLFW — the
     # GLFW impl (window-manager.c) is desktop-only, but yui calls these stub
     # symbols on every platform, so they must link everywhere (they early-return
-    # on the NULL object that non-desktop platforms always have).
+    # on the NULL object that non-desktop platforms always have). yplatform is
+    # codegen'd with --no-fold so the stubs stay in this platform-independent
+    # methods.gen.c while the GLFW accessor/factory live in rpc.gen.c (built by
+    # the desktop-only yetty_yplatform_window_manager target).
     methods.gen.c
     ${_core_per_os}
 )

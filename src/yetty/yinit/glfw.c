@@ -15,8 +15,9 @@
 #include <webgpu/webgpu.h>
 #include <yetty/yplatform/compat.h>
 #include <yetty/yplatform/thread.h>
-#include <yetty/yplatform/fs.h>
+#include <yetty/yplatform/paths.h>
 #include <yetty/yplatform/time.h>
+#include <yetty/yplatform/window.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -57,16 +58,7 @@ static void platform_get_x11_handles(GLFWwindow *win, void **disp, unsigned long
 #include <yetty/yplatform/extract-assets.h>
 #include <yetty/ytrace/ytrace.h>
 
-/* Forward declarations - implemented in other platform files */
-const char *yetty_yplatform_get_cache_dir(void);
-const char *yetty_yplatform_get_data_dir(void);
-const char *yetty_yplatform_get_config_dir(void);
-const char *yetty_yplatform_get_runtime_dir(void);
-
-GLFWwindow *yetty_yplatform_create_window(int width, int height, const char *title);
-void yetty_yplatform_destroy_window(GLFWwindow *window);
-void yetty_yplatform_get_framebuffer_size(GLFWwindow *window, int *width, int *height);
-void yetty_yplatform_get_window_size(GLFWwindow *window, int *width, int *height);
+/* Surface creation lives in webgpu-surface/ (no shared header yet). */
 WGPUSurface yetty_yplatform_create_surface(WGPUInstance instance, GLFWwindow *window);
 
 /* OS event loop — owns its per-window state internally and reads/writes the
@@ -121,41 +113,31 @@ struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
     if (!app_cfg) {
         app_cfg = &defaults;
     }
-    /* Platform paths */
-    //TODO adapt path reading using the new api that reads a struct
-    const char *cache_dir = yetty_yplatform_get_cache_dir();
-    const char *data_dir = yetty_yplatform_get_data_dir();
-    const char *runtime_dir = yetty_yplatform_get_runtime_dir();
-    const char *config_dir = yetty_yplatform_get_config_dir();
+    /* Platform paths: resolve the directory layout and create the writable
+     * dirs in one shot. The owning struct is released right after config is
+     * built (yconfig copies the strings, and setenv copies too). */
+    struct yetty_yplatform_paths_ptr_result paths_res = yetty_yplatform_paths_create();
+    if (!YETTY_IS_OK(paths_res)) {
+        return YETTY_ERR(yetty_ycore_int, "yinit: failed to resolve platform paths", paths_res);
+    }
+    struct yetty_yplatform_paths *platform_paths = paths_res.value;
 
-    char shaders_dir[512];
-    char fonts_dir[512];
-    snprintf(shaders_dir, sizeof(shaders_dir), "%s/shaders", data_dir);
-    snprintf(fonts_dir, sizeof(fonts_dir), "%s/fonts", data_dir);
-
-    yetty_yplatform_mkdir_p(cache_dir);
-    yetty_yplatform_mkdir_p(data_dir);
-    yetty_yplatform_mkdir_p(runtime_dir);
-    yetty_yplatform_mkdir_p(fonts_dir);
-    yetty_yplatform_mkdir_p(config_dir);
-
-    //TODO: adapt path reading directly to yetty_yplatform_paths!
-    struct yetty_yconfig_paths paths = {.shaders_dir = shaders_dir,
-                                        .fonts_dir = fonts_dir,
-                                        .runtime_dir = runtime_dir,
-                                        .bin_dir = NULL,
-                                        .config_dir = config_dir};
+    struct yetty_yconfig_paths paths = {
+        .shaders_dir = platform_paths->shaders_dir_buf,
+        .fonts_dir = platform_paths->fonts_dir_buf,
+        .runtime_dir = platform_paths->runtime_dir_buf,
+        .bin_dir = platform_paths->bin_dir_buf,
+        .config_dir = platform_paths->config_dir_buf,
+    };
 
     /* Export platform paths as YETTY_* env vars so config files
      * (e.g. tinyemu .cfg) can reference them via $YETTY_RUNTIME_DIR etc. */
-    setenv("YETTY_SHADERS_DIR", shaders_dir, 1);
-    setenv("YETTY_FONTS_DIR", fonts_dir, 1);
-    setenv("YETTY_RUNTIME_DIR", runtime_dir, 1);
-    setenv("YETTY_DATA_DIR", data_dir, 1);
-    setenv("YETTY_CONFIG_DIR", config_dir, 1);
-    if (paths.bin_dir) {
-        setenv("YETTY_BIN_DIR", paths.bin_dir, 1);
-    }
+    setenv("YETTY_SHADERS_DIR", platform_paths->shaders_dir_buf, 1);
+    setenv("YETTY_FONTS_DIR", platform_paths->fonts_dir_buf, 1);
+    setenv("YETTY_RUNTIME_DIR", platform_paths->runtime_dir_buf, 1);
+    setenv("YETTY_DATA_DIR", platform_paths->data_dir_buf, 1);
+    setenv("YETTY_CONFIG_DIR", platform_paths->config_dir_buf, 1);
+    setenv("YETTY_BIN_DIR", platform_paths->bin_dir_buf, 1);
 
     /* Extract bundled assets — app-specific. yetty supplies a callback
      * that unpacks its brotli/incbin'd shaders, fonts, configs and
@@ -164,6 +146,7 @@ struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
     if (app_cfg->extract_assets_fn) {
         struct yetty_ycore_void_result extract_result = app_cfg->extract_assets_fn();
         if (!YETTY_IS_OK(extract_result)) {
+            yetty_yplatform_paths_destroy(platform_paths);
             return YETTY_ERR(yetty_ycore_int, "yinit: failed to extract assets", extract_result);
         }
         ydebug("yinit: assets extracted");
@@ -178,9 +161,14 @@ struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
      * ever printing usage. */
     struct yetty_yconfig_result config_result = yetty_yconfig_create(argc, argv, &paths);
     if (!YETTY_IS_OK(config_result)) {
+        yetty_yplatform_paths_destroy(platform_paths);
         return YETTY_ERR(yetty_ycore_int, "yinit: failed to create config", config_result);
     }
     struct yetty_yconfig_config *config = config_result.value;
+
+    /* config copied the path strings (store_platform_paths) and setenv copied
+     * the env values, so the owning struct is no longer needed. */
+    yetty_yplatform_paths_destroy(platform_paths);
 
     /* Check for headless mode — gates glfwInit. Headless is the
      * --yvnc-headless path: VNC server runs without a window, so there is
@@ -227,12 +215,14 @@ struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
     GLFWwindow *window = NULL;
     if (!headless) {
         ydebug("yinit: creating window %dx%d", width, height);
-        window = yetty_yplatform_create_window(width, height, "yetty");
-        if (!window) {
+        struct yetty_yplatform_glfwindow_ptr_result window_res =
+            yetty_yplatform_create_window(width, height, "yetty");
+        if (!YETTY_IS_OK(window_res)) {
             config->ops->destroy(config);
             glfwTerminate();
-            return YETTY_ERR(yetty_ycore_int, "yinit: failed to create window");
+            return YETTY_ERR(yetty_ycore_int, "yinit: failed to create window", window_res);
         }
+        window = window_res.value;
         ydebug("yinit: window created");
     } else {
         ydebug("yinit: headless mode, skipping window creation");

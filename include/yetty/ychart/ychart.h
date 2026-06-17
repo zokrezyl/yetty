@@ -42,8 +42,8 @@ struct yetty_ychart_buffer_result yetty_ychart_render_data(const char *input, si
  * NULL for the fallback). Any of the optional pointers may be NULL. */
 struct yetty_ychart_buffer_result yetty_ychart_render_data_full(
     const char *input, size_t len, const char *path, enum yetty_ychart_kind kind_override,
-    const struct yetty_ychart_render_options *render_options,
-    yetty_ychart_measure_text_fn measure, void *measure_userdata);
+    const struct yetty_ychart_render_options *render_options, yetty_ychart_measure_text_fn measure,
+    void *measure_userdata);
 
 #ifdef __cplusplus
 }

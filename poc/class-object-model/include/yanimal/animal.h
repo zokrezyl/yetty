@@ -5,7 +5,7 @@
 #define POC_YANIMAL_ANIMAL_H
 
 #include "class.h"
-#include "methods.gen.h" /* every public method stub in this module */
+#include "methods.gen.h"  /* every public method stub in this module */
 
 /* Data-block handle — opaque outside the owning .c. The
  * struct stays private; only its pointer crosses here, in a

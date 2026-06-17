@@ -16,9 +16,8 @@ struct [[clang::annotate("class@yanimal:dog")]] [[clang::annotate(
 };
 
 [[clang::annotate("override@yanimal:dog:animal_ctor")]]
-static struct yetty_ycore_void_result dog_ctor(struct ctx *ctx, struct object *obj)
+static struct yetty_ycore_void_result dog_ctor(struct object *obj)
 {
-    (void)ctx;
     struct yanimal_dog_data_ptr_result self = yanimal_dog_data_get(obj); /* own */
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self, "dog_ctor: data block");
     self.value->loyalty = 100;
@@ -36,9 +35,8 @@ static struct yetty_ycore_void_result dog_ctor(struct ctx *ctx, struct object *o
 }
 
 [[clang::annotate("override@yanimal:dog:animal_speak")]]
-static struct str_result dog_speak(struct ctx *ctx, struct object *obj, int volume)
+static struct str_result dog_speak(struct object *obj, int volume)
 {
-    (void)ctx;
     struct yanimal_dog_data_ptr_result self = yanimal_dog_data_get(obj); /* own */
     YETTY_RETURN_IF_ERR(str, self, "dog_speak: data block");
     struct yetty_ycore_int_result energy = yanimal_animal_energy_get(obj); /* parent */

@@ -633,8 +633,7 @@ static struct yetty_ycore_void_result map_links(struct yetty_ychart_chart *chart
         double value = 1.0;
         value_as_number(obj_get_any(link, (const char *const[]){"value", "weight", NULL}), &value);
         if (source && target) {
-            struct yetty_ycore_void_result fr =
-                yetty_ychart_add_flow(chart, source, target, value);
+            struct yetty_ycore_void_result fr = yetty_ychart_add_flow(chart, source, target, value);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "json: add flow");
         }
     }
@@ -642,7 +641,7 @@ static struct yetty_ycore_void_result map_links(struct yetty_ychart_chart *chart
 }
 
 struct yetty_ycore_void_result yetty_ychart_parse_json(const char *input, size_t len,
-                                                        struct yetty_ychart_chart *chart)
+                                                       struct yetty_ychart_chart *chart)
 {
     if (!input || !chart) {
         return YETTY_ERR(yetty_ycore_void, "parse_json: NULL input or chart");

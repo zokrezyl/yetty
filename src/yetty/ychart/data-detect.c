@@ -65,7 +65,7 @@ enum yetty_ychart_format yetty_ychart_format_from_name(const char *name)
  *===========================================================================*/
 
 int yetty_ychart_find_directive(const char *input, size_t len, const char **out_dir,
-                                 size_t *out_dir_len, size_t *out_body_off)
+                                size_t *out_dir_len, size_t *out_body_off)
 {
     if (out_dir) {
         *out_dir = NULL;
@@ -190,7 +190,7 @@ static bool truthy(const char *val, size_t val_len)
 }
 
 struct yetty_ycore_void_result yetty_ychart_parse_directive(const char *line, size_t line_len,
-                                                             struct yetty_ychart_chart *chart)
+                                                            struct yetty_ychart_chart *chart)
 {
     if (!chart) {
         return YETTY_ERR(yetty_ycore_void, "parse_directive: NULL chart");
@@ -218,12 +218,10 @@ struct yetty_ycore_void_result yetty_ychart_parse_directive(const char *line, si
             struct yetty_ycore_void_result set = yetty_ychart_set_title(chart, scratch);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, set, "parse_directive: title");
         } else if (span_eq(key, key_len, "x") || span_eq(key, key_len, "xlabel")) {
-            struct yetty_ycore_void_result set =
-                yetty_ychart_set_axis_labels(chart, scratch, NULL);
+            struct yetty_ycore_void_result set = yetty_ychart_set_axis_labels(chart, scratch, NULL);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, set, "parse_directive: xlabel");
         } else if (span_eq(key, key_len, "y") || span_eq(key, key_len, "ylabel")) {
-            struct yetty_ycore_void_result set =
-                yetty_ychart_set_axis_labels(chart, NULL, scratch);
+            struct yetty_ycore_void_result set = yetty_ychart_set_axis_labels(chart, NULL, scratch);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, set, "parse_directive: ylabel");
         } else if (span_eq(key, key_len, "legend")) {
             chart->show_legend = truthy(val, val_len);
@@ -297,8 +295,7 @@ static enum yetty_ychart_format detect_body_format(const char *body, size_t len,
     return YETTY_YCHART_FORMAT_CSV;
 }
 
-enum yetty_ychart_format yetty_ychart_detect_format(const char *input, size_t len,
-                                                      const char *path)
+enum yetty_ychart_format yetty_ychart_detect_format(const char *input, size_t len, const char *path)
 {
     if (!input) {
         return YETTY_YCHART_FORMAT_UNKNOWN;
@@ -371,7 +368,7 @@ int yetty_ychart_can_parse(const char *input, size_t len)
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ychart_parse(const char *input, size_t len, const char *path,
-                                                   struct yetty_ychart_chart *chart)
+                                                  struct yetty_ychart_chart *chart)
 {
     if (!input || !chart) {
         return YETTY_ERR(yetty_ycore_void, "parse: NULL input or chart");

@@ -30,6 +30,7 @@
 #include <pthread.h>
 #endif
 
+// TODO: remove the global! each platform should have an initialization function that returns the paths object
 static struct yetty_yplatform_paths *g_paths = NULL;
 
 #ifdef _WIN32

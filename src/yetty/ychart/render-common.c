@@ -50,7 +50,7 @@ uint32_t yetty_ychart_with_alpha(uint32_t color, uint8_t alpha)
 }
 
 float yetty_ychart_measure(struct yetty_ychart_render_state *state, const char *text,
-                            float font_size)
+                           float font_size)
 {
     if (!text || !text[0]) {
         return 0.0f;
@@ -81,9 +81,9 @@ double yetty_ychart_max_value(const struct yetty_ychart_chart *chart)
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ychart_emit_box(struct yetty_ychart_render_state *state,
-                                                      float x0, float y0, float x1, float y1,
-                                                      float corner_radius, uint32_t fill_color,
-                                                      uint32_t stroke_color, float stroke_width)
+                                                     float x0, float y0, float x1, float y1,
+                                                     float corner_radius, uint32_t fill_color,
+                                                     uint32_t stroke_color, float stroke_width)
 {
     if (x1 < x0) {
         float t = x0;
@@ -109,8 +109,8 @@ struct yetty_ycore_void_result yetty_ychart_emit_box(struct yetty_ychart_render_
 }
 
 struct yetty_ycore_void_result yetty_ychart_emit_segment(struct yetty_ychart_render_state *state,
-                                                          float x0, float y0, float x1, float y1,
-                                                          uint32_t color, float width)
+                                                         float x0, float y0, float x1, float y1,
+                                                         uint32_t color, float width)
 {
     struct yetty_ysdf_segment geom = {.start_x = x0, .start_y = y0, .end_x = x1, .end_y = y1};
     struct yetty_ycore_void_result r = yetty_ydraw_drawable_list_add_cmd_add_segment(
@@ -120,8 +120,8 @@ struct yetty_ycore_void_result yetty_ychart_emit_segment(struct yetty_ychart_ren
 }
 
 struct yetty_ycore_void_result yetty_ychart_emit_triangle(struct yetty_ychart_render_state *state,
-                                                           float ax, float ay, float bx, float by,
-                                                           float cx, float cy, uint32_t color)
+                                                          float ax, float ay, float bx, float by,
+                                                          float cx, float cy, uint32_t color)
 {
     struct yetty_ysdf_triangle geom = {
         .vertex_a_x = ax,
@@ -138,9 +138,9 @@ struct yetty_ycore_void_result yetty_ychart_emit_triangle(struct yetty_ychart_re
 }
 
 struct yetty_ycore_void_result yetty_ychart_emit_circle(struct yetty_ychart_render_state *state,
-                                                         float cx, float cy, float radius,
-                                                         uint32_t fill_color, uint32_t stroke_color,
-                                                         float stroke_width)
+                                                        float cx, float cy, float radius,
+                                                        uint32_t fill_color, uint32_t stroke_color,
+                                                        float stroke_width)
 {
     struct yetty_ysdf_circle geom = {.center_x = cx, .center_y = cy, .radius = radius};
     struct yetty_ycore_void_result r = yetty_ydraw_drawable_list_add_cmd_add_circle(
@@ -150,9 +150,8 @@ struct yetty_ycore_void_result yetty_ychart_emit_circle(struct yetty_ychart_rend
 }
 
 struct yetty_ycore_void_result yetty_ychart_emit_polyline(struct yetty_ychart_render_state *state,
-                                                           const float *xs, const float *ys,
-                                                           size_t count, uint32_t color,
-                                                           float width)
+                                                          const float *xs, const float *ys,
+                                                          size_t count, uint32_t color, float width)
 {
     for (size_t i = 1; i < count; i++) {
         struct yetty_ycore_void_result r =
@@ -167,8 +166,8 @@ struct yetty_ycore_void_result yetty_ychart_emit_polyline(struct yetty_ychart_re
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ychart_emit_text(struct yetty_ychart_render_state *state,
-                                                       float x, float baseline_y, const char *text,
-                                                       float font_size, uint32_t color)
+                                                      float x, float baseline_y, const char *text,
+                                                      float font_size, uint32_t color)
 {
     if (!text || !text[0]) {
         return YETTY_OK_VOID();
@@ -186,9 +185,9 @@ struct yetty_ycore_void_result yetty_ychart_emit_text(struct yetty_ychart_render
 }
 
 struct yetty_ycore_void_result yetty_ychart_emit_label(struct yetty_ychart_render_state *state,
-                                                        float x, float cy, const char *text,
-                                                        float font_size, uint32_t color,
-                                                        enum yetty_ychart_anchor anchor)
+                                                       float x, float cy, const char *text,
+                                                       float font_size, uint32_t color,
+                                                       enum yetty_ychart_anchor anchor)
 {
     if (!text || !text[0]) {
         return YETTY_OK_VOID();
@@ -217,9 +216,9 @@ static void wedge_point(float cx, float cy, float radius, float theta, float *ou
 }
 
 struct yetty_ycore_void_result yetty_ychart_emit_wedge(struct yetty_ychart_render_state *state,
-                                                        float cx, float cy, float inner_radius,
-                                                        float outer_radius, float angle_start,
-                                                        float angle_end, uint32_t color)
+                                                       float cx, float cy, float inner_radius,
+                                                       float outer_radius, float angle_start,
+                                                       float angle_end, uint32_t color)
 {
     float span = angle_end - angle_start;
     if (span <= 1e-5f) {
@@ -297,8 +296,8 @@ struct yetty_ycore_void_result yetty_ychart_emit_title(struct yetty_ychart_rende
     float fs = state->opt->title_font_size;
     float cx = (state->content_x0 + state->content_x1) * 0.5f;
     float cy = state->content_y0 - fs * 0.5f - 4.0f;
-    return yetty_ychart_emit_label(state, cx, cy, state->chart->title, fs,
-                                    YETTY_YCHART_COLOR_TITLE, YETTY_YCHART_ANCHOR_CENTER);
+    return yetty_ychart_emit_label(state, cx, cy, state->chart->title, fs, YETTY_YCHART_COLOR_TITLE,
+                                   YETTY_YCHART_ANCHOR_CENTER);
 }
 
 float yetty_ychart_legend_height(const struct yetty_ychart_render_state *state, size_t count)
@@ -310,9 +309,9 @@ float yetty_ychart_legend_height(const struct yetty_ychart_render_state *state, 
 }
 
 struct yetty_ycore_void_result yetty_ychart_emit_legend(struct yetty_ychart_render_state *state,
-                                                         const char *const *labels,
-                                                         const uint32_t *colors, size_t count,
-                                                         float legend_top)
+                                                        const char *const *labels,
+                                                        const uint32_t *colors, size_t count,
+                                                        float legend_top)
 {
     if (!state->chart->show_legend || count == 0) {
         return YETTY_OK_VOID();

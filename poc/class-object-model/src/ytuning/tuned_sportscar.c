@@ -26,9 +26,8 @@ struct [[clang::annotate("class@ytuning:tuned_sportscar")]] [[clang::annotate(
 };
 
 [[clang::annotate("override@ytuning:tuned_sportscar:yvehicle:vehicle_start")]]
-static struct yetty_ycore_void_result tuned_sportscar_start(struct ctx *ctx, struct object *obj)
+static struct yetty_ycore_void_result tuned_sportscar_start(struct object *obj)
 {
-    (void)ctx;
     struct ytuning_tuned_sportscar_data_ptr_result self = ytuning_tuned_sportscar_data_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self, "tuned_sportscar_start: data block");
     self.value->boost_level = 3;
@@ -41,10 +40,8 @@ static struct yetty_ycore_void_result tuned_sportscar_start(struct ctx *ctx, str
 }
 
 [[clang::annotate("override@ytuning:tuned_sportscar:yvehicle:vehicle_describe")]]
-static struct str_result tuned_sportscar_describe(struct ctx *ctx, struct object *obj,
-                                                  float distance)
+static struct str_result tuned_sportscar_describe(struct object *obj, float distance)
 {
-    (void)ctx;
     struct ytuning_tuned_sportscar_data_ptr_result self = ytuning_tuned_sportscar_data_get(obj);
     YETTY_RETURN_IF_ERR(str, self, "tuned_sportscar_describe: data block");
     /* Cross-module reads of yvehicle members, including the read-only
