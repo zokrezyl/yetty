@@ -88,6 +88,7 @@ ACTIVITY_NAME="android.app.NativeActivity"
 # separate gradle product flavor, so each has its own APK + applicationId:
 #   yetty    → app/outputs/apk/yetty/release/app-yetty-release.apk    (com.yetty.terminal)
 #   ygreeter → app/outputs/apk/ygreeter/release/app-ygreeter-release.apk (com.yetty.greeter)
+#   yhello   → app/outputs/apk/yhello/release/app-yhello-release.apk  (com.yetty.hello)
 APK_DIR="${APK_DIR:-$PROJECT_ROOT/build-android_x86_64-ytrace-release/app/outputs/apk}"
 # Honour an explicit APK_PATH from the environment (overrides flavor lookup).
 APK_PATH_OVERRIDE="${APK_PATH:-}"
@@ -124,8 +125,12 @@ resolve_program() {
             PACKAGE_NAME="com.yetty.greeter"
             APK_PATH="${APK_PATH_OVERRIDE:-$APK_DIR/ygreeter/release/app-ygreeter-release.apk}"
             ;;
+        yhello)
+            PACKAGE_NAME="com.yetty.hello"
+            APK_PATH="${APK_PATH_OVERRIDE:-$APK_DIR/yhello/release/app-yhello-release.apk}"
+            ;;
         *)
-            error "Unknown --program '$PROGRAM' (expected: yetty or ygreeter)"
+            error "Unknown --program '$PROGRAM' (expected: yetty, ygreeter or yhello)"
             exit 1
             ;;
     esac
@@ -697,7 +702,7 @@ main() {
                     PROGRAM="$next_arg"
                     skip_next=true
                 else
-                    error "--program requires a name (yetty or ygreeter)"
+                    error "--program requires a name (yetty, ygreeter or yhello)"
                     exit 1
                 fi
                 ;;
@@ -803,6 +808,7 @@ main() {
             echo "  --program NAME  Which app to install + launch (default: yetty)"
             echo "                  yetty    → the terminal        (com.yetty.terminal)"
             echo "                  ygreeter → the ygui showcase    (com.yetty.greeter)"
+            echo "                  yhello   → direct-yfigures greeter (com.yetty.hello)"
             echo "                  (each is a separate gradle-flavor APK)"
             echo "  --soft-gpu      Use software GPU (SwiftShader) instead of host GPU"
             echo "  --vnc-port N    Set VNC port (default: 5900)"

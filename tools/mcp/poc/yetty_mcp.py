@@ -363,6 +363,7 @@ def draw_circuit(circuit: str) -> str:
 
 
 @mcp.tool()
+<<<<<<< HEAD
 def draw_chart(data: str) -> str:
     """Render a data chart — bar, column, line, area, scatter, pie, donut,
     radar, treemap, or sankey — as a figure in the yetty terminal, from a
@@ -418,6 +419,8 @@ def draw_chart(data: str) -> str:
 
 
 @mcp.tool()
+=======
+>>>>>>> 9413afca (yhello)
 def draw_plot(
     expression: str,
     width: int = 0,

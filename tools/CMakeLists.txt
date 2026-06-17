@@ -85,6 +85,10 @@ if(YETTY_ENABLE_TOOL_YGREETER)
     add_subdirectory(ygreeter)
 endif()
 
+if(YETTY_ENABLE_TOOL_YHELLO)
+    add_subdirectory(yhello)
+endif()
+
 if(YETTY_ENABLE_TOOL_YMESH)
     add_subdirectory(ymesh)
 endif()

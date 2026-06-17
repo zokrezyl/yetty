@@ -71,6 +71,13 @@ android {
             manifestPlaceholders["appLabel"] = "ygreeter"
             externalNativeBuild { cmake { targets += "ygreeter"; arguments += "-DYETTY_GRADLE_FLAVOR=ygreeter" } }
         }
+        create("yhello") {
+            dimension = "program"
+            applicationId = "com.yetty.hello"
+            manifestPlaceholders["appLibName"] = "yhello"
+            manifestPlaceholders["appLabel"] = "yhello"
+            externalNativeBuild { cmake { targets += "yhello"; arguments += "-DYETTY_GRADLE_FLAVOR=yhello" } }
+        }
     }
 
     signingConfigs {
@@ -149,10 +156,17 @@ android {
 androidComponents {
     onVariants(selector().withFlavor("program" to "ygreeter")) { variant ->
         variant.packaging.jniLibs.excludes.add("**/libyetty.so")
+        variant.packaging.jniLibs.excludes.add("**/libyhello.so")
+        variant.packaging.jniLibs.excludes.add("**/libqemu-system-riscv64.so")
+    }
+    onVariants(selector().withFlavor("program" to "yhello")) { variant ->
+        variant.packaging.jniLibs.excludes.add("**/libyetty.so")
+        variant.packaging.jniLibs.excludes.add("**/libygreeter.so")
         variant.packaging.jniLibs.excludes.add("**/libqemu-system-riscv64.so")
     }
     onVariants(selector().withFlavor("program" to "yetty")) { variant ->
         variant.packaging.jniLibs.excludes.add("**/libygreeter.so")
+        variant.packaging.jniLibs.excludes.add("**/libyhello.so")
     }
 }
 
