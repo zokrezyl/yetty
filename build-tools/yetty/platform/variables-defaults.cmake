@@ -165,6 +165,7 @@ option(YETTY_ENABLE_TOOL_YTOP            "ytop tool (CPU monitor)"           ON)
 option(YETTY_ENABLE_TOOL_CCC             "ccc tool (claude CLI loop)"        ON)
 option(YETTY_ENABLE_TOOL_YAI             "yai tool (AI engine loop)"         ON)
 option(YETTY_ENABLE_TOOL_YGREETER        "ygreeter first-contact tool"       ON)
+option(YETTY_ENABLE_TOOL_YHELLO          "yhello direct-yfigures greeter tool" ON)
 option(YETTY_ENABLE_TOOL_YINSTALL        "yinstall installer"                ON)
 
 # Whether the desktop app binaries (yetty, ygreeter, …) bake their assets

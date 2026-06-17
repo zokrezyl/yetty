@@ -6,6 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
 
 #define MAX_RESOURCE_SETS 32
 #define MAX_BINDING_CODE 16384
@@ -115,6 +118,10 @@ struct yetty_yrender_gpu_resource_binder_impl {
     WGPUShaderModule shader_module;
     WGPUPipelineLayout pipeline_layout;
     WGPURenderPipeline pipeline;
+    /* When set, shader_module + pipeline are owned by the allocator's shared
+     * pipeline cache, not by this binder — destroy/re-finalize must NOT
+     * release them. */
+    int pipeline_cached;
     WGPUBuffer quad_vertex_buffer;
     int finalized;
     uint64_t last_shader_hash;
@@ -825,6 +832,45 @@ static struct yetty_ycore_void_result create_bind_group(
     return YETTY_OK_VOID();
 }
 
+/* 64-bit FNV-1a over the generated shader text — the pipeline cache key. */
+static uint64_t fnv1a64(const char *data, size_t len)
+{
+    uint64_t hash = 1469598103934665603ULL;
+    for (size_t i = 0; i < len; i++) {
+        hash ^= (uint64_t)(unsigned char)data[i];
+        hash *= 1099511628211ULL;
+    }
+    return hash;
+}
+
+/* The full-screen quad VB is content-independent and created once per binder.
+ * Factored out so the pipeline-cache hit path (which returns before the
+ * inline creation below) still has a vertex buffer to draw with. */
+static struct yetty_ycore_void_result ensure_quad_vertex_buffer(
+    struct yetty_yrender_gpu_resource_binder_impl *impl)
+{
+    if (impl->quad_vertex_buffer) {
+        return YETTY_OK_VOID();
+    }
+    float quad_vertices[] = {
+        -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 1.0f,
+    };
+    WGPUBufferDescriptor quad_desc = {0};
+    quad_desc.label.data = "quad vertices";
+    quad_desc.label.length = 13;
+    quad_desc.size = sizeof(quad_vertices);
+    quad_desc.usage = WGPUBufferUsage_Vertex;
+    quad_desc.mappedAtCreation = 1;
+    impl->quad_vertex_buffer = impl->allocator->ops->create_buffer(impl->allocator, &quad_desc);
+    if (!impl->quad_vertex_buffer) {
+        return YETTY_ERR(yetty_ycore_void, "failed to create quad buffer");
+    }
+    void *mapped = wgpuBufferGetMappedRange(impl->quad_vertex_buffer, 0, sizeof(quad_vertices));
+    memcpy(mapped, quad_vertices, sizeof(quad_vertices));
+    wgpuBufferUnmap(impl->quad_vertex_buffer);
+    return YETTY_OK_VOID();
+}
+
 /* Compile shader and create pipeline */
 static struct yetty_ycore_void_result compile_and_create_pipeline(
     struct yetty_yrender_gpu_resource_binder_impl *impl)
@@ -850,15 +896,43 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(
 
     ydebug("GpuResourceBinder: merged shader %zu bytes", total_len);
 
-    /* Dump shader to file for debugging */
+    /* Reuse a previously compiled pipeline when the generated shader is
+     * byte-identical (the common case: every ygrid shares one font dispatcher,
+     * so a re-minted figure regenerates the same WGSL). This is what makes
+     * yfsvm's static interpreter pay off across scene rebuilds — only the
+     * bytecode buffer changes, never the shader, so the WGSL→SPIR-V compile
+     * happens once per unique composition instead of on every tab switch. */
+    uint64_t pipeline_key = fnv1a64(merged, total_len - 1);
     {
-        FILE *f = fopen("tmp/merged_shader.wgsl", "w");
-        if (f) {
-            fwrite(merged, 1, total_len - 1, f);
-            fclose(f);
-            ydebug("GpuResourceBinder: dumped shader to tmp/merged_shader.wgsl");
+        struct yetty_ycore_void_result quad_res = ensure_quad_vertex_buffer(impl);
+        if (!YETTY_IS_OK(quad_res)) {
+            free(merged);
+            return quad_res;
         }
     }
+    {
+        WGPUShaderModule cached_module = NULL;
+        WGPURenderPipeline cached_pipeline = yetty_yrender_gpu_allocator_pipeline_cache_lookup(
+            impl->allocator, pipeline_key, &cached_module);
+        if (cached_pipeline && cached_module) {
+            impl->shader_module = cached_module;
+            impl->pipeline = cached_pipeline;
+            impl->pipeline_cached = 1;
+            free(merged);
+            ydebug("GpuResourceBinder: pipeline cache HIT (reused, no recompile)");
+#ifdef __ANDROID__
+            __android_log_print(4, "yhello", "PROBE cache HIT ns=%s key=%llx len=%zu",
+                                impl->resource_set_count ? impl->resource_sets[0]->namespace : "?",
+                                (unsigned long long)pipeline_key, total_len - 1);
+#endif
+            return YETTY_OK_VOID();
+        }
+    }
+#ifdef __ANDROID__
+    __android_log_print(4, "yhello", "PROBE cache MISS->COMPILE ns=%s key=%llx len=%zu",
+                        impl->resource_set_count ? impl->resource_sets[0]->namespace : "?",
+                        (unsigned long long)pipeline_key, total_len - 1);
+#endif
 
     WGPUShaderSourceWGSL wgsl_src = {0};
     wgsl_src.chain.sType = WGPUSType_ShaderSourceWGSL;
@@ -887,26 +961,7 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(
         return YETTY_ERR(yetty_ycore_void, "failed to compile shader");
     }
 
-    /* Quad vertex buffer — only create once */
-    if (!impl->quad_vertex_buffer) {
-        float quad_vertices[] = {
-            -1.0f, -1.0f, 1.0f, -1.0f, -1.0f, 1.0f, -1.0f, 1.0f, 1.0f, -1.0f, 1.0f, 1.0f,
-        };
-        WGPUBufferDescriptor quad_desc = {0};
-        quad_desc.label.data = "quad vertices";
-        quad_desc.label.length = 13;
-        quad_desc.size = sizeof(quad_vertices);
-        quad_desc.usage = WGPUBufferUsage_Vertex;
-        quad_desc.mappedAtCreation = 1;
-        impl->quad_vertex_buffer = impl->allocator->ops->create_buffer(impl->allocator, &quad_desc);
-        if (!impl->quad_vertex_buffer) {
-            return YETTY_ERR(yetty_ycore_void, "failed to create quad buffer");
-        }
-
-        void *mapped = wgpuBufferGetMappedRange(impl->quad_vertex_buffer, 0, sizeof(quad_vertices));
-        memcpy(mapped, quad_vertices, sizeof(quad_vertices));
-        wgpuBufferUnmap(impl->quad_vertex_buffer);
-    }
+    /* Quad VB already ensured before the cache lookup above. */
 
     /* Pipeline */
     WGPUPipelineLayoutDescriptor pl_desc = {0};
@@ -989,6 +1044,13 @@ static struct yetty_ycore_void_result compile_and_create_pipeline(
     }
 
     ydebug("GpuResourceBinder: pipeline created");
+
+    /* Hand the freshly compiled shader + pipeline to the shared cache. From
+     * now on this binder treats them as cache-owned (pipeline_cached) so it
+     * never releases them — the next binder with the same WGSL reuses them. */
+    yetty_yrender_gpu_allocator_pipeline_cache_store(impl->allocator, pipeline_key,
+                                                     impl->shader_module, impl->pipeline);
+    impl->pipeline_cached = 1;
     return YETTY_OK_VOID();
 }
 
@@ -999,13 +1061,15 @@ static void binder_destroy(struct yetty_yrender_gpu_resource_binder *self)
     struct yetty_yrender_gpu_resource_binder_impl *impl =
         (struct yetty_yrender_gpu_resource_binder_impl *)self;
 
-    if (impl->pipeline) {
+    /* pipeline + shader_module may be cache-owned (shared across binders);
+     * only release them when this binder compiled them itself. */
+    if (impl->pipeline && !impl->pipeline_cached) {
         wgpuRenderPipelineRelease(impl->pipeline);
     }
     if (impl->pipeline_layout) {
         wgpuPipelineLayoutRelease(impl->pipeline_layout);
     }
-    if (impl->shader_module) {
+    if (impl->shader_module && !impl->pipeline_cached) {
         wgpuShaderModuleRelease(impl->shader_module);
     }
     if (impl->quad_vertex_buffer && impl->allocator) {
@@ -1074,9 +1138,13 @@ static struct yetty_ycore_void_result binder_finalize(
     }
     ydebug("GpuResourceBinder: finalize CACHE MISS - rebuilding pipeline");
 
-    /* Release old GPU resources if re-finalizing */
+    /* Release old GPU resources if re-finalizing. A cache-owned pipeline /
+     * shader module belongs to the allocator cache — drop our reference
+     * without releasing it. */
     if (impl->pipeline) {
-        wgpuRenderPipelineRelease(impl->pipeline);
+        if (!impl->pipeline_cached) {
+            wgpuRenderPipelineRelease(impl->pipeline);
+        }
         impl->pipeline = NULL;
     }
     if (impl->pipeline_layout) {
@@ -1084,9 +1152,12 @@ static struct yetty_ycore_void_result binder_finalize(
         impl->pipeline_layout = NULL;
     }
     if (impl->shader_module) {
-        wgpuShaderModuleRelease(impl->shader_module);
+        if (!impl->pipeline_cached) {
+            wgpuShaderModuleRelease(impl->shader_module);
+        }
         impl->shader_module = NULL;
     }
+    impl->pipeline_cached = 0;
     if (impl->bind_group) {
         wgpuBindGroupRelease(impl->bind_group);
         impl->bind_group = NULL;

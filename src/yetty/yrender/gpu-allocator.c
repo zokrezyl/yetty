@@ -4,8 +4,17 @@
 #include <string.h>
 
 #define MAX_ALLOCATIONS 1024
+#define MAX_PIPELINE_CACHE 128
 
 enum yetty_yrender_alloc_type { YETTY_YRENDER_ALLOC_TYPE_BUFFER, YETTY_YRENDER_ALLOC_TYPE_TEXTURE };
+
+/* One compiled-shader/pipeline pair, keyed by a hash of the generated WGSL.
+ * Owned by the allocator for its (program) lifetime. */
+struct yetty_yrender_pipeline_cache_entry {
+    uint64_t key;
+    WGPUShaderModule module;
+    WGPURenderPipeline pipeline;
+};
 
 struct yetty_yrender_allocation {
     char name[64];
@@ -24,6 +33,13 @@ struct yetty_yrender_gpu_allocator_impl {
      * counts; read by get_stats for the yui GPU-info dialog. */
     size_t peak_allocations;
     uint64_t peak_total_bytes;
+
+    /* Shader/pipeline cache — see pipeline_cache_lookup/store. The render
+     * binder consults this so a byte-identical generated shader (every ygrid
+     * shares one font dispatcher, so re-minting a figure produces the same
+     * WGSL) is compiled once instead of on every scene rebuild. */
+    struct yetty_yrender_pipeline_cache_entry pipeline_cache[MAX_PIPELINE_CACHE];
+    size_t pipeline_cache_count;
 };
 
 /* Forward declarations */
@@ -84,7 +100,48 @@ static uint32_t bytes_per_pixel(WGPUTextureFormat format)
 static void gpu_allocator_destroy(struct yetty_ydraw_gpu_allocator *self)
 {
     struct yetty_yrender_gpu_allocator_impl *impl = (struct yetty_yrender_gpu_allocator_impl *)self;
+    for (size_t i = 0; i < impl->pipeline_cache_count; i++) {
+        if (impl->pipeline_cache[i].pipeline) {
+            wgpuRenderPipelineRelease(impl->pipeline_cache[i].pipeline);
+        }
+        if (impl->pipeline_cache[i].module) {
+            wgpuShaderModuleRelease(impl->pipeline_cache[i].module);
+        }
+    }
     free(impl);
+}
+
+WGPURenderPipeline yetty_yrender_gpu_allocator_pipeline_cache_lookup(
+    struct yetty_ydraw_gpu_allocator *self, uint64_t key, WGPUShaderModule *out_module)
+{
+    struct yetty_yrender_gpu_allocator_impl *impl = (struct yetty_yrender_gpu_allocator_impl *)self;
+    if (!impl) {
+        return NULL;
+    }
+    for (size_t i = 0; i < impl->pipeline_cache_count; i++) {
+        if (impl->pipeline_cache[i].key == key) {
+            if (out_module) {
+                *out_module = impl->pipeline_cache[i].module;
+            }
+            return impl->pipeline_cache[i].pipeline;
+        }
+    }
+    return NULL;
+}
+
+void yetty_yrender_gpu_allocator_pipeline_cache_store(struct yetty_ydraw_gpu_allocator *self,
+                                                      uint64_t key, WGPUShaderModule module,
+                                                      WGPURenderPipeline pipeline)
+{
+    struct yetty_yrender_gpu_allocator_impl *impl = (struct yetty_yrender_gpu_allocator_impl *)self;
+    if (!impl || impl->pipeline_cache_count >= MAX_PIPELINE_CACHE) {
+        return;
+    }
+    struct yetty_yrender_pipeline_cache_entry *entry =
+        &impl->pipeline_cache[impl->pipeline_cache_count++];
+    entry->key = key;
+    entry->module = module;
+    entry->pipeline = pipeline;
 }
 
 static WGPUBuffer gpu_allocator_create_buffer(struct yetty_ydraw_gpu_allocator *self,

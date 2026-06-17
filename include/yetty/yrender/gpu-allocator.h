@@ -51,6 +51,21 @@ YETTY_YRESULT_DECLARE(yetty_yrender_gpu_allocator, struct yetty_ydraw_gpu_alloca
 
 struct yetty_yrender_gpu_allocator_result yetty_yrender_gpu_allocator_create(WGPUDevice device);
 
+/* Process-lifetime shader/pipeline cache, keyed by a hash of the generated
+ * WGSL. Binders that produce a byte-identical shader (e.g. every ygrid
+ * instance shares one font dispatcher, so re-minting a figure regenerates the
+ * same WGSL) reuse one compiled pipeline instead of recompiling on each scene
+ * rebuild — the recompile that yfsvm's static interpreter is meant to avoid.
+ * The allocator owns the cached module/pipeline and releases them at destroy;
+ * callers must NOT release a pipeline/module obtained from the cache.
+ * lookup() returns the cached pipeline (and its module via out_module) or NULL
+ * on miss. */
+WGPURenderPipeline yetty_yrender_gpu_allocator_pipeline_cache_lookup(
+    struct yetty_ydraw_gpu_allocator *self, uint64_t key, WGPUShaderModule *out_module);
+void yetty_yrender_gpu_allocator_pipeline_cache_store(struct yetty_ydraw_gpu_allocator *self,
+                                                      uint64_t key, WGPUShaderModule module,
+                                                      WGPURenderPipeline pipeline);
+
 #ifdef __cplusplus
 }
 #endif

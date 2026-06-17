@@ -32,6 +32,9 @@
 #include <yetty/yctl/rpc-server.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/ytrace/ytrace.h>
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
 #include <yetty/yfigure/registry.h>
 #include <yetty/yshadertoy/figure.h>
 #ifdef YETTY_HAS_YMGUI
@@ -278,6 +281,12 @@ static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPU
         }
         yinfo("present mode: %s (avail: fifo=%d fifo-relaxed=%d mailbox=%d immediate=%d)",
               picked_name, have_fifo, have_fifo_relaxed, have_mailbox, have_immediate);
+#ifdef __ANDROID__
+        __android_log_print(4, "yhello",
+                            "PROBE present mode: %s (avail fifo=%d fifo-relaxed=%d mailbox=%d "
+                            "immediate=%d)",
+                            picked_name, have_fifo, have_fifo_relaxed, have_mailbox, have_immediate);
+#endif
         wgpuSurfaceCapabilitiesFreeMembers(caps);
     } else {
         rt->gpu.surface_format = WGPUTextureFormat_BGRA8Unorm;
