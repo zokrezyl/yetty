@@ -1,0 +1,6 @@
+#ychart type=column title="Revenue mix (stacked)" stacked=on
+quarter,hardware,software,services
+Q1,30,18,12
+Q2,34,22,16
+Q3,28,25,20
+Q4,40,30,24

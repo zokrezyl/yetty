@@ -211,6 +211,10 @@ if(YETTY_ENABLE_FEATURE_YDIAGRAM)
     add_subdirectory(ydiagram)
 endif()
 
+if(YETTY_ENABLE_FEATURE_YCHART)
+    add_subdirectory(ychart)
+endif()
+
 if(YETTY_ENABLE_FEATURE_YTHORVG)
     if(YETTY_ENABLE_LIB_THORVG)
         add_subdirectory(ythorvg)

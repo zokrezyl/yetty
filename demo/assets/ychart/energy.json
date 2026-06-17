@@ -1,0 +1,13 @@
+{
+  "chart": "sankey",
+  "title": "Energy flow",
+  "links": [
+    {"source": "Coal",        "target": "Electricity",  "value": 25},
+    {"source": "Gas",         "target": "Electricity",  "value": 15},
+    {"source": "Solar",       "target": "Electricity",  "value": 12},
+    {"source": "Wind",        "target": "Electricity",  "value": 8},
+    {"source": "Electricity", "target": "Residential",  "value": 28},
+    {"source": "Electricity", "target": "Industry",     "value": 22},
+    {"source": "Electricity", "target": "Losses",       "value": 10}
+  ]
+}

@@ -1,0 +1,6 @@
+#ychart type=column title="Quarterly revenue" y=kUSD
+quarter,revenue
+Q1,120
+Q2,138
+Q3,99
+Q4,164

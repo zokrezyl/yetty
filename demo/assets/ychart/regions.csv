@@ -1,0 +1,6 @@
+#ychart type=column title="Units sold by region"
+region,2021,2022,2023
+North,42,55,61
+South,33,38,52
+East,28,44,49
+West,51,47,58

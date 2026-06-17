@@ -1,0 +1,9 @@
+chart: radar
+title: Player comparison
+categories: [speed, power, range, control, stamina, defense]
+series:
+  - name: Alice
+    values: [4, 5, 3, 4, 5, 2]
+  - name: Bob
+    color: "#F6BD16"
+    values: [5, 2, 4, 3, 2, 5]

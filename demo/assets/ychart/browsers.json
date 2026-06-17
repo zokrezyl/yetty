@@ -1,0 +1,5 @@
+{
+  "chart": "pie",
+  "title": "Browser market share",
+  "data": { "Chrome": 65, "Safari": 19, "Edge": 9, "Firefox": 5, "Other": 2 }
+}
