@@ -32,8 +32,8 @@ static enum yetty_ychart_kind auto_kind(const struct yetty_ychart_chart *chart)
 
 struct yetty_ychart_buffer_result yetty_ychart_render_data_full(
     const char *input, size_t len, const char *path, enum yetty_ychart_kind kind_override,
-    const struct yetty_ychart_render_options *render_options,
-    yetty_ychart_measure_text_fn measure, void *measure_userdata)
+    const struct yetty_ychart_render_options *render_options, yetty_ychart_measure_text_fn measure,
+    void *measure_userdata)
 {
     if (!input) {
         return YETTY_ERR(yetty_ychart_buffer, "ychart: NULL input");
@@ -84,5 +84,5 @@ struct yetty_ychart_buffer_result yetty_ychart_render_data_full(
 struct yetty_ychart_buffer_result yetty_ychart_render_data(const char *input, size_t len)
 {
     return yetty_ychart_render_data_full(input, len, NULL, YETTY_YCHART_KIND_AUTO, NULL, NULL,
-                                          NULL);
+                                         NULL);
 }

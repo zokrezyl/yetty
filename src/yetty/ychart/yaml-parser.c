@@ -253,7 +253,7 @@ static struct yetty_ycore_void_result series_field(struct yetty_ychart_chart *ch
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ychart_parse_yaml(const char *input, size_t len,
-                                                        struct yetty_ychart_chart *chart)
+                                                       struct yetty_ychart_chart *chart)
 {
     if (!input || !chart) {
         return YETTY_ERR(yetty_ycore_void, "parse_yaml: NULL input or chart");

@@ -51,8 +51,7 @@ static double tm_worst(double row_sum, double row_min, double row_max, double si
     return a > b ? a : b;
 }
 
-struct yetty_ycore_void_result yetty_ychart_render_treemap(
-    struct yetty_ychart_render_state *state)
+struct yetty_ycore_void_result yetty_ychart_render_treemap(struct yetty_ychart_render_state *state)
 {
     const struct yetty_ychart_chart *chart = state->chart;
     size_t ncat = chart->category_count;
@@ -161,7 +160,7 @@ struct yetty_ycore_void_result yetty_ychart_render_treemap(
         float y1 = y0 + rects[c].h;
         uint32_t color = yetty_ychart_resolve_color(chart, c);
         result = yetty_ychart_emit_box(state, x0 + 1.0f, y0 + 1.0f, x1 - 1.0f, y1 - 1.0f, 2.0f,
-                                        color, 0xFF0B1014u, 1.0f);
+                                       color, 0xFF0B1014u, 1.0f);
         if (YETTY_IS_ERR(result)) {
             break;
         }
@@ -182,7 +181,7 @@ struct yetty_ycore_void_result yetty_ychart_render_treemap(
                     snprintf(buf, sizeof(buf), "%g", v);
                 }
                 result = yetty_ychart_emit_label(state, lcx, lcy + fs * 0.6f, buf, fs * 0.85f,
-                                                  0xCC0B1014u, YETTY_YCHART_ANCHOR_CENTER);
+                                                 0xCC0B1014u, YETTY_YCHART_ANCHOR_CENTER);
             }
         }
     }
@@ -393,17 +392,17 @@ struct yetty_ycore_void_result yetty_ychart_render_sankey(struct yetty_ychart_re
     /* Node bars + labels. */
     for (size_t n = 0; n < node_count && YETTY_IS_OK(result); n++) {
         result = yetty_ychart_emit_box(state, nodes[n].x0, nodes[n].y0, nodes[n].x1, nodes[n].y1,
-                                        1.0f, nodes[n].color, 0, 0.0f);
+                                       1.0f, nodes[n].color, 0, 0.0f);
         if (YETTY_IS_ERR(result)) {
             break;
         }
         float cy = (nodes[n].y0 + nodes[n].y1) * 0.5f;
         if (nodes[n].layer == max_layer) {
             result = yetty_ychart_emit_label(state, nodes[n].x0 - 5.0f, cy, nodes[n].name, fs,
-                                              YETTY_YCHART_COLOR_TEXT, YETTY_YCHART_ANCHOR_RIGHT);
+                                             YETTY_YCHART_COLOR_TEXT, YETTY_YCHART_ANCHOR_RIGHT);
         } else {
             result = yetty_ychart_emit_label(state, nodes[n].x1 + 5.0f, cy, nodes[n].name, fs,
-                                              YETTY_YCHART_COLOR_TEXT, YETTY_YCHART_ANCHOR_LEFT);
+                                             YETTY_YCHART_COLOR_TEXT, YETTY_YCHART_ANCHOR_LEFT);
         }
     }
 

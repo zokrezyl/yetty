@@ -23,7 +23,7 @@
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ychart_render_pie(struct yetty_ychart_render_state *state,
-                                                        bool donut)
+                                                       bool donut)
 {
     const struct yetty_ychart_chart *chart = state->chart;
     size_t ncat = chart->category_count;

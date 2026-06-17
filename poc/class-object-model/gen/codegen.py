@@ -24,9 +24,11 @@ Reads annotated .c sources, builds the in-memory model, emits:
     model.yaml         — informational dump.
 
 Method signature contract:
-  RetT slot(struct ctx *ctx, struct object *obj, <rest...>);
+  RetT slot(struct object *obj, <rest...>);
 
-  ctx is *not* on the wire. Public stub branches on ctx->session:
+  No ctx argument — the RPC session is linked onto the object at create time
+  and read back from obj->session (it is *not* on the wire). Public stub
+  branches on obj->session:
     NULL → local: vtable dispatch via obj->klass.
     set  → remote: look up remote_id via xlat (batched per-class via
            rpc_session_translate_class, lazy fallback via
@@ -518,34 +520,30 @@ def default_return_for(ret: str) -> str:
 
 def validate_method(m: dict):
     args = m["args"]
-    if len(args) < 2:
+    if len(args) < 1:
         sys.stderr.write(
-            f"error: method {m['slot']} needs (ctx*, obj*, ...). got {len(args)}\n")
+            f"error: method {m['slot']} needs (obj*, ...). got {len(args)}\n")
         sys.exit(1)
-    if not is_specific_struct_ptr(args[0]["type"], "ctx"):
+    if not is_specific_struct_ptr(args[0]["type"], "object"):
         sys.stderr.write(
-            f"error: method {m['slot']}: first arg must be 'struct ctx *' "
+            f"error: method {m['slot']}: first arg must be 'struct object *' "
             f"(got '{args[0]['type']}')\n")
-        sys.exit(1)
-    if not is_specific_struct_ptr(args[1]["type"], "object"):
-        sys.stderr.write(
-            f"error: method {m['slot']}: second arg must be 'struct object *' "
-            f"(got '{args[1]['type']}')\n")
         sys.exit(1)
     # Extra struct-ptr args after obj would silently marshal as NULL on the
     # wire — bail rather than ship broken behaviour.
-    for a in args[2:]:
+    for a in args[1:]:
         if is_struct_ptr(a["type"]):
             sys.stderr.write(
                 f"error: method {m['slot']}: arg '{a['name']}' is a struct "
-                f"pointer ({a['type']}). Only the obj at arg[1] is supported "
+                f"pointer ({a['type']}). Only the obj at arg[0] is supported "
                 f"as a wire handle. Pass scalars or extend the wire format.\n")
             sys.exit(1)
 
 
 def wire_args(m: dict) -> list:
-    """All args except ctx."""
-    return m["args"][1:]
+    """All args. The obj at arg[0] marshals as a wire handle; the rest are
+    scalars."""
+    return m["args"]
 
 
 def args_struct_body(args: list, indent: str) -> str:
@@ -598,8 +596,7 @@ def emit_dispatch_body(m: dict) -> str:
     rid = result_type_id(m["return_type"])
     vt = ret_value_type(rid)
     slot_fn = f"{qualified_slot(m)}_fn"
-    ctx_name = args[0]["name"]
-    obj_name = args[1]["name"]
+    obj_name = args[0]["name"]
     call_args = ", ".join(a["name"] for a in args)
 
     wargs = wire_args(m)
@@ -622,7 +619,7 @@ def emit_dispatch_body(m: dict) -> str:
     if vt is None:
         remote_call = f"""\
         uint8_t _wbuf[1];
-        size_t _wn = rpc_call(_s->session, RPC_OP_CALL, _rid, &_a, sizeof(_a),
+        size_t _wn = rpc_call({obj_name}->session, RPC_OP_CALL, _rid, &_a, sizeof(_a),
                               _wbuf, sizeof(_wbuf));
         if (_wn < 1) return YETTY_ERR({rid}, "{qualified_slot(m)}: short RPC response");
         if (_wbuf[0] != 0) return YETTY_ERR({rid}, "{qualified_slot(m)}: remote impl returned error");
@@ -631,7 +628,7 @@ def emit_dispatch_body(m: dict) -> str:
     else:
         remote_call = f"""\
         uint8_t _wbuf[1 + sizeof({vt})];
-        size_t _wn = rpc_call(_s->session, RPC_OP_CALL, _rid, &_a, sizeof(_a),
+        size_t _wn = rpc_call({obj_name}->session, RPC_OP_CALL, _rid, &_a, sizeof(_a),
                               _wbuf, sizeof(_wbuf));
         if (_wn < 1) return YETTY_ERR({rid}, "{qualified_slot(m)}: short RPC response");
         if (_wbuf[0] != 0) return YETTY_ERR({rid}, "{qualified_slot(m)}: remote impl returned error");
@@ -653,9 +650,8 @@ def emit_dispatch_body(m: dict) -> str:
 
     if (!{obj_name}) return YETTY_ERR({rid}, "{qualified_slot(m)}: NULL object");
 
-    struct ctx *_s = {ctx_name};
-    if (_s && _s->session) {{
-        uint32_t _rid = rpc_session_ensure_remote_id(_s->session, _slot);
+    if ({obj_name}->session) {{
+        uint32_t _rid = rpc_session_ensure_remote_id({obj_name}->session, _slot);
         if (_rid == RPC_REMOTE_ID_UNRESOLVED)
             return YETTY_ERR({rid}, "{qualified_slot(m)}: remote id unresolved");
         struct __attribute__((packed)) {{
@@ -996,16 +992,18 @@ def class_header_for(cls: dict, module: str) -> str:
 
 def emit_skel(m: dict) -> str:
     """Unpack the wire body, resolve obj handle, re-enter the public stub
-    with a local ctx so the right override fires on the actual class.
-    The wire response carries a status byte (0=OK, 1=ERR); for value
-    slots the OK payload is the raw value bytes that follow."""
+    so the right override fires on the actual class. The resolved server-side
+    object is local (session NULL), so re-entering dispatches in-process — no
+    ctx argument is passed. The wire response carries a status byte (0=OK,
+    1=ERR); for value slots the OK payload is the raw value bytes that
+    follow."""
     slot = qualified_slot(m)
     rid = result_type_id(m["return_type"])
     vt = ret_value_type(rid)
     args = wire_args(m)
     fields = args_struct_body(args, indent="        ")
 
-    call_parts = ["&_local"]
+    call_parts = []
     for a in args:
         if is_struct_ptr(a["type"]):
             call_parts.append(
@@ -1053,7 +1051,6 @@ static size_t {slot}_skel(const void *_body, size_t _body_len,
     }} _a;
     if (_body_len < sizeof(_a)) return 0;
     memcpy(&_a, _body, sizeof(_a));
-    struct ctx _local = {{0}};
 {body}}}
 """
 
@@ -1095,6 +1092,9 @@ struct object_ptr_result {qname}_create(struct ctx *ctx)
         return YETTY_ERR(object_ptr, "{qname}_create: calloc(proxy) failed");
     struct object *_obj = _mem;
     *(const struct class **)_obj = _klass;
+    /* Link the session onto the proxy so its methods marshal over it — they
+     * read obj->session instead of taking a ctx argument. */
+    _obj->session = ctx->session;
     *(uint64_t *)((char *)_obj + sizeof(*_obj)) = _h;
     return YETTY_OK(object_ptr, _obj);
 }}

@@ -204,7 +204,7 @@ void yetty_ychart_chart_destroy(struct yetty_ychart_chart *chart)
  *===========================================================================*/
 
 struct yetty_ycore_void_result yetty_ychart_set_title(struct yetty_ychart_chart *chart,
-                                                       const char *title)
+                                                      const char *title)
 {
     if (!chart) {
         return YETTY_ERR(yetty_ycore_void, "set_title: NULL chart");
@@ -219,8 +219,8 @@ struct yetty_ycore_void_result yetty_ychart_set_title(struct yetty_ychart_chart 
 }
 
 struct yetty_ycore_void_result yetty_ychart_set_axis_labels(struct yetty_ychart_chart *chart,
-                                                             const char *x_label,
-                                                             const char *y_label)
+                                                            const char *x_label,
+                                                            const char *y_label)
 {
     if (!chart) {
         return YETTY_ERR(yetty_ycore_void, "set_axis_labels: NULL chart");
@@ -245,7 +245,7 @@ struct yetty_ycore_void_result yetty_ychart_set_axis_labels(struct yetty_ychart_
 }
 
 struct yetty_ycore_int_result yetty_ychart_add_category(struct yetty_ychart_chart *chart,
-                                                         const char *label)
+                                                        const char *label)
 {
     if (!chart) {
         return YETTY_ERR(yetty_ycore_int, "add_category: NULL chart");
@@ -264,7 +264,7 @@ struct yetty_ycore_int_result yetty_ychart_add_category(struct yetty_ychart_char
 }
 
 struct yetty_ycore_int_result yetty_ychart_add_series(struct yetty_ychart_chart *chart,
-                                                       const char *name, uint32_t color)
+                                                      const char *name, uint32_t color)
 {
     if (!chart) {
         return YETTY_ERR(yetty_ycore_int, "add_series: NULL chart");
@@ -288,7 +288,7 @@ struct yetty_ycore_int_result yetty_ychart_add_series(struct yetty_ychart_chart 
 }
 
 struct yetty_ycore_void_result yetty_ychart_series_push(struct yetty_ychart_chart *chart,
-                                                         size_t series_index, double value)
+                                                        size_t series_index, double value)
 {
     if (!chart || series_index >= chart->series_count) {
         return YETTY_ERR(yetty_ycore_void, "series_push: bad series index");
@@ -303,7 +303,7 @@ struct yetty_ycore_void_result yetty_ychart_series_push(struct yetty_ychart_char
 }
 
 struct yetty_ycore_void_result yetty_ychart_series_push_xy(struct yetty_ychart_chart *chart,
-                                                            size_t series_index, double x, double y)
+                                                           size_t series_index, double x, double y)
 {
     if (!chart || series_index >= chart->series_count) {
         return YETTY_ERR(yetty_ycore_void, "series_push_xy: bad series index");
@@ -328,8 +328,8 @@ struct yetty_ycore_void_result yetty_ychart_series_push_xy(struct yetty_ychart_c
 }
 
 struct yetty_ycore_void_result yetty_ychart_add_flow(struct yetty_ychart_chart *chart,
-                                                      const char *source, const char *target,
-                                                      double value)
+                                                     const char *source, const char *target,
+                                                     double value)
 {
     if (!chart || !source || !target) {
         return YETTY_ERR(yetty_ycore_void, "add_flow: NULL chart/source/target");

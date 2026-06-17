@@ -73,6 +73,13 @@ struct op {
 
 struct object {
     const struct class *klass;
+    /* RPC session this object is bound to. NULL → local object, methods
+     * dispatch in-process; set → remote proxy, methods marshal over the
+     * session to the server-side handle. Linked at create time (see the
+     * generated <class>_create); methods read it instead of taking a ctx
+     * argument. object_alloc zero-fills it, so local objects are NULL with
+     * no extra work. */
+    struct rpc_session *session;
 };
 
 struct str {

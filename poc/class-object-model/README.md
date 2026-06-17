@@ -83,13 +83,16 @@ symbol, and the wire label — one canonical name, three uses.
 
 ### Dispatch
 
-Every method has a generated public stub. It branches on `ctx->session`:
+Every method has a generated public stub. The RPC session is linked onto the
+object at create time; the stub branches on `obj->session` (no `ctx`
+argument):
 
 - **NULL → local**: look up the impl in `obj->klass`'s dispatch table and call
   it directly (a vtable call).
 - **set → remote**: translate the local slot to the peer's id and issue an
-  `rpc_call`; the server re-enters the *same* public stub with a local ctx so
-  the right override runs on the real object.
+  `rpc_call`; the server resolves the handle to its real (local, session-NULL)
+  object and re-enters the *same* public stub, so the right override runs on
+  the real object.
 
 Caller code is identical either way.
 
@@ -139,8 +142,9 @@ the current module; its C signature is taken from that impl. Cross-domain
 overrides target a slot whose public stub already lives in the slot's home
 module.
 
-The required method shape is `RetT slot(struct ctx *ctx, struct object *obj, …)`,
-and every impl returns a Result.
+The required method shape is `RetT slot(struct object *obj, …)`, and every impl
+returns a Result. There is no `ctx` parameter — the RPC session is read from
+`obj->session`.
 
 ---
 
@@ -251,7 +255,7 @@ on a wrong object returns an error whose cause chain points back through
 |---|---|
 | `<domain>_<class>_class_get()` / `_mixin_get()` | lazy class registration / accessor |
 | `<domain>_<class>_create(ctx)`                  | factory (local alloc or remote proxy) |
-| `<domain>_<slot>(ctx, obj, …)`                  | public method stub (local dispatch or RPC) |
+| `<domain>_<slot>(obj, …)`                       | public method stub (local dispatch or RPC) |
 | `<domain>_<class>_data_get(obj)`                | opaque data-block handle (Result) |
 | `<domain>_<class>_<field>_get(obj)`             | member getter (value Result) |
 | `<domain>_<class>_<field>_set(obj, value)`      | member setter (void Result) |

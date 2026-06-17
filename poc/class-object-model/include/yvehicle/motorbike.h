@@ -5,7 +5,7 @@
 #define POC_YVEHICLE_MOTORBIKE_H
 
 #include "class.h"
-#include "methods.gen.h" /* every public method stub in this module */
+#include "methods.gen.h"  /* every public method stub in this module */
 #include "yvehicle/vehicle.h"
 
 /* Data-block handle — opaque outside the owning .c. The

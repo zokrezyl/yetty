@@ -32,8 +32,7 @@ struct [[clang::annotate("class@yvehicle:vehicle")]] vehicle_data {
 };
 
 [[clang::annotate("override@yvehicle:vehicle:vehicle_describe")]]
-static struct str_result vehicle_default_describe(struct ctx *ctx, struct object *obj,
-                                                  float distance)
+static struct str_result vehicle_default_describe(struct object *obj, float distance)
 {
     struct str r;
     snprintf(r.buf, sizeof(r.buf), "vehicle describe(%.1f)", distance);
@@ -80,8 +79,9 @@ module A can be overridden by a class in module B without index collisions.
 struct yetty_yclass_descriptor { const char *name; enum yetty_yclass_type type; size_t data_size; };
 struct yetty_yclass_op         { const char *slot_domain; const char *name;
                                  yetty_yclass_method_id_t method_id; yetty_yclass_impl_t impl; };
-struct yetty_yclass_object     { const struct yetty_yclass *klass; };
-struct yetty_yclass_ctx        { struct yetty_yclass_rpc_session *session; }; /* NULL=local, set=remote */
+struct yetty_yclass_object     { const struct yetty_yclass *klass;
+                                 struct yetty_yclass_rpc_session *session; }; /* session: NULL=local, set=remote proxy */
+struct yetty_yclass_ctx        { struct yetty_yclass_rpc_session *session; }; /* only passed to <class>_create */
 ```
 
 A class is registered once with `yetty_yclass_register(descriptor, ops, n_ops,
@@ -93,13 +93,14 @@ touched.
 
 ### Local vs remote — the same call
 
-Every generated public stub takes a `ctx` first:
+A method slot takes the object first — there is no `ctx` argument:
 
 ```c
-RetT slot(struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, /* rest... */);
+RetT slot(struct yetty_yclass_object *obj, /* rest... */);
 ```
 
-`ctx` is **not** on the wire. The stub branches on `ctx->session`:
+The RPC session is linked onto the object at create time and read back from
+`obj->session` (it is **not** on the wire). The stub branches on it:
 
 - **NULL → local:** vtable dispatch via `obj->klass`.
 - **set → remote:** translate the class to a remote id, then
@@ -143,8 +144,7 @@ struct [[clang::annotate("class@yvehicle:sportscar")]]
 };
 
 [[clang::annotate("override@yvehicle:sportscar:vehicle_accelerate")]]
-static struct yetty_ycore_int_result sportscar_accelerate(struct ctx *ctx,
-                                                          struct object *obj, float speed) { ... }
+static struct yetty_ycore_int_result sportscar_accelerate(struct object *obj, float speed) { ... }
 ```
 
 ### Cross-module inheritance
@@ -159,8 +159,7 @@ struct [[clang::annotate("class@ytuning:tuned_sportscar")]]
 
 /* override yvehicle's `vehicle_describe` slot from the ytuning module */
 [[clang::annotate("override@ytuning:tuned_sportscar:yvehicle:vehicle_describe")]]
-static struct str_result tuned_sportscar_describe(struct ctx *ctx, struct object *obj,
-                                                  float distance) { ... }
+static struct str_result tuned_sportscar_describe(struct object *obj, float distance) { ... }
 ```
 
 The packed `(domain_id, idx)` slot encoding is exactly what makes this compose
@@ -171,11 +170,12 @@ into a working cross-domain vtable.
 Every slot implementation must match:
 
 ```c
-RetT slot(struct yetty_yclass_ctx *ctx, struct yetty_yclass_object *obj, <rest...>);
+RetT slot(struct yetty_yclass_object *obj, <rest...>);
 ```
 
-`RetT` is a [Result type](../../docs/result.md). `ctx` and `obj` are fixed; everything after
-is the method's own arguments and is what gets marshalled on the wire.
+`RetT` is a [Result type](../../docs/result.md). `obj` is fixed; everything after
+is the method's own arguments and is what gets marshalled on the wire. The RPC
+session is read from `obj->session`, not threaded through as an argument.
 
 ---
 
@@ -272,7 +272,6 @@ methods:
     owning_class: vehicle
     return_type: struct yetty_ycore_int_result
     args:
-      - {name: ctx,   type: "struct ctx *"}
       - {name: obj,   type: "struct object *"}
       - {name: speed, type: float}
     local: false

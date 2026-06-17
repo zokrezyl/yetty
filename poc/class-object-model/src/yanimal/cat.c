@@ -16,9 +16,8 @@ struct [[clang::annotate("class@yanimal:cat")]] [[clang::annotate(
 };
 
 [[clang::annotate("override@yanimal:cat:animal_ctor")]]
-static struct yetty_ycore_void_result cat_ctor(struct ctx *ctx, struct object *obj)
+static struct yetty_ycore_void_result cat_ctor(struct object *obj)
 {
-    (void)ctx;
     struct yanimal_cat_data_ptr_result self = yanimal_cat_data_get(obj); /* own */
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self, "cat_ctor: data block");
     self.value->lives_remaining = 9;
@@ -36,9 +35,8 @@ static struct yetty_ycore_void_result cat_ctor(struct ctx *ctx, struct object *o
 }
 
 [[clang::annotate("override@yanimal:cat:animal_speak")]]
-static struct str_result cat_speak(struct ctx *ctx, struct object *obj, int volume)
+static struct str_result cat_speak(struct object *obj, int volume)
 {
-    (void)ctx;
     struct yanimal_cat_data_ptr_result self = yanimal_cat_data_get(obj); /* own */
     YETTY_RETURN_IF_ERR(str, self, "cat_speak: data block");
     struct yetty_ycore_int_result energy = yanimal_animal_energy_get(obj); /* parent */

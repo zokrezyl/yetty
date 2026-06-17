@@ -55,7 +55,8 @@ struct yetty_ycore_void_result yetty_ycore_void_chain(struct yetty_ycore_void_re
 void yetty_ycore_error_print(FILE *out, const char *headline, struct yetty_ycore_error err)
 {
     if (!out) {
-        return;
+        fprintf(stderr, "yetty_ycore_error_print: out not set, setting it to stderr");
+        out = stderr;
     }
     if (headline) {
         fprintf(out, "%s: %s\n", headline, err.msg ? err.msg : "<no message>");

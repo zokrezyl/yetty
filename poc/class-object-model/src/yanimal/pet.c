@@ -18,9 +18,8 @@ struct [[clang::annotate("mixin@yanimal:pet")]] pet_data {
 };
 
 [[clang::annotate("override@yanimal:pet:animal_eat")]]
-static struct yetty_ycore_int_result pet_eat(struct ctx *ctx, struct object *obj, float amount)
+static struct yetty_ycore_int_result pet_eat(struct object *obj, float amount)
 {
-    (void)ctx;
     struct yanimal_pet_data_ptr_result self = yanimal_pet_data_get(obj); /* own */
     YETTY_RETURN_IF_ERR(yetty_ycore_int, self, "pet_eat: data block");
     self.value->treats_today += 1;

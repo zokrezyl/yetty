@@ -27,9 +27,8 @@ struct [[clang::annotate("class@yvehicle:sportscar")]] [[clang::annotate(
 };
 
 [[clang::annotate("override@yvehicle:sportscar:vehicle_ctor")]]
-static struct yetty_ycore_void_result sportscar_ctor(struct ctx *ctx, struct object *obj)
+static struct yetty_ycore_void_result sportscar_ctor(struct object *obj)
 {
-    (void)ctx;
     struct yvehicle_sportscar_data_ptr_result self = yvehicle_sportscar_data_get(obj); /* own */
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self, "sportscar_ctor: data block");
     self.value->top_speed = 320;
@@ -50,10 +49,8 @@ static struct yetty_ycore_void_result sportscar_ctor(struct ctx *ctx, struct obj
 }
 
 [[clang::annotate("override@yvehicle:sportscar:vehicle_accelerate")]]
-static struct yetty_ycore_int_result sportscar_accelerate(struct ctx *ctx, struct object *obj,
-                                                          float speed)
+static struct yetty_ycore_int_result sportscar_accelerate(struct object *obj, float speed)
 {
-    (void)ctx;
     struct yvehicle_sportscar_data_ptr_result self = yvehicle_sportscar_data_get(obj); /* own */
     YETTY_RETURN_IF_ERR(yetty_ycore_int, self, "sportscar_accelerate: data block");
     self.value->turbo_engaged = 1;
@@ -88,9 +85,8 @@ static struct yetty_ycore_int_result sportscar_accelerate(struct ctx *ctx, struc
 }
 
 [[clang::annotate("override@yvehicle:sportscar:vehicle_describe")]]
-static struct str_result sportscar_describe(struct ctx *ctx, struct object *obj, float distance)
+static struct str_result sportscar_describe(struct object *obj, float distance)
 {
-    (void)ctx;
     struct yvehicle_sportscar_data_ptr_result self = yvehicle_sportscar_data_get(obj); /* own */
     YETTY_RETURN_IF_ERR(str, self, "sportscar_describe: data block");
     struct yetty_ycore_int_result speed = yvehicle_vehicle_speed_get(obj);

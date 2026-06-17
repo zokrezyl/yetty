@@ -149,7 +149,7 @@ static struct yetty_ycore_void_result render_vertical(struct yetty_ychart_render
         fmt_num(buf, sizeof(buf), v);
         struct yetty_ycore_void_result tl =
             yetty_ychart_emit_label(state, px0 - 6.0f, gy, buf, fs, YETTY_YCHART_COLOR_TEXT_MUTED,
-                                     YETTY_YCHART_ANCHOR_RIGHT);
+                                    YETTY_YCHART_ANCHOR_RIGHT);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, tl, "cartesian: y tick label");
     }
 
@@ -169,7 +169,7 @@ static struct yetty_ycore_void_result render_vertical(struct yetty_ychart_render
         float cx = px0 + ((float)i + 0.5f) * slot;
         struct yetty_ycore_void_result cl =
             yetty_ychart_emit_label(state, cx, py1 + fs * 0.5f + 6.0f, chart->categories[i], fs,
-                                     YETTY_YCHART_COLOR_TEXT_MUTED, YETTY_YCHART_ANCHOR_CENTER);
+                                    YETTY_YCHART_COLOR_TEXT_MUTED, YETTY_YCHART_ANCHOR_CENTER);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, cl, "cartesian: x label");
     }
 
@@ -237,8 +237,8 @@ static struct yetty_ycore_void_result render_vertical(struct yetty_ychart_render
                 struct yetty_ycore_void_result t1 =
                     yetty_ychart_emit_triangle(state, x0, y0, x1, y1, x0, baseline_y, fill);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, t1, "cartesian: area tri a");
-                struct yetty_ycore_void_result t2 = yetty_ychart_emit_triangle(
-                    state, x1, y1, x1, baseline_y, x0, baseline_y, fill);
+                struct yetty_ycore_void_result t2 =
+                    yetty_ychart_emit_triangle(state, x1, y1, x1, baseline_y, x0, baseline_y, fill);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, t2, "cartesian: area tri b");
             }
         }
@@ -280,8 +280,8 @@ static struct yetty_ycore_void_result render_vertical(struct yetty_ychart_render
  * Horizontal bars: BAR
  *===========================================================================*/
 
-static struct yetty_ycore_void_result render_bar(struct yetty_ychart_render_state *state,
-                                                 float px0, float py0, float px1, float py1)
+static struct yetty_ycore_void_result render_bar(struct yetty_ychart_render_state *state, float px0,
+                                                 float py0, float px1, float py1)
 {
     const struct yetty_ychart_chart *chart = state->chart;
     float fs = state->opt->label_font_size;
@@ -309,7 +309,7 @@ static struct yetty_ycore_void_result render_bar(struct yetty_ychart_render_stat
         fmt_num(buf, sizeof(buf), v);
         struct yetty_ycore_void_result tl =
             yetty_ychart_emit_label(state, gx, py1 + fs * 0.5f + 6.0f, buf, fs,
-                                     YETTY_YCHART_COLOR_TEXT_MUTED, YETTY_YCHART_ANCHOR_CENTER);
+                                    YETTY_YCHART_COLOR_TEXT_MUTED, YETTY_YCHART_ANCHOR_CENTER);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, tl, "bar: x tick label");
     }
 
@@ -328,7 +328,7 @@ static struct yetty_ycore_void_result render_bar(struct yetty_ychart_render_stat
         float center_y = slot_y0 + slot * 0.5f;
         struct yetty_ycore_void_result cl =
             yetty_ychart_emit_label(state, px0 - 6.0f, center_y, chart->categories[i], fs,
-                                     YETTY_YCHART_COLOR_TEXT_MUTED, YETTY_YCHART_ANCHOR_RIGHT);
+                                    YETTY_YCHART_COLOR_TEXT_MUTED, YETTY_YCHART_ANCHOR_RIGHT);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, cl, "bar: category label");
 
         float stack_pos = 0.0f, stack_neg = 0.0f;

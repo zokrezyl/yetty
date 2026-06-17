@@ -1,7 +1,7 @@
 # ycircuit — yclass class `ycircuit:circuit`: an electronic schematic renderer.
 #
 # circuit.c is the hand-written annotated source (#includes circuit.gen.c at
-# the foot); methods.gen.c + rpc.gen.c are codegen output. It parses a small
+# the foot); the per-class <stem>.gen.c files are codegen output (#included into each .c). It parses a small
 # schematic DSL (or is filled through its add_* methods) into an editable
 # circuit model and renders a ydraw drawable list: wires / component bodies as
 # SDF segments, circles and triangles, and designators / values / labels as
@@ -11,7 +11,6 @@
 
 add_library(yetty_ycircuit STATIC
     circuit.c
-    methods.gen.c
     rpc.gen.c
 )
 

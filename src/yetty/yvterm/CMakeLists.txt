@@ -8,7 +8,6 @@ add_library(yetty_yvterm STATIC
     # and the cross-class method tables. grid.c/vterm.c each only #include their
     # own <name>.gen.c at the foot, so these are compiled as standalone units —
     # mirrors ygrid/CMakeLists.txt.
-    methods.gen.c
     rpc.gen.c
 )
 

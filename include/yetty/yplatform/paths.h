@@ -46,9 +46,13 @@ extern "C" {
  *                  (honours $XDG_BIN_HOME). Windows:
  *                  %LOCALAPPDATA%\Programs\yetty. Empty on platforms with
  *                  no install step (webasm / android / ios / tvos).
+ *   shaders_dir — <data_dir>/shaders. Derived field: populated only by
+ *                  yetty_yplatform_paths_create (left empty by the
+ *                  per-platform get_platform_paths primitive).
+ *   fonts_dir   — <data_dir>/fonts. Derived field, same rule as shaders_dir.
  *
  * PATH_MAX is platform-specific (4096 on Linux, 1024 on macOS, 260 on
- * Windows MAX_PATH). 5×PATH_MAX ≈ 20 KiB on Linux — chunky for a heap
+ * Windows MAX_PATH). 8×PATH_MAX ≈ 32 KiB on Linux — chunky for a heap
  * alloc, fine for a process-lifetime singleton (see below).
  */
 struct yetty_yplatform_paths {
@@ -58,6 +62,8 @@ struct yetty_yplatform_paths {
     char config_dir_buf[PATH_MAX];
     char assets_dir_buf[PATH_MAX];
     char bin_dir_buf[PATH_MAX];
+    char shaders_dir_buf[PATH_MAX];
+    char fonts_dir_buf[PATH_MAX];
 };
 
 YETTY_YRESULT_DECLARE(yetty_yplatform_paths_ptr, struct yetty_yplatform_paths *);
@@ -67,8 +73,22 @@ YETTY_YRESULT_DECLARE(yetty_yplatform_paths_ptr, struct yetty_yplatform_paths *)
  * Caller owns the returned pointer and must release it with
  * yetty_yplatform_paths_destroy. Most call sites should prefer the
  * convenience getters below (process-static singleton, no ownership).
+ *
+ * This is the per-platform primitive: it resolves cache/data/runtime/
+ * config/assets/bin but leaves the derived shaders_dir/fonts_dir empty
+ * and does not create any directory (except iOS/tvOS, which must use
+ * NSFileManager). Use yetty_yplatform_paths_create for the full setup.
  */
 struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths(void);
+
+/*
+ * Resolve the platform directory layout (via the per-platform
+ * get_platform_paths), derive shaders_dir/fonts_dir as <data>/shaders and
+ * <data>/fonts, and create the writable directories (cache, data, runtime,
+ * config, shaders, fonts). assets_dir/bin_dir are NOT created. Caller owns
+ * the result and releases it with yetty_yplatform_paths_destroy.
+ */
+struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_create(void);
 
 /*
  * Free a struct returned by yetty_yplatform_paths_get_platform_paths.

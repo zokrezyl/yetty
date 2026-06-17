@@ -160,6 +160,13 @@ all: help
 # or <name>=<path> for yclass modules living elsewhere (yclass-based tools).
 YCLASS_MODULES := yfigure ygrid ygui ymgui yrdawn yshadertoy yvterm yflame ymap yview yplatform ychrome ymusic ycircuit yai=tools/ai/yai yrich
 
+# Modules kept on the legacy split (standalone methods.gen.c + rpc.gen.c instead
+# of folding both into each <stem>.gen.c). yplatform's only class lives in the
+# GLFW-bound, desktop-only window-manager.c, but its (all-local) method stubs
+# must link on every platform — so the stubs stay in a platform-independent
+# methods.gen.c while the GLFW accessor/factory stay in the desktop-only unit.
+YCLASS_NOFOLD := yplatform
+
 .PHONY: codegen
 codegen: ## Run yclass codegen for all annotated modules (output committed to git)
 	@# Two passes: a header-destined type (exposed function arg, callback
@@ -182,10 +189,12 @@ codegen: ## Run yclass codegen for all annotated modules (output committed to gi
 				fail=1; continue; \
 			fi; \
 			echo "==> yclass codegen: $$mod"; \
+			nofold=""; \
+			case " $(YCLASS_NOFOLD) " in *" $$mod "*) nofold="--no-fold";; esac; \
 			uv run src/yetty/yclass/gen/codegen.py "$$mod" \
 					"$(CURDIR)/include/yetty" \
 					"$(CURDIR)/$$src_dir" \
-					$$sources || fail=1; \
+					$$nofold $$sources || fail=1; \
 		done; \
 		if [ $$fail -ne 0 ]; then \
 			echo "==> yclass codegen: errors above — see each module's report"; \

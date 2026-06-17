@@ -11,7 +11,6 @@
 add_library(yetty_ymgui STATIC
     figure.c
     pipeline.c
-    methods.gen.c
     rpc.gen.c
 )
 

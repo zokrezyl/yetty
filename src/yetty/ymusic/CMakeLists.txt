@@ -1,7 +1,7 @@
 # ymusic — yclass class `ymusic:music`: a LilyPond-subset music renderer.
 #
 # music.c is the hand-written annotated source (#includes music.gen.c at the
-# foot); methods.gen.c + rpc.gen.c are codegen output. It parses a LilyPond
+# foot); the per-class <stem>.gen.c files are codegen output (#included into each .c). It parses a LilyPond
 # subset into an editable score model and renders a ydraw drawable list: staff
 # lines / stems / ledger lines / barlines as SDF segments, and clefs / noteheads
 # / rests / accidentals / flags as Emmentaler MSDF glyphs. The yclass model.yaml
@@ -10,7 +10,6 @@
 
 add_library(yetty_ymusic STATIC
     music.c
-    methods.gen.c
     rpc.gen.c
 )
 

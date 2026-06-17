@@ -3,7 +3,7 @@
 #   map.c           the `ymap:map` yclass class (hand-written annotated
 #                   source; map.gen.c included at the foot). Provider
 #                   registry, view state, pan/zoom verbs, render dispatch.
-#                   methods.gen.c + rpc.gen.c + map.h are codegen output;
+#                   map.gen.c + map.h are codegen output;
 #                   model.yaml drives the FFI / host-language bindings.
 #   engine.c        raster path: parallel tile fetch → RGBA composite →
 #                   one yimage prim. Plus the slippy projection helpers.
@@ -20,7 +20,6 @@
 
 add_library(yetty_ymap STATIC
     map.c
-    methods.gen.c
     rpc.gen.c
     engine.c
     tile-fetch.c

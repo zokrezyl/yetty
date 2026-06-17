@@ -16,9 +16,8 @@ struct [[clang::annotate("class@yanimal:animal")]] animal_data {
 };
 
 [[clang::annotate("override@yanimal:animal:animal_ctor")]]
-static struct yetty_ycore_void_result animal_default_ctor(struct ctx *ctx, struct object *obj)
+static struct yetty_ycore_void_result animal_default_ctor(struct object *obj)
 {
-    (void)ctx;
     struct yanimal_animal_data_ptr_result self = yanimal_animal_data_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self, "animal_default_ctor: data block");
     self.value->age = 0;
@@ -28,9 +27,8 @@ static struct yetty_ycore_void_result animal_default_ctor(struct ctx *ctx, struc
 }
 
 [[clang::annotate("override@yanimal:animal:animal_dtor")]]
-static struct yetty_ycore_void_result animal_default_dtor(struct ctx *ctx, struct object *obj)
+static struct yetty_ycore_void_result animal_default_dtor(struct object *obj)
 {
-    (void)ctx;
     struct yanimal_animal_data_ptr_result self = yanimal_animal_data_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self, "animal_default_dtor: data block");
     ydebug("obj=%p final energy=%d", (void *)obj, self.value->energy);
@@ -38,9 +36,8 @@ static struct yetty_ycore_void_result animal_default_dtor(struct ctx *ctx, struc
 }
 
 [[clang::annotate("override@yanimal:animal:animal_breathe")]]
-static struct yetty_ycore_void_result animal_default_breathe(struct ctx *ctx, struct object *obj)
+static struct yetty_ycore_void_result animal_default_breathe(struct object *obj)
 {
-    (void)ctx;
     struct yanimal_animal_data_ptr_result self = yanimal_animal_data_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, self, "animal_default_breathe: data block");
     self.value->energy += 5;
@@ -52,9 +49,8 @@ static struct yetty_ycore_void_result animal_default_breathe(struct ctx *ctx, st
 }
 
 [[clang::annotate("override@yanimal:animal:animal_speak")]]
-static struct str_result animal_default_speak(struct ctx *ctx, struct object *obj, int volume)
+static struct str_result animal_default_speak(struct object *obj, int volume)
 {
-    (void)ctx;
     struct yanimal_animal_data_ptr_result self = yanimal_animal_data_get(obj);
     YETTY_RETURN_IF_ERR(str, self, "animal_default_speak: data block");
     self.value->energy -= 1;
@@ -66,10 +62,8 @@ static struct str_result animal_default_speak(struct ctx *ctx, struct object *ob
 }
 
 [[clang::annotate("override@yanimal:animal:animal_eat")]]
-static struct yetty_ycore_int_result animal_default_eat(struct ctx *ctx, struct object *obj,
-                                                        float amount)
+static struct yetty_ycore_int_result animal_default_eat(struct object *obj, float amount)
 {
-    (void)ctx;
     struct yanimal_animal_data_ptr_result self = yanimal_animal_data_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, self, "animal_default_eat: data block");
     self.value->energy += (int)(amount * 20.0f);

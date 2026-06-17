@@ -15,9 +15,8 @@ struct [[clang::annotate("class@yvehicle:motorbike")]] [[clang::annotate(
 };
 
 [[clang::annotate("override@yvehicle:motorbike:vehicle_describe")]]
-static struct str_result motorbike_describe(struct ctx *ctx, struct object *obj, float distance)
+static struct str_result motorbike_describe(struct object *obj, float distance)
 {
-    (void)ctx;
     struct yvehicle_motorbike_data_ptr_result self = yvehicle_motorbike_data_get(obj); /* own */
     YETTY_RETURN_IF_ERR(str, self, "motorbike_describe: data block");
     struct yetty_ycore_int_result mileage = yvehicle_vehicle_mileage_get(obj); /* parent */

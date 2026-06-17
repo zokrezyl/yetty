@@ -49,60 +49,60 @@ enum yetty_ychart_anchor {
  *===========================================================================*/
 
 float yetty_ychart_measure(struct yetty_ychart_render_state *state, const char *text,
-                            float font_size);
+                           float font_size);
 
 /* Replace a colour's alpha byte (ARGB). */
 uint32_t yetty_ychart_with_alpha(uint32_t color, uint8_t alpha);
 
 struct yetty_ycore_void_result yetty_ychart_emit_box(struct yetty_ychart_render_state *state,
-                                                      float x0, float y0, float x1, float y1,
-                                                      float corner_radius, uint32_t fill_color,
-                                                      uint32_t stroke_color, float stroke_width);
+                                                     float x0, float y0, float x1, float y1,
+                                                     float corner_radius, uint32_t fill_color,
+                                                     uint32_t stroke_color, float stroke_width);
 
 struct yetty_ycore_void_result yetty_ychart_emit_segment(struct yetty_ychart_render_state *state,
-                                                          float x0, float y0, float x1, float y1,
-                                                          uint32_t color, float width);
+                                                         float x0, float y0, float x1, float y1,
+                                                         uint32_t color, float width);
 
 struct yetty_ycore_void_result yetty_ychart_emit_triangle(struct yetty_ychart_render_state *state,
-                                                           float ax, float ay, float bx, float by,
-                                                           float cx, float cy, uint32_t color);
+                                                          float ax, float ay, float bx, float by,
+                                                          float cx, float cy, uint32_t color);
 
 struct yetty_ycore_void_result yetty_ychart_emit_circle(struct yetty_ychart_render_state *state,
-                                                         float cx, float cy, float radius,
-                                                         uint32_t fill_color, uint32_t stroke_color,
-                                                         float stroke_width);
+                                                        float cx, float cy, float radius,
+                                                        uint32_t fill_color, uint32_t stroke_color,
+                                                        float stroke_width);
 
 /* A poly-line through `count` points (no fill). */
 struct yetty_ycore_void_result yetty_ychart_emit_polyline(struct yetty_ychart_render_state *state,
-                                                           const float *xs, const float *ys,
-                                                           size_t count, uint32_t color,
-                                                           float width);
+                                                          const float *xs, const float *ys,
+                                                          size_t count, uint32_t color,
+                                                          float width);
 
 /* Emit text with baseline at `baseline_y`, left edge at `x`. */
 struct yetty_ycore_void_result yetty_ychart_emit_text(struct yetty_ychart_render_state *state,
-                                                       float x, float baseline_y, const char *text,
-                                                       float font_size, uint32_t color);
+                                                      float x, float baseline_y, const char *text,
+                                                      float font_size, uint32_t color);
 
 /* Emit text anchored horizontally around `x`, vertically centred on `cy`. */
 struct yetty_ycore_void_result yetty_ychart_emit_label(struct yetty_ychart_render_state *state,
-                                                        float x, float cy, const char *text,
-                                                        float font_size, uint32_t color,
-                                                        enum yetty_ychart_anchor anchor);
+                                                       float x, float cy, const char *text,
+                                                       float font_size, uint32_t color,
+                                                       enum yetty_ychart_anchor anchor);
 
 /* A filled / outlined annular wedge (pie slice when inner_radius == 0).
  * Angles in radians, measured clockwise from the top (12 o'clock). */
 struct yetty_ycore_void_result yetty_ychart_emit_wedge(struct yetty_ychart_render_state *state,
-                                                        float cx, float cy, float inner_radius,
-                                                        float outer_radius, float angle_start,
-                                                        float angle_end, uint32_t color);
+                                                       float cx, float cy, float inner_radius,
+                                                       float outer_radius, float angle_start,
+                                                       float angle_end, uint32_t color);
 
 /* Title + legend (legend shows one swatch+label per entry). */
 struct yetty_ycore_void_result yetty_ychart_emit_title(struct yetty_ychart_render_state *state);
 
 struct yetty_ycore_void_result yetty_ychart_emit_legend(struct yetty_ychart_render_state *state,
-                                                         const char *const *labels,
-                                                         const uint32_t *colors, size_t count,
-                                                         float legend_top);
+                                                        const char *const *labels,
+                                                        const uint32_t *colors, size_t count,
+                                                        float legend_top);
 
 /* Pixel height reserved at the bottom for a legend of `count` entries (0 when
  * the legend is disabled / empty). */
@@ -118,11 +118,9 @@ double yetty_ychart_max_value(const struct yetty_ychart_chart *chart);
 struct yetty_ycore_void_result yetty_ychart_render_cartesian(
     struct yetty_ychart_render_state *state);
 struct yetty_ycore_void_result yetty_ychart_render_pie(struct yetty_ychart_render_state *state,
-                                                        bool donut);
+                                                       bool donut);
 struct yetty_ycore_void_result yetty_ychart_render_radar(struct yetty_ychart_render_state *state);
-struct yetty_ycore_void_result yetty_ychart_render_treemap(
-    struct yetty_ychart_render_state *state);
-struct yetty_ycore_void_result yetty_ychart_render_sankey(
-    struct yetty_ychart_render_state *state);
+struct yetty_ycore_void_result yetty_ychart_render_treemap(struct yetty_ychart_render_state *state);
+struct yetty_ycore_void_result yetty_ychart_render_sankey(struct yetty_ychart_render_state *state);
 
 #endif /* YETTY_YCHART_RENDER_STATE_H */

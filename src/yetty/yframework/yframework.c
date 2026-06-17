@@ -285,7 +285,8 @@ static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPU
         __android_log_print(4, "yhello",
                             "PROBE present mode: %s (avail fifo=%d fifo-relaxed=%d mailbox=%d "
                             "immediate=%d)",
-                            picked_name, have_fifo, have_fifo_relaxed, have_mailbox, have_immediate);
+                            picked_name, have_fifo, have_fifo_relaxed, have_mailbox,
+                            have_immediate);
 #endif
         wgpuSurfaceCapabilitiesFreeMembers(caps);
     } else {
