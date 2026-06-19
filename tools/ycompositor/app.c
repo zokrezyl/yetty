@@ -1,7 +1,10 @@
 /*
- * tools/ycompositor/main.c — standalone ycompositor test harness.
+ * tools/ycompositor/app.c — standalone ycompositor test harness (yclass class
+ * `ycompositor:app`).
  *
- * Opens a window via yinit_run + yframework_create, builds a ycompositor
+ * Subclass of yapp:app: the shared yplatform entry brings up the
+ * window/surface/GPU/channels and hands the runtime to run, which builds a
+ * ycompositor
  * with a single full-window ygrid figure, and pushes a parameter-sweep
  * of SDF primitives directly into the grid via yetty_ygrid_add_record.
  * No terminal, no yui, no ygui — the compositor and ygrid render path
@@ -23,7 +26,9 @@
  *   [5..] geometry (f32; struct yetty_ysdf_<kind>)
  */
 
-#include <yetty/yinit/yinit.h>
+#include <yetty/yinit/yinit.h> /* struct yetty_yinit_runtime (platform runtime type) */
+#include <yetty/yapp/app.h>
+#include <yetty/yclass/class.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yconfig/config.h>
@@ -49,7 +54,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct ycomp_app {
+struct [[clang::annotate("class@ycompositor:app")]] [[clang::annotate("parent@yapp:app")]] yetty_ycompositor_app {
     int quit;
     struct yetty_context ctx;
     struct yetty_yframework *yrt;
@@ -57,15 +62,22 @@ struct ycomp_app {
                                          * yframework's x11-tile choice */
     struct yetty_yclass_object *root;
     struct yetty_ygrid_grid *grid;
-    /* Default font loaded once at worker startup and attached to every
+    /* Default font loaded once at startup and attached to every
      * rebuilt grid at slot 0. Owned here, destroyed in teardown. */
     struct yetty_yfont_font *font;
-    void *surface; /* WGPUSurface borrowed from yinit_rt */
+    void *surface; /* WGPUSurface borrowed from the platform runtime */
     uint32_t surface_w;
     uint32_t surface_h;
     /* Window chrome host (draggable/resizable titlebar + min/max/close). */
     struct yetty_ychrome_host *chrome;
 };
+
+/* Result wrapper + codegen accessor/downcast forward-decls (this TU does not
+ * include its own generated header). */
+YETTY_YRESULT_DECLARE(yetty_ycompositor_app_ptr, struct yetty_ycompositor_app *);
+struct yetty_yclass_ptr_result yetty_ycompositor_app_class_get(void);
+struct yetty_ycompositor_app_ptr_result yetty_ycompositor_app_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_ycompositor_app_create(struct yetty_yclass_ctx *ctx);
 
 /* Mint brand color from rules/08-branding.md: BRAND_ACCENT #6BA892, etc.
  * Format on wire is 0xAARRGGBB (the same packing the dashboard uses). */
@@ -364,7 +376,7 @@ static struct yetty_ycore_void_result populate_grid(struct yetty_ygrid_grid *gri
 
 /* (Re)build the single ygrid figure to cover the whole drawable area
  * minus a small margin. Called at startup and on RESIZE. */
-static struct yetty_ycore_void_result rebuild_figure(struct ycomp_app *app)
+static struct yetty_ycore_void_result rebuild_figure(struct yetty_ycompositor_app *app)
 {
     const float margin = 20.0f;
     struct yetty_ycore_rectangle rect = {
@@ -413,7 +425,7 @@ static struct yetty_ycore_void_result rebuild_figure(struct ycomp_app *app)
     return YETTY_OK_VOID();
 }
 
-static void handle_event(struct ycomp_app *app, const struct yetty_yui_event *ev)
+static void handle_event(struct yetty_ycompositor_app *app, const struct yetty_yui_event *ev)
 {
     /* Window chrome gets first dibs on pointer events (caption drag / edge
      * resize / its buttons); anything it doesn't claim falls through. */
@@ -478,9 +490,22 @@ static void handle_event(struct ycomp_app *app, const struct yetty_yui_event *ev
     }
 }
 
-static struct yetty_ycore_void_result ycomp_worker(struct yetty_yinit_runtime *rt, void *user)
+[[clang::annotate("override@yapp:app:init")]]
+static struct yetty_ycore_void_result ycompositor_app_init(struct yetty_yclass_object *obj,
+                                                           struct yetty_yinit_runtime *rt)
 {
-    struct ycomp_app *app = user;
+    (void)obj;
+    (void)rt;
+    return YETTY_OK_VOID();
+}
+
+[[clang::annotate("override@yapp:app:run")]]
+static struct yetty_ycore_void_result ycompositor_app_run(struct yetty_yclass_object *obj,
+                                                          struct yetty_yinit_runtime *rt)
+{
+    struct yetty_ycompositor_app_ptr_result app_res = yetty_ycompositor_app_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "ycompositor:app:run: app_from");
+    struct yetty_ycompositor_app *app = app_res.value;
 
     struct yetty_yframework_ptr_result yr = yetty_yframework_create(rt);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yframework_create failed");
@@ -653,15 +678,11 @@ static struct yetty_ycore_void_result ycomp_worker(struct yetty_yinit_runtime *r
     return YETTY_OK_VOID();
 }
 
-int main(int argc, char **argv)
+/* Strong injection point: the shared yplatform entry creates the concrete app
+ * through this weak hook. */
+struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx)
 {
-    struct ycomp_app app = {0};
-    struct yetty_ycore_int_result run_result =
-        yetty_yinit_run(argc, argv, ycomp_worker, &app);
-    if (YETTY_IS_ERR(run_result)) {
-        yetty_ycore_error_print(stderr, "ycompositor: run", run_result.error);
-        yetty_ycore_error_destroy(run_result.error);
-        return 1;
-    }
-    return run_result.value;
+    return yetty_ycompositor_app_create(ctx);
 }
+
+#include "app.gen.c"

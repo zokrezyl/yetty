@@ -27,8 +27,9 @@ struct yetty_yplatform_webasm_window_ptr_result yetty_yplatform_webasm_window_fr
     struct yetty_yclass_object *obj);
 
 /* No webasm-specific state — the canvas is global to the emscripten runtime. */
-struct [[clang::annotate("class@yplatform:webasm_window")]] [[clang::annotate("platform@webasm")]] [[clang::annotate(
-    "parent@yplatform:window")]] yetty_yplatform_webasm_window {
+struct [[clang::annotate("class@yplatform:webasm_window")]] [[clang::annotate(
+    "platform@webasm")]] [[clang::annotate("parent@yplatform:window")]]
+yetty_yplatform_webasm_window {
     char reserved;
 };
 

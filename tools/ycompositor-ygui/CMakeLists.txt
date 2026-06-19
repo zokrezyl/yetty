@@ -18,13 +18,11 @@ if(NOT YETTY_ENABLE_LIB_WEBGPU)
 endif()
 
 set(YCOMP_YGUI_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/yinit/glfw.c
+    ${YETTY_APP_BOOTSTRAP_SOURCES}
     ${YETTY_ROOT}/src/yetty/yframework/yframework.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c

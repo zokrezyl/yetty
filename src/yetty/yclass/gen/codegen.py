@@ -232,6 +232,15 @@ def ast_dump(path: Path, include_dirs: list) -> dict:
     # special define is required for them to resolve here.
     cmd = [clang, "-Xclang", "-ast-dump=json", "-fsyntax-only", "-std=c2x",
            "-ferror-limit=0", "-Wno-error", "-Wno-everything"]
+    # Some modules keep their annotated class/overrides behind a feature
+    # #ifdef (e.g. a standalone-window app guarded by
+    # YETTY_<TOOL>_HAS_STANDALONE). The annotation is invisible to this parse
+    # unless that macro is defined, so the Makefile passes the module's
+    # required guard macros through YCLASS_DEFINES (space-separated). These
+    # only affect which annotated declarations clang sees; the generated
+    # output is committed and compiled under the real CMake define.
+    for macro in os.environ.get("YCLASS_DEFINES", "").split():
+        cmd.append(f"-D{macro}")
     for d in include_dirs:
         cmd.append(f"-I{d}")
     cmd.append(str(path))

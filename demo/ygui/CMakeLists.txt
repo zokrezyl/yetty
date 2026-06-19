@@ -14,18 +14,18 @@ if(NOT YETTY_ENABLE_LIB_WEBGPU)
     return()
 endif()
 
-# Platform / yinit / yframework / yconfig sources — same set ygreeter
-# inlines. There is no static lib for the yinit layer (window, surface,
-# event-pipes), so each standalone-window binary pulls the sources
-# directly.
+# Platform / yframework / yconfig sources. The demo runner is a yapp:app
+# subclass (class demoygui:app in runner.c); it owns its own entry
+# (demo_runner_run) so it pulls the glfw_platform bootstrap
+# (${YETTY_APP_BOOTSTRAP_SOURCES}) WITHOUT the shared ymain/glfw.c. There is no
+# static lib for this platform layer, so each standalone binary pulls the
+# sources directly.
 set(DEMO_YGUI_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/yinit/glfw.c
+    ${YETTY_APP_BOOTSTRAP_SOURCES}
     ${YETTY_ROOT}/src/yetty/yframework/yframework.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c

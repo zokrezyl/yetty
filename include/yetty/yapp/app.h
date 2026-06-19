@@ -35,17 +35,30 @@ struct yetty_yapp_app_ptr_result {
 struct yetty_yapp_app_ptr_result yetty_yapp_app_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yapp_app_to(struct yetty_yapp_app *data);
 
-struct yetty_ycore_void_result yetty_yapp_init(struct yetty_yclass_object * app, struct yetty_yinit_runtime * runtime);
-struct yetty_ycore_void_result yetty_yapp_run(struct yetty_yclass_object * app, struct yetty_yinit_runtime * runtime);
+struct yetty_ycore_void_result yetty_yapp_init(struct yetty_yclass_object *app,
+                                               struct yetty_yinit_runtime *runtime);
+struct yetty_ycore_void_result yetty_yapp_run(struct yetty_yclass_object *app,
+                                              struct yetty_yinit_runtime *runtime);
 
-typedef struct yetty_ycore_void_result (*yetty_yapp_init_fn)(struct yetty_yclass_object *, struct yetty_yinit_runtime *);
-typedef struct yetty_ycore_void_result (*yetty_yapp_run_fn)(struct yetty_yclass_object *, struct yetty_yinit_runtime *);
+typedef struct yetty_ycore_void_result (*yetty_yapp_init_fn)(struct yetty_yclass_object *,
+                                                             struct yetty_yinit_runtime *);
+typedef struct yetty_ycore_void_result (*yetty_yapp_run_fn)(struct yetty_yclass_object *,
+                                                            struct yetty_yinit_runtime *);
 
 struct yetty_yclass_object_ptr_result yetty_yapp_app_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_yapp_register(void);
 
 struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx);
+/*
+ * Concrete-app by-name registration hook. The shared platform entry calls this
+ * after registering the platform and base-app classes; the final app module may
+ * provide a strong override that installs its own yclass accessor-lookup hook
+ * (needed only when the app object is proxied over RPC). Standalone apps that
+ * only dispatch locally inherit this no-op default — their app class registers
+ * itself lazily on first create.
+ */
+struct yetty_ycore_void_result yetty_yapp_register_app(void);
 
 #ifdef __cplusplus
 }

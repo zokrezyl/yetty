@@ -22,7 +22,9 @@ struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_
                                                             int argc, char **argv);
 struct yetty_ycore_void_result yetty_yapp_register(void);
 struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx);
-struct yetty_ycore_void_result yetty_yetty_register(void);
+/* Concrete-app by-name registration hook. Weak no-op default in yapp/app.c; the
+ * final app module may override it (yetty does, to register its own app class). */
+struct yetty_ycore_void_result yetty_yapp_register_app(void);
 
 int main(int argc, char **argv)
 {
@@ -41,7 +43,7 @@ int main(int argc, char **argv)
         yetty_ycore_error_destroy(yapp_reg.error);
         return 1;
     }
-    struct yetty_ycore_void_result app_reg = yetty_yetty_register();
+    struct yetty_ycore_void_result app_reg = yetty_yapp_register_app();
     if (YETTY_IS_ERR(app_reg)) {
         yetty_ycore_error_print(stderr, "yetty: app register", app_reg.error);
         yetty_ycore_error_destroy(app_reg.error);

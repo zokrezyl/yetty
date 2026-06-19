@@ -1332,8 +1332,7 @@ static struct yetty_ycore_void_result terminal_copy_selection(
     if (!terminal->sel_active) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yclass_object *clipboard =
-        terminal->context.yetty_context.runtime->clipboard;
+    struct yetty_yclass_object *clipboard = terminal->context.yetty_context.runtime->clipboard;
     if (!clipboard) {
         ydebug("terminal_copy_selection: no clipboard");
         return YETTY_OK_VOID();
@@ -1372,8 +1371,7 @@ static struct yetty_ycore_void_result terminal_copy_selection(
 static struct yetty_ycore_void_result terminal_paste_clipboard(
     struct yetty_yterminal_terminal *terminal)
 {
-    struct yetty_yclass_object *clipboard =
-        terminal->context.yetty_context.runtime->clipboard;
+    struct yetty_yclass_object *clipboard = terminal->context.yetty_context.runtime->clipboard;
     if (!clipboard) {
         ydebug("terminal_paste_clipboard: no clipboard");
         return YETTY_OK_VOID();

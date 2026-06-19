@@ -158,7 +158,7 @@ all: help
 
 # A module entry is either a bare name (sources under src/yetty/<name>/)
 # or <name>=<path> for yclass modules living elsewhere (yclass-based tools).
-YCLASS_MODULES := yapp yetty yfigure ygrid ygui ymgui yrdawn yshadertoy yvterm yflame ymap yview yplatform ychrome ymusic ycircuit yai=tools/ai/yai yrich
+YCLASS_MODULES := yapp yetty yfigure ygrid ygui ymgui yrdawn yshadertoy yvterm yflame ymap yview yplatform ychrome ymusic ycircuit yai=tools/ai/yai yrich yzoo=tools/yzoo ymaze=tools/ymaze yjungle=tools/yjungle demoygui=demo/ygui ycompositor=tools/ycompositor yaudio=tools/yaudio ycompositorygui=tools/ycompositor-ygui ybrowser=tools/ybrowser yhello=tools/yhello ygreeter=tools/ygreeter
 
 # Modules kept on the legacy split (standalone methods.gen.c + rpc.gen.c instead
 # of folding the per-class code into each <stem>.gen.c). Empty now: the module
@@ -175,6 +175,14 @@ CODEGEN_JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 
 # Regenerate ONE module by name: resolve its spec (for the `yai=<dir>` form),
 # its annotated sources, and the --no-fold flag, then run the generator.
+# Feature guards a module keeps its annotated class/overrides behind. codegen
+# can't see annotations under an #ifdef unless the macro is defined for its parse
+# (the generated output is committed and compiled under the real CMake define).
+# Space-separate multiple macros. Keep in sync with each tool's CMake define.
+YCLASS_DEFINES_ybrowser := YETTY_YBROWSER_HAS_STANDALONE YETTY_YGUI_HAS_UV
+YCLASS_DEFINES_yhello := YETTY_YHELLO_HAS_STANDALONE
+YCLASS_DEFINES_ygreeter := YETTY_YGREETER_HAS_STANDALONE YETTY_YGUI_HAS_UV
+
 define codegen_one
 mod="$(1)"; spec="$$mod"; \
 for s in $(YCLASS_MODULES); do case "$$s" in "$$mod"=*) spec="$$s";; esac; done; \
@@ -183,7 +191,7 @@ sources=$$(grep -lrE 'clang::annotate\("(class|mixin)@'"$$mod"':' "$$src_dir" --
 if [ -z "$$sources" ]; then echo "ERROR: no annotated sources under $$src_dir"; exit 1; fi; \
 nofold=""; case " $(YCLASS_NOFOLD) " in *" $$mod "*) nofold="--no-fold";; esac; \
 echo "  codegen: $$mod"; \
-PYTHONHASHSEED=0 uv run src/yetty/yclass/gen/codegen.py "$$mod" "$(CURDIR)/include/yetty" "$(CURDIR)/$$src_dir" $$nofold $$sources
+YCLASS_DEFINES="$(YCLASS_DEFINES_$(1))" PYTHONHASHSEED=0 uv run src/yetty/yclass/gen/codegen.py "$$mod" "$(CURDIR)/include/yetty" "$(CURDIR)/$$src_dir" $$nofold $$sources
 endef
 
 # NB: the per-module _cg1-%/_cg2-% targets are deliberately NOT .PHONY — GNU

@@ -30,8 +30,9 @@ struct yetty_yplatform_android_clipboard_ptr_result yetty_yplatform_android_clip
     struct yetty_yclass_object *obj);
 
 /* Private subclass state: the pipe paste results are posted to (borrowed). */
-struct [[clang::annotate("class@yplatform:android_clipboard")]] [[clang::annotate("platform@android")]]
-[[clang::annotate("parent@yplatform:clipboard")]] yetty_yplatform_android_clipboard {
+struct [[clang::annotate("class@yplatform:android_clipboard")]] [[clang::annotate(
+    "platform@android")]] [[clang::annotate("parent@yplatform:clipboard")]]
+yetty_yplatform_android_clipboard {
     struct yetty_ycore_xthread_event_pipe *response_pipe;
 };
 
@@ -40,7 +41,8 @@ struct yetty_ycore_void_result yetty_yplatform_android_clipboard_configure(
     struct yetty_yclass_object *obj, struct yetty_ycore_xthread_event_pipe *response_pipe)
 {
     if (!response_pipe) {
-        return YETTY_ERR(yetty_ycore_void, "android_clipboard_configure: response_pipe is required");
+        return YETTY_ERR(yetty_ycore_void,
+                         "android_clipboard_configure: response_pipe is required");
     }
     struct yetty_yplatform_android_clipboard_ptr_result data =
         yetty_yplatform_android_clipboard_from(obj);

@@ -359,8 +359,8 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
 #endif /* YETTY_YCHROME_HAS_LOCAL */
 
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
-    struct yetty_yfigure_producer *producer, struct yetty_yclass_object *window_chrome,
-    float width, float height, float caption_height, float edge_size, unsigned int flags)
+    struct yetty_yfigure_producer *producer, struct yetty_yclass_object *window_chrome, float width,
+    float height, float caption_height, float edge_size, unsigned int flags)
 {
     if (!producer) {
         return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host_create_wire: producer required");

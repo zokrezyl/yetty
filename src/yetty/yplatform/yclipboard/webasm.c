@@ -31,8 +31,9 @@ struct yetty_yplatform_webasm_clipboard_ptr_result yetty_yplatform_webasm_clipbo
     struct yetty_yclass_object *obj);
 
 /* Private subclass state: the pipe paste results are posted to (borrowed). */
-struct [[clang::annotate("class@yplatform:webasm_clipboard")]] [[clang::annotate("platform@webasm")]]
-[[clang::annotate("parent@yplatform:clipboard")]] yetty_yplatform_webasm_clipboard {
+struct [[clang::annotate("class@yplatform:webasm_clipboard")]] [[clang::annotate(
+    "platform@webasm")]] [[clang::annotate("parent@yplatform:clipboard")]]
+yetty_yplatform_webasm_clipboard {
     struct yetty_ycore_xthread_event_pipe *response_pipe;
 };
 
@@ -63,7 +64,8 @@ static struct yetty_ycore_void_result webasm_clipboard_set_text(struct yetty_ycl
 }
 
 [[clang::annotate("override@yplatform:webasm_clipboard:clipboard_request_paste")]]
-static struct yetty_ycore_void_result webasm_clipboard_request_paste(struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result webasm_clipboard_request_paste(
+    struct yetty_yclass_object *obj)
 {
     struct yetty_yplatform_webasm_clipboard_ptr_result data =
         yetty_yplatform_webasm_clipboard_from(obj);
@@ -72,7 +74,8 @@ static struct yetty_ycore_void_result webasm_clipboard_request_paste(struct yett
         return YETTY_ERR(yetty_ycore_void, "clipboard_request_paste: not configured");
     }
     if (yetty_yplatform_webasm_clipboard_request_paste(data.value->response_pipe) != 0) {
-        return YETTY_ERR(yetty_ycore_void, "clipboard_request_paste: navigator.clipboard read failed");
+        return YETTY_ERR(yetty_ycore_void,
+                         "clipboard_request_paste: navigator.clipboard read failed");
     }
     return YETTY_OK_VOID();
 }

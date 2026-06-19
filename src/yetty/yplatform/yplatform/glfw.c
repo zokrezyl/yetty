@@ -91,8 +91,9 @@ struct yetty_yplatform_glfw_platform_ptr_result yetty_yplatform_glfw_platform_fr
 
 /* No per-instance state: the bootstrap below owns the window / surface / pipes /
  * runtime for the duration of run(). */
-struct [[clang::annotate("class@yplatform:glfw_platform")]] [[clang::annotate("platform@glfw")]]
-[[clang::annotate("parent@yplatform:platform")]] yetty_yplatform_glfw_platform {
+struct [[clang::annotate("class@yplatform:glfw_platform")]] [[clang::annotate(
+    "platform@glfw")]] [[clang::annotate("parent@yplatform:platform")]]
+yetty_yplatform_glfw_platform {
     char reserved;
 };
 
@@ -112,8 +113,7 @@ YETTY_EXTERNAL_CALLBACK
 static int glfw_platform_worker_trampoline(void *arg)
 {
     struct glfw_platform_worker_args *worker_args = arg;
-    struct yetty_ycore_void_result res =
-        yetty_yapp_init(worker_args->app, worker_args->rt);
+    struct yetty_ycore_void_result res = yetty_yapp_init(worker_args->app, worker_args->rt);
     if (YETTY_IS_OK(res)) {
         res = yetty_yapp_run(worker_args->app, worker_args->rt);
     }
@@ -397,10 +397,11 @@ static struct yetty_ycore_void_result glfw_platform_run(struct yetty_yclass_obje
                     yetty_yplatform_window_chrome_configure(window_chrome, chrome_output_pipe);
                 if (YETTY_IS_OK(chrome_cfg)) {
                     chrome_cfg = yetty_yplatform_glfw_window_chrome_attach(window_chrome, window,
-                                                                          platform_input_pipe);
+                                                                           platform_input_pipe);
                 }
                 if (YETTY_IS_ERR(chrome_cfg)) {
-                    ywarn("glfw_platform: window chrome configure failed: %s", chrome_cfg.error.msg);
+                    ywarn("glfw_platform: window chrome configure failed: %s",
+                          chrome_cfg.error.msg);
                     yetty_ycore_error_destroy(chrome_cfg.error);
                     (void)yetty_yplatform_window_chrome_destroy(window_chrome);
                     window_chrome = NULL;
@@ -451,7 +452,8 @@ static struct yetty_ycore_void_result glfw_platform_run(struct yetty_yclass_obje
 
     if (render_thread) {
         if (window) {
-            glfw_platform_event_loop(window, &running, clipboard, chrome_output_pipe, window_chrome);
+            glfw_platform_event_loop(window, &running, clipboard, chrome_output_pipe,
+                                     window_chrome);
         } else {
             while (running) {
                 yetty_yplatform_ytime_sleep_ms(100);

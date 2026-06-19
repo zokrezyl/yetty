@@ -1,6 +1,10 @@
 /*
  * tools/ycompositor-ygui/main.c — ygui rendered via the new
- * ycompositor pipeline.
+ * ycompositor pipeline (yclass class `ycompositorygui:app`).
+ *
+ * Subclass of yapp:app. main() splices out `-e <cmd...>` (the child argv) then
+ * drives the platform bring-up sequence directly — it keeps its own main() so
+ * the `-e` tail never reaches yconfig. The platform hands the runtime to run.
  *
  * Two modes, selected by command line:
  *
@@ -25,7 +29,9 @@
  *     exactly what the app is emitting, in isolation from yetty itself.
  */
 
-#include <yetty/yinit/yinit.h>
+#include <yetty/yinit/yinit.h> /* struct yetty_yinit_runtime (platform runtime type) */
+#include <yetty/yapp/app.h>
+#include <yetty/yclass/class.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yconfig/config.h>
@@ -80,7 +86,7 @@ static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result
     }
 }
 
-struct ycomp_ygui_app {
+struct [[clang::annotate("class@ycompositorygui:app")]] [[clang::annotate("parent@yapp:app")]] yetty_ycompositorygui_app {
     int quit;
     struct yetty_context ctx;
     struct yetty_yframework *yrt;
@@ -133,6 +139,24 @@ struct ycomp_ygui_app {
     uint64_t n_bytes_in;
 };
 
+/* Result wrapper + codegen accessor/downcast forward-decls (this TU does not
+ * include its own generated header). */
+YETTY_YRESULT_DECLARE(yetty_ycompositorygui_app_ptr, struct yetty_ycompositorygui_app *);
+struct yetty_yclass_ptr_result yetty_ycompositorygui_app_class_get(void);
+struct yetty_ycompositorygui_app_ptr_result yetty_ycompositorygui_app_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_ycompositorygui_app_create(
+    struct yetty_yclass_ctx *ctx);
+
+/* Platform bring-up sequence symbols. ycompositor-ygui owns its own main()
+ * (`-e` child-argv splicing), so it drives this sequence directly. */
+struct yetty_ycore_void_result yetty_yplatform_register(void);
+struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_platform_create(
+    struct yetty_yclass_ctx *ctx);
+struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *app,
+                                                            int argc, char **argv);
+
 /* Build the widget tree once. A window holds a vbox body containing a
  * header label, a row of action buttons, a panel with checkboxes /
  * progress, and a list. Default theme drives all styling so we see
@@ -157,7 +181,7 @@ static struct yetty_yclass_object *cy_add(struct yetty_yclass_object *parent,
     return r.value;
 }
 
-static void build_scene(struct ycomp_ygui_app *app)
+static void build_scene(struct yetty_ycompositorygui_app *app)
 {
     /* Outer window — it becomes the framework root, so the layout pass
      * stretches it to the viewport automatically. */
@@ -275,7 +299,7 @@ static void build_scene(struct ycomp_ygui_app *app)
  * — that's engine_render's job, and engine_render also tries to ship
  * over OSC which we don't want in-process. So we wipe + lead with
  * CMD_ZERO manually here. */
-static struct yetty_ycore_void_result push_ygui_scene(struct ycomp_ygui_app *app)
+static struct yetty_ycore_void_result push_ygui_scene(struct yetty_ycompositorygui_app *app)
 {
     if (!app->ygui) {
         return YETTY_OK_VOID();
@@ -402,7 +426,7 @@ static uint8_t *maybe_decompress_lz4f(const uint8_t *payload, size_t payload_len
 static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_len,
                    const uint8_t *payload, size_t payload_len)
 {
-    struct ycomp_ygui_app *app = user;
+    struct yetty_ycompositorygui_app *app = user;
     (void)args;
     (void)args_len;
     app->n_osc_total++;
@@ -444,7 +468,7 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
 
 static void on_raw(void *user, const char *bytes, size_t n)
 {
-    struct ycomp_ygui_app *app = user;
+    struct yetty_ycompositorygui_app *app = user;
     (void)bytes;
     /* Raw output (printf / fprintf / non-OSC ANSI) is reported but
      * dropped — this tool is for OSC analysis, not full terminal
@@ -455,7 +479,7 @@ static void on_raw(void *user, const char *bytes, size_t n)
 /* fork+exec the child under a PTY. cell size matches imgui_impl_yetty's
  * defaults so the demo's TIOCGWINSZ-derived "fill" computation reports
  * the surface dims this tool actually shows. Returns 0 on success. */
-static int spawn_child(struct ycomp_ygui_app *app)
+static int spawn_child(struct yetty_ycompositorygui_app *app)
 {
     struct winsize ws = {0};
     if (app->cell_w_px > 0.0f) {
@@ -496,7 +520,7 @@ static int spawn_child(struct ycomp_ygui_app *app)
     return 0;
 }
 
-static void update_child_winsize(struct ycomp_ygui_app *app)
+static void update_child_winsize(struct yetty_ycompositorygui_app *app)
 {
     if (app->pty_master_fd < 0) {
         return;
@@ -521,7 +545,7 @@ static void update_child_winsize(struct ycomp_ygui_app *app)
 
 /* Drain whatever is currently readable from the child's PTY and feed it
  * to the yface scanner. Returns 1 if the child closed (EOF). */
-static int pump_pty_in(struct ycomp_ygui_app *app)
+static int pump_pty_in(struct yetty_ycompositorygui_app *app)
 {
     if (app->pty_master_fd < 0) {
         return 0;
@@ -557,7 +581,7 @@ static int pump_pty_in(struct ycomp_ygui_app *app)
     }
 }
 
-static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_event *ev)
+static void handle_event(struct yetty_ycompositorygui_app *app, const struct yetty_yui_event *ev)
 {
     /* Window chrome gets first dibs on pointer events. It only claims caption
      * drags / edge resizes / its own buttons (all outside the app's content),
@@ -689,9 +713,22 @@ static void handle_event(struct ycomp_ygui_app *app, const struct yetty_yui_even
     }
 }
 
-static struct yetty_ycore_void_result ycomp_ygui_worker(struct yetty_yinit_runtime *rt, void *user)
+[[clang::annotate("override@yapp:app:init")]]
+static struct yetty_ycore_void_result ycompositorygui_app_init(struct yetty_yclass_object *obj,
+                                                               struct yetty_yinit_runtime *rt)
 {
-    struct ycomp_ygui_app *app = user;
+    (void)obj;
+    (void)rt;
+    return YETTY_OK_VOID();
+}
+
+[[clang::annotate("override@yapp:app:run")]]
+static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclass_object *obj,
+                                                              struct yetty_yinit_runtime *rt)
+{
+    struct yetty_ycompositorygui_app_ptr_result app_res = yetty_ycompositorygui_app_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "ycompositorygui:app:run: app_from");
+    struct yetty_ycompositorygui_app *app = app_res.value;
 
     struct yetty_yframework_ptr_result yr = yetty_yframework_create(rt);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yframework_create failed");
@@ -971,32 +1008,67 @@ static struct yetty_ycore_void_result ycomp_ygui_worker(struct yetty_yinit_runti
 
 int main(int argc, char **argv)
 {
-    struct ycomp_ygui_app app = {0};
-    app.cell_w_px = 8.0f;
-    app.cell_h_px = 16.0f;
-    app.pty_master_fd = -1;
-    app.child_pid = -1;
+    struct yetty_ycore_void_result platform_reg = yetty_yplatform_register();
+    if (YETTY_IS_ERR(platform_reg)) {
+        yetty_ycore_error_print(stderr, "ycompositor-ygui: platform register", platform_reg.error);
+        yetty_ycore_error_destroy(platform_reg.error);
+        return 1;
+    }
+    struct yetty_ycore_void_result yapp_reg = yetty_yapp_register();
+    if (YETTY_IS_ERR(yapp_reg)) {
+        yetty_ycore_error_print(stderr, "ycompositor-ygui: yapp register", yapp_reg.error);
+        yetty_ycore_error_destroy(yapp_reg.error);
+        return 1;
+    }
 
-    /* `-e <cmd> [args...]`: everything after -e is the child argv. We
-     * still let yinit_run see the leading argv slice (it parses its own
-     * flags), so we splice -e out by setting argc to the index of -e and
-     * stashing the tail on the app for the worker. */
+    struct yetty_yclass_object_ptr_result app_res = yetty_ycompositorygui_app_create(NULL);
+    if (YETTY_IS_ERR(app_res)) {
+        yetty_ycore_error_print(stderr, "ycompositor-ygui: app create", app_res.error);
+        yetty_ycore_error_destroy(app_res.error);
+        return 1;
+    }
+    struct yetty_ycompositorygui_app_ptr_result app_data =
+        yetty_ycompositorygui_app_from(app_res.value);
+    if (YETTY_IS_ERR(app_data)) {
+        yetty_ycore_error_print(stderr, "ycompositor-ygui: app data", app_data.error);
+        yetty_ycore_error_destroy(app_data.error);
+        return 1;
+    }
+    struct yetty_ycompositorygui_app *app = app_data.value;
+    app->cell_w_px = 8.0f;
+    app->cell_h_px = 16.0f;
+    app->pty_master_fd = -1;
+    app->child_pid = -1;
+
+    /* `-e <cmd> [args...]`: everything after -e is the child argv. We still let
+     * yconfig see the leading argv slice (it parses its own flags), so we splice
+     * -e out by setting argc to the index of -e and stashing the tail on the app
+     * for run(). */
     int trimmed_argc = argc;
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-e") == 0 && i + 1 < argc) {
-            app.child_argv = &argv[i + 1];
-            app.child_argc = argc - (i + 1);
-            trimmed_argc = i; /* hide -e and tail from yinit */
+            app->child_argv = &argv[i + 1];
+            app->child_argc = argc - (i + 1);
+            trimmed_argc = i; /* hide -e and tail from yconfig */
             break;
         }
     }
 
-    struct yetty_ycore_int_result run_result =
-        yetty_yinit_run(trimmed_argc, argv, ycomp_ygui_worker, &app);
+    struct yetty_yclass_object_ptr_result platform_res = yetty_yplatform_glfw_platform_create(NULL);
+    if (YETTY_IS_ERR(platform_res)) {
+        yetty_ycore_error_print(stderr, "ycompositor-ygui: platform create", platform_res.error);
+        yetty_ycore_error_destroy(platform_res.error);
+        return 1;
+    }
+
+    struct yetty_ycore_void_result run_result =
+        yetty_yplatform_platform_run(platform_res.value, app_res.value, trimmed_argc, argv);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "ycompositor-ygui: run", run_result.error);
         yetty_ycore_error_destroy(run_result.error);
         return 1;
     }
-    return run_result.value;
+    return 0;
 }
+
+#include "main.gen.c"

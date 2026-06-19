@@ -41,11 +41,12 @@ struct yetty_yclass_ptr_result yetty_yplatform_android_platform_class_get(void);
 struct yetty_yplatform_android_platform_ptr_result yetty_yplatform_android_platform_from(
     struct yetty_yclass_object *obj);
 
-struct [[clang::annotate("class@yplatform:android_platform")]] [[clang::annotate("platform@android")]]
-[[clang::annotate("parent@yplatform:platform")]] yetty_yplatform_android_platform {
+struct [[clang::annotate("class@yplatform:android_platform")]] [[clang::annotate(
+    "platform@android")]] [[clang::annotate("parent@yplatform:platform")]]
+yetty_yplatform_android_platform {
     struct yetty_yconfig_config *config;
-    struct yetty_yclass_object *window;    /* yplatform:android_window */
-    struct yetty_yclass_object *clipboard; /* yplatform:android_clipboard */
+    struct yetty_yclass_object *window;                 /* yplatform:android_window */
+    struct yetty_yclass_object *clipboard;              /* yplatform:android_clipboard */
     struct yetty_ycore_xthread_event_pipe *input_pipe;  /* NDK → worker */
     struct yetty_ycore_xthread_event_pipe *output_pipe; /* worker → NDK */
 };

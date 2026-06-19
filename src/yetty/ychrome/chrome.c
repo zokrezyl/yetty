@@ -473,7 +473,7 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_obj
             }
             if (step_dx != 0 || step_dy != 0) {
                 wm_absorb(yetty_yplatform_window_chrome_resize_by(wm, step_dx, step_dy,
-                                                                   chrome->resize_edge));
+                                                                  chrome->resize_edge));
             }
             return YETTY_OK(yetty_ycore_int, 1);
         }

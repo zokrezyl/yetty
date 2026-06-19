@@ -28,10 +28,13 @@
 #include <yetty/ygui/ygui.h>
 #include <yetty/ygui/widgets/vbox.h>
 #include <yetty/ygui/widgets/yrich_view.h>
-#include <yetty/yinit/yinit.h>
+#include <yetty/yinit/yinit.h> /* struct yetty_yinit_runtime (platform runtime type) */
+#include <yetty/yapp/app.h>
+#include <yetty/yclass/class.h>
 #include <yetty/yplatform/yclipboard/clipboard.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yrender/render-target.h>
+#include <yetty/yrich/yrich-app.h> /* public entry: yetty_yrich_app_run + kind enum */
 #include <yetty/yrich/yrich-shell.h>
 #include <yetty/yrich/yrich-types.h>
 
@@ -53,7 +56,8 @@ static inline void destroy_safe(struct yetty_ycore_void_result r)
     }
 }
 
-struct yrich_app {
+struct [[clang::annotate("class@yrich:app")]] [[clang::annotate("parent@yapp:app")]]
+yetty_yrich_app {
     int quit;
     enum yetty_yrich_app_kind kind;
     struct yetty_yclass_object *doc;         /* borrowed until handed to the view */
@@ -75,10 +79,28 @@ struct yrich_app {
     uint32_t surface_h;
 };
 
+/* Result wrapper + codegen accessor/downcast forward-decls (this TU does not
+ * include its own generated header). */
+YETTY_YRESULT_DECLARE(yetty_yrich_app_ptr, struct yetty_yrich_app *);
+struct yetty_yclass_ptr_result yetty_yrich_app_class_get(void);
+struct yetty_yrich_app_ptr_result yetty_yrich_app_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yrich_app_create(struct yetty_yclass_ctx *ctx);
+
+/* Platform bring-up sequence symbols. yetty_yrich_app_run is the public entry the
+ * thin ydoc / ysheet / yslide tools call (it carries the document object), so it
+ * drives the platform sequence directly rather than via the shared ymain entry. */
+struct yetty_ycore_void_result yetty_yplatform_register(void);
+struct yetty_ycore_void_result yetty_yapp_register(void);
+struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_platform_create(
+    struct yetty_yclass_ctx *ctx);
+struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *app,
+                                                            int argc, char **argv);
+
 /* Build the decorated editor tree. The engine root is created and
  * registered FIRST so that figure widgets in the shell (the scrollarea)
  * resolve an engine and get wire ids when added underneath it. */
-static struct yetty_ycore_void_result build_editor(struct yrich_app *app)
+static struct yetty_ycore_void_result build_editor(struct yetty_yrich_app *app)
 {
     struct yetty_yclass_object_ptr_result rootr = yetty_ygui_widget_new(
         yetty_ygui_class_expect(yetty_ygui_vbox_class_get(), "yetty_ygui_vbox_class_get"));
@@ -118,7 +140,7 @@ static struct yetty_ycore_void_result build_editor(struct yrich_app *app)
 
 /* Sync the viewport to the surface and ship the scene into the container
  * over the in-process yclass slot path. */
-static struct yetty_ycore_void_result push_scene(struct yrich_app *app)
+static struct yetty_ycore_void_result push_scene(struct yetty_yrich_app *app)
 {
     if (!app->ygui) {
         return YETTY_OK_VOID();
@@ -215,7 +237,7 @@ static size_t encode_utf8(uint32_t codepoint, char out[4])
 }
 
 /* Track content growth after an edit, then re-emit the scene. */
-static struct yetty_ycore_void_result refit_and_push(struct yrich_app *app)
+static struct yetty_ycore_void_result refit_and_push(struct yetty_yrich_app *app)
 {
     if (app->editor_view) {
         struct yetty_ycore_void_result fit_res =
@@ -227,7 +249,8 @@ static struct yetty_ycore_void_result refit_and_push(struct yrich_app *app)
 
 /* Ctrl+C / Ctrl+X / Ctrl+V — copy/cut go straight to the clipboard
  * manager; paste is an async round trip that returns as a PASTE event. */
-static struct yetty_ycore_void_result handle_clipboard_chord(struct yrich_app *app, int glfw_key)
+static struct yetty_ycore_void_result handle_clipboard_chord(struct yetty_yrich_app *app,
+                                                             int glfw_key)
 {
     struct yetty_yclass_object *clipboard = app->yrt->clipboard;
     struct yetty_yclass_object *doc =
@@ -263,7 +286,7 @@ static struct yetty_ycore_void_result handle_clipboard_chord(struct yrich_app *a
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result handle_event(struct yrich_app *app,
+static struct yetty_ycore_void_result handle_event(struct yetty_yrich_app *app,
                                                    const struct yetty_yui_event *ev)
 {
     /* Window chrome gets first dibs on pointer events; anything it doesn't
@@ -418,9 +441,22 @@ static struct yetty_ycore_void_result handle_event(struct yrich_app *app,
     }
 }
 
-static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtime *rt, void *user)
+[[clang::annotate("override@yapp:app:init")]]
+static struct yetty_ycore_void_result yrich_app_init(struct yetty_yclass_object *obj,
+                                                     struct yetty_yinit_runtime *rt)
 {
-    struct yrich_app *app = user;
+    (void)obj;
+    (void)rt;
+    return YETTY_OK_VOID();
+}
+
+[[clang::annotate("override@yapp:app:run")]]
+static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *obj,
+                                                    struct yetty_yinit_runtime *rt)
+{
+    struct yetty_yrich_app_ptr_result app_res = yetty_yrich_app_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "yrich:app:run: app_from");
+    struct yetty_yrich_app *app = app_res.value;
 
     struct yetty_yframework_ptr_result yr = yetty_yframework_create(rt);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yframework_create failed");
@@ -601,8 +637,38 @@ struct yetty_ycore_int_result yetty_yrich_app_run(int argc, char **argv,
     if (!doc_obj) {
         return YETTY_OK(yetty_ycore_int, 2);
     }
-    struct yrich_app app = {0};
-    app.doc = doc_obj;
-    app.kind = kind;
-    return yetty_yinit_run(argc, argv, yrich_app_worker, &app);
+
+    struct yetty_ycore_void_result platform_reg = yetty_yplatform_register();
+    if (YETTY_IS_ERR(platform_reg)) {
+        return YETTY_ERR(yetty_ycore_int, "yrich:app: platform register", platform_reg);
+    }
+    struct yetty_ycore_void_result yapp_reg = yetty_yapp_register();
+    if (YETTY_IS_ERR(yapp_reg)) {
+        return YETTY_ERR(yetty_ycore_int, "yrich:app: yapp register", yapp_reg);
+    }
+
+    struct yetty_yclass_object_ptr_result app_res = yetty_yrich_app_create(NULL);
+    if (YETTY_IS_ERR(app_res)) {
+        return YETTY_ERR(yetty_ycore_int, "yrich:app: app create", app_res);
+    }
+    struct yetty_yrich_app_ptr_result app_data = yetty_yrich_app_from(app_res.value);
+    if (YETTY_IS_ERR(app_data)) {
+        return YETTY_ERR(yetty_ycore_int, "yrich:app: app data", app_data);
+    }
+    app_data.value->doc = doc_obj;
+    app_data.value->kind = kind;
+
+    struct yetty_yclass_object_ptr_result platform_res = yetty_yplatform_glfw_platform_create(NULL);
+    if (YETTY_IS_ERR(platform_res)) {
+        return YETTY_ERR(yetty_ycore_int, "yrich:app: platform create", platform_res);
+    }
+
+    struct yetty_ycore_void_result run_res =
+        yetty_yplatform_platform_run(platform_res.value, app_res.value, argc, argv);
+    if (YETTY_IS_ERR(run_res)) {
+        return YETTY_ERR(yetty_ycore_int, "yrich:app: run", run_res);
+    }
+    return YETTY_OK(yetty_ycore_int, 0);
 }
+
+#include "app.gen.c"

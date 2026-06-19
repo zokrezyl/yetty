@@ -128,8 +128,7 @@ static struct yetty_ycore_void_result window_chrome_iconify(struct yetty_yclass_
 [[clang::annotate("virtual@yplatform:window_chrome:window_chrome_toggle_maximize")]]
 [[clang::annotate("local@yplatform:window_chrome_toggle_maximize")]]
 /* clang-format on */
-static struct yetty_ycore_void_result window_chrome_toggle_maximize(
-    struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result window_chrome_toggle_maximize(struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_void_ptr_result data_r = window_chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "window_chrome toggle_maximize: object");

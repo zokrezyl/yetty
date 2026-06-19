@@ -43,15 +43,17 @@ struct yetty_yplatform_glfw_clipboard_ptr_result yetty_yplatform_glfw_clipboard_
     struct yetty_yclass_object *obj);
 
 /* Private subclass state: the cross-thread pipes, borrowed (owned by caller). */
-struct [[clang::annotate("class@yplatform:glfw_clipboard")]] [[clang::annotate("platform@glfw")]]
-[[clang::annotate("parent@yplatform:clipboard")]] yetty_yplatform_glfw_clipboard {
+struct [[clang::annotate("class@yplatform:glfw_clipboard")]] [[clang::annotate(
+    "platform@glfw")]] [[clang::annotate("parent@yplatform:clipboard")]]
+yetty_yplatform_glfw_clipboard {
     struct yetty_ycore_xthread_event_pipe *output_pipe; /* render → main marshalling bus */
     struct yetty_ycore_xthread_event_pipe *input_pipe;  /* main → render paste responses */
 };
 
 static struct yetty_yplatform_glfw_clipboard *glfw_clipboard_data(struct yetty_yclass_object *obj)
 {
-    struct yetty_yplatform_glfw_clipboard_ptr_result data = yetty_yplatform_glfw_clipboard_from(obj);
+    struct yetty_yplatform_glfw_clipboard_ptr_result data =
+        yetty_yplatform_glfw_clipboard_from(obj);
     if (!YETTY_IS_OK(data)) {
         yetty_ycore_error_destroy(data.error);
         return NULL;
@@ -158,7 +160,8 @@ struct yetty_ycore_void_result yetty_yplatform_glfw_clipboard_configure(
         return YETTY_ERR(yetty_ycore_void,
                          "glfw_clipboard_configure: output_pipe and input_pipe are required");
     }
-    struct yetty_yplatform_glfw_clipboard_ptr_result data = yetty_yplatform_glfw_clipboard_from(obj);
+    struct yetty_yplatform_glfw_clipboard_ptr_result data =
+        yetty_yplatform_glfw_clipboard_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "glfw_clipboard_configure: data_get");
     data.value->output_pipe = output_pipe;
     data.value->input_pipe = input_pipe;

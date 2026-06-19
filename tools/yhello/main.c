@@ -59,7 +59,9 @@
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yshadertoy/figure.h>
-#include <yetty/yinit/yinit.h>
+#include <yetty/yinit/yinit.h> /* struct yetty_yinit_runtime (platform runtime type) */
+#include <yetty/yapp/app.h>
+#include <yetty/yclass/class.h>
 #include <yetty/yrender/render-target.h>
 #endif
 
@@ -3296,9 +3298,48 @@ static void standalone_stop(struct app *app)
     }
 }
 
-static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runtime *rt, void *user)
+/*
+ * yclass app wrapper. The standalone window host is a yapp:app subclass; the
+ * heavy per-run state stays in `struct app` (shared with client mode), which the
+ * data block just embeds. codegen sees this class because the Makefile passes
+ * YETTY_YHELLO_HAS_STANDALONE via YCLASS_DEFINES; main.gen.c is #included at the
+ * foot, inside the same guard, so reduced builds never compile it.
+ */
+struct [[clang::annotate("class@yhello:app")]] [[clang::annotate("parent@yapp:app")]] yetty_yhello_app {
+    struct app app;
+};
+
+YETTY_YRESULT_DECLARE(yetty_yhello_app_ptr, struct yetty_yhello_app *);
+struct yetty_yclass_ptr_result yetty_yhello_app_class_get(void);
+struct yetty_yhello_app_ptr_result yetty_yhello_app_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yhello_app_create(struct yetty_yclass_ctx *ctx);
+
+/* Platform bring-up sequence symbols. yhello has its own dual-mode main(), so it
+ * drives this sequence directly rather than via the shared ymain/glfw.c. */
+struct yetty_ycore_void_result yetty_yplatform_register(void);
+struct yetty_ycore_void_result yetty_yapp_register(void);
+struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_platform_create(
+    struct yetty_yclass_ctx *ctx);
+struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *app,
+                                                            int argc, char **argv);
+
+[[clang::annotate("override@yapp:app:init")]]
+static struct yetty_ycore_void_result yhello_app_init(struct yetty_yclass_object *obj,
+                                                      struct yetty_yinit_runtime *rt)
 {
-    struct app *app = (struct app *)user;
+    (void)obj;
+    (void)rt;
+    return YETTY_OK_VOID();
+}
+
+[[clang::annotate("override@yapp:app:run")]]
+static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_object *obj,
+                                                        struct yetty_yinit_runtime *rt)
+{
+    struct yetty_yhello_app_ptr_result app_res = yetty_yhello_app_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "yhello:app:run: app_from");
+    struct app *app = &app_res.value->app;
 
     struct yetty_yframework_ptr_result frr = yetty_yframework_create(rt);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, frr, "standalone: yframework_create");
@@ -3641,7 +3682,7 @@ __attribute__((unused)) static struct yetty_ycore_void_result yhello_extract_ass
  * stack — standalone_worker runs the event loop to completion on this thread,
  * so the thread owns them and frees them when it returns. */
 struct yhello_android_thread_args {
-    struct app *app;
+    struct yetty_yclass_object *app_obj; /* yhello:app object (owns struct app) */
     struct yetty_yinit_runtime rt;
 };
 
@@ -3651,14 +3692,17 @@ static void *yhello_android_render_thread(void *arg)
     struct yhello_android_thread_args *targs = arg;
     /* Blocks: builds the framework, the UI and the chrome, runs the event
      * loop, then tears the whole lot down when the loop is stopped (the
-     * non-emscripten tail of standalone_worker). */
-    struct yetty_ycore_void_result run_res = standalone_worker(&targs->rt, targs->app);
+     * non-emscripten tail of standalone_worker). NOTE: the Android standalone
+     * path is pending the new yplatform Android entry (content-scale + NDK glue
+     * that replace the removed yinit/android-glue.c); it cannot link until that
+     * lands. The call below tracks the migrated yapp:app:run signature so only
+     * the platform glue remains. */
+    struct yetty_ycore_void_result run_res = standalone_worker(targs->app_obj, &targs->rt);
     if (YETTY_IS_ERR(run_res)) {
         LOGE("yhello standalone worker: %s",
              run_res.error.msg ? run_res.error.msg : "(no message)");
         yetty_ycore_error_destroy(run_res.error);
     }
-    free(targs->app);
     free(targs);
     return NULL;
 }
@@ -3727,17 +3771,32 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
     int32_t width = ANativeWindow_getWidth(state->window);
     int32_t height = ANativeWindow_getHeight(state->window);
 
-    struct app *app = calloc(1, sizeof(*app));
+    /* The yapp:app object owns the embedded struct app; create it through the
+     * class so run() can resolve it. (Registration is idempotent.) */
+    (void)yetty_yplatform_register();
+    (void)yetty_yapp_register();
+    struct yetty_yclass_object_ptr_result app_res = yetty_yhello_app_create(NULL);
     struct yhello_android_thread_args *targs = calloc(1, sizeof(*targs));
-    if (!app || !targs) {
-        LOGE("yhello: out of memory");
-        free(app);
+    if (YETTY_IS_ERR(app_res) || !targs) {
+        LOGE("yhello: out of memory / app create failed");
+        if (YETTY_IS_ERR(app_res)) {
+            yetty_ycore_error_destroy(app_res.error);
+        }
         free(targs);
         return;
     }
-    targs->app = app;
+    struct yetty_yhello_app_ptr_result app_data = yetty_yhello_app_from(app_res.value);
+    if (YETTY_IS_ERR(app_data)) {
+        yetty_ycore_error_destroy(app_data.error);
+        free(targs);
+        return;
+    }
+    struct app *app = &app_data.value->app;
+    targs->app_obj = app_res.value;
     /* Synthetic runtime: the same fields the desktop worker reads, stamped by
-     * hand (Android doesn't go through yetty_yinit_run). */
+     * hand (Android doesn't go through the GLFW platform run). FIXME: the new
+     * yplatform Android entry must supply the content-scale replacement for the
+     * removed yetty_yinit_android_content_scale. */
     targs->rt.config = state->config;
     targs->rt.instance = state->instance;
     targs->rt.surface = state->surface;
@@ -3807,36 +3866,52 @@ struct yetty_ycore_void_result yetty_android_program_term(struct yetty_yplatform
 #ifndef __ANDROID__
 static int run_standalone_mode(int argc, char **argv)
 {
-#ifdef __EMSCRIPTEN__
-    /* On webasm the worker returns immediately (event_loop->start()
-     * registers the emscripten main loop and does NOT block), so this
-     * function returns too — but the browser keeps driving frames
-     * afterward, dereferencing `app` via the callbacks the worker
-     * registered (the 33 ms frame timer's listener &app->frame_listener,
-     * the input listener &app->listener, and app->engine /
-     * app->render_target read in standalone_event_handler). A stack
-     * `app` would be freed on return → use-after-free → "null function"
-     * crash on the very next tick. Heap-allocate and leak it for
-     * program lifetime (same reason the worker skips teardown above). */
-    struct app *app = calloc(1, sizeof(*app));
-    if (!app) {
-        fprintf(stderr, "yhello: out of memory allocating app\n");
+    /* The app object's data block (struct yetty_yhello_app embedding struct app)
+     * is heap-allocated by yetty_yhello_app_create and never freed before exit —
+     * which also covers the webasm case where standalone_worker returns
+     * immediately but the browser keeps driving frames through callbacks that
+     * dereference `app` (a stack app would be a use-after-free there). */
+    struct yetty_ycore_void_result platform_reg = yetty_yplatform_register();
+    if (YETTY_IS_ERR(platform_reg)) {
+        yetty_ycore_error_print(stderr, "yhello: platform register", platform_reg.error);
+        yetty_ycore_error_destroy(platform_reg.error);
         return 1;
     }
-#else
-    struct app app_storage = {0};
-    struct app *app = &app_storage;
-#endif
-    struct yetty_ycore_int_result run_result =
-        yetty_yinit_run(argc, argv, standalone_worker, app);
+    struct yetty_ycore_void_result yapp_reg = yetty_yapp_register();
+    if (YETTY_IS_ERR(yapp_reg)) {
+        yetty_ycore_error_print(stderr, "yhello: yapp register", yapp_reg.error);
+        yetty_ycore_error_destroy(yapp_reg.error);
+        return 1;
+    }
+
+    struct yetty_yclass_object_ptr_result app_res = yetty_yhello_app_create(NULL);
+    if (YETTY_IS_ERR(app_res)) {
+        yetty_ycore_error_print(stderr, "yhello: app create", app_res.error);
+        yetty_ycore_error_destroy(app_res.error);
+        return 1;
+    }
+
+    struct yetty_yclass_object_ptr_result platform_res = yetty_yplatform_glfw_platform_create(NULL);
+    if (YETTY_IS_ERR(platform_res)) {
+        yetty_ycore_error_print(stderr, "yhello: platform create", platform_res.error);
+        yetty_ycore_error_destroy(platform_res.error);
+        return 1;
+    }
+
+    struct yetty_ycore_void_result run_result =
+        yetty_yplatform_platform_run(platform_res.value, app_res.value, argc, argv);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "yhello: run", run_result.error);
         yetty_ycore_error_destroy(run_result.error);
         return 1;
     }
-    return run_result.value;
+    return 0;
 }
-#endif /* !__ANDROID__ — run_standalone_mode (uses GLFW yetty_yinit_run) */
+#endif /* !__ANDROID__ — run_standalone_mode (drives the yplatform sequence) */
+
+/* yclass glue for yhello:app — compiled in every standalone build (desktop, web,
+ * Android), outside the __ANDROID__ split above. */
+#include "main.gen.c"
 
 #endif /* YETTY_YHELLO_HAS_STANDALONE */
 

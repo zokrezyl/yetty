@@ -83,8 +83,8 @@ typedef struct yetty_ycore_void_result (*yetty_yinit_worker_fn)(struct yetty_yin
  * On success the Result's value is the process exit code (the worker's
  * own exit status). Bootstrap failures (config, window, GPU, …) are
  * surfaced as an error Result with the cause chain attached. */
-struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
-                                              yetty_yinit_worker_fn worker, void *user);
+struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv, yetty_yinit_worker_fn worker,
+                                              void *user);
 
 #ifdef __cplusplus
 }

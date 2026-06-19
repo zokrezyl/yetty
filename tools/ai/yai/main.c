@@ -81,6 +81,7 @@
 #include <errno.h>
 #include <poll.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -90,6 +91,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <uv.h>
@@ -220,12 +222,96 @@ struct yai_engine_config *yai_active_engine_config(struct yai_app *app)
     return &app->config.claude;
 }
 
-/* The HUD format in effect for the active engine: its per-engine override if
+/* Parse a boolean-ish scalar ("1"/"true"/"yes" → 1). */
+static int yai_config_truthy(const char *value)
+{
+    return strcmp(value, "1") == 0 || strcmp(value, "true") == 0 || strcmp(value, "yes") == 0;
+}
+
+/* The `defaults:` keys a backend may override (every global key except the
+ * `engine` selector itself, which chooses the backend). */
+static int yai_is_default_key(const char *key)
+{
+    return strcmp(key, "edit_mode") == 0 || strcmp(key, "fold_lines") == 0 ||
+           strcmp(key, "show_thinking") == 0 || strcmp(key, "hud_on") == 0 ||
+           strcmp(key, "hud_float") == 0 || strcmp(key, "hud_format") == 0;
+}
+
+/* The active backend's verbatim override of `key`, or NULL when it inherits
+ * the global default. */
+static const char *yai_engine_override_get(const struct yai_engine_config *cfg, const char *key)
+{
+    for (int index = 0; index < cfg->override_count; index++) {
+        if (strcmp(cfg->overrides[index].key, key) == 0) {
+            return cfg->overrides[index].value;
+        }
+    }
+    return NULL;
+}
+
+/* Record (or replace) a backend's override of a `defaults:` key. Silently
+ * drops the override once the small fixed table is full. */
+static void yai_engine_override_set(struct yai_engine_config *cfg, const char *key,
+                                    const char *value)
+{
+    for (int index = 0; index < cfg->override_count; index++) {
+        if (strcmp(cfg->overrides[index].key, key) == 0) {
+            snprintf(cfg->overrides[index].value, sizeof(cfg->overrides[index].value), "%s", value);
+            return;
+        }
+    }
+    if (cfg->override_count >= YAI_BACKEND_OVERRIDE_MAX) {
+        return;
+    }
+    struct yai_setting *slot = &cfg->overrides[cfg->override_count++];
+    snprintf(slot->key, sizeof(slot->key), "%s", key);
+    snprintf(slot->value, sizeof(slot->value), "%s", value);
+}
+
+/* The HUD format in effect for the active engine: its per-backend override if
  * set, else the global template. */
 static const char *yai_effective_hud_format(struct yai_app *app)
 {
-    const struct yai_engine_config *cfg = yai_active_engine_config(app);
-    return cfg->hud_format[0] ? cfg->hud_format : app->config.hud_format;
+    const char *override = yai_engine_override_get(yai_active_engine_config(app), "hud_format");
+    return (override && override[0]) ? override : app->config.hud_format;
+}
+
+/* Whether the ygui HUD window is enabled for the active engine. */
+static int yai_effective_hud_on(struct yai_app *app)
+{
+    const char *override = yai_engine_override_get(yai_active_engine_config(app), "hud_on");
+    return override ? yai_config_truthy(override) : app->config.hud_on;
+}
+
+/* Whether the HUD floats (vs docks) for the active engine. */
+static int yai_effective_hud_float(struct yai_app *app)
+{
+    const char *override = yai_engine_override_get(yai_active_engine_config(app), "hud_float");
+    return override ? yai_config_truthy(override) : app->config.hud_float;
+}
+
+/* Store the HUD template as `count` verbatim pieces and recompute the
+ * concatenated hud_format the renderer parses (pieces joined directly, no
+ * separator). The pieces are kept so the YAML list round-trips on save. */
+static void yai_config_set_hud_parts(struct yai_config *config, const char *const *parts, int count)
+{
+    if (count < 0) {
+        count = 0;
+    }
+    if (count > YAI_HUD_FORMAT_PARTS_MAX) {
+        count = YAI_HUD_FORMAT_PARTS_MAX;
+    }
+    config->hud_format_part_count = count;
+    config->hud_format[0] = '\0';
+    size_t offset = 0;
+    for (int index = 0; index < count; index++) {
+        snprintf(config->hud_format_parts[index], YAI_HUD_FORMAT_PART_MAX, "%s", parts[index]);
+        size_t room = sizeof(config->hud_format) - offset;
+        int written = snprintf(config->hud_format + offset, room, "%s", parts[index]);
+        if (written > 0) {
+            offset += ((size_t)written < room) ? (size_t)written : room - 1;
+        }
+    }
 }
 
 /* Seed every setting with its default. Call once, before the file load. */
@@ -234,40 +320,42 @@ static void yai_config_defaults(struct yai_app *app)
     struct yai_config *config = &app->config;
     app->engine_name = "claude";
     app->editor_mode_name = "emacs";
+    /* defaults */
+    snprintf(config->edit_mode, sizeof(config->edit_mode), "emacs");
+    config->fold_lines = YAI_DEFAULT_FOLD_LINES;
+    config->show_thinking = 0;
+    config->hud_on = 1;
+    config->hud_float = 0;
+    const char *const default_hud_parts[] = {YAI_DEFAULT_HUD_PART_0, YAI_DEFAULT_HUD_PART_1,
+                                             YAI_DEFAULT_HUD_PART_2, YAI_DEFAULT_HUD_PART_3,
+                                             YAI_DEFAULT_HUD_PART_4};
+    yai_config_set_hud_parts(config, default_hud_parts,
+                             (int)(sizeof(default_hud_parts) / sizeof(default_hud_parts[0])));
     app->renderer.fold_lines = YAI_DEFAULT_FOLD_LINES;
     app->renderer.show_thinking = 0;
-    /* global */
-    config->no_hud = 0;
-    config->hud_float = 0;
-    snprintf(config->hud_format, sizeof(config->hud_format), "%s", YAI_DEFAULT_HUD_FORMAT);
     /* claude */
     config->claude.model[0] = '\0';
     snprintf(config->claude.effort, sizeof(config->claude.effort), "auto");
     snprintf(config->claude.permission_mode, sizeof(config->claude.permission_mode), "default");
     snprintf(config->claude.allowed_preset, sizeof(config->claude.allowed_preset), "curated");
     config->claude.allowed_tools[0] = '\0';
-    config->claude.hud_format[0] = '\0';
+    config->claude.override_count = 0;
     /* codex */
     config->codex.model[0] = '\0';
     snprintf(config->codex.effort, sizeof(config->codex.effort), "default");
     snprintf(config->codex.sandbox, sizeof(config->codex.sandbox), "workspace-write");
     snprintf(config->codex.approval, sizeof(config->codex.approval), "never");
-    config->codex.hud_format[0] = '\0';
+    config->codex.override_count = 0;
     /* gemini */
     config->gemini.model[0] = '\0';
     snprintf(config->gemini.approval_mode, sizeof(config->gemini.approval_mode), "default");
-    config->gemini.hud_format[0] = '\0';
+    config->gemini.override_count = 0;
 }
 
-/* Parse a boolean-ish scalar ("1"/"true"/"yes" → 1). */
-static int yai_config_truthy(const char *value)
-{
-    return strcmp(value, "1") == 0 || strcmp(value, "true") == 0 || strcmp(value, "yes") == 0;
-}
-
-/* Apply a GLOBAL setting by key (top-level YAML keys + CLI globals). The
- * `engine`/`edit_mode` map to app fields and the renderer owns fold_lines/
- * show_thinking. Returns 1 if the key was a known global. */
+/* Apply a GLOBAL (`defaults:`) setting by key. `engine` selects the active
+ * backend; the rest seed the global default fields. The resolved live values
+ * (editor mode, renderer fold_lines / show_thinking) are produced separately
+ * by yai_config_resolve. Returns 1 if the key was a known global. */
 static int yai_config_set_global(struct yai_app *app, const char *key, const char *value)
 {
     struct yai_config *config = &app->config;
@@ -276,18 +364,21 @@ static int yai_config_set_global(struct yai_app *app, const char *key, const cha
                            : (strcmp(value, "gemini") == 0) ? "gemini"
                                                             : "claude";
     } else if (strcmp(key, "edit_mode") == 0) {
-        app->editor_mode_name = (strcmp(value, "vi") == 0) ? "vi" : "emacs";
+        snprintf(config->edit_mode, sizeof(config->edit_mode), "%s",
+                 strcmp(value, "vi") == 0 ? "vi" : "emacs");
     } else if (strcmp(key, "fold_lines") == 0) {
         int folded = atoi(value);
-        app->renderer.fold_lines = folded > 0 ? folded : YAI_DEFAULT_FOLD_LINES;
+        config->fold_lines = folded > 0 ? folded : YAI_DEFAULT_FOLD_LINES;
     } else if (strcmp(key, "show_thinking") == 0) {
-        app->renderer.show_thinking = yai_config_truthy(value);
-    } else if (strcmp(key, "no_hud") == 0) {
-        config->no_hud = yai_config_truthy(value);
+        config->show_thinking = yai_config_truthy(value);
+    } else if (strcmp(key, "hud_on") == 0) {
+        config->hud_on = yai_config_truthy(value);
     } else if (strcmp(key, "hud_float") == 0) {
         config->hud_float = yai_config_truthy(value);
     } else if (strcmp(key, "hud_format") == 0) {
-        snprintf(config->hud_format, sizeof(config->hud_format), "%s", value);
+        /* A scalar hud_format is a one-piece list. */
+        const char *single[] = {value};
+        yai_config_set_hud_parts(config, single, 1);
     } else {
         return 0;
     }
@@ -296,7 +387,7 @@ static int yai_config_set_global(struct yai_app *app, const char *key, const cha
 
 /* Apply a setting to one engine's section. `key` is the unprefixed section
  * key (model, effort, permission_mode, allowed_preset, allowed_tools,
- * sandbox, approval, approval_mode, hud_format). Returns 1 if known. */
+ * sandbox, approval, approval_mode). Returns 1 if known. */
 static int yai_config_set_engine_field(struct yai_engine_config *cfg, const char *key,
                                        const char *value)
 {
@@ -316,35 +407,70 @@ static int yai_config_set_engine_field(struct yai_engine_config *cfg, const char
         snprintf(cfg->approval, sizeof(cfg->approval), "%s", value);
     } else if (strcmp(key, "approval_mode") == 0) {
         snprintf(cfg->approval_mode, sizeof(cfg->approval_mode), "%s", value);
-    } else if (strcmp(key, "hud_format") == 0) {
-        snprintf(cfg->hud_format, sizeof(cfg->hud_format), "%s", value);
     } else {
         return 0;
     }
     return 1;
 }
 
+/* Apply one key/value found inside a backend's section: a backend-specific
+ * field, or — when it names a global default — a per-backend override. */
+static void yai_config_apply_engine_key(struct yai_engine_config *cfg, const char *key,
+                                        const char *value)
+{
+    if (yai_config_set_engine_field(cfg, key, value)) {
+        return;
+    }
+    if (yai_is_default_key(key)) {
+        yai_engine_override_set(cfg, key, value);
+    }
+}
+
+/* Resolve the live values consumed at runtime from the global defaults and the
+ * active backend's overrides: the editor mode and the renderer's fold_lines /
+ * show_thinking. The HUD-related defaults are resolved on demand instead (see
+ * yai_effective_hud_*). Call whenever the active engine or a default changes. */
+static void yai_config_resolve(struct yai_app *app)
+{
+    const struct yai_engine_config *cfg = yai_active_engine_config(app);
+    const char *edit_mode = yai_engine_override_get(cfg, "edit_mode");
+    if (!edit_mode) {
+        edit_mode = app->config.edit_mode;
+    }
+    app->editor_mode_name = (strcmp(edit_mode, "vi") == 0) ? "vi" : "emacs";
+    const char *fold = yai_engine_override_get(cfg, "fold_lines");
+    int folded = fold ? atoi(fold) : app->config.fold_lines;
+    app->renderer.fold_lines = folded > 0 ? folded : YAI_DEFAULT_FOLD_LINES;
+    const char *thinking = yai_engine_override_get(cfg, "show_thinking");
+    app->renderer.show_thinking =
+        thinking ? yai_config_truthy(thinking) : app->config.show_thinking;
+}
+
 /* The single live write path: CLI flags, the /config dialog, and the
- * permission "auto" shortcut. Global keys set globals; every other key
+ * permission "auto" shortcut. Global keys set the defaults; every other key
  * targets the ACTIVE engine's section. Legacy/prefixed knob + CLI keys
- * (codex_sandbox, claude_effort, …) are normalized to section keys.
- * Returns 1 if the key was known. */
+ * (codex_sandbox, claude_effort, …) are normalized to section keys. The live
+ * values are re-resolved before returning. Returns 1 if the key was known. */
 static int yai_config_set(struct yai_app *app, const char *key, const char *value)
 {
+    int known;
     if (yai_config_set_global(app, key, value)) {
-        return 1;
+        known = 1;
+    } else {
+        const char *section_key = key;
+        if (strcmp(key, "claude_effort") == 0 || strcmp(key, "codex_effort") == 0) {
+            section_key = "effort";
+        } else if (strcmp(key, "codex_sandbox") == 0) {
+            section_key = "sandbox";
+        } else if (strcmp(key, "codex_approval") == 0) {
+            section_key = "approval";
+        } else if (strcmp(key, "gemini_approval_mode") == 0) {
+            section_key = "approval_mode";
+        }
+        known = yai_config_set_engine_field(yai_active_engine_config(app), section_key, value);
     }
-    const char *section_key = key;
-    if (strcmp(key, "claude_effort") == 0 || strcmp(key, "codex_effort") == 0) {
-        section_key = "effort";
-    } else if (strcmp(key, "codex_sandbox") == 0) {
-        section_key = "sandbox";
-    } else if (strcmp(key, "codex_approval") == 0) {
-        section_key = "approval";
-    } else if (strcmp(key, "gemini_approval_mode") == 0) {
-        section_key = "approval_mode";
-    }
-    return yai_config_set_engine_field(yai_active_engine_config(app), section_key, value);
+    yai_config_resolve(app);
+    return known;
 }
 
 /* $XDG_CONFIG_HOME/yetty/yai.yaml, else $HOME/.config/yetty/yai.yaml.
@@ -402,14 +528,21 @@ static void yai_config_load(struct yai_app *app)
     }
     yaml_parser_set_input_file(&parser, file);
 
-    /* Two-level mapping: scalar globals at depth 1, plus `claude:`/`codex:`/
-     * `gemini:` sub-mappings whose scalar keys land in that engine's section.
-     * Depth tracking guards against unexpected nesting. */
+    /* Three-level layout: a top mapping holding `defaults:` (global scalar
+     * keys) and `backends:` (claude/codex/gemini sub-mappings). `depth` tracks
+     * mapping nesting (1 = top, 2 = inside defaults/backends, 3 = inside one
+     * backend); `section` selects where the scalars at depth 2/3 land. The one
+     * sequence value is `hud_format:` (a list of pieces); it is collected
+     * separately into hud_parts and concatenated at its SEQUENCE_END. */
+    enum { SECTION_NONE, SECTION_DEFAULTS, SECTION_BACKENDS } section = SECTION_NONE;
     int depth = 0;
     int have_key = 0;
     char pending_key[64] = {0};
-    char section[16] = {0}; /* "" = global; else the engine section name */
-    struct yai_engine_config *section_cfg = NULL;
+    struct yai_engine_config *backend_cfg = NULL;
+    int collecting_hud = 0;
+    struct yai_engine_config *hud_backend = NULL; /* non-NULL = backend override */
+    int hud_part_count = 0;
+    char hud_parts[YAI_HUD_FORMAT_PARTS_MAX][YAI_HUD_FORMAT_PART_MAX];
     int done = 0;
     while (!done) {
         yaml_event_t event;
@@ -417,53 +550,98 @@ static void yai_config_load(struct yai_app *app)
             break; /* malformed — stop, keep whatever was restored so far */
         }
         switch (event.type) {
-        case YAML_MAPPING_START_EVENT:
         case YAML_SEQUENCE_START_EVENT:
-            /* A container as a value. At depth 1 with a pending key, it opens
-             * a section named by that key. */
+            /* `hud_format:` as a list — collect its scalar pieces. */
+            if (have_key && strcmp(pending_key, "hud_format") == 0 &&
+                ((depth == 2 && section == SECTION_DEFAULTS) ||
+                 (depth == 3 && section == SECTION_BACKENDS && backend_cfg))) {
+                collecting_hud = 1;
+                hud_backend = (depth == 3) ? backend_cfg : NULL;
+                hud_part_count = 0;
+                have_key = 0;
+                break;
+            }
+            /* fallthrough: any other sequence is treated like a mapping value */
+            __attribute__((fallthrough));
+        case YAML_MAPPING_START_EVENT:
+            /* A container value. At depth 1 it opens `defaults:`/`backends:`;
+             * at depth 2 inside backends it opens one engine's section. */
             if (depth == 1 && have_key) {
-                snprintf(section, sizeof(section), "%s", pending_key);
-                if (strcmp(section, "codex") == 0) {
-                    section_cfg = &app->config.codex;
-                } else if (strcmp(section, "gemini") == 0) {
-                    section_cfg = &app->config.gemini;
-                } else if (strcmp(section, "claude") == 0) {
-                    section_cfg = &app->config.claude;
+                if (strcmp(pending_key, "defaults") == 0) {
+                    section = SECTION_DEFAULTS;
+                } else if (strcmp(pending_key, "backends") == 0) {
+                    section = SECTION_BACKENDS;
                 } else {
-                    section_cfg = NULL; /* unknown section: ignore its keys */
+                    section = SECTION_NONE;
+                }
+            } else if (depth == 2 && section == SECTION_BACKENDS && have_key) {
+                if (strcmp(pending_key, "codex") == 0) {
+                    backend_cfg = &app->config.codex;
+                } else if (strcmp(pending_key, "gemini") == 0) {
+                    backend_cfg = &app->config.gemini;
+                } else if (strcmp(pending_key, "claude") == 0) {
+                    backend_cfg = &app->config.claude;
+                } else {
+                    backend_cfg = NULL; /* unknown backend: ignore its keys */
                 }
             }
             have_key = 0;
             depth++;
             break;
-        case YAML_MAPPING_END_EVENT:
         case YAML_SEQUENCE_END_EVENT:
+            if (collecting_hud) {
+                /* Finalize the hud_format list: concatenate the pieces. */
+                const char *part_ptrs[YAI_HUD_FORMAT_PARTS_MAX];
+                for (int index = 0; index < hud_part_count; index++) {
+                    part_ptrs[index] = hud_parts[index];
+                }
+                if (hud_backend) {
+                    char joined[1024];
+                    size_t offset = 0;
+                    joined[0] = '\0';
+                    for (int index = 0; index < hud_part_count; index++) {
+                        size_t room = sizeof(joined) - offset;
+                        int written = snprintf(joined + offset, room, "%s", hud_parts[index]);
+                        if (written > 0) {
+                            offset += ((size_t)written < room) ? (size_t)written : room - 1;
+                        }
+                    }
+                    yai_engine_override_set(hud_backend, "hud_format", joined);
+                } else {
+                    yai_config_set_hud_parts(&app->config, part_ptrs, hud_part_count);
+                }
+                collecting_hud = 0;
+                hud_backend = NULL;
+                have_key = 0;
+                break;
+            }
+            __attribute__((fallthrough));
+        case YAML_MAPPING_END_EVENT:
             depth--;
             if (depth <= 1) {
-                section[0] = '\0';
-                section_cfg = NULL;
+                section = SECTION_NONE;
+                backend_cfg = NULL;
+            } else if (depth == 2) {
+                backend_cfg = NULL;
             }
+            have_key = 0;
             break;
         case YAML_SCALAR_EVENT: {
             const char *text = (const char *)event.data.scalar.value;
-            if (depth == 1) {
-                if (!have_key) {
-                    snprintf(pending_key, sizeof(pending_key), "%s", text);
-                    have_key = 1;
-                } else {
+            if (collecting_hud) {
+                if (hud_part_count < YAI_HUD_FORMAT_PARTS_MAX) {
+                    snprintf(hud_parts[hud_part_count++], YAI_HUD_FORMAT_PART_MAX, "%s", text);
+                }
+            } else if (!have_key) {
+                snprintf(pending_key, sizeof(pending_key), "%s", text);
+                have_key = 1;
+            } else {
+                if (depth == 2 && section == SECTION_DEFAULTS) {
                     yai_config_set_global(app, pending_key, text);
-                    have_key = 0;
+                } else if (depth == 3 && section == SECTION_BACKENDS && backend_cfg) {
+                    yai_config_apply_engine_key(backend_cfg, pending_key, text);
                 }
-            } else if (depth == 2) {
-                if (!have_key) {
-                    snprintf(pending_key, sizeof(pending_key), "%s", text);
-                    have_key = 1;
-                } else {
-                    if (section_cfg) {
-                        yai_config_set_engine_field(section_cfg, pending_key, text);
-                    }
-                    have_key = 0;
-                }
+                have_key = 0;
             }
             break;
         }
@@ -477,6 +655,7 @@ static void yai_config_load(struct yai_app *app)
     }
     yaml_parser_delete(&parser);
     (void)fclose(file);
+    yai_config_resolve(app);
 }
 
 /* Emit one `key: value` pair only when `value` is non-empty. */
@@ -529,21 +708,72 @@ static int yai_config_emit_quoted(yaml_emitter_t *emitter, const char *key, cons
     return yaml_emitter_emit(emitter, &event);
 }
 
-/* Emit one engine's section: `name:` then a block mapping of that engine's
- * relevant keys. The per-engine hud_format override is written only when set
- * (an empty override means "inherit the global"). Returns the success flag. */
-static int yai_config_emit_engine(yaml_emitter_t *emitter, const char *name,
-                                  const struct yai_engine_config *cfg)
+/* Emit a bare plain scalar (a key whose value is a nested block mapping). */
+static int yai_config_emit_scalar(yaml_emitter_t *emitter, const char *text)
 {
     yaml_event_t event;
-    if (!yaml_scalar_event_initialize(&event, NULL, NULL, (const yaml_char_t *)name, -1, 1, 1,
-                                      YAML_PLAIN_SCALAR_STYLE) ||
+    return yaml_scalar_event_initialize(&event, NULL, NULL, (const yaml_char_t *)text, -1, 1, 1,
+                                        YAML_PLAIN_SCALAR_STYLE) &&
+           yaml_emitter_emit(emitter, &event);
+}
+
+/* Open / close a block mapping as the current value. */
+static int yai_config_emit_map_start(yaml_emitter_t *emitter)
+{
+    yaml_event_t event;
+    return yaml_mapping_start_event_initialize(&event, NULL, NULL, /*implicit=*/1,
+                                               YAML_BLOCK_MAPPING_STYLE) &&
+           yaml_emitter_emit(emitter, &event);
+}
+
+static int yai_config_emit_map_end(yaml_emitter_t *emitter)
+{
+    yaml_event_t event;
+    return yaml_mapping_end_event_initialize(&event) && yaml_emitter_emit(emitter, &event);
+}
+
+/* Emit a single double-quoted scalar value (a sequence item). */
+static int yai_config_emit_quoted_value(yaml_emitter_t *emitter, const char *value)
+{
+    yaml_event_t event;
+    return yaml_scalar_event_initialize(&event, NULL, NULL, (const yaml_char_t *)value, -1, 0, 1,
+                                        YAML_DOUBLE_QUOTED_SCALAR_STYLE) &&
+           yaml_emitter_emit(emitter, &event);
+}
+
+/* Emit `hud_format:` as a block sequence of its pieces, each double-quoted (a
+ * piece may embed '#' and newlines). The loader concatenates them back. */
+static int yai_config_emit_hud_format(yaml_emitter_t *emitter, const struct yai_config *config)
+{
+    yaml_event_t event;
+    if (!yai_config_emit_scalar(emitter, "hud_format")) {
+        return 0;
+    }
+    if (!yaml_sequence_start_event_initialize(&event, NULL, NULL, /*implicit=*/1,
+                                              YAML_BLOCK_SEQUENCE_STYLE) ||
         !yaml_emitter_emit(emitter, &event)) {
         return 0;
     }
-    if (!yaml_mapping_start_event_initialize(&event, NULL, NULL, /*implicit=*/1,
-                                             YAML_BLOCK_MAPPING_STYLE) ||
-        !yaml_emitter_emit(emitter, &event)) {
+    /* part_count 0 means the format is a single scalar held in hud_format. */
+    int count = config->hud_format_part_count > 0 ? config->hud_format_part_count : 1;
+    for (int index = 0; index < count; index++) {
+        const char *part =
+            config->hud_format_part_count > 0 ? config->hud_format_parts[index] : config->hud_format;
+        if (!yai_config_emit_quoted_value(emitter, part)) {
+            return 0;
+        }
+    }
+    return yaml_sequence_end_event_initialize(&event) && yaml_emitter_emit(emitter, &event);
+}
+
+/* Emit one engine's section under `backends:`: `name:` then a block mapping of
+ * that engine's relevant keys, followed by any per-backend overrides of the
+ * global defaults (kept verbatim, so they round-trip). Returns the success
+ * flag. */
+static int yai_config_emit_engine(yaml_emitter_t *emitter, const char *name,
+                                  const struct yai_engine_config *cfg)
+{
+    if (!yai_config_emit_scalar(emitter, name) || !yai_config_emit_map_start(emitter)) {
         return 0;
     }
     int ok = yai_config_emit_if_set(emitter, "model", cfg->model);
@@ -559,13 +789,18 @@ static int yai_config_emit_engine(yaml_emitter_t *emitter, const char *name,
     } else { /* gemini */
         ok = ok && yai_config_emit_pair(emitter, "approval_mode", cfg->approval_mode);
     }
-    if (ok && cfg->hud_format[0]) {
-        ok = yai_config_emit_quoted(emitter, "hud_format", cfg->hud_format);
+    /* hud_format is double-quoted (it embeds '#' and newlines); every other
+     * override is a plain scalar. */
+    for (int index = 0; ok && index < cfg->override_count; index++) {
+        const char *key = cfg->overrides[index].key;
+        const char *value = cfg->overrides[index].value;
+        ok = strcmp(key, "hud_format") == 0 ? yai_config_emit_quoted(emitter, key, value)
+                                            : yai_config_emit_pair(emitter, key, value);
     }
     if (!ok) {
         return 0;
     }
-    return yaml_mapping_end_event_initialize(&event) && yaml_emitter_emit(emitter, &event);
+    return yai_config_emit_map_end(emitter);
 }
 
 /* Write the live settings (app->config + engine/editor/renderer fields) as
@@ -592,8 +827,9 @@ static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
     /* Header comment first (libyaml's event API emits no comments), then the
      * emitter appends the mapping to the same stream. */
     fputs("# yai config — auto-written on startup, on config change, and on exit.\n"
-          "# Global keys up top; per-engine settings under claude:/codex:/gemini:.\n"
-          "# hud_format is the global HUD template; set it under an engine to override.\n",
+          "# Global keys under defaults:; per-backend settings under backends:.\n"
+          "# Any defaults: key may be set under a backend to override it there.\n"
+          "#\n",
           file);
 
     yaml_emitter_t emitter;
@@ -618,18 +854,23 @@ static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
     if (ok) {
         const struct yai_config *config = &app->config;
         char fold_lines[16];
-        snprintf(fold_lines, sizeof(fold_lines), "%d", app->renderer.fold_lines);
-        ok = yai_config_emit_pair(&emitter, "engine", app->engine_name) &&
-             yai_config_emit_pair(&emitter, "edit_mode", app->editor_mode_name) &&
+        snprintf(fold_lines, sizeof(fold_lines), "%d", config->fold_lines);
+        /* defaults: { … } — the global settings. */
+        ok = yai_config_emit_scalar(&emitter, "defaults") && yai_config_emit_map_start(&emitter) &&
+             yai_config_emit_pair(&emitter, "engine", app->engine_name) &&
+             yai_config_emit_pair(&emitter, "edit_mode", config->edit_mode) &&
              yai_config_emit_pair(&emitter, "fold_lines", fold_lines) &&
              yai_config_emit_pair(&emitter, "show_thinking",
-                                  app->renderer.show_thinking ? "1" : "0") &&
-             yai_config_emit_pair(&emitter, "no_hud", config->no_hud ? "1" : "0") &&
-             yai_config_emit_pair(&emitter, "hud_float", config->hud_float ? "1" : "0") &&
-             yai_config_emit_quoted(&emitter, "hud_format", config->hud_format) &&
+                                  config->show_thinking ? "true" : "false") &&
+             yai_config_emit_pair(&emitter, "hud_on", config->hud_on ? "true" : "false") &&
+             yai_config_emit_pair(&emitter, "hud_float", config->hud_float ? "true" : "false") &&
+             yai_config_emit_hud_format(&emitter, config) && yai_config_emit_map_end(&emitter) &&
+             /* backends: { claude: {…}, codex: {…}, gemini: {…} }. */
+             yai_config_emit_scalar(&emitter, "backends") && yai_config_emit_map_start(&emitter) &&
              yai_config_emit_engine(&emitter, "claude", &config->claude) &&
              yai_config_emit_engine(&emitter, "codex", &config->codex) &&
-             yai_config_emit_engine(&emitter, "gemini", &config->gemini);
+             yai_config_emit_engine(&emitter, "gemini", &config->gemini) &&
+             yai_config_emit_map_end(&emitter);
     }
     if (ok) {
         ok = yaml_mapping_end_event_initialize(&event) && yaml_emitter_emit(&emitter, &event);
@@ -1868,6 +2109,52 @@ static const char *backend_tab_title(const char *engine_name)
     return engine_name;
 }
 
+/* Format a quota reset epoch in the local timezone and the user's locale.
+ * With include_date: "Mon DD, H:MMam/pm" (a reset days out); otherwise
+ * "H:MMam/pm" (a reset later today). `out` is left "" when the epoch is
+ * unknown (0). */
+static void yai_format_reset_time(long long epoch, int include_date, char *out, size_t out_size)
+{
+    if (out_size == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (epoch <= 0) {
+        return;
+    }
+    time_t reset = (time_t)epoch;
+    struct tm broken;
+    if (!localtime_r(&reset, &broken)) {
+        return;
+    }
+    int hour12 = broken.tm_hour % 12;
+    if (hour12 == 0) {
+        hour12 = 12;
+    }
+    char ampm[8] = "";
+    strftime(ampm, sizeof(ampm), "%P", &broken); /* locale lowercase am/pm (glibc) */
+    if (!ampm[0]) {
+        snprintf(ampm, sizeof(ampm), "%s", broken.tm_hour < 12 ? "am" : "pm");
+    }
+    if (include_date) {
+        char month_day[16] = "";
+        strftime(month_day, sizeof(month_day), "%b %e", &broken); /* locale month abbr */
+        /* %e space-pads single-digit days; collapse the resulting double space. */
+        char squeezed[16];
+        size_t out_index = 0;
+        for (size_t index = 0; month_day[index] && out_index + 1 < sizeof(squeezed); index++) {
+            if (month_day[index] == ' ' && (out_index == 0 || squeezed[out_index - 1] == ' ')) {
+                continue;
+            }
+            squeezed[out_index++] = month_day[index];
+        }
+        squeezed[out_index] = '\0';
+        snprintf(out, out_size, "%s, %d:%02d%s", squeezed, hour12, broken.tm_min, ampm);
+    } else {
+        snprintf(out, out_size, "%d:%02d%s", hour12, broken.tm_min, ampm);
+    }
+}
+
 /* Resolve every HUD format variable from current app state. The atomic
  * values come straight from usage / config / engine_name / the cached
  * state + quota + last-turn fields; the #{turn}/#{session}/#{stats}
@@ -1888,6 +2175,19 @@ static void yai_hud_collect_values(struct yai_app *app, struct yai_hud_var_value
     snprintf(out->value[YAI_HUD_VAR_COST], YAI_HUD_VALUE_MAX, "%.4f", app->usage.cost);
     snprintf(out->value[YAI_HUD_VAR_TURNS], YAI_HUD_VALUE_MAX, "%d", app->usage.turns);
     snprintf(out->value[YAI_HUD_VAR_QUOTA], YAI_HUD_VALUE_MAX, "%s", app->quota_text);
+    /* Decomposed quota: per-window percentage + locale reset time. Left empty
+     * until the proxy captures ratelimit headers (out was zeroed above). */
+    struct yai_quota quota;
+    yai_usage_proxy_quota(app, &quota);
+    if (quota.valid) {
+        snprintf(out->value[YAI_HUD_VAR_QUOTA_SESSION_PCT], YAI_HUD_VALUE_MAX, "%d",
+                 quota.session_pct);
+        snprintf(out->value[YAI_HUD_VAR_QUOTA_WEEK_PCT], YAI_HUD_VALUE_MAX, "%d", quota.week_pct);
+        yai_format_reset_time(quota.session_reset, /*include_date=*/0,
+                              out->value[YAI_HUD_VAR_QUOTA_SESSION_RESETS], YAI_HUD_VALUE_MAX);
+        yai_format_reset_time(quota.week_reset, /*include_date=*/1,
+                              out->value[YAI_HUD_VAR_QUOTA_WEEK_RESETS], YAI_HUD_VALUE_MAX);
+    }
     yai_format_tokens(app->estimated_tokens, out->value[YAI_HUD_VAR_EST_TOKENS], YAI_HUD_VALUE_MAX);
 
     const struct yai_turn_usage *turn = &app->last_turn;
@@ -3141,12 +3441,14 @@ static struct yetty_ycore_void_result config_dialog_sync(struct yai_app *app)
     }
     if (values.show_thinking != app->config_show_thinking_applied) {
         app->config_show_thinking_applied = values.show_thinking;
-        app->renderer.show_thinking = values.show_thinking;
+        app->config.show_thinking = values.show_thinking;
+        yai_config_resolve(app);
     }
     int fold_lines = (int)(values.fold_lines + 0.5f);
     if (fold_lines != app->config_fold_lines_applied) {
         app->config_fold_lines_applied = fold_lines;
-        app->renderer.fold_lines = fold_lines;
+        app->config.fold_lines = fold_lines > 0 ? fold_lines : YAI_DEFAULT_FOLD_LINES;
+        yai_config_resolve(app);
     }
     for (int knob = 0; knob < app->config_knob_count && knob < YAI_HUD_CONFIG_MAX_KNOBS; knob++) {
         int chosen = values.knob_selected[knob];
@@ -3552,6 +3854,8 @@ static struct yetty_ycore_void_result yai_set_edit_mode(struct yai_app *app, con
     struct yetty_ycore_void_result free_res = yetty_yclass_object_free(app->editor);
     app->editor = editor_res.value;
     app->editor_mode_name = target;
+    /* The edit-mode knob edits the global default, not a per-backend override. */
+    snprintf(app->config.edit_mode, sizeof(app->config.edit_mode), "%s", target);
     /* vi enters in insert; emacs has no modal indicator. The first
      * keystroke refreshes this, but set it now so the prompt is right
      * the instant the mode changes. */
@@ -3624,6 +3928,9 @@ static void print_usage(FILE *stream, const char *program)
 int main(int argc, char **argv)
 {
     ytrace_init();
+    /* Honor the user's locale for time formatting (quota reset times use the
+     * locale's month names and am/pm markers). */
+    setlocale(LC_TIME, "");
 
     /* Client mode: `yai --connect <port> <method> [args...]` makes this
      * yai a one-shot client of ANOTHER running yai's --rpc server — send
@@ -3688,7 +3995,7 @@ int main(int argc, char **argv)
         } else if (strcmp(arg, "--show-thinking") == 0) {
             yai_config_set(app, "show_thinking", "1");
         } else if (strcmp(arg, "--no-hud") == 0) {
-            yai_config_set(app, "no_hud", "1");
+            yai_config_set(app, "hud_on", "0");
         } else if (strcmp(arg, "--hud-float") == 0) {
             yai_config_set(app, "hud_float", "1");
         } else if (strcmp(arg, "--rpc") == 0) {
@@ -3837,7 +4144,8 @@ int main(int argc, char **argv)
      * echoes the ESC bytes back and the host renders "^[" garbage. */
     yai_report_error(app, "raw input", enter_raw_input(app));
 
-    struct yai_hud_ptr_result hud_res = yai_hud_create(app->config.no_hud, app->config.hud_float);
+    struct yai_hud_ptr_result hud_res =
+        yai_hud_create(yai_effective_hud_on(app), yai_effective_hud_float(app));
     if (YETTY_IS_ERR(hud_res)) {
         yai_report_error(app, "hud create",
                          (struct yetty_ycore_void_result){.ok = 0, .error = hud_res.error});
@@ -3847,10 +4155,10 @@ int main(int argc, char **argv)
     }
     /* The ygui HUD window renders only under yetty. On any other tty there
      * is no window (yai_hud_create returned NULL), so drive the renderer's
-     * text status bar instead — unless the HUD was disabled (--no-hud) or
+     * text status bar instead — unless the HUD was disabled (hud_on=false) or
      * stdout is not a tty (pin_enabled is false: no bottom row to pin). */
     if (!app->hud && app->renderer.pin_enabled && !app->renderer.pin_shader_glyphs &&
-        !app->config.no_hud) {
+        yai_effective_hud_on(app)) {
         app->renderer.text_hud = 1;
     }
     /* Parse the configured HUD format (both backends read app->hud_format:

@@ -1,21 +1,21 @@
 /*
- * tools/ymaze/main.c — standalone animated-maze app.
+ * tools/yzoo/app.c — standalone animated-zoo app (yclass class `yzoo:app`).
  *
- * Opens a window via yinit_run + yframework_create, builds a single
- * full-window ygrid figure, and renders the yetty_ymaze into it every
- * frame. No terminal, no ygui widget tree — the maze drives the ygrid /
- * compositor render path directly (the "independent app" counterpart to
- * the ygui ymaze widget). Modeled on tools/ycompositor.
+ * Subclass of yapp:app: the shared yplatform entry brings up the
+ * window/surface/GPU/channels and hands the assembled runtime to run, which
+ * builds a single full-window ygrid figure and renders the yetty_yzoo into it
+ * every frame. No terminal, no ygui widget tree — the zoo drives the ygrid /
+ * compositor render path directly. Modeled on tools/ymaze.
  *
- * Per frame: clear the grid, render the maze for the current time into a
- * ydraw buffer, push each primitive into the grid, then
- * target->clear → figure render → target->present. The poll timeout paces
- * the loop at ~30 fps so the actor animates.
+ * yclass: the only hand-written file is this annotated .c; app.gen.c is
+ * #included at the foot. Both slots are app overrides of the yapp:app virtuals.
  *
  * Keys: q / ESC quit.
  */
 
-#include <yetty/yinit/yinit.h>
+#include <yetty/yinit/yinit.h> /* struct yetty_yinit_runtime (platform runtime type) */
+#include <yetty/yapp/app.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
 #include <yetty/yframework/yframework.h>
@@ -33,7 +33,7 @@
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ysdf/types.gen.h>
-#include <yetty/ymaze/ymaze.h>
+#include <yetty/yzoo/yzoo.h>
 #include <yetty/ytrace/ytrace.h>
 #include <webgpu/webgpu.h>
 
@@ -42,15 +42,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct ymaze_app {
+struct [[clang::annotate("class@yzoo:app")]] [[clang::annotate("parent@yapp:app")]] yetty_yzoo_app {
     int quit;
     struct yetty_context ctx;
     struct yetty_yframework *yrt;
     struct yetty_ydraw_target *target;
     struct yetty_yclass_object *root;
     struct yetty_ygrid_grid *grid;
-    struct yetty_ymaze *maze;
-    struct yetty_ydraw_drawable_list *buf; /* reused across frames */
+    struct yetty_yzoo *zoo;
+    struct yetty_ydraw_drawable_list *buf;
     double start_time;
     void *surface;
     uint32_t surface_w;
@@ -59,13 +59,15 @@ struct ymaze_app {
     struct yetty_ychrome_host *chrome;
 };
 
+/* Result wrapper + codegen accessor/downcast forward-decls (this TU does not
+ * include its own generated header). */
+YETTY_YRESULT_DECLARE(yetty_yzoo_app_ptr, struct yetty_yzoo_app *);
+struct yetty_yclass_ptr_result yetty_yzoo_app_class_get(void);
+struct yetty_yzoo_app_ptr_result yetty_yzoo_app_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yzoo_app_create(struct yetty_yclass_ctx *ctx);
+
 #define RICH_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
 
-/* Walk a ydraw buffer's primitive stream and push each primitive into the
- * grid as its own record. The buffer's prim layout
- * (`[type|z_order|fill|stroke|stroke_width|geom…]`, plus an optional id
- * word when the HAS_ID flag is set) is exactly the ygrid record format, so
- * each prim is forwarded verbatim. */
 static struct yetty_ycore_void_result push_buffer_to_grid(
     struct yetty_ygrid_grid *grid, const struct yetty_ydraw_drawable_list *buf)
 {
@@ -81,8 +83,6 @@ static struct yetty_ycore_void_result push_buffer_to_grid(
         if (sdf_bytes > 0) {
             psize = sdf_bytes + ((type & YETTY_YDRAW_HAS_ID_FLAG) ? sizeof(uint32_t) : 0);
         } else {
-            /* Non-SDF record: u32 type | u32 payload_size | payload. The
-             * maze emits only SDF prims, so this path is defensive. */
             if (remaining < 2 * sizeof(uint32_t)) {
                 break;
             }
@@ -98,34 +98,30 @@ static struct yetty_ycore_void_result push_buffer_to_grid(
     return YETTY_OK_VOID();
 }
 
-/* Render the maze for the current time into the grid (cleared first). */
-static struct yetty_ycore_void_result render_maze(struct ymaze_app *app)
+static struct yetty_ycore_void_result render_zoo(struct yetty_yzoo_app *app)
 {
-    if (!app->grid || !app->maze || !app->buf) {
+    if (!app->grid || !app->zoo || !app->buf) {
         return YETTY_OK_VOID();
     }
     struct yetty_ycore_void_result cr = yetty_ygrid_clear_local(app->grid);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "render_maze: grid clear");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "render_zoo: grid clear");
 
     float t = (float)(yetty_yplatform_ytime_monotonic_sec() - app->start_time);
-    struct yetty_ycore_void_result rr = yetty_ymaze_render(app->maze, app->buf, t, NULL);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "render_maze: ymaze_render");
+    struct yetty_ycore_void_result rr = yetty_yzoo_render(app->zoo, app->buf, t);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "render_zoo: yzoo_render");
 
     struct yetty_ycore_void_result pr = push_buffer_to_grid(app->grid, app->buf);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "render_maze: push to grid");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "render_zoo: push to grid");
 
     yetty_yfigure_figure_dirty_set(app->root, 1);
     return YETTY_OK_VOID();
 }
 
-/* (Re)build the single full-window ygrid figure. Called at startup and on
- * RESIZE. The maze's scene size is matched to the figure so it fills it. */
-static struct yetty_ycore_void_result rebuild_figure(struct ymaze_app *app)
+static struct yetty_ycore_void_result rebuild_figure(struct yetty_yzoo_app *app)
 {
     struct yetty_ycore_rectangle rect = {
         .min = {.x = 0.0f, .y = 0.0f},
-        .max = {.x = (float)app->surface_w, .y = (float)app->surface_h},
-    };
+        .max = {.x = (float)app->surface_w, .y = (float)app->surface_h}};
     float w = rect.max.x - rect.min.x;
     float h = rect.max.y - rect.min.y;
     if (w <= 0.0f || h <= 0.0f) {
@@ -143,20 +139,20 @@ static struct yetty_ycore_void_result rebuild_figure(struct ymaze_app *app)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "rebuild_figure: ygrid_create");
     app->grid = gr.value;
 
-    (void)yetty_ymaze_set_scene_size(app->maze, w, h);
+    (void)yetty_yzoo_set_scene_size(app->zoo, w, h);
 
     struct yetty_ycore_void_result ar =
         yetty_yfigure_container_add_child(app->root, yetty_ygrid_as_figure(app->grid), /*id=*/1u);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "rebuild_figure: add_child");
 
-    struct yetty_ycore_void_result mr = render_maze(app);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "rebuild_figure: render_maze");
+    struct yetty_ycore_void_result mr = render_zoo(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "rebuild_figure: render_zoo");
 
-    yinfo("ymaze: figure rebuilt for %ux%u", app->surface_w, app->surface_h);
+    yinfo("yzoo: figure rebuilt for %ux%u", app->surface_w, app->surface_h);
     return YETTY_OK_VOID();
 }
 
-static void handle_event(struct ymaze_app *app, const struct yetty_yui_event *ev)
+static void handle_event(struct yetty_yzoo_app *app, const struct yetty_yui_event *ev)
 {
     /* Window chrome gets first dibs on pointer events; anything it doesn't
      * claim (caption drag / edge resize / its buttons) falls through. */
@@ -208,11 +204,8 @@ static void handle_event(struct ymaze_app *app, const struct yetty_yui_event *ev
         return;
     }
     case YETTY_YCORE_KEY_DOWN:
-        /* GLFW key codes: 256=ESC, 81=Q, 82=R. */
         if (ev->key.key == 256 || ev->key.key == 81) {
             app->quit = 1;
-        } else if (ev->key.key == 82) {
-            (void)yetty_ymaze_regenerate(app->maze);
         }
         return;
     default:
@@ -220,9 +213,22 @@ static void handle_event(struct ymaze_app *app, const struct yetty_yui_event *ev
     }
 }
 
-static struct yetty_ycore_void_result ymaze_worker(struct yetty_yinit_runtime *rt, void *user)
+[[clang::annotate("override@yapp:app:init")]]
+static struct yetty_ycore_void_result yzoo_app_init(struct yetty_yclass_object *obj,
+                                                    struct yetty_yinit_runtime *rt)
 {
-    struct ymaze_app *app = user;
+    (void)obj;
+    (void)rt;
+    return YETTY_OK_VOID();
+}
+
+[[clang::annotate("override@yapp:app:run")]]
+static struct yetty_ycore_void_result yzoo_app_run(struct yetty_yclass_object *obj,
+                                                   struct yetty_yinit_runtime *rt)
+{
+    struct yetty_yzoo_app_ptr_result app_res = yetty_yzoo_app_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "yzoo:app:run: app_from");
+    struct yetty_yzoo_app *app = app_res.value;
 
     struct yetty_yframework_ptr_result yr = yetty_yframework_create(rt);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yframework_create failed");
@@ -236,8 +242,6 @@ static struct yetty_ycore_void_result ymaze_worker(struct yetty_yinit_runtime *r
     app->surface_w = rt->surface_width;
     app->surface_h = rt->surface_height;
 
-    /* Swap yframework's async x11-tile target for a plain texture target
-     * the simple poll loop can drive (same reasoning as ycompositor). */
     app->yrt->render_target->ops->destroy(app->yrt->render_target);
     app->yrt->render_target = NULL;
     struct yetty_yrender_viewport vp = {
@@ -258,11 +262,10 @@ static struct yetty_ycore_void_result ymaze_worker(struct yetty_yinit_runtime *r
     yetty_yfigure_container_set_context(app->root, &app->ctx);
     yetty_yfigure_container_set_rect(app->root, root_rect);
 
-    /* Maze + reusable draw buffer. */
-    struct yetty_ymaze_config cfg = yetty_ymaze_config_default();
-    struct yetty_ymaze_ptr_result mr = yetty_ymaze_create(&cfg, 0);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "ymaze_create failed");
-    app->maze = mr.value;
+    struct yetty_yzoo_config cfg = yetty_yzoo_config_default();
+    struct yetty_yzoo_ptr_result zr = yetty_yzoo_create(&cfg, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "yzoo_create failed");
+    app->zoo = zr.value;
     struct yetty_ydraw_drawable_list_result br =
         yetty_ydraw_drawable_list_config_buffer_create(NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "drawable_list create failed");
@@ -291,8 +294,6 @@ static struct yetty_ycore_void_result ymaze_worker(struct yetty_yinit_runtime *r
     int pipe_fd = fdr.value;
 
     while (!app->quit) {
-        /* ~30 fps: block up to 33 ms for input, then render a fresh frame
-         * regardless — the maze is animated. */
         struct pollfd pfd = {.fd = pipe_fd, .events = POLLIN};
         int pr = poll(&pfd, 1, 33);
         if (pr > 0 && (pfd.revents & POLLIN)) {
@@ -313,7 +314,7 @@ static struct yetty_ycore_void_result ymaze_worker(struct yetty_yinit_runtime *r
             wgpuInstanceProcessEvents((WGPUInstance)rt->instance);
         }
 
-        struct yetty_ycore_void_result mrr = render_maze(app);
+        struct yetty_ycore_void_result mrr = render_zoo(app);
         if (YETTY_IS_ERR(mrr)) {
             yetty_ycore_error_destroy(mrr.error);
         }
@@ -350,8 +351,8 @@ static struct yetty_ycore_void_result ymaze_worker(struct yetty_yinit_runtime *r
     app->grid = NULL;
     yetty_ydraw_drawable_list_destroy(app->buf);
     app->buf = NULL;
-    yetty_ymaze_destroy(app->maze);
-    app->maze = NULL;
+    yetty_yzoo_destroy(app->zoo);
+    app->zoo = NULL;
     app->target->ops->destroy(app->target);
     app->target = NULL;
     yetty_yframework_destroy(app->yrt);
@@ -359,15 +360,11 @@ static struct yetty_ycore_void_result ymaze_worker(struct yetty_yinit_runtime *r
     return YETTY_OK_VOID();
 }
 
-int main(int argc, char **argv)
+/* Strong injection point: the shared yplatform entry creates the concrete app
+ * through this weak hook. */
+struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx)
 {
-    struct ymaze_app app = {0};
-    struct yetty_ycore_int_result run_result =
-        yetty_yinit_run(argc, argv, ymaze_worker, &app);
-    if (YETTY_IS_ERR(run_result)) {
-        yetty_ycore_error_print(stderr, "ymaze: run", run_result.error);
-        yetty_ycore_error_destroy(run_result.error);
-        return 1;
-    }
-    return run_result.value;
+    return yetty_yzoo_app_create(ctx);
 }
+
+#include "app.gen.c"

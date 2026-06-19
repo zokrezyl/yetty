@@ -981,7 +981,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_model_on_event(struct yetty_yui_t
                 }
                 if (wm && (step_dx != 0 || step_dy != 0)) {
                     wm_absorb(yetty_yplatform_window_chrome_resize_by(wm, step_dx, step_dy,
-                                                                       bar->resize_edge));
+                                                                      bar->resize_edge));
                 }
                 return YETTY_OK(yetty_ycore_int, 1);
             }

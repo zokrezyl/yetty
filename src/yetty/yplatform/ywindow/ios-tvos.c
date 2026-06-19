@@ -30,8 +30,8 @@ struct yetty_yplatform_ios_window_ptr_result yetty_yplatform_ios_window_from(
 /* Cached metrics pushed from the UIKit bootstrap. framebuffer_* is in physical
  * pixels; content_scale is UIScreen.nativeScale. Logical size is derived as
  * framebuffer / scale. */
-struct [[clang::annotate("class@yplatform:ios_window")]] [[clang::annotate("platform@ios")]] [[clang::annotate(
-    "parent@yplatform:window")]] yetty_yplatform_ios_window {
+struct [[clang::annotate("class@yplatform:ios_window")]] [[clang::annotate(
+    "platform@ios")]] [[clang::annotate("parent@yplatform:window")]] yetty_yplatform_ios_window {
     int framebuffer_width;
     int framebuffer_height;
     float content_scale;

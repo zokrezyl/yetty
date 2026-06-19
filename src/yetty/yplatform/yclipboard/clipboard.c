@@ -49,8 +49,8 @@ struct yetty_yplatform_clipboard_ptr_result yetty_yplatform_clipboard_from(
  * with no deferred main-thread work inherit.
  *=========================================================================*/
 
-[[clang::annotate("virtual@yplatform:clipboard:clipboard_set_text")]]
-[[clang::annotate("local@yplatform:clipboard_set_text")]]
+[[clang::annotate("virtual@yplatform:clipboard:clipboard_set_text")]] [[clang::annotate(
+    "local@yplatform:clipboard_set_text")]]
 static struct yetty_ycore_void_result clipboard_default_set_text(struct yetty_yclass_object *obj,
                                                                  const char *text, size_t len)
 {
@@ -61,8 +61,8 @@ static struct yetty_ycore_void_result clipboard_default_set_text(struct yetty_yc
                      "clipboard_set_text: not implemented by base clipboard class");
 }
 
-[[clang::annotate("virtual@yplatform:clipboard:clipboard_request_paste")]]
-[[clang::annotate("local@yplatform:clipboard_request_paste")]]
+[[clang::annotate("virtual@yplatform:clipboard:clipboard_request_paste")]] [[clang::annotate(
+    "local@yplatform:clipboard_request_paste")]]
 static struct yetty_ycore_void_result clipboard_default_request_paste(
     struct yetty_yclass_object *obj)
 {
@@ -71,8 +71,8 @@ static struct yetty_ycore_void_result clipboard_default_request_paste(
                      "clipboard_request_paste: not implemented by base clipboard class");
 }
 
-[[clang::annotate("virtual@yplatform:clipboard:clipboard_drain")]]
-[[clang::annotate("local@yplatform:clipboard_drain")]]
+[[clang::annotate("virtual@yplatform:clipboard:clipboard_drain")]] [[clang::annotate(
+    "local@yplatform:clipboard_drain")]]
 static struct yetty_ycore_void_result clipboard_default_drain(struct yetty_yclass_object *obj)
 {
     /* Deferred main-thread work is platform-specific; platforms that need none

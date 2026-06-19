@@ -25,8 +25,8 @@ struct yetty_yplatform_glfw_window_ptr_result yetty_yplatform_glfw_window_from(
     struct yetty_yclass_object *obj);
 
 /* Private subclass state: the native GLFW window, owned here. */
-struct [[clang::annotate("class@yplatform:glfw_window")]] [[clang::annotate("platform@glfw")]] [[clang::annotate(
-    "parent@yplatform:window")]] yetty_yplatform_glfw_window {
+struct [[clang::annotate("class@yplatform:glfw_window")]] [[clang::annotate(
+    "platform@glfw")]] [[clang::annotate("parent@yplatform:window")]] yetty_yplatform_glfw_window {
     struct GLFWwindow *handle;
 };
 

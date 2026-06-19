@@ -31,14 +31,21 @@ struct yetty_yplatform_platform_ptr_result {
         struct yetty_ycore_error error;
     };
 };
-struct yetty_yplatform_platform_ptr_result yetty_yplatform_platform_from(struct yetty_yclass_object *obj);
+struct yetty_yplatform_platform_ptr_result yetty_yplatform_platform_from(
+    struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yplatform_platform_to(struct yetty_yplatform_platform *data);
 
-struct yetty_ycore_void_result yetty_yplatform_platform_init(struct yetty_yclass_object * obj, struct yetty_yclass_object * app, int argc, char ** argv);
-struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object * obj, struct yetty_yclass_object * app, int argc, char ** argv);
+struct yetty_ycore_void_result yetty_yplatform_platform_init(struct yetty_yclass_object *obj,
+                                                             struct yetty_yclass_object *app,
+                                                             int argc, char **argv);
+struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *app,
+                                                            int argc, char **argv);
 
-typedef struct yetty_ycore_void_result (*yetty_yplatform_platform_init_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, char **);
-typedef struct yetty_ycore_void_result (*yetty_yplatform_platform_run_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, char **);
+typedef struct yetty_ycore_void_result (*yetty_yplatform_platform_init_fn)(
+    struct yetty_yclass_object *, struct yetty_yclass_object *, int, char **);
+typedef struct yetty_ycore_void_result (*yetty_yplatform_platform_run_fn)(
+    struct yetty_yclass_object *, struct yetty_yclass_object *, int, char **);
 
 struct yetty_yclass_object_ptr_result yetty_yplatform_platform_create(struct yetty_yclass_ctx *ctx);
 

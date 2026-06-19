@@ -20,12 +20,12 @@ set(YHELLO_SOURCES
     ${YETTY_ROOT}/src/yetty/yconfig/config.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
     ${YETTY_ROOT}/src/yetty/ynotify/ynotify.c
-    ${YETTY_ROOT}/src/yetty/yinit/glfw.c
+    # yhello is a yapp:app subclass (class yhello:app in main.c); its dual-mode
+    # main() drives the glfw_platform bootstrap directly (no shared ymain entry).
+    ${YETTY_APP_BOOTSTRAP_SOURCES}
     ${YETTY_ROOT}/src/yetty/yframework/yframework.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
 )
 

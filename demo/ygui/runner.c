@@ -18,6 +18,8 @@
 #include "runner.h"
 
 #include <yetty/ycore/result.h>
+#include <yetty/yapp/app.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ycore/terminal-detect.h>
 #include <yetty/yconfig/config.h>
@@ -104,6 +106,38 @@ struct demo_runner {
     struct yetty_ygrid_grid *chrome_caption; /* pinned figure compositing chrome's bar */
     int chrome_last_hover;                   /* last hovered control — repaint on change */
 };
+
+/*
+ * yclass app wrapper. The standalone bring-up is a yapp:app subclass: the
+ * shared glfw_platform brings up the window/surface/GPU/channels and drives the
+ * run override below. The heavy per-demo state stays in `struct demo_runner`
+ * (the build_fn API the numbered demos depend on); the app data block just
+ * embeds it. demo_runner_run creates the app, stamps name/build/enable_chrome
+ * onto the embedded runner, then runs the platform sequence.
+ *
+ * yclass: the only hand-written file is this annotated runner.c; runner.gen.c is
+ * #included at the foot.
+ */
+struct [[clang::annotate("class@demoygui:app")]] [[clang::annotate("parent@yapp:app")]] yetty_demoygui_app {
+    struct demo_runner runner;
+};
+
+/* Result wrapper + codegen accessor/downcast forward-decls (this TU does not
+ * include its own generated header). */
+YETTY_YRESULT_DECLARE(yetty_demoygui_app_ptr, struct yetty_demoygui_app *);
+struct yetty_yclass_ptr_result yetty_demoygui_app_class_get(void);
+struct yetty_demoygui_app_ptr_result yetty_demoygui_app_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_demoygui_app_create(struct yetty_yclass_ctx *ctx);
+
+/* Platform bring-up sequence symbols (provided by the yplatform layer). The
+ * demo runner owns its own entry (demo_runner_run), so it drives this sequence
+ * directly rather than via the shared ymain/glfw.c. */
+struct yetty_ycore_void_result yetty_yplatform_register(void);
+struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_platform_create(
+    struct yetty_yclass_ctx *ctx);
+struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *app,
+                                                            int argc, char **argv);
 
 static struct yetty_ycore_int_result frame_tick(struct yetty_yevent_event_listener *listener,
                                                 const struct yetty_yui_event *ev)
@@ -519,9 +553,22 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
-static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, void *user)
+[[clang::annotate("override@yapp:app:init")]]
+static struct yetty_ycore_void_result demoygui_app_init(struct yetty_yclass_object *obj,
+                                                        struct yetty_yinit_runtime *rt)
 {
-    struct demo_runner *r = (struct demo_runner *)user;
+    (void)obj;
+    (void)rt;
+    return YETTY_OK_VOID();
+}
+
+[[clang::annotate("override@yapp:app:run")]]
+static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_object *obj,
+                                                       struct yetty_yinit_runtime *rt)
+{
+    struct yetty_demoygui_app_ptr_result app_res = yetty_demoygui_app_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "demoygui:app:run: app_from");
+    struct demo_runner *r = &app_res.value->runner;
 
     struct yetty_yframework_ptr_result frr = yetty_yframework_create(rt);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, frr, "demo_runner: yframework_create");
@@ -1474,14 +1521,53 @@ static int demo_runner_run_impl(int argc, char **argv, const char *name, demo_bu
         return run_client_mode(name, build, enable_chrome);
     }
 #endif
-    struct demo_runner r = {.name = name, .build = build, .enable_chrome = enable_chrome};
-    struct yetty_ycore_int_result run_result = yetty_yinit_run(argc, argv, worker, &r);
+    /* Standalone: drive the platform bring-up sequence directly. The concrete
+     * app is this runner's demoygui:app; the platform calls its init/run. */
+    struct yetty_ycore_void_result platform_reg = yetty_yplatform_register();
+    if (YETTY_IS_ERR(platform_reg)) {
+        yetty_ycore_error_print(stderr, "demo-runner: platform register", platform_reg.error);
+        yetty_ycore_error_destroy(platform_reg.error);
+        return 1;
+    }
+    struct yetty_ycore_void_result yapp_reg = yetty_yapp_register();
+    if (YETTY_IS_ERR(yapp_reg)) {
+        yetty_ycore_error_print(stderr, "demo-runner: yapp register", yapp_reg.error);
+        yetty_ycore_error_destroy(yapp_reg.error);
+        return 1;
+    }
+
+    struct yetty_yclass_object_ptr_result app_res = yetty_demoygui_app_create(NULL);
+    if (YETTY_IS_ERR(app_res)) {
+        yetty_ycore_error_print(stderr, "demo-runner: app create", app_res.error);
+        yetty_ycore_error_destroy(app_res.error);
+        return 1;
+    }
+    struct yetty_demoygui_app_ptr_result app_data = yetty_demoygui_app_from(app_res.value);
+    if (YETTY_IS_ERR(app_data)) {
+        yetty_ycore_error_print(stderr, "demo-runner: app data", app_data.error);
+        yetty_ycore_error_destroy(app_data.error);
+        return 1;
+    }
+    app_data.value->runner.name = name;
+    app_data.value->runner.build = build;
+    app_data.value->runner.enable_chrome = enable_chrome;
+
+    struct yetty_yclass_object_ptr_result platform_res = yetty_yplatform_glfw_platform_create(NULL);
+    if (YETTY_IS_ERR(platform_res)) {
+        yetty_ycore_error_print(stderr, "demo-runner: platform create", platform_res.error);
+        yetty_ycore_error_destroy(platform_res.error);
+        return 1;
+    }
+
+    /* Single step — run() calls init(app, argc, argv) internally. */
+    struct yetty_ycore_void_result run_result =
+        yetty_yplatform_platform_run(platform_res.value, app_res.value, argc, argv);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "demo-runner: run", run_result.error);
         yetty_ycore_error_destroy(run_result.error);
         return 1;
     }
-    return run_result.value;
+    return 0;
 }
 
 int demo_runner_run(int argc, char **argv, const char *name, demo_build_fn build)
@@ -1495,3 +1581,5 @@ int demo_runner_run_chrome(int argc, char **argv, const char *name, demo_build_f
 {
     return demo_runner_run_impl(argc, argv, name, build, /*enable_chrome=*/1);
 }
+
+#include "runner.gen.c"

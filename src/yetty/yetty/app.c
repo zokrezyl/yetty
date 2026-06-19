@@ -24,7 +24,8 @@
 #include <yetty/yplatform/pty.h>
 #include <yetty/ytrace/ytrace.h>
 
-struct [[clang::annotate("class@yetty:app")]] [[clang::annotate("parent@yapp:app")]] yetty_yetty_app {
+struct [[clang::annotate("class@yetty:app")]] [[clang::annotate("parent@yapp:app")]]
+yetty_yetty_app {
     char reserved;
 };
 
@@ -90,6 +91,16 @@ static struct yetty_ycore_void_result yetty_app_run(struct yetty_yclass_object *
 struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx)
 {
     return yetty_yetty_app_create(ctx);
+}
+
+/* Strong override of the weak yapp default: install the yetty app's
+ * accessor-lookup hook. Keeps yetty's startup identical to before the shared
+ * entry was generalized. */
+struct yetty_ycore_void_result yetty_yetty_register(void);
+
+struct yetty_ycore_void_result yetty_yapp_register_app(void)
+{
+    return yetty_yetty_register();
 }
 
 #include "app.gen.c"

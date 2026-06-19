@@ -41,17 +41,31 @@
 /* Max line-editor undo depth (vi `u`); oldest steps drop past this. */
 #define YAI_UNDO_MAX 256
 
-/* The default HUD format string (config key `hud_format`). A tmux-style
- * template over the values the HUD shows — see hud-format.h for the
- * grammar. Three rows: row 0 state + title / quota / model (also the single
- * line the text-bar backend shows), row 1 turn / Σ-stats, row 2 session /
- * cache·cost·turns. `\n` starts a row; `#[align=...]` selects the
- * left/center/right cell. `#{title}` is the user's /title (empty until set). */
+/* The default HUD format (config key `hud_format`). A tmux-style template over
+ * the values the HUD shows — see hud-format.h for the grammar. Three rows:
+ * row 0 state + title / quota / model (also the single line the text-bar
+ * backend shows), row 1 turn / Σ-stats, row 2 session / cache·cost·turns. `\n`
+ * starts a row; `#[align=...]` selects the left/center/right cell. `#{title}`
+ * is the user's /title (empty until set).
+ *
+ * Stored in the config as a YAML sequence of strings that the app concatenates
+ * (directly, no separator) into one format — splitting the long template into
+ * readable pieces. These are the default pieces; their concatenation is
+ * YAI_DEFAULT_HUD_FORMAT, used as the parse fallback. */
+#define YAI_DEFAULT_HUD_PART_0 "#[fg=accent_bright]#{state}#[fg=primary] #{title}"
+#define YAI_DEFAULT_HUD_PART_1 "#[align=center,fg=accent_bright]#{quota}"
+#define YAI_DEFAULT_HUD_PART_2 "#[align=right,fg=primary]#{engine} · #{model}"
+#define YAI_DEFAULT_HUD_PART_3                                                                     \
+    "\n#[fg=secondary]#{turn}#[align=right,fg=accent]#{stats}"
+#define YAI_DEFAULT_HUD_PART_4                                                                     \
+    "\n#[fg=muted]#{session}#[align=right,fg=secondary]cache #{cache} · $#{cost} · #{turns} turn(s)"
 #define YAI_DEFAULT_HUD_FORMAT                                                                     \
-    "#[fg=accent_bright]#{state}#[fg=primary] #{title}#[align=center,fg=accent_bright]#{quota}"    \
-    "#[align=right,fg=primary]#{engine} · #{model}\n"                                              \
-    "#[fg=secondary]#{turn}#[align=right,fg=accent]#{stats}\n"                                     \
-    "#[fg=muted]#{session}#[align=right,fg=secondary]cache #{cache} · $#{cost} · #{turns} turn(s)"
+    YAI_DEFAULT_HUD_PART_0 YAI_DEFAULT_HUD_PART_1 YAI_DEFAULT_HUD_PART_2 YAI_DEFAULT_HUD_PART_3     \
+        YAI_DEFAULT_HUD_PART_4
+
+/* Largest single HUD-format piece and how many a format may hold. */
+#define YAI_HUD_FORMAT_PART_MAX 256
+#define YAI_HUD_FORMAT_PARTS_MAX 16
 
 /* One line-editor undo step: a heap copy of the line and its cursor as
  * they were before an edit. See struct yai_app's undo_stack. */
@@ -90,15 +104,27 @@ struct yai_pending_permission {
     yyjson_mut_doc *input_doc;
 };
 
+/* A captured per-backend override of a `defaults:` key (edit_mode, fold_lines,
+ * show_thinking, hud_on, hud_float, hud_format). The value is kept verbatim so
+ * it round-trips losslessly; the effective typed value is parsed at resolve
+ * time (see yai_config_resolve / yai_effective_hud_*). */
+struct yai_setting {
+    char key[24];
+    char value[512];
+};
+
+/* Upper bound on the number of `defaults:` keys one backend may override. */
+#define YAI_BACKEND_OVERRIDE_MAX 8
+
 /* Per-engine settings — one of these per backend (claude / codex / gemini),
- * stored under that engine's section in the YAML. Each engine reads only its
- * own fields at spawn; unused fields stay "". `model` and `effort` are common
- * (gemini has no effort); the rest are engine-specific. `hud_format` is an
- * optional override of the global template (see yai_config.hud_format). */
+ * stored under that engine's section in the YAML `backends:` mapping. Each
+ * engine reads only its own fields at spawn; unused fields stay "". `model`
+ * and `effort` are common (gemini has no effort); the rest are
+ * engine-specific. A backend may also carry `overrides` — values for the
+ * global `defaults:` keys that take effect while this backend is active. */
 struct yai_engine_config {
-    char model[128];      /* "" = the engine CLI's own default */
-    char effort[16];      /* claude: auto..max; codex: default..high; gemini: unused */
-    char hud_format[512]; /* "" = inherit the global hud_format */
+    char model[128]; /* "" = the engine CLI's own default */
+    char effort[16]; /* claude: auto..max; codex: default..high; gemini: unused */
     /* claude */
     char permission_mode[24]; /* default | acceptEdits | plan | auto */
     char allowed_preset[16];  /* curated | readonly | edit | full */
@@ -108,20 +134,32 @@ struct yai_engine_config {
     char approval[16]; /* never | on-request | untrusted */
     /* gemini */
     char approval_mode[16]; /* default | auto_edit | yolo */
+    /* overrides of the global `defaults:` keys; "" count = inherit them all */
+    struct yai_setting overrides[YAI_BACKEND_OVERRIDE_MAX];
+    int override_count;
 };
 
 /* yai's own settings. The single source of truth: seeded with defaults,
  * overlaid by the config file (~/.config/yetty/yai.yaml), then overridden by
  * command-line flags. The engines read these fields directly at spawn — there
- * are no YAI_* environment variables. `engine` and `edit_mode` live as their
- * own app fields (engine_name / editor_mode_name); the renderer owns
- * fold_lines / show_thinking. Global settings live here; engine-specific ones
- * live in the per-engine sub-structs, keyed by app->engine_name. */
+ * are no YAI_* environment variables. The `defaults:` section holds the global
+ * settings below; the active engine is app->engine_name and the resolved live
+ * values land in app->editor_mode_name and the renderer's fold_lines /
+ * show_thinking (see yai_config_resolve). Per-engine settings live in the
+ * sub-structs, keyed by app->engine_name, and may override the defaults. */
 struct yai_config {
-    /* global */
-    int no_hud;           /* 1 = no ygui window; stats as plain text */
-    int hud_float;        /* 1 = float the HUD instead of docking */
-    char hud_format[512]; /* global tmux-style HUD template (see hud-format.h) */
+    /* defaults */
+    char edit_mode[8];     /* "emacs" | "vi" */
+    int fold_lines;        /* folded-output line budget */
+    int show_thinking;     /* 1 = show the model's thinking blocks */
+    int hud_on;            /* 1 = ygui HUD window; 0 = stats as plain text */
+    int hud_float;         /* 1 = float the HUD instead of docking */
+    char hud_format[1024]; /* global HUD template = the parts concatenated */
+    /* The HUD template authored as a sequence of pieces (YAML list); the app
+     * concatenates them into hud_format. Kept verbatim so the list round-trips
+     * on save. part_count 0 means "single scalar held in hud_format". */
+    char hud_format_parts[YAI_HUD_FORMAT_PARTS_MAX][YAI_HUD_FORMAT_PART_MAX];
+    int hud_format_part_count;
     /* per-engine sections */
     struct yai_engine_config claude;
     struct yai_engine_config codex;
@@ -443,6 +481,22 @@ void yai_usage_proxy_status(struct yai_app *app, char *out, size_t out_size);
 /* Compact one-line quota for the status bar, e.g. "quota 5h 26% · 7d 55%"
  * (empty until the first API call is captured). */
 void yai_usage_proxy_summary(struct yai_app *app, char *out, size_t out_size);
+
+/* The captured account quota, decomposed: the 5-hour ("session") and 7-day
+ * ("week") utilization windows and their reset epochs (UTC seconds; 0 when the
+ * header was absent). `valid` is 0 until the proxy captures the first
+ * ratelimit headers. */
+struct yai_quota {
+    int valid;
+    int session_pct; /* 5h utilization, 0..100 */
+    int week_pct;    /* 7d utilization, 0..100 */
+    long long session_reset; /* epoch seconds; 0 = unknown */
+    long long week_reset;    /* epoch seconds; 0 = unknown */
+};
+
+/* Copy the latest decomposed quota into `out` (out->valid = 0 when none yet,
+ * or when there is no proxy — codex / gemini). */
+void yai_usage_proxy_quota(struct yai_app *app, struct yai_quota *out);
 
 /* uv callbacks shared by the engines' child spawns. Signatures are
  * dictated by libuv (YETTY_EXTERNAL_CALLBACK) — inner Results are

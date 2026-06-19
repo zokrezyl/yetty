@@ -57,13 +57,11 @@ if(YBROWSER_STANDALONE)
     # layer (window, surface, event pipes carry file-static state), so each
     # standalone-window binary inlines them, same as demo/ygui/runner.
     target_sources(ybrowser PRIVATE
-        ${YETTY_ROOT}/src/yetty/yinit/glfw.c
+        ${YETTY_APP_BOOTSTRAP_SOURCES}
         ${YETTY_ROOT}/src/yetty/yframework/yframework.c
         ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
-        ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
-        ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c

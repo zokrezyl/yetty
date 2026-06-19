@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -64,6 +65,17 @@ struct yai_proxy {
     pthread_mutex_t status_mutex;
     char status[4096];  /* latest decoded quota detail (one field per line) */
     char summary[64];   /* compact one-line form for the HUD, e.g. "5h 26% · 7d 55%" */
+    /* Decomposed quota for the granular HUD variables (guarded by status_mutex). */
+    int quota_valid;
+    int quota_session_pct;
+    int quota_week_pct;
+    long long quota_session_reset; /* epoch seconds; 0 = unknown */
+    long long quota_week_reset;    /* epoch seconds; 0 = unknown */
+
+    pthread_mutex_t conversation_mutex;
+    FILE *conversation_file;
+    char conversation_path[256];
+    unsigned long next_request_id;
 
     pthread_mutex_t conns_mutex;
     struct yai_proxy_conn *conns[YAI_PROXY_MAX_CONNS];
@@ -86,6 +98,7 @@ struct yai_proxy_conn {
     int relay_failed;    /* a client-side write failed: abort the transfer */
     struct yai_proxy_field fields[YAI_PROXY_MAX_FIELDS]; /* captured quota headers */
     int field_count;
+    unsigned long request_id;
 };
 
 /*---------------------------------------------------------------------------
@@ -121,6 +134,185 @@ static int header_name_matches(const char *line, size_t line_len, const char *na
     return strncasecmp(line, name, name_len) == 0;
 }
 
+static int phr_name_is(const struct phr_header *header, const char *name);
+
+static int parsed_header_name_is(const struct phr_header *header, const char *name)
+{
+    size_t name_len = strlen(name);
+    return header->name && header->name_len == name_len &&
+           strncasecmp(header->name, name, name_len) == 0;
+}
+
+static int request_header_is_sensitive(const struct phr_header *header)
+{
+    return parsed_header_name_is(header, "authorization") ||
+           parsed_header_name_is(header, "x-api-key") ||
+           parsed_header_name_is(header, "anthropic-api-key") ||
+           parsed_header_name_is(header, "cookie");
+}
+
+static void conversation_timestamp(char *out, size_t out_size)
+{
+    struct timespec now;
+    if (clock_gettime(CLOCK_REALTIME, &now) != 0) {
+        snprintf(out, out_size, "unknown");
+        return;
+    }
+    struct tm broken;
+    if (!localtime_r(&now.tv_sec, &broken)) {
+        snprintf(out, out_size, "unknown");
+        return;
+    }
+    size_t used = strftime(out, out_size, "%Y-%m-%dT%H:%M:%S", &broken);
+    if (used == 0 || used >= out_size) {
+        snprintf(out, out_size, "unknown");
+        return;
+    }
+    snprintf(out + used, out_size - used, ".%03ld", now.tv_nsec / 1000000L);
+}
+
+static void conversation_write_json_string(FILE *file, const char *bytes, size_t len)
+{
+    fputc('"', file);
+    for (size_t index = 0; index < len; index++) {
+        unsigned char ch = (unsigned char)bytes[index];
+        if (ch == '"' || ch == '\\') {
+            fputc('\\', file);
+            fputc(ch, file);
+        } else if (ch == '\n') {
+            fputs("\\n", file);
+        } else if (ch == '\r') {
+            fputs("\\r", file);
+        } else if (ch == '\t') {
+            fputs("\\t", file);
+        } else if (ch >= 0x20 && ch < 0x7f) {
+            fputc(ch, file);
+        } else {
+            fprintf(file, "\\u%04x", ch);
+        }
+    }
+    fputc('"', file);
+}
+
+static void conversation_log_prefix(struct yai_proxy_conn *conn, const char *event)
+{
+    char ts[32];
+    conversation_timestamp(ts, sizeof(ts));
+    fprintf(conn->proxy->conversation_file, "{\"ts\":\"%s\",\"request_id\":%lu,\"event\":\"%s\"",
+            ts, conn->request_id, event);
+}
+
+static void conversation_log_request(struct yai_proxy_conn *conn, const char *method,
+                                     const char *url, const struct phr_header *headers,
+                                     size_t num_headers, const char *body, size_t body_len)
+{
+    struct yai_proxy *proxy = conn->proxy;
+    if (!proxy->conversation_file) {
+        return;
+    }
+    pthread_mutex_lock(&proxy->conversation_mutex);
+    conversation_log_prefix(conn, "request");
+    fputs(",\"method\":", proxy->conversation_file);
+    conversation_write_json_string(proxy->conversation_file, method, strlen(method));
+    fputs(",\"url\":", proxy->conversation_file);
+    conversation_write_json_string(proxy->conversation_file, url, strlen(url));
+    fputs(",\"headers\":[", proxy->conversation_file);
+    for (size_t index = 0; index < num_headers; index++) {
+        if (index > 0) {
+            fputc(',', proxy->conversation_file);
+        }
+        const struct phr_header *header = &headers[index];
+        fputs("{\"name\":", proxy->conversation_file);
+        conversation_write_json_string(proxy->conversation_file, header->name, header->name_len);
+        fputs(",\"value\":", proxy->conversation_file);
+        if (request_header_is_sensitive(header)) {
+            conversation_write_json_string(proxy->conversation_file, "[redacted]", 10);
+        } else {
+            conversation_write_json_string(proxy->conversation_file, header->value,
+                                           header->value_len);
+        }
+        fputc('}', proxy->conversation_file);
+    }
+    fputs("],\"body\":", proxy->conversation_file);
+    conversation_write_json_string(proxy->conversation_file, body, body_len);
+    fputs("}\n", proxy->conversation_file);
+    fflush(proxy->conversation_file);
+    pthread_mutex_unlock(&proxy->conversation_mutex);
+}
+
+static void conversation_log_response_header(struct yai_proxy_conn *conn, const char *bytes,
+                                             size_t len)
+{
+    struct yai_proxy *proxy = conn->proxy;
+    if (!proxy->conversation_file || conn->status_code < 200) {
+        return;
+    }
+    pthread_mutex_lock(&proxy->conversation_mutex);
+    conversation_log_prefix(conn, "response_header");
+    fprintf(proxy->conversation_file, ",\"status\":%d,\"line\":", conn->status_code);
+    conversation_write_json_string(proxy->conversation_file, bytes, len);
+    fputs("}\n", proxy->conversation_file);
+    fflush(proxy->conversation_file);
+    pthread_mutex_unlock(&proxy->conversation_mutex);
+}
+
+static void conversation_log_response_body(struct yai_proxy_conn *conn, const char *bytes,
+                                           size_t len)
+{
+    struct yai_proxy *proxy = conn->proxy;
+    if (!proxy->conversation_file || conn->status_code < 200 || len == 0) {
+        return;
+    }
+    pthread_mutex_lock(&proxy->conversation_mutex);
+    conversation_log_prefix(conn, "response_body");
+    fprintf(proxy->conversation_file, ",\"status\":%d,\"bytes\":%zu,\"data\":",
+            conn->status_code, len);
+    conversation_write_json_string(proxy->conversation_file, bytes, len);
+    fputs("}\n", proxy->conversation_file);
+    fflush(proxy->conversation_file);
+    pthread_mutex_unlock(&proxy->conversation_mutex);
+}
+
+static void conversation_log_response_end(struct yai_proxy_conn *conn, CURLcode result)
+{
+    struct yai_proxy *proxy = conn->proxy;
+    if (!proxy->conversation_file) {
+        return;
+    }
+    pthread_mutex_lock(&proxy->conversation_mutex);
+    conversation_log_prefix(conn, "response_end");
+    fprintf(proxy->conversation_file, ",\"status\":%d,\"curl_result\":%d,\"relay_failed\":%d}\n",
+            conn->status_code, (int)result, conn->relay_failed);
+    fflush(proxy->conversation_file);
+    pthread_mutex_unlock(&proxy->conversation_mutex);
+}
+
+static void conversation_path_init(struct yai_proxy *proxy)
+{
+    if (mkdir("tmp", 0777) != 0 && errno != EEXIST) {
+        return;
+    }
+    if (mkdir("tmp/transcript", 0777) != 0 && errno != EEXIST) {
+        return;
+    }
+    const char *name = strrchr(proxy->app->transcript_path, '/');
+    name = name ? name + 1 : proxy->app->transcript_path;
+    if (!name[0]) {
+        name = "session.jsonl";
+    }
+    char stem[160];
+    snprintf(stem, sizeof(stem), "%s", name);
+    char *suffix = strstr(stem, ".jsonl");
+    if (suffix) {
+        *suffix = '\0';
+    }
+    int written = snprintf(proxy->conversation_path, sizeof(proxy->conversation_path),
+                           "tmp/transcript/%s-proxy.jsonl", stem);
+    if (written < 0 || (size_t)written >= sizeof(proxy->conversation_path)) {
+        proxy->conversation_path[0] = '\0';
+    }
+}
+
 /* True for response headers whose framing we re-derive ourselves. */
 static int header_is_hop_by_hop(const char *line, size_t line_len)
 {
@@ -149,12 +341,17 @@ static size_t header_callback(char *buffer, size_t size, size_t count, void *use
         }
     }
 
+    /* Transcript: every header line of the real (>= 200) response. No-ops for
+     * informational/early lines (guarded inside on status_code < 200). */
+    conversation_log_response_header(conn, buffer, len);
+
     int is_blank = (len == 2 && buffer[0] == '\r' && buffer[1] == '\n') ||
                    (len == 1 && buffer[0] == '\n');
     if (is_blank) {
         /* End of a header block. Ignore 1xx informational blocks; for the
          * real response, append our own framing and flush to the client. */
         if (conn->status_code >= 200 && !conn->headers_flushed) {
+            conversation_log_response_header(conn, "\r\n", 2);
             const char *framing = "Transfer-Encoding: chunked\r\n\r\n";
             size_t framing_len = strlen(framing);
             size_t need = conn->resp_len + framing_len;
@@ -205,6 +402,10 @@ static size_t header_callback(char *buffer, size_t size, size_t count, void *use
         }
     }
 
+    if (conn->status_code >= 200) {
+        conversation_log_response_header(conn, buffer, len);
+    }
+
     if (conn->status_code >= 200 && !header_is_hop_by_hop(buffer, len)) {
         size_t need = conn->resp_len + len;
         if (need > conn->resp_cap) {
@@ -232,6 +433,8 @@ static size_t body_callback(char *buffer, size_t size, size_t count, void *userd
     if (len == 0) {
         return 0;
     }
+    conversation_log_response_body(conn, buffer, len);
+    conversation_log_response_body(conn, buffer, len);
     char chunk_header[32];
     int header_len = snprintf(chunk_header, sizeof(chunk_header), "%zx\r\n", len);
     if (header_len < 0 || write_full(conn->fd, chunk_header, (size_t)header_len) != 0 ||
@@ -319,14 +522,24 @@ static void proxy_publish_status(struct yai_proxy *proxy, const struct yai_proxy
         offset += (size_t)wrote < room ? (size_t)wrote : room - 1;
     }
 
-    /* Compact one-liner for the status bar: the two utilization windows. */
+    /* Compact one-liner for the status bar plus the decomposed values for the
+     * granular HUD variables: the two utilization windows and their resets.
+     * The reset header key carries the window ("...5h-reset" / "...7d-reset"). */
     const char *five_hour = NULL;
     const char *seven_day = NULL;
+    const char *five_hour_reset = NULL;
+    const char *seven_day_reset = NULL;
     for (int index = 0; index < conn->field_count; index++) {
-        if (strcmp(conn->fields[index].key, "unified-5h-utilization") == 0) {
-            five_hour = conn->fields[index].value;
-        } else if (strcmp(conn->fields[index].key, "unified-7d-utilization") == 0) {
-            seven_day = conn->fields[index].value;
+        const char *key = conn->fields[index].key;
+        const char *value = conn->fields[index].value;
+        if (strcmp(key, "unified-5h-utilization") == 0) {
+            five_hour = value;
+        } else if (strcmp(key, "unified-7d-utilization") == 0) {
+            seven_day = value;
+        } else if (str_ends_with(key, "reset") && strstr(key, "5h")) {
+            five_hour_reset = value;
+        } else if (str_ends_with(key, "reset") && strstr(key, "7d")) {
+            seven_day_reset = value;
         }
     }
     char summary[64] = "";
@@ -339,6 +552,11 @@ static void proxy_publish_status(struct yai_proxy *proxy, const struct yai_proxy
     pthread_mutex_lock(&proxy->status_mutex);
     snprintf(proxy->status, sizeof(proxy->status), "%s", block);
     snprintf(proxy->summary, sizeof(proxy->summary), "%s", summary);
+    proxy->quota_valid = (five_hour || seven_day) ? 1 : 0;
+    proxy->quota_session_pct = five_hour ? (int)(atof(five_hour) * 100.0 + 0.5) : 0;
+    proxy->quota_week_pct = seven_day ? (int)(atof(seven_day) * 100.0 + 0.5) : 0;
+    proxy->quota_session_reset = five_hour_reset ? strtoll(five_hour_reset, NULL, 10) : 0;
+    proxy->quota_week_reset = seven_day_reset ? strtoll(seven_day_reset, NULL, 10) : 0;
     pthread_mutex_unlock(&proxy->status_mutex);
 
     if (proxy->status_path[0]) {
@@ -423,6 +641,7 @@ static int proxy_forward(struct yai_proxy_conn *conn, const char *method, const 
 
     CURLcode result = curl_easy_perform(curl);
     curl_easy_cleanup(curl);
+    conversation_log_response_end(conn, result);
 
     if (conn->relay_failed) {
         return -1; /* client went away mid-stream */
@@ -549,6 +768,23 @@ static void proxy_serve(struct yai_proxy_conn *conn)
             buf_len += (size_t)got;
         }
 
+        /* Assign a per-request id and log the full request before forwarding.
+         * The id only matters for the transcript, so skip it when logging is
+         * off. conversation_log_request itself no-ops without a file. */
+        if (conn->proxy->conversation_file) {
+            pthread_mutex_lock(&conn->proxy->conversation_mutex);
+            conn->request_id = ++conn->proxy->next_request_id;
+            pthread_mutex_unlock(&conn->proxy->conversation_mutex);
+        }
+        conversation_log_request(conn, method_buf, url, headers, num_headers, buf + header_end,
+                                 content_length);
+
+        pthread_mutex_lock(&conn->proxy->conversation_mutex);
+        conn->request_id = conn->proxy->next_request_id++;
+        pthread_mutex_unlock(&conn->proxy->conversation_mutex);
+        conversation_log_request(conn, method_buf, url, headers, num_headers, buf + header_end,
+                                 content_length);
+
         int forward_result =
             proxy_forward(conn, method_buf, url, forward_headers, buf + header_end, content_length);
         curl_slist_free_all(forward_headers);
@@ -649,7 +885,22 @@ struct yetty_ycore_void_result yai_usage_proxy_start(struct yai_app *app)
     proxy->listen_fd = -1;
     atomic_init(&proxy->stop, 0);
     pthread_mutex_init(&proxy->status_mutex, NULL);
+    pthread_mutex_init(&proxy->conversation_mutex, NULL);
     pthread_mutex_init(&proxy->conns_mutex, NULL);
+    proxy->next_request_id = 1;
+    conversation_path_init(proxy);
+    if (proxy->conversation_path[0]) {
+        proxy->conversation_file = fopen(proxy->conversation_path, "a");
+    }
+
+    /* Conversation transcript: opened before the accept thread starts so worker
+     * threads always see a stable file pointer (NULL when unavailable — every
+     * conversation_log_* call guards on it). Stays open for the proxy lifetime. */
+    pthread_mutex_init(&proxy->conversation_mutex, NULL);
+    conversation_path_init(proxy);
+    if (proxy->conversation_path[0]) {
+        proxy->conversation_file = fopen(proxy->conversation_path, "w");
+    }
 
     /* Upstream = the ANTHROPIC_BASE_URL the child would otherwise have used,
      * before we redirect it at ourselves. */
@@ -667,7 +918,15 @@ struct yetty_ycore_void_result yai_usage_proxy_start(struct yai_app *app)
 
     int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
     if (listen_fd < 0) {
+        if (proxy->conversation_file) {
+            fclose(proxy->conversation_file);
+        }
+        pthread_mutex_destroy(&proxy->conversation_mutex);
+        if (proxy->conversation_file) {
+            fclose(proxy->conversation_file);
+        }
         pthread_mutex_destroy(&proxy->status_mutex);
+        pthread_mutex_destroy(&proxy->conversation_mutex);
         pthread_mutex_destroy(&proxy->conns_mutex);
         free(proxy);
         return YETTY_ERR(yetty_ycore_void, "usage proxy: socket");
@@ -681,7 +940,15 @@ struct yetty_ycore_void_result yai_usage_proxy_start(struct yai_app *app)
     if (bind(listen_fd, (struct sockaddr *)&addr, sizeof(addr)) != 0 ||
         listen(listen_fd, 16) != 0) {
         close(listen_fd);
+        if (proxy->conversation_file) {
+            fclose(proxy->conversation_file);
+        }
+        pthread_mutex_destroy(&proxy->conversation_mutex);
+        if (proxy->conversation_file) {
+            fclose(proxy->conversation_file);
+        }
         pthread_mutex_destroy(&proxy->status_mutex);
+        pthread_mutex_destroy(&proxy->conversation_mutex);
         pthread_mutex_destroy(&proxy->conns_mutex);
         free(proxy);
         return YETTY_ERR(yetty_ycore_void, "usage proxy: bind/listen");
@@ -690,7 +957,15 @@ struct yetty_ycore_void_result yai_usage_proxy_start(struct yai_app *app)
     socklen_t bound_len = sizeof(bound);
     if (getsockname(listen_fd, (struct sockaddr *)&bound, &bound_len) != 0) {
         close(listen_fd);
+        if (proxy->conversation_file) {
+            fclose(proxy->conversation_file);
+        }
+        pthread_mutex_destroy(&proxy->conversation_mutex);
+        if (proxy->conversation_file) {
+            fclose(proxy->conversation_file);
+        }
         pthread_mutex_destroy(&proxy->status_mutex);
+        pthread_mutex_destroy(&proxy->conversation_mutex);
         pthread_mutex_destroy(&proxy->conns_mutex);
         free(proxy);
         return YETTY_ERR(yetty_ycore_void, "usage proxy: getsockname");
@@ -702,7 +977,15 @@ struct yetty_ycore_void_result yai_usage_proxy_start(struct yai_app *app)
     if (pthread_create(&proxy->accept_thread, NULL, proxy_accept_main, proxy) != 0) {
         close(listen_fd);
         curl_global_cleanup();
+        if (proxy->conversation_file) {
+            fclose(proxy->conversation_file);
+        }
+        pthread_mutex_destroy(&proxy->conversation_mutex);
+        if (proxy->conversation_file) {
+            fclose(proxy->conversation_file);
+        }
         pthread_mutex_destroy(&proxy->status_mutex);
+        pthread_mutex_destroy(&proxy->conversation_mutex);
         pthread_mutex_destroy(&proxy->conns_mutex);
         free(proxy);
         return YETTY_ERR(yetty_ycore_void, "usage proxy: pthread_create");
@@ -752,6 +1035,10 @@ void yai_usage_proxy_stop(struct yai_app *app)
     pthread_mutex_unlock(&proxy->conns_mutex);
 
     curl_global_cleanup();
+    if (proxy->conversation_file) {
+        fclose(proxy->conversation_file);
+    }
+    pthread_mutex_destroy(&proxy->conversation_mutex);
     pthread_mutex_destroy(&proxy->status_mutex);
     pthread_mutex_destroy(&proxy->conns_mutex);
     free(proxy);
@@ -784,5 +1071,21 @@ void yai_usage_proxy_summary(struct yai_app *app, char *out, size_t out_size)
     }
     pthread_mutex_lock(&proxy->status_mutex);
     snprintf(out, out_size, "%s", proxy->summary);
+    pthread_mutex_unlock(&proxy->status_mutex);
+}
+
+void yai_usage_proxy_quota(struct yai_app *app, struct yai_quota *out)
+{
+    memset(out, 0, sizeof(*out));
+    struct yai_proxy *proxy = app->usage_proxy;
+    if (!proxy) {
+        return;
+    }
+    pthread_mutex_lock(&proxy->status_mutex);
+    out->valid = proxy->quota_valid;
+    out->session_pct = proxy->quota_session_pct;
+    out->week_pct = proxy->quota_week_pct;
+    out->session_reset = proxy->quota_session_reset;
+    out->week_reset = proxy->quota_week_reset;
     pthread_mutex_unlock(&proxy->status_mutex);
 }

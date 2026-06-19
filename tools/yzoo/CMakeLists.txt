@@ -12,14 +12,16 @@ if(NOT YETTY_ENABLE_LIB_WEBGPU)
     return()
 endif()
 
+# yzoo is a yapp:app subclass (class yzoo:app in app.c). The shared yplatform
+# entry (${YETTY_APP_ENTRY_GLFW}) owns main() and drives the glfw_platform
+# bootstrap (${YETTY_APP_BOOTSTRAP_SOURCES}); app.c #includes its own app.gen.c.
 set(YZOO_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/yinit/glfw.c
+    ${YETTY_APP_ENTRY_GLFW}
+    ${YETTY_APP_BOOTSTRAP_SOURCES}
     ${YETTY_ROOT}/src/yetty/yframework/yframework.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
@@ -33,7 +35,7 @@ set(YZOO_PLATFORM_SOURCES
 )
 
 add_executable(yzoo
-    main.c
+    app.c
     ${YZOO_PLATFORM_SOURCES}
 )
 

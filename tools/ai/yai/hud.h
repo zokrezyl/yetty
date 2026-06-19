@@ -34,9 +34,9 @@ struct yai_hud;
 YETTY_YRESULT_DECLARE(yai_hud_ptr, struct yai_hud *);
 
 /* Create the window. OK with a NULL value when the HUD is intentionally
- * unavailable (--no-hud, stdout not a tty); an error Result on a
+ * unavailable (hud_on=false, stdout not a tty); an error Result on a
  * real init failure. */
-struct yai_hud_ptr_result yai_hud_create(int no_hud, int hud_float);
+struct yai_hud_ptr_result yai_hud_create(int hud_on, int hud_float);
 
 /* Build the HUD body from a parsed format. Lays the window body out as one
  * row per format row, each row split into left/center/right alignment cells,

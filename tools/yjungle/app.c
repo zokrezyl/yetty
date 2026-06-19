@@ -1,15 +1,22 @@
 /*
- * tools/yzoo/main.c — standalone animated-zoo app.
+ * tools/yjungle/app.c — standalone animated-jungle app (yclass class `yjungle:app`).
  *
- * Opens a window via yinit_run + yframework_create, builds a single
- * full-window ygrid figure, and renders the yetty_yzoo into it every
- * frame. No terminal, no ygui widget tree — the zoo drives the ygrid /
- * compositor render path directly. Modeled on tools/ymaze.
+ * Subclass of yapp:app: the shared yplatform entry brings up the
+ * window/surface/GPU/channels and hands the assembled runtime to run, which
+ * builds a single full-window ygrid figure and renders the yetty_yjungle into it
+ * every frame via the flat full-redraw path (yetty_yjungle_render). No terminal,
+ * no ygui widget tree — the jungle drives the ygrid / compositor render path
+ * directly. Modeled on tools/ymaze.
+ *
+ * yclass: the only hand-written file is this annotated .c; app.gen.c is
+ * #included at the foot.
  *
  * Keys: q / ESC quit.
  */
 
-#include <yetty/yinit/yinit.h>
+#include <yetty/yinit/yinit.h> /* struct yetty_yinit_runtime (platform runtime type) */
+#include <yetty/yapp/app.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
 #include <yetty/yframework/yframework.h>
@@ -27,7 +34,7 @@
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ysdf/types.gen.h>
-#include <yetty/yzoo/yzoo.h>
+#include <yetty/yjungle/yjungle.h>
 #include <yetty/ytrace/ytrace.h>
 #include <webgpu/webgpu.h>
 
@@ -36,14 +43,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct yzoo_app {
+struct [[clang::annotate("class@yjungle:app")]] [[clang::annotate("parent@yapp:app")]] yetty_yjungle_app {
     int quit;
     struct yetty_context ctx;
     struct yetty_yframework *yrt;
     struct yetty_ydraw_target *target;
     struct yetty_yclass_object *root;
     struct yetty_ygrid_grid *grid;
-    struct yetty_yzoo *zoo;
+    struct yetty_yjungle *jungle;
     struct yetty_ydraw_drawable_list *buf;
     double start_time;
     void *surface;
@@ -52,6 +59,13 @@ struct yzoo_app {
     /* Window chrome host (draggable/resizable titlebar + min/max/close). */
     struct yetty_ychrome_host *chrome;
 };
+
+/* Result wrapper + codegen accessor/downcast forward-decls (this TU does not
+ * include its own generated header). */
+YETTY_YRESULT_DECLARE(yetty_yjungle_app_ptr, struct yetty_yjungle_app *);
+struct yetty_yclass_ptr_result yetty_yjungle_app_class_get(void);
+struct yetty_yjungle_app_ptr_result yetty_yjungle_app_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yjungle_app_create(struct yetty_yclass_ctx *ctx);
 
 #define RICH_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
 
@@ -85,26 +99,27 @@ static struct yetty_ycore_void_result push_buffer_to_grid(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result render_zoo(struct yzoo_app *app)
+static struct yetty_ycore_void_result render_jungle(struct yetty_yjungle_app *app)
 {
-    if (!app->grid || !app->zoo || !app->buf) {
+    if (!app->grid || !app->jungle || !app->buf) {
         return YETTY_OK_VOID();
     }
     struct yetty_ycore_void_result cr = yetty_ygrid_clear_local(app->grid);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "render_zoo: grid clear");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "render_jungle: grid clear");
 
-    float t = (float)(yetty_yplatform_ytime_monotonic_sec() - app->start_time);
-    struct yetty_ycore_void_result rr = yetty_yzoo_render(app->zoo, app->buf, t);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "render_zoo: yzoo_render");
+    uint64_t now_ms =
+        (uint64_t)((yetty_yplatform_ytime_monotonic_sec() - app->start_time) * 1000.0);
+    struct yetty_ycore_void_result rr = yetty_yjungle_render(app->jungle, app->buf, now_ms);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "render_jungle: yjungle_render");
 
     struct yetty_ycore_void_result pr = push_buffer_to_grid(app->grid, app->buf);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "render_zoo: push to grid");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "render_jungle: push to grid");
 
     yetty_yfigure_figure_dirty_set(app->root, 1);
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result rebuild_figure(struct yzoo_app *app)
+static struct yetty_ycore_void_result rebuild_figure(struct yetty_yjungle_app *app)
 {
     struct yetty_ycore_rectangle rect = {
         .min = {.x = 0.0f, .y = 0.0f},
@@ -126,20 +141,20 @@ static struct yetty_ycore_void_result rebuild_figure(struct yzoo_app *app)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "rebuild_figure: ygrid_create");
     app->grid = gr.value;
 
-    (void)yetty_yzoo_set_scene_size(app->zoo, w, h);
+    (void)yetty_yjungle_set_scene_size(app->jungle, w, h);
 
     struct yetty_ycore_void_result ar =
         yetty_yfigure_container_add_child(app->root, yetty_ygrid_as_figure(app->grid), /*id=*/1u);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "rebuild_figure: add_child");
 
-    struct yetty_ycore_void_result mr = render_zoo(app);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "rebuild_figure: render_zoo");
+    struct yetty_ycore_void_result mr = render_jungle(app);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "rebuild_figure: render_jungle");
 
-    yinfo("yzoo: figure rebuilt for %ux%u", app->surface_w, app->surface_h);
+    yinfo("yjungle: figure rebuilt for %ux%u", app->surface_w, app->surface_h);
     return YETTY_OK_VOID();
 }
 
-static void handle_event(struct yzoo_app *app, const struct yetty_yui_event *ev)
+static void handle_event(struct yetty_yjungle_app *app, const struct yetty_yui_event *ev)
 {
     /* Window chrome gets first dibs on pointer events; anything it doesn't
      * claim (caption drag / edge resize / its buttons) falls through. */
@@ -200,9 +215,22 @@ static void handle_event(struct yzoo_app *app, const struct yetty_yui_event *ev)
     }
 }
 
-static struct yetty_ycore_void_result yzoo_worker(struct yetty_yinit_runtime *rt, void *user)
+[[clang::annotate("override@yapp:app:init")]]
+static struct yetty_ycore_void_result yjungle_app_init(struct yetty_yclass_object *obj,
+                                                       struct yetty_yinit_runtime *rt)
 {
-    struct yzoo_app *app = user;
+    (void)obj;
+    (void)rt;
+    return YETTY_OK_VOID();
+}
+
+[[clang::annotate("override@yapp:app:run")]]
+static struct yetty_ycore_void_result yjungle_app_run(struct yetty_yclass_object *obj,
+                                                      struct yetty_yinit_runtime *rt)
+{
+    struct yetty_yjungle_app_ptr_result app_res = yetty_yjungle_app_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "yjungle:app:run: app_from");
+    struct yetty_yjungle_app *app = app_res.value;
 
     struct yetty_yframework_ptr_result yr = yetty_yframework_create(rt);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yframework_create failed");
@@ -236,10 +264,10 @@ static struct yetty_ycore_void_result yzoo_worker(struct yetty_yinit_runtime *rt
     yetty_yfigure_container_set_context(app->root, &app->ctx);
     yetty_yfigure_container_set_rect(app->root, root_rect);
 
-    struct yetty_yzoo_config cfg = yetty_yzoo_config_default();
-    struct yetty_yzoo_ptr_result zr = yetty_yzoo_create(&cfg, 0);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "yzoo_create failed");
-    app->zoo = zr.value;
+    struct yetty_yjungle_config cfg = yetty_yjungle_config_default();
+    struct yetty_yjungle_ptr_result jr = yetty_yjungle_create(&cfg, 0);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, jr, "yjungle_create failed");
+    app->jungle = jr.value;
     struct yetty_ydraw_drawable_list_result br =
         yetty_ydraw_drawable_list_config_buffer_create(NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "drawable_list create failed");
@@ -288,7 +316,7 @@ static struct yetty_ycore_void_result yzoo_worker(struct yetty_yinit_runtime *rt
             wgpuInstanceProcessEvents((WGPUInstance)rt->instance);
         }
 
-        struct yetty_ycore_void_result mrr = render_zoo(app);
+        struct yetty_ycore_void_result mrr = render_jungle(app);
         if (YETTY_IS_ERR(mrr)) {
             yetty_ycore_error_destroy(mrr.error);
         }
@@ -325,8 +353,8 @@ static struct yetty_ycore_void_result yzoo_worker(struct yetty_yinit_runtime *rt
     app->grid = NULL;
     yetty_ydraw_drawable_list_destroy(app->buf);
     app->buf = NULL;
-    yetty_yzoo_destroy(app->zoo);
-    app->zoo = NULL;
+    yetty_yjungle_destroy(app->jungle);
+    app->jungle = NULL;
     app->target->ops->destroy(app->target);
     app->target = NULL;
     yetty_yframework_destroy(app->yrt);
@@ -334,14 +362,11 @@ static struct yetty_ycore_void_result yzoo_worker(struct yetty_yinit_runtime *rt
     return YETTY_OK_VOID();
 }
 
-int main(int argc, char **argv)
+/* Strong injection point: the shared yplatform entry creates the concrete app
+ * through this weak hook. */
+struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx)
 {
-    struct yzoo_app app = {0};
-    struct yetty_ycore_int_result run_result = yetty_yinit_run(argc, argv, yzoo_worker, &app);
-    if (YETTY_IS_ERR(run_result)) {
-        yetty_ycore_error_print(stderr, "yzoo: run", run_result.error);
-        yetty_ycore_error_destroy(run_result.error);
-        return 1;
-    }
-    return run_result.value;
+    return yetty_yjungle_app_create(ctx);
 }
+
+#include "app.gen.c"

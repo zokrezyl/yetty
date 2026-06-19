@@ -36,8 +36,9 @@ struct yetty_yplatform_glfw_window_chrome_ptr_result yetty_yplatform_glfw_window
     struct yetty_yclass_object *obj);
 
 /* Private subclass state. */
-struct [[clang::annotate("class@yplatform:glfw_window_chrome")]] [[clang::annotate("platform@glfw")]]
-[[clang::annotate("parent@yplatform:window_chrome")]] yetty_yplatform_glfw_window_chrome {
+struct [[clang::annotate("class@yplatform:glfw_window_chrome")]] [[clang::annotate(
+    "platform@glfw")]] [[clang::annotate("parent@yplatform:window_chrome")]]
+yetty_yplatform_glfw_window_chrome {
     GLFWwindow *window; /* borrowed — owned by the caller. */
     /* Used by handle_event(WINDOW_CLOSE) to post SHUTDOWN to the render thread. */
     struct yetty_ycore_xthread_event_pipe *input_pipe;

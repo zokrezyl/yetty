@@ -406,10 +406,10 @@ static struct yetty_ycore_void_result hud_build(struct yai_hud *hud)
     return yai_hud_flush(hud);
 }
 
-struct yai_hud_ptr_result yai_hud_create(int no_hud, int hud_float)
+struct yai_hud_ptr_result yai_hud_create(int hud_on, int hud_float)
 {
-    if (no_hud) {
-        return YETTY_OK(yai_hud_ptr, NULL); /* intentionally disabled (--no-hud) */
+    if (!hud_on) {
+        return YETTY_OK(yai_hud_ptr, NULL); /* intentionally disabled (hud_on=false) */
     }
     if (!isatty(STDOUT_FILENO)) {
         return YETTY_OK(yai_hud_ptr, NULL); /* no pane to float over */

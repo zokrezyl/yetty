@@ -22,16 +22,17 @@ struct yetty_yplatform_android_window_ptr_result yetty_yplatform_android_window_
     struct yetty_yclass_object *obj);
 
 /* Cached framebuffer metrics pushed from the NDK glue. */
-struct [[clang::annotate("class@yplatform:android_window")]] [[clang::annotate("platform@android")]]
-[[clang::annotate("parent@yplatform:window")]] yetty_yplatform_android_window {
+struct [[clang::annotate("class@yplatform:android_window")]] [[clang::annotate(
+    "platform@android")]] [[clang::annotate("parent@yplatform:window")]]
+yetty_yplatform_android_window {
     int framebuffer_width;
     int framebuffer_height;
     float content_scale;
 };
 
 [[clang::annotate("override@yplatform:android_window:window_open")]]
-static struct yetty_ycore_void_result android_window_open(struct yetty_yclass_object *obj, int width,
-                                                          int height, const char *title)
+static struct yetty_ycore_void_result android_window_open(struct yetty_yclass_object *obj,
+                                                          int width, int height, const char *title)
 {
     /* The NDK owns the ANativeWindow; nothing to open. */
     (void)obj;
@@ -45,7 +46,8 @@ static struct yetty_ycore_void_result android_window_open(struct yetty_yclass_ob
 static struct yetty_ycore_void_result android_window_get_size(struct yetty_yclass_object *obj,
                                                               int *width, int *height)
 {
-    struct yetty_yplatform_android_window_ptr_result data = yetty_yplatform_android_window_from(obj);
+    struct yetty_yplatform_android_window_ptr_result data =
+        yetty_yplatform_android_window_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "window_get_size: data_get");
     float scale = data.value->content_scale > 0.0f ? data.value->content_scale : 1.0f;
     if (width) {
@@ -61,7 +63,8 @@ static struct yetty_ycore_void_result android_window_get_size(struct yetty_yclas
 static struct yetty_ycore_void_result android_window_get_framebuffer_size(
     struct yetty_yclass_object *obj, int *width, int *height)
 {
-    struct yetty_yplatform_android_window_ptr_result data = yetty_yplatform_android_window_from(obj);
+    struct yetty_yplatform_android_window_ptr_result data =
+        yetty_yplatform_android_window_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "window_get_framebuffer_size: data_get");
     if (width) {
         *width = data.value->framebuffer_width;
@@ -76,7 +79,8 @@ static struct yetty_ycore_void_result android_window_get_framebuffer_size(
 static struct yetty_ycore_void_result android_window_get_content_scale(
     struct yetty_yclass_object *obj, float *xscale, float *yscale)
 {
-    struct yetty_yplatform_android_window_ptr_result data = yetty_yplatform_android_window_from(obj);
+    struct yetty_yplatform_android_window_ptr_result data =
+        yetty_yplatform_android_window_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "window_get_content_scale: data_get");
     float scale = data.value->content_scale > 0.0f ? data.value->content_scale : 1.0f;
     if (xscale) {
@@ -112,7 +116,8 @@ struct yetty_ycore_void_result yetty_yplatform_android_window_set_metrics(
     struct yetty_yclass_object *obj, int framebuffer_width, int framebuffer_height,
     float content_scale)
 {
-    struct yetty_yplatform_android_window_ptr_result data = yetty_yplatform_android_window_from(obj);
+    struct yetty_yplatform_android_window_ptr_result data =
+        yetty_yplatform_android_window_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "android_window_set_metrics: data_get");
     data.value->framebuffer_width = framebuffer_width;
     data.value->framebuffer_height = framebuffer_height;

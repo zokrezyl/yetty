@@ -40,11 +40,12 @@ struct yetty_yclass_ptr_result yetty_yplatform_ios_platform_class_get(void);
 struct yetty_yplatform_ios_platform_ptr_result yetty_yplatform_ios_platform_from(
     struct yetty_yclass_object *obj);
 
-struct [[clang::annotate("class@yplatform:ios_platform")]] [[clang::annotate("platform@ios")]]
-[[clang::annotate("parent@yplatform:platform")]] yetty_yplatform_ios_platform {
+struct [[clang::annotate("class@yplatform:ios_platform")]] [[clang::annotate(
+    "platform@ios")]] [[clang::annotate("parent@yplatform:platform")]]
+yetty_yplatform_ios_platform {
     struct yetty_yconfig_config *config;
-    struct yetty_yclass_object *window;    /* yplatform:ios_window */
-    struct yetty_yclass_object *clipboard; /* yplatform:ios_clipboard */
+    struct yetty_yclass_object *window;                 /* yplatform:ios_window */
+    struct yetty_yclass_object *clipboard;              /* yplatform:ios_clipboard */
     struct yetty_ycore_xthread_event_pipe *input_pipe;  /* UIKit → worker */
     struct yetty_ycore_xthread_event_pipe *output_pipe; /* worker → UIKit */
 };

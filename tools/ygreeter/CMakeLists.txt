@@ -62,13 +62,14 @@ endif()
 # webgpu is off — client mode doesn't open a window or run a GPU
 # event loop.
 if(YETTY_ENABLE_LIB_WEBGPU)
+    # ygreeter is a yapp:app subclass (class ygreeter:app in main.c); its
+    # dual-mode main() drives the glfw_platform bootstrap directly (no shared
+    # ymain entry).
     list(APPEND YGREETER_SOURCES
-        ${YETTY_ROOT}/src/yetty/yinit/glfw.c
+        ${YETTY_APP_BOOTSTRAP_SOURCES}
         ${YETTY_ROOT}/src/yetty/yframework/yframework.c
         ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
-        ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
-        ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
     )
 endif()

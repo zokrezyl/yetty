@@ -402,6 +402,30 @@ endif()
 # headers shadow CPython's <Python.h>, so they are kept PRIVATE to the lib.
 add_subdirectory(${YETTY_ROOT}/src/cpython ${CMAKE_BINARY_DIR}/src/cpython)
 
+# Shared desktop app-bootstrap sources. A standalone GLFW app (a tool/demo that
+# subclasses yapp:app) compiles these straight into its executable: the shared
+# ymain entry, the glfw_platform yclass (platform + window/clipboard subclasses).
+# Each such app appends ${YETTY_APP_BOOTSTRAP_SOURCES} to its own source list
+# plus its own annotated app.c + generated app.gen.c. (The main yetty exec keeps
+# its own inline list in platform/<plat>/cmake.cmake, which also pulls in the
+# yetty:app sources.) Apps needing custom CLI handling provide their own main()
+# and OMIT ymain/glfw.c — they run the platform sequence directly.
+#
+# Defined BEFORE the src/yetty subdir pass below: src/yetty/yrich consumes this
+# in its yetty_yrich_app OBJECT library, so the variable must already be set.
+set(YETTY_APP_BOOTSTRAP_SOURCES
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/platform.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/glfw.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/glfw.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/glfw.c
+)
+# The shared GLFW entry (provides int main()). Class 1 apps add this; Class 2
+# apps (custom CLI) provide their own main and leave this out.
+set(YETTY_APP_ENTRY_GLFW
+    ${YETTY_ROOT}/src/yetty/yplatform/ymain/glfw.c
+)
+
 # Add src/yetty (populates YETTY_SOURCES, YETTY_CORE_SOURCES, builds feature libraries)
 add_subdirectory(${YETTY_ROOT}/src/yetty ${CMAKE_BINARY_DIR}/src/yetty)
 

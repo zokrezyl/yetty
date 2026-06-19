@@ -47,11 +47,11 @@ struct yetty_yplatform_platform_ptr_result yetty_yplatform_platform_from(
  * defaults make a missing override a loud error.
  *=========================================================================*/
 
-[[clang::annotate("virtual@yplatform:platform:platform_init")]]
-[[clang::annotate("local@yplatform:platform_init")]]
+[[clang::annotate("virtual@yplatform:platform:platform_init")]] [[clang::annotate(
+    "local@yplatform:platform_init")]]
 static struct yetty_ycore_void_result platform_default_init(struct yetty_yclass_object *obj,
-                                                            struct yetty_yclass_object *app, int argc,
-                                                            char **argv)
+                                                            struct yetty_yclass_object *app,
+                                                            int argc, char **argv)
 {
     (void)obj;
     (void)app;
@@ -60,11 +60,11 @@ static struct yetty_ycore_void_result platform_default_init(struct yetty_yclass_
     return YETTY_ERR(yetty_ycore_void, "platform_init: not implemented by base platform class");
 }
 
-[[clang::annotate("virtual@yplatform:platform:platform_run")]]
-[[clang::annotate("local@yplatform:platform_run")]]
+[[clang::annotate("virtual@yplatform:platform:platform_run")]] [[clang::annotate(
+    "local@yplatform:platform_run")]]
 static struct yetty_ycore_void_result platform_default_run(struct yetty_yclass_object *obj,
-                                                           struct yetty_yclass_object *app, int argc,
-                                                           char **argv)
+                                                           struct yetty_yclass_object *app,
+                                                           int argc, char **argv)
 {
     (void)obj;
     (void)app;
