@@ -81,11 +81,11 @@ add_library(yetty_yplatform_core STATIC
     # yrich link the stubs from core; the GLFW marshalling subclass (glfw_clipboard)
     # is a separate TU built into the desktop platform sources.
     yclipboard/clipboard.c
-    # Base (platform-independent) app yclass: the yapp:app abstraction — the
-    # app_run / app_extract_assets dispatch stubs the platform calls and every
-    # concrete app (yetty:app, the standalone tools) subclasses. In core so the
-    # stubs link wherever an app object is created.
+    # Base (platform-independent) app yclass: the yapp:app abstraction — init /
+    # run dispatch stubs plus the weak app factory that concrete apps override.
+    # In core so the platform can host any yapp:app subclass without naming it.
     ${YETTY_ROOT}/src/yetty/yapp/app.c
+    ${YETTY_ROOT}/src/yetty/yapp/rpc.gen.c
     ${_core_per_os}
 )
 

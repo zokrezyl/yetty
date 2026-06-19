@@ -158,7 +158,7 @@ all: help
 
 # A module entry is either a bare name (sources under src/yetty/<name>/)
 # or <name>=<path> for yclass modules living elsewhere (yclass-based tools).
-YCLASS_MODULES := yfigure ygrid ygui ymgui yrdawn yshadertoy yvterm yflame ymap yview yplatform ychrome ymusic ycircuit yai=tools/ai/yai yrich
+YCLASS_MODULES := yapp yetty yfigure ygrid ygui ymgui yrdawn yshadertoy yvterm yflame ymap yview yplatform ychrome ymusic ycircuit yai=tools/ai/yai yrich
 
 # Modules kept on the legacy split (standalone methods.gen.c + rpc.gen.c instead
 # of folding the per-class code into each <stem>.gen.c). Empty now: the module

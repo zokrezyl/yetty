@@ -1,25 +1,52 @@
 /*
- * yapp/app.c — WEAK default application entry points.
+ * yapp/app.c — abstract app base class.
  *
- * The platform framework calls yetty_app_run / yetty_app_extract_assets but does
- * not know which application it is hosting. These weak definitions let the
- * framework link and run on its own; any executable that also links a STRONG
- * definition (the yetty terminal in src/yetty/yetty/app.c, a standalone tool in
- * its own main) overrides the weak one at link time. That is how one framework
- * is reused by every app — the app is whichever strong yetty_app_run the
- * executable links.
- *
- * Compiled into yetty_yplatform_core so the weak fallback is always available.
+ * A platform creates one concrete app through the weak
+ * yetty_yapp_create_app() injection point, then drives it through the
+ * yapp:app virtual methods below. Platform code never names a concrete app.
  */
 
-#include <yetty/yapp/app.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
 #include <yetty/yinit/yinit.h>
 
-__attribute__((weak)) struct yetty_ycore_void_result yetty_app_run(struct yetty_yinit_runtime *runtime)
+#include <stddef.h>
+
+struct [[clang::annotate("class@yapp:app")]] yetty_yapp_app {
+    char reserved;
+};
+
+YETTY_YRESULT_DECLARE(yetty_yapp_app_ptr, struct yetty_yapp_app *);
+struct yetty_yclass_ptr_result yetty_yapp_app_class_get(void);
+struct yetty_yapp_app_ptr_result yetty_yapp_app_from(struct yetty_yclass_object *obj);
+
+[[clang::annotate("virtual@yapp:app:init")]]
+[[clang::annotate("local@yapp:init")]]
+static struct yetty_ycore_void_result yapp_default_init(struct yetty_yclass_object *app,
+                                                        struct yetty_yinit_runtime *runtime)
 {
+    (void)app;
     (void)runtime;
-    return YETTY_ERR(yetty_ycore_void,
-                     "yetty_app_run: no application linked — the executable must define a strong "
-                     "yetty_app_run");
+    return YETTY_OK_VOID();
 }
+
+[[clang::annotate("virtual@yapp:app:run")]]
+[[clang::annotate("local@yapp:run")]]
+static struct yetty_ycore_void_result yapp_default_run(struct yetty_yclass_object *app,
+                                                       struct yetty_yinit_runtime *runtime)
+{
+    (void)app;
+    (void)runtime;
+    return YETTY_ERR(yetty_ycore_void, "yapp:app:run not implemented");
+}
+
+[[clang::annotate("expose")]]
+__attribute__((weak)) struct yetty_yclass_object_ptr_result
+yetty_yapp_create_app(struct yetty_yclass_ctx *ctx)
+{
+    (void)ctx;
+    return YETTY_ERR(yetty_yclass_object_ptr,
+                     "yetty_yapp_create_app: no app implementation linked");
+}
+
+#include "app.gen.c"

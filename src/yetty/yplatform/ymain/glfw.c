@@ -20,8 +20,9 @@ struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_platform_create(
 struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object *obj,
                                                             struct yetty_yclass_object *app,
                                                             int argc, char **argv);
+struct yetty_ycore_void_result yetty_yapp_register(void);
+struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx);
 struct yetty_ycore_void_result yetty_yetty_register(void);
-struct yetty_yclass_object_ptr_result yetty_yetty_app_create(struct yetty_yclass_ctx *ctx);
 
 int main(int argc, char **argv)
 {
@@ -34,6 +35,12 @@ int main(int argc, char **argv)
         yetty_ycore_error_destroy(reg.error);
         return 1;
     }
+    struct yetty_ycore_void_result yapp_reg = yetty_yapp_register();
+    if (YETTY_IS_ERR(yapp_reg)) {
+        yetty_ycore_error_print(stderr, "yetty: yapp register", yapp_reg.error);
+        yetty_ycore_error_destroy(yapp_reg.error);
+        return 1;
+    }
     struct yetty_ycore_void_result app_reg = yetty_yetty_register();
     if (YETTY_IS_ERR(app_reg)) {
         yetty_ycore_error_print(stderr, "yetty: app register", app_reg.error);
@@ -41,9 +48,9 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* The concrete program: the yetty terminal. A standalone tool instantiates
-     * its own yapp:app subclass here instead — the platform startup is identical. */
-    struct yetty_yclass_object_ptr_result app_res = yetty_yetty_app_create(NULL);
+    /* The concrete program is injected by the final app module. The platform
+     * entry only knows yapp:app. */
+    struct yetty_yclass_object_ptr_result app_res = yetty_yapp_create_app(NULL);
     if (YETTY_IS_ERR(app_res)) {
         yetty_ycore_error_print(stderr, "yetty: app create", app_res.error);
         yetty_ycore_error_destroy(app_res.error);

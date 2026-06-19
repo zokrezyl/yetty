@@ -1,25 +1,16 @@
-/*
- * yapp/app.h — the application entry the platform calls.
- *
- * The platform framework (yplatform:platform and its per-OS subclasses) is
- * app-agnostic: it brings up config / window / clipboard / GPU surface / the
- * cross-thread channels, then calls the two functions below. Each application —
- * the yetty terminal, a standalone tool — provides its own STRONG definition of
- * these symbols; the framework ships WEAK defaults (src/yetty/yapp/app.c) so it
- * links on its own and falls back to a clear error when no app is present.
- *
- * The linker selects the app: an executable that links the framework plus its
- * own strong yetty_app_run IS that app. The same framework sources are reused by
- * every app unchanged — no per-app object, subclass, or registration.
- *
- *   yetty_app_run(runtime)     — the app body. Runs on the worker thread the
- *                   platform spawns; the runtime stays valid until it returns.
- */
+/* GENERATED — do not edit. */
+/* Public interface for regular class(es) `app` (module: yapp).
+ * Fully generated from the source .c — do not edit. This single
+ * header is the source's complete public interface: class
+ * accessors, method stubs, create()/register(), exposed
+ * functions, and the public types the signatures use. */
+#ifndef YETTY_YCLASSGEN_YAPP_APP_H
+#define YETTY_YCLASSGEN_YAPP_APP_H
 
-#ifndef YETTY_YAPP_APP_H
-#define YETTY_YAPP_APP_H
-
+#include <yetty/yclass/class.h>
+#include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -27,10 +18,37 @@ extern "C" {
 
 struct yetty_yinit_runtime;
 
-struct yetty_ycore_void_result yetty_app_run(struct yetty_yinit_runtime *runtime);
+struct yetty_yclass_ptr_result yetty_yapp_app_class_get(void);
+
+/* Data-block handle — opaque outside the owning .c. The struct
+ * stays private; only its pointer crosses here, in a Result so a
+ * bad object surfaces rather than corrupting. Reach members
+ * through the per-property getters/setters below. */
+struct yetty_yapp_app;
+struct yetty_yapp_app_ptr_result {
+    int ok;
+    union {
+        struct yetty_yapp_app *value;
+        struct yetty_ycore_error error;
+    };
+};
+struct yetty_yapp_app_ptr_result yetty_yapp_app_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_yapp_app_to(struct yetty_yapp_app *data);
+
+struct yetty_ycore_void_result yetty_yapp_init(struct yetty_yclass_object * app, struct yetty_yinit_runtime * runtime);
+struct yetty_ycore_void_result yetty_yapp_run(struct yetty_yclass_object * app, struct yetty_yinit_runtime * runtime);
+
+typedef struct yetty_ycore_void_result (*yetty_yapp_init_fn)(struct yetty_yclass_object *, struct yetty_yinit_runtime *);
+typedef struct yetty_ycore_void_result (*yetty_yapp_run_fn)(struct yetty_yclass_object *, struct yetty_yinit_runtime *);
+
+struct yetty_yclass_object_ptr_result yetty_yapp_app_create(struct yetty_yclass_ctx *ctx);
+
+struct yetty_ycore_void_result yetty_yapp_register(void);
+
+struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* YETTY_YAPP_APP_H */
+#endif

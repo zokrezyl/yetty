@@ -99,7 +99,7 @@ struct [[clang::annotate("class@yplatform:glfw_platform")]] [[clang::annotate("p
 /* Trampoline carries the app object + runtime across the thread boundary, then
  * pokes the GLFW event loop awake when the app exits so the main thread doesn't
  * sleep past process shutdown. The app body itself is the yapp:app subclass's
- * app_run — the platform is generic and never names the concrete program. */
+ * init/run pair — the platform is generic and never names the concrete program. */
 struct glfw_platform_worker_args {
     struct yetty_yclass_object *app;
     struct yetty_yinit_runtime *rt;
@@ -113,7 +113,10 @@ static int glfw_platform_worker_trampoline(void *arg)
 {
     struct glfw_platform_worker_args *worker_args = arg;
     struct yetty_ycore_void_result res =
-        yetty_yapp_app_run(worker_args->app, worker_args->rt);
+        yetty_yapp_init(worker_args->app, worker_args->rt);
+    if (YETTY_IS_OK(res)) {
+        res = yetty_yapp_run(worker_args->app, worker_args->rt);
+    }
     if (YETTY_IS_ERR(res)) {
         yetty_ycore_error_print(stderr, "glfw_platform: worker fatal error", res.error);
         yetty_ycore_error_destroy(res.error);

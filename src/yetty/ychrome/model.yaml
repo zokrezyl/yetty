@@ -6,7 +6,7 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-      - name: window_manager
+      - name: window_chrome
         type: "struct yetty_yclass_object *"
       - name: caption_height
         type: float
@@ -14,8 +14,8 @@ methods:
         type: float
       - name: flags
         type: uint32_t
-    doc: "/* Bind the engine to a window_manager and set the caption/edge geometry. Call
- * once after create(), before feeding events. window_manager is borrowed. */"
+    doc: "/* Bind the engine to a window_chrome and set the caption/edge geometry. Call
+ * once after create(), before feeding events. window_chrome is borrowed. */"
     local: true
     return_payload_type: null
   - slot: set_size
@@ -94,7 +94,7 @@ classes:
     mixins: []
     data: struct yetty_ychrome_chrome
     data_fields:
-      - name: window_manager
+      - name: window_chrome
         type: "struct yetty_yclass_object *"
         get: false
         set: false

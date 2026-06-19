@@ -3,9 +3,9 @@
  *
  * Subclass of yapp:app. This is the program-specific half of the startup: the
  * platform brings up config / window / clipboard / GPU surface / channels and
- * hands the assembled runtime to app_run, which builds the PTY factory, the
- * framework and the terminal, runs the terminal loop, and tears down. The same
- * platform bootstrap drives every standalone app — only this app object differs.
+ * hands the assembled runtime to run, which builds the PTY factory, the framework
+ * and the terminal, runs the terminal loop, and tears down. The same platform
+ * bootstrap drives every standalone app — only this app object differs.
  *
  * yclass: the only hand-written file is this annotated .c; app.gen.c is #included
  * at the foot. Both slots are app overrides of the yapp:app virtuals.
@@ -15,6 +15,7 @@
 
 #include <yetty/ycore/result.h>
 #include <yetty/yclass/class.h>
+#include <yetty/yapp/app.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yetty/yetty.h>
@@ -32,8 +33,18 @@ struct [[clang::annotate("class@yetty:app")]] [[clang::annotate("parent@yapp:app
 YETTY_YRESULT_DECLARE(yetty_yetty_app_ptr, struct yetty_yetty_app *);
 struct yetty_yclass_ptr_result yetty_yetty_app_class_get(void);
 struct yetty_yetty_app_ptr_result yetty_yetty_app_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yetty_app_create(struct yetty_yclass_ctx *ctx);
 
-[[clang::annotate("override@yetty:app:yapp:app_run")]]
+[[clang::annotate("override@yapp:app:init")]]
+static struct yetty_ycore_void_result yetty_app_init(struct yetty_yclass_object *obj,
+                                                     struct yetty_yinit_runtime *rt)
+{
+    (void)obj;
+    (void)rt;
+    return YETTY_OK_VOID();
+}
+
+[[clang::annotate("override@yapp:app:run")]]
 static struct yetty_ycore_void_result yetty_app_run(struct yetty_yclass_object *obj,
                                                     struct yetty_yinit_runtime *rt)
 {
@@ -74,6 +85,11 @@ static struct yetty_ycore_void_result yetty_app_run(struct yetty_yclass_object *
     (void)yetty_yframework_destroy(framework);
     pty_factory->ops->destroy(pty_factory);
     return run_res;
+}
+
+struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx)
+{
+    return yetty_yetty_app_create(ctx);
 }
 
 #include "app.gen.c"

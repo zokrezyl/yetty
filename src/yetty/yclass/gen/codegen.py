@@ -743,6 +743,11 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     # from `include@<path>` annotations (foreign by-value types the generated
     # header must pull in).
     includes_by_file: dict = {}
+    # Source file -> the current module's class declared in that file. This
+    # supports the app-style override spelling where the annotation names the
+    # virtual method being overridden (`override@yapp:app:run`) and the
+    # implementing class is the source file's class.
+    impl_class_by_file: dict = {}
 
     def bucket(name: str) -> dict:
         if name not in classes:
@@ -949,14 +954,28 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                         virtual_slots.add(slot)
                         continue
                     if role == "override":
-                        # Two shapes accepted:
+                        # Shapes accepted:
                         #   3 segs — slot lives in the impl class's domain
                         #            (same-module override)
+                        #          — or, when DOMAIN is foreign, the annotation
+                        #            names the target virtual method
+                        #            (`override@yapp:app:run`); the impl class is
+                        #            the current source file's class.
                         #   4 segs — slot's domain explicit; may differ
                         #            (cross-module override)
                         if len(args) == 3:
-                            impl_dom, cls, slot = args
-                            slot_dom = impl_dom
+                            ann_dom, ann_cls, slot = args
+                            if ann_dom == module:
+                                impl_dom, cls, slot_dom = ann_dom, ann_cls, ann_dom
+                            else:
+                                cls = impl_class_by_file.get(str(path))
+                                if not cls:
+                                    sys.stderr.write(
+                                        f"error: 'override@{':'.join(args)}' names a foreign "
+                                        "virtual method, but no local class@ has been seen in "
+                                        f"{path}; declare the class before its overrides.\n")
+                                    sys.exit(1)
+                                impl_dom, slot_dom = module, ann_dom
                         elif len(args) == 4:
                             impl_dom, cls, slot_dom, slot = args
                         else:
@@ -1017,6 +1036,7 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                     # relationships, not ours.
                     if primary_dom != module:
                         continue
+                    impl_class_by_file.setdefault(str(path), primary)
                     b = bucket(primary)
                     # Set descriptive fields ONLY on first sighting.
                     # The same annotation reaches every TU that pulls
