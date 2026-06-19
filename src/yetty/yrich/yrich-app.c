@@ -29,8 +29,7 @@
 #include <yetty/ygui/widgets/vbox.h>
 #include <yetty/ygui/widgets/yrich_view.h>
 #include <yetty/yinit/yinit.h>
-#include <yetty/yplatform/extract-assets.h>
-#include <yetty/yplatform/clipboard-manager.h>
+#include <yetty/yplatform/yclipboard/clipboard.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yrich/yrich-shell.h>
@@ -230,7 +229,7 @@ static struct yetty_ycore_void_result refit_and_push(struct yrich_app *app)
  * manager; paste is an async round trip that returns as a PASTE event. */
 static struct yetty_ycore_void_result handle_clipboard_chord(struct yrich_app *app, int glfw_key)
 {
-    struct yetty_platform_clipboard_manager *clipboard = app->yrt->clipboard_manager;
+    struct yetty_yclass_object *clipboard = app->yrt->clipboard;
     struct yetty_yclass_object *doc =
         app->editor_view ? yetty_ygui_yrich_view_document(app->editor_view) : NULL;
     if (!doc) {
@@ -238,7 +237,8 @@ static struct yetty_ycore_void_result handle_clipboard_chord(struct yrich_app *a
     }
     if (glfw_key == 86) { /* V — request async paste */
         if (clipboard) {
-            struct yetty_ycore_void_result paste_res = clipboard->ops->request_paste(clipboard);
+            struct yetty_ycore_void_result paste_res =
+                yetty_yplatform_clipboard_request_paste(clipboard);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, paste_res, "yrich: request paste");
         }
         return YETTY_OK_VOID();
@@ -249,7 +249,8 @@ static struct yetty_ycore_void_result handle_clipboard_chord(struct yrich_app *a
     }
     struct yetty_ycore_void_result copy_res = YETTY_OK_VOID();
     if (clipboard) {
-        copy_res = clipboard->ops->set_text(clipboard, selection_text, strlen(selection_text));
+        copy_res =
+            yetty_yplatform_clipboard_set_text(clipboard, selection_text, strlen(selection_text));
     }
     free(selection_text);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, copy_res, "yrich: clipboard set");
@@ -503,7 +504,7 @@ static struct yetty_ycore_void_result yrich_app_worker(struct yetty_yinit_runtim
      * font). Composited as a pinned figure over the document. */
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
-            app->root_obj, app->font, &app->ctx, app->yrt->window_manager, (float)app->surface_w,
+            app->root_obj, app->font, &app->ctx, app->yrt->window_chrome, (float)app->surface_w,
             (float)app->surface_h, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             app->chrome = chrome_r.value;
@@ -603,6 +604,5 @@ struct yetty_ycore_int_result yetty_yrich_app_run(int argc, char **argv,
     struct yrich_app app = {0};
     app.doc = doc_obj;
     app.kind = kind;
-    struct yetty_yinit_app_config cfg = {.extract_assets_fn = yetty_platform_extract_assets};
-    return yetty_yinit_run(argc, argv, &cfg, yrich_app_worker, &app);
+    return yetty_yinit_run(argc, argv, yrich_app_worker, &app);
 }

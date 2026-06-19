@@ -1,12 +1,12 @@
 # ychrome — yclass class `ychrome:chrome`: a widget-free window-chrome gesture
 # engine (caption drag → move, edges → resize, double-click → maximize). It
-# drives a yplatform:window_manager object and depends on neither ygui nor yui,
+# drives a yplatform:window_chrome object and depends on neither ygui nor yui,
 # so any app can get draggable/resizable/maximizable borderless windows.
 #
 # chrome.c is the hand-written annotated source (#includes chrome.gen.c at the
 # foot); the per-class <stem>.gen.c files are codegen output (#included into each .c). Pure logic — no GLFW, no
-# rendering. The window_manager gesture symbols it calls are resolved by the
-# consumer, which links yetty_yplatform_window_manager.
+# rendering. The window_chrome gesture symbols it calls are resolved by the
+# consumer, which links yetty_yplatform_window_chrome.
 add_library(yetty_ychrome STATIC
     chrome.c
     rpc.gen.c
@@ -33,9 +33,9 @@ target_link_libraries(yetty_ychrome PUBLIC
     # yfigure carries the producer and is available on the headless cross
     # targets too.
     yetty_yfigure
-    # chrome.c's gesture handlers call the yetty_yplatform_window_manager_*
+    # chrome.c's gesture handlers call the yetty_yplatform_window_chrome_*
     # method stubs (move/resize/iconify/...). Those live in yetty_yplatform_core
-    # (the generated method stubs) and early-return on the NULL window_manager a wire/client
+    # (the generated method stubs) and early-return on the NULL window_chrome a wire/client
     # host carries. Declare the dependency explicitly so the static link
     # resolves on EVERY target: previously it only worked where yui happened to
     # pull yplatform_core ahead of ychrome, which never happens on the headless

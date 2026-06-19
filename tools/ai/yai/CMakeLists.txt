@@ -18,6 +18,7 @@ add_executable(yai
     main.c
     render.c
     hud.c
+    hud-format.c
     commands.c
     event.c
     control.c

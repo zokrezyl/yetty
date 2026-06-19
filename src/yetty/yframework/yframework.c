@@ -446,8 +446,8 @@ struct yetty_yframework_ptr_result yetty_yframework_create(
     rt->config = yinit_rt->config;
     rt->platform_input_pipe = yinit_rt->platform_input_pipe;
     rt->output_pipe = yinit_rt->output_pipe;
-    rt->clipboard_manager = yinit_rt->clipboard_manager;
-    rt->window_manager = yinit_rt->window_manager;
+    rt->clipboard = yinit_rt->clipboard;
+    rt->window_chrome = yinit_rt->window_chrome;
 
     rt->gpu.app_gpu_context.instance = yinit_rt->instance;
     rt->gpu.app_gpu_context.surface = yinit_rt->surface;

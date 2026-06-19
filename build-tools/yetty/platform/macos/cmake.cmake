@@ -30,12 +30,18 @@ endif()
 
 # Platform sources — macOS-specific + shared GLFW/Unix (C)
 set(YETTY_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/yinit/glfw.c
-    ${YETTY_ROOT}/src/yetty/ymain/glfw.c
+    # Platform-object startup (shared GLFW desktop bootstrap): the glfw_platform
+    # yclass run() brings up window (ywindow) + clipboard (yclipboard) directly.
+    ${YETTY_ROOT}/src/yetty/yplatform/ymain/glfw.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/platform.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/glfw.c
+    ${YETTY_ROOT}/src/yetty/yetty/app.c
+    ${YETTY_ROOT}/src/yetty/yetty/rpc.gen.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/glfw.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/glfw.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
@@ -44,7 +50,6 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
     ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
 )
 
@@ -109,7 +114,7 @@ target_link_libraries(yetty PRIVATE
     yetty_yco
     yetty_yplatform_core
     yetty_yplatform_move_resize
-    yetty_yplatform_window_manager
+    yetty_yplatform_window_chrome
 )
 
 # Copy runtime assets to build directory

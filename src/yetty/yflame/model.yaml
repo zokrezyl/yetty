@@ -14,6 +14,8 @@ methods:
         type: float
       - name: flags
         type: uint32_t
+    doc: "/* configure: set graph width, row height, min visible box width, and flags.
+ * 0 selects the default for each. Call after create(), before parse(). */"
     local: true
     return_payload_type: null
   - slot: parse
@@ -27,6 +29,8 @@ methods:
         type: "const char *"
       - name: len
         type: size_t
+    doc: "/* parse: ingest folded-stack text, build the call tree, index it. Resets focus
+ * to the root and clears any hover highlight. */"
     local: true
     return_payload_type: null
   - slot: render
@@ -36,6 +40,8 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* render: lay out the focus subtree and emit it as a fresh ydraw drawable list
+ * (caller owns it). Pointer return -> local-only. */"
     local: true
     return_payload_type: "struct yetty_ydraw_drawable_list *"
   - slot: hit_test
@@ -49,6 +55,8 @@ methods:
         type: float
       - name: y
         type: float
+    doc: "/* hit_test: id of the frame at content-coordinate (x,y) in the current focus
+ * layout, or -1 if none. */"
     local: true
     return_payload_type: int
   - slot: focus
@@ -60,6 +68,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: node_id
         type: int32_t
+    doc: "/* focus: zoom so the given node fills the full width (its subtree is shown). */"
     local: true
     return_payload_type: null
   - slot: focus_parent
@@ -69,6 +78,7 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* focus_parent: zoom out one level (focus the current node's parent). */"
     local: true
     return_payload_type: null
   - slot: reset
@@ -78,6 +88,7 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* reset: zoom back out to the whole graph (root). */"
     local: true
     return_payload_type: null
   - slot: set_highlight
@@ -89,6 +100,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: node_id
         type: int32_t
+    doc: "/* set_highlight: mark a node as hovered (-1 clears) for the next render. */"
     local: true
     return_payload_type: null
   - slot: destroy
@@ -98,6 +110,7 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* destroy: free the tree, the node index, and the object. */"
     local: true
     return_payload_type: null
 classes:
@@ -182,6 +195,7 @@ classes:
       - slot: destroy
         slot_domain: yflame
         impl: flame_obj_destroy
+    doc: null
 exposed:
   - source_file: src/yetty/yflame/flame.c
     type_text: "enum yetty_yflame_constant {
@@ -190,6 +204,8 @@ exposed:
     YETTY_YFLAME_HIT_UP = -2,
     YETTY_YFLAME_HIT_ROOT = -3,
 };"
+    doc: "/* Public flags / hit-test sentinels. Defined here in the owning .c; codegen
+ * reproduces the enum into the generated flame.h for consumers. */"
   - source_file: src/yetty/yflame/flame.c
     name: yetty_yflame_emit_osc
     return_type: struct yetty_ycore_void_result
@@ -198,6 +214,7 @@ exposed:
         type: "const struct yetty_ydraw_drawable_list *"
       - name: fd
         type: int
+    doc: null
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

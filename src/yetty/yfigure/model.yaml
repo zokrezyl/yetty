@@ -6,6 +6,9 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* destroy: tears down concrete state and frees the figure. The base
+ * default is a no-op — the base class is never instantiated as a leaf;
+ * every concrete kind overrides this and frees via object_free. */"
     local: true
     return_payload_type: null
   - slot: render
@@ -17,6 +20,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: target
         type: "struct yetty_ydraw_target *"
+    doc: null
     local: true
     return_payload_type: null
   - slot: constructor
@@ -26,6 +30,9 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* yclass instance layout: yclass_object header at offset 0, user data
+ * (the `struct yetty_yfigure_container` body) immediately after. Cast
+ * via (obj + 1) advances past the header in pointer arithmetic. */"
     local: false
     return_payload_type: null
   - slot: add_child
@@ -39,6 +46,7 @@ methods:
         type: "struct yetty_yfigure_figure *"
       - name: id
         type: uint32_t
+    doc: null
     local: false
     return_payload_type: null
   - slot: remove_child_by_id
@@ -50,6 +58,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: id
         type: uint32_t
+    doc: null
     local: false
     return_payload_type: null
   - slot: raise_child_by_id
@@ -61,6 +70,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: id
         type: uint32_t
+    doc: null
     local: false
     return_payload_type: null
   - slot: process_records
@@ -72,6 +82,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: bytes
         type: struct yetty_ycore_buffer
+    doc: null
     local: false
     return_payload_type: null
   - slot: process_input
@@ -83,6 +94,10 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: statemachine
         type: "struct yetty_ywire_wire_statemachine *"
+    doc: "/* process_input: consume the figure's wire body straight off the SM.
+ * Base default rejects — a purely visual figure ignores wire updates.
+ * The container only routes here for kinds that override it (capability
+ * detected via yetty_yfigure_figure_implements). */"
     local: true
     return_payload_type: null
   - slot: process_bytes
@@ -96,6 +111,7 @@ methods:
         type: "const uint8_t *"
       - name: bytes_len
         type: size_t
+    doc: "/* process_bytes: apply a buffered wire body. Base default rejects. */"
     local: true
     return_payload_type: null
   - slot: dump_state
@@ -107,6 +123,8 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: indent
         type: int
+    doc: "/* dump_state: heap text snapshot for tests. Base default yields a NULL
+ * string so the yetty_yfigure_dump wrapper emits its rect fallback. */"
     local: true
     return_payload_type: "char *"
   - slot: reset_content
@@ -116,6 +134,8 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* reset_content: drop content, keep GPU state. Base default rejects so the
+ * container falls back to destroy + mint for kinds that don't support it. */"
     local: true
     return_payload_type: null
   - slot: set_scroll
@@ -129,6 +149,12 @@ methods:
         type: float
       - name: scroll_y
         type: float
+    doc: "/* set_scroll: move the figure's scroll offset (the content coordinate shown
+ * at the rect's top-left). Base default rejects — a non-scrolling figure has
+ * no content larger than its rect. Scrollable kinds (ygrid) override this so
+ * the container can drive the offset by id from a wire SET_CHILD_SCROLL
+ * record or the terminal's autonomous wheel/key handler, without re-shipping
+ * content. */"
     local: true
     return_payload_type: null
   - slot: set_content_size
@@ -142,6 +168,9 @@ methods:
         type: float
       - name: content_h
         type: float
+    doc: "/* set_content_size: declare the figure's content extent in px (the rect stays
+ * the visible window; content may be larger, making the figure a scroll
+ * viewport). Base default rejects. Scrollable kinds override it. */"
     local: true
     return_payload_type: null
 classes:
@@ -215,6 +244,7 @@ classes:
       - slot: dump_state
         slot_domain: yfigure
         impl: container_dump_state_slot
+    doc: null
   - name: figure
     domain: yfigure
     accessor: yetty_yfigure_figure_class_get
@@ -269,6 +299,32 @@ classes:
       - slot: set_content_size
         slot_domain: yfigure
         impl: yetty_yfigure_figure_default_set_content_size
+    doc: "/* ---- figure base data slice (PRIVATE) -----------------------------------
+ * The yclass data slice for the figure base class — the first slice in every
+ * figure object (right after the yclass object header). The layout is not
+ * exported: figure.h only forward-declares the struct. Members that other
+ * classes legitimately read/write carry a `property` annotation, which makes
+ * codegen emit the standardized get/set accessors plus the opaque data-block
+ * handle (yetty_yfigure_figure_data_get); unannotated members stay private to
+ * this TU. There is deliberately no `self_obj` member — the owning object of
+ * a base handle is simply `(struct yetty_yclass_object *)handle - 1`, since
+ * the base is always the first slice.
+ *
+ *   rect   : AABB in target pixel space; moves go through the parent's
+ *            set_rect so damage tracking stays correct. (No `id` field — id is
+ *            a parent-scoped name the container assigns.)
+ *   z      : stacking order within the parent (higher renders later / wins
+ *            hit-tests); ties break on insertion order.
+ *   hidden : parent skips this child entirely (no render, no hit).
+ *   dirty  : contents changed without geometry moving; the parent ORs this
+ *            into its damage region next render pass and clears it.
+ *   absolute_coords : the figure lays out / hit-tests / paints its content
+ *            in pane-root pixel space and only scissor-clips to its rect —
+ *            no per-figure re-origin (ygui chrome + scrolling sub-figures).
+ *            When 0 (the default for every producer figure: yplot/yimage/…),
+ *            content is local to the figure rect. The parent's hit-test reads
+ *            this to decide whether to report the cursor in pane-local space
+ *            (absolute) or re-origined to the figure rect (local). */"
 exposed:
   - source_file: src/yetty/yfigure/container.c
     type_text: "struct yetty_yfigure_hit {
@@ -276,6 +332,19 @@ exposed:
     float local_x;
     float local_y;
 };"
+    doc: "/* Hit-test result: the child whose rect contains the cursor, plus the cursor
+ * coordinates inside that child's own pixel space (origin = child rect's
+ * top-left). figure_id == 0 means \"no hit\". Iteration is back-to-front, so
+ * for overlapping children the BACK-most match wins. This is an `expose`d
+ * type: codegen reads this definition (it sees the whole TU during its parse
+ * pass) and re-emits it into the generated container.h for consumers. The
+ * definition lives HERE because this TU no longer includes container.h, so it
+ * is the sole definition in the real build too — no double definition.
+ * `expose` makes codegen re-emit this full definition (it is returned by
+ * value from yetty_yfigure_container_hit_test, so consumers need the
+ * layout, not just a forward decl) into the generated container.h. That
+ * header copy and this one never share a TU — this TU does not include
+ * container.h — so there is no clash. */"
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_dump
     return_type: struct yetty_ycore_char_ptr_result
@@ -284,12 +353,17 @@ exposed:
         type: "const struct yetty_yfigure_figure *"
       - name: indent
         type: int
+    doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_clear_all
     return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* Remove and destroy every child figure, then mark the container dirty so the
+ * empty result is repainted. Shared by the CLEAR_ALL admin op and the terminal's
+ * full-screen-erase / reset path. Best-effort: keeps tearing down on a per-child
+ * error, stashing the first to surface at the end. */"
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_set_registry
     return_type: void
@@ -298,6 +372,11 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: registry
         type: "struct yetty_yfigure_registry *"
+    doc: "/* Setters for per-instance runtime state. These are owner-side
+ * helpers — they take a body pointer (not a proxy), so they're only
+ * meaningful on the side that hosts the actual container instance.
+ * That side knows its `context` and `registry` from local C state;
+ * neither pointer is meaningful across a wire. */"
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_set_context
     return_type: void
@@ -306,6 +385,7 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: context
         type: "const struct yetty_context *"
+    doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_set_rect
     return_type: struct yetty_ycore_void_result
@@ -314,6 +394,7 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: rect
         type: struct yetty_ycore_rectangle
+    doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_set_viewport_offset
     return_type: void
@@ -324,6 +405,7 @@ exposed:
         type: float
       - name: offset_y
         type: float
+    doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_consume_envelope
     return_type: struct yetty_ycore_void_result
@@ -332,6 +414,7 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: sm
         type: "struct yetty_ywire_wire_statemachine *"
+    doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_process_input
     return_type: struct yetty_ycore_void_result
@@ -340,6 +423,10 @@ exposed:
         type: "void *"
       - name: sm
         type: "struct yetty_ywire_wire_statemachine *"
+    doc: "/* Coroutine entry registered on the input pipe — its signature is fixed by
+ * the wire callback ABI (`yetty_ywire_process_input_fn` = void *userdata, sm),
+ * so the handle arrives as an opaque `userdata` that callers set to the
+ * container's yclass object. */"
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_process_records
     return_type: struct yetty_ycore_void_result
@@ -350,12 +437,14 @@ exposed:
         type: "const uint8_t *"
       - name: bytes_len
         type: size_t
+    doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_as_figure
     return_type: "struct yetty_yfigure_figure *"
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_add_child
     return_type: struct yetty_ycore_void_result
@@ -366,6 +455,7 @@ exposed:
         type: "struct yetty_yfigure_figure *"
       - name: id
         type: uint32_t
+    doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_find_child_by_id
     return_type: "struct yetty_yfigure_figure *"
@@ -374,6 +464,7 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: id
         type: uint32_t
+    doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_remove_child_by_id
     return_type: struct yetty_ycore_void_result
@@ -382,6 +473,7 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: id
         type: uint32_t
+    doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_protect_child
     return_type: struct yetty_ycore_void_result
@@ -390,6 +482,11 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: id
         type: uint32_t
+    doc: "/* Mark an existing child as protected from clear_all (the CLEAR_ALL admin op
+ * and the terminal's full-screen-erase / reset hook). The container's own
+ * structural figures — the terminal content grid above all — use this so a
+ * client emitting CLEAR_ALL to drop its figures cannot also wipe the host's
+ * content. Idempotent; a stale id (already removed) is a benign no-op. */"
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_raise_child_by_id
     return_type: struct yetty_ycore_void_result
@@ -398,6 +495,7 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: id
         type: uint32_t
+    doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_hit_test
     return_type: struct yetty_yfigure_hit
@@ -408,6 +506,7 @@ exposed:
         type: float
       - name: y
         type: float
+    doc: null
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

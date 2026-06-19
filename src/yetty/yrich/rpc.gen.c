@@ -7,91 +7,81 @@
 #include <stddef.h>
 #include <string.h>
 
-/* Forward decls — these accessors and skels are defined in each
- * class's own <stem>.gen.c; the lookup tables below name them
- * across translation units. */
-struct yetty_yclass_ptr_result yetty_yrich_document_class_get(void);
-struct yetty_yclass_ptr_result yetty_yrich_element_class_get(void);
-struct yetty_yclass_ptr_result yetty_yrich_shape_class_get(void);
-struct yetty_yclass_ptr_result yetty_yrich_slides_class_get(void);
-struct yetty_yclass_ptr_result yetty_yrich_cell_class_get(void);
-struct yetty_yclass_ptr_result yetty_yrich_spreadsheet_class_get(void);
-struct yetty_yclass_ptr_result yetty_yrich_paragraph_class_get(void);
-struct yetty_yclass_ptr_result yetty_yrich_inline_image_class_get(void);
-struct yetty_yclass_ptr_result yetty_yrich_ydoc_class_get(void);
-size_t yetty_yrich_constructor_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_document_content_width_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_document_content_height_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_document_undo_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_document_redo_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_document_on_mouse_down_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_document_on_mouse_up_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_document_on_mouse_drag_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_document_on_mouse_double_click_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_document_on_key_down_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_document_on_text_input_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_element_hit_test_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_element_is_editable_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_element_begin_edit_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_element_end_edit_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_element_is_editing_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_element_insert_text_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_element_delete_sel_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_slides_set_current_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_slides_next_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_slides_prev_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_spreadsheet_set_grid_size_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_spreadsheet_set_row_height_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_spreadsheet_set_col_width_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_spreadsheet_set_cell_value_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_ydoc_toggle_format_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_ydoc_set_text_color_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_ydoc_set_alignment_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_ydoc_set_heading_skel(const void *, size_t, void *, size_t);
-size_t yetty_yrich_ydoc_change_font_size_skel(const void *, size_t, void *, size_t);
+/* Forward decls. A class tagged platform@<x> is guarded by
+ * #ifdef YETTY_PLATFORM_<X> (registered only on that platform, where
+ * CMake compiles it); a cross-platform class is a WEAK ref so the
+ * lookup table never force-links an unused class into a minimal
+ * consumer. The chained submodule registers are weak externs. */
+struct yetty_yclass_ptr_result yetty_yrich_document_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yrich_element_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yrich_shape_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yrich_slides_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yrich_cell_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yrich_spreadsheet_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yrich_paragraph_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yrich_inline_image_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yrich_ydoc_class_get(void) __attribute__((weak));
+size_t yetty_yrich_constructor_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_document_content_width_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_document_content_height_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_document_undo_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_document_redo_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_document_on_mouse_down_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_document_on_mouse_up_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_document_on_mouse_drag_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_document_on_mouse_double_click_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_document_on_key_down_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_document_on_text_input_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_element_hit_test_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_element_is_editable_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_element_begin_edit_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_element_end_edit_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_element_is_editing_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_element_insert_text_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_element_delete_sel_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_slides_set_current_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_slides_next_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_slides_prev_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_spreadsheet_set_grid_size_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_spreadsheet_set_row_height_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_spreadsheet_set_col_width_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_spreadsheet_set_cell_value_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_ydoc_toggle_format_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_ydoc_set_text_color_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_ydoc_set_alignment_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_ydoc_set_heading_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yrich_ydoc_change_font_size_skel(const void *, size_t, void *, size_t) __attribute__((weak));
 struct yetty_ycore_void_result yetty_yrich_register(void);
 
-/* ---- yrich: class name → accessor (lazy) ---------------------- */
+/* ---- yrich: class name -> accessor (lazy) ---------------------- */
 
 static struct yetty_yclass_ptr_result yetty_yrich_accessor_lookup(const char *name)
 {
-    if (strcmp(name, "yetty_yrich_document") == 0) {
+    if (strcmp(name, "yetty_yrich_document") == 0 && yetty_yrich_document_class_get)
         return yetty_yrich_document_class_get();
-    }
-    if (strcmp(name, "yetty_yrich_element") == 0) {
+    if (strcmp(name, "yetty_yrich_element") == 0 && yetty_yrich_element_class_get)
         return yetty_yrich_element_class_get();
-    }
-    if (strcmp(name, "yetty_yrich_shape") == 0) {
+    if (strcmp(name, "yetty_yrich_shape") == 0 && yetty_yrich_shape_class_get)
         return yetty_yrich_shape_class_get();
-    }
-    if (strcmp(name, "yetty_yrich_slides") == 0) {
+    if (strcmp(name, "yetty_yrich_slides") == 0 && yetty_yrich_slides_class_get)
         return yetty_yrich_slides_class_get();
-    }
-    if (strcmp(name, "yetty_yrich_cell") == 0) {
+    if (strcmp(name, "yetty_yrich_cell") == 0 && yetty_yrich_cell_class_get)
         return yetty_yrich_cell_class_get();
-    }
-    if (strcmp(name, "yetty_yrich_spreadsheet") == 0) {
+    if (strcmp(name, "yetty_yrich_spreadsheet") == 0 && yetty_yrich_spreadsheet_class_get)
         return yetty_yrich_spreadsheet_class_get();
-    }
-    if (strcmp(name, "yetty_yrich_paragraph") == 0) {
+    if (strcmp(name, "yetty_yrich_paragraph") == 0 && yetty_yrich_paragraph_class_get)
         return yetty_yrich_paragraph_class_get();
-    }
-    if (strcmp(name, "yetty_yrich_inline_image") == 0) {
+    if (strcmp(name, "yetty_yrich_inline_image") == 0 && yetty_yrich_inline_image_class_get)
         return yetty_yrich_inline_image_class_get();
-    }
-    if (strcmp(name, "yetty_yrich_ydoc") == 0) {
+    if (strcmp(name, "yetty_yrich_ydoc") == 0 && yetty_yrich_ydoc_class_get)
         return yetty_yrich_ydoc_class_get();
-    }
-    /* "Not mine": OK with NULL value — yetty_yclass_by_name walks to next hook. */
+    /* "Not mine": OK with NULL value -- yetty_yclass_by_name walks to next hook. */
     return YETTY_OK(yetty_yclass_ptr, NULL);
 }
 
-/* ---- yrich: slot → skel, name-keyed static data --------------- */
+/* ---- yrich: slot -> skel, name-keyed static data --------------- */
 
-struct yetty_yrich_skel_row {
-    const char *name;
-    yetty_yclass_rpc_skel_fn fn;
-};
+struct yetty_yrich_skel_row { const char *name; yetty_yclass_rpc_skel_fn fn; };
 
 static const struct yetty_yrich_skel_row yetty_yrich_skel_rows[] = {
     {"yetty_yrich_constructor", yetty_yrich_constructor_skel},
@@ -123,44 +113,33 @@ static const struct yetty_yrich_skel_row yetty_yrich_skel_rows[] = {
     {"yetty_yrich_ydoc_set_text_color", yetty_yrich_ydoc_set_text_color_skel},
     {"yetty_yrich_ydoc_set_alignment", yetty_yrich_ydoc_set_alignment_skel},
     {"yetty_yrich_ydoc_set_heading", yetty_yrich_ydoc_set_heading_skel},
-    {"yetty_yrich_ydoc_change_font_size", yetty_yrich_ydoc_change_font_size_skel}};
+    {"yetty_yrich_ydoc_change_font_size", yetty_yrich_ydoc_change_font_size_skel},
+};
 
-/* Signature is dictated by the skel-lookup hook contract (registered as a
- * fn-pointer via yetty_yclass_rpc_add_skel_lookup); a slot-name lookup
- * failure is absorbed into a NULL return at this boundary. */
+/* Signature dictated by the skel-lookup hook contract; a miss is absorbed
+ * into a NULL return at this boundary. */
 YETTY_EXTERNAL_CALLBACK
 static yetty_yclass_rpc_skel_fn yetty_yrich_skel_lookup(yetty_yclass_method_slot slot)
 {
     struct yetty_yclass_const_char_ptr_result slot_name_r = yetty_yclass_method_slot_name(slot);
-    if (YETTY_IS_ERR(slot_name_r)) {
-        yetty_ycore_error_destroy(slot_name_r.error);
-        return NULL;
-    }
+    if (YETTY_IS_ERR(slot_name_r)) { yetty_ycore_error_destroy(slot_name_r.error); return NULL; }
     const char *name = slot_name_r.value;
-    for (size_t i = 0; i < sizeof(yetty_yrich_skel_rows) / sizeof(yetty_yrich_skel_rows[0]); ++i) {
-        if (strcmp(yetty_yrich_skel_rows[i].name, name) == 0) {
+    for (size_t i = 0;
+         i < sizeof(yetty_yrich_skel_rows) / sizeof(yetty_yrich_skel_rows[0]); ++i)
+        /* .fn may be a weak ref (NULL when its class isn't linked); skip it. */
+        if (yetty_yrich_skel_rows[i].fn
+            && strcmp(yetty_yrich_skel_rows[i].name, name) == 0)
             return yetty_yrich_skel_rows[i].fn;
-        }
-    }
     return NULL;
 }
 
 /* ---- yrich: explicit yclass-RPC hook registration ------------- */
 
-/* Installs this module's server-side discovery hooks: the accessor
- * lookup feeds yetty_yclass_by_name()'s registry-miss path, and (when
- * the module exposes wire methods) the skel lookup feeds RPC skeleton
- * dispatch. Call once when the yclass RPC / remote-object server is
- * brought up — idempotent, so repeated calls (several hosts, re-init)
- * are no-ops. This replaces the former load-time installer: a module
- * merely being linked no longer mutates global state before main(),
- * and there is no abort() path on a constructor. */
 struct yetty_ycore_void_result yetty_yrich_register(void)
 {
     static bool registered = false;
-    if (registered) {
+    if (registered)
         return YETTY_OK_VOID();
-    }
 
     struct yetty_ycore_void_result add_accessor_r =
         yetty_yclass_add_accessor_lookup(yetty_yrich_accessor_lookup);

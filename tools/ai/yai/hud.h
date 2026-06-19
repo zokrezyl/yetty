@@ -28,6 +28,8 @@
 
 #include <yetty/ycore/result.h>
 
+#include "hud-format.h"
+
 struct yai_hud;
 YETTY_YRESULT_DECLARE(yai_hud_ptr, struct yai_hud *);
 
@@ -36,19 +38,18 @@ YETTY_YRESULT_DECLARE(yai_hud_ptr, struct yai_hud *);
  * real init failure. */
 struct yai_hud_ptr_result yai_hud_create(int no_hud, int hud_float);
 
-/* Update one line. Cheap; nothing is written until yai_hud_flush.
- *
- * The HUD body is split into two columns. The LEFT column carries the
- * live conversation status (set_state / set_turn / set_session); the
- * RIGHT column carries the lower-priority reference info — the active
- * model (set_model) and the session statistics (set_stats, two rows). */
-struct yetty_ycore_void_result yai_hud_set_state(struct yai_hud *hud, const char *text);
-struct yetty_ycore_void_result yai_hud_set_turn(struct yai_hud *hud, const char *text);
-struct yetty_ycore_void_result yai_hud_set_session(struct yai_hud *hud, const char *text);
-struct yetty_ycore_void_result yai_hud_set_quota(struct yai_hud *hud, const char *text);
-struct yetty_ycore_void_result yai_hud_set_model(struct yai_hud *hud, const char *text);
-struct yetty_ycore_void_result yai_hud_set_stats(struct yai_hud *hud, const char *primary,
-                                                 const char *secondary);
+/* Build the HUD body from a parsed format. Lays the window body out as one
+ * row per format row, each row split into left/center/right alignment cells,
+ * with one label per format span (its color fixed from the span). The
+ * `format` is borrowed (owned by the caller / app) and must outlive the HUD.
+ * Call once after create, before the first render. */
+struct yetty_ycore_void_result yai_hud_set_format(struct yai_hud *hud,
+                                                  const struct yai_hud_format *format);
+
+/* Re-expand every span against `values` and update its label text. Cheap;
+ * the widget tree is unchanged. Nothing is written until yai_hud_flush. */
+struct yetty_ycore_void_result yai_hud_render(struct yai_hud *hud,
+                                              const struct yai_hud_var_values *values);
 
 /* Emit a frame if anything changed. Flushes stdout first so the
  * envelope serializes after pending text (single-writer discipline). */

@@ -15,7 +15,6 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty.h>
-#include <yetty/yplatform/extract-assets.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <stdio.h>
@@ -87,11 +86,8 @@ int main(int argc, char **argv)
      * top of main so every fork inherits it. */
     setenv("TERM_PROGRAM", "yetty", 1);
 
-    struct yetty_yinit_app_config cfg = {
-        .extract_assets_fn = yetty_platform_extract_assets,
-    };
     struct yetty_ycore_int_result run_result =
-        yetty_yinit_run(argc, argv, &cfg, yetty_worker, NULL);
+        yetty_yinit_run(argc, argv, yetty_worker, NULL);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "yetty: bootstrap", run_result.error);
         yetty_ycore_error_destroy(run_result.error);

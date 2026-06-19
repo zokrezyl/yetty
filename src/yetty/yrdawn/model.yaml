@@ -88,6 +88,7 @@ classes:
       - slot: process_bytes
         slot_domain: yfigure
         impl: yrdawn_figure_process_bytes_slot
+    doc: null
 exposed:
   - source_file: src/yetty/yrdawn/figure.c
     type_text: "struct yetty_yrdawn_factory_args {
@@ -98,18 +99,21 @@ exposed:
     void * request_render_user;
     struct yetty_yrdawn_factory_state * state;
 };"
+    doc: null
   - source_file: src/yetty/yrdawn/figure.c
     name: yetty_yrdawn_figure_from_base
     return_type: struct yetty_yrdawn_figure_ptr_result
     args:
       - name: base
         type: "struct yetty_yfigure_figure *"
+    doc: null
   - source_file: src/yetty/yrdawn/figure.c
     name: yetty_yrdawn_figure_as_figure
     return_type: "struct yetty_yfigure_figure *"
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* Upcast: object → its figure-base slice. Stable pointer. */"
   - source_file: src/yetty/yrdawn/figure.c
     name: yetty_yrdawn_register_factory
     return_type: struct yetty_ycore_void_result
@@ -118,12 +122,14 @@ exposed:
         type: "struct yetty_yfigure_registry *"
       - name: args
         type: "struct yetty_yrdawn_factory_args *"
+    doc: null
   - source_file: src/yetty/yrdawn/figure.c
     name: yetty_yrdawn_factory_args_release
     return_type: struct yetty_ycore_void_result
     args:
       - name: args
         type: "struct yetty_yrdawn_factory_args *"
+    doc: null
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

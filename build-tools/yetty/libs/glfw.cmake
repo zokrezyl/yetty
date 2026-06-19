@@ -110,7 +110,7 @@ endif()
 # headers stay scoped to one TU and don't pollute the rest of the codebase.
 # When the prebuilt tarball doesn't ship private headers (macOS / Windows /
 # mobile / web), the consumer falls back to a stub TU that no-ops the same
-# public functions — keeps the caller (window-manager) platform-agnostic.
+# public functions — keeps the caller (window-chrome) platform-agnostic.
 if(NOT TARGET yetty_yplatform_move_resize)
     if(TARGET glfw_private_headers)
         add_library(yetty_yplatform_move_resize STATIC
@@ -127,29 +127,35 @@ if(NOT TARGET yetty_yplatform_move_resize)
     target_link_libraries(yetty_yplatform_move_resize PUBLIC yetty_ycore)
 endif()
 
-# yetty_yplatform_window_manager — yclass class `yplatform:window_manager`:
+# yetty_yplatform_window_chrome — yclass class `yplatform:window_chrome`:
 # the render→main marshaling for OS window control (move/resize/min/max/close/
 # cursor). Its own static lib (like move_resize above) so the GLFW dependency
 # and the C23 `[[clang::annotate]]` codegen attributes stay scoped to this TU
-# set instead of leaking into the main exec's source list. window-manager.gen.c
-# is #included at the foot of window-manager.c; methods.gen.c / rpc.gen.c are
-# separate codegen TUs.
-if(NOT TARGET yetty_yplatform_window_manager)
-    # methods.gen.c (the platform-independent method stubs) lives in
-    # yetty_yplatform_core so it links on every platform; here we only build the
-    # GLFW impl + the create/register (rpc.gen.c) that need a real window.
-    add_library(yetty_yplatform_window_manager STATIC
-        ${YETTY_ROOT}/src/yetty/yplatform/window-manager.c
+# set instead of leaking into the main exec's source list.
+#
+#   window-chrome.gen.c (folded method stubs + create + class accessor) is
+#     #included at the foot of window-chrome.c;
+#   ywindow-chrome/rpc.gen.c is the submodule register + accessor-lookup;
+#   rpc.gen.c (module aggregator) chains the submodule registers as weak
+#     externs, so submodules not compiled on a platform resolve to NULL.
+if(NOT TARGET yetty_yplatform_window_chrome)
+    # The base window_chrome (producer slots + dispatch stubs) lives in
+    # yetty_yplatform_core (platform-independent). This desktop lib carries only
+    # the GLFW subclass (glfw_window_chrome: the handle_event override) plus the
+    # submodule register + module aggregator.
+    add_library(yetty_yplatform_window_chrome STATIC
+        ${YETTY_ROOT}/src/yetty/yplatform/ywindow-chrome/glfw.c
+        ${YETTY_ROOT}/src/yetty/yplatform/ywindow-chrome/rpc.gen.c
         ${YETTY_ROOT}/src/yetty/yplatform/rpc.gen.c)
-    target_include_directories(yetty_yplatform_window_manager
+    target_include_directories(yetty_yplatform_window_chrome
         PUBLIC ${YETTY_ROOT}/include
         PRIVATE ${YETTY_ROOT}/src)
-    target_link_libraries(yetty_yplatform_window_manager
+    target_link_libraries(yetty_yplatform_window_chrome
         PUBLIC yetty_ycore yetty_yclass
         PRIVATE glfw yetty_yplatform_move_resize)
-    # window-manager.c carries C23 `[[clang::annotate(...)]]` attributes.
+    # window-chrome.c carries C23 `[[clang::annotate(...)]]` attributes.
     if(NOT MSVC)
-        set_target_properties(yetty_yplatform_window_manager PROPERTIES
+        set_target_properties(yetty_yplatform_window_chrome PROPERTIES
             C_STANDARD 23
             C_STANDARD_REQUIRED ON)
     endif()

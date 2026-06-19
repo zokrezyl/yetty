@@ -16,6 +16,8 @@
 extern "C" {
 #endif
 
+/* ypdf adds no ops or state on top of ydraw_embed; the class exists only
+ * so callers can name it in yetty_ygui_add. The 1-byte slice is unused. */
 struct yetty_yclass_ptr_result yetty_ygui_ypdf_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct
@@ -37,8 +39,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ypdf_create(struct yetty_yclass
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_yclass_object *obj,
-                                                        const char *path);
+struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_yclass_object *obj, const char *path);
 
 #ifdef __cplusplus
 }

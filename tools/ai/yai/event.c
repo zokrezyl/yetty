@@ -56,40 +56,28 @@ static struct yetty_ycore_void_result dispatch_usage(struct yai_app *app,
     snprintf(session_line, sizeof(session_line), "session: ↓%s out%s · %d turn(s)",
              session_output_text, session_cost_text, app->usage.turns);
 
-    if (app->hud) {
-        /* Tokens go to the HUD window; the scrollback stays clean. */
-        struct yetty_ycore_void_result hud_res = yai_hud_set_turn(app->hud, turn_line);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "event usage: hud turn line");
-        hud_res = yai_hud_set_session(app->hud, session_line);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "event usage: hud session line");
-        char quota_summary[64];
-        yai_usage_proxy_summary(app, quota_summary, sizeof(quota_summary));
-        if (quota_summary[0]) {
-            hud_res = yai_hud_set_quota(app->hud, quota_summary);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "event usage: hud quota");
-        }
-        hud_res = yai_hud_set_state(app->hud, "idle");
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "event usage: hud state");
-        hud_res = yai_refresh_hud_stats(app);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "event usage: hud stats");
-        hud_res = yai_hud_flush(app->hud);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "event usage: hud flush");
-        return YETTY_OK_VOID();
+    /* Cache the per-turn raw usage + the account quota so the HUD format
+     * variables (#{turn*}, #{quota}, the #{turn}/#{session} composites) can
+     * be recomputed on any refresh. */
+    app->last_turn.input = usage->input;
+    app->last_turn.output = usage->output;
+    app->last_turn.cache_read = usage->cache_read;
+    app->last_turn.cost = usage->cost;
+    app->last_turn.seconds = usage->seconds;
+    app->last_turn.has_cost = usage->has_cost;
+    app->last_turn.valid = 1;
+    char quota_summary[96];
+    yai_usage_proxy_summary(app, quota_summary, sizeof(quota_summary));
+    if (quota_summary[0]) {
+        snprintf(app->quota_text, sizeof(app->quota_text), "%s", quota_summary);
     }
-    /* Non-yetty tty: keep the usage on the text status bar (idle state +
-     * refreshed totals) rather than spamming the scrollback. */
-    if (app->renderer.text_hud) {
-        struct yetty_ycore_void_result state_res = yai_renderer_hud_state(&app->renderer, "idle");
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, state_res, "event usage: text hud state");
-        char quota_summary[64];
-        yai_usage_proxy_summary(app, quota_summary, sizeof(quota_summary));
-        if (quota_summary[0]) {
-            struct yetty_ycore_void_result quota_res =
-                yai_renderer_hud_quota(&app->renderer, quota_summary);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, quota_res, "event usage: text hud quota");
-        }
-        struct yetty_ycore_void_result stats_res = yai_refresh_hud_stats(app);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, stats_res, "event usage: text hud stats");
+
+    if (app->hud || app->renderer.text_hud) {
+        /* Turn done → idle; the configured HUD format carries the totals,
+         * so a single refresh renders the whole bar. */
+        snprintf(app->state_text, sizeof(app->state_text), "%s", "idle");
+        struct yetty_ycore_void_result refresh_res = yai_refresh_hud_stats(app);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, refresh_res, "event usage: hud refresh");
         return YETTY_OK_VOID();
     }
     /* No HUD at all (a pipe): the usage goes into the scrollback. */
@@ -181,14 +169,15 @@ struct yetty_ycore_void_result yai_event_dispatch(struct yai_app *app,
         return YETTY_OK_VOID();
     }
     case YAI_EVENT_TOOL_RESULT: {
-        struct yetty_ycore_void_result result_res = yai_render_tool_result(
-            &app->renderer, event->tool_result.content, event->tool_result.is_error,
-            event->tool_result.tool_name);
+        struct yetty_ycore_void_result result_res =
+            yai_render_tool_result(&app->renderer, event->tool_result.content,
+                                   event->tool_result.is_error, event->tool_result.tool_name);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_res, "event: tool result");
         return YETTY_OK_VOID();
     }
     case YAI_EVENT_HOOK: {
-        struct yetty_ycore_void_result hook_res = yai_render_hook(&app->renderer, event->hook.event);
+        struct yetty_ycore_void_result hook_res =
+            yai_render_hook(&app->renderer, event->hook.event);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hook_res, "event: hook");
         return YETTY_OK_VOID();
     }

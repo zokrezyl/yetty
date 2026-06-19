@@ -35,7 +35,6 @@
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yinit/yinit.h>
-#include <yetty/yplatform/extract-assets.h>
 #include <yetty/yplatform/paths.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/ycoroutine.h>
@@ -55,7 +54,7 @@
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/widgets/button.h>
 #include <yetty/ygui/widgets/label.h>
-#include <yetty/yplatform/window-manager.h>
+#include <yetty/yplatform/ywindow-chrome/window-chrome.h>
 
 /* Caption-strip height (px) for chrome-enabled demos. The drawn strip and the
  * engine's drag/double-click zone share this value. */
@@ -695,10 +694,10 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
 
     /* Window-chrome engine — bind it to the borderless OS window's manager so
      * the caption strip and edges drive real move/resize/maximize. Borrowed
-     * window_manager comes from yinit via yframework; absent in headless. A
+     * window_chrome comes from yinit via yframework; absent in headless. A
      * failure here just leaves chrome disabled (window stays static) rather
      * than aborting the demo. */
-    if (r->enable_chrome && r->yframework->window_manager) {
+    if (r->enable_chrome && r->yframework->window_chrome) {
         struct yetty_ycore_void_result creg = yetty_ychrome_register();
         if (YETTY_IS_ERR(creg)) {
             yetty_ycore_error_destroy(creg.error);
@@ -706,7 +705,7 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         struct yetty_yclass_object_ptr_result cor = yetty_ychrome_chrome_create(NULL);
         if (YETTY_IS_OK(cor)) {
             r->chrome = cor.value;
-            struct yetty_ycore_void_result ccfg = yetty_ychrome_configure(r->chrome, r->yframework->window_manager, DEMO_CHROME_CAPTION_H,
+            struct yetty_ycore_void_result ccfg = yetty_ychrome_configure(r->chrome, r->yframework->window_chrome, DEMO_CHROME_CAPTION_H,
                 /*edge_size=*/8.0f, YETTY_YCHROME_FLAG_ALL);
             if (YETTY_IS_ERR(ccfg)) {
                 yetty_ycore_error_destroy(ccfg.error);
@@ -1476,8 +1475,7 @@ static int demo_runner_run_impl(int argc, char **argv, const char *name, demo_bu
     }
 #endif
     struct demo_runner r = {.name = name, .build = build, .enable_chrome = enable_chrome};
-    struct yetty_yinit_app_config cfg = {.extract_assets_fn = yetty_platform_extract_assets};
-    struct yetty_ycore_int_result run_result = yetty_yinit_run(argc, argv, &cfg, worker, &r);
+    struct yetty_ycore_int_result run_result = yetty_yinit_run(argc, argv, worker, &r);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "demo-runner: run", run_result.error);
         yetty_ycore_error_destroy(run_result.error);

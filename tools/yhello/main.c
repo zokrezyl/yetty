@@ -2822,7 +2822,7 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
      * real OS-window chrome (ychrome), so no in-canvas window widget. The
      * greeter's own content (its tabbar / body / statusbar) stacks directly in
      * here. Standalone mode insets the top by the chrome caption height (see
-     * run_standalone_mode); close arrives via ychrome → window_manager →
+     * run_standalone_mode); close arrives via ychrome → window_chrome →
      * WINDOW_CLOSE, handled in the event loop. */
     struct yetty_yclass_object_ptr_result rr =
         yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
@@ -3445,7 +3445,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yinit_runti
      * font), composited as a pinned figure over the greeter UI. */
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
-            app->root_container, app->font, &app->ctx, app->yframework->window_manager,
+            app->root_container, app->font, &app->ctx, app->yframework->window_chrome,
             (float)rt->surface_width, (float)rt->surface_height, 36.0f, 8.0f,
             YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
@@ -3620,12 +3620,9 @@ static struct yetty_ycore_void_result yhello_verify_assets(const char *data_dir)
     return YETTY_OK_VOID();
 }
 
-/* yinit-shaped wrapper for yhello's own incbin extractor (logos +
- * demo video). We don't reuse yetty's larger
- * `yetty_platform_extract_assets` here because that one drives off the
- * `yetty_data_manifest.h` generated for the main yetty binary, which
- * doesn't exist when only yhello is being built. */
-static struct yetty_ycore_void_result yhello_extract_assets_cb(void)
+/* yhello's own incbin extractor (logos + demo video), used by the Android
+ * program-init below. Desktop/web place assets via the installer / bundle. */
+__attribute__((unused)) static struct yetty_ycore_void_result yhello_extract_assets_cb(void)
 {
     const char *data_dir = yetty_yplatform_get_data_dir();
     if (!data_dir || !*data_dir) {
@@ -3678,19 +3675,11 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
 
     LOGI("Initializing yhello...");
 
-    const char *cache_dir = yetty_yplatform_get_cache_dir();
-    const char *runtime_dir = yetty_yplatform_get_runtime_dir();
-    const char *data_dir = yetty_yplatform_get_data_dir();
-    const char *config_dir = yetty_yplatform_get_config_dir();
-    yetty_yinit_android_mkdir_p(cache_dir);
-    yetty_yinit_android_mkdir_p(runtime_dir);
-    yetty_yinit_android_mkdir_p(data_dir);
-    yetty_yinit_android_mkdir_p(config_dir);
-
-    /* Extract yhello's embedded assets (shaders, MSDF cdb font, logos,
-     * intro video, sample pdf, README) into <data_dir>. The showcase reads
-     * its font + shaders from <data_dir>/{shaders,msdf-fonts}; the rich tabs
-     * read the logos/video/pdf from <data_dir>/. */
+    /* Extract yhello's embedded assets (shaders, MSDF cdb font, logos, intro
+     * video, sample pdf, README); the extractor creates its own target dirs.
+     * The showcase reads its font + shaders from config (paths/fonts,
+     * paths/shaders), which yconfig_create resolves via the platform paths
+     * abstraction — the tool never touches the path getters directly. */
     {
         struct yetty_ycore_void_result extract_res = yhello_extract_assets_cb();
         if (YETTY_IS_ERR(extract_res)) {
@@ -3701,25 +3690,10 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
         }
     }
 
-    /* shaders/fonts live under <data_dir>/{shaders,fonts}; the MSDF cdb sits
-     * at <data_dir>/msdf-fonts (standalone_worker reaches it as
-     * fonts_dir/../msdf-fonts). Mirrors the desktop paths layout. */
-    static char shaders_dir[512];
-    static char fonts_dir[512];
-    snprintf(shaders_dir, sizeof(shaders_dir), "%s/shaders", data_dir);
-    snprintf(fonts_dir, sizeof(fonts_dir), "%s/fonts", data_dir);
-
-    struct yetty_yconfig_paths paths = {0};
-    paths.shaders_dir = shaders_dir;
-    paths.fonts_dir = fonts_dir;
-    paths.config_dir = config_dir;
-    paths.runtime_dir = runtime_dir;
-    paths.bin_dir = NULL;
-
     /* No --qemu: yhello standalone renders its own figure tree, no VM. */
     {
         char *fake_argv[] = {(char *)"yhello", NULL};
-        struct yetty_yconfig_result config_result = yetty_yconfig_create(1, fake_argv, &paths);
+        struct yetty_yconfig_result config_result = yetty_yconfig_create(1, fake_argv);
         if (!YETTY_IS_OK(config_result)) {
             LOGE("yhello: config create failed");
             return;
@@ -3853,9 +3827,8 @@ static int run_standalone_mode(int argc, char **argv)
     struct app app_storage = {0};
     struct app *app = &app_storage;
 #endif
-    struct yetty_yinit_app_config cfg = {.extract_assets_fn = yhello_extract_assets_cb};
     struct yetty_ycore_int_result run_result =
-        yetty_yinit_run(argc, argv, &cfg, standalone_worker, app);
+        yetty_yinit_run(argc, argv, standalone_worker, app);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "yhello: run", run_result.error);
         yetty_ycore_error_destroy(run_result.error);

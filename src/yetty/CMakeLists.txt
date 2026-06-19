@@ -254,9 +254,9 @@ if(YETTY_ENABLE_FEATURE_YFLAME)
 endif()
 
 # ychrome — widget-free window-chrome gesture engine (drives a
-# yplatform:window_manager). Pure logic (ycore + yclass only), so it builds on
+# yplatform:window_chrome). Pure logic (ycore + yclass only), so it builds on
 # every platform; consumers that want OS-window control link it alongside
-# yetty_yplatform_window_manager.
+# yetty_yplatform_window_chrome.
 add_subdirectory(ychrome)
 
 # ymusic — LilyPond-subset music renderer. Needs the ydraw-core record builder,

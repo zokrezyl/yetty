@@ -18,6 +18,9 @@ extern "C" {
 
 struct yai_app;
 
+/* The class@ annotation needs a struct to sit on; the base carries no
+ * per-instance state (the line buffer is in struct yai_app, mode scratch
+ * is in the subclass). */
 struct yetty_yclass_ptr_result yetty_yai_editor_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct
@@ -35,11 +38,9 @@ struct yetty_yai_editor_ptr_result {
 struct yetty_yai_editor_ptr_result yetty_yai_editor_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yai_editor_to(struct yetty_yai_editor *data);
 
-struct yetty_ycore_int_result yetty_yai_feed_byte(struct yetty_yclass_object *obj,
-                                                  struct yai_app *app, int byte);
+struct yetty_ycore_int_result yetty_yai_feed_byte(struct yetty_yclass_object * obj, struct yai_app * app, int byte);
 
-typedef struct yetty_ycore_int_result (*yetty_yai_feed_byte_fn)(struct yetty_yclass_object *,
-                                                                struct yai_app *, int);
+typedef struct yetty_ycore_int_result (*yetty_yai_feed_byte_fn)(struct yetty_yclass_object *, struct yai_app *, int);
 
 struct yetty_yclass_object_ptr_result yetty_yai_editor_create(struct yetty_yclass_ctx *ctx);
 

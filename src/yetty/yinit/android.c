@@ -18,7 +18,6 @@
 #include <yetty/yinit/yinit.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yconfig/config.h>
-#include <yetty/yplatform/extract-assets.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty.h>
@@ -50,7 +49,6 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
 {
     const char *cache_dir;
     const char *runtime_dir;
-    struct yetty_yconfig_paths paths;
     struct yetty_yconfig_result config_result;
     struct yetty_yplatform_input_pipe_result pipe_result;
     struct yetty_yplatform_pty_factory_ptr_result pty_result;
@@ -78,38 +76,8 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
         const char *config_dir = yetty_yplatform_get_config_dir();
         yetty_yinit_android_mkdir_p(data_dir);
         yetty_yinit_android_mkdir_p(config_dir);
-
-        /* Match glfw-main.c: shaders/fonts live under <data_dir>/{shaders,fonts}
-         * which is exactly where extract-assets puts them. */
-        static char shaders_dir[512];
-        static char fonts_dir[512];
-        snprintf(shaders_dir, sizeof(shaders_dir), "%s/shaders", data_dir);
-        snprintf(fonts_dir, sizeof(fonts_dir), "%s/fonts", data_dir);
-
-        paths.shaders_dir = shaders_dir;
-        paths.fonts_dir = fonts_dir;
-        paths.config_dir = config_dir;
     }
-    paths.runtime_dir = runtime_dir;
-    paths.bin_dir = NULL;
 
-    /* Extract embedded assets (kernel, opensbi, alpine rootfs, qemu binary,
-     * cdb fonts, config.yaml...) onto disk where tinyemu / qemu / fontloader
-     * / config-loader can read them. Must run BEFORE yetty_yconfig_create
-     * so the bundled config.yaml is on disk on first launch. Without this,
-     * tinyemu_pty_create() also fails to open kernel-riscv64.bin and the
-     * process silently exits because ytrace logs go to stderr, which
-     * Android's NativeActivity routes to /dev/null. */
-    {
-        struct yetty_ycore_void_result extract_result = yetty_platform_extract_assets();
-        if (!YETTY_IS_OK(extract_result)) {
-            LOGE("Failed to extract assets: %s",
-                 extract_result.error.msg ? extract_result.error.msg : "(no message)");
-            /* Fatal — without assets nothing will work. */
-            return;
-        }
-        LOGI("Assets extracted to runtime dir");
-    }
 
     /* Config — default to --qemu on Android (spawns external qemu loaded
      * from nativeLibraryDir/libqemu-system-riscv64.so, then telnets to
@@ -118,7 +86,7 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
     {
         char *fake_argv[] = {(char *)"yetty", (char *)"--qemu", NULL};
         int fake_argc = 2;
-        config_result = yetty_yconfig_create(fake_argc, fake_argv, &paths);
+        config_result = yetty_yconfig_create(fake_argc, fake_argv);
     }
     if (!YETTY_IS_OK(config_result)) {
         LOGE("Failed to create config");
@@ -170,7 +138,7 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
      * same code path the desktop worker uses. Android doesn't go through
      * yetty_yinit_run — the NDK drives the OS loop and we bootstrap here
      * inline — so the struct gets stamped by hand. No argv/output_pipe/
-     * clipboard/window_manager on Android. */
+     * clipboard/window_chrome on Android. */
     memset(&yinit_rt, 0, sizeof(yinit_rt));
     yinit_rt.config = state->config;
     yinit_rt.instance = state->instance;

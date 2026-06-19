@@ -161,46 +161,58 @@ all: help
 YCLASS_MODULES := yfigure ygrid ygui ymgui yrdawn yshadertoy yvterm yflame ymap yview yplatform ychrome ymusic ycircuit yai=tools/ai/yai yrich
 
 # Modules kept on the legacy split (standalone methods.gen.c + rpc.gen.c instead
-# of folding both into each <stem>.gen.c). yplatform's only class lives in the
-# GLFW-bound, desktop-only window-manager.c, but its (all-local) method stubs
-# must link on every platform — so the stubs stay in a platform-independent
-# methods.gen.c while the GLFW accessor/factory stay in the desktop-only unit.
-YCLASS_NOFOLD := yplatform
+# of folding the per-class code into each <stem>.gen.c). Empty now: the module
+# aggregator's lookup tables use WEAK references, so a class whose <stem>.gen.c
+# isn't compiled on this platform (yplatform's per-OS glfw/ios/webasm window,
+# platform and clipboard classes) resolves to NULL instead of an undefined
+# symbol — no module needs the legacy split to dodge that anymore.
+YCLASS_NOFOLD :=
 
-.PHONY: codegen
-codegen: ## Run yclass codegen for all annotated modules (output committed to git)
-	@# Two passes: a header-destined type (exposed function arg, callback
-	@# typedef, vtable struct) only becomes visible to its consumers in
-	@# OTHER files once the first pass has rewritten the owning header.
-	@# The second pass re-parses with those headers in place so every
-	@# signature resolves to the real type instead of int via recovery.
-	@for pass in 1 2; do \
-		echo "==> yclass codegen: pass $$pass"; \
-		fail=0; \
-		for spec in $(YCLASS_MODULES); do \
-			mod=$${spec%%=*}; \
-			case "$$spec" in \
-				*=*) src_dir=$${spec#*=};; \
-				*) src_dir="src/yetty/$$mod";; \
-			esac; \
-			sources=$$(grep -lrE 'clang::annotate\("(class|mixin)@'"$$mod"':' "$$src_dir" --include='*.c' --exclude='*.gen.c' | LC_ALL=C sort); \
-			if [ -z "$$sources" ]; then \
-				echo "ERROR: no annotated sources found under $$src_dir"; \
-				fail=1; continue; \
-			fi; \
-			echo "==> yclass codegen: $$mod"; \
-			nofold=""; \
-			case " $(YCLASS_NOFOLD) " in *" $$mod "*) nofold="--no-fold";; esac; \
-			uv run src/yetty/yclass/gen/codegen.py "$$mod" \
-					"$(CURDIR)/include/yetty" \
-					"$(CURDIR)/$$src_dir" \
-					$$nofold $$sources || fail=1; \
-		done; \
-		if [ $$fail -ne 0 ]; then \
-			echo "==> yclass codegen: errors above — see each module's report"; \
-			exit 1; \
-		fi; \
-	done
+# Bare module names (strip any "=<srcdir>" suffix used by out-of-tree modules).
+YCLASS_MODNAMES := $(foreach spec,$(YCLASS_MODULES),$(firstword $(subst =, ,$(spec))))
+# Codegen fan-out width. Override: `make CODEGEN_JOBS=8 codegen`.
+CODEGEN_JOBS ?= $(shell nproc 2>/dev/null || echo 4)
+
+# Regenerate ONE module by name: resolve its spec (for the `yai=<dir>` form),
+# its annotated sources, and the --no-fold flag, then run the generator.
+define codegen_one
+mod="$(1)"; spec="$$mod"; \
+for s in $(YCLASS_MODULES); do case "$$s" in "$$mod"=*) spec="$$s";; esac; done; \
+case "$$spec" in *=*) src_dir=$${spec#*=};; *) src_dir="src/yetty/$$mod";; esac; \
+sources=$$(grep -lrE 'clang::annotate\("(class|mixin)@'"$$mod"':' "$$src_dir" --include='*.c' --exclude='*.gen.c' | LC_ALL=C sort); \
+if [ -z "$$sources" ]; then echo "ERROR: no annotated sources under $$src_dir"; exit 1; fi; \
+nofold=""; case " $(YCLASS_NOFOLD) " in *" $$mod "*) nofold="--no-fold";; esac; \
+echo "  codegen: $$mod"; \
+PYTHONHASHSEED=0 uv run src/yetty/yclass/gen/codegen.py "$$mod" "$(CURDIR)/include/yetty" "$(CURDIR)/$$src_dir" $$nofold $$sources
+endef
+
+# NB: the per-module _cg1-%/_cg2-% targets are deliberately NOT .PHONY — GNU
+# make skips pattern-rule (implicit) recipes for phony targets. They never
+# correspond to real files, so the pattern rule runs them every time anyway.
+.PHONY: codegen _codegen_pass1 _codegen_pass2
+
+codegen: ## Run yclass codegen for all modules (fans out across cores; output committed)
+	@# Each module writes only its OWN files, so within a pass the modules run
+	@# in parallel. Two passes with a barrier between them: a header-destined
+	@# type (exposed arg, callback typedef, vtable struct) becomes visible to
+	@# consumers in OTHER modules only once pass 1 has written the owning header;
+	@# pass 2 re-parses with all headers present. codegen writes atomically, so
+	@# a consumer never reads a half-written header mid-pass. (A cross-module
+	@# type chain deeper than one level would need a 3rd pass.)
+	@$(MAKE) --no-print-directory -j$(CODEGEN_JOBS) _codegen_pass2
+
+_codegen_pass1: $(foreach m,$(YCLASS_MODNAMES),_cg1-$(m))
+	@echo "==> yclass codegen: pass 1 done ($(words $(YCLASS_MODNAMES)) modules)"
+_codegen_pass2: $(foreach m,$(YCLASS_MODNAMES),_cg2-$(m))
+	@echo "==> yclass codegen: pass 2 done"
+
+# Inter-pass barrier: every pass-2 module waits for ALL of pass 1 to finish.
+$(foreach m,$(YCLASS_MODNAMES),_cg2-$(m)): _codegen_pass1
+
+_cg1-%:
+	@$(call codegen_one,$*)
+_cg2-%:
+	@$(call codegen_one,$*)
 
 .PHONY: ffi
 ffi: ## Generate FFI language bindings from the per-module model.yaml (run after codegen)

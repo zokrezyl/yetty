@@ -12,6 +12,8 @@ methods:
         type: float
       - name: flags
         type: uint32_t
+    doc: "/* configure: set system width, staff-space (line gap) in px and render flags.
+ * 0 selects the default for each. Call after create(), before render(). */"
     local: true
     return_payload_type: null
   - slot: parse
@@ -25,6 +27,8 @@ methods:
         type: "const char *"
       - name: len
         type: size_t
+    doc: "/* parse: ingest LilyPond-subset text and build the score model. Resets the model
+ * and clears any selection. */"
     local: true
     return_payload_type: null
   - slot: render
@@ -34,6 +38,8 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* render: lay out the score and emit it as a fresh ydraw drawable list (caller
+ * owns it). Pointer return -> local-only. */"
     local: true
     return_payload_type: "struct yetty_ydraw_drawable_list *"
   - slot: hit_test
@@ -47,6 +53,8 @@ methods:
         type: float
       - name: y
         type: float
+    doc: "/* hit_test: id of the element whose column + system band contains content
+ * (x,y), or YETTY_YMUSIC_NO_ELEMENT. Requires a prior render() for the layout. */"
     local: true
     return_payload_type: int
   - slot: set_highlight
@@ -58,6 +66,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: element_id
         type: int32_t
+    doc: "/* set_highlight: mark an element as selected (-1 clears) for the next render. */"
     local: true
     return_payload_type: null
   - slot: destroy
@@ -67,6 +76,7 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* destroy: free the score model and the object. */"
     local: true
     return_payload_type: null
 classes:
@@ -134,12 +144,15 @@ classes:
       - slot: destroy
         slot_domain: ymusic
         impl: music_obj_destroy
+    doc: null
 exposed:
   - source_file: src/yetty/ymusic/music.c
     type_text: "enum yetty_ymusic_constant {
     YETTY_YMUSIC_NO_ELEMENT = -1,
     YETTY_YMUSIC_FLAG_NONE = 0,
 };"
+    doc: "/* Public constants. Defined here in the owning .c; codegen reproduces the
+ * enum into the generated music.h for consumers. */"
   - source_file: src/yetty/ymusic/music.c
     name: yetty_ymusic_emit_osc
     return_type: struct yetty_ycore_void_result
@@ -148,6 +161,7 @@ exposed:
         type: "const struct yetty_ydraw_drawable_list *"
       - name: fd
         type: int
+    doc: null
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

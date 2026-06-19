@@ -7,45 +7,47 @@
 #include <stddef.h>
 #include <string.h>
 
-/* Forward decls — these accessors and skels are defined in each
- * class's own <stem>.gen.c; the lookup tables below name them
- * across translation units. */
-struct yetty_yclass_ptr_result yetty_yai_claude_class_get(void);
-struct yetty_yclass_ptr_result yetty_yai_codex_class_get(void);
-struct yetty_yclass_ptr_result yetty_yai_emacs_class_get(void);
-struct yetty_yclass_ptr_result yetty_yai_vi_class_get(void);
-struct yetty_yclass_ptr_result yetty_yai_editor_class_get(void);
-struct yetty_yclass_ptr_result yetty_yai_engine_class_get(void);
-struct yetty_yclass_ptr_result yetty_yai_gemini_class_get(void);
-struct yetty_yclass_ptr_result yetty_yai_turn_engine_class_get(void);
+/* Forward decls. A class tagged platform@<x> is guarded by
+ * #ifdef YETTY_PLATFORM_<X> (registered only on that platform, where
+ * CMake compiles it); a cross-platform class is a WEAK ref so the
+ * lookup table never force-links an unused class into a minimal
+ * consumer. The chained submodule registers are weak externs. */
+struct yetty_yclass_ptr_result yetty_yai_claude_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yai_codex_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yai_emacs_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yai_vi_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yai_editor_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yai_engine_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yai_gemini_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yai_turn_engine_class_get(void) __attribute__((weak));
 struct yetty_ycore_void_result yetty_yai_register(void);
 
-/* ---- yai: class name → accessor (lazy) ---------------------- */
+/* ---- yai: class name -> accessor (lazy) ---------------------- */
 
 static struct yetty_yclass_ptr_result yetty_yai_accessor_lookup(const char *name)
 {
-    if (strcmp(name, "yetty_yai_claude") == 0) return yetty_yai_claude_class_get();
-    if (strcmp(name, "yetty_yai_codex") == 0) return yetty_yai_codex_class_get();
-    if (strcmp(name, "yetty_yai_emacs") == 0) return yetty_yai_emacs_class_get();
-    if (strcmp(name, "yetty_yai_vi") == 0) return yetty_yai_vi_class_get();
-    if (strcmp(name, "yetty_yai_editor") == 0) return yetty_yai_editor_class_get();
-    if (strcmp(name, "yetty_yai_engine") == 0) return yetty_yai_engine_class_get();
-    if (strcmp(name, "yetty_yai_gemini") == 0) return yetty_yai_gemini_class_get();
-    if (strcmp(name, "yetty_yai_turn_engine") == 0) return yetty_yai_turn_engine_class_get();
-    /* "Not mine": OK with NULL value — yetty_yclass_by_name walks to next hook. */
+    if (strcmp(name, "yetty_yai_claude") == 0 && yetty_yai_claude_class_get)
+        return yetty_yai_claude_class_get();
+    if (strcmp(name, "yetty_yai_codex") == 0 && yetty_yai_codex_class_get)
+        return yetty_yai_codex_class_get();
+    if (strcmp(name, "yetty_yai_emacs") == 0 && yetty_yai_emacs_class_get)
+        return yetty_yai_emacs_class_get();
+    if (strcmp(name, "yetty_yai_vi") == 0 && yetty_yai_vi_class_get)
+        return yetty_yai_vi_class_get();
+    if (strcmp(name, "yetty_yai_editor") == 0 && yetty_yai_editor_class_get)
+        return yetty_yai_editor_class_get();
+    if (strcmp(name, "yetty_yai_engine") == 0 && yetty_yai_engine_class_get)
+        return yetty_yai_engine_class_get();
+    if (strcmp(name, "yetty_yai_gemini") == 0 && yetty_yai_gemini_class_get)
+        return yetty_yai_gemini_class_get();
+    if (strcmp(name, "yetty_yai_turn_engine") == 0 && yetty_yai_turn_engine_class_get)
+        return yetty_yai_turn_engine_class_get();
+    /* "Not mine": OK with NULL value -- yetty_yclass_by_name walks to next hook. */
     return YETTY_OK(yetty_yclass_ptr, NULL);
 }
 
 /* ---- yai: explicit yclass-RPC hook registration ------------- */
 
-/* Installs this module's server-side discovery hooks: the accessor
- * lookup feeds yetty_yclass_by_name()'s registry-miss path, and (when
- * the module exposes wire methods) the skel lookup feeds RPC skeleton
- * dispatch. Call once when the yclass RPC / remote-object server is
- * brought up — idempotent, so repeated calls (several hosts, re-init)
- * are no-ops. This replaces the former load-time installer: a module
- * merely being linked no longer mutates global state before main(),
- * and there is no abort() path on a constructor. */
 struct yetty_ycore_void_result yetty_yai_register(void)
 {
     static bool registered = false;

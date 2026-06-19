@@ -8,6 +8,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: record
         type: struct yetty_ycore_buffer
+    doc: null
     local: false
     return_payload_type: null
   - slot: clear
@@ -17,6 +18,7 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: null
     local: false
     return_payload_type: null
   - slot: destroy
@@ -26,6 +28,7 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: null
     local: false
     return_payload_type: null
 classes:
@@ -303,6 +306,7 @@ classes:
       - slot: set_content_size
         slot_domain: yfigure
         impl: yetty_ygrid_grid_set_content_size_impl
+    doc: null
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

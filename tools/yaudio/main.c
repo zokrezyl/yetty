@@ -35,7 +35,6 @@
 #include <yetty/yevent/dispatch.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yplatform/platform-input-pipe.h>
-#include <yetty/yplatform/extract-assets.h>
 #include <yetty/yplatform/yworkpool.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
@@ -1228,11 +1227,8 @@ int main(int argc, char **argv)
     }
 
     struct yaudio_app app = {.wav_path = wav_path};
-    struct yetty_yinit_app_config cfg = {
-        .extract_assets_fn = yetty_platform_extract_assets,
-    };
     struct yetty_ycore_int_result run_result =
-        yetty_yinit_run(argc, argv, &cfg, yaudio_worker, &app);
+        yetty_yinit_run(argc, argv, yaudio_worker, &app);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "yaudio: run", run_result.error);
         yetty_ycore_error_destroy(run_result.error);

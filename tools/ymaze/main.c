@@ -23,7 +23,6 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yplatform/platform-input-pipe.h>
-#include <yetty/yplatform/extract-assets.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yfigure/figure.h>
@@ -277,7 +276,7 @@ static struct yetty_ycore_void_result ymaze_worker(struct yetty_yinit_runtime *r
      * SDF (no font needed). */
     {
         struct yetty_ychrome_host_ptr_result chrome_host_r = yetty_ychrome_host_create(
-            app->root, NULL, &app->ctx, app->yrt->window_manager, (float)app->surface_w,
+            app->root, NULL, &app->ctx, app->yrt->window_chrome, (float)app->surface_w,
             (float)app->surface_h, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_host_r)) {
             app->chrome = chrome_host_r.value;
@@ -363,11 +362,8 @@ static struct yetty_ycore_void_result ymaze_worker(struct yetty_yinit_runtime *r
 int main(int argc, char **argv)
 {
     struct ymaze_app app = {0};
-    struct yetty_yinit_app_config cfg = {
-        .extract_assets_fn = yetty_platform_extract_assets,
-    };
     struct yetty_ycore_int_result run_result =
-        yetty_yinit_run(argc, argv, &cfg, ymaze_worker, &app);
+        yetty_yinit_run(argc, argv, ymaze_worker, &app);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "ymaze: run", run_result.error);
         yetty_ycore_error_destroy(run_result.error);

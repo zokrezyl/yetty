@@ -54,8 +54,9 @@ static struct yetty_ycore_void_result gemini_start(struct yetty_yclass_object *o
     if (setenv("YETTY_MCP_VIA_PARENT", "1", 1) != 0) {
         return YETTY_ERR(yetty_ycore_void, "gemini start: setenv YETTY_MCP_VIA_PARENT failed");
     }
-    printf(YAI_DIM "(gemini runs one fresh conversation per turn — resume is not wired up yet)"
-                   YAI_RESET "\n");
+    printf(YAI_DIM
+           "(gemini runs one fresh conversation per turn — resume is not wired up yet)" YAI_RESET
+           "\n");
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "gemini start: flush");
     return YETTY_OK_VOID();
@@ -70,11 +71,11 @@ static struct yetty_ycore_void_result gemini_send_user_message(struct yetty_ycla
     if (app->child_open_handles > 0 || app->child_alive) {
         return YETTY_ERR(yetty_ycore_void, "gemini send_user_message: previous turn still open");
     }
-    const char *model = app->config.model;
+    const char *model = app->config.gemini.model;
     /* Non-interactive gemini cannot prompt for tool approval; the
      * default approval mode auto-denies mutating tools. Opt into a
      * looser mode explicitly (--gemini-approval auto_edit | yolo). */
-    const char *approval_mode = app->config.gemini_approval_mode;
+    const char *approval_mode = app->config.gemini.approval_mode;
 
     const char *args[12];
     int arg_count = 0;
@@ -106,8 +107,8 @@ static struct yetty_ycore_void_result gemini_describe_config(struct yetty_yclass
                                                              size_t out_size)
 {
     (void)obj;
-    const char *model = app->config.model;
-    const char *approval_mode = app->config.gemini_approval_mode;
+    const char *model = app->config.gemini.model;
+    const char *approval_mode = app->config.gemini.approval_mode;
     int written = snprintf(out, out_size,
                            "model: %s  [--model]\n"
                            "approval mode: %s  [--gemini-approval]\n"
@@ -128,7 +129,7 @@ static struct yetty_ycore_void_result gemini_config_knob(struct yetty_yclass_obj
     int written = snprintf(out, out_size,
                            "gemini_approval_mode|approval mode|"
                            "default,auto_edit,yolo,plan|%s",
-                           app->config.gemini_approval_mode);
+                           app->config.gemini.approval_mode);
     if (written < 0 || (size_t)written >= out_size) {
         return YETTY_ERR(yetty_ycore_void, "gemini config_knob: spec truncated");
     }

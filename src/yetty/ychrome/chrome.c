@@ -12,7 +12,7 @@
  * It owns no rendering and no widgets. The app draws whatever title bar it
  * likes, decides the caption height and resize-border thickness, and feeds raw
  * mouse events in. The engine hit-tests them and drives a
- * yplatform:window_manager yclass object:
+ * yplatform:window_chrome yclass object:
  *
  *   - press + drag inside the caption strip  → move the window
  *   - double-click the caption strip         → toggle maximize
@@ -27,13 +27,13 @@
  * right/bottom edge bands track the window.
  *
  * Every slot is `local@` — chrome is an in-process object, never proxied over
- * RPC. window-manager.c is its platform backend (it forwards the gestures over
+ * RPC. window-chrome.c is its platform backend (it forwards the gestures over
  * the render→main event pipe).
  *
  * Lifecycle:
  *   yetty_ychrome_register();
  *   obj = yetty_ychrome_chrome_create(NULL);
- *   yetty_ychrome_configure(obj, window_manager_obj,
+ *   yetty_ychrome_configure(obj, window_chrome_obj,
  *                           caption_height, edge_size, YETTY_YCHROME_FLAG_ALL);
  *   yetty_ychrome_set_size(obj, width, height);   // on every resize
  *   consumed = yetty_ychrome_handle_event(obj, &mouse_event);
@@ -52,7 +52,7 @@
 #include <yetty/ycore/result.h>
 
 #include <yetty/yevent/event.h> /* event types + resize-edge / cursor enums */
-#include <yetty/yplatform/window-manager.h>
+#include <yetty/yplatform/ywindow-chrome/window-chrome.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -100,8 +100,8 @@ enum {
 
 struct [[clang::annotate("class@ychrome:chrome"),
          clang::annotate("include@yetty/ydraw-core/drawable-list.h")]] yetty_ychrome_chrome {
-    /* Borrowed yplatform:window_manager yclass object — set by configure(). */
-    struct yetty_yclass_object *window_manager;
+    /* Borrowed yplatform:window_chrome yclass object — set by configure(). */
+    struct yetty_yclass_object *window_chrome;
 
     float caption_height; /* top strip that drags / double-click-maximizes (px) */
     float edge_size;      /* right/bottom resize border thickness (px)          */
@@ -165,13 +165,13 @@ static struct yetty_yclass_void_ptr_result chrome_from_obj(struct yetty_yclass_o
     return slice_r;
 }
 
-/* The window-manager slots are fire-and-forget (they post a request onto the
+/* The window-chrome slots are fire-and-forget (they post a request onto the
  * render→main pipe). A failure can only be an object-resolve error, not
  * recoverable here — absorb the chain so it isn't leaked. */
-static void wm_absorb(struct yetty_ycore_void_result window_manager_result)
+static void wm_absorb(struct yetty_ycore_void_result window_chrome_result)
 {
-    if (YETTY_IS_ERR(window_manager_result)) {
-        yetty_ycore_error_destroy(window_manager_result.error);
+    if (YETTY_IS_ERR(window_chrome_result)) {
+        yetty_ycore_error_destroy(window_chrome_result.error);
     }
 }
 
@@ -197,23 +197,23 @@ static int chrome_event_xy(const struct yetty_yui_event *event, float *out_x, fl
  * Lifecycle / configuration
  *===========================================================================*/
 
-/* Bind the engine to a window_manager and set the caption/edge geometry. Call
- * once after create(), before feeding events. window_manager is borrowed. */
+/* Bind the engine to a window_chrome and set the caption/edge geometry. Call
+ * once after create(), before feeding events. window_chrome is borrowed. */
 [[clang::annotate("virtual@ychrome:chrome:configure")]] [[clang::annotate(
     "local@ychrome:configure")]]
 static struct yetty_ycore_void_result chrome_configure(struct yetty_yclass_object *obj,
-                                                       struct yetty_yclass_object *window_manager,
+                                                       struct yetty_yclass_object *window_chrome,
                                                        float caption_height, float edge_size,
                                                        uint32_t flags)
 {
-    /* window_manager may be NULL: the in-terminal / client case has no OS
+    /* window_chrome may be NULL: the in-terminal / client case has no OS
      * window to drive. Chrome still renders its caption and tracks hover so the
      * app can act on a control click itself; only the live OS-window gestures
-     * (drag / resize / maximize / close → window_manager slots) are skipped. */
+     * (drag / resize / maximize / close → window_chrome slots) are skipped. */
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "chrome configure: object");
     struct yetty_ychrome_chrome *chrome = data_r.value;
-    chrome->window_manager = window_manager;
+    chrome->window_chrome = window_chrome;
     chrome->caption_height = caption_height > 0.0f ? caption_height : 0.0f;
     chrome->edge_size = edge_size > 0.0f ? edge_size : (float)YCHROME_DEFAULT_EDGE_PX;
     chrome->flags = flags;
@@ -237,7 +237,7 @@ static struct yetty_ycore_void_result chrome_set_size(struct yetty_yclass_object
 [[clang::annotate("virtual@ychrome:chrome:destroy")]] [[clang::annotate("local@ychrome:destroy")]]
 static struct yetty_ycore_void_result chrome_destroy(struct yetty_yclass_object *obj)
 {
-    /* No owned resources (window_manager is borrowed) — just free the object. */
+    /* No owned resources (window_chrome is borrowed) — just free the object. */
     return yetty_yclass_object_free(obj);
 }
 
@@ -408,7 +408,7 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_obj
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, data_r, "chrome handle_event: object");
     struct yetty_ychrome_chrome *chrome = data_r.value;
-    struct yetty_yclass_object *wm = chrome->window_manager;
+    struct yetty_yclass_object *wm = chrome->window_chrome;
 
     float x = 0.0f, y = 0.0f;
     int have_xy = chrome_event_xy(event, &x, &y);
@@ -419,7 +419,7 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_obj
         chrome->hover_button =
             (chrome->dragging || chrome->resizing) ? 0 : chrome_button_at(chrome, x, y);
     }
-    /* No window_manager → in-terminal / client mode: there is no OS window to
+    /* No window_chrome → in-terminal / client mode: there is no OS window to
      * drag, resize, or maximize, so skip every gesture below. Keep the hover
      * highlight live and claim clicks inside the caption strip (so they do not
      * fall through to the app's content); the app reads
@@ -449,14 +449,14 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_obj
                  * pointer here; on X11 it's a no-op and the per-pixel resize_by
                  * below keeps driving the size. */
                 chrome->resize_grab_sent = 1;
-                wm_absorb(yetty_yplatform_window_manager_begin_interactive_resize(
+                wm_absorb(yetty_yplatform_window_chrome_begin_interactive_resize(
                     wm, chrome->resize_edge));
             }
             /* Per-axis delta. Right/bottom keep the top-left fixed → track
              * incrementally (update resize_last). Left/top move the origin →
              * after each move the window-relative cursor snaps back to the
              * press anchor, so measure from that fixed anchor (don't update) to
-             * avoid a feedback loop. window_manager applies the per-edge origin
+             * avoid a feedback loop. window_chrome applies the per-edge origin
              * shift from fresh geometry. */
             int step_dx = 0, step_dy = 0;
             if (chrome->resize_right) {
@@ -472,7 +472,7 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_obj
                 step_dy = (int)(y - chrome->resize_anchor_y);
             }
             if (step_dx != 0 || step_dy != 0) {
-                wm_absorb(yetty_yplatform_window_manager_resize_by(wm, step_dx, step_dy,
+                wm_absorb(yetty_yplatform_window_chrome_resize_by(wm, step_dx, step_dy,
                                                                    chrome->resize_edge));
             }
             return YETTY_OK(yetty_ycore_int, 1);
@@ -496,13 +496,13 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_obj
             }
             if (!chrome->drag_grab_sent) {
                 chrome->drag_grab_sent = 1;
-                wm_absorb(yetty_yplatform_window_manager_begin_interactive_move(wm));
+                wm_absorb(yetty_yplatform_window_chrome_begin_interactive_move(wm));
             }
             if (dx != 0 || dy != 0) {
                 /* Don't update the anchor: glfwSetWindowPos repositions
                  * absolutely, leaving the cursor at the anchor in the moved
                  * frame; resetting would accumulate rounding error. */
-                wm_absorb(yetty_yplatform_window_manager_drag_by(wm, dx, dy));
+                wm_absorb(yetty_yplatform_window_chrome_drag_by(wm, dx, dy));
             }
             return YETTY_OK(yetty_ycore_int, 1);
         }
@@ -531,10 +531,10 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_obj
         if (edge_left || edge_right || edge_top || edge_bottom) {
             int shape =
                 (edge_left || edge_right) ? YETTY_YCORE_CURSOR_HRESIZE : YETTY_YCORE_CURSOR_VRESIZE;
-            wm_absorb(yetty_yplatform_window_manager_set_cursor(wm, shape));
+            wm_absorb(yetty_yplatform_window_chrome_set_cursor(wm, shape));
             chrome->edge_cursor_on = 1;
         } else if (chrome->edge_cursor_on) {
-            wm_absorb(yetty_yplatform_window_manager_set_cursor(wm, YETTY_YCORE_CURSOR_DEFAULT));
+            wm_absorb(yetty_yplatform_window_chrome_set_cursor(wm, YETTY_YCORE_CURSOR_DEFAULT));
             chrome->edge_cursor_on = 0;
         }
     }
@@ -548,15 +548,15 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_obj
     if (in_caption && event->type == YETTY_YCORE_MOUSE_DOWN) {
         int button = chrome_button_at(chrome, x, y);
         if (button == 1) {
-            wm_absorb(yetty_yplatform_window_manager_iconify(wm));
+            wm_absorb(yetty_yplatform_window_chrome_iconify(wm));
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (button == 2) {
-            wm_absorb(yetty_yplatform_window_manager_toggle_maximize(wm));
+            wm_absorb(yetty_yplatform_window_chrome_toggle_maximize(wm));
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (button == 3) {
-            wm_absorb(yetty_yplatform_window_manager_request_close(wm));
+            wm_absorb(yetty_yplatform_window_chrome_request_close(wm));
             return YETTY_OK(yetty_ycore_int, 1);
         }
     }
@@ -592,7 +592,7 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_obj
     /* --- caption double-click → toggle maximize ------------------------ */
     if ((chrome->flags & YETTY_YCHROME_FLAG_MAXIMIZE) && in_caption &&
         event->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK && event->mouse.button == 0) {
-        wm_absorb(yetty_yplatform_window_manager_toggle_maximize(wm));
+        wm_absorb(yetty_yplatform_window_chrome_toggle_maximize(wm));
         chrome->dragging = 0; /* cancel any drag the preceding press armed */
         return YETTY_OK(yetty_ycore_int, 1);
     }

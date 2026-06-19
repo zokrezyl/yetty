@@ -10,6 +10,9 @@ methods:
         type: "struct yai_app *"
       - name: allowed
         type: int
+    doc: "/* Engines without a permission protocol simply have nothing to answer
+ * — a no-op default, NOT an error: main.c calls this unconditionally
+ * at shutdown to never leave a CLI blocked on an unanswered prompt. */"
     local: true
     return_payload_type: null
   - slot: handle_event
@@ -23,6 +26,7 @@ methods:
         type: "struct yai_app *"
       - name: event
         type: "struct yyjson_val *"
+    doc: null
     local: true
     return_payload_type: null
   - slot: send_user_message
@@ -36,6 +40,7 @@ methods:
         type: "struct yai_app *"
       - name: text
         type: "const char *"
+    doc: null
     local: true
     return_payload_type: null
   - slot: interrupt
@@ -47,6 +52,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: app
         type: "struct yai_app *"
+    doc: null
     local: true
     return_payload_type: null
   - slot: start
@@ -58,6 +64,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: app
         type: "struct yai_app *"
+    doc: null
     local: true
     return_payload_type: null
   - slot: describe_config
@@ -73,6 +80,12 @@ methods:
         type: "char *"
       - name: out_size
         type: size_t
+    doc: "/* describe_config: write the engine-specific configuration rows
+ * (model, sandbox/permission knobs, resume token semantics) into
+ * `out` as newline-separated \"key: value  [ENV_KNOB]\" lines. The
+ * caller presents them — as labels in the ygui config dialog when the
+ * HUD is up, or as scrollback text without one. Errors on truncation.
+ * Default: an engine with no knobs writes an empty string. */"
     local: true
     return_payload_type: null
   - slot: config_knob
@@ -88,6 +101,10 @@ methods:
         type: "char *"
       - name: out_size
         type: size_t
+    doc: "/* config_knob: the engine's ONE editable knob for the config dialog,
+ * as `ENV_KEY|label|option1,option2,…|current-value`. The dialog
+ * renders it as a radio group; a selection lands back in apply_config.
+ * Default: no knob (empty string). */"
     local: true
     return_payload_type: null
   - slot: apply_config
@@ -103,6 +120,13 @@ methods:
         type: "const char *"
       - name: value
         type: "const char *"
+    doc: "/* apply_config: a knob edited in the config dialog. `key` is the engine
+ * field name from config_knob, `value` the chosen option. The value is
+ * already stored in app->config by the caller (yai_config_set); the per-turn
+ * engines read that struct on every spawn, so the change takes effect on the
+ * next turn. The base default therefore does nothing. Engines with a live
+ * protocol override this (claude pushes the new permission mode into the
+ * running session immediately). */"
     local: true
     return_payload_type: null
   - slot: on_child_exit
@@ -116,6 +140,7 @@ methods:
         type: "struct yai_app *"
       - name: exit_status
         type: int64_t
+    doc: null
     local: true
     return_payload_type: null
   - slot: on_child_eof
@@ -127,6 +152,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: app
         type: "struct yai_app *"
+    doc: null
     local: true
     return_payload_type: null
   - slot: feed_byte
@@ -140,6 +166,7 @@ methods:
         type: "struct yai_app *"
       - name: byte
         type: int
+    doc: null
     local: true
     return_payload_type: int
 classes:
@@ -197,6 +224,8 @@ classes:
       - slot: on_child_eof
         slot_domain: yai
         impl: claude_on_child_eof
+    doc: "/* Engine-private state: the tool_use_id -> tool name ring (to label
+ * results) and the interrupt request counter. */"
   - name: codex
     domain: yai
     accessor: yetty_yai_codex_class_get
@@ -228,6 +257,7 @@ classes:
       - slot: handle_event
         slot_domain: yai
         impl: codex_handle_event
+    doc: null
   - name: emacs
     domain: yai
     accessor: yetty_yai_emacs_class_get
@@ -247,6 +277,7 @@ classes:
       - slot: feed_byte
         slot_domain: yai
         impl: emacs_feed_byte
+    doc: null
   - name: vi
     domain: yai
     accessor: yetty_yai_vi_class_get
@@ -286,6 +317,7 @@ classes:
       - slot: feed_byte
         slot_domain: yai
         impl: vi_feed_byte
+    doc: null
   - name: editor
     domain: yai
     accessor: yetty_yai_editor_class_get
@@ -303,6 +335,9 @@ classes:
       - slot: feed_byte
         slot_domain: yai
         impl: editor_feed_byte
+    doc: "/* The class@ annotation needs a struct to sit on; the base carries no
+ * per-instance state (the line buffer is in struct yai_app, mode scratch
+ * is in the subclass). */"
   - name: engine
     domain: yai
     accessor: yetty_yai_engine_class_get
@@ -347,6 +382,10 @@ classes:
       - slot: resolve_permission
         slot_domain: yai
         impl: engine_resolve_permission
+    doc: "/* The class@ annotation needs a struct to sit on; the engine carries
+ * no instance state of its own (per-engine state lives in the subclass
+ * data structs, shared turn state in struct yai_app). The struct's
+ * size contributes 1 byte to the instance layout, which is harmless. */"
   - name: gemini
     domain: yai
     accessor: yetty_yai_gemini_class_get
@@ -378,6 +417,7 @@ classes:
       - slot: handle_event
         slot_domain: yai
         impl: gemini_handle_event
+    doc: null
   - name: turn_engine
     domain: yai
     accessor: yetty_yai_turn_engine_class_get
@@ -403,6 +443,7 @@ classes:
       - slot: interrupt
         slot_domain: yai
         impl: turn_engine_interrupt
+    doc: null
 types:
   - name: yai_tool_name_entry
     kind: struct

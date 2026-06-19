@@ -37,7 +37,6 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ynet/lwip-port.c
     ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/brotli-glue.c
-    ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
 )
 
@@ -255,9 +254,9 @@ set_target_properties(ygreeter PROPERTIES
     LINK_DEPENDS ${YETTY_ROOT}/build-tools/web/yetty-assets-preload.js)
 
 # Standalone ygreeter's lib set (mirrors tools/ygreeter/CMakeLists.txt's
-# webgpu link line). move_resize / window_manager are desktop-only — on
-# webasm the window_manager symbols resolve via stubs in
-# yetty_yplatform_core (window_manager is NULL, the stubs early-return).
+# webgpu link line). move_resize / window_chrome are desktop-only — on
+# webasm the window_chrome symbols resolve via stubs in
+# yetty_yplatform_core (window_chrome is NULL, the stubs early-return).
 target_link_libraries(ygreeter PRIVATE
     yetty_ygui
     yetty_ywire

@@ -50,7 +50,6 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
     ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
     ${YETTY_ROOT}/src/yetty/ypty/temu-pty.c
 )
@@ -371,8 +370,8 @@ if(NOT MSVC)
 endif()
 
 # Showcase lib set — mirrors the desktop tools/yhello/CMakeLists.txt link line
-# (minus the GLFW-only yetty_yplatform_move_resize / _window_manager, whose
-# window_manager stubs resolve via yetty_yplatform_core on Android) + the
+# (minus the GLFW-only yetty_yplatform_move_resize / _window_chrome, whose
+# window_chrome stubs resolve via yetty_yplatform_core on Android) + the
 # Android app glue libs (native_app_glue whole-archived so
 # ANativeActivity_onCreate is retained; android + log for the NDK).
 target_link_libraries(yhello PRIVATE

@@ -94,7 +94,7 @@ target_link_libraries(yhello PRIVATE
     yetty_yplot
     ${YETTY_LIBS}
     yetty_yplatform_move_resize
-    yetty_yplatform_window_manager
+    yetty_yplatform_window_chrome
     ${FONTCONFIG_LIBRARIES}
 )
 if(NOT WIN32)

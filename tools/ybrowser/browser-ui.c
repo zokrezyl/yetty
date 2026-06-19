@@ -1637,7 +1637,6 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yinit/yinit.h>
-#include <yetty/yplatform/extract-assets.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ywire/wire-statemachine.h>
@@ -2097,7 +2096,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yinit_runtime *rt, 
     /* Window chrome: draggable/resizable titlebar + min/max/close. */
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
-            s->root_container, s->font, &ctx, s->yframework->window_manager,
+            s->root_container, s->font, &ctx, s->yframework->window_chrome,
             (float)rt->surface_width, (float)rt->surface_height, 36.0f, 8.0f,
             YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
@@ -2268,9 +2267,8 @@ int ybrowser_ui_run_standalone(const char *initial_url, float font_size, int no_
     s.app.font_size = font_size > 0.0f ? font_size : 16.0f;
     s.app.no_ui = no_ui;
     s.initial_url = initial_url;
-    struct yetty_yinit_app_config cfg = {.extract_assets_fn = yetty_platform_extract_assets};
     yetty_ylexbor_prof("=== standalone entry (yinit: window+surface+GPU adapter next) ===");
-    struct yetty_ycore_int_result run_result = yetty_yinit_run(argc, argv, &cfg, sa_worker, &s);
+    struct yetty_ycore_int_result run_result = yetty_yinit_run(argc, argv, sa_worker, &s);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "ybrowser: run", run_result.error);
         yetty_ycore_error_destroy(run_result.error);

@@ -59,13 +59,14 @@ struct yetty_yinit_runtime {
 
     /* Event pipes.
      *   platform_input_pipe — main thread (OS events) → worker thread
-     *   output_pipe         — worker thread → main thread (clipboard,
-     *                         window manager); NULL if not requested */
+     *   output_pipe         — legacy shared render → main bus; NULL now that the
+     *                         clipboard and window-chrome each own their own bus */
     struct yetty_ycore_xthread_event_pipe *platform_input_pipe;
     struct yetty_ycore_xthread_event_pipe *output_pipe;
-    struct yetty_platform_clipboard_manager *clipboard_manager;
-    /* yplatform:window_manager yclass object (or NULL). Borrowed. */
-    struct yetty_yclass_object *window_manager;
+    /* yplatform:clipboard yclass object (or NULL in headless). Borrowed. */
+    struct yetty_yclass_object *clipboard;
+    /* yplatform:window_chrome yclass object (or NULL). Borrowed. */
+    struct yetty_yclass_object *window_chrome;
 };
 
 /* Worker function — runs on a dedicated thread (or on the main thread
@@ -76,30 +77,13 @@ struct yetty_yinit_runtime {
 typedef struct yetty_ycore_void_result (*yetty_yinit_worker_fn)(struct yetty_yinit_runtime *rt,
                                                                 void *user);
 
-/* Per-app bootstrap knobs.
- *
- *   extract_assets_fn — optional callback invoked early in the
- *     bootstrap (after paths are set up, before yconfig). yetty passes
- *     yetty_platform_extract_assets here, which unpacks the brotli-
- *     compressed shaders/fonts/configs bundled in its binary. A
- *     standalone app with no bundled assets leaves this NULL — yinit
- *     then doesn't reference the symbol, so brotli/yncbin don't need
- *     to be linked.
- */
-struct yetty_yinit_app_config {
-    struct yetty_ycore_void_result (*extract_assets_fn)(void);
-};
-
 /* The standard entry point for platforms with an int main(argc,argv):
  *   glfw desktop (linux/macos/windows), webasm.
- *
- * `app_cfg` may be NULL — defaults are: extract_yetty_assets=false.
  *
  * On success the Result's value is the process exit code (the worker's
  * own exit status). Bootstrap failures (config, window, GPU, …) are
  * surfaced as an error Result with the cause chain attached. */
 struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
-                                              const struct yetty_yinit_app_config *app_cfg,
                                               yetty_yinit_worker_fn worker, void *user);
 
 #ifdef __cplusplus

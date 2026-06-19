@@ -85,6 +85,11 @@ set(YGUI_SOURCES
     theme.c
     ${YGUI_ANNOTATED}
     rpc.gen.c
+    # Per-submodule registration units; the root rpc.gen.c chains their
+    # yetty_ygui_<submodule>_register() so yetty_ygui_register() still
+    # registers every class in the module.
+    widgets/rpc.gen.c
+    mixins/rpc.gen.c
 )
 
 add_library(yetty_ygui STATIC ${YGUI_SOURCES})

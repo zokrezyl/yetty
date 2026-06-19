@@ -1,141 +1,611 @@
 methods:
-  - slot: window_manager_configure
+  - slot: clipboard_set_text
     domain: yplatform
-    owning_class: window_manager
+    owning_class: clipboard
     return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-      - name: os_window
-        type: "void *"
-      - name: output_pipe
-        type: "struct yetty_ycore_xthread_event_pipe *"
-      - name: input_pipe
-        type: "struct yetty_ycore_xthread_event_pipe *"
+      - name: text
+        type: "const char *"
+      - name: len
+        type: size_t
+    doc: null
     local: true
     return_payload_type: null
-  - slot: window_manager_destroy
+  - slot: clipboard_request_paste
     domain: yplatform
-    owning_class: window_manager
+    owning_class: clipboard
     return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: null
     local: true
     return_payload_type: null
-  - slot: window_manager_iconify
+  - slot: clipboard_drain
     domain: yplatform
-    owning_class: window_manager
+    owning_class: clipboard
     return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: null
     local: true
     return_payload_type: null
-  - slot: window_manager_toggle_maximize
+  - slot: platform_init
     domain: yplatform
-    owning_class: window_manager
+    owning_class: platform
     return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-    local: true
-    return_payload_type: null
-  - slot: window_manager_request_close
-    domain: yplatform
-    owning_class: window_manager
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
+      - name: app
         type: "struct yetty_yclass_object *"
-    local: true
-    return_payload_type: null
-  - slot: window_manager_drag_by
-    domain: yplatform
-    owning_class: window_manager
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: dx
+      - name: argc
         type: int
-      - name: dy
-        type: int
+      - name: argv
+        type: "char **"
+    doc: null
     local: true
     return_payload_type: null
-  - slot: window_manager_resize_by
+  - slot: platform_run
     domain: yplatform
-    owning_class: window_manager
+    owning_class: platform
     return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-      - name: dx
+      - name: app
+        type: "struct yetty_yclass_object *"
+      - name: argc
         type: int
-      - name: dy
-        type: int
-      - name: edge
-        type: int
+      - name: argv
+        type: "char **"
+    doc: null
     local: true
     return_payload_type: null
-  - slot: window_manager_begin_interactive_move
+  - slot: window_chrome_destroy
     domain: yplatform
-    owning_class: window_manager
+    owning_class: window_chrome
     return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* clang-format on */"
     local: true
     return_payload_type: null
-  - slot: window_manager_begin_interactive_resize
+  - slot: window_chrome_handle_event
     domain: yplatform
-    owning_class: window_manager
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: edge
-        type: int
-    local: true
-    return_payload_type: null
-  - slot: window_manager_set_cursor
-    domain: yplatform
-    owning_class: window_manager
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: shape
-        type: int
-    local: true
-    return_payload_type: null
-  - slot: window_manager_handle_event
-    domain: yplatform
-    owning_class: window_manager
+    owning_class: window_chrome
     return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: event
         type: "const struct yetty_yui_event *"
+    doc: "/* clang-format on */"
     local: true
     return_payload_type: null
-classes:
-  - name: window_manager
+  - slot: window_chrome_configure
     domain: yplatform
-    accessor: yetty_yplatform_window_manager_class_get
+    owning_class: window_chrome
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: output_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+    doc: "/* clang-format on */"
+    local: true
+    return_payload_type: null
+  - slot: window_chrome_iconify
+    domain: yplatform
+    owning_class: window_chrome
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* clang-format on */"
+    local: true
+    return_payload_type: null
+  - slot: window_chrome_toggle_maximize
+    domain: yplatform
+    owning_class: window_chrome
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* clang-format on */"
+    local: true
+    return_payload_type: null
+  - slot: window_chrome_request_close
+    domain: yplatform
+    owning_class: window_chrome
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* clang-format on */"
+    local: true
+    return_payload_type: null
+  - slot: window_chrome_drag_by
+    domain: yplatform
+    owning_class: window_chrome
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: dx
+        type: int
+      - name: dy
+        type: int
+    doc: "/* clang-format on */"
+    local: true
+    return_payload_type: null
+  - slot: window_chrome_resize_by
+    domain: yplatform
+    owning_class: window_chrome
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: dx
+        type: int
+      - name: dy
+        type: int
+      - name: edge
+        type: int
+    doc: "/* clang-format on */"
+    local: true
+    return_payload_type: null
+  - slot: window_chrome_begin_interactive_move
+    domain: yplatform
+    owning_class: window_chrome
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* clang-format on */"
+    local: true
+    return_payload_type: null
+  - slot: window_chrome_begin_interactive_resize
+    domain: yplatform
+    owning_class: window_chrome
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: edge
+        type: int
+    doc: "/* clang-format on */"
+    local: true
+    return_payload_type: null
+  - slot: window_chrome_set_cursor
+    domain: yplatform
+    owning_class: window_chrome
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: shape
+        type: int
+    doc: "/* clang-format on */"
+    local: true
+    return_payload_type: null
+  - slot: window_open
+    domain: yplatform
+    owning_class: window
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: width
+        type: int
+      - name: height
+        type: int
+      - name: title
+        type: "const char *"
+    doc: null
+    local: true
+    return_payload_type: null
+  - slot: window_get_size
+    domain: yplatform
+    owning_class: window
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: width
+        type: "int *"
+      - name: height
+        type: "int *"
+    doc: null
+    local: true
+    return_payload_type: null
+  - slot: window_get_framebuffer_size
+    domain: yplatform
+    owning_class: window
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: width
+        type: "int *"
+      - name: height
+        type: "int *"
+    doc: null
+    local: true
+    return_payload_type: null
+  - slot: window_get_content_scale
+    domain: yplatform
+    owning_class: window
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: xscale
+        type: "float *"
+      - name: yscale
+        type: "float *"
+    doc: null
+    local: true
+    return_payload_type: null
+  - slot: window_should_close
+    domain: yplatform
+    owning_class: window
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: true
+    return_payload_type: int
+  - slot: window_set_title
+    domain: yplatform
+    owning_class: window
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: title
+        type: "const char *"
+    doc: null
+    local: true
+    return_payload_type: null
+  - slot: window_destroy
+    domain: yplatform
+    owning_class: window
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: true
+    return_payload_type: null
+  - slot: window_create_surface
+    domain: yplatform
+    owning_class: window
+    return_type: struct yetty_yclass_void_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: instance
+        type: "void *"
+    doc: "/* Create the WebGPU surface for this window. `instance` is a WGPUInstance and
+ * the result value is a WGPUSurface — both passed as void* so this abstraction
+ * stays free of <webgpu/webgpu.h>; the subclass casts. The native handle stays
+ * private to the subclass. */"
+    local: true
+    return_payload_type: "void *"
+classes:
+  - name: android_clipboard
+    domain: yplatform
+    accessor: yetty_yplatform_android_clipboard_class_get
     type: regular
-    source_file: src/yetty/yplatform/window-manager.c
+    source_file: src/yetty/yplatform/yclipboard/android.c
+    parent:
+      domain: yplatform
+      name: clipboard
+    mixins: []
+    data: struct yetty_yplatform_android_clipboard
+    data_fields:
+      - name: response_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+        get: false
+        set: false
+    ops:
+      - slot: clipboard_set_text
+        slot_domain: yplatform
+        impl: android_clipboard_set_text
+      - slot: clipboard_request_paste
+        slot_domain: yplatform
+        impl: android_clipboard_request_paste
+    doc: "/* Private subclass state: the pipe paste results are posted to (borrowed). */"
+    platform: android
+  - name: clipboard
+    domain: yplatform
+    accessor: yetty_yplatform_clipboard_class_get
+    type: regular
+    source_file: src/yetty/yplatform/yclipboard/clipboard.c
     parent: null
     mixins: []
-    data: struct yetty_yplatform_window_manager
+    data: struct yetty_yplatform_clipboard
     data_fields:
+      - name: reserved
+        type: char
+        get: false
+        set: false
+    ops:
+      - slot: clipboard_set_text
+        slot_domain: yplatform
+        impl: clipboard_default_set_text
+      - slot: clipboard_request_paste
+        slot_domain: yplatform
+        impl: clipboard_default_request_paste
+      - slot: clipboard_drain
+        slot_domain: yplatform
+        impl: clipboard_default_drain
+    doc: "/* Base clipboard data slice. Abstract — holds no shared state; each subclass
+ * keeps its own pipes (response channel, and on GLFW the marshalling bus). */"
+  - name: glfw_clipboard
+    domain: yplatform
+    accessor: yetty_yplatform_glfw_clipboard_class_get
+    type: regular
+    source_file: src/yetty/yplatform/yclipboard/glfw.c
+    parent:
+      domain: yplatform
+      name: clipboard
+    mixins: []
+    data: struct yetty_yplatform_glfw_clipboard
+    data_fields:
+      - name: output_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+        get: false
+        set: false
+      - name: input_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+        get: false
+        set: false
+    ops:
+      - slot: clipboard_set_text
+        slot_domain: yplatform
+        impl: glfw_clipboard_set_text
+      - slot: clipboard_request_paste
+        slot_domain: yplatform
+        impl: glfw_clipboard_request_paste
+      - slot: clipboard_drain
+        slot_domain: yplatform
+        impl: glfw_clipboard_drain
+    doc: "/* Private subclass state: the cross-thread pipes, borrowed (owned by caller). */"
+    platform: glfw
+  - name: ios_clipboard
+    domain: yplatform
+    accessor: yetty_yplatform_ios_clipboard_class_get
+    type: regular
+    source_file: src/yetty/yplatform/yclipboard/ios-tvos.c
+    parent:
+      domain: yplatform
+      name: clipboard
+    mixins: []
+    data: struct yetty_yplatform_ios_clipboard
+    data_fields:
+      - name: response_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+        get: false
+        set: false
+    ops:
+      - slot: clipboard_set_text
+        slot_domain: yplatform
+        impl: ios_clipboard_set_text
+      - slot: clipboard_request_paste
+        slot_domain: yplatform
+        impl: ios_clipboard_request_paste
+    doc: "/* Private subclass state: the pipe paste results are posted to (borrowed). */"
+    platform: ios
+  - name: webasm_clipboard
+    domain: yplatform
+    accessor: yetty_yplatform_webasm_clipboard_class_get
+    type: regular
+    source_file: src/yetty/yplatform/yclipboard/webasm.c
+    parent:
+      domain: yplatform
+      name: clipboard
+    mixins: []
+    data: struct yetty_yplatform_webasm_clipboard
+    data_fields:
+      - name: response_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+        get: false
+        set: false
+    ops:
+      - slot: clipboard_set_text
+        slot_domain: yplatform
+        impl: webasm_clipboard_set_text
+      - slot: clipboard_request_paste
+        slot_domain: yplatform
+        impl: webasm_clipboard_request_paste
+    doc: "/* Private subclass state: the pipe paste results are posted to (borrowed). */"
+    platform: webasm
+  - name: android_platform
+    domain: yplatform
+    accessor: yetty_yplatform_android_platform_class_get
+    type: regular
+    source_file: src/yetty/yplatform/yplatform/android.c
+    parent:
+      domain: yplatform
+      name: platform
+    mixins: []
+    data: struct yetty_yplatform_android_platform
+    data_fields:
+      - name: config
+        type: "struct yetty_yconfig_config *"
+        get: false
+        set: false
       - name: window
-        type: "GLFWwindow *"
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: clipboard
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: input_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
         get: false
         set: false
       - name: output_pipe
         type: "struct yetty_ycore_xthread_event_pipe *"
+        get: false
+        set: false
+    ops:
+      - slot: platform_init
+        slot_domain: yplatform
+        impl: android_platform_init
+      - slot: platform_run
+        slot_domain: yplatform
+        impl: android_platform_run
+    doc: null
+    platform: android
+  - name: glfw_platform
+    domain: yplatform
+    accessor: yetty_yplatform_glfw_platform_class_get
+    type: regular
+    source_file: src/yetty/yplatform/yplatform/glfw.c
+    parent:
+      domain: yplatform
+      name: platform
+    mixins: []
+    data: struct yetty_yplatform_glfw_platform
+    data_fields:
+      - name: reserved
+        type: char
+        get: false
+        set: false
+    ops:
+      - slot: platform_init
+        slot_domain: yplatform
+        impl: glfw_platform_init
+      - slot: platform_run
+        slot_domain: yplatform
+        impl: glfw_platform_run
+    doc: "/* No per-instance state: the bootstrap below owns the window / surface / pipes /
+ * runtime for the duration of run(). */"
+    platform: glfw
+  - name: ios_platform
+    domain: yplatform
+    accessor: yetty_yplatform_ios_platform_class_get
+    type: regular
+    source_file: src/yetty/yplatform/yplatform/ios-tvos.c
+    parent:
+      domain: yplatform
+      name: platform
+    mixins: []
+    data: struct yetty_yplatform_ios_platform
+    data_fields:
+      - name: config
+        type: "struct yetty_yconfig_config *"
+        get: false
+        set: false
+      - name: window
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: clipboard
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: input_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+        get: false
+        set: false
+      - name: output_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+        get: false
+        set: false
+    ops:
+      - slot: platform_init
+        slot_domain: yplatform
+        impl: ios_platform_init
+      - slot: platform_run
+        slot_domain: yplatform
+        impl: ios_platform_run
+    doc: null
+    platform: ios
+  - name: platform
+    domain: yplatform
+    accessor: yetty_yplatform_platform_class_get
+    type: regular
+    source_file: src/yetty/yplatform/yplatform/platform.c
+    parent: null
+    mixins: []
+    data: struct yetty_yplatform_platform
+    data_fields:
+      - name: reserved
+        type: char
+        get: false
+        set: false
+    ops:
+      - slot: platform_init
+        slot_domain: yplatform
+        impl: platform_default_init
+      - slot: platform_run
+        slot_domain: yplatform
+        impl: platform_default_run
+    doc: "/* Abstract base — owns no state; each subclass holds its own privately. */"
+  - name: webasm_platform
+    domain: yplatform
+    accessor: yetty_yplatform_webasm_platform_class_get
+    type: regular
+    source_file: src/yetty/yplatform/yplatform/webasm.c
+    parent:
+      domain: yplatform
+      name: platform
+    mixins: []
+    data: struct yetty_yplatform_webasm_platform
+    data_fields:
+      - name: config
+        type: "struct yetty_yconfig_config *"
+        get: false
+        set: false
+      - name: window
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: clipboard
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: input_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+        get: false
+        set: false
+      - name: output_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+        get: false
+        set: false
+    ops:
+      - slot: platform_init
+        slot_domain: yplatform
+        impl: webasm_platform_init
+      - slot: platform_run
+        slot_domain: yplatform
+        impl: webasm_platform_run
+    doc: null
+    platform: webasm
+  - name: glfw_window_chrome
+    domain: yplatform
+    accessor: yetty_yplatform_glfw_window_chrome_class_get
+    type: regular
+    source_file: src/yetty/yplatform/ywindow-chrome/glfw.c
+    parent:
+      domain: yplatform
+      name: window_chrome
+    mixins: []
+    data: struct yetty_yplatform_glfw_window_chrome
+    data_fields:
+      - name: window
+        type: "GLFWwindow *"
         get: false
         set: false
       - name: input_pipe
@@ -171,39 +641,351 @@ classes:
         get: false
         set: false
     ops:
-      - slot: window_manager_configure
+      - slot: window_chrome_destroy
         slot_domain: yplatform
-        impl: window_manager_configure
-      - slot: window_manager_destroy
+        impl: glfw_window_chrome_destroy
+      - slot: window_chrome_handle_event
         slot_domain: yplatform
-        impl: window_manager_destroy
-      - slot: window_manager_iconify
+        impl: glfw_window_chrome_handle_event
+    doc: "/* Private subclass state. */"
+    platform: glfw
+  - name: window_chrome
+    domain: yplatform
+    accessor: yetty_yplatform_window_chrome_class_get
+    type: regular
+    source_file: src/yetty/yplatform/ywindow-chrome/window-chrome.c
+    parent: null
+    mixins: []
+    data: struct yetty_yplatform_window_chrome
+    data_fields:
+      - name: output_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+        get: false
+        set: false
+    ops:
+      - slot: window_chrome_configure
         slot_domain: yplatform
-        impl: window_manager_iconify
-      - slot: window_manager_toggle_maximize
+        impl: window_chrome_configure
+      - slot: window_chrome_destroy
         slot_domain: yplatform
-        impl: window_manager_toggle_maximize
-      - slot: window_manager_request_close
+        impl: window_chrome_destroy
+      - slot: window_chrome_iconify
         slot_domain: yplatform
-        impl: window_manager_request_close
-      - slot: window_manager_drag_by
+        impl: window_chrome_iconify
+      - slot: window_chrome_toggle_maximize
         slot_domain: yplatform
-        impl: window_manager_drag_by
-      - slot: window_manager_resize_by
+        impl: window_chrome_toggle_maximize
+      - slot: window_chrome_request_close
         slot_domain: yplatform
-        impl: window_manager_resize_by
-      - slot: window_manager_begin_interactive_move
+        impl: window_chrome_request_close
+      - slot: window_chrome_drag_by
         slot_domain: yplatform
-        impl: window_manager_begin_interactive_move
-      - slot: window_manager_begin_interactive_resize
+        impl: window_chrome_drag_by
+      - slot: window_chrome_resize_by
         slot_domain: yplatform
-        impl: window_manager_begin_interactive_resize
-      - slot: window_manager_set_cursor
+        impl: window_chrome_resize_by
+      - slot: window_chrome_begin_interactive_move
         slot_domain: yplatform
-        impl: window_manager_set_cursor
-      - slot: window_manager_handle_event
+        impl: window_chrome_begin_interactive_move
+      - slot: window_chrome_begin_interactive_resize
         slot_domain: yplatform
-        impl: window_manager_handle_event
+        impl: window_chrome_begin_interactive_resize
+      - slot: window_chrome_set_cursor
+        slot_domain: yplatform
+        impl: window_chrome_set_cursor
+      - slot: window_chrome_handle_event
+        slot_domain: yplatform
+        impl: window_chrome_handle_event
+    doc: null
+  - name: android_window
+    domain: yplatform
+    accessor: yetty_yplatform_android_window_class_get
+    type: regular
+    source_file: src/yetty/yplatform/ywindow/android.c
+    parent:
+      domain: yplatform
+      name: window
+    mixins: []
+    data: struct yetty_yplatform_android_window
+    data_fields:
+      - name: framebuffer_width
+        type: int
+        get: false
+        set: false
+      - name: framebuffer_height
+        type: int
+        get: false
+        set: false
+      - name: content_scale
+        type: float
+        get: false
+        set: false
+    ops:
+      - slot: window_open
+        slot_domain: yplatform
+        impl: android_window_open
+      - slot: window_get_size
+        slot_domain: yplatform
+        impl: android_window_get_size
+      - slot: window_get_framebuffer_size
+        slot_domain: yplatform
+        impl: android_window_get_framebuffer_size
+      - slot: window_get_content_scale
+        slot_domain: yplatform
+        impl: android_window_get_content_scale
+      - slot: window_should_close
+        slot_domain: yplatform
+        impl: android_window_should_close
+      - slot: window_set_title
+        slot_domain: yplatform
+        impl: android_window_set_title
+    doc: "/* Cached framebuffer metrics pushed from the NDK glue. */"
+    platform: android
+  - name: glfw_window
+    domain: yplatform
+    accessor: yetty_yplatform_glfw_window_class_get
+    type: regular
+    source_file: src/yetty/yplatform/ywindow/glfw.c
+    parent:
+      domain: yplatform
+      name: window
+    mixins: []
+    data: struct yetty_yplatform_glfw_window
+    data_fields:
+      - name: handle
+        type: "struct GLFWwindow *"
+        get: false
+        set: false
+    ops:
+      - slot: window_open
+        slot_domain: yplatform
+        impl: glfw_window_open
+      - slot: window_destroy
+        slot_domain: yplatform
+        impl: glfw_window_destroy
+      - slot: window_get_size
+        slot_domain: yplatform
+        impl: glfw_window_get_size
+      - slot: window_get_framebuffer_size
+        slot_domain: yplatform
+        impl: glfw_window_get_framebuffer_size
+      - slot: window_get_content_scale
+        slot_domain: yplatform
+        impl: glfw_window_get_content_scale
+      - slot: window_should_close
+        slot_domain: yplatform
+        impl: glfw_window_should_close
+      - slot: window_set_title
+        slot_domain: yplatform
+        impl: glfw_window_set_title
+      - slot: window_create_surface
+        slot_domain: yplatform
+        impl: glfw_window_create_surface
+    doc: "/* Private subclass state: the native GLFW window, owned here. */"
+    platform: glfw
+  - name: ios_window
+    domain: yplatform
+    accessor: yetty_yplatform_ios_window_class_get
+    type: regular
+    source_file: src/yetty/yplatform/ywindow/ios-tvos.c
+    parent:
+      domain: yplatform
+      name: window
+    mixins: []
+    data: struct yetty_yplatform_ios_window
+    data_fields:
+      - name: framebuffer_width
+        type: int
+        get: false
+        set: false
+      - name: framebuffer_height
+        type: int
+        get: false
+        set: false
+      - name: content_scale
+        type: float
+        get: false
+        set: false
+    ops:
+      - slot: window_open
+        slot_domain: yplatform
+        impl: ios_window_open
+      - slot: window_get_size
+        slot_domain: yplatform
+        impl: ios_window_get_size
+      - slot: window_get_framebuffer_size
+        slot_domain: yplatform
+        impl: ios_window_get_framebuffer_size
+      - slot: window_get_content_scale
+        slot_domain: yplatform
+        impl: ios_window_get_content_scale
+      - slot: window_should_close
+        slot_domain: yplatform
+        impl: ios_window_should_close
+      - slot: window_set_title
+        slot_domain: yplatform
+        impl: ios_window_set_title
+    doc: "/* Cached metrics pushed from the UIKit bootstrap. framebuffer_* is in physical
+ * pixels; content_scale is UIScreen.nativeScale. Logical size is derived as
+ * framebuffer / scale. */"
+    platform: ios
+  - name: webasm_window
+    domain: yplatform
+    accessor: yetty_yplatform_webasm_window_class_get
+    type: regular
+    source_file: src/yetty/yplatform/ywindow/webasm.c
+    parent:
+      domain: yplatform
+      name: window
+    mixins: []
+    data: struct yetty_yplatform_webasm_window
+    data_fields:
+      - name: reserved
+        type: char
+        get: false
+        set: false
+    ops:
+      - slot: window_open
+        slot_domain: yplatform
+        impl: webasm_window_open
+      - slot: window_destroy
+        slot_domain: yplatform
+        impl: webasm_window_destroy
+      - slot: window_get_size
+        slot_domain: yplatform
+        impl: webasm_window_get_size
+      - slot: window_get_framebuffer_size
+        slot_domain: yplatform
+        impl: webasm_window_get_framebuffer_size
+      - slot: window_get_content_scale
+        slot_domain: yplatform
+        impl: webasm_window_get_content_scale
+      - slot: window_should_close
+        slot_domain: yplatform
+        impl: webasm_window_should_close
+      - slot: window_set_title
+        slot_domain: yplatform
+        impl: webasm_window_set_title
+    doc: "/* No webasm-specific state — the canvas is global to the emscripten runtime. */"
+    platform: webasm
+  - name: window
+    domain: yplatform
+    accessor: yetty_yplatform_window_class_get
+    type: regular
+    source_file: src/yetty/yplatform/ywindow/window.c
+    parent: null
+    mixins: []
+    data: struct yetty_yplatform_window
+    data_fields:
+      - name: reserved
+        type: char
+        get: false
+        set: false
+    ops:
+      - slot: window_open
+        slot_domain: yplatform
+        impl: window_default_open
+      - slot: window_destroy
+        slot_domain: yplatform
+        impl: window_default_destroy
+      - slot: window_create_surface
+        slot_domain: yplatform
+        impl: window_default_create_surface
+      - slot: window_get_size
+        slot_domain: yplatform
+        impl: window_default_get_size
+      - slot: window_get_framebuffer_size
+        slot_domain: yplatform
+        impl: window_default_get_framebuffer_size
+      - slot: window_get_content_scale
+        slot_domain: yplatform
+        impl: window_default_get_content_scale
+      - slot: window_should_close
+        slot_domain: yplatform
+        impl: window_default_should_close
+      - slot: window_set_title
+        slot_domain: yplatform
+        impl: window_default_set_title
+    doc: "/* Base window data slice. The base is abstract — it owns no state (the native
+ * handle, if any, is private to each subclass), so this slice is empty. */"
+exposed:
+  - source_file: src/yetty/yplatform/yclipboard/android.c
+    name: yetty_yplatform_android_clipboard_configure
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: response_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+    doc: null
+  - source_file: src/yetty/yplatform/yclipboard/glfw.c
+    name: yetty_yplatform_glfw_clipboard_configure
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: output_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+      - name: input_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+    doc: "/* Bind the render→main marshalling bus and the main→render response pipe. Both
+ * are borrowed. Call once after create(), before any other slot. */"
+  - source_file: src/yetty/yplatform/yclipboard/ios-tvos.c
+    name: yetty_yplatform_ios_clipboard_configure
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: response_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+    doc: "/* Bind the pipe that paste results are delivered on. Borrowed. */"
+  - source_file: src/yetty/yplatform/yclipboard/webasm.c
+    name: yetty_yplatform_webasm_clipboard_configure
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: response_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+    doc: "/* Bind the pipe that paste results are delivered on. Borrowed. */"
+  - source_file: src/yetty/yplatform/ywindow-chrome/glfw.c
+    name: yetty_yplatform_glfw_window_chrome_attach
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: os_window
+        type: "void *"
+      - name: input_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+    doc: "/* Bind the native window + main→render response pipe. Call once after create()
+ * and the base window_chrome_configure(). Both borrowed. */"
+  - source_file: src/yetty/yplatform/ywindow/android.c
+    name: yetty_yplatform_android_window_set_metrics
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: framebuffer_width
+        type: int
+      - name: framebuffer_height
+        type: int
+      - name: content_scale
+        type: float
+    doc: "/* Push framebuffer metrics from the NDK glue / resize callback. */"
+  - source_file: src/yetty/yplatform/ywindow/ios-tvos.c
+    name: yetty_yplatform_ios_window_set_metrics
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: framebuffer_width
+        type: int
+      - name: framebuffer_height
+        type: int
+      - name: content_scale
+        type: float
+    doc: "/* Push framebuffer metrics from the UIKit bootstrap / layout-resize callback. */"
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result
@@ -215,6 +997,18 @@ types:
         fields:
           - name: value
             type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_yclass_void_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "void *"
           - name: error
             type: struct yetty_ycore_error
   - name: yetty_ycore_error
@@ -230,6 +1024,18 @@ types:
         type: int
       - name: cause
         type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_ycore_void_result
     kind: result
     fields:
@@ -243,21 +1049,54 @@ types:
           - name: error
             type: struct yetty_ycore_error
 local_types:
-  yetty_yplatform_window_manager: src/yetty/yplatform/window-manager.c
-  yetty_yplatform_window_manager_ptr_result: src/yetty/yplatform/window-manager.c
+  yetty_yplatform_android_clipboard_ptr_result: src/yetty/yplatform/yclipboard/android.c
+  yetty_yplatform_android_clipboard: src/yetty/yplatform/yclipboard/android.c
+  yetty_yplatform_clipboard: src/yetty/yplatform/yclipboard/clipboard.c
+  yetty_yplatform_clipboard_ptr_result: src/yetty/yplatform/yclipboard/clipboard.c
+  yetty_yplatform_glfw_clipboard_ptr_result: src/yetty/yplatform/yclipboard/glfw.c
+  yetty_yplatform_glfw_clipboard: src/yetty/yplatform/yclipboard/glfw.c
+  yetty_yplatform_ios_clipboard_ptr_result: src/yetty/yplatform/yclipboard/ios-tvos.c
+  yetty_yplatform_ios_clipboard: src/yetty/yplatform/yclipboard/ios-tvos.c
+  yetty_yplatform_webasm_clipboard_ptr_result: src/yetty/yplatform/yclipboard/webasm.c
+  yetty_yplatform_webasm_clipboard: src/yetty/yplatform/yclipboard/webasm.c
+  yetty_yplatform_android_platform_ptr_result: src/yetty/yplatform/yplatform/android.c
+  yetty_yplatform_android_platform: src/yetty/yplatform/yplatform/android.c
+  yetty_yplatform_glfw_platform_ptr_result: src/yetty/yplatform/yplatform/glfw.c
+  yetty_yplatform_glfw_platform: src/yetty/yplatform/yplatform/glfw.c
+  glfw_platform_worker_args: src/yetty/yplatform/yplatform/glfw.c
+  yetty_yplatform_ios_platform_ptr_result: src/yetty/yplatform/yplatform/ios-tvos.c
+  yetty_yplatform_ios_platform: src/yetty/yplatform/yplatform/ios-tvos.c
+  yetty_yplatform_platform: src/yetty/yplatform/yplatform/platform.c
+  yetty_yplatform_platform_ptr_result: src/yetty/yplatform/yplatform/platform.c
+  yetty_yplatform_webasm_platform_ptr_result: src/yetty/yplatform/yplatform/webasm.c
+  yetty_yplatform_webasm_platform: src/yetty/yplatform/yplatform/webasm.c
+  yetty_yplatform_glfw_window_chrome_ptr_result: src/yetty/yplatform/ywindow-chrome/glfw.c
+  yetty_yplatform_glfw_window_chrome: src/yetty/yplatform/ywindow-chrome/glfw.c
+  yetty_yplatform_window_chrome: src/yetty/yplatform/ywindow-chrome/window-chrome.c
+  yetty_yplatform_window_chrome_ptr_result: src/yetty/yplatform/ywindow-chrome/window-chrome.c
+  yetty_yplatform_android_window_ptr_result: src/yetty/yplatform/ywindow/android.c
+  yetty_yplatform_android_window: src/yetty/yplatform/ywindow/android.c
+  yetty_yplatform_glfw_window_ptr_result: src/yetty/yplatform/ywindow/glfw.c
+  yetty_yplatform_glfw_window: src/yetty/yplatform/ywindow/glfw.c
+  yetty_yplatform_ios_window_ptr_result: src/yetty/yplatform/ywindow/ios-tvos.c
+  yetty_yplatform_ios_window: src/yetty/yplatform/ywindow/ios-tvos.c
+  yetty_yplatform_webasm_window_ptr_result: src/yetty/yplatform/ywindow/webasm.c
+  yetty_yplatform_webasm_window: src/yetty/yplatform/ywindow/webasm.c
+  yetty_yplatform_window: src/yetty/yplatform/ywindow/window.c
+  yetty_yplatform_window_ptr_result: src/yetty/yplatform/ywindow/window.c
 local_typedefs:
   __int128_t:
-    source_file: src/yetty/yplatform/window-manager.c
+    source_file: src/yetty/yplatform/yclipboard/android.c
     text: typedef __int128 __int128_t;
   __uint128_t:
-    source_file: src/yetty/yplatform/window-manager.c
+    source_file: src/yetty/yplatform/yclipboard/android.c
     text: typedef unsigned __int128 __uint128_t;
   __NSConstantString:
-    source_file: src/yetty/yplatform/window-manager.c
+    source_file: src/yetty/yplatform/yclipboard/android.c
     text: typedef struct __NSConstantString_tag __NSConstantString;
   __builtin_ms_va_list:
-    source_file: src/yetty/yplatform/window-manager.c
+    source_file: src/yetty/yplatform/yclipboard/android.c
     text: "typedef char *__builtin_ms_va_list;"
   __builtin_va_list:
-    source_file: src/yetty/yplatform/window-manager.c
+    source_file: src/yetty/yplatform/yclipboard/android.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"

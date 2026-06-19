@@ -14,6 +14,8 @@ methods:
         type: float
       - name: flags
         type: uint32_t
+    doc: "/* Bind the engine to a window_manager and set the caption/edge geometry. Call
+ * once after create(), before feeding events. window_manager is borrowed. */"
     local: true
     return_payload_type: null
   - slot: set_size
@@ -27,6 +29,8 @@ methods:
         type: float
       - name: height
         type: float
+    doc: "/* Update the window size so the right/bottom edge bands track it. Call on every
+ * resize. */"
     local: true
     return_payload_type: null
   - slot: destroy
@@ -36,6 +40,7 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: null
     local: true
     return_payload_type: null
   - slot: edge_cursor_at
@@ -49,6 +54,7 @@ methods:
         type: float
       - name: y
         type: float
+    doc: null
     local: true
     return_payload_type: int
   - slot: render
@@ -58,6 +64,10 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* Paint the caption strip into a fresh drawable list and return it: a filled
+ * background spanning (width × caption_height) plus the minimize/maximize/close
+ * glyphs flush right. The caller composites the list as a pinned top figure and
+ * destroys it. Uses font_id=-1 (the default font), so no font dependency. */"
     local: true
     return_payload_type: "struct yetty_ydraw_drawable_list *"
   - slot: handle_event
@@ -69,6 +79,9 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: event
         type: "const struct yetty_yui_event *"
+    doc: "/* Feed one mouse event. Returns 1 if chrome claimed it (the app should stop
+ * processing it), 0 if it's not a chrome gesture. Forward events here only
+ * after your own controls (buttons, tabs) had their chance. */"
     local: true
     return_payload_type: int
 classes:
@@ -192,6 +205,7 @@ classes:
       - slot: handle_event
         slot_domain: ychrome
         impl: chrome_handle_event
+    doc: null
 exposed:
   - source_file: src/yetty/ychrome/chrome.c
     type_text: "enum yetty_ychrome_flag {
@@ -200,12 +214,18 @@ exposed:
     YETTY_YCHROME_FLAG_MAXIMIZE = 4,
     YETTY_YCHROME_FLAG_ALL = 7,
 };"
+    doc: "/* Feature flags for configure(). OR them together; FLAG_ALL enables the lot.
+ * Defined here in the owning .c; codegen reproduces the enum into the generated
+ * chrome.h for consumers. */"
   - source_file: src/yetty/ychrome/chrome.c
     name: yetty_ychrome_hover_button
     return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* Current window-control button under the pointer (1=minimize, 2=maximize,
+ * 3=close; 0=none). Hosts poll this after forwarding an event and re-paint the
+ * caption when it changes, so the hover highlight tracks the pointer. */"
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

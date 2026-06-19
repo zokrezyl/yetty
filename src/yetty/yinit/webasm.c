@@ -18,7 +18,6 @@
 #include <yetty/yframework/yframework.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
-#include <yetty/yplatform/extract-assets.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/ynet/netstack.h>
@@ -108,11 +107,8 @@ int main(int argc, char **argv)
      * stream without env wiring on the JS side. */
     //setenv("YTRACE_DEFAULT_ON", "yes", 1);
 
-    struct yetty_yinit_app_config app_cfg = {
-        .extract_assets_fn = yetty_platform_extract_assets,
-    };
     struct yetty_ycore_int_result run_result =
-        yetty_yinit_run(argc, argv, &app_cfg, yetty_webasm_worker, NULL);
+        yetty_yinit_run(argc, argv, yetty_webasm_worker, NULL);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "yetty (webasm) fatal", run_result.error);
         yetty_ycore_error_destroy(run_result.error);

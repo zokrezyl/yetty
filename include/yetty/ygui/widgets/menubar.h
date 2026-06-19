@@ -37,9 +37,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_menubar_create(struct yetty_ycl
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_menubar_add(struct yetty_yclass_object *bar,
-                                                      const char *label,
-                                                      struct yetty_yclass_object *menu);
+struct yetty_ycore_void_result yetty_ygui_menubar_add(struct yetty_yclass_object *bar, const char *label, struct yetty_yclass_object *menu);
 
 #ifdef __cplusplus
 }

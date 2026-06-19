@@ -52,13 +52,21 @@ endif()
 # carry transitive deps (libuv, glfw3webgpu, yetty_telnet) that need
 # the main yetty target's include/link set to resolve.
 set(YETTY_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/yinit/glfw.c
-    ${YETTY_ROOT}/src/yetty/ymain/glfw.c
+    # Platform-object startup: ymain/yplatform/glfw.c is the entry; it drives the
+    # yplatform:glfw_platform yclass (platform.c + glfw.c), whose run() is the
+    # full desktop bootstrap — bringing up the window (ywindow) and clipboard
+    # (yclipboard) abstractions directly, with no legacy yinit/window/clipboard.
+    ${YETTY_ROOT}/src/yetty/yplatform/ymain/glfw.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/platform.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/glfw.c
+    ${YETTY_ROOT}/src/yetty/yetty/app.c
+    ${YETTY_ROOT}/src/yetty/yetty/rpc.gen.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/glfw.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/glfw.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
@@ -66,7 +74,6 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
     ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
 )
 
@@ -164,7 +171,7 @@ target_link_libraries(yetty PRIVATE
     util
     yetty_yplatform_core
     yetty_yplatform_move_resize
-    yetty_yplatform_window_manager
+    yetty_yplatform_window_chrome
 )
 
 # Copy runtime assets to build directory

@@ -1,7 +1,6 @@
 /* glfw-event-loop.c - OS event loop using GLFW */
 
 #include <yetty/yplatform/platform-input-pipe.h>
-#include <yetty/yplatform/clipboard-manager.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/yevent/event.h>
 #include <yetty/ytrace/ytrace.h>
@@ -24,7 +23,7 @@ struct yetty_yplatform_os_event_state {
      *   - on construction (calloc zeroes it),
      *   - immediately after firing a MOUSE_DOUBLE_CLICK, so a third
      *     quick press doesn't fire again, and
-     *   - when the window-manager tells us a render-side WINDOW_DRAG_BY
+     *   - when the window-chrome tells us a render-side WINDOW_DRAG_BY
      *     or WINDOW_RESIZE_BY command just moved/resized the window —
      *     i.e. the press was a drag, not a click). */
     double last_press_sec[8];
@@ -156,7 +155,7 @@ static void mouse_button_callback(GLFWwindow *window, int button, int action, in
     /* Synthesize MOUSE_DOUBLE_CLICK on a PRESS that pairs with the
      * previous PRESS for the same button within the time threshold.
      * Whether the previous press was a "clean click" (vs. a drag) is
-     * authoritatively cleared by the window-manager via
+     * authoritatively cleared by the window-chrome via
      * yetty_yplatform_os_event_invalidate_click_pairing — when the
      * render thread sends back a WINDOW_DRAG_BY / WINDOW_RESIZE_BY
      * command, the main-thread handler runs that AFTER moving the
@@ -166,7 +165,7 @@ static void mouse_button_callback(GLFWwindow *window, int button, int action, in
      * a screen-coord delta isn't computable, and window-relative deltas
      * are misleading during a drag (the window follows the cursor, so
      * the cursor's window-relative position rebounds to the anchor).
-     * The "did a drag happen" signal from the window-manager is enough. */
+     * The "did a drag happen" signal from the window-chrome is enough. */
     if (action == GLFW_PRESS && button >= 0 &&
         (size_t)button < sizeof(st->last_press_sec) / sizeof(st->last_press_sec[0])) {
         double now_sec = yetty_yplatform_ytime_monotonic_sec();
@@ -316,28 +315,10 @@ void yetty_yplatform_setup_window_callbacks(GLFWwindow *window,
     glfwSetWindowRefreshCallback(window, window_refresh_callback);
 }
 
-void yetty_yplatform_run_os_event_loop(GLFWwindow *window, int *running,
-                                       struct yetty_platform_clipboard_manager *cm)
-{
-    while (*running && !glfwWindowShouldClose(window)) {
-        glfwWaitEvents();
-        /* After each event burst, drain anything the render thread has
-         * pushed onto the clipboard pipe. GLFW clipboard calls have to
-         * happen on this thread; the render thread parks requests on
-         * the pipe and wakes us via glfwPostEmptyEvent.
-         *
-         * This function's signature is fixed by GLFW's main-thread driver
-         * idiom (void return, no out-params). Errors from drain are logged
-         * and absorbed at this boundary. */
-        if (cm && cm->ops->drain) {
-            struct yetty_ycore_void_result r = cm->ops->drain(cm);
-            if (YETTY_IS_ERR(r)) {
-                yerror("os_event_loop: clipboard drain failed: %s", r.error.msg);
-                yetty_ycore_error_destroy(r.error);
-            }
-        }
-    }
-}
+/* The main-thread event loop itself (glfwWaitEvents + draining the render→main
+ * buses) lives in the platform bootstrap (yplatform/yplatform/glfw.c), which
+ * knows about the clipboard and window-chrome objects. This module owns only the
+ * GLFW input callbacks and the per-window state they read. */
 
 void yetty_yplatform_teardown_window_callbacks(GLFWwindow *window)
 {

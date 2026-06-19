@@ -15,7 +15,6 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty.h>
-#include <yetty/yplatform/extract-assets.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <fcntl.h>
@@ -156,18 +155,6 @@ static void *render_thread_func(void *arg)
     setenv("YETTY_DATA_DIR", data_dir, 1);
     setenv("YETTY_CONFIG_DIR", config_dir, 1);
 
-    static char shaders_dir[512];
-    static char fonts_dir[512];
-    snprintf(shaders_dir, sizeof(shaders_dir), "%s/shaders", data_dir);
-    snprintf(fonts_dir, sizeof(fonts_dir), "%s/fonts", data_dir);
-
-    struct yetty_yconfig_paths paths = {
-        .shaders_dir = shaders_dir,
-        .fonts_dir = fonts_dir,
-        .runtime_dir = runtime_dir,
-        .bin_dir = NULL
-    };
-
     /* Config — there's no shell command line on iOS / tvOS, so synthesize
      * one. Connect to a telnet server (qemu-on-host or any reachable
      * telnetd). Override at build via -DYETTY_TVOS_TELNET=\"host:port\".
@@ -175,18 +162,12 @@ static void *render_thread_func(void *arg)
 #ifndef YETTY_TVOS_TELNET
 #define YETTY_TVOS_TELNET "127.0.0.1:2423"
 #endif
-    /* Extract embedded assets BEFORE config — first launch needs the
-     * bundled config.yaml on disk for yetty_yconfig_create to read. */
-    ydebug("extracting assets");
-    yetty_platform_extract_assets();
-    ydebug("assets extracted");
-
     ydebug("creating config: --telnet %s", YETTY_TVOS_TELNET);
     char *fake_argv[] = {(char *)"yetty", (char *)"--telnet",
                          (char *)YETTY_TVOS_TELNET, NULL};
     int fake_argc = 3;
     struct yetty_yconfig_result config_result =
-        yetty_yconfig_create(fake_argc, fake_argv, &paths);
+        yetty_yconfig_create(fake_argc, fake_argv);
     if (!YETTY_IS_OK(config_result)) {
         yerror("failed to create config: %s", config_result.error);
         return;

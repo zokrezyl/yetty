@@ -92,8 +92,8 @@ static void control_send(struct yai_control_conn *conn, const uint8_t *bytes, si
 }
 
 /* Pack and send a success response carrying the given msgpack `result`. */
-static void control_respond_ok(struct yai_control_conn *conn, uint32_t msgid,
-                               const uint8_t *result, size_t result_len)
+static void control_respond_ok(struct yai_control_conn *conn, uint32_t msgid, const uint8_t *result,
+                               size_t result_len)
 {
     uint8_t storage[2048];
     struct yetty_yctl_write_buffer wbuf;
@@ -107,7 +107,8 @@ static void control_respond_ok(struct yai_control_conn *conn, uint32_t msgid,
     control_send(conn, wbuf.data, wbuf.len);
 }
 
-static void control_respond_error(struct yai_control_conn *conn, uint32_t msgid, const char *message)
+static void control_respond_error(struct yai_control_conn *conn, uint32_t msgid,
+                                  const char *message)
 {
     uint8_t storage[512];
     struct yetty_yctl_write_buffer wbuf;
@@ -136,7 +137,8 @@ static void control_pack_kv(msgpack_packer *packer, const char *key, const char 
 static void control_method_status(struct yai_control_conn *conn, uint32_t msgid)
 {
     struct yai_app *app = conn->control->app;
-    const char *model = app->config.model[0] ? app->config.model : "default";
+    const char *engine_model = yai_active_engine_config(app)->model;
+    const char *model = engine_model[0] ? engine_model : "default";
     msgpack_sbuffer sbuf;
     msgpack_sbuffer_init(&sbuf);
     msgpack_packer packer;
@@ -433,8 +435,8 @@ static int control_write_all(int fd, const uint8_t *bytes, size_t len)
     return 0;
 }
 
-int yai_control_client_main(const char *host, int port, const char *method,
-                            const char *const *args, int arg_count)
+int yai_control_client_main(const char *host, int port, const char *method, const char *const *args,
+                            int arg_count)
 {
     if (port <= 0 || port > 65535) {
         fprintf(stderr, "yai --connect: port out of range\n");
@@ -458,8 +460,9 @@ int yai_control_client_main(const char *host, int port, const char *method,
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
     if (connect(fd, (const struct sockaddr *)&addr, sizeof(addr)) != 0) {
-        fprintf(stderr, "yai --connect: cannot reach %s:%d (is the other yai started with --rpc?)\n",
-                host, port);
+        fprintf(stderr,
+                "yai --connect: cannot reach %s:%d (is the other yai started with --rpc?)\n", host,
+                port);
         close(fd);
         return 1;
     }

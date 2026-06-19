@@ -29,7 +29,6 @@ set(YAUDIO_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
     ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
     ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
@@ -68,7 +67,7 @@ target_link_libraries(yaudio PRIVATE
     ${YETTY_LIBS}
     yetty_yplatform_core
     yetty_yplatform_move_resize
-    yetty_yplatform_window_manager
+    yetty_yplatform_window_chrome
     yetty_yco
     yetty_telnet
     ${BROTLIDEC_LIBRARIES}

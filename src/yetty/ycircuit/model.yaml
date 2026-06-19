@@ -10,6 +10,9 @@ methods:
         type: float
       - name: flags
         type: uint32_t
+    doc: "/* configure: set the grid pitch in px and render flags. 0 selects the
+ * default. A `grid` directive in the parsed document takes precedence. Call
+ * after create(), before render(). */"
     local: true
     return_payload_type: null
   - slot: parse
@@ -23,6 +26,8 @@ methods:
         type: "const char *"
       - name: len
         type: size_t
+    doc: "/* parse: ingest schematic-DSL text and build the circuit model. Resets the
+ * model and clears any selection. */"
     local: true
     return_payload_type: null
   - slot: clear
@@ -32,6 +37,8 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* clear: drop every element, the title and the selection (configuration is
+ * kept). The programmatic counterpart of parse(\"\"). */"
     local: true
     return_payload_type: null
   - slot: add_component
@@ -53,6 +60,9 @@ methods:
         type: "const char *"
       - name: value
         type: "const char *"
+    doc: "/* add_component: append a component (kind by name: \"resistor\", \"diode\",
+ * \"npn\", ...; rotation in degrees, multiples of 90; name/value may be NULL or
+ * empty). Returns the new element id. */"
     local: true
     return_payload_type: int
   - slot: add_ic
@@ -80,6 +90,9 @@ methods:
         type: "const char *"
       - name: pins_bottom
         type: "const char *"
+    doc: "/* add_ic: append a generic IC body with named pins per side (comma-separated
+ * lists like \"GND,TRIG,OUT\"; NULL or empty = no pins on that side). The body
+ * grows to fit the longest side. Returns the new element id. */"
     local: true
     return_payload_type: int
   - slot: add_wire
@@ -97,6 +110,7 @@ methods:
         type: float
       - name: y1
         type: float
+    doc: "/* add_wire: append one straight wire segment. Returns the new element id. */"
     local: true
     return_payload_type: int
   - slot: add_junction
@@ -110,6 +124,7 @@ methods:
         type: float
       - name: y
         type: float
+    doc: "/* add_junction: append a connection dot. Returns the new element id. */"
     local: true
     return_payload_type: int
   - slot: add_label
@@ -125,6 +140,8 @@ methods:
         type: float
       - name: text
         type: "const char *"
+    doc: "/* add_label: append a free text label anchored at (x,y). Returns the new
+ * element id. */"
     local: true
     return_payload_type: int
   - slot: render
@@ -134,6 +151,8 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* render: lay out the circuit and emit it as a fresh ydraw drawable list
+ * (caller owns it). Pointer return -> local-only. */"
     local: true
     return_payload_type: "struct yetty_ydraw_drawable_list *"
   - slot: hit_test
@@ -147,6 +166,9 @@ methods:
         type: float
       - name: y
         type: float
+    doc: "/* hit_test: id of the element whose bounding box contains content (x,y), or
+ * YETTY_YCIRCUIT_NO_ELEMENT. Requires a prior render() for the layout. On
+ * overlap the most recently added element wins (it draws on top). */"
     local: true
     return_payload_type: int
   - slot: set_highlight
@@ -158,6 +180,8 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: element_id
         type: int32_t
+    doc: "/* set_highlight: mark an element as selected (-1 clears) for the next
+ * render. */"
     local: true
     return_payload_type: null
   - slot: destroy
@@ -167,6 +191,7 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* destroy: free the circuit model and the object. */"
     local: true
     return_payload_type: null
 classes:
@@ -256,12 +281,15 @@ classes:
       - slot: destroy
         slot_domain: ycircuit
         impl: circuit_obj_destroy
+    doc: null
 exposed:
   - source_file: src/yetty/ycircuit/circuit.c
     type_text: "enum yetty_ycircuit_constant {
     YETTY_YCIRCUIT_NO_ELEMENT = -1,
     YETTY_YCIRCUIT_FLAG_NONE = 0,
 };"
+    doc: "/* Public constants. Defined here in the owning .c; codegen reproduces the
+ * enum into the generated circuit.h for consumers. */"
   - source_file: src/yetty/ycircuit/circuit.c
     name: yetty_ycircuit_emit_osc
     return_type: struct yetty_ycore_void_result
@@ -270,6 +298,7 @@ exposed:
         type: "const struct yetty_ydraw_drawable_list *"
       - name: fd
         type: int
+    doc: null
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

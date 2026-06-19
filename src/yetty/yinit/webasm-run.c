@@ -461,7 +461,6 @@ static void setup_input_callbacks(struct yetty_ycore_xthread_event_pipe *pipe)
  *===========================================================================*/
 
 struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
-                                              const struct yetty_yinit_app_config *app_cfg,
                                               yetty_yinit_worker_fn worker, void *user)
 {
     if (!worker) {
@@ -469,17 +468,6 @@ struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
     }
 
     ydebug("yinit_run: WebASM starting");
-
-    /* Platform paths (MEMFS). The app's extract_assets_fn decompresses
-     * incbin'd brotli blobs into /data/{shaders,fonts,...} and /config/
-     * at startup; runtime then reads them as ordinary files. Same model
-     * as desktop, where the data dir lives on the user's disk. */
-    struct yetty_yconfig_paths paths;
-    paths.shaders_dir = "/data/shaders";
-    paths.fonts_dir = "/data/fonts";
-    paths.runtime_dir = "/tmp";
-    paths.bin_dir = NULL;
-    paths.config_dir = "/config";
 
     /* Export platform paths as YETTY_* env vars so config files
      * (e.g. tinyemu .cfg) can reference them via $YETTY_DATA_DIR etc.
@@ -490,19 +478,8 @@ struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
     setenv("YETTY_DATA_DIR", "/data", 1);
     setenv("YETTY_CONFIG_DIR", "/config", 1);
 
-    /* Extract incbin'd assets into MEMFS BEFORE config. Always "first
-     * time" on web — MEMFS is fresh per page load. Apps with no bundled
-     * assets pass a NULL extract_assets_fn. */
-    if (app_cfg && app_cfg->extract_assets_fn) {
-        struct yetty_ycore_void_result extract_result = app_cfg->extract_assets_fn();
-        if (!YETTY_IS_OK(extract_result)) {
-            return YETTY_ERR(yetty_ycore_int, "yinit_run: asset extraction failed", extract_result);
-        }
-        ydebug("yinit_run: assets extracted to /data/");
-    }
-
     /* Config */
-    struct yetty_yconfig_result config_result = yetty_yconfig_create(argc, argv, &paths);
+    struct yetty_yconfig_result config_result = yetty_yconfig_create(argc, argv);
     if (!YETTY_IS_OK(config_result)) {
         return YETTY_ERR(yetty_ycore_int, "yinit_run: yconfig_create failed", config_result);
     }
@@ -558,7 +535,7 @@ struct yetty_ycore_int_result yetty_yinit_run(int argc, char **argv,
     });
 
     /* Synthetic runtime — same struct the desktop worker receives. No
-     * output_pipe / clipboard / window_manager on web. */
+     * output_pipe / clipboard / window_chrome on web. */
     struct yetty_yinit_runtime yinit_rt;
     memset(&yinit_rt, 0, sizeof(yinit_rt));
     yinit_rt.argc = argc;

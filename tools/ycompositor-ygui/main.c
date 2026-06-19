@@ -31,7 +31,6 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yplatform/platform-input-pipe.h>
-#include <yetty/yplatform/extract-assets.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
@@ -814,7 +813,7 @@ static struct yetty_ycore_void_result ycomp_ygui_worker(struct yetty_yinit_runti
      * as a pinned figure over the scene. */
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
-            app->root, app->font, &app->ctx, app->yrt->window_manager, (float)app->surface_w,
+            app->root, app->font, &app->ctx, app->yrt->window_chrome, (float)app->surface_w,
             (float)app->surface_h, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             app->chrome = chrome_r.value;
@@ -992,11 +991,8 @@ int main(int argc, char **argv)
         }
     }
 
-    struct yetty_yinit_app_config cfg = {
-        .extract_assets_fn = yetty_platform_extract_assets,
-    };
     struct yetty_ycore_int_result run_result =
-        yetty_yinit_run(trimmed_argc, argv, &cfg, ycomp_ygui_worker, &app);
+        yetty_yinit_run(trimmed_argc, argv, ycomp_ygui_worker, &app);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "ycompositor-ygui: run", run_result.error);
         yetty_ycore_error_destroy(run_result.error);
