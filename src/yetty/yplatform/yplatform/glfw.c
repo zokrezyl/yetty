@@ -503,4 +503,16 @@ static struct yetty_ycore_void_result glfw_platform_run(struct yetty_yclass_obje
     return YETTY_OK_VOID();
 }
 
+/* Platform-agnostic factory: returns the platform object appropriate to this
+ * build (glfw on desktop). Cross-platform Class-2 tools (ygreeter, yhello) that
+ * own their main() call this instead of naming a per-OS create, so the same
+ * source picks glfw/webasm/android/ios by which platform.c is compiled in. */
+struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_platform_create(
+    struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_yplatform_default_platform_create(
+    struct yetty_yclass_ctx *ctx)
+{
+    return yetty_yplatform_glfw_platform_create(ctx);
+}
+
 #include "glfw.gen.c"

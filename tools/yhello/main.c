@@ -66,12 +66,12 @@
 #endif
 
 /* Android standalone entry. yhello runs as a NativeActivity through the
- * shared NDK glue (src/yetty/yinit/android-glue.c), which resolves the
+ * shared NDK glue (src/yetty/yplatform/ymain/android-glue.c), which resolves the
  * yetty_android_program_init / _term pair defined at the foot of this file. */
 #if defined(__ANDROID__) && defined(YETTY_YHELLO_HAS_STANDALONE)
 #include <pthread.h>
 #include <webgpu/webgpu.h>
-#include <yetty/yinit/android-glue.h>
+#include <yetty/yplatform/android-glue.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #endif
 
@@ -3318,7 +3318,7 @@ struct yetty_yclass_object_ptr_result yetty_yhello_app_create(struct yetty_yclas
  * drives this sequence directly rather than via the shared ymain/glfw.c. */
 struct yetty_ycore_void_result yetty_yplatform_register(void);
 struct yetty_ycore_void_result yetty_yapp_register(void);
-struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_platform_create(
+struct yetty_yclass_object_ptr_result yetty_yplatform_default_platform_create(
     struct yetty_yclass_ctx *ctx);
 struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object *obj,
                                                             struct yetty_yclass_object *app,
@@ -3709,7 +3709,7 @@ static void *yhello_android_render_thread(void *arg)
 
 /* Android program entry — resolved at link time by android-glue.c. Builds the
  * standalone showcase from the live surface and runs it on a render thread,
- * mirroring the terminal's yetty_android_program_init in src/yetty/yinit/android.c. */
+ * mirroring the terminal's yetty_android_program_init in src/yetty/yplatform/ymain/android.c. */
 YETTY_EXTERNAL_CALLBACK
 void yetty_android_program_init(struct yetty_yplatform_app_state *state)
 {
@@ -3891,7 +3891,7 @@ static int run_standalone_mode(int argc, char **argv)
         return 1;
     }
 
-    struct yetty_yclass_object_ptr_result platform_res = yetty_yplatform_glfw_platform_create(NULL);
+    struct yetty_yclass_object_ptr_result platform_res = yetty_yplatform_default_platform_create(NULL);
     if (YETTY_IS_ERR(platform_res)) {
         yetty_ycore_error_print(stderr, "yhello: platform create", platform_res.error);
         yetty_ycore_error_destroy(platform_res.error);

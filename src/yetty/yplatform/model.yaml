@@ -584,6 +584,14 @@ classes:
         type: "struct yetty_ycore_xthread_event_pipe *"
         get: false
         set: false
+      - name: instance
+        type: "void *"
+        get: false
+        set: false
+      - name: surface
+        type: "void *"
+        get: false
+        set: false
     ops:
       - slot: platform_init
         slot_domain: yplatform

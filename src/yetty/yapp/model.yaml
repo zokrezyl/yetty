@@ -1,0 +1,124 @@
+methods:
+  - slot: init
+    domain: yapp
+    owning_class: app
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: app
+        type: "struct yetty_yclass_object *"
+      - name: runtime
+        type: "struct yetty_yinit_runtime *"
+    doc: null
+    local: true
+    return_payload_type: null
+  - slot: run
+    domain: yapp
+    owning_class: app
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: app
+        type: "struct yetty_yclass_object *"
+      - name: runtime
+        type: "struct yetty_yinit_runtime *"
+    doc: null
+    local: true
+    return_payload_type: null
+classes:
+  - name: app
+    domain: yapp
+    accessor: yetty_yapp_app_class_get
+    type: regular
+    source_file: src/yetty/yapp/app.c
+    parent: null
+    mixins: []
+    data: struct yetty_yapp_app
+    data_fields:
+      - name: reserved
+        type: char
+        get: false
+        set: false
+    ops:
+      - slot: init
+        slot_domain: yapp
+        impl: yapp_default_init
+      - slot: run
+        slot_domain: yapp
+        impl: yapp_default_run
+    doc: null
+exposed:
+  - source_file: src/yetty/yapp/app.c
+    name: yetty_yapp_create_app
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: ctx
+        type: "struct yetty_yclass_ctx *"
+    doc: null
+  - source_file: src/yetty/yapp/app.c
+    name: yetty_yapp_register_app
+    return_type: struct yetty_ycore_void_result
+    args: []
+    doc: "/*
+ * Concrete-app by-name registration hook. The shared platform entry calls this
+ * after registering the platform and base-app classes; the final app module may
+ * provide a strong override that installs its own yclass accessor-lookup hook
+ * (needed only when the app object is proxied over RPC). Standalone apps that
+ * only dispatch locally inherit this no-op default — their app class registers
+ * itself lazily on first create.
+ */"
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+local_types:
+  yetty_yapp_app: src/yetty/yapp/app.c
+  yetty_yapp_app_ptr_result: src/yetty/yapp/app.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/yapp/app.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/yapp/app.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/yapp/app.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/yapp/app.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/yapp/app.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

@@ -819,7 +819,13 @@ static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
         *slash = '\0';
         yai_mkdir_p(dir);
     }
-    FILE *file = fopen(path, "w");
+    /* Write to a sibling temp file and rename() it into place. An interrupted
+     * or failed save then never destroys the live config: a plain
+     * fopen(path, "w") truncates it up front, so a crash / Ctrl-C / racing
+     * second instance mid-write leaves an empty (comment-only) file. */
+    char temp_path[544];
+    snprintf(temp_path, sizeof(temp_path), "%s.tmp.%d", path, (int)getpid());
+    FILE *file = fopen(temp_path, "w");
     if (!file) {
         return YETTY_ERR(yetty_ycore_void, "yai_config_save: fopen failed");
     }
@@ -835,6 +841,7 @@ static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
     yaml_emitter_t emitter;
     if (!yaml_emitter_initialize(&emitter)) {
         (void)fclose(file);
+        (void)unlink(temp_path);
         return YETTY_ERR(yetty_ycore_void, "yai_config_save: emitter init failed");
     }
     yaml_emitter_set_output_file(&emitter, file);
@@ -886,10 +893,17 @@ static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
     yaml_emitter_delete(&emitter);
     if (!ok) {
         (void)fclose(file);
+        (void)unlink(temp_path);
         return YETTY_ERR(yetty_ycore_void, "yai_config_save: yaml emit failed");
     }
     if (fclose(file) != 0) {
+        (void)unlink(temp_path);
         return YETTY_ERR(yetty_ycore_void, "yai_config_save: fclose failed");
+    }
+    /* Atomic publish: the live config is replaced in one step, or not at all. */
+    if (rename(temp_path, path) != 0) {
+        (void)unlink(temp_path);
+        return YETTY_ERR(yetty_ycore_void, "yai_config_save: rename failed");
     }
     return YETTY_OK_VOID();
 }

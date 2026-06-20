@@ -1,18 +1,13 @@
 /*
- * yplatform/ymain/webasm.c — WebAssembly entry.
+ * yplatform/ymain/webasm.c — WebAssembly entry (the main yetty target).
  *
- * Same linear shape as desktop — the canvas exists at page load, so main()
- * registers the platform classes, creates the webasm_platform, then init()
- * then run(). The browser owns the event loop (emscripten drives it via the JS
- * asset preload + emscripten_set_main_loop), so platform_run hands back rather
- * than blocking; registering the emscripten loop is the app-worker seam below.
- *
- * NOT WIRED IN: forward-declared symbols, not in any CMake target; the existing
- * yinit/webasm path stays until this replaces it.
- *
- * SEAMS: argv (none on web anyway) and the app/render worker — how the app body
- * is invoked and how emscripten_set_main_loop is registered for it — are the
- * open platform→app seam, same as the other platforms.
+ * Same linear shape as the desktop glfw entry: register the platform + base-app
+ * classes, create the concrete app through the weak yetty_yapp_create_app()
+ * injection point, create the webasm_platform, then platform_run(platform, app).
+ * run() calls init() and then drives the app (init/run). The browser owns the
+ * event loop (the app's run() registers emscripten_set_main_loop and hands
+ * back), so platform_run returns and main() returns; the browser keeps the wasm
+ * runtime alive to service frames.
  */
 
 #include <stdio.h>
@@ -20,12 +15,17 @@
 #include <yetty/ycore/result.h>
 #include <yetty/yclass/class.h>
 
-/* Generated platform symbols. */
+/* Generated platform + app symbols (mirrors ymain/glfw.c). */
 struct yetty_ycore_void_result yetty_yplatform_register(void);
 struct yetty_yclass_object_ptr_result yetty_yplatform_webasm_platform_create(
     struct yetty_yclass_ctx *ctx);
 struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *app,
                                                             int argc, char **argv);
+struct yetty_ycore_void_result yetty_yapp_register(void);
+struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx);
+/* Concrete-app by-name registration hook (weak no-op default in yapp/app.c). */
+struct yetty_ycore_void_result yetty_yapp_register_app(void);
 
 int main(int argc, char **argv)
 {
@@ -33,6 +33,25 @@ int main(int argc, char **argv)
     if (YETTY_IS_ERR(reg)) {
         yetty_ycore_error_print(stderr, "yetty: platform register", reg.error);
         yetty_ycore_error_destroy(reg.error);
+        return 1;
+    }
+    struct yetty_ycore_void_result yapp_reg = yetty_yapp_register();
+    if (YETTY_IS_ERR(yapp_reg)) {
+        yetty_ycore_error_print(stderr, "yetty: yapp register", yapp_reg.error);
+        yetty_ycore_error_destroy(yapp_reg.error);
+        return 1;
+    }
+    struct yetty_ycore_void_result app_reg = yetty_yapp_register_app();
+    if (YETTY_IS_ERR(app_reg)) {
+        yetty_ycore_error_print(stderr, "yetty: app register", app_reg.error);
+        yetty_ycore_error_destroy(app_reg.error);
+        return 1;
+    }
+
+    struct yetty_yclass_object_ptr_result app_res = yetty_yapp_create_app(NULL);
+    if (YETTY_IS_ERR(app_res)) {
+        yetty_ycore_error_print(stderr, "yetty: app create", app_res.error);
+        yetty_ycore_error_destroy(app_res.error);
         return 1;
     }
 
@@ -44,9 +63,10 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* Single step — run() calls init(argc, argv) internally. */
+    /* Single step — run() calls init(app, argc, argv) internally, then drives
+     * the app. */
     struct yetty_ycore_void_result run_res =
-        yetty_yplatform_platform_run(platform_res.value, argc, argv);
+        yetty_yplatform_platform_run(platform_res.value, app_res.value, argc, argv);
     if (YETTY_IS_ERR(run_res)) {
         yetty_ycore_error_print(stderr, "yetty: platform run", run_res.error);
         yetty_ycore_error_destroy(run_res.error);

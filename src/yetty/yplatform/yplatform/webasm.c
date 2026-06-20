@@ -14,12 +14,17 @@
  */
 
 #include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include <yetty/ycore/result.h>
 #include <yetty/yclass/class.h>
 #include <yetty/yconfig/config.h>
+#include <yetty/yinit/yinit.h> /* struct yetty_yinit_runtime (platform runtime type) */
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/ytrace/ytrace.h>
+
+#include <webgpu/webgpu.h>
 
 /* Sibling abstractions (forward-declared; decoupled from generated headers). */
 struct yetty_yclass_object_ptr_result yetty_yplatform_webasm_window_create(
@@ -29,9 +34,23 @@ struct yetty_yclass_object_ptr_result yetty_yplatform_webasm_clipboard_create(
 struct yetty_ycore_void_result yetty_yplatform_webasm_clipboard_configure(
     struct yetty_yclass_object *obj, struct yetty_ycore_xthread_event_pipe *response_pipe);
 
+/* Canvas / GPU surface / framebuffer helpers (window/webasm.c, webgpu-surface/
+ * webasm.c) and the HTML5 input callbacks (ymain/webasm-input.c). */
+int yetty_yplatform_webasm_create_window(struct yetty_yconfig_config *config);
+void yetty_yplatform_webasm_get_framebuffer_size(int *width, int *height);
+WGPUSurface yetty_yplatform_webasm_create_surface(WGPUInstance instance);
+void yetty_yplatform_webasm_setup_input_callbacks(struct yetty_ycore_xthread_event_pipe *pipe);
+
 /* platform_init slot dispatcher (generated) — run() calls init() through it. */
 struct yetty_ycore_void_result yetty_yplatform_platform_init(struct yetty_yclass_object *obj,
+                                                             struct yetty_yclass_object *app,
                                                              int argc, char **argv);
+
+/* App lifecycle dispatchers (generated, yapp module) — run() drives the app. */
+struct yetty_ycore_void_result yetty_yapp_init(struct yetty_yclass_object *app,
+                                               struct yetty_yinit_runtime *runtime);
+struct yetty_ycore_void_result yetty_yapp_run(struct yetty_yclass_object *app,
+                                              struct yetty_yinit_runtime *runtime);
 
 YETTY_YRESULT_DECLARE(yetty_yplatform_webasm_platform_ptr,
                       struct yetty_yplatform_webasm_platform *);
@@ -47,6 +66,8 @@ yetty_yplatform_webasm_platform {
     struct yetty_yclass_object *clipboard;              /* yplatform:webasm_clipboard */
     struct yetty_ycore_xthread_event_pipe *input_pipe;  /* canvas → worker */
     struct yetty_ycore_xthread_event_pipe *output_pipe; /* worker → canvas */
+    void *instance;                                     /* WGPUInstance */
+    void *surface;                                      /* WGPUSurface */
 };
 
 static struct yetty_yplatform_webasm_platform *webasm_platform_data(struct yetty_yclass_object *obj)
@@ -62,18 +83,32 @@ static struct yetty_yplatform_webasm_platform *webasm_platform_data(struct yetty
 
 [[clang::annotate("override@yplatform:webasm_platform:platform_init")]]
 static struct yetty_ycore_void_result webasm_platform_init(struct yetty_yclass_object *obj,
+                                                           struct yetty_yclass_object *app,
                                                            int argc, char **argv)
 {
+    (void)app; /* the app is driven from run(); init only brings up the platform */
     struct yetty_yplatform_webasm_platform *data = webasm_platform_data(obj);
     if (!data) {
         return YETTY_ERR(yetty_ycore_void, "webasm_platform_init: data_get");
     }
 
+    /* MEMFS path layout the config / asset loader expect (mirrors the desktop
+     * paths exported by yconfig). */
+    setenv("YETTY_SHADERS_DIR", "/data/shaders", 1);
+    setenv("YETTY_FONTS_DIR", "/data/fonts", 1);
+    setenv("YETTY_RUNTIME_DIR", "/tmp", 1);
+    setenv("YETTY_DATA_DIR", "/data", 1);
+    setenv("YETTY_CONFIG_DIR", "/config", 1);
+
     struct yetty_yconfig_result config_res = yetty_yconfig_create(argc, argv);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, config_res, "webasm_platform_init: config");
     data->config = config_res.value;
 
-    /* The canvas already exists (page/preload); just bind a window object. */
+    /* Bring up the canvas (#canvas element) before the WebGPU surface reads it. */
+    if (!yetty_yplatform_webasm_create_window(data->config)) {
+        return YETTY_ERR(yetty_ycore_void, "webasm_platform_init: create window failed");
+    }
+    /* Bind the window abstraction object on top of the canvas. */
     struct yetty_yclass_object_ptr_result window_res = yetty_yplatform_webasm_window_create(NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, window_res, "webasm_platform_init: window create");
     data->window = window_res.value;
@@ -85,27 +120,86 @@ static struct yetty_ycore_void_result webasm_platform_init(struct yetty_yclass_o
     YETTY_RETURN_IF_ERR(yetty_ycore_void, output_res, "webasm_platform_init: output pipe");
     data->output_pipe = output_res.value;
 
-    struct yetty_yclass_object_ptr_result clip_res = yetty_yplatform_webasm_clipboard_create(NULL);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, clip_res, "webasm_platform_init: clipboard create");
-    data->clipboard = clip_res.value;
-    struct yetty_ycore_void_result clip_cfg =
-        yetty_yplatform_webasm_clipboard_configure(data->clipboard, data->input_pipe);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, clip_cfg, "webasm_platform_init: clipboard configure");
+    /* HTML5 keyboard/mouse/wheel/resize callbacks → input pipe. */
+    yetty_yplatform_webasm_setup_input_callbacks(data->input_pipe);
+
+    /* No clipboard object on the web build: the webasm_clipboard subclass's
+     * navigator.clipboard EM_JS glue is not yet wired, and the previous webasm
+     * bootstrap also ran with clipboard == NULL. Leave data->clipboard unset. */
+
+    /* WebGPU instance + surface (the canvas exists now). */
+    WGPUInstance instance = wgpuCreateInstance(NULL);
+    if (!instance) {
+        return YETTY_ERR(yetty_ycore_void, "webasm_platform_init: WebGPU instance create failed");
+    }
+    WGPUSurface surface = yetty_yplatform_webasm_create_surface(instance);
+    if (!surface) {
+        wgpuInstanceRelease(instance);
+        return YETTY_ERR(yetty_ycore_void, "webasm_platform_init: WebGPU surface create failed");
+    }
+    data->instance = instance;
+    data->surface = surface;
 
     ydebug("webasm_platform: init complete");
     return YETTY_OK_VOID();
 }
 
 [[clang::annotate("override@yplatform:webasm_platform:platform_run")]]
-static struct yetty_ycore_void_result webasm_platform_run(struct yetty_yclass_object *obj, int argc,
+static struct yetty_ycore_void_result webasm_platform_run(struct yetty_yclass_object *obj,
+                                                          struct yetty_yclass_object *app, int argc,
                                                           char **argv)
 {
-    struct yetty_ycore_void_result init_res = yetty_yplatform_platform_init(obj, argc, argv);
+    if (!app) {
+        return YETTY_ERR(yetty_ycore_void, "webasm_platform_run: app object is required");
+    }
+    struct yetty_ycore_void_result init_res = yetty_yplatform_platform_init(obj, app, argc, argv);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, init_res, "webasm_platform_run: init");
-    /* The browser event loop is driven by emscripten (emscripten_set_main_loop
-     * registered from ymain/webasm.c); there is no blocking loop to run here. */
+
+    struct yetty_yplatform_webasm_platform *data = webasm_platform_data(obj);
+    if (!data) {
+        return YETTY_ERR(yetty_ycore_void, "webasm_platform_run: data_get");
+    }
+
+    /* Assemble the runtime the app's run() reads, then drive the app on the main
+     * thread. Single-threaded on the web: the app's run() registers the
+     * emscripten main loop and hands back; the browser drives frames thereafter,
+     * so the runtime (stack here) only needs to outlive the init/run calls —
+     * yframework copies what it needs and the HTML5 callbacks own the pipe. */
+    int fb_width = 0, fb_height = 0;
+    yetty_yplatform_webasm_get_framebuffer_size(&fb_width, &fb_height);
+
+    struct yetty_yinit_runtime rt;
+    memset(&rt, 0, sizeof(rt));
+    rt.argc = argc;
+    rt.argv = argv;
+    rt.config = data->config;
+    rt.instance = data->instance;
+    rt.surface = data->surface;
+    rt.surface_width = (uint32_t)fb_width;
+    rt.surface_height = (uint32_t)fb_height;
+    rt.content_scale = 1.0f;
+    rt.platform_input_pipe = data->input_pipe;
+    rt.clipboard = data->clipboard;
+
+    struct yetty_ycore_void_result app_init = yetty_yapp_init(app, &rt);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, app_init, "webasm_platform_run: app init");
+    struct yetty_ycore_void_result app_run = yetty_yapp_run(app, &rt);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, app_run, "webasm_platform_run: app run");
+
     ydebug("webasm_platform: run (loop owned by the browser/emscripten)");
     return YETTY_OK_VOID();
+}
+
+/* Platform-agnostic factory: returns the platform object appropriate to this
+ * build. Cross-platform Class-2 tools (ygreeter, yhello) that own their main()
+ * call this instead of naming a per-OS create, so the same source picks
+ * glfw/webasm/android/ios by which platform.c is compiled in. */
+struct yetty_yclass_object_ptr_result yetty_yplatform_webasm_platform_create(
+    struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_yplatform_default_platform_create(
+    struct yetty_yclass_ctx *ctx)
+{
+    return yetty_yplatform_webasm_platform_create(ctx);
 }
 
 #include "webasm.gen.c"

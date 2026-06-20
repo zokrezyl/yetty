@@ -1,0 +1,147 @@
+methods: []
+classes:
+  - name: app
+    domain: demoygui
+    accessor: yetty_demoygui_app_class_get
+    type: regular
+    source_file: demo/ygui/runner.c
+    parent:
+      domain: yapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_app
+    data_fields:
+      - name: runner
+        type: struct demo_runner
+        get: false
+        set: false
+    ops:
+      - slot: init
+        slot_domain: yapp
+        impl: demoygui_app_init
+      - slot: run
+        slot_domain: yapp
+        impl: demoygui_app_run
+    doc: "/*
+ * yclass app wrapper. The standalone bring-up is a yapp:app subclass: the
+ * shared glfw_platform brings up the window/surface/GPU/channels and drives the
+ * run override below. The heavy per-demo state stays in `struct demo_runner`
+ * (the build_fn API the numbered demos depend on); the app data block just
+ * embeds it. demo_runner_run creates the app, stamps name/build/enable_chrome
+ * onto the embedded runner, then runs the platform sequence.
+ *
+ * yclass: the only hand-written file is this annotated runner.c; runner.gen.c is
+ * #included at the foot.
+ */"
+types:
+  - name: demo_runner
+    kind: struct
+    fields:
+      - name: name
+        type: "const char *"
+      - name: build
+        type: demo_build_fn
+      - name: engine
+        type: "struct yetty_ygui_framework *"
+      - name: root
+        type: "struct yetty_yclass_object *"
+      - name: yframework
+        type: "struct yetty_yframework *"
+      - name: pty_pair
+        type: struct yetty_yplatform_memory_pty_pair
+      - name: has_pty_pair
+        type: int
+      - name: root_container
+        type: "struct yetty_yclass_object *"
+      - name: figure_registry
+        type: "struct yetty_yfigure_registry *"
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
+      - name: wire_sm
+        type: "struct yetty_ywire_wire_statemachine *"
+      - name: font
+        type: "struct yetty_yfont_font *"
+      - name: figure_args
+        type: struct yetty_ygrid_factory_args
+      - name: listener
+        type: struct yetty_yevent_event_listener
+      - name: frame_listener
+        type: struct yetty_yevent_event_listener
+      - name: frame_timer
+        type: yetty_yevent_timer_id
+      - name: render_target
+        type: "struct yetty_ydraw_target *"
+      - name: enable_chrome
+        type: int
+      - name: chrome
+        type: "struct yetty_yclass_object *"
+      - name: chrome_caption
+        type: "struct yetty_ygrid_grid *"
+      - name: chrome_last_hover
+        type: int
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_yevent_event_listener
+    kind: struct
+    fields:
+      - name: handler
+        type: yetty_ycore_event_handler
+  - name: yetty_ygrid_factory_args
+    kind: struct
+    fields:
+      - name: default_font
+        type: "struct yetty_yfont_font *"
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
+      - name: absolute_coords
+        type: int
+  - name: yetty_yplatform_memory_pty_pair
+    kind: struct
+    fields:
+      - name: a
+        type: "struct yetty_platform_pty *"
+      - name: b
+        type: "struct yetty_platform_pty *"
+local_types:
+  demo_runner: demo/ygui/runner.c
+  yetty_demoygui_app: demo/ygui/runner.c
+  yetty_demoygui_app_ptr_result: demo/ygui/runner.c
+local_typedefs:
+  __int128_t:
+    source_file: demo/ygui/runner.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: demo/ygui/runner.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: demo/ygui/runner.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: demo/ygui/runner.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: demo/ygui/runner.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
