@@ -291,6 +291,16 @@ static int yai_effective_hud_float(struct yai_app *app)
     return override ? yai_config_truthy(override) : app->config.hud_float;
 }
 
+/* HUD rendering backend for the active engine: "yetty" (ygui window) or "text"
+ * (plain status bar). The text bar also serves as the fallback on non-yetty
+ * hosts where the ygui HUD has no window to render into. */
+static const char *yai_effective_hud_mode(struct yai_app *app)
+{
+    const char *override = yai_engine_override_get(yai_active_engine_config(app), "hud-mode");
+    const char *value = (override && override[0]) ? override : app->config.hud_mode;
+    return strcmp(value, "text") == 0 ? "text" : "yetty";
+}
+
 /* Store the HUD template as `count` verbatim pieces and recompute the
  * concatenated hud_format the renderer parses (pieces joined directly, no
  * separator). The pieces are kept so the YAML list round-trips on save. */
@@ -4164,8 +4174,12 @@ int main(int argc, char **argv)
      * echoes the ESC bytes back and the host renders "^[" garbage. */
     yai_report_error(app, "raw input", enter_raw_input(app));
 
+    /* The ygui HUD is built only when hud-on is true AND hud-mode selects it;
+     * "text" mode skips creation and falls through to the text status bar. */
+    int want_ygui_hud =
+        yai_effective_hud_on(app) && strcmp(yai_effective_hud_mode(app), "yetty") == 0;
     struct yai_hud_ptr_result hud_res =
-        yai_hud_create(yai_effective_hud_on(app), yai_effective_hud_float(app));
+        yai_hud_create(want_ygui_hud, yai_effective_hud_float(app));
     if (YETTY_IS_ERR(hud_res)) {
         yai_report_error(app, "hud create",
                          (struct yetty_ycore_void_result){.ok = 0, .error = hud_res.error});
