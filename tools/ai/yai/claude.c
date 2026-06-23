@@ -859,9 +859,9 @@ static struct yetty_ycore_void_result claude_config_knob(struct yetty_yclass_obj
      * (apply_config / claude_start translate it). Reasoning effort is a model
      * parameter, so it lives on the model tab (main.c build_effort_knob). */
     int written = snprintf(out, out_size,
-                           "permission_mode|permission mode|"
+                           "permission-mode|permission mode|"
                            "default,acceptEdits,plan,auto|%s\n"
-                           "allowed_preset|tools|curated,readonly,edit,full|%s",
+                           "allowed-preset|tools|curated,readonly,edit,full|%s",
                            permission_mode, app->config.claude.allowed_preset);
     if (written < 0 || (size_t)written >= out_size) {
         return YETTY_ERR(yetty_ycore_void, "claude config_knob: spec truncated");
@@ -886,7 +886,7 @@ static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_ob
      * side-effect is pushing a new permission mode into the running session
      * so it takes effect without waiting for the next spawn; everything else
      * (tools preset, model) is read fresh at the next spawn. */
-    if (strcmp(key, "permission_mode") != 0 || !app->child_alive || !app->child_stdin_open) {
+    if (strcmp(key, "permission-mode") != 0 || !app->child_alive || !app->child_stdin_open) {
         return YETTY_OK_VOID();
     }
     char request_id[32];

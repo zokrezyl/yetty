@@ -39,8 +39,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ypdf_create(struct yetty_yclass
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_yclass_object *obj,
-                                                        const char *path);
+struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_yclass_object *obj, const char *path);
 
 #ifdef __cplusplus
 }

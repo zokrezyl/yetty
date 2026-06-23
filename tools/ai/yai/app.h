@@ -105,7 +105,7 @@ struct yai_pending_permission {
 };
 
 /* A captured per-backend override of a `defaults:` key (edit_mode, fold_lines,
- * show_thinking, hud_on, hud_float, hud_format). The value is kept verbatim so
+ * show_thinking, hud_on, hud_float, hud_mode, hud_format). The value is kept verbatim so
  * it round-trips losslessly; the effective typed value is parsed at resolve
  * time (see yai_config_resolve / yai_effective_hud_*). */
 struct yai_setting {
@@ -154,6 +154,7 @@ struct yai_config {
     int show_thinking;     /* 1 = show the model's thinking blocks */
     int hud_on;            /* 1 = ygui HUD window; 0 = stats as plain text */
     int hud_float;         /* 1 = float the HUD instead of docking */
+    char hud_mode[8];      /* "yetty" = ygui HUD; "text" = plain text bar */
     char hud_format[1024]; /* global HUD template = the parts concatenated */
     /* The HUD template authored as a sequence of pieces (YAML list); the app
      * concatenates them into hud_format. Kept verbatim so the list round-trips

@@ -16,34 +16,26 @@ struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void) __attribu
 struct yetty_yclass_ptr_result yetty_yfigure_figure_class_get(void) __attribute__((weak));
 size_t yetty_yfigure_constructor_skel(const void *, size_t, void *, size_t) __attribute__((weak));
 size_t yetty_yfigure_add_child_skel(const void *, size_t, void *, size_t) __attribute__((weak));
-size_t yetty_yfigure_remove_child_by_id_skel(const void *, size_t, void *, size_t)
-    __attribute__((weak));
-size_t yetty_yfigure_raise_child_by_id_skel(const void *, size_t, void *, size_t)
-    __attribute__((weak));
-size_t yetty_yfigure_process_records_skel(const void *, size_t, void *, size_t)
-    __attribute__((weak));
+size_t yetty_yfigure_remove_child_by_id_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yfigure_raise_child_by_id_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_yfigure_process_records_skel(const void *, size_t, void *, size_t) __attribute__((weak));
 struct yetty_ycore_void_result yetty_yfigure_register(void);
 
 /* ---- yfigure: class name -> accessor (lazy) ---------------------- */
 
 static struct yetty_yclass_ptr_result yetty_yfigure_accessor_lookup(const char *name)
 {
-    if (strcmp(name, "yetty_yfigure_container") == 0 && yetty_yfigure_container_class_get) {
+    if (strcmp(name, "yetty_yfigure_container") == 0 && yetty_yfigure_container_class_get)
         return yetty_yfigure_container_class_get();
-    }
-    if (strcmp(name, "yetty_yfigure_figure") == 0 && yetty_yfigure_figure_class_get) {
+    if (strcmp(name, "yetty_yfigure_figure") == 0 && yetty_yfigure_figure_class_get)
         return yetty_yfigure_figure_class_get();
-    }
     /* "Not mine": OK with NULL value -- yetty_yclass_by_name walks to next hook. */
     return YETTY_OK(yetty_yclass_ptr, NULL);
 }
 
 /* ---- yfigure: slot -> skel, name-keyed static data --------------- */
 
-struct yetty_yfigure_skel_row {
-    const char *name;
-    yetty_yclass_rpc_skel_fn fn;
-};
+struct yetty_yfigure_skel_row { const char *name; yetty_yclass_rpc_skel_fn fn; };
 
 static const struct yetty_yfigure_skel_row yetty_yfigure_skel_rows[] = {
     {"yetty_yfigure_constructor", yetty_yfigure_constructor_skel},
@@ -59,18 +51,14 @@ YETTY_EXTERNAL_CALLBACK
 static yetty_yclass_rpc_skel_fn yetty_yfigure_skel_lookup(yetty_yclass_method_slot slot)
 {
     struct yetty_yclass_const_char_ptr_result slot_name_r = yetty_yclass_method_slot_name(slot);
-    if (YETTY_IS_ERR(slot_name_r)) {
-        yetty_ycore_error_destroy(slot_name_r.error);
-        return NULL;
-    }
+    if (YETTY_IS_ERR(slot_name_r)) { yetty_ycore_error_destroy(slot_name_r.error); return NULL; }
     const char *name = slot_name_r.value;
-    for (size_t i = 0; i < sizeof(yetty_yfigure_skel_rows) / sizeof(yetty_yfigure_skel_rows[0]);
-         ++i) {
+    for (size_t i = 0;
+         i < sizeof(yetty_yfigure_skel_rows) / sizeof(yetty_yfigure_skel_rows[0]); ++i)
         /* .fn may be a weak ref (NULL when its class isn't linked); skip it. */
-        if (yetty_yfigure_skel_rows[i].fn && strcmp(yetty_yfigure_skel_rows[i].name, name) == 0) {
+        if (yetty_yfigure_skel_rows[i].fn
+            && strcmp(yetty_yfigure_skel_rows[i].name, name) == 0)
             return yetty_yfigure_skel_rows[i].fn;
-        }
-    }
     return NULL;
 }
 
@@ -79,9 +67,8 @@ static yetty_yclass_rpc_skel_fn yetty_yfigure_skel_lookup(yetty_yclass_method_sl
 struct yetty_ycore_void_result yetty_yfigure_register(void)
 {
     static bool registered = false;
-    if (registered) {
+    if (registered)
         return YETTY_OK_VOID();
-    }
 
     struct yetty_ycore_void_result add_accessor_r =
         yetty_yclass_add_accessor_lookup(yetty_yfigure_accessor_lookup);

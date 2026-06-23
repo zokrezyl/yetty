@@ -232,9 +232,10 @@ static int yai_config_truthy(const char *value)
  * `engine` selector itself, which chooses the backend). */
 static int yai_is_default_key(const char *key)
 {
-    return strcmp(key, "edit_mode") == 0 || strcmp(key, "fold_lines") == 0 ||
-           strcmp(key, "show_thinking") == 0 || strcmp(key, "hud_on") == 0 ||
-           strcmp(key, "hud_float") == 0 || strcmp(key, "hud_format") == 0;
+    return strcmp(key, "edit-mode") == 0 || strcmp(key, "fold-lines") == 0 ||
+           strcmp(key, "show-thinking") == 0 || strcmp(key, "hud-on") == 0 ||
+           strcmp(key, "hud-float") == 0 || strcmp(key, "hud-mode") == 0 ||
+           strcmp(key, "hud-format") == 0;
 }
 
 /* The active backend's verbatim override of `key`, or NULL when it inherits
@@ -272,21 +273,21 @@ static void yai_engine_override_set(struct yai_engine_config *cfg, const char *k
  * set, else the global template. */
 static const char *yai_effective_hud_format(struct yai_app *app)
 {
-    const char *override = yai_engine_override_get(yai_active_engine_config(app), "hud_format");
+    const char *override = yai_engine_override_get(yai_active_engine_config(app), "hud-format");
     return (override && override[0]) ? override : app->config.hud_format;
 }
 
 /* Whether the ygui HUD window is enabled for the active engine. */
 static int yai_effective_hud_on(struct yai_app *app)
 {
-    const char *override = yai_engine_override_get(yai_active_engine_config(app), "hud_on");
+    const char *override = yai_engine_override_get(yai_active_engine_config(app), "hud-on");
     return override ? yai_config_truthy(override) : app->config.hud_on;
 }
 
 /* Whether the HUD floats (vs docks) for the active engine. */
 static int yai_effective_hud_float(struct yai_app *app)
 {
-    const char *override = yai_engine_override_get(yai_active_engine_config(app), "hud_float");
+    const char *override = yai_engine_override_get(yai_active_engine_config(app), "hud-float");
     return override ? yai_config_truthy(override) : app->config.hud_float;
 }
 
@@ -326,6 +327,7 @@ static void yai_config_defaults(struct yai_app *app)
     config->show_thinking = 0;
     config->hud_on = 1;
     config->hud_float = 0;
+    snprintf(config->hud_mode, sizeof(config->hud_mode), "yetty");
     const char *const default_hud_parts[] = {YAI_DEFAULT_HUD_PART_0, YAI_DEFAULT_HUD_PART_1,
                                              YAI_DEFAULT_HUD_PART_2, YAI_DEFAULT_HUD_PART_3,
                                              YAI_DEFAULT_HUD_PART_4};
@@ -363,19 +365,22 @@ static int yai_config_set_global(struct yai_app *app, const char *key, const cha
         app->engine_name = (strcmp(value, "codex") == 0)    ? "codex"
                            : (strcmp(value, "gemini") == 0) ? "gemini"
                                                             : "claude";
-    } else if (strcmp(key, "edit_mode") == 0) {
+    } else if (strcmp(key, "edit-mode") == 0) {
         snprintf(config->edit_mode, sizeof(config->edit_mode), "%s",
                  strcmp(value, "vi") == 0 ? "vi" : "emacs");
-    } else if (strcmp(key, "fold_lines") == 0) {
+    } else if (strcmp(key, "fold-lines") == 0) {
         int folded = atoi(value);
         config->fold_lines = folded > 0 ? folded : YAI_DEFAULT_FOLD_LINES;
-    } else if (strcmp(key, "show_thinking") == 0) {
+    } else if (strcmp(key, "show-thinking") == 0) {
         config->show_thinking = yai_config_truthy(value);
-    } else if (strcmp(key, "hud_on") == 0) {
+    } else if (strcmp(key, "hud-on") == 0) {
         config->hud_on = yai_config_truthy(value);
-    } else if (strcmp(key, "hud_float") == 0) {
+    } else if (strcmp(key, "hud-float") == 0) {
         config->hud_float = yai_config_truthy(value);
-    } else if (strcmp(key, "hud_format") == 0) {
+    } else if (strcmp(key, "hud-mode") == 0) {
+        snprintf(config->hud_mode, sizeof(config->hud_mode), "%s",
+                 strcmp(value, "text") == 0 ? "text" : "yetty");
+    } else if (strcmp(key, "hud-format") == 0) {
         /* A scalar hud_format is a one-piece list. */
         const char *single[] = {value};
         yai_config_set_hud_parts(config, single, 1);
@@ -395,17 +400,17 @@ static int yai_config_set_engine_field(struct yai_engine_config *cfg, const char
         snprintf(cfg->model, sizeof(cfg->model), "%s", value);
     } else if (strcmp(key, "effort") == 0) {
         snprintf(cfg->effort, sizeof(cfg->effort), "%s", value);
-    } else if (strcmp(key, "permission_mode") == 0) {
+    } else if (strcmp(key, "permission-mode") == 0) {
         snprintf(cfg->permission_mode, sizeof(cfg->permission_mode), "%s", value);
-    } else if (strcmp(key, "allowed_preset") == 0) {
+    } else if (strcmp(key, "allowed-preset") == 0) {
         snprintf(cfg->allowed_preset, sizeof(cfg->allowed_preset), "%s", value);
-    } else if (strcmp(key, "allowed_tools") == 0) {
+    } else if (strcmp(key, "allowed-tools") == 0) {
         snprintf(cfg->allowed_tools, sizeof(cfg->allowed_tools), "%s", value);
     } else if (strcmp(key, "sandbox") == 0) {
         snprintf(cfg->sandbox, sizeof(cfg->sandbox), "%s", value);
     } else if (strcmp(key, "approval") == 0) {
         snprintf(cfg->approval, sizeof(cfg->approval), "%s", value);
-    } else if (strcmp(key, "approval_mode") == 0) {
+    } else if (strcmp(key, "approval-mode") == 0) {
         snprintf(cfg->approval_mode, sizeof(cfg->approval_mode), "%s", value);
     } else {
         return 0;
@@ -433,15 +438,15 @@ static void yai_config_apply_engine_key(struct yai_engine_config *cfg, const cha
 static void yai_config_resolve(struct yai_app *app)
 {
     const struct yai_engine_config *cfg = yai_active_engine_config(app);
-    const char *edit_mode = yai_engine_override_get(cfg, "edit_mode");
+    const char *edit_mode = yai_engine_override_get(cfg, "edit-mode");
     if (!edit_mode) {
         edit_mode = app->config.edit_mode;
     }
     app->editor_mode_name = (strcmp(edit_mode, "vi") == 0) ? "vi" : "emacs";
-    const char *fold = yai_engine_override_get(cfg, "fold_lines");
+    const char *fold = yai_engine_override_get(cfg, "fold-lines");
     int folded = fold ? atoi(fold) : app->config.fold_lines;
     app->renderer.fold_lines = folded > 0 ? folded : YAI_DEFAULT_FOLD_LINES;
-    const char *thinking = yai_engine_override_get(cfg, "show_thinking");
+    const char *thinking = yai_engine_override_get(cfg, "show-thinking");
     app->renderer.show_thinking =
         thinking ? yai_config_truthy(thinking) : app->config.show_thinking;
 }
@@ -458,14 +463,14 @@ static int yai_config_set(struct yai_app *app, const char *key, const char *valu
         known = 1;
     } else {
         const char *section_key = key;
-        if (strcmp(key, "claude_effort") == 0 || strcmp(key, "codex_effort") == 0) {
+        if (strcmp(key, "claude-effort") == 0 || strcmp(key, "codex-effort") == 0) {
             section_key = "effort";
-        } else if (strcmp(key, "codex_sandbox") == 0) {
+        } else if (strcmp(key, "codex-sandbox") == 0) {
             section_key = "sandbox";
-        } else if (strcmp(key, "codex_approval") == 0) {
+        } else if (strcmp(key, "codex-approval") == 0) {
             section_key = "approval";
-        } else if (strcmp(key, "gemini_approval_mode") == 0) {
-            section_key = "approval_mode";
+        } else if (strcmp(key, "gemini-approval-mode") == 0) {
+            section_key = "approval-mode";
         }
         known = yai_config_set_engine_field(yai_active_engine_config(app), section_key, value);
     }
@@ -552,7 +557,7 @@ static void yai_config_load(struct yai_app *app)
         switch (event.type) {
         case YAML_SEQUENCE_START_EVENT:
             /* `hud_format:` as a list — collect its scalar pieces. */
-            if (have_key && strcmp(pending_key, "hud_format") == 0 &&
+            if (have_key && strcmp(pending_key, "hud-format") == 0 &&
                 ((depth == 2 && section == SECTION_DEFAULTS) ||
                  (depth == 3 && section == SECTION_BACKENDS && backend_cfg))) {
                 collecting_hud = 1;
@@ -606,7 +611,7 @@ static void yai_config_load(struct yai_app *app)
                             offset += ((size_t)written < room) ? (size_t)written : room - 1;
                         }
                     }
-                    yai_engine_override_set(hud_backend, "hud_format", joined);
+                    yai_engine_override_set(hud_backend, "hud-format", joined);
                 } else {
                     yai_config_set_hud_parts(&app->config, part_ptrs, hud_part_count);
                 }
@@ -746,7 +751,7 @@ static int yai_config_emit_quoted_value(yaml_emitter_t *emitter, const char *val
 static int yai_config_emit_hud_format(yaml_emitter_t *emitter, const struct yai_config *config)
 {
     yaml_event_t event;
-    if (!yai_config_emit_scalar(emitter, "hud_format")) {
+    if (!yai_config_emit_scalar(emitter, "hud-format")) {
         return 0;
     }
     if (!yaml_sequence_start_event_initialize(&event, NULL, NULL, /*implicit=*/1,
@@ -778,23 +783,23 @@ static int yai_config_emit_engine(yaml_emitter_t *emitter, const char *name,
     }
     int ok = yai_config_emit_if_set(emitter, "model", cfg->model);
     if (strcmp(name, "claude") == 0) {
-        ok = ok && yai_config_emit_pair(emitter, "permission_mode", cfg->permission_mode) &&
-             yai_config_emit_pair(emitter, "allowed_preset", cfg->allowed_preset) &&
-             yai_config_emit_if_set(emitter, "allowed_tools", cfg->allowed_tools) &&
+        ok = ok && yai_config_emit_pair(emitter, "permission-mode", cfg->permission_mode) &&
+             yai_config_emit_pair(emitter, "allowed-preset", cfg->allowed_preset) &&
+             yai_config_emit_if_set(emitter, "allowed-tools", cfg->allowed_tools) &&
              yai_config_emit_pair(emitter, "effort", cfg->effort);
     } else if (strcmp(name, "codex") == 0) {
         ok = ok && yai_config_emit_pair(emitter, "sandbox", cfg->sandbox) &&
              yai_config_emit_pair(emitter, "approval", cfg->approval) &&
              yai_config_emit_pair(emitter, "effort", cfg->effort);
     } else { /* gemini */
-        ok = ok && yai_config_emit_pair(emitter, "approval_mode", cfg->approval_mode);
+        ok = ok && yai_config_emit_pair(emitter, "approval-mode", cfg->approval_mode);
     }
     /* hud_format is double-quoted (it embeds '#' and newlines); every other
      * override is a plain scalar. */
     for (int index = 0; ok && index < cfg->override_count; index++) {
         const char *key = cfg->overrides[index].key;
         const char *value = cfg->overrides[index].value;
-        ok = strcmp(key, "hud_format") == 0 ? yai_config_emit_quoted(emitter, key, value)
+        ok = strcmp(key, "hud-format") == 0 ? yai_config_emit_quoted(emitter, key, value)
                                             : yai_config_emit_pair(emitter, key, value);
     }
     if (!ok) {
@@ -865,12 +870,13 @@ static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
         /* defaults: { … } — the global settings. */
         ok = yai_config_emit_scalar(&emitter, "defaults") && yai_config_emit_map_start(&emitter) &&
              yai_config_emit_pair(&emitter, "engine", app->engine_name) &&
-             yai_config_emit_pair(&emitter, "edit_mode", config->edit_mode) &&
-             yai_config_emit_pair(&emitter, "fold_lines", fold_lines) &&
-             yai_config_emit_pair(&emitter, "show_thinking",
+             yai_config_emit_pair(&emitter, "edit-mode", config->edit_mode) &&
+             yai_config_emit_pair(&emitter, "fold-lines", fold_lines) &&
+             yai_config_emit_pair(&emitter, "show-thinking",
                                   config->show_thinking ? "true" : "false") &&
-             yai_config_emit_pair(&emitter, "hud_on", config->hud_on ? "true" : "false") &&
-             yai_config_emit_pair(&emitter, "hud_float", config->hud_float ? "true" : "false") &&
+             yai_config_emit_pair(&emitter, "hud-on", config->hud_on ? "true" : "false") &&
+             yai_config_emit_pair(&emitter, "hud-float", config->hud_float ? "true" : "false") &&
+             yai_config_emit_pair(&emitter, "hud-mode", config->hud_mode) &&
              yai_config_emit_hud_format(&emitter, config) && yai_config_emit_map_end(&emitter) &&
              /* backends: { claude: {…}, codex: {…}, gemini: {…} }. */
              yai_config_emit_scalar(&emitter, "backends") && yai_config_emit_map_start(&emitter) &&
@@ -2080,11 +2086,11 @@ static int build_effort_knob(struct yai_app *app, int knob_index, int tab,
     if (strcmp(app->engine_name, "codex") == 0) {
         list = codex_efforts;
         count = 5;
-        key = "codex_effort";
+        key = "codex-effort";
     } else if (strcmp(app->engine_name, "claude") == 0) {
         list = claude_efforts;
         count = 6;
-        key = "claude_effort";
+        key = "claude-effort";
     } else {
         return 0; /* gemini: no effort control */
     }
@@ -2333,22 +2339,22 @@ static const char *config_knob_label(const struct yai_app *app, int index)
         return "model";
     }
     const char *key = app->config_knobs[index].key;
-    if (strcmp(key, "permission_mode") == 0) {
+    if (strcmp(key, "permission-mode") == 0) {
         return "permission mode";
     }
-    if (strcmp(key, "allowed_preset") == 0) {
+    if (strcmp(key, "allowed-preset") == 0) {
         return "tools";
     }
-    if (strcmp(key, "codex_sandbox") == 0) {
+    if (strcmp(key, "codex-sandbox") == 0) {
         return "sandbox";
     }
-    if (strcmp(key, "codex_approval") == 0) {
+    if (strcmp(key, "codex-approval") == 0) {
         return "approval";
     }
-    if (strcmp(key, "codex_effort") == 0 || strcmp(key, "claude_effort") == 0) {
+    if (strcmp(key, "codex-effort") == 0 || strcmp(key, "claude-effort") == 0) {
         return "reasoning effort";
     }
-    if (strcmp(key, "gemini_approval_mode") == 0) {
+    if (strcmp(key, "gemini-approval-mode") == 0) {
         return "approval mode";
     }
     return key;
@@ -2842,9 +2848,9 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
              * "auto" is also the permission-mode knob's value — store it and
              * (claude) translate to bypassPermissions live; reopening /config
              * shows "auto" selected. */
-            yai_config_set(app, "permission_mode", "auto");
+            yai_config_set(app, "permission-mode", "auto");
             struct yetty_ycore_void_result mode_res =
-                yetty_yai_apply_config(app->engine, app, "permission_mode", "auto");
+                yetty_yai_apply_config(app->engine, app, "permission-mode", "auto");
             YETTY_RETURN_IF_ERR(yetty_ycore_void, mode_res, "handle_input_line: auto mode");
             /* The permission mode is a persisted config knob — keep the file
              * in step with the live change. */
@@ -3241,9 +3247,9 @@ static struct yetty_ycore_void_result permission_key(struct yai_app *app, unsign
         return yetty_yai_resolve_permission(app->engine, app, 1);
     case '!': {
         /* Auto: approve everything from now on, then allow the current. */
-        yai_config_set(app, "permission_mode", "auto");
+        yai_config_set(app, "permission-mode", "auto");
         struct yetty_ycore_void_result mode_res =
-            yetty_yai_apply_config(app->engine, app, "permission_mode", "auto");
+            yetty_yai_apply_config(app->engine, app, "permission-mode", "auto");
         YETTY_RETURN_IF_ERR(yetty_ycore_void, mode_res, "permission_key: auto mode");
         /* The permission mode is a persisted config knob — keep the file in
          * step with the live change. */
@@ -3981,16 +3987,16 @@ int main(int argc, char **argv)
         const char *key;
     } value_flags[] = {
         {"--model", "model"},
-        {"--edit-mode", "edit_mode"},
-        {"--fold-lines", "fold_lines"},
-        {"--permission-mode", "permission_mode"},
-        {"--allowed-preset", "allowed_preset"},
-        {"--allowed-tools", "allowed_tools"},
-        {"--claude-effort", "claude_effort"},
-        {"--codex-sandbox", "codex_sandbox"},
-        {"--codex-approval", "codex_approval"},
-        {"--codex-effort", "codex_effort"},
-        {"--gemini-approval", "gemini_approval_mode"},
+        {"--edit-mode", "edit-mode"},
+        {"--fold-lines", "fold-lines"},
+        {"--permission-mode", "permission-mode"},
+        {"--allowed-preset", "allowed-preset"},
+        {"--allowed-tools", "allowed-tools"},
+        {"--claude-effort", "claude-effort"},
+        {"--codex-sandbox", "codex-sandbox"},
+        {"--codex-approval", "codex-approval"},
+        {"--codex-effort", "codex-effort"},
+        {"--gemini-approval", "gemini-approval-mode"},
     };
     const char *resume_session_id = NULL;
     int markdown_requested = 0;
@@ -4007,11 +4013,11 @@ int main(int argc, char **argv)
         } else if (strcmp(arg, "--animate") == 0) {
             animate_requested = 1;
         } else if (strcmp(arg, "--show-thinking") == 0) {
-            yai_config_set(app, "show_thinking", "1");
+            yai_config_set(app, "show-thinking", "1");
         } else if (strcmp(arg, "--no-hud") == 0) {
-            yai_config_set(app, "hud_on", "0");
+            yai_config_set(app, "hud-on", "0");
         } else if (strcmp(arg, "--hud-float") == 0) {
-            yai_config_set(app, "hud_float", "1");
+            yai_config_set(app, "hud-float", "1");
         } else if (strcmp(arg, "--rpc") == 0) {
             if (arg_index + 1 >= argc) {
                 fprintf(stderr, "yai: --rpc needs a port\n");

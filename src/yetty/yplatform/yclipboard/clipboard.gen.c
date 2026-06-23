@@ -1,45 +1,34 @@
 /* GENERATED — do not edit. */
 #include <yetty/yclass/rpc.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ycore/types.h> /* container_of, buffer */
+#include <yetty/ycore/types.h>  /* container_of, buffer */
 #include <yetty/ytrace/ytrace.h>
 #include <stdbool.h>
-#include <stddef.h> /* NULL, size_t */
+#include <stddef.h>  /* NULL, size_t */
 #include <stdint.h>
 #include <stdio.h>  /* stderr */
-#include <stdlib.h> /* calloc/free for proxy + buffer marshalling */
-#include <string.h> /* memcpy/strcmp/strlen */
+#include <stdlib.h>  /* calloc/free for proxy + buffer marshalling */
+#include <string.h>  /* memcpy/strcmp/strlen */
 
 struct yetty_ycore_void_result;
-struct yetty_ycore_void_result yetty_yplatform_clipboard_set_text(struct yetty_yclass_object *obj,
-                                                                  const char *text, size_t len);
-struct yetty_ycore_void_result yetty_yplatform_clipboard_request_paste(
-    struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yplatform_clipboard_drain(struct yetty_yclass_object *obj);
-typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_set_text_fn)(
-    struct yetty_yclass_object *, const char *, size_t);
-typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_request_paste_fn)(
-    struct yetty_yclass_object *);
-typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_drain_fn)(
-    struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_yplatform_clipboard_set_text(struct yetty_yclass_object * obj, const char * text, size_t len);
+struct yetty_ycore_void_result yetty_yplatform_clipboard_request_paste(struct yetty_yclass_object * obj);
+struct yetty_ycore_void_result yetty_yplatform_clipboard_drain(struct yetty_yclass_object * obj);
+typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_set_text_fn)(struct yetty_yclass_object *, const char *, size_t);
+typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_request_paste_fn)(struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_drain_fn)(struct yetty_yclass_object *);
 
 [[maybe_unused]]
-static yetty_yplatform_clipboard_set_text_fn
-    yetty_yplatform_clipboard_yetty_yplatform_clipboard_set_text_check = clipboard_default_set_text;
+static yetty_yplatform_clipboard_set_text_fn yetty_yplatform_clipboard_yetty_yplatform_clipboard_set_text_check = clipboard_default_set_text;
 [[maybe_unused]]
-static yetty_yplatform_clipboard_request_paste_fn
-    yetty_yplatform_clipboard_yetty_yplatform_clipboard_request_paste_check =
-        clipboard_default_request_paste;
+static yetty_yplatform_clipboard_request_paste_fn yetty_yplatform_clipboard_yetty_yplatform_clipboard_request_paste_check = clipboard_default_request_paste;
 [[maybe_unused]]
-static yetty_yplatform_clipboard_drain_fn
-    yetty_yplatform_clipboard_yetty_yplatform_clipboard_drain_check = clipboard_default_drain;
+static yetty_yplatform_clipboard_drain_fn yetty_yplatform_clipboard_yetty_yplatform_clipboard_drain_check = clipboard_default_drain;
 
 struct yetty_yclass_ptr_result yetty_yplatform_clipboard_class_get(void)
 {
     static const struct yetty_yclass *cls = NULL;
-    if (cls) {
-        return YETTY_OK(yetty_yclass_ptr, cls);
-    }
+    if (cls) return YETTY_OK(yetty_yclass_ptr, cls);
     ydebug("registering class=yetty_yplatform_clipboard");
 
     static const struct yetty_yclass_descriptor desc = {
@@ -49,51 +38,37 @@ struct yetty_yclass_ptr_result yetty_yplatform_clipboard_class_get(void)
         .data_align = _Alignof(struct yetty_yplatform_clipboard),
     };
     static const struct yetty_yclass_op ops[] = {
-        {"yetty_yplatform", "clipboard_set_text",
-         (yetty_yclass_method_id_t)yetty_yplatform_clipboard_set_text,
-         (yetty_yclass_impl_t)clipboard_default_set_text},
-        {"yetty_yplatform", "clipboard_request_paste",
-         (yetty_yclass_method_id_t)yetty_yplatform_clipboard_request_paste,
-         (yetty_yclass_impl_t)clipboard_default_request_paste},
-        {"yetty_yplatform", "clipboard_drain",
-         (yetty_yclass_method_id_t)yetty_yplatform_clipboard_drain,
-         (yetty_yclass_impl_t)clipboard_default_drain},
+        {"yetty_yplatform", "clipboard_set_text", (yetty_yclass_method_id_t)yetty_yplatform_clipboard_set_text, (yetty_yclass_impl_t)clipboard_default_set_text},
+        {"yetty_yplatform", "clipboard_request_paste", (yetty_yclass_method_id_t)yetty_yplatform_clipboard_request_paste, (yetty_yclass_impl_t)clipboard_default_request_paste},
+        {"yetty_yplatform", "clipboard_drain", (yetty_yclass_method_id_t)yetty_yplatform_clipboard_drain, (yetty_yclass_impl_t)clipboard_default_drain},
     };
     struct yetty_yclass_ptr_result register_class_r =
-        yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]), NULL, NULL, 0);
+        yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]),
+                              NULL, NULL, 0);
     if (YETTY_IS_ERR(register_class_r)) {
-        yerror("yetty_yplatform_clipboard_class_get: class_register failed: %s",
-               register_class_r.error.msg);
-        return YETTY_ERR(yetty_yclass_ptr,
-                         "yetty_yplatform_clipboard_class_get: class_register failed",
-                         register_class_r);
+        yerror("yetty_yplatform_clipboard_class_get: class_register failed: %s", register_class_r.error.msg);
+        return YETTY_ERR(yetty_yclass_ptr, "yetty_yplatform_clipboard_class_get: class_register failed", register_class_r);
     }
     cls = register_class_r.value;
     return register_class_r;
 }
 
-struct yetty_yplatform_clipboard_ptr_result yetty_yplatform_clipboard_from(
-    struct yetty_yclass_object *obj)
+struct yetty_yplatform_clipboard_ptr_result yetty_yplatform_clipboard_from(struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_ptr_result class_r = yetty_yplatform_clipboard_class_get();
-    if (YETTY_IS_ERR(class_r)) {
-        return YETTY_ERR(yetty_yplatform_clipboard_ptr,
-                         "yetty_yplatform_clipboard_from: class accessor", class_r);
-    }
-    struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
-    if (YETTY_IS_ERR(slice_r)) {
-        return YETTY_ERR(yetty_yplatform_clipboard_ptr,
-                         "yetty_yplatform_clipboard_from: object_data", slice_r);
-    }
-    return YETTY_OK(yetty_yplatform_clipboard_ptr,
-                    (struct yetty_yplatform_clipboard *)slice_r.value);
+    if (YETTY_IS_ERR(class_r))
+        return YETTY_ERR(yetty_yplatform_clipboard_ptr, "yetty_yplatform_clipboard_from: class accessor", class_r);
+    struct yetty_yclass_void_ptr_result slice_r =
+        yetty_yclass_object_data(obj, class_r.value);
+    if (YETTY_IS_ERR(slice_r))
+        return YETTY_ERR(yetty_yplatform_clipboard_ptr, "yetty_yplatform_clipboard_from: object_data", slice_r);
+    return YETTY_OK(yetty_yplatform_clipboard_ptr, (struct yetty_yplatform_clipboard *)slice_r.value);
 }
 
 struct yetty_yclass_object *yetty_yplatform_clipboard_to(struct yetty_yplatform_clipboard *data)
 {
-    if (!data) {
+    if (!data)
         return NULL;
-    }
     struct yetty_yclass_ptr_result class_r = yetty_yplatform_clipboard_class_get();
     if (YETTY_IS_ERR(class_r)) {
         yetty_ycore_error_destroy(class_r.error);
@@ -108,94 +83,74 @@ struct yetty_yclass_object *yetty_yplatform_clipboard_to(struct yetty_yplatform_
     return (struct yetty_yclass_object *)((char *)data - offset_r.value);
 }
 
-struct yetty_ycore_void_result yetty_yplatform_clipboard_set_text(struct yetty_yclass_object *obj,
-                                                                  const char *text, size_t len)
+
+struct yetty_ycore_void_result yetty_yplatform_clipboard_set_text(struct yetty_yclass_object * obj, const char * text, size_t len)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
-        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
-            "yetty_yplatform", (yetty_yclass_method_id_t)yetty_yplatform_clipboard_set_text);
-        if (YETTY_IS_ERR(method_slot_r)) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yetty_yplatform_clipboard_set_text: method_slot_get failed",
-                             method_slot_r);
-        }
+        struct yetty_yclass_method_slot_result method_slot_r =
+            yetty_yclass_method_slot_get("yetty_yplatform", (yetty_yclass_method_id_t)yetty_yplatform_clipboard_set_text);
+        if (YETTY_IS_ERR(method_slot_r))
+            return YETTY_ERR(yetty_ycore_void, "yetty_yplatform_clipboard_set_text: method_slot_get failed", method_slot_r);
         method_slot = method_slot_r.value;
     }
 
-    if (!obj) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_yplatform_clipboard_set_text: NULL object");
-    }
+    if (!obj) return YETTY_ERR(yetty_ycore_void, "yetty_yplatform_clipboard_set_text: NULL object");
 
-    struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
-                        "yetty_yplatform_clipboard_set_text: object_class failed");
+    struct yetty_yclass_ptr_result object_class_r =
+        yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r, "yetty_yplatform_clipboard_set_text: object_class failed");
     struct yetty_yclass_impl_t_result dispatch_impl_r =
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
-                        "yetty_yplatform_clipboard_set_text: dispatch_lookup failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yplatform_clipboard_set_text: dispatch_lookup failed");
     return ((yetty_yplatform_clipboard_set_text_fn)dispatch_impl_r.value)(obj, text, len);
 }
 
-struct yetty_ycore_void_result yetty_yplatform_clipboard_request_paste(
-    struct yetty_yclass_object *obj)
+struct yetty_ycore_void_result yetty_yplatform_clipboard_request_paste(struct yetty_yclass_object * obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
-        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
-            "yetty_yplatform", (yetty_yclass_method_id_t)yetty_yplatform_clipboard_request_paste);
-        if (YETTY_IS_ERR(method_slot_r)) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yetty_yplatform_clipboard_request_paste: method_slot_get failed",
-                             method_slot_r);
-        }
+        struct yetty_yclass_method_slot_result method_slot_r =
+            yetty_yclass_method_slot_get("yetty_yplatform", (yetty_yclass_method_id_t)yetty_yplatform_clipboard_request_paste);
+        if (YETTY_IS_ERR(method_slot_r))
+            return YETTY_ERR(yetty_ycore_void, "yetty_yplatform_clipboard_request_paste: method_slot_get failed", method_slot_r);
         method_slot = method_slot_r.value;
     }
 
-    if (!obj) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_yplatform_clipboard_request_paste: NULL object");
-    }
+    if (!obj) return YETTY_ERR(yetty_ycore_void, "yetty_yplatform_clipboard_request_paste: NULL object");
 
-    struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
-                        "yetty_yplatform_clipboard_request_paste: object_class failed");
+    struct yetty_yclass_ptr_result object_class_r =
+        yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r, "yetty_yplatform_clipboard_request_paste: object_class failed");
     struct yetty_yclass_impl_t_result dispatch_impl_r =
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
-                        "yetty_yplatform_clipboard_request_paste: dispatch_lookup failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yplatform_clipboard_request_paste: dispatch_lookup failed");
     return ((yetty_yplatform_clipboard_request_paste_fn)dispatch_impl_r.value)(obj);
 }
 
-struct yetty_ycore_void_result yetty_yplatform_clipboard_drain(struct yetty_yclass_object *obj)
+struct yetty_ycore_void_result yetty_yplatform_clipboard_drain(struct yetty_yclass_object * obj)
 {
     static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
     if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
-        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
-            "yetty_yplatform", (yetty_yclass_method_id_t)yetty_yplatform_clipboard_drain);
-        if (YETTY_IS_ERR(method_slot_r)) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yetty_yplatform_clipboard_drain: method_slot_get failed",
-                             method_slot_r);
-        }
+        struct yetty_yclass_method_slot_result method_slot_r =
+            yetty_yclass_method_slot_get("yetty_yplatform", (yetty_yclass_method_id_t)yetty_yplatform_clipboard_drain);
+        if (YETTY_IS_ERR(method_slot_r))
+            return YETTY_ERR(yetty_ycore_void, "yetty_yplatform_clipboard_drain: method_slot_get failed", method_slot_r);
         method_slot = method_slot_r.value;
     }
 
-    if (!obj) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_yplatform_clipboard_drain: NULL object");
-    }
+    if (!obj) return YETTY_ERR(yetty_ycore_void, "yetty_yplatform_clipboard_drain: NULL object");
 
-    struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
-                        "yetty_yplatform_clipboard_drain: object_class failed");
+    struct yetty_yclass_ptr_result object_class_r =
+        yetty_yclass_object_class(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r, "yetty_yplatform_clipboard_drain: object_class failed");
     struct yetty_yclass_impl_t_result dispatch_impl_r =
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
-                        "yetty_yplatform_clipboard_drain: dispatch_lookup failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r, "yetty_yplatform_clipboard_drain: dispatch_lookup failed");
     return ((yetty_yplatform_clipboard_drain_fn)dispatch_impl_r.value)(obj);
 }
 
-struct yetty_yclass_object_ptr_result yetty_yplatform_clipboard_create(
-    struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_yplatform_clipboard_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_yplatform_clipboard_create(struct yetty_yclass_ctx *ctx)
 {
     ydebug("class=yetty_yplatform_clipboard");
@@ -204,18 +159,15 @@ struct yetty_yclass_object_ptr_result yetty_yplatform_clipboard_create(struct ye
      * Without this, translate_class on a fresh remote-only session
      * would have no local slots to map remote ids onto. */
     struct yetty_yclass_ptr_result class_accessor_r = yetty_yplatform_clipboard_class_get();
-    if (YETTY_IS_ERR(class_accessor_r)) {
+    if (YETTY_IS_ERR(class_accessor_r))
         return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_yplatform_clipboard_create: class accessor failed",
-                         class_accessor_r);
-    }
+                         "yetty_yplatform_clipboard_create: class accessor failed", class_accessor_r);
     const struct yetty_yclass *klass = class_accessor_r.value;
 
     if (!ctx || !ctx->session) {
-        struct yetty_yclass_object_ptr_result alloc_r = yetty_yclass_object_alloc(klass);
-        if (YETTY_IS_ERR(alloc_r)) {
-            return alloc_r;
-        }
+        struct yetty_yclass_object_ptr_result alloc_r =
+            yetty_yclass_object_alloc(klass);
+        if (YETTY_IS_ERR(alloc_r)) return alloc_r;
         return alloc_r;
     }
 
@@ -227,8 +179,7 @@ struct yetty_yclass_object_ptr_result yetty_yplatform_clipboard_create(struct ye
         struct yetty_ycore_void_result translate_class_r =
             yetty_yclass_rpc_session_translate_class(ctx->session, "yetty_yplatform_clipboard");
         if (YETTY_IS_ERR(translate_class_r)) {
-            yetty_ycore_error_print(
-                stderr,
+            yetty_ycore_error_print(stderr,
                 "yetty_yplatform_clipboard_create: translate_class (degraded — will lazy-resolve)",
                 translate_class_r.error);
             yetty_ycore_error_destroy(translate_class_r.error);
@@ -237,17 +188,15 @@ struct yetty_yclass_object_ptr_result yetty_yplatform_clipboard_create(struct ye
 
     uint64_t handle = 0;
     const char *class_name = "yetty_yplatform_clipboard";
-    struct yetty_ycore_size_result create_call_r =
-        yetty_yclass_rpc_call(ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, class_name,
-                              strlen(class_name), &handle, sizeof(handle));
-    if (YETTY_IS_ERR(create_call_r)) {
+    struct yetty_ycore_size_result create_call_r = yetty_yclass_rpc_call(
+        ctx->session, YETTY_YCLASS_RPC_OP_CREATE, 0, class_name, strlen(class_name), &handle,
+        sizeof(handle));
+    if (YETTY_IS_ERR(create_call_r))
         return YETTY_ERR(yetty_yclass_object_ptr,
                          "yetty_yplatform_clipboard_create: CREATE call failed", create_call_r);
-    }
-    if (create_call_r.value != sizeof(handle) || !handle) {
+    if (create_call_r.value != sizeof(handle) || !handle)
         return YETTY_ERR(yetty_yclass_object_ptr,
                          "yetty_yplatform_clipboard_create: CREATE returned no/invalid handle");
-    }
 
     /* Proxy: aligned (header + uint64_t) layout. Allocating raw bytes
      * and writing the handle past the header was misaligned on 32-bit
@@ -257,10 +206,8 @@ struct yetty_yclass_object_ptr_result yetty_yplatform_clipboard_create(struct ye
      * never local-dispatch, so the class's data_size contract isn't
      * honoured for this allocation. */
     struct yetty_yclass_proxy *proxy = calloc(1, sizeof(*proxy));
-    if (!proxy) {
-        return YETTY_ERR(yetty_yclass_object_ptr,
-                         "yetty_yplatform_clipboard_create: calloc(proxy) failed");
-    }
+    if (!proxy)
+        return YETTY_ERR(yetty_yclass_object_ptr, "yetty_yplatform_clipboard_create: calloc(proxy) failed");
     proxy->header.klass = klass;
     /* Link the session onto the proxy so its methods marshal over it — they
      * read obj->session instead of taking a ctx argument. */
@@ -268,3 +215,4 @@ struct yetty_yclass_object_ptr_result yetty_yplatform_clipboard_create(struct ye
     proxy->handle = handle;
     return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
 }
+

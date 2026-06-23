@@ -127,7 +127,7 @@ static struct yetty_ycore_void_result gemini_config_knob(struct yetty_yclass_obj
 {
     (void)obj;
     int written = snprintf(out, out_size,
-                           "gemini_approval_mode|approval mode|"
+                           "gemini-approval-mode|approval mode|"
                            "default,auto_edit,yolo,plan|%s",
                            app->config.gemini.approval_mode);
     if (written < 0 || (size_t)written >= out_size) {

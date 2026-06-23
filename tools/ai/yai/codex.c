@@ -258,9 +258,9 @@ static struct yetty_ycore_void_result codex_config_knob(struct yetty_yclass_obje
      * Reasoning effort is a model parameter — it lives on the model tab
      * (main.c build_effort_knob), not here. */
     int written = snprintf(out, out_size,
-                           "codex_sandbox|sandbox|"
+                           "codex-sandbox|sandbox|"
                            "read-only,workspace-write,danger-full-access|%s\n"
-                           "codex_approval|approval|never,on-request,untrusted|%s",
+                           "codex-approval|approval|never,on-request,untrusted|%s",
                            app->config.codex.sandbox, app->config.codex.approval);
     if (written < 0 || (size_t)written >= out_size) {
         return YETTY_ERR(yetty_ycore_void, "codex config_knob: spec truncated");

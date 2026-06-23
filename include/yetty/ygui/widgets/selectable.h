@@ -37,12 +37,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_selectable_create(struct yetty_
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_selectable_set_text(struct yetty_yclass_object *obj,
-                                                              const char *t);
-struct yetty_ycore_void_result yetty_ygui_selectable_set_selected(struct yetty_yclass_object *obj,
-                                                                  int s);
-struct yetty_ycore_int_result yetty_ygui_selectable_is_selected(
-    const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_selectable_set_text(struct yetty_yclass_object *obj, const char *t);
+struct yetty_ycore_void_result yetty_ygui_selectable_set_selected(struct yetty_yclass_object *obj, int s);
+struct yetty_ycore_int_result yetty_ygui_selectable_is_selected(const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }

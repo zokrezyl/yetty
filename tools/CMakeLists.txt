@@ -76,8 +76,9 @@ if(YETTY_ENABLE_TOOL_CCC AND YETTY_PLATFORM STREQUAL "linux")
     add_subdirectory(ai/ccc)
 endif()
 
-# yai shares ccc's POSIX requirements (fork/execl, termios, poll, ioctl).
-if(YETTY_ENABLE_TOOL_YAI AND YETTY_PLATFORM STREQUAL "linux")
+# yai shares ccc's POSIX requirements (fork/execl, termios, poll, ioctl) —
+# both linux and macos provide these.
+if(YETTY_ENABLE_TOOL_YAI AND (YETTY_PLATFORM STREQUAL "linux" OR YETTY_PLATFORM STREQUAL "macos"))
     add_subdirectory(ai/yai)
 endif()
 

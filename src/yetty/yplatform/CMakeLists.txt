@@ -86,16 +86,38 @@ add_library(yetty_yplatform_core STATIC
     # In core so the platform can host any yapp:app subclass without naming it.
     ${YETTY_ROOT}/src/yetty/yapp/app.c
     ${YETTY_ROOT}/src/yetty/yapp/rpc.gen.c
+    # Submodule accessor-lookup registrations. The yplatform module aggregator
+    # (yplatform/rpc.gen.c, compiled into yetty_yplatform_window_chrome) calls
+    # each of these; the references are declared weak so absence is tolerated
+    # on ELF where missing weak externs resolve to NULL. Mach-O's static
+    # linker does not honor that — it rejects any unresolved reference,
+    # weak or not — so the definitions must actually be present in the link.
+    # The lookup tables themselves are guarded by YETTY_PLATFORM_* macros
+    # (which are not globally set), so each definition compiles down to
+    # registering a lookup hook that just returns NULL for class names that
+    # don't belong to it.
+    yclipboard/rpc.gen.c
+    ywindow/rpc.gen.c
+    yplatform/rpc.gen.c
     ${_core_per_os}
 )
 
 # These base yclass TUs carry C23 [[clang::annotate(...)]] attributes.
+# Older clang (e.g. Apple clang 16) only knows the pre-rename `gnu2x` spelling;
+# newer clang accepts `gnu23`. Detect once and reuse the supported flag.
 if(NOT MSVC)
+    include(CheckCCompilerFlag)
+    check_c_compiler_flag("-std=gnu23" YETTY_HAS_STD_GNU23)
+    if(YETTY_HAS_STD_GNU23)
+        set(_yetty_yplatform_c23_flag "-std=gnu23")
+    else()
+        set(_yetty_yplatform_c23_flag "-std=gnu2x")
+    endif()
     set_source_files_properties(
         ywindow-chrome/window-chrome.c
         yclipboard/clipboard.c
         ${YETTY_ROOT}/src/yetty/yapp/app.c
-        PROPERTIES COMPILE_OPTIONS "-std=gnu23")
+        PROPERTIES COMPILE_OPTIONS "${_yetty_yplatform_c23_flag}")
 endif()
 
 target_include_directories(yetty_yplatform_core PUBLIC

@@ -225,6 +225,9 @@ local_types:
   row_link_arena: tools/ygreeter/main.c
   ybrowser_scenario: tools/ygreeter/main.c
   key_ctx: tools/ygreeter/main.c
+  stdout_pty: tools/ygreeter/main.c
+  stdout_write: tools/ygreeter/main.c
+  client_state: tools/ygreeter/main.c
   yetty_ygreeter_app: tools/ygreeter/main.c
   yetty_ygreeter_app_ptr_result: tools/ygreeter/main.c
 local_typedefs:
