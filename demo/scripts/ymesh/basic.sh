@@ -14,7 +14,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(cd "$DIR/../../.." && pwd)"
 YMESH="${YMESH:-$ROOT/build-desktop-ytrace-release/tools/ymesh/ymesh}"
 ASSETS="$ROOT/demo/assets/ymesh"
-PAUSE="${DEMO_PAUSE:-3}"
+PAUSE="${DEMO_PAUSE:-0}"
 
 if [ ! -x "$YMESH" ]; then
     echo "ymesh binary not found at $YMESH — set YMESH=path/to/ymesh" >&2

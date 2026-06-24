@@ -28,9 +28,10 @@
 #include <yetty/yclass/class.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
-#include <yetty/yinit/yinit.h>            /* struct yetty_yinit_runtime (platform runtime type) */
 #include <yetty/yplatform/android-glue.h> /* struct yetty_yplatform_app_state + hook sigs */
+#include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/platform-input-pipe.h>
+#include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/ytrace/ytrace.h>
 
 /* Path helpers (yplatform/paths/android.c). */
@@ -46,17 +47,23 @@ WGPUSurface yetty_yplatform_create_surface_from_window(WGPUInstance instance,
 /* App injection + lifecycle (yapp module; the concrete app is linked per .so). */
 struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx);
 struct yetty_ycore_void_result yetty_yapp_init(struct yetty_yclass_object *app,
-                                               struct yetty_yinit_runtime *runtime);
+                                               struct yetty_yclass_object *platform);
 struct yetty_ycore_void_result yetty_yapp_run(struct yetty_yclass_object *app,
-                                              struct yetty_yinit_runtime *runtime);
+                                              struct yetty_yclass_object *platform);
 
-/* Render-thread payload: the app object + the synthetic runtime it reads during
+/* Platform class registration + base create (generated, yplatform module). The
+ * platform object is just the bring-up-state carrier here — Android's NDK
+ * ALooper is the OS loop, so we never call platform_run. */
+struct yetty_ycore_void_result yetty_yplatform_register(void);
+struct yetty_yclass_object_ptr_result yetty_yplatform_platform_create(struct yetty_yclass_ctx *ctx);
+
+/* Render-thread payload: the app object + the platform object it reads during
  * setup. Both must outlive program_init's stack — the app's run() services the
  * loop to completion on this thread — so the thread owns this (heap) and the
  * pointer is parked on state->program_state for program_term. */
 struct yetty_android_render_args {
     struct yetty_yclass_object *app;
-    struct yetty_yinit_runtime rt;
+    struct yetty_yclass_object *platform;
     int *running;
 };
 
@@ -66,9 +73,9 @@ static void *yetty_android_render_thread(void *arg)
     struct yetty_android_render_args *args = arg;
     /* The app's run() builds the framework + terminal and blocks on the render
      * loop until a shutdown event arrives on the input pipe. */
-    struct yetty_ycore_void_result res = yetty_yapp_init(args->app, &args->rt);
+    struct yetty_ycore_void_result res = yetty_yapp_init(args->app, args->platform);
     if (YETTY_IS_OK(res)) {
-        res = yetty_yapp_run(args->app, &args->rt);
+        res = yetty_yapp_run(args->app, args->platform);
     }
     if (YETTY_IS_ERR(res)) {
         LOGE("android: app worker fatal: %s", res.error.msg ? res.error.msg : "(no message)");
@@ -130,15 +137,50 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
         LOGE("android: out of memory");
         return;
     }
-    /* Assemble the runtime by hand (no argv / output_pipe / window_chrome on
-     * Android); the app's run() reads it via yframework_create. */
-    args->rt.config = state->config;
-    args->rt.instance = state->instance;
-    args->rt.surface = state->surface;
-    args->rt.surface_width = (uint32_t)width;
-    args->rt.surface_height = (uint32_t)height;
-    args->rt.content_scale = yetty_yinit_android_content_scale(state->app);
-    args->rt.platform_input_pipe = state->pipe;
+
+    /* Register the platform classes and create a platform object to carry the
+     * bring-up state by hand (no argv / output_pipe / window_chrome on Android).
+     * The NDK ALooper is the OS loop, so we never call platform_run — the object
+     * is just the handoff the app + yframework read back. */
+    struct yetty_ycore_void_result reg = yetty_yplatform_register();
+    if (YETTY_IS_ERR(reg)) {
+        LOGE("android: platform register failed: %s",
+             reg.error.msg ? reg.error.msg : "(no message)");
+        yetty_ycore_error_destroy(reg.error);
+        free(args);
+        return;
+    }
+    struct yetty_yclass_object_ptr_result platform_result = yetty_yplatform_platform_create(NULL);
+    if (!YETTY_IS_OK(platform_result)) {
+        LOGE("android: platform create failed: %s",
+             platform_result.error.msg ? platform_result.error.msg : "(no message)");
+        yetty_ycore_error_destroy(platform_result.error);
+        free(args);
+        return;
+    }
+    args->platform = platform_result.value;
+
+    struct yetty_yplatform_gpu_context gpu = {
+        .instance = state->instance,
+        .surface = state->surface,
+        .surface_width = (uint32_t)width,
+        .surface_height = (uint32_t)height,
+        .content_scale = yetty_yinit_android_content_scale(state->app),
+    };
+    struct yetty_ycore_void_result populate =
+        yetty_yplatform_platform_set_gpu_context(args->platform, &gpu);
+    if (YETTY_IS_OK(populate)) {
+        populate = yetty_yplatform_platform_set_services(args->platform, state->config, state->pipe,
+                                                         NULL, NULL);
+    }
+    if (YETTY_IS_ERR(populate)) {
+        LOGE("android: platform populate failed: %s",
+             populate.error.msg ? populate.error.msg : "(no message)");
+        yetty_ycore_error_destroy(populate.error);
+        (void)yetty_yclass_object_free(args->platform);
+        free(args);
+        return;
+    }
     args->running = &state->running;
 
     /* The concrete program is injected by the linked app module (yetty:app for
@@ -148,6 +190,7 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
         LOGE("android: app create failed: %s",
              app_result.error.msg ? app_result.error.msg : "(no message)");
         yetty_ycore_error_destroy(app_result.error);
+        (void)yetty_yclass_object_free(args->platform);
         free(args);
         return;
     }
@@ -187,6 +230,10 @@ struct yetty_ycore_void_result yetty_android_program_term(struct yetty_yplatform
     }
 
     if (state->program_state) {
+        struct yetty_android_render_args *args = state->program_state;
+        if (args->platform) {
+            (void)yetty_yclass_object_free(args->platform);
+        }
         free(state->program_state);
         state->program_state = NULL;
     }

@@ -32,18 +32,25 @@ struct yetty_yplatform_clipboard_ptr_result {
         struct yetty_ycore_error error;
     };
 };
-struct yetty_yplatform_clipboard_ptr_result yetty_yplatform_clipboard_from(struct yetty_yclass_object *obj);
+struct yetty_yplatform_clipboard_ptr_result yetty_yplatform_clipboard_from(
+    struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yplatform_clipboard_to(struct yetty_yplatform_clipboard *data);
 
-struct yetty_ycore_void_result yetty_yplatform_clipboard_set_text(struct yetty_yclass_object * obj, const char * text, size_t len);
-struct yetty_ycore_void_result yetty_yplatform_clipboard_request_paste(struct yetty_yclass_object * obj);
-struct yetty_ycore_void_result yetty_yplatform_clipboard_drain(struct yetty_yclass_object * obj);
+struct yetty_ycore_void_result yetty_yplatform_clipboard_set_text(struct yetty_yclass_object *obj,
+                                                                  const char *text, size_t len);
+struct yetty_ycore_void_result yetty_yplatform_clipboard_request_paste(
+    struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yplatform_clipboard_drain(struct yetty_yclass_object *obj);
 
-typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_set_text_fn)(struct yetty_yclass_object *, const char *, size_t);
-typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_request_paste_fn)(struct yetty_yclass_object *);
-typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_drain_fn)(struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_set_text_fn)(
+    struct yetty_yclass_object *, const char *, size_t);
+typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_request_paste_fn)(
+    struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_drain_fn)(
+    struct yetty_yclass_object *);
 
-struct yetty_yclass_object_ptr_result yetty_yplatform_clipboard_create(struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_yplatform_clipboard_create(
+    struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_yplatform_register(void);
 

@@ -9,12 +9,13 @@
 #include <webgpu/webgpu.h>
 #include <pthread.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yinit/yinit.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
+#include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <fcntl.h>
@@ -56,6 +57,12 @@ const char *yetty_yplatform_get_data_dir(void);
 const char *yetty_yplatform_get_runtime_dir(void);
 const char *yetty_yplatform_get_config_dir(void);
 WGPUSurface yetty_yplatform_create_surface_from_layer(WGPUInstance instance, CAMetalLayer *layer);
+
+/* Platform class registration + base create (generated, yplatform module). iOS
+ * bootstraps inline (UIKit owns the loop), so the platform object is only a
+ * bring-up-state carrier handed to yframework_create — never run(). */
+struct yetty_ycore_void_result yetty_yplatform_register(void);
+struct yetty_yclass_object_ptr_result yetty_yplatform_platform_create(struct yetty_yclass_ctx *ctx);
 
 /* YettyMetalView - UIView backed by CAMetalLayer */
 @interface YettyMetalView : UIView
@@ -221,22 +228,52 @@ static void *render_thread_func(void *arg)
     _metalView.metalLayer.drawableSize = CGSizeMake(fb_width, fb_height);
     ydebug("framebuffer size: %ux%u", fb_width, fb_height);
 
-    /* Build a synthetic yinit_runtime (iOS doesn't go through
-     * yetty_yinit_run — UIKit drives the main loop and we bootstrap
-     * inline) and hand it to yframework_create for the standard
-     * adapter/device/queue/allocator/render-target setup. */
+    /* Create a platform object to carry the bring-up state (iOS bootstraps
+     * inline — UIKit owns the main loop — so we never call platform_run) and
+     * hand it to yframework_create for the standard adapter/device/queue/
+     * allocator/render-target setup. yframework copies the GPU slice by value
+     * and borrows the config/pipe pointers, so the platform object can be freed
+     * as soon as create returns. */
     ydebug("creating yframework");
-    struct yetty_yinit_runtime yinit_rt;
-    memset(&yinit_rt, 0, sizeof(yinit_rt));
-    yinit_rt.config              = _config;
-    yinit_rt.instance            = _instance;
-    yinit_rt.surface             = _surface;
-    yinit_rt.surface_width       = fb_width;
-    yinit_rt.surface_height      = fb_height;
-    yinit_rt.content_scale       = (float)scale;
-    yinit_rt.platform_input_pipe = _pipe;
+    struct yetty_ycore_void_result plat_reg = yetty_yplatform_register();
+    if (YETTY_IS_ERR(plat_reg)) {
+        yerror("failed to register platform: %s",
+               plat_reg.error.msg ? plat_reg.error.msg : "(no msg)");
+        yetty_ycore_error_destroy(plat_reg.error);
+        return;
+    }
+    struct yetty_yclass_object_ptr_result plat_res = yetty_yplatform_platform_create(NULL);
+    if (!YETTY_IS_OK(plat_res)) {
+        yerror("failed to create platform: %s",
+               plat_res.error.msg ? plat_res.error.msg : "(no msg)");
+        yetty_ycore_error_destroy(plat_res.error);
+        return;
+    }
+    struct yetty_yclass_object *platform = plat_res.value;
 
-    struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(&yinit_rt);
+    struct yetty_yplatform_gpu_context gpu;
+    memset(&gpu, 0, sizeof(gpu));
+    gpu.instance       = _instance;
+    gpu.surface        = _surface;
+    gpu.surface_width  = fb_width;
+    gpu.surface_height = fb_height;
+    gpu.content_scale  = (float)scale;
+
+    struct yetty_ycore_void_result set_gpu =
+        yetty_yplatform_platform_set_gpu_context(platform, &gpu);
+    if (YETTY_IS_OK(set_gpu)) {
+        set_gpu = yetty_yplatform_platform_set_services(platform, _config, _pipe, NULL, NULL);
+    }
+    if (YETTY_IS_ERR(set_gpu)) {
+        yerror("failed to populate platform: %s",
+               set_gpu.error.msg ? set_gpu.error.msg : "(no msg)");
+        yetty_ycore_error_destroy(set_gpu.error);
+        (void)yetty_yclass_object_free(platform);
+        return;
+    }
+
+    struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(platform);
+    (void)yetty_yclass_object_free(platform);
     if (!YETTY_IS_OK(yrt_res)) {
         yerror("failed to create yframework: %s",
                yrt_res.error.msg ? yrt_res.error.msg : "(no msg)");

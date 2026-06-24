@@ -33,8 +33,9 @@
 #include <yetty/yapp/app.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
-#include <yetty/yinit/yinit.h>
+#include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/platform-input-pipe.h>
+#include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yplatform/thread.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/yplatform/ywindow/glfw.h>
@@ -97,13 +98,13 @@ yetty_yplatform_glfw_platform {
     char reserved;
 };
 
-/* Trampoline carries the app object + runtime across the thread boundary, then
+/* Trampoline carries the app object + platform across the thread boundary, then
  * pokes the GLFW event loop awake when the app exits so the main thread doesn't
  * sleep past process shutdown. The app body itself is the yapp:app subclass's
  * init/run pair — the platform is generic and never names the concrete program. */
 struct glfw_platform_worker_args {
     struct yetty_yclass_object *app;
-    struct yetty_yinit_runtime *rt;
+    struct yetty_yclass_object *platform;
     int *running;
     GLFWwindow *window;
     int result;
@@ -113,9 +114,9 @@ YETTY_EXTERNAL_CALLBACK
 static int glfw_platform_worker_trampoline(void *arg)
 {
     struct glfw_platform_worker_args *worker_args = arg;
-    struct yetty_ycore_void_result res = yetty_yapp_init(worker_args->app, worker_args->rt);
+    struct yetty_ycore_void_result res = yetty_yapp_init(worker_args->app, worker_args->platform);
     if (YETTY_IS_OK(res)) {
-        res = yetty_yapp_run(worker_args->app, worker_args->rt);
+        res = yetty_yapp_run(worker_args->app, worker_args->platform);
     }
     if (YETTY_IS_ERR(res)) {
         yetty_ycore_error_print(stderr, "glfw_platform: worker fatal error", res.error);
@@ -193,7 +194,6 @@ static struct yetty_ycore_void_result glfw_platform_run(struct yetty_yclass_obje
                                                         struct yetty_yclass_object *app, int argc,
                                                         char **argv)
 {
-    (void)obj;
     if (!app) {
         return YETTY_ERR(yetty_ycore_void, "glfw_platform_run: app object is required");
     }
@@ -420,11 +420,9 @@ static struct yetty_ycore_void_result glfw_platform_run(struct yetty_yclass_obje
         }
     }
 
-    /* Hand everything to the worker through the runtime struct. */
-    struct yetty_yinit_runtime rt = {
-        .argc = argc,
-        .argv = argv,
-        .config = config,
+    /* Store everything on the platform object; the worker + yframework_create
+     * read it back through the platform accessors. */
+    struct yetty_yplatform_gpu_context gpu = {
         .instance = instance,
         .surface = surface,
         .surface_width = (uint32_t)fb_width,
@@ -432,23 +430,30 @@ static struct yetty_ycore_void_result glfw_platform_run(struct yetty_yclass_obje
         .content_scale = content_scale,
         .x11_display = x11_display,
         .x11_window = x11_window,
-        .window = window,
-        .platform_input_pipe = platform_input_pipe,
-        .output_pipe = NULL,
-        .clipboard = clipboard,
-        .window_chrome = window_chrome,
     };
+    struct yetty_ycore_void_result populate = yetty_yplatform_platform_set_gpu_context(obj, &gpu);
+    if (YETTY_IS_OK(populate)) {
+        populate = yetty_yplatform_platform_set_services(obj, config, platform_input_pipe,
+                                                         clipboard, window_chrome);
+    }
 
     int running = 1;
     struct glfw_platform_worker_args worker_args = {
         .app = app,
-        .rt = &rt,
+        .platform = obj,
         .running = &running,
         .window = window,
         .result = 0,
     };
-    struct yetty_yplatform_ythread *render_thread =
-        yetty_yplatform_ythread_create(glfw_platform_worker_trampoline, &worker_args);
+    struct yetty_yplatform_ythread *render_thread = NULL;
+    if (YETTY_IS_OK(populate)) {
+        render_thread =
+            yetty_yplatform_ythread_create(glfw_platform_worker_trampoline, &worker_args);
+    } else {
+        yetty_ycore_error_destroy(populate.error);
+        yerror("glfw_platform: failed to populate platform object");
+        worker_args.result = 1;
+    }
 
     if (render_thread) {
         if (window) {

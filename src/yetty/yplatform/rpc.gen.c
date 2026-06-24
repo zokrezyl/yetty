@@ -18,14 +18,14 @@ struct yetty_ycore_void_result yetty_yplatform_ywindow_register(void) __attribut
 struct yetty_ycore_void_result yetty_yplatform_ywindow_chrome_register(void) __attribute__((weak));
 struct yetty_ycore_void_result yetty_yplatform_register(void);
 
-
 /* ---- yplatform: explicit yclass-RPC hook registration ------------- */
 
 struct yetty_ycore_void_result yetty_yplatform_register(void)
 {
     static bool registered = false;
-    if (registered)
+    if (registered) {
         return YETTY_OK_VOID();
+    }
 
     /* Weak: the submodule's rpc.gen.c may not be compiled for this
      * platform — register it only when it is actually linked. */

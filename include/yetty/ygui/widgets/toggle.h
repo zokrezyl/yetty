@@ -37,7 +37,8 @@ struct yetty_yclass_object_ptr_result yetty_ygui_toggle_create(struct yetty_ycla
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_toggle_set_label(struct yetty_yclass_object *obj, const char *label);
+struct yetty_ycore_void_result yetty_ygui_toggle_set_label(struct yetty_yclass_object *obj,
+                                                           const char *label);
 struct yetty_ycore_void_result yetty_ygui_toggle_set_on(struct yetty_yclass_object *obj, int on);
 struct yetty_ycore_int_result yetty_ygui_toggle_get_on(const struct yetty_yclass_object *obj);
 

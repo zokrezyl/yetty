@@ -36,7 +36,8 @@
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yimage/yimage-gen.h>
-#include <yetty/yinit/yinit.h>
+#include <yetty/yplatform/gpu-context.h>
+#include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yplatform/paths.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/ycoroutine.h>
@@ -555,22 +556,29 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
 
 [[clang::annotate("override@yapp:app:init")]]
 static struct yetty_ycore_void_result demoygui_app_init(struct yetty_yclass_object *obj,
-                                                        struct yetty_yinit_runtime *rt)
+                                                        struct yetty_yclass_object *platform)
 {
     (void)obj;
-    (void)rt;
+    (void)platform;
     return YETTY_OK_VOID();
 }
 
 [[clang::annotate("override@yapp:app:run")]]
 static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_object *obj,
-                                                       struct yetty_yinit_runtime *rt)
+                                                       struct yetty_yclass_object *platform)
 {
     struct yetty_demoygui_app_ptr_result app_res = yetty_demoygui_app_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "demoygui:app:run: app_from");
     struct demo_runner *r = &app_res.value->runner;
 
-    struct yetty_yframework_ptr_result frr = yetty_yframework_create(rt);
+    const struct yetty_yplatform_gpu_context *gpu = yetty_yplatform_platform_gpu_context(platform);
+    struct yetty_ycore_xthread_event_pipe *input_pipe =
+        yetty_yplatform_platform_input_pipe(platform);
+    if (!gpu || !input_pipe) {
+        return YETTY_ERR(yetty_ycore_void, "demoygui:app:run: platform state not populated");
+    }
+
+    struct yetty_yframework_ptr_result frr = yetty_yframework_create(platform);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, frr, "demo_runner: yframework_create");
     r->yframework = frr.value;
     r->render_target = r->yframework->render_target;
@@ -648,7 +656,7 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
     struct yetty_context ctx = {.runtime = r->yframework, .event_loop = r->yframework->event_loop};
     {
         struct yetty_ycore_rectangle root_rect = {
-            .min = {0, 0}, .max = {(float)rt->surface_width, (float)rt->surface_height}};
+            .min = {0, 0}, .max = {(float)gpu->surface_width, (float)gpu->surface_height}};
         struct yetty_yclass_ctx yclass_ctx = {0};
         struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "demo_runner: container_create");
@@ -683,7 +691,7 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "demo_runner: framework_create");
         r->engine = fr.value;
         struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
-            r->engine, (float)rt->surface_width, (float)rt->surface_height);
+            r->engine, (float)gpu->surface_width, (float)gpu->surface_height);
         if (YETTY_IS_ERR(vr)) {
             yetty_ycore_error_destroy(vr.error);
         }
@@ -757,13 +765,13 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
             if (YETTY_IS_ERR(ccfg)) {
                 yetty_ycore_error_destroy(ccfg.error);
             }
-            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(r->chrome, (float)rt->surface_width, (float)rt->surface_height);
+            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(r->chrome, (float)gpu->surface_width, (float)gpu->surface_height);
             if (YETTY_IS_ERR(csz)) {
                 yetty_ycore_error_destroy(csz.error);
             }
             /* Composite the chrome-painted caption as a pinned top figure. */
             struct yetty_ycore_void_result cap =
-                runner_chrome_caption_create(r, &ctx, (float)rt->surface_width);
+                runner_chrome_caption_create(r, &ctx, (float)gpu->surface_width);
             if (YETTY_IS_ERR(cap)) {
                 ywarn("demo_runner: chrome caption create failed: %s", cap.error.msg);
                 yetty_ycore_error_destroy(cap.error);
@@ -823,7 +831,7 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
         }
     }
 
-    yetty_yevent_post_async(rt->platform_input_pipe,
+    yetty_yevent_post_async(input_pipe,
                             &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
     struct yetty_ycore_void_result run_res =

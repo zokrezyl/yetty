@@ -43,23 +43,33 @@ struct yetty_yclass_object *yetty_yai_engine_to(struct yetty_yai_engine *data);
 /* Engines without a permission protocol simply have nothing to answer
  * — a no-op default, NOT an error: main.c calls this unconditionally
  * at shutdown to never leave a CLI blocked on an unanswered prompt. */
-struct yetty_ycore_void_result yetty_yai_resolve_permission(struct yetty_yclass_object * obj, struct yai_app * app, int allowed);
-struct yetty_ycore_void_result yetty_yai_handle_event(struct yetty_yclass_object * obj, struct yai_app * app, struct yyjson_val * event);
-struct yetty_ycore_void_result yetty_yai_send_user_message(struct yetty_yclass_object * obj, struct yai_app * app, const char * text);
-struct yetty_ycore_void_result yetty_yai_interrupt(struct yetty_yclass_object * obj, struct yai_app * app);
-struct yetty_ycore_void_result yetty_yai_start(struct yetty_yclass_object * obj, struct yai_app * app);
+struct yetty_ycore_void_result yetty_yai_resolve_permission(struct yetty_yclass_object *obj,
+                                                            struct yai_app *app, int allowed);
+struct yetty_ycore_void_result yetty_yai_handle_event(struct yetty_yclass_object *obj,
+                                                      struct yai_app *app,
+                                                      struct yyjson_val *event);
+struct yetty_ycore_void_result yetty_yai_send_user_message(struct yetty_yclass_object *obj,
+                                                           struct yai_app *app, const char *text);
+struct yetty_ycore_void_result yetty_yai_interrupt(struct yetty_yclass_object *obj,
+                                                   struct yai_app *app);
+struct yetty_ycore_void_result yetty_yai_start(struct yetty_yclass_object *obj,
+                                               struct yai_app *app);
 /* describe_config: write the engine-specific configuration rows
  * (model, sandbox/permission knobs, resume token semantics) into
  * `out` as newline-separated "key: value  [ENV_KNOB]" lines. The
  * caller presents them — as labels in the ygui config dialog when the
  * HUD is up, or as scrollback text without one. Errors on truncation.
  * Default: an engine with no knobs writes an empty string. */
-struct yetty_ycore_void_result yetty_yai_describe_config(struct yetty_yclass_object * obj, struct yai_app * app, char * out, size_t out_size);
+struct yetty_ycore_void_result yetty_yai_describe_config(struct yetty_yclass_object *obj,
+                                                         struct yai_app *app, char *out,
+                                                         size_t out_size);
 /* config_knob: the engine's ONE editable knob for the config dialog,
  * as `ENV_KEY|label|option1,option2,…|current-value`. The dialog
  * renders it as a radio group; a selection lands back in apply_config.
  * Default: no knob (empty string). */
-struct yetty_ycore_void_result yetty_yai_config_knob(struct yetty_yclass_object * obj, struct yai_app * app, char * out, size_t out_size);
+struct yetty_ycore_void_result yetty_yai_config_knob(struct yetty_yclass_object *obj,
+                                                     struct yai_app *app, char *out,
+                                                     size_t out_size);
 /* apply_config: a knob edited in the config dialog. `key` is the engine
  * field name from config_knob, `value` the chosen option. The value is
  * already stored in app->config by the caller (yai_config_set); the per-turn
@@ -67,20 +77,38 @@ struct yetty_ycore_void_result yetty_yai_config_knob(struct yetty_yclass_object 
  * next turn. The base default therefore does nothing. Engines with a live
  * protocol override this (claude pushes the new permission mode into the
  * running session immediately). */
-struct yetty_ycore_void_result yetty_yai_apply_config(struct yetty_yclass_object * obj, struct yai_app * app, const char * key, const char * value);
-struct yetty_ycore_void_result yetty_yai_on_child_exit(struct yetty_yclass_object * obj, struct yai_app * app, int64_t exit_status);
-struct yetty_ycore_void_result yetty_yai_on_child_eof(struct yetty_yclass_object * obj, struct yai_app * app);
+struct yetty_ycore_void_result yetty_yai_apply_config(struct yetty_yclass_object *obj,
+                                                      struct yai_app *app, const char *key,
+                                                      const char *value);
+struct yetty_ycore_void_result yetty_yai_on_child_exit(struct yetty_yclass_object *obj,
+                                                       struct yai_app *app, int64_t exit_status);
+struct yetty_ycore_void_result yetty_yai_on_child_eof(struct yetty_yclass_object *obj,
+                                                      struct yai_app *app);
 
-typedef struct yetty_ycore_void_result (*yetty_yai_resolve_permission_fn)(struct yetty_yclass_object *, struct yai_app *, int);
-typedef struct yetty_ycore_void_result (*yetty_yai_handle_event_fn)(struct yetty_yclass_object *, struct yai_app *, struct yyjson_val *);
-typedef struct yetty_ycore_void_result (*yetty_yai_send_user_message_fn)(struct yetty_yclass_object *, struct yai_app *, const char *);
-typedef struct yetty_ycore_void_result (*yetty_yai_interrupt_fn)(struct yetty_yclass_object *, struct yai_app *);
-typedef struct yetty_ycore_void_result (*yetty_yai_start_fn)(struct yetty_yclass_object *, struct yai_app *);
-typedef struct yetty_ycore_void_result (*yetty_yai_describe_config_fn)(struct yetty_yclass_object *, struct yai_app *, char *, size_t);
-typedef struct yetty_ycore_void_result (*yetty_yai_config_knob_fn)(struct yetty_yclass_object *, struct yai_app *, char *, size_t);
-typedef struct yetty_ycore_void_result (*yetty_yai_apply_config_fn)(struct yetty_yclass_object *, struct yai_app *, const char *, const char *);
-typedef struct yetty_ycore_void_result (*yetty_yai_on_child_exit_fn)(struct yetty_yclass_object *, struct yai_app *, int64_t);
-typedef struct yetty_ycore_void_result (*yetty_yai_on_child_eof_fn)(struct yetty_yclass_object *, struct yai_app *);
+typedef struct yetty_ycore_void_result (*yetty_yai_resolve_permission_fn)(
+    struct yetty_yclass_object *, struct yai_app *, int);
+typedef struct yetty_ycore_void_result (*yetty_yai_handle_event_fn)(struct yetty_yclass_object *,
+                                                                    struct yai_app *,
+                                                                    struct yyjson_val *);
+typedef struct yetty_ycore_void_result (*yetty_yai_send_user_message_fn)(
+    struct yetty_yclass_object *, struct yai_app *, const char *);
+typedef struct yetty_ycore_void_result (*yetty_yai_interrupt_fn)(struct yetty_yclass_object *,
+                                                                 struct yai_app *);
+typedef struct yetty_ycore_void_result (*yetty_yai_start_fn)(struct yetty_yclass_object *,
+                                                             struct yai_app *);
+typedef struct yetty_ycore_void_result (*yetty_yai_describe_config_fn)(struct yetty_yclass_object *,
+                                                                       struct yai_app *, char *,
+                                                                       size_t);
+typedef struct yetty_ycore_void_result (*yetty_yai_config_knob_fn)(struct yetty_yclass_object *,
+                                                                   struct yai_app *, char *,
+                                                                   size_t);
+typedef struct yetty_ycore_void_result (*yetty_yai_apply_config_fn)(struct yetty_yclass_object *,
+                                                                    struct yai_app *, const char *,
+                                                                    const char *);
+typedef struct yetty_ycore_void_result (*yetty_yai_on_child_exit_fn)(struct yetty_yclass_object *,
+                                                                     struct yai_app *, int64_t);
+typedef struct yetty_ycore_void_result (*yetty_yai_on_child_eof_fn)(struct yetty_yclass_object *,
+                                                                    struct yai_app *);
 
 struct yetty_yclass_object_ptr_result yetty_yai_engine_create(struct yetty_yclass_ctx *ctx);
 

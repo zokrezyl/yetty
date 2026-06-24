@@ -4187,12 +4187,15 @@ int main(int argc, char **argv)
     } else {
         app->hud = hud_res.value;
     }
-    /* The ygui HUD window renders only under yetty. On any other tty there
-     * is no window (yai_hud_create returned NULL), so drive the renderer's
-     * text status bar instead — unless the HUD was disabled (hud_on=false) or
-     * stdout is not a tty (pin_enabled is false: no bottom row to pin). */
-    if (!app->hud && app->renderer.pin_enabled && !app->renderer.pin_shader_glyphs &&
-        yai_effective_hud_on(app)) {
+    /* Whenever there is no ygui HUD window (yai_hud_create returned NULL —
+     * because hud-mode is "text", the host is not yetty, or creation failed),
+     * drive the renderer's text status bar instead. This is independent of the
+     * host: an explicit hud-mode "text" under yetty still wants the text bar,
+     * so it must NOT key off pin_shader_glyphs (host==yetty) — doing so wrongly
+     * suppressed the text bar whenever yai ran inside yetty. Skipped only when
+     * the HUD is disabled (hud_on=false) or stdout is not a tty (pin_enabled is
+     * false: no bottom row to pin). */
+    if (!app->hud && app->renderer.pin_enabled && yai_effective_hud_on(app)) {
         app->renderer.text_hud = 1;
     }
     /* Parse the configured HUD format (both backends read app->hud_format:

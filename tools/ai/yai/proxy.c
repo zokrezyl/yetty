@@ -800,9 +800,38 @@ static void proxy_serve(struct yai_proxy_conn *conn)
             forward_headers = curl_slist_append(forward_headers, one);
         }
 
-        /* Read the rest of the body if it didn't all arrive with the headers. */
-        while (buf_len - header_end < content_length && !atomic_load(&conn->proxy->stop)) {
-            ssize_t got = proxy_fill(conn, &buf, &buf_cap, buf_len);
+        /* The exact total size is now known: the parsed header block plus the
+         * Content-Length body. Grow `buf` to that size in a single realloc and
+         * read the body straight into it, instead of repeatedly doubling (the
+         * doubling above sized `buf` for headers only, where the length is not
+         * known up front). This realloc may move `buf`, invalidating the parsed
+         * header pointers that point into it; record their offsets first so the
+         * request log can rebase them afterwards (only needed when conversation
+         * logging is active). */
+        size_t total_len = header_end + content_length;
+        size_t header_name_offsets[100];
+        size_t header_value_offsets[100];
+        if (conn->proxy->conversation_file) {
+            for (size_t index = 0; index < num_headers; index++) {
+                header_name_offsets[index] = (size_t)(headers[index].name - buf);
+                header_value_offsets[index] = (size_t)(headers[index].value - buf);
+            }
+        }
+        if (total_len > buf_cap) {
+            char *grown = realloc(buf, total_len);
+            if (!grown) {
+                curl_slist_free_all(forward_headers);
+                free(buf);
+                return;
+            }
+            buf = grown;
+            buf_cap = total_len;
+        }
+
+        /* Read the rest of the body, if any, into the now exactly-sized buffer
+         * (no further reallocation occurs here). */
+        while (buf_len < total_len && !atomic_load(&conn->proxy->stop)) {
+            ssize_t got = recv(conn->fd, buf + buf_len, buf_cap - buf_len, 0);
             if (got <= 0) {
                 if (got < 0 && errno == EINTR) {
                     continue;
@@ -817,6 +846,14 @@ static void proxy_serve(struct yai_proxy_conn *conn)
         pthread_mutex_lock(&conn->proxy->conversation_mutex);
         conn->request_id = conn->proxy->next_request_id++;
         pthread_mutex_unlock(&conn->proxy->conversation_mutex);
+        if (conn->proxy->conversation_file) {
+            /* Rebase header pointers onto `buf`, which the body read may have
+             * moved via realloc. */
+            for (size_t index = 0; index < num_headers; index++) {
+                headers[index].name = buf + header_name_offsets[index];
+                headers[index].value = buf + header_value_offsets[index];
+            }
+        }
         conversation_log_request(conn, method_buf, url, headers, num_headers, buf + header_end,
                                  content_length);
 

@@ -80,7 +80,8 @@
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yshadertoy/figure.h>
-#include <yetty/yinit/yinit.h> /* struct yetty_yinit_runtime (platform runtime type) */
+#include <yetty/yplatform/gpu-context.h>
+#include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yapp/app.h>
 #include <yetty/yclass/class.h>
 #include <yetty/yrender/render-target.h>
@@ -4126,22 +4127,29 @@ struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_
 
 [[clang::annotate("override@yapp:app:init")]]
 static struct yetty_ycore_void_result ygreeter_app_init(struct yetty_yclass_object *obj,
-                                                        struct yetty_yinit_runtime *rt)
+                                                        struct yetty_yclass_object *platform)
 {
     (void)obj;
-    (void)rt;
+    (void)platform;
     return YETTY_OK_VOID();
 }
 
 [[clang::annotate("override@yapp:app:run")]]
 static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_object *obj,
-                                                        struct yetty_yinit_runtime *rt)
+                                                        struct yetty_yclass_object *platform)
 {
     struct yetty_ygreeter_app_ptr_result app_res = yetty_ygreeter_app_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "ygreeter:app:run: app_from");
     struct app *app = &app_res.value->app;
 
-    struct yetty_yframework_ptr_result frr = yetty_yframework_create(rt);
+    const struct yetty_yplatform_gpu_context *gpu = yetty_yplatform_platform_gpu_context(platform);
+    struct yetty_ycore_xthread_event_pipe *input_pipe =
+        yetty_yplatform_platform_input_pipe(platform);
+    if (!gpu || !input_pipe) {
+        return YETTY_ERR(yetty_ycore_void, "ygreeter:app:run: platform state not populated");
+    }
+
+    struct yetty_yframework_ptr_result frr = yetty_yframework_create(platform);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, frr, "standalone: yframework_create");
     app->yframework = frr.value;
     app->render_target = app->yframework->render_target;
@@ -4248,7 +4256,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
                                       .event_loop = app->yframework->event_loop};
     {
         struct yetty_ycore_rectangle root_rect = {
-            .min = {0, 0}, .max = {(float)rt->surface_width, (float)rt->surface_height}};
+            .min = {0, 0}, .max = {(float)gpu->surface_width, (float)gpu->surface_height}};
         struct yetty_yclass_ctx yclass_ctx = {0};
         struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "standalone: container_create");
@@ -4280,7 +4288,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scr, "standalone: set_container_obj");
         float cs = app_content_scale(app);
         struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
-            app->engine, (float)rt->surface_width / cs, (float)rt->surface_height / cs);
+            app->engine, (float)gpu->surface_width / cs, (float)gpu->surface_height / cs);
         if (YETTY_IS_ERR(vr)) {
             yetty_ycore_error_destroy(vr.error);
         }
@@ -4316,7 +4324,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
          * receiver scales back to framebuffer px (see app_content_scale). */
         float cs = app_content_scale(app);
         struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
-            app->engine, (float)rt->surface_width / cs, (float)rt->surface_height / cs);
+            app->engine, (float)gpu->surface_width / cs, (float)gpu->surface_height / cs);
         if (YETTY_IS_ERR(vr)) {
             yetty_ycore_error_destroy(vr.error);
         }
@@ -4335,7 +4343,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
             app->root_container, app->font, &app->ctx, app->yframework->window_chrome,
-            (float)rt->surface_width, (float)rt->surface_height, 36.0f, 8.0f,
+            (float)gpu->surface_width, (float)gpu->surface_height, 36.0f, 8.0f,
             YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             app->chrome = chrome_r.value;
@@ -4392,7 +4400,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
     }
 
     /* Kick first frame. */
-    yetty_yevent_post_async(rt->platform_input_pipe,
+    yetty_yevent_post_async(input_pipe,
                             &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
     struct yetty_ycore_void_result run_res =
@@ -4568,8 +4576,8 @@ __attribute__((unused)) static struct yetty_ycore_void_result ygreeter_extract_a
  * stack — standalone_worker runs the event loop to completion on this thread,
  * so the thread owns them and frees them when it returns. */
 struct ygreeter_android_thread_args {
-    struct yetty_yclass_object *app_obj; /* ygreeter:app object (owns struct app) */
-    struct yetty_yinit_runtime rt;
+    struct yetty_yclass_object *app_obj;  /* ygreeter:app object (owns struct app) */
+    struct yetty_yclass_object *platform; /* bring-up-state carrier (NDK owns the loop) */
 };
 
 YETTY_EXTERNAL_CALLBACK
@@ -4583,11 +4591,14 @@ static void *ygreeter_android_render_thread(void *arg)
      * that replace the removed yinit/android-glue.c); it cannot link until that
      * lands. The call below tracks the migrated yapp:app:run signature so only
      * the platform glue remains. */
-    struct yetty_ycore_void_result run_res = standalone_worker(targs->app_obj, &targs->rt);
+    struct yetty_ycore_void_result run_res = standalone_worker(targs->app_obj, targs->platform);
     if (YETTY_IS_ERR(run_res)) {
         LOGE("ygreeter standalone worker: %s",
              run_res.error.msg ? run_res.error.msg : "(no message)");
         yetty_ycore_error_destroy(run_res.error);
+    }
+    if (targs->platform) {
+        (void)yetty_yclass_object_free(targs->platform);
     }
     free(targs);
     return NULL;
@@ -4679,17 +4690,49 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
     }
     struct app *app = &app_data.value->app;
     targs->app_obj = app_res.value;
-    /* Synthetic runtime: the same fields the desktop worker reads, stamped by
-     * hand (Android doesn't go through the GLFW platform run). FIXME: the new
-     * yplatform Android entry must supply the content-scale replacement for the
-     * removed yetty_yinit_android_content_scale. */
-    targs->rt.config = state->config;
-    targs->rt.instance = state->instance;
-    targs->rt.surface = state->surface;
-    targs->rt.surface_width = (uint32_t)width;
-    targs->rt.surface_height = (uint32_t)height;
-    targs->rt.content_scale = yetty_yinit_android_content_scale(state->app);
-    targs->rt.platform_input_pipe = state->pipe;
+
+    /* Register the platform classes and create a platform object to carry the
+     * bring-up state by hand (Android doesn't go through the GLFW platform run).
+     * FIXME: the new yplatform Android entry must supply the content-scale path. */
+    struct yetty_ycore_void_result plat_reg = yetty_yplatform_register();
+    if (YETTY_IS_ERR(plat_reg)) {
+        LOGE("ygreeter: platform register failed: %s",
+             plat_reg.error.msg ? plat_reg.error.msg : "(no message)");
+        yetty_ycore_error_destroy(plat_reg.error);
+        free(targs);
+        return;
+    }
+    struct yetty_yclass_object_ptr_result plat_res = yetty_yplatform_platform_create(NULL);
+    if (!YETTY_IS_OK(plat_res)) {
+        LOGE("ygreeter: platform create failed: %s",
+             plat_res.error.msg ? plat_res.error.msg : "(no message)");
+        yetty_ycore_error_destroy(plat_res.error);
+        free(targs);
+        return;
+    }
+    targs->platform = plat_res.value;
+
+    struct yetty_yplatform_gpu_context gpu = {
+        .instance = state->instance,
+        .surface = state->surface,
+        .surface_width = (uint32_t)width,
+        .surface_height = (uint32_t)height,
+        .content_scale = yetty_yinit_android_content_scale(state->app),
+    };
+    struct yetty_ycore_void_result populate =
+        yetty_yplatform_platform_set_gpu_context(targs->platform, &gpu);
+    if (YETTY_IS_OK(populate)) {
+        populate = yetty_yplatform_platform_set_services(targs->platform, state->config, state->pipe,
+                                                         NULL, NULL);
+    }
+    if (YETTY_IS_ERR(populate)) {
+        LOGE("ygreeter: platform populate failed: %s",
+             populate.error.msg ? populate.error.msg : "(no message)");
+        yetty_ycore_error_destroy(populate.error);
+        (void)yetty_yclass_object_free(targs->platform);
+        free(targs);
+        return;
+    }
 
     state->program_state = app;
     /* The showcase is pointer-driven; never auto-pop the soft IME. */

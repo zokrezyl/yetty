@@ -19,9 +19,10 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yinit/yinit.h>
+#include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty.h>
+#include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/ytrace/ytrace.h>
 
 struct [[clang::annotate("class@yetty:app")]] [[clang::annotate("parent@yapp:app")]]
@@ -38,27 +39,35 @@ struct yetty_yclass_object_ptr_result yetty_yetty_app_create(struct yetty_yclass
 
 [[clang::annotate("override@yapp:app:init")]]
 static struct yetty_ycore_void_result yetty_app_init(struct yetty_yclass_object *obj,
-                                                     struct yetty_yinit_runtime *rt)
+                                                     struct yetty_yclass_object *platform)
 {
     (void)obj;
-    (void)rt;
+    (void)platform;
     return YETTY_OK_VOID();
 }
 
 [[clang::annotate("override@yapp:app:run")]]
 static struct yetty_ycore_void_result yetty_app_run(struct yetty_yclass_object *obj,
-                                                    struct yetty_yinit_runtime *rt)
+                                                    struct yetty_yclass_object *platform)
 {
     (void)obj;
 
+    struct yetty_yconfig_config *config = yetty_yplatform_platform_config(platform);
+    const struct yetty_yplatform_gpu_context *gpu = yetty_yplatform_platform_gpu_context(platform);
+    struct yetty_ycore_xthread_event_pipe *input_pipe =
+        yetty_yplatform_platform_input_pipe(platform);
+    if (!config || !gpu || !input_pipe) {
+        return YETTY_ERR(yetty_ycore_void, "yetty:app: platform state not populated");
+    }
+
     struct yetty_yplatform_pty_factory_ptr_result pty_res =
-        yetty_yplatform_pty_factory_create(rt->config, NULL);
+        yetty_yplatform_pty_factory_create(config, NULL);
     if (!YETTY_IS_OK(pty_res)) {
         return YETTY_ERR(yetty_ycore_void, "yetty:app: pty_factory_create failed", pty_res);
     }
     struct yetty_yplatform_pty_factory *pty_factory = pty_res.value;
 
-    struct yetty_yframework_ptr_result framework_res = yetty_yframework_create(rt);
+    struct yetty_yframework_ptr_result framework_res = yetty_yframework_create(platform);
     if (!YETTY_IS_OK(framework_res)) {
         pty_factory->ops->destroy(pty_factory);
         return YETTY_ERR(yetty_ycore_void, "yetty:app: yframework_create failed", framework_res);
@@ -76,9 +85,9 @@ static struct yetty_ycore_void_result yetty_app_run(struct yetty_yclass_object *
     /* First frame at the live framebuffer size, not the config default. */
     struct yetty_yui_event resize = {
         .type = YETTY_YCORE_RESIZE,
-        .resize = {.width = (float)rt->surface_width, .height = (float)rt->surface_height},
+        .resize = {.width = (float)gpu->surface_width, .height = (float)gpu->surface_height},
     };
-    rt->platform_input_pipe->ops->write(rt->platform_input_pipe, &resize, sizeof(resize));
+    input_pipe->ops->write(input_pipe, &resize, sizeof(resize));
 
     struct yetty_ycore_void_result run_res = yetty_run(yetty);
 

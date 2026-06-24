@@ -4,7 +4,7 @@
  * that wants a window + GPU + event loop. The actual logic is the same
  * one yetty/yetty.c carried as the static init_webgpu(); the deltas are:
  *
- *   - inputs come from a yinit_runtime (not an app-context bundle),
+ *   - inputs come from a yplatform:platform object (not an app-context bundle),
  *   - the result is an owned struct yetty_yframework (not stamped onto a
  *     yetty struct),
  *   - the event_loop + wgpu await machinery + RPC server live here too,
@@ -14,7 +14,8 @@
 
 #include <yetty/yframework/yframework.h>
 
-#include <yetty/yinit/yinit.h>
+#include <yetty/yplatform/gpu-context.h>
+#include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yrender/gpu-allocator.h>
@@ -424,11 +425,15 @@ static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPU
     return YETTY_OK_VOID();
 }
 
-struct yetty_yframework_ptr_result yetty_yframework_create(
-    const struct yetty_yinit_runtime *yinit_rt)
+struct yetty_yframework_ptr_result yetty_yframework_create(struct yetty_yclass_object *platform)
 {
-    if (!yinit_rt) {
-        return YETTY_ERR(yetty_yframework_ptr, "yframework_create: yinit_rt is NULL");
+    if (!platform) {
+        return YETTY_ERR(yetty_yframework_ptr, "yframework_create: platform is NULL");
+    }
+
+    const struct yetty_yplatform_gpu_context *gpu = yetty_yplatform_platform_gpu_context(platform);
+    if (!gpu) {
+        return YETTY_ERR(yetty_yframework_ptr, "yframework_create: platform GPU context unset");
     }
 
     struct yetty_yframework *rt = calloc(1, sizeof(struct yetty_yframework));
@@ -442,20 +447,14 @@ struct yetty_yframework_ptr_result yetty_yframework_create(
         return YETTY_ERR(yetty_yframework_ptr, "yframework_create: factory_state alloc failed");
     }
 
-    /* Wire the borrowed fields and the platform GPU slice. */
-    rt->config = yinit_rt->config;
-    rt->platform_input_pipe = yinit_rt->platform_input_pipe;
-    rt->output_pipe = yinit_rt->output_pipe;
-    rt->clipboard = yinit_rt->clipboard;
-    rt->window_chrome = yinit_rt->window_chrome;
+    /* Wire the borrowed services and copy the platform GPU slice by value. */
+    rt->config = yetty_yplatform_platform_config(platform);
+    rt->platform_input_pipe = yetty_yplatform_platform_input_pipe(platform);
+    rt->output_pipe = NULL;
+    rt->clipboard = yetty_yplatform_platform_clipboard(platform);
+    rt->window_chrome = yetty_yplatform_platform_window_chrome(platform);
 
-    rt->gpu.app_gpu_context.instance = yinit_rt->instance;
-    rt->gpu.app_gpu_context.surface = yinit_rt->surface;
-    rt->gpu.app_gpu_context.surface_width = yinit_rt->surface_width;
-    rt->gpu.app_gpu_context.surface_height = yinit_rt->surface_height;
-    rt->gpu.app_gpu_context.content_scale = yinit_rt->content_scale;
-    rt->gpu.app_gpu_context.x11_display = yinit_rt->x11_display;
-    rt->gpu.app_gpu_context.x11_window = yinit_rt->x11_window;
+    rt->gpu.app_gpu_context = *gpu;
 
     /* Event loop — VNC + render-target callbacks need it. */
     struct yetty_ycore_event_loop_result el_res =
@@ -469,14 +468,14 @@ struct yetty_yframework_ptr_result yetty_yframework_create(
     /* Coroutine-aware wgpu await machinery — VNC + texture render target
      * use it to yield instead of blocking on async wgpu work. */
     struct yplatform_wgpu_ptr_result wgpu_res =
-        yetty_yplatform_wgpu_create(yinit_rt->instance, rt->event_loop);
+        yetty_yplatform_wgpu_create(gpu->instance, rt->event_loop);
     if (!YETTY_IS_OK(wgpu_res)) {
         (void)yetty_yframework_destroy(rt);
         return YETTY_ERR(yetty_yframework_ptr, "yframework: wgpu_create failed", wgpu_res);
     }
     rt->wgpu = wgpu_res.value;
 
-    struct yetty_ycore_void_result gpu_res = init_gpu(rt, yinit_rt->instance, yinit_rt->surface);
+    struct yetty_ycore_void_result gpu_res = init_gpu(rt, gpu->instance, gpu->surface);
     if (!YETTY_IS_OK(gpu_res)) {
         (void)yetty_yframework_destroy(rt);
         return YETTY_ERR(yetty_yframework_ptr, "yframework: gpu init failed", gpu_res);

@@ -16,8 +16,6 @@
 extern "C" {
 #endif
 
-struct yetty_yinit_runtime;
-
 struct yetty_yclass_ptr_result yetty_yapp_app_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct
@@ -35,11 +33,15 @@ struct yetty_yapp_app_ptr_result {
 struct yetty_yapp_app_ptr_result yetty_yapp_app_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yapp_app_to(struct yetty_yapp_app *data);
 
-struct yetty_ycore_void_result yetty_yapp_init(struct yetty_yclass_object * app, struct yetty_yinit_runtime * runtime);
-struct yetty_ycore_void_result yetty_yapp_run(struct yetty_yclass_object * app, struct yetty_yinit_runtime * runtime);
+struct yetty_ycore_void_result yetty_yapp_init(struct yetty_yclass_object *app,
+                                               struct yetty_yclass_object *platform);
+struct yetty_ycore_void_result yetty_yapp_run(struct yetty_yclass_object *app,
+                                              struct yetty_yclass_object *platform);
 
-typedef struct yetty_ycore_void_result (*yetty_yapp_init_fn)(struct yetty_yclass_object *, struct yetty_yinit_runtime *);
-typedef struct yetty_ycore_void_result (*yetty_yapp_run_fn)(struct yetty_yclass_object *, struct yetty_yinit_runtime *);
+typedef struct yetty_ycore_void_result (*yetty_yapp_init_fn)(struct yetty_yclass_object *,
+                                                             struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_yapp_run_fn)(struct yetty_yclass_object *,
+                                                            struct yetty_yclass_object *);
 
 struct yetty_yclass_object_ptr_result yetty_yapp_app_create(struct yetty_yclass_ctx *ctx);
 

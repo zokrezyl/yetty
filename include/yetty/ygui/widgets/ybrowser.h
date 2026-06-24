@@ -37,7 +37,8 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ybrowser_create(struct yetty_yc
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_ybrowser_set_html(struct yetty_yclass_object *obj, const char *html, size_t len);
+struct yetty_ycore_void_result yetty_ygui_ybrowser_set_html(struct yetty_yclass_object *obj,
+                                                            const char *html, size_t len);
 
 #ifdef __cplusplus
 }

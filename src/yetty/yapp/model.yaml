@@ -6,8 +6,8 @@ methods:
     args:
       - name: app
         type: "struct yetty_yclass_object *"
-      - name: runtime
-        type: "struct yetty_yinit_runtime *"
+      - name: platform
+        type: "struct yetty_yclass_object *"
     doc: null
     local: true
     return_payload_type: null
@@ -18,8 +18,8 @@ methods:
     args:
       - name: app
         type: "struct yetty_yclass_object *"
-      - name: runtime
-        type: "struct yetty_yinit_runtime *"
+      - name: platform
+        type: "struct yetty_yclass_object *"
     doc: null
     local: true
     return_payload_type: null

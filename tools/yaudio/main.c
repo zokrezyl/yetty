@@ -25,7 +25,8 @@
  * view if the selection changed) → clear target → yui_render → present.
  */
 
-#include <yetty/yinit/yinit.h> /* struct yetty_yinit_runtime (platform runtime type) */
+#include <yetty/yplatform/gpu-context.h>
+#include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yapp/app.h>
 #include <yetty/yclass/class.h>
 #include <yetty/yframework/yframework.h>
@@ -166,7 +167,7 @@ struct [[clang::annotate("class@yaudio:app")]] [[clang::annotate("parent@yapp:ap
      * builds the real UI on the loop thread. */
     struct yetty_yplatform_yworkpool *load_pool;
     struct yetty_ycore_xthread_event_pipe *input_pipe; /* worker → loop wake */
-    struct yetty_yinit_runtime *rt;                    /* for build_widgets() in done() */
+    const struct yetty_yplatform_gpu_context *gpu;     /* for build_widgets() in done() */
 
     volatile double load_progress; /* 0..1, monotonic; worker writes, loop reads */
     volatile int load_phase;       /* enum yaudio_load_phase */
@@ -615,7 +616,7 @@ static struct yetty_ycore_void_result on_next_click(struct yetty_yclass_object *
     return YETTY_OK_VOID();
 }
 
-static void build_widgets(struct yetty_yaudio_app *app, struct yetty_yinit_runtime *rt)
+static void build_widgets(struct yetty_yaudio_app *app, const struct yetty_yplatform_gpu_context *gpu)
 {
     struct yetty_ygui_framework *engine = yetty_yui_engine(app->yui);
     if (!engine) {
@@ -628,8 +629,8 @@ static void build_widgets(struct yetty_yaudio_app *app, struct yetty_yinit_runti
         return;
     }
 
-    float W = (float)rt->surface_width;
-    float H = (float)rt->surface_height;
+    float W = (float)gpu->surface_width;
+    float H = (float)gpu->surface_height;
     float top = 36.0f; /* room for yui's tabbar */
     float sb_h = yetty_yui_statusbar_height(app->yui);
     float btn_strip_h = 48.0f;
@@ -810,7 +811,8 @@ static void build_widgets(struct yetty_yaudio_app *app, struct yetty_yinit_runti
 /* A caption + a progress bar, centred over an otherwise empty window. Built
  * before any file work so the window can present immediately; hidden by
  * yaudio_load_done() once the real plot UI replaces it. */
-static void build_loading_ui(struct yetty_yaudio_app *app, struct yetty_yinit_runtime *rt)
+static void build_loading_ui(struct yetty_yaudio_app *app,
+                             const struct yetty_yplatform_gpu_context *gpu)
 {
     struct yetty_ygui_framework *engine = yetty_yui_engine(app->yui);
     if (!engine) {
@@ -823,8 +825,8 @@ static void build_loading_ui(struct yetty_yaudio_app *app, struct yetty_yinit_ru
         return;
     }
 
-    float W = (float)rt->surface_width;
-    float H = (float)rt->surface_height;
+    float W = (float)gpu->surface_width;
+    float H = (float)gpu->surface_height;
     float bw = 460.0f;
     if (bw > W - 64.0f) {
         bw = W - 64.0f;
@@ -1086,7 +1088,7 @@ static void yaudio_load_done(void *ctx)
     struct yetty_yaudio_app *app = ctx;
 
     if (app->load_state == YAUDIO_LOAD_OK) {
-        build_widgets(app, app->rt);
+        build_widgets(app, app->gpu);
         app->ui_built = 1;
         if (app->load_bar) {
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(app->load_bar, 0));
@@ -1118,47 +1120,54 @@ static void yaudio_load_done(void *ctx)
 
 [[clang::annotate("override@yapp:app:init")]]
 static struct yetty_ycore_void_result yaudio_app_init(struct yetty_yclass_object *obj,
-                                                      struct yetty_yinit_runtime *rt)
+                                                      struct yetty_yclass_object *platform)
 {
     (void)obj;
-    (void)rt;
+    (void)platform;
     return YETTY_OK_VOID();
 }
 
 [[clang::annotate("override@yapp:app:run")]]
 static struct yetty_ycore_void_result yaudio_app_run(struct yetty_yclass_object *obj,
-                                                     struct yetty_yinit_runtime *rt)
+                                                     struct yetty_yclass_object *platform)
 {
     struct yetty_yaudio_app_ptr_result app_res = yetty_yaudio_app_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "yaudio:app:run: app_from");
     struct yetty_yaudio_app *app = app_res.value;
+
+    const struct yetty_yplatform_gpu_context *gpu = yetty_yplatform_platform_gpu_context(platform);
+    struct yetty_ycore_xthread_event_pipe *input_pipe =
+        yetty_yplatform_platform_input_pipe(platform);
+    if (!gpu || !input_pipe) {
+        return YETTY_ERR(yetty_ycore_void, "yaudio:app:run: platform state not populated");
+    }
 
     /* Standard GPU/event/render-target bring-up FIRST — the window and a
      * progress bar must come up before any heavy file work. Same call
      * yetty's own main uses (adapter, device, queue, allocator, msdf
      * generator, surface configuration, event loop, render target); the
      * runtime owns all of it and we borrow via app->ctx.runtime->X. */
-    struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(rt);
+    struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(platform);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yrt_res, "yaudio: yframework_create failed");
     app->runtime = yrt_res.value;
     app->ctx.runtime = app->runtime;
     app->ctx.pty_factory = NULL; /* yaudio has no terminal */
     app->ctx.event_loop = app->runtime->event_loop;
     app->render_target = app->runtime->render_target;
-    app->rt = rt;
-    app->input_pipe = rt->platform_input_pipe;
+    app->gpu = gpu;
+    app->input_pipe = input_pipe;
 
     /* yui — owns the scene-canvas + ygui engine. cell_w/h are mostly
      * arbitrary for our use; pick the same defaults yui's tabbar uses. */
     struct yetty_yui_ptr_result yr =
-        yetty_yui_create(&app->ctx, rt->surface_width, rt->surface_height, 8.0f, 16.0f);
+        yetty_yui_create(&app->ctx, gpu->surface_width, gpu->surface_height, 8.0f, 16.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yui_create failed");
     app->yui = yr.value;
 
     /* Loading screen only — the real plot UI is built later, from
      * yaudio_load_done(), once the worker has the data. */
     app->last_posted_progress = -1.0;
-    build_loading_ui(app, rt);
+    build_loading_ui(app, gpu);
 
     /* Wire up our event handler on the runtime's libuv event loop. The
      * loop drives the platform_input_pipe; events dispatch into
@@ -1195,7 +1204,7 @@ static struct yetty_ycore_void_result yaudio_app_run(struct yetty_yclass_object 
     }
 
     /* Present the first frame (the loading screen) immediately. */
-    yetty_yevent_post_async(rt->platform_input_pipe,
+    yetty_yevent_post_async(input_pipe,
                             &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
     /* Run the libuv loop until SHUTDOWN. Input-driven render coalesced via

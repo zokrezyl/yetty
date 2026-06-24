@@ -135,9 +135,9 @@ types:
     kind: struct
     fields:
       - name: tv_sec
-        type: __darwin_time_t
+        type: __time_t
       - name: tv_nsec
-        type: long
+        type: __syscall_slong_t
   - name: yetty_yclass_object_ptr_result
     kind: result
     fields:

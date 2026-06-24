@@ -15,7 +15,8 @@
 struct yetty_yclass_ptr_result yetty_ygui_primitive_widget_class_get(void) __attribute__((weak));
 struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void) __attribute__((weak));
 size_t yetty_ygui_widget_on_press_skel(const void *, size_t, void *, size_t) __attribute__((weak));
-size_t yetty_ygui_widget_on_release_skel(const void *, size_t, void *, size_t) __attribute__((weak));
+size_t yetty_ygui_widget_on_release_skel(const void *, size_t, void *, size_t)
+    __attribute__((weak));
 size_t yetty_ygui_widget_on_motion_skel(const void *, size_t, void *, size_t) __attribute__((weak));
 size_t yetty_ygui_constructor_skel(const void *, size_t, void *, size_t) __attribute__((weak));
 size_t yetty_ygui_destructor_skel(const void *, size_t, void *, size_t) __attribute__((weak));
@@ -28,17 +29,22 @@ struct yetty_ycore_void_result yetty_ygui_register(void);
 
 static struct yetty_yclass_ptr_result yetty_ygui_accessor_lookup(const char *name)
 {
-    if (strcmp(name, "yetty_ygui_primitive_widget") == 0 && yetty_ygui_primitive_widget_class_get)
+    if (strcmp(name, "yetty_ygui_primitive_widget") == 0 && yetty_ygui_primitive_widget_class_get) {
         return yetty_ygui_primitive_widget_class_get();
-    if (strcmp(name, "yetty_ygui_widget") == 0 && yetty_ygui_widget_class_get)
+    }
+    if (strcmp(name, "yetty_ygui_widget") == 0 && yetty_ygui_widget_class_get) {
         return yetty_ygui_widget_class_get();
+    }
     /* "Not mine": OK with NULL value -- yetty_yclass_by_name walks to next hook. */
     return YETTY_OK(yetty_yclass_ptr, NULL);
 }
 
 /* ---- ygui: slot -> skel, name-keyed static data --------------- */
 
-struct yetty_ygui_skel_row { const char *name; yetty_yclass_rpc_skel_fn fn; };
+struct yetty_ygui_skel_row {
+    const char *name;
+    yetty_yclass_rpc_skel_fn fn;
+};
 
 static const struct yetty_ygui_skel_row yetty_ygui_skel_rows[] = {
     {"yetty_ygui_widget_on_press", yetty_ygui_widget_on_press_skel},
@@ -55,14 +61,17 @@ YETTY_EXTERNAL_CALLBACK
 static yetty_yclass_rpc_skel_fn yetty_ygui_skel_lookup(yetty_yclass_method_slot slot)
 {
     struct yetty_yclass_const_char_ptr_result slot_name_r = yetty_yclass_method_slot_name(slot);
-    if (YETTY_IS_ERR(slot_name_r)) { yetty_ycore_error_destroy(slot_name_r.error); return NULL; }
+    if (YETTY_IS_ERR(slot_name_r)) {
+        yetty_ycore_error_destroy(slot_name_r.error);
+        return NULL;
+    }
     const char *name = slot_name_r.value;
-    for (size_t i = 0;
-         i < sizeof(yetty_ygui_skel_rows) / sizeof(yetty_ygui_skel_rows[0]); ++i)
+    for (size_t i = 0; i < sizeof(yetty_ygui_skel_rows) / sizeof(yetty_ygui_skel_rows[0]); ++i) {
         /* .fn may be a weak ref (NULL when its class isn't linked); skip it. */
-        if (yetty_ygui_skel_rows[i].fn
-            && strcmp(yetty_ygui_skel_rows[i].name, name) == 0)
+        if (yetty_ygui_skel_rows[i].fn && strcmp(yetty_ygui_skel_rows[i].name, name) == 0) {
             return yetty_ygui_skel_rows[i].fn;
+        }
+    }
     return NULL;
 }
 
@@ -71,8 +80,9 @@ static yetty_yclass_rpc_skel_fn yetty_ygui_skel_lookup(yetty_yclass_method_slot 
 struct yetty_ycore_void_result yetty_ygui_register(void)
 {
     static bool registered = false;
-    if (registered)
+    if (registered) {
         return YETTY_OK_VOID();
+    }
 
     struct yetty_ycore_void_result add_accessor_r =
         yetty_yclass_add_accessor_lookup(yetty_ygui_accessor_lookup);
@@ -88,15 +98,13 @@ struct yetty_ycore_void_result yetty_ygui_register(void)
      * platform — register it only when it is actually linked. */
     if (yetty_ygui_mixins_register) {
         struct yetty_ycore_void_result sub_r = yetty_ygui_mixins_register();
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, sub_r,
-                            "yetty_ygui_register: submodule ygui_mixins");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sub_r, "yetty_ygui_register: submodule ygui_mixins");
     }
     /* Weak: the submodule's rpc.gen.c may not be compiled for this
      * platform — register it only when it is actually linked. */
     if (yetty_ygui_widgets_register) {
         struct yetty_ycore_void_result sub_r = yetty_ygui_widgets_register();
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, sub_r,
-                            "yetty_ygui_register: submodule ygui_widgets");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sub_r, "yetty_ygui_register: submodule ygui_widgets");
     }
     registered = true;
     return YETTY_OK_VOID();

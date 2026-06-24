@@ -55,9 +55,10 @@ struct yai_renderer {
      * --animate; otherwise a static glyph is used and yetty idles when
      * nothing changes. */
     int animate_glyph;
-    /* Text status bar at the bottom of the pinned zone, for non-yetty
-     * terminals (where the ygui HUD window can't render). Active when
-     * stdout is a tty but the host is not yetty. hud_state = left
+    /* Text status bar pinned to the bottom row via a DECSTBM scroll region.
+     * Used whenever the ygui HUD window is absent: a non-yetty host (where the
+     * ygui HUD can't render) or an explicit hud-mode "text" under yetty. Active
+     * when stdout is a tty and no ygui HUD window exists. hud_state = left
      * (activity), hud_stats = right (model + token/cost summary). */
     int text_hud;
     char hud_state[160];

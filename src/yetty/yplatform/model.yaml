@@ -541,8 +541,24 @@ classes:
     mixins: []
     data: struct yetty_yplatform_platform
     data_fields:
-      - name: reserved
-        type: char
+      - name: gpu
+        type: struct yetty_yplatform_gpu_context
+        get: false
+        set: false
+      - name: config
+        type: "struct yetty_yconfig_config *"
+        get: false
+        set: false
+      - name: input_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+        get: false
+        set: false
+      - name: clipboard
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: window_chrome
+        type: "struct yetty_yclass_object *"
         get: false
         set: false
     ops:
@@ -552,7 +568,10 @@ classes:
       - slot: platform_run
         slot_domain: yplatform
         impl: platform_default_run
-    doc: "/* Abstract base — owns no state; each subclass holds its own privately. */"
+    doc: "/* The platform's bring-up results live on the base so every subclass shares one
+ * shape. The data block is opaque outside this TU: the per-OS subclass producer
+ * sets these during platform_run through the setters below, and yframework plus
+ * the app read them back through the getters. */"
   - name: webasm_platform
     domain: yplatform
     accessor: yetty_yplatform_webasm_platform_class_get
@@ -956,6 +975,65 @@ exposed:
       - name: response_pipe
         type: "struct yetty_ycore_xthread_event_pipe *"
     doc: "/* Bind the pipe that paste results are delivered on. Borrowed. */"
+  - source_file: src/yetty/yplatform/yplatform/platform.c
+    name: yetty_yplatform_platform_set_gpu_context
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: gpu
+        type: "const struct yetty_yplatform_gpu_context *"
+    doc: null
+  - source_file: src/yetty/yplatform/yplatform/platform.c
+    name: yetty_yplatform_platform_set_services
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: config
+        type: "struct yetty_yconfig_config *"
+      - name: input_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+      - name: clipboard
+        type: "struct yetty_yclass_object *"
+      - name: window_chrome
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yplatform/yplatform/platform.c
+    name: yetty_yplatform_platform_gpu_context
+    return_type: "const struct yetty_yplatform_gpu_context *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yplatform/yplatform/platform.c
+    name: yetty_yplatform_platform_config
+    return_type: "struct yetty_yconfig_config *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yplatform/yplatform/platform.c
+    name: yetty_yplatform_platform_input_pipe
+    return_type: "struct yetty_ycore_xthread_event_pipe *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yplatform/yplatform/platform.c
+    name: yetty_yplatform_platform_clipboard
+    return_type: "struct yetty_yclass_object *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yplatform/yplatform/platform.c
+    name: yetty_yplatform_platform_window_chrome
+    return_type: "struct yetty_yclass_object *"
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
   - source_file: src/yetty/yplatform/ywindow-chrome/glfw.c
     name: yetty_yplatform_glfw_window_chrome_attach
     return_type: struct yetty_ycore_void_result
@@ -1056,6 +1134,23 @@ types:
             type: int
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_yplatform_gpu_context
+    kind: struct
+    fields:
+      - name: instance
+        type: int
+      - name: surface
+        type: int
+      - name: surface_width
+        type: uint32_t
+      - name: surface_height
+        type: uint32_t
+      - name: content_scale
+        type: float
+      - name: x11_display
+        type: "void *"
+      - name: x11_window
+        type: unsigned long
 local_types:
   yetty_yplatform_android_clipboard_ptr_result: src/yetty/yplatform/yclipboard/android.c
   yetty_yplatform_android_clipboard: src/yetty/yplatform/yclipboard/android.c

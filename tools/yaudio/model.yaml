@@ -143,8 +143,8 @@ classes:
         type: "struct yetty_ycore_xthread_event_pipe *"
         get: false
         set: false
-      - name: rt
-        type: "struct yetty_yinit_runtime *"
+      - name: gpu
+        type: "const struct yetty_yplatform_gpu_context *"
         get: false
         set: false
       - name: load_progress

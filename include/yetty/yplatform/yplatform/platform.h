@@ -16,7 +16,14 @@
 extern "C" {
 #endif
 
-/* Abstract base — owns no state; each subclass holds its own privately. */
+struct yetty_yconfig_config;
+struct yetty_ycore_xthread_event_pipe;
+struct yetty_yplatform_gpu_context;
+
+/* The platform's bring-up results live on the base so every subclass shares one
+ * shape. The data block is opaque outside this TU: the per-OS subclass producer
+ * sets these during platform_run through the setters below, and yframework plus
+ * the app read them back through the getters. */
 struct yetty_yclass_ptr_result yetty_yplatform_platform_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct
@@ -31,18 +38,39 @@ struct yetty_yplatform_platform_ptr_result {
         struct yetty_ycore_error error;
     };
 };
-struct yetty_yplatform_platform_ptr_result yetty_yplatform_platform_from(struct yetty_yclass_object *obj);
+struct yetty_yplatform_platform_ptr_result yetty_yplatform_platform_from(
+    struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yplatform_platform_to(struct yetty_yplatform_platform *data);
 
-struct yetty_ycore_void_result yetty_yplatform_platform_init(struct yetty_yclass_object * obj, struct yetty_yclass_object * app, int argc, char ** argv);
-struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object * obj, struct yetty_yclass_object * app, int argc, char ** argv);
+struct yetty_ycore_void_result yetty_yplatform_platform_init(struct yetty_yclass_object *obj,
+                                                             struct yetty_yclass_object *app,
+                                                             int argc, char **argv);
+struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *app,
+                                                            int argc, char **argv);
 
-typedef struct yetty_ycore_void_result (*yetty_yplatform_platform_init_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, char **);
-typedef struct yetty_ycore_void_result (*yetty_yplatform_platform_run_fn)(struct yetty_yclass_object *, struct yetty_yclass_object *, int, char **);
+typedef struct yetty_ycore_void_result (*yetty_yplatform_platform_init_fn)(
+    struct yetty_yclass_object *, struct yetty_yclass_object *, int, char **);
+typedef struct yetty_ycore_void_result (*yetty_yplatform_platform_run_fn)(
+    struct yetty_yclass_object *, struct yetty_yclass_object *, int, char **);
 
 struct yetty_yclass_object_ptr_result yetty_yplatform_platform_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_yplatform_register(void);
+
+struct yetty_ycore_void_result yetty_yplatform_platform_set_gpu_context(
+    struct yetty_yclass_object *obj, const struct yetty_yplatform_gpu_context *gpu);
+struct yetty_ycore_void_result yetty_yplatform_platform_set_services(
+    struct yetty_yclass_object *obj, struct yetty_yconfig_config *config,
+    struct yetty_ycore_xthread_event_pipe *input_pipe, struct yetty_yclass_object *clipboard,
+    struct yetty_yclass_object *window_chrome);
+const struct yetty_yplatform_gpu_context *yetty_yplatform_platform_gpu_context(
+    struct yetty_yclass_object *obj);
+struct yetty_yconfig_config *yetty_yplatform_platform_config(struct yetty_yclass_object *obj);
+struct yetty_ycore_xthread_event_pipe *yetty_yplatform_platform_input_pipe(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_yplatform_platform_clipboard(struct yetty_yclass_object *obj);
+struct yetty_yclass_object *yetty_yplatform_platform_window_chrome(struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }

@@ -113,7 +113,7 @@ struct yetty_yui_tabbar_model {
 
 /* Convert a logical (DP) chrome dimension to framebuffer pixels using
  * the bound context's HiDPI content_scale (see
- * yetty_yinit_gpu_context::content_scale). Falls back to 1× when ctx
+ * yetty_yplatform_gpu_context::content_scale). Falls back to 1× when ctx
  * isn't bound yet — pre-first-add the strip is never hit-tested or
  * laid out anyway, so this keeps callers free of NULL guards. */
 static inline float tabbar_dp(const struct yetty_yui_tabbar_model *bar, float dp)

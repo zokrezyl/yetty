@@ -8,7 +8,6 @@
 
 #include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
-#include <yetty/yinit/yinit.h>
 
 #include <stddef.h>
 
@@ -22,19 +21,19 @@ struct yetty_yapp_app_ptr_result yetty_yapp_app_from(struct yetty_yclass_object 
 
 [[clang::annotate("virtual@yapp:app:init")]] [[clang::annotate("local@yapp:init")]]
 static struct yetty_ycore_void_result yapp_default_init(struct yetty_yclass_object *app,
-                                                        struct yetty_yinit_runtime *runtime)
+                                                        struct yetty_yclass_object *platform)
 {
     (void)app;
-    (void)runtime;
+    (void)platform;
     return YETTY_OK_VOID();
 }
 
 [[clang::annotate("virtual@yapp:app:run")]] [[clang::annotate("local@yapp:run")]]
 static struct yetty_ycore_void_result yapp_default_run(struct yetty_yclass_object *app,
-                                                       struct yetty_yinit_runtime *runtime)
+                                                       struct yetty_yclass_object *platform)
 {
     (void)app;
-    (void)runtime;
+    (void)platform;
     return YETTY_ERR(yetty_ycore_void, "yapp:app:run not implemented");
 }
 

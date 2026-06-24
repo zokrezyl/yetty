@@ -14,7 +14,8 @@
  * Keys: q / ESC quit.
  */
 
-#include <yetty/yinit/yinit.h> /* struct yetty_yinit_runtime (platform runtime type) */
+#include <yetty/yplatform/gpu-context.h>
+#include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yapp/app.h>
 #include <yetty/yclass/class.h>
 #include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
@@ -217,22 +218,29 @@ static void handle_event(struct yetty_yjungle_app *app, const struct yetty_yui_e
 
 [[clang::annotate("override@yapp:app:init")]]
 static struct yetty_ycore_void_result yjungle_app_init(struct yetty_yclass_object *obj,
-                                                       struct yetty_yinit_runtime *rt)
+                                                       struct yetty_yclass_object *platform)
 {
     (void)obj;
-    (void)rt;
+    (void)platform;
     return YETTY_OK_VOID();
 }
 
 [[clang::annotate("override@yapp:app:run")]]
 static struct yetty_ycore_void_result yjungle_app_run(struct yetty_yclass_object *obj,
-                                                      struct yetty_yinit_runtime *rt)
+                                                      struct yetty_yclass_object *platform)
 {
     struct yetty_yjungle_app_ptr_result app_res = yetty_yjungle_app_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "yjungle:app:run: app_from");
     struct yetty_yjungle_app *app = app_res.value;
 
-    struct yetty_yframework_ptr_result yr = yetty_yframework_create(rt);
+    const struct yetty_yplatform_gpu_context *gpu = yetty_yplatform_platform_gpu_context(platform);
+    struct yetty_ycore_xthread_event_pipe *input_pipe =
+        yetty_yplatform_platform_input_pipe(platform);
+    if (!gpu || !input_pipe) {
+        return YETTY_ERR(yetty_ycore_void, "yjungle:app:run: platform state not populated");
+    }
+
+    struct yetty_yframework_ptr_result yr = yetty_yframework_create(platform);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yframework_create failed");
     app->yrt = yr.value;
 
@@ -240,9 +248,9 @@ static struct yetty_ycore_void_result yjungle_app_run(struct yetty_yclass_object
     app->ctx.pty_factory = NULL;
     app->ctx.event_loop = app->yrt->event_loop;
 
-    app->surface = rt->surface;
-    app->surface_w = rt->surface_width;
-    app->surface_h = rt->surface_height;
+    app->surface = gpu->surface;
+    app->surface_w = gpu->surface_width;
+    app->surface_h = gpu->surface_height;
 
     app->yrt->render_target->ops->destroy(app->yrt->render_target);
     app->yrt->render_target = NULL;
@@ -290,8 +298,7 @@ static struct yetty_ycore_void_result yjungle_app_run(struct yetty_yclass_object
         }
     }
 
-    struct yetty_ycore_int_result fdr =
-        rt->platform_input_pipe->ops->read_fd(rt->platform_input_pipe);
+    struct yetty_ycore_int_result fdr = input_pipe->ops->read_fd(input_pipe);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fdr, "pipe read_fd failed");
     int pipe_fd = fdr.value;
 
@@ -302,7 +309,7 @@ static struct yetty_ycore_void_result yjungle_app_run(struct yetty_yclass_object
             for (;;) {
                 struct yetty_yui_event ev = {0};
                 struct yetty_ycore_size_result rr =
-                    rt->platform_input_pipe->ops->read(rt->platform_input_pipe, &ev, sizeof(ev));
+                    input_pipe->ops->read(input_pipe, &ev, sizeof(ev));
                 if (YETTY_IS_ERR(rr) || rr.value != sizeof(ev)) {
                     break;
                 }
@@ -312,8 +319,8 @@ static struct yetty_ycore_void_result yjungle_app_run(struct yetty_yclass_object
         if (app->quit) {
             break;
         }
-        if (rt->instance) {
-            wgpuInstanceProcessEvents((WGPUInstance)rt->instance);
+        if (gpu->instance) {
+            wgpuInstanceProcessEvents(gpu->instance);
         }
 
         struct yetty_ycore_void_result mrr = render_jungle(app);

@@ -20,8 +20,9 @@
 #include <yetty/ycore/result.h>
 #include <yetty/yclass/class.h>
 #include <yetty/yconfig/config.h>
-#include <yetty/yinit/yinit.h> /* struct yetty_yinit_runtime (platform runtime type) */
+#include <yetty/yplatform/gpu-context.h>
 #include <yetty/yplatform/platform-input-pipe.h>
+#include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include <webgpu/webgpu.h>
@@ -48,9 +49,9 @@ struct yetty_ycore_void_result yetty_yplatform_platform_init(struct yetty_yclass
 
 /* App lifecycle dispatchers (generated, yapp module) — run() drives the app. */
 struct yetty_ycore_void_result yetty_yapp_init(struct yetty_yclass_object *app,
-                                               struct yetty_yinit_runtime *runtime);
+                                               struct yetty_yclass_object *platform);
 struct yetty_ycore_void_result yetty_yapp_run(struct yetty_yclass_object *app,
-                                              struct yetty_yinit_runtime *runtime);
+                                              struct yetty_yclass_object *platform);
 
 YETTY_YRESULT_DECLARE(yetty_yplatform_webasm_platform_ptr,
                       struct yetty_yplatform_webasm_platform *);
@@ -160,30 +161,30 @@ static struct yetty_ycore_void_result webasm_platform_run(struct yetty_yclass_ob
         return YETTY_ERR(yetty_ycore_void, "webasm_platform_run: data_get");
     }
 
-    /* Assemble the runtime the app's run() reads, then drive the app on the main
-     * thread. Single-threaded on the web: the app's run() registers the
-     * emscripten main loop and hands back; the browser drives frames thereafter,
-     * so the runtime (stack here) only needs to outlive the init/run calls —
-     * yframework copies what it needs and the HTML5 callbacks own the pipe. */
+    /* Mirror the bring-up state onto the base platform object, then drive the
+     * app on the main thread. Single-threaded on the web: the app's run()
+     * registers the emscripten main loop and hands back; the browser drives
+     * frames thereafter. yframework + the app read the state back through the
+     * platform accessors and the HTML5 callbacks own the pipe. */
     int fb_width = 0, fb_height = 0;
     yetty_yplatform_webasm_get_framebuffer_size(&fb_width, &fb_height);
 
-    struct yetty_yinit_runtime rt;
-    memset(&rt, 0, sizeof(rt));
-    rt.argc = argc;
-    rt.argv = argv;
-    rt.config = data->config;
-    rt.instance = data->instance;
-    rt.surface = data->surface;
-    rt.surface_width = (uint32_t)fb_width;
-    rt.surface_height = (uint32_t)fb_height;
-    rt.content_scale = 1.0f;
-    rt.platform_input_pipe = data->input_pipe;
-    rt.clipboard = data->clipboard;
+    struct yetty_yplatform_gpu_context gpu = {
+        .instance = data->instance,
+        .surface = data->surface,
+        .surface_width = (uint32_t)fb_width,
+        .surface_height = (uint32_t)fb_height,
+        .content_scale = 1.0f,
+    };
+    struct yetty_ycore_void_result set_gpu = yetty_yplatform_platform_set_gpu_context(obj, &gpu);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_gpu, "webasm_platform_run: set gpu context");
+    struct yetty_ycore_void_result set_svc = yetty_yplatform_platform_set_services(
+        obj, data->config, data->input_pipe, data->clipboard, NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_svc, "webasm_platform_run: set services");
 
-    struct yetty_ycore_void_result app_init = yetty_yapp_init(app, &rt);
+    struct yetty_ycore_void_result app_init = yetty_yapp_init(app, obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, app_init, "webasm_platform_run: app init");
-    struct yetty_ycore_void_result app_run = yetty_yapp_run(app, &rt);
+    struct yetty_ycore_void_result app_run = yetty_yapp_run(app, obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, app_run, "webasm_platform_run: app run");
 
     ydebug("webasm_platform: run (loop owned by the browser/emscripten)");

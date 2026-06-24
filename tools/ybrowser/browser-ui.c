@@ -1636,7 +1636,8 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #include <yetty/yframework/yframework.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yimage/yimage-gen.h>
-#include <yetty/yinit/yinit.h> /* struct yetty_yinit_runtime (platform runtime type) */
+#include <yetty/yplatform/gpu-context.h>
+#include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yapp/app.h>
 #include <yetty/yclass/class.h>
 #include <yetty/yplot/yplot-gen.h>
@@ -2020,20 +2021,28 @@ static const char *encode_special_key(uint32_t key, char *scratch, size_t scratc
 
 [[clang::annotate("override@yapp:app:init")]]
 static struct yetty_ycore_void_result ybrowser_app_init(struct yetty_yclass_object *obj,
-                                                        struct yetty_yinit_runtime *rt)
+                                                        struct yetty_yclass_object *platform)
 {
     (void)obj;
-    (void)rt;
+    (void)platform;
     return YETTY_OK_VOID();
 }
 
 [[clang::annotate("override@yapp:app:run")]]
 static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
-                                                struct yetty_yinit_runtime *rt)
+                                                struct yetty_yclass_object *platform)
 {
     struct yetty_ybrowser_app_ptr_result app_res = yetty_ybrowser_app_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "ybrowser:app:run: app_from");
     struct yetty_ybrowser_app *s = app_res.value;
+
+    const struct yetty_yplatform_gpu_context *gpu = yetty_yplatform_platform_gpu_context(platform);
+    struct yetty_ycore_xthread_event_pipe *input_pipe =
+        yetty_yplatform_platform_input_pipe(platform);
+    if (!gpu || !input_pipe) {
+        return YETTY_ERR(yetty_ycore_void, "ybrowser:app:run: platform state not populated");
+    }
+
     yetty_ylexbor_prof("sa_worker START (GPU/window already up via platform)");
 
     /* Start the initial-page download now, on a background thread, so its
@@ -2053,7 +2062,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
     }
 
     double t_fw = yetty_ylexbor_prof_now_ms();
-    struct yetty_yframework_ptr_result frr = yetty_yframework_create(rt);
+    struct yetty_yframework_ptr_result frr = yetty_yframework_create(platform);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, frr, "ybrowser standalone: yframework_create");
     s->yframework = frr.value;
     s->render_target = s->yframework->render_target;
@@ -2124,7 +2133,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
     struct yetty_context ctx = {.runtime = s->yframework, .event_loop = s->yframework->event_loop};
     {
         struct yetty_ycore_rectangle root_rect = {
-            .min = {0, 0}, .max = {(float)rt->surface_width, (float)rt->surface_height}};
+            .min = {0, 0}, .max = {(float)gpu->surface_width, (float)gpu->surface_height}};
         struct yetty_yclass_ctx yclass_ctx = {0};
         struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "ybrowser standalone: container_create");
@@ -2138,7 +2147,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
     {
         struct yetty_ychrome_host_ptr_result chrome_r = yetty_ychrome_host_create(
             s->root_container, s->font, &ctx, s->yframework->window_chrome,
-            (float)rt->surface_width, (float)rt->surface_height, 36.0f, 8.0f,
+            (float)gpu->surface_width, (float)gpu->surface_height, 36.0f, 8.0f,
             YETTY_YCHROME_FLAG_ALL);
         if (YETTY_IS_OK(chrome_r)) {
             s->chrome = chrome_r.value;
@@ -2184,10 +2193,10 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
                 yetty_ycore_error_destroy(pr.error);
             }
         }
-        s->app.viewport_w = (float)rt->surface_width;
-        s->app.viewport_h = (float)rt->surface_height;
-        err_ok(yetty_ygui_framework_set_viewport(s->app.fw, (float)rt->surface_width,
-                                                 (float)rt->surface_height));
+        s->app.viewport_w = (float)gpu->surface_width;
+        s->app.viewport_h = (float)gpu->surface_height;
+        err_ok(yetty_ygui_framework_set_viewport(s->app.fw, (float)gpu->surface_width,
+                                                 (float)gpu->surface_height));
     }
 
     yetty_ygui_framework_set_key_cb(s->app.fw, key_cb, &s->app);
@@ -2230,7 +2239,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         yetty_yevent_register_default_listeners(s->yframework->event_loop, &s->listener);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rel, "ybrowser standalone: register_listeners");
 
-    yetty_yevent_post_async(rt->platform_input_pipe,
+    yetty_yevent_post_async(input_pipe,
                             &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
     struct yetty_ycore_void_result run_res =
