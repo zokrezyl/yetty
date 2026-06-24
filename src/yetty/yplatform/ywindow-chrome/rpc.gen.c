@@ -7,15 +7,16 @@
 #include <stddef.h>
 #include <string.h>
 
-/* Forward decls. A class tagged platform@<x> is guarded by
- * #ifdef YETTY_PLATFORM_<X> (registered only on that platform, where
- * CMake compiles it); a cross-platform class is a WEAK ref so the
- * lookup table never force-links an unused class into a minimal
- * consumer. The chained submodule registers are weak externs. */
+/* Forward decls. A class tagged platform@<x> is registered only on
+ * that platform: its accessor/skel decls and its registration entry
+ * are wrapped in #ifdef YETTY_PLATFORM_<X>, where CMake compiles the
+ * class .c. A cross-platform class is a plain strong ref, defined in
+ * the same library and pulled in when register() is. Submodule
+ * registers are chained as strong externs (always co-linked). */
 #ifdef YETTY_PLATFORM_GLFW
 struct yetty_yclass_ptr_result yetty_yplatform_glfw_window_chrome_class_get(void);
 #endif
-struct yetty_yclass_ptr_result yetty_yplatform_window_chrome_class_get(void) __attribute__((weak));
+struct yetty_yclass_ptr_result yetty_yplatform_window_chrome_class_get(void);
 struct yetty_ycore_void_result yetty_yplatform_ywindow_chrome_register(void);
 
 /* ---- yplatform_ywindow_chrome: class name -> accessor (lazy) ---------------------- */
@@ -28,8 +29,7 @@ static struct yetty_yclass_ptr_result yetty_yplatform_ywindow_chrome_accessor_lo
         return yetty_yplatform_glfw_window_chrome_class_get();
     }
 #endif
-    if (strcmp(name, "yetty_yplatform_window_chrome") == 0 &&
-        yetty_yplatform_window_chrome_class_get) {
+    if (strcmp(name, "yetty_yplatform_window_chrome") == 0) {
         return yetty_yplatform_window_chrome_class_get();
     }
     /* "Not mine": OK with NULL value -- yetty_yclass_by_name walks to next hook. */

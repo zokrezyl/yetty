@@ -2727,31 +2727,30 @@ def _platform_guard(text, platform):
 
 
 def emit_group_aggregator(classes, methods, group, chain_registers) -> str:
-    """Weak/guarded forward decls + lookup tables + yetty_<group>_register()
+    """Guarded forward decls + lookup tables + yetty_<group>_register()
     for the classes of one registration group."""
     cls_platform = {c["name"]: c.get("platform") for c in classes}
     accessor_protos = "".join(
         _platform_guard(
-            f"struct yetty_yclass_ptr_result {c['accessor']}(void)"
-            f"{'' if c.get('platform') else ' __attribute__((weak))'};\n",
+            f"struct yetty_yclass_ptr_result {c['accessor']}(void);\n",
             c.get("platform"))
         for c in classes)
     skel_protos = "".join(
         _platform_guard(
-            f"size_t {qualified_slot(m)}_skel(const void *, size_t, void *, size_t)"
-            f"{'' if cls_platform.get(m['owning_class']) else ' __attribute__((weak))'};\n",
+            f"size_t {qualified_slot(m)}_skel(const void *, size_t, void *, size_t);\n",
             cls_platform.get(m["owning_class"]))
         for m in methods if not m.get("local"))
     chain_protos = "".join(
-        f"struct yetty_ycore_void_result yetty_{cg}_register(void) __attribute__((weak));\n"
+        f"struct yetty_ycore_void_result yetty_{cg}_register(void);\n"
         for cg in chain_registers)
     register_proto = f"struct yetty_ycore_void_result yetty_{group}_register(void);\n"
     forward = (
-        "/* Forward decls. A class tagged platform@<x> is guarded by\n"
-        " * #ifdef YETTY_PLATFORM_<X> (registered only on that platform, where\n"
-        " * CMake compiles it); a cross-platform class is a WEAK ref so the\n"
-        " * lookup table never force-links an unused class into a minimal\n"
-        " * consumer. The chained submodule registers are weak externs. */\n"
+        "/* Forward decls. A class tagged platform@<x> is registered only on\n"
+        " * that platform: its accessor/skel decls and its registration entry\n"
+        " * are wrapped in #ifdef YETTY_PLATFORM_<X>, where CMake compiles the\n"
+        " * class .c. A cross-platform class is a plain strong ref, defined in\n"
+        " * the same library and pulled in when register() is. Submodule\n"
+        " * registers are chained as strong externs (always co-linked). */\n"
         + accessor_protos + skel_protos + chain_protos + register_proto + "\n"
     )
     return forward + emit_lookup_tables(classes, methods, group, chain_registers)
@@ -2762,14 +2761,11 @@ def emit_lookup_tables(classes, methods, group, chain_registers=()) -> str:
 
     def accessor_branch(c):
         platform = c.get("platform")
-        if platform:
-            # Strong ref — compiled under the same #ifdef, so always defined.
-            body = (f'    if (strcmp(name, "{qualified_class(c)}") == 0)\n'
-                    f'        return {c["accessor"]}();\n')
-        else:
-            # Weak ref — `&& accessor` falls through when the class isn't linked.
-            body = (f'    if (strcmp(name, "{qualified_class(c)}") == 0 && {c["accessor"]})\n'
-                    f'        return {c["accessor"]}();\n')
+        # Strong ref. A platform class is wrapped in its #ifdef (compiled by
+        # CMake only on that platform); a cross-platform class is always
+        # defined in the same library. Either way the symbol is present.
+        body = (f'    if (strcmp(name, "{qualified_class(c)}") == 0)\n'
+                f'        return {c["accessor"]}();\n')
         return _platform_guard(body, platform)
 
     accessor_section = ""
@@ -2814,9 +2810,7 @@ static yetty_yclass_rpc_skel_fn yetty_{group}_skel_lookup(yetty_yclass_method_sl
     const char *name = slot_name_r.value;
     for (size_t i = 0;
          i < sizeof(yetty_{group}_skel_rows) / sizeof(yetty_{group}_skel_rows[0]); ++i)
-        /* .fn may be a weak ref (NULL when its class isn't linked); skip it. */
-        if (yetty_{group}_skel_rows[i].fn
-            && strcmp(yetty_{group}_skel_rows[i].name, name) == 0)
+        if (strcmp(yetty_{group}_skel_rows[i].name, name) == 0)
             return yetty_{group}_skel_rows[i].fn;
     return NULL;
 }}
@@ -2839,9 +2833,9 @@ static yetty_yclass_rpc_skel_fn yetty_{group}_skel_lookup(yetty_yclass_method_sl
             f'                        "yetty_{group}_register: add_accessor_lookup");\n')
 
     chain_block = "".join(
-        f"    /* Weak: the submodule's rpc.gen.c may not be compiled for this\n"
-        f"     * platform — register it only when it is actually linked. */\n"
-        f"    if (yetty_{cg}_register) {{\n"
+        f"    {{\n"
+        f"        /* Submodule aggregator is always compiled into the same\n"
+        f"         * library, so this strong call is always resolved. */\n"
         f"        struct yetty_ycore_void_result sub_r = yetty_{cg}_register();\n"
         f"        YETTY_RETURN_IF_ERR(yetty_ycore_void, sub_r,\n"
         f'                            "yetty_{group}_register: submodule {cg}");\n'

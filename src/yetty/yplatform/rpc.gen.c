@@ -7,15 +7,16 @@
 #include <stddef.h>
 #include <string.h>
 
-/* Forward decls. A class tagged platform@<x> is guarded by
- * #ifdef YETTY_PLATFORM_<X> (registered only on that platform, where
- * CMake compiles it); a cross-platform class is a WEAK ref so the
- * lookup table never force-links an unused class into a minimal
- * consumer. The chained submodule registers are weak externs. */
-struct yetty_ycore_void_result yetty_yplatform_yclipboard_register(void) __attribute__((weak));
-struct yetty_ycore_void_result yetty_yplatform_yplatform_register(void) __attribute__((weak));
-struct yetty_ycore_void_result yetty_yplatform_ywindow_register(void) __attribute__((weak));
-struct yetty_ycore_void_result yetty_yplatform_ywindow_chrome_register(void) __attribute__((weak));
+/* Forward decls. A class tagged platform@<x> is registered only on
+ * that platform: its accessor/skel decls and its registration entry
+ * are wrapped in #ifdef YETTY_PLATFORM_<X>, where CMake compiles the
+ * class .c. A cross-platform class is a plain strong ref, defined in
+ * the same library and pulled in when register() is. Submodule
+ * registers are chained as strong externs (always co-linked). */
+struct yetty_ycore_void_result yetty_yplatform_yclipboard_register(void);
+struct yetty_ycore_void_result yetty_yplatform_yplatform_register(void);
+struct yetty_ycore_void_result yetty_yplatform_ywindow_register(void);
+struct yetty_ycore_void_result yetty_yplatform_ywindow_chrome_register(void);
 struct yetty_ycore_void_result yetty_yplatform_register(void);
 
 /* ---- yplatform: explicit yclass-RPC hook registration ------------- */
@@ -27,30 +28,30 @@ struct yetty_ycore_void_result yetty_yplatform_register(void)
         return YETTY_OK_VOID();
     }
 
-    /* Weak: the submodule's rpc.gen.c may not be compiled for this
-     * platform — register it only when it is actually linked. */
-    if (yetty_yplatform_yclipboard_register) {
+    {
+        /* Submodule aggregator is always compiled into the same
+         * library, so this strong call is always resolved. */
         struct yetty_ycore_void_result sub_r = yetty_yplatform_yclipboard_register();
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sub_r,
                             "yetty_yplatform_register: submodule yplatform_yclipboard");
     }
-    /* Weak: the submodule's rpc.gen.c may not be compiled for this
-     * platform — register it only when it is actually linked. */
-    if (yetty_yplatform_yplatform_register) {
+    {
+        /* Submodule aggregator is always compiled into the same
+         * library, so this strong call is always resolved. */
         struct yetty_ycore_void_result sub_r = yetty_yplatform_yplatform_register();
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sub_r,
                             "yetty_yplatform_register: submodule yplatform_yplatform");
     }
-    /* Weak: the submodule's rpc.gen.c may not be compiled for this
-     * platform — register it only when it is actually linked. */
-    if (yetty_yplatform_ywindow_register) {
+    {
+        /* Submodule aggregator is always compiled into the same
+         * library, so this strong call is always resolved. */
         struct yetty_ycore_void_result sub_r = yetty_yplatform_ywindow_register();
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sub_r,
                             "yetty_yplatform_register: submodule yplatform_ywindow");
     }
-    /* Weak: the submodule's rpc.gen.c may not be compiled for this
-     * platform — register it only when it is actually linked. */
-    if (yetty_yplatform_ywindow_chrome_register) {
+    {
+        /* Submodule aggregator is always compiled into the same
+         * library, so this strong call is always resolved. */
         struct yetty_ycore_void_result sub_r = yetty_yplatform_ywindow_chrome_register();
         YETTY_RETURN_IF_ERR(yetty_ycore_void, sub_r,
                             "yetty_yplatform_register: submodule yplatform_ywindow_chrome");
