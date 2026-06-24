@@ -37,27 +37,14 @@ static struct yetty_ycore_void_result yapp_default_run(struct yetty_yclass_objec
     return YETTY_ERR(yetty_ycore_void, "yapp:app:run not implemented");
 }
 
-[[clang::annotate("expose")]]
-__attribute__((weak)) struct yetty_yclass_object_ptr_result yetty_yapp_create_app(
-    struct yetty_yclass_ctx *ctx)
-{
-    (void)ctx;
-    return YETTY_ERR(yetty_yclass_object_ptr,
-                     "yetty_yapp_create_app: no app implementation linked");
-}
-
 /*
- * Concrete-app by-name registration hook. The shared platform entry calls this
- * after registering the platform and base-app classes; the final app module may
- * provide a strong override that installs its own yclass accessor-lookup hook
- * (needed only when the app object is proxied over RPC). Standalone apps that
- * only dispatch locally inherit this no-op default — their app class registers
- * itself lazily on first create.
+ * App-injection point. The generic platform bootstrap (ymain/<plat>.c) knows
+ * only yapp:app, so it calls this fixed-name forwarder; the concrete app module
+ * linked into the binary defines it to build — and, when the app is wire-proxied,
+ * register — its own app class. Declaration only: there is no default. A binary
+ * that links a platform entry without defining this fails to link, by design.
  */
 [[clang::annotate("expose")]]
-__attribute__((weak)) struct yetty_ycore_void_result yetty_yapp_register_app(void)
-{
-    return YETTY_OK_VOID();
-}
+struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx);
 
 #include "app.gen.c"

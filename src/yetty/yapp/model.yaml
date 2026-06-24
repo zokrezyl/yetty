@@ -52,18 +52,12 @@ exposed:
     args:
       - name: ctx
         type: "struct yetty_yclass_ctx *"
-    doc: null
-  - source_file: src/yetty/yapp/app.c
-    name: yetty_yapp_register_app
-    return_type: struct yetty_ycore_void_result
-    args: []
     doc: "/*
- * Concrete-app by-name registration hook. The shared platform entry calls this
- * after registering the platform and base-app classes; the final app module may
- * provide a strong override that installs its own yclass accessor-lookup hook
- * (needed only when the app object is proxied over RPC). Standalone apps that
- * only dispatch locally inherit this no-op default — their app class registers
- * itself lazily on first create.
+ * App-injection point. The generic platform bootstrap (ymain/<plat>.c) knows
+ * only yapp:app, so it calls this fixed-name forwarder; the concrete app module
+ * linked into the binary defines it to build — and, when the app is wire-proxied,
+ * register — its own app class. Declaration only: there is no default. A binary
+ * that links a platform entry without defining this fails to link, by design.
  */"
 types:
   - name: yetty_yclass_object_ptr_result

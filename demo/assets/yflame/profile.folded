@@ -1,0 +1,13 @@
+yetty_run;event_loop;poll 120
+yetty_run;event_loop;render;text_layer;pack_lines 340
+yetty_run;event_loop;render;text_layer;upload 95
+yetty_run;event_loop;render;ydraw_layer;bucket_prims 210
+yetty_run;event_loop;render;ydraw_layer;binder_submit 180
+yetty_run;event_loop;render;figure_pass;yplot 260
+yetty_run;event_loop;render;figure_pass;ycat_svg 140
+yetty_run;event_loop;render;present 70
+yetty_run;event_loop;input;parse_pty;vterm_feed 410
+yetty_run;event_loop;input;parse_pty;wire_statemachine 130
+yetty_run;startup;create_window 55
+yetty_run;startup;gpu_init;adapter 90
+yetty_run;startup;gpu_init;device 75

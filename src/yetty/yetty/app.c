@@ -97,19 +97,17 @@ static struct yetty_ycore_void_result yetty_app_run(struct yetty_yclass_object *
     return run_res;
 }
 
-struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx)
-{
-    return yetty_yetty_app_create(ctx);
-}
-
-/* Strong override of the weak yapp default: install the yetty app's
- * accessor-lookup hook. Keeps yetty's startup identical to before the shared
- * entry was generalized. */
+/* Install the yetty app's accessor-lookup hook (the yetty app object is proxied
+ * over RPC, so it must be resolvable by name) and then build the app. The
+ * generic bootstrap calls only this one forwarder, so the registration folds in
+ * here rather than living behind a separate entry point. */
 struct yetty_ycore_void_result yetty_yetty_register(void);
 
-struct yetty_ycore_void_result yetty_yapp_register_app(void)
+struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx)
 {
-    return yetty_yetty_register();
+    struct yetty_ycore_void_result reg = yetty_yetty_register();
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, reg, "yetty_yapp_create_app: register");
+    return yetty_yetty_app_create(ctx);
 }
 
 #include "app.gen.c"

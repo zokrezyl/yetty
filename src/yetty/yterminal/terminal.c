@@ -1145,8 +1145,7 @@ static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
         char newlines[256];
         memset(newlines, '\n', sizeof(newlines));
         while (remaining > 0u) {
-            uint32_t chunk =
-                remaining < sizeof(newlines) ? remaining : (uint32_t)sizeof(newlines);
+            uint32_t chunk = remaining < sizeof(newlines) ? remaining : (uint32_t)sizeof(newlines);
             struct yetty_ycore_void_result feed_res =
                 yetty_yvterm_vterm_feed(terminal->grid, newlines, chunk);
             if (YETTY_IS_ERR(feed_res)) {

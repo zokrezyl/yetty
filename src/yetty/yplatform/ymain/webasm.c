@@ -2,8 +2,8 @@
  * yplatform/ymain/webasm.c — WebAssembly entry (the main yetty target).
  *
  * Same linear shape as the desktop glfw entry: register the platform + base-app
- * classes, create the concrete app through the weak yetty_yapp_create_app()
- * injection point, create the webasm_platform, then platform_run(platform, app).
+ * classes, create the concrete app through the yetty_yapp_create_app() injection
+ * point, create the webasm_platform, then platform_run(platform, app).
  * run() calls init() and then drives the app (init/run). The browser owns the
  * event loop (the app's run() registers emscripten_set_main_loop and hands
  * back), so platform_run returns and main() returns; the browser keeps the wasm
@@ -24,8 +24,6 @@ struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_
                                                             int argc, char **argv);
 struct yetty_ycore_void_result yetty_yapp_register(void);
 struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx);
-/* Concrete-app by-name registration hook (weak no-op default in yapp/app.c). */
-struct yetty_ycore_void_result yetty_yapp_register_app(void);
 
 int main(int argc, char **argv)
 {
@@ -41,13 +39,7 @@ int main(int argc, char **argv)
         yetty_ycore_error_destroy(yapp_reg.error);
         return 1;
     }
-    struct yetty_ycore_void_result app_reg = yetty_yapp_register_app();
-    if (YETTY_IS_ERR(app_reg)) {
-        yetty_ycore_error_print(stderr, "yetty: app register", app_reg.error);
-        yetty_ycore_error_destroy(app_reg.error);
-        return 1;
-    }
-
+    /* The concrete app registers its own app class inside create_app. */
     struct yetty_yclass_object_ptr_result app_res = yetty_yapp_create_app(NULL);
     if (YETTY_IS_ERR(app_res)) {
         yetty_ycore_error_print(stderr, "yetty: app create", app_res.error);
