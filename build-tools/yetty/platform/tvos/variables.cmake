@@ -23,5 +23,10 @@ set(YETTY_ENABLE_TOOL_YGREETER OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_TOOL_YINSTALL OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_TOOL_YTOP     OFF CACHE BOOL "" FORCE)
 
+# yhello opens its own GLFW desktop window; its standalone bootstrap pulls in
+# yplatform/yplatform/glfw.c, which needs GLFW (OFF here — UIKit owns the
+# window). Skip until yhello gains a platform-abstracted bootstrap (#361).
+set(YETTY_ENABLE_TOOL_YHELLO   OFF CACHE BOOL "" FORCE)
+
 # QA tools require host LLVM/Clang libs and hardcode Linux paths.
 set(YETTY_ENABLE_TOOL_QA OFF CACHE BOOL "" FORCE)
