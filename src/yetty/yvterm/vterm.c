@@ -43,13 +43,15 @@
 /* GPU cell layout the text shader reads: 4 u32 words per cell. */
 enum { YVTERM_WORDS_PER_CELL = 4 };
 
-/* How many rows ABOVE the visible top the rich pass scans for figure anchors, on
- * top of one screen height. An anchored figure spans downward from its top line,
- * so once that top line scrolls into history the figure must keep drawing until
- * its bottom row also leaves; the scan therefore reaches back far enough to find
- * the anchor of any figure taller than the screen. Past this, a figure is fully
- * off the top. The per-figure extent test culls anything that doesn't reach. */
-enum { YVTERM_COMPOSITE_LOOKBACK_ROWS = 256 };
+/* How many rows BELOW the visible bottom the rich pass scans for figure anchors,
+ * on top of one screen height. A figure is anchored on its BOTTOM line but spans
+ * upward, so in a scrolled-back view a figure whose bottom sits just below the
+ * viewport may still have its top poking into the pane. The scan therefore looks
+ * ahead past the bottom far enough to find the anchor of any figure taller than
+ * the screen; the look-ahead is additionally capped by the live scroll distance
+ * (no figure exists below the live bottom). Past this a figure is fully off the
+ * bottom. The per-figure extent test culls anything that doesn't reach. */
+enum { YVTERM_COMPOSITE_ANCHOR_LOOKAHEAD_ROWS = 256 };
 
 /* Must match the Uniforms struct in the text shader (text_wgsl below). */
 struct vterm_uniforms {
@@ -1066,15 +1068,18 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
                            ? vterm->cell_size.height / vterm->baseline_cell_height
                            : 1.0f;
     float figure_scale = zoom * cell_ratio;
-    /* A figure is anchored on its TOP line but spans several rows downward. It
-     * must stay drawn while ANY of its rows is on screen, so the scan starts
-     * above visible row 0: an anchor that has scrolled into the history still
-     * draws (at a negative pixel offset) as long as its extent reaches back into
-     * the pane. The look-back bounds the tallest figure we keep alive — past it,
-     * a figure whose anchor is that far up is fully off the top and need not draw.
-     * Figures clip to the pane viewport, so an over-scan never bleeds upward. */
-    int comp_lookback = (int)rows + YVTERM_COMPOSITE_LOOKBACK_ROWS;
-    for (int row = -comp_lookback; row < (int)rows; ++row) {
+    /* A figure is anchored on its BOTTOM line and spans upward, so the scan runs
+     * the visible rows plus a look-ahead BELOW the bottom: in a scrolled-back
+     * view a figure whose bottom sits below the viewport may still have its top
+     * poking into the pane. The look-ahead is capped by the live scroll distance
+     * `back` (root_row's offset behind the live base) — in the live view back is
+     * 0, so nothing below the bottom is scanned and the oldest scrollback slots
+     * (which alias "below the bottom" on the ring) are never misread as figures. */
+    uint32_t back = slot_count ? (base + slot_count - root_row) % slot_count : 0u;
+    int comp_lookahead = (int)(back < (uint32_t)YVTERM_COMPOSITE_ANCHOR_LOOKAHEAD_ROWS
+                                   ? back
+                                   : (uint32_t)YVTERM_COMPOSITE_ANCHOR_LOOKAHEAD_ROWS);
+    for (int row = 0; row < (int)rows + comp_lookahead; ++row) {
         uint32_t comp_count = 0;
         /* Read composites by the SAME ring slot the text shader draws at this
          * visible row — slot = (row + root_row) % ring_rows — so figures scroll
@@ -1086,9 +1091,6 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
                 ((row + (int)root_row) % (int)slot_count + (int)slot_count) % (int)slot_count;
             comp_slot = (uint32_t)wrapped;
         } else {
-            if (row < 0) {
-                continue;
-            }
             comp_slot = (uint32_t)row;
         }
         struct yetty_ydraw_composite *const *comps =
@@ -1096,7 +1098,11 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
         if (!comps || comp_count == 0) {
             continue;
         }
-        float anchor_y = (float)row * vterm->cell_size.height;
+        /* This row is the block's BOTTOM line; recover its top so the figure
+         * still draws top-down from where its text sits. span 0 → single row. */
+        uint32_t span = yetty_yvterm_grid_slot_span(grid, comp_slot);
+        int top_row = row - (int)(span ? span - 1u : 0u);
+        float anchor_y = (float)top_row * vterm->cell_size.height;
         float comp_x = rect.min.x + (0.0f - vz_center_x - vz_off_x) * zoom + vz_center_x;
         float comp_y_local = (anchor_y - vz_center_y - vz_off_y) * zoom + vz_center_y;
         float comp_y = rect.min.y + comp_y_local;
@@ -1104,14 +1110,12 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
             if (!comps[ci]) {
                 continue;
             }
-            /* For an anchor that has scrolled above the pane top (row < 0), draw
-             * only while the figure's extent still reaches back down into view;
-             * once even its bottom row is gone it is fully off-screen. A figure
-             * with no reported height falls back to the old behaviour (drawn only
-             * while its anchor row is visible). An anchor pushed below the pane
-             * bottom (possible under zoom) draws nothing visible either. */
+            /* Cull a figure that has fully left the pane: its bottom edge above
+             * the pane top (scrolled off the top), or its top below the pane
+             * bottom (scrolled off / pushed down under zoom). A figure with no
+             * reported height is drawn whenever its top row is on screen. */
             float fig_height = yetty_ydraw_composite_pixel_height(comps[ci]) * figure_scale;
-            if (row < 0 && comp_y_local + fig_height <= 0.0f) {
+            if (comp_y_local + fig_height <= 0.0f) {
                 continue;
             }
             if (comp_y_local >= pane_height) {
@@ -1137,7 +1141,7 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     if (vterm->sdf_layer) {
         struct yetty_ycore_void_result sdf_res = yetty_yvterm_sdf_layer_render(
             vterm->sdf_layer, grid, target, rect, vterm->cell_size.width, vterm->cell_size.height,
-            cols, rows, root_row, slot_count, zoom, vz_off_x, vz_off_y, cell_ratio);
+            cols, rows, root_row, slot_count, back, zoom, vz_off_x, vz_off_y, cell_ratio);
         if (YETTY_IS_ERR(sdf_res)) {
             ywarn("vterm_render: SDF layer: %s", sdf_res.error.msg);
             yetty_ycore_error_destroy(sdf_res.error);
@@ -1518,6 +1522,17 @@ struct yetty_ycore_uint32_result yetty_yvterm_vterm_attach_composite(
         return YETTY_ERR(yetty_ycore_uint32, "yvterm attach_composite: bad obj");
     }
     return yetty_yvterm_grid_attach_composite(vterm->grid_obj, row, composite);
+}
+
+[[clang::annotate("expose")]]
+struct yetty_ycore_void_result yetty_yvterm_vterm_relocate_rich_to_bottom(
+    struct yetty_yclass_object *obj, uint32_t span_rows)
+{
+    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    if (!vterm) {
+        return YETTY_ERR(yetty_ycore_void, "yvterm relocate_rich: bad obj");
+    }
+    return yetty_yvterm_grid_relocate_rich_to_bottom(vterm->grid_obj, span_rows);
 }
 
 [[clang::annotate("expose")]]

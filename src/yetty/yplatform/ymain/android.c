@@ -6,7 +6,7 @@
  *
  *   yetty_android_program_init — the ANativeWindow exists (APP_CMD_INIT_WINDOW);
  *                                assemble the runtime from the live surface,
- *                                create the concrete app through the weak
+ *                                create the concrete app through the
  *                                yetty_yapp_create_app() injection point, and
  *                                drive it (yapp:app init/run) on a render thread.
  *   yetty_android_program_term — stop the render thread and tear down.

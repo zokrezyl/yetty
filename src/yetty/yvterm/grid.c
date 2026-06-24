@@ -96,6 +96,14 @@ struct yetty_yvterm_line {
     uint32_t composite_count;
     uint32_t composite_capacity;
 
+    /* Row-span of the rich-content block whose BOTTOM line this is. A figure
+     * (composite or SDF block) is anchored on its bottom line so it leaves the
+     * scrollback only when its last overlapping line is evicted. The renderer
+     * recovers the block's top row as (this line's row − (rich_span_rows − 1)),
+     * so the figure still draws top-down from where its text sits. 0 means "not
+     * a relocated block" — treated as a single-row anchor (top == bottom). */
+    uint32_t rich_span_rows;
+
     int dirty;
 
     /* 1 when this physical line is a soft-wrap continuation of the line above
@@ -312,6 +320,7 @@ static void clear_line_rich(struct yetty_yvterm_line *line, uint32_t cols)
         line->composites[i] = NULL;
     }
     line->composite_count = 0;
+    line->rich_span_rows = 0;
 }
 
 static void blank_cell(struct yetty_yvterm_text_cell *cell, uint32_t fg, uint32_t bg)
@@ -945,6 +954,7 @@ static void take_line_rich(struct yetty_yvterm_line *dst, struct yetty_yvterm_li
     dst->arena = src->arena;
     dst->arena_count = src->arena_count;
     dst->arena_capacity = src->arena_capacity;
+    dst->rich_span_rows = src->rich_span_rows;
 
     src->composites = NULL;
     src->composite_count = 0;
@@ -955,6 +965,7 @@ static void take_line_rich(struct yetty_yvterm_line *dst, struct yetty_yvterm_li
     src->arena = NULL;
     src->arena_count = 0;
     src->arena_capacity = 0;
+    src->rich_span_rows = 0;
 }
 
 /* Move a source line's anchored rich content (SDF primitive arena + descriptors
@@ -1030,6 +1041,13 @@ static void merge_line_rich(struct yetty_yvterm_line *dst, struct yetty_yvterm_l
             yetty_ycore_error_destroy(comp_res.error);
         }
     }
+
+    /* Two blocks folded onto one row: keep the taller span so the merged
+     * content still leaves the scrollback by its lowest overlapping line. */
+    if (src->rich_span_rows > dst->rich_span_rows) {
+        dst->rich_span_rows = src->rich_span_rows;
+    }
+    src->rich_span_rows = 0;
 
     dst->dirty = 1;
 }
@@ -1509,6 +1527,44 @@ struct yetty_ycore_uint32_result yetty_yvterm_grid_attach_composite(
     return YETTY_OK(yetty_ycore_uint32, index);
 }
 
+/* Re-home a freshly-ingested rich block from its TOP line onto its BOTTOM line
+ * and stamp the block's row span there, so a figure (composite or SDF block)
+ * leaves the scrollback only when its LAST overlapping line is evicted, not its
+ * first. Called once after the reserve newlines that allocated the block's rows:
+ * the cursor then sits on the line just BELOW the block, so the bottom line is
+ * cursor_row − 1 and the top is cursor_row − span_rows. span_rows is the row
+ * height the block reserved. A span of 1 is a single-row block (top == bottom):
+ * only the span is recorded, nothing moves. The content was attached on the top
+ * line via attach_composite / append_primitive during ingestion; those rows are
+ * never recycled during their own reserve (the scroll blanks the rows below the
+ * block), so the top line still holds the content here. */
+[[clang::annotate("expose")]]
+struct yetty_ycore_void_result yetty_yvterm_grid_relocate_rich_to_bottom(
+    struct yetty_yclass_object *obj, uint32_t span_rows)
+{
+    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm relocate_rich: from_obj");
+    struct yetty_yvterm_grid *grid = grid_res.value;
+    if (span_rows == 0u) {
+        return YETTY_OK_VOID();
+    }
+    int bottom_row = (int)grid->cursor_row - 1;
+    int top_row = (int)grid->cursor_row - (int)span_rows;
+    struct yetty_yvterm_line *bottom = line_at_signed(grid, bottom_row);
+    if (top_row != bottom_row) {
+        struct yetty_yvterm_line *top = line_at_signed(grid, top_row);
+        /* bottom is freshly blanked by the reserve scroll, so this steals the
+         * top line's whole rich backing onto it (no copy). */
+        merge_line_rich(bottom, top);
+    }
+    /* Stamp the span AFTER the move: merge_line_rich carries the (zero) source
+     * span, so set the real height last. */
+    bottom->rich_span_rows = span_rows;
+    bottom->dirty = 1;
+    grid->has_dirty = 1;
+    return YETTY_OK_VOID();
+}
+
 [[clang::annotate("expose")]]
 struct yetty_ycore_void_result yetty_yvterm_grid_clear_rich_line(struct yetty_yclass_object *obj,
                                                                  uint32_t row)
@@ -1953,6 +2009,26 @@ uint32_t yetty_yvterm_grid_slot_primitive_count(struct yetty_yclass_object *obj,
         return 0u;
     }
     return grid->lines[slot].primitive_count;
+}
+
+/* Row-span of the rich-content block whose BOTTOM line is RAW ring slot `slot`.
+ * The renderer recovers the block's top row as (slot's row − (span − 1)) so the
+ * figure draws top-down from where its text sits, while the block is owned (and
+ * evicted) by its bottom line. 0 means the slot carries no relocated block —
+ * the renderer then treats it as a single-row anchor. */
+[[clang::annotate("expose")]]
+uint32_t yetty_yvterm_grid_slot_span(struct yetty_yclass_object *obj, uint32_t slot)
+{
+    struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
+    if (YETTY_IS_ERR(grid_res)) {
+        yetty_ycore_error_destroy(grid_res.error);
+        return 0u;
+    }
+    struct yetty_yvterm_grid *grid = grid_res.value;
+    if (slot >= grid->line_count) {
+        return 0u;
+    }
+    return grid->lines[slot].rich_span_rows;
 }
 
 /* Words of primitive `index` on RAW ring slot `slot`. *out_word_count is set to the

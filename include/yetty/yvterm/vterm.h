@@ -85,6 +85,8 @@ struct yetty_ycore_uint32_result yetty_yvterm_vterm_append_primitive(
     struct yetty_yclass_object *obj, uint32_t row, const uint32_t *words, uint32_t word_count);
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_attach_composite(
     struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_composite *composite);
+struct yetty_ycore_void_result yetty_yvterm_vterm_relocate_rich_to_bottom(
+    struct yetty_yclass_object *obj, uint32_t span_rows);
 struct yetty_ycore_void_result yetty_yvterm_vterm_clear_rich_line(struct yetty_yclass_object *obj,
                                                                   uint32_t row);
 struct yetty_ycore_void_result yetty_yvterm_vterm_clear_rich_all(struct yetty_yclass_object *obj);

@@ -486,6 +486,25 @@ exposed:
         type: "struct yetty_ydraw_composite *"
     doc: null
   - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_relocate_rich_to_bottom
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: span_rows
+        type: uint32_t
+    doc: "/* Re-home a freshly-ingested rich block from its TOP line onto its BOTTOM line
+ * and stamp the block's row span there, so a figure (composite or SDF block)
+ * leaves the scrollback only when its LAST overlapping line is evicted, not its
+ * first. Called once after the reserve newlines that allocated the block's rows:
+ * the cursor then sits on the line just BELOW the block, so the bottom line is
+ * cursor_row − 1 and the top is cursor_row − span_rows. span_rows is the row
+ * height the block reserved. A span of 1 is a single-row block (top == bottom):
+ * only the span is recorded, nothing moves. The content was attached on the top
+ * line via attach_composite / append_primitive during ingestion; those rows are
+ * never recycled during their own reserve (the scroll blanks the rows below the
+ * block), so the top line still holds the content here. */"
+  - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_clear_rich_line
     return_type: struct yetty_ycore_void_result
     args:
@@ -642,6 +661,19 @@ exposed:
     doc: "/* Number of raw drawable records (SDF / glyph / TEXT_DRAWABLE_LIST / FONT) stored
  * on RAW ring slot `slot`. The SDF render pass walks these by slot — same raw-slot
  * addressing the composite + text passes use — so figures and text scroll together. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_span
+    return_type: uint32_t
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: slot
+        type: uint32_t
+    doc: "/* Row-span of the rich-content block whose BOTTOM line is RAW ring slot `slot`.
+ * The renderer recovers the block's top row as (slot's row − (span − 1)) so the
+ * figure draws top-down from where its text sits, while the block is owned (and
+ * evicted) by its bottom line. 0 means the slot carries no relocated block —
+ * the renderer then treats it as a single-row anchor. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_slot_primitive_words
     return_type: "const uint32_t *"
@@ -881,6 +913,15 @@ exposed:
         type: uint32_t
       - name: composite
         type: "struct yetty_ydraw_composite *"
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_relocate_rich_to_bottom
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: span_rows
+        type: uint32_t
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_clear_rich_line

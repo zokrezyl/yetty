@@ -98,6 +98,14 @@ add_library(yetty_yplatform_core STATIC
     # don't belong to it.
     yclipboard/rpc.gen.c
     ywindow/rpc.gen.c
+    # The window-chrome submodule's accessor-lookup registration. Its base
+    # class (window-chrome.c) is already compiled into core above, but the
+    # aggregator (yplatform/rpc.gen.c) now chains every submodule register as a
+    # strong extern, so this shim must be present in every link too — the
+    # desktop build also pulls a YETTY_PLATFORM_GLFW-flavoured copy via
+    # glfw.cmake, which the linker prefers there; targets that don't (webasm,
+    # headless tools) resolve the strong ref from this core copy.
+    ywindow-chrome/rpc.gen.c
     yplatform/rpc.gen.c
     ${_core_per_os}
 )

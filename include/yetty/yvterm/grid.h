@@ -100,6 +100,19 @@ struct yetty_ycore_uint32_result yetty_yvterm_grid_append_primitive(struct yetty
                                                                     uint32_t word_count);
 struct yetty_ycore_uint32_result yetty_yvterm_grid_attach_composite(
     struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_composite *composite);
+/* Re-home a freshly-ingested rich block from its TOP line onto its BOTTOM line
+ * and stamp the block's row span there, so a figure (composite or SDF block)
+ * leaves the scrollback only when its LAST overlapping line is evicted, not its
+ * first. Called once after the reserve newlines that allocated the block's rows:
+ * the cursor then sits on the line just BELOW the block, so the bottom line is
+ * cursor_row − 1 and the top is cursor_row − span_rows. span_rows is the row
+ * height the block reserved. A span of 1 is a single-row block (top == bottom):
+ * only the span is recorded, nothing moves. The content was attached on the top
+ * line via attach_composite / append_primitive during ingestion; those rows are
+ * never recycled during their own reserve (the scroll blanks the rows below the
+ * block), so the top line still holds the content here. */
+struct yetty_ycore_void_result yetty_yvterm_grid_relocate_rich_to_bottom(
+    struct yetty_yclass_object *obj, uint32_t span_rows);
 struct yetty_ycore_void_result yetty_yvterm_grid_clear_rich_line(struct yetty_yclass_object *obj,
                                                                  uint32_t row);
 struct yetty_ycore_void_result yetty_yvterm_grid_clear_rich_all(struct yetty_yclass_object *obj);
@@ -138,6 +151,12 @@ struct yetty_ydraw_composite *const *yetty_yvterm_grid_slot_composites(
  * on RAW ring slot `slot`. The SDF render pass walks these by slot — same raw-slot
  * addressing the composite + text passes use — so figures and text scroll together. */
 uint32_t yetty_yvterm_grid_slot_primitive_count(struct yetty_yclass_object *obj, uint32_t slot);
+/* Row-span of the rich-content block whose BOTTOM line is RAW ring slot `slot`.
+ * The renderer recovers the block's top row as (slot's row − (span − 1)) so the
+ * figure draws top-down from where its text sits, while the block is owned (and
+ * evicted) by its bottom line. 0 means the slot carries no relocated block —
+ * the renderer then treats it as a single-row anchor. */
+uint32_t yetty_yvterm_grid_slot_span(struct yetty_yclass_object *obj, uint32_t slot);
 /* Words of primitive `index` on RAW ring slot `slot`. *out_word_count is set to the
  * record's u32 length. Returns NULL (and *out_word_count 0) if slot/index are out of
  * range. The returned span aliases the line's arena — read it, do not retain it. */

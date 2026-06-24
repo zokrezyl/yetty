@@ -51,6 +51,12 @@
 /* GLYPH primitive type — matches the shader's YDRAW_SDF_GLYPH (and ygrid). */
 #define YVTERM_SDF_GLYPH_TYPE 200u
 
+/* How many rows BELOW the viewport bottom a bottom-anchored block is scanned
+ * for (capped by the live scroll distance). Bounds the tallest block kept alive
+ * in a scrolled-back view; per-prim AABB clipping culls anything that doesn't
+ * actually reach the pane. */
+#define YVTERM_SDF_ANCHOR_LOOKAHEAD_ROWS 256u
+
 /* Uniform slots — same names/order/types ygrid uses so the (copied) layer
  * shader's ydraw_ydraw_* fields resolve. */
 #define U_GRID_SIZE 0
@@ -942,7 +948,7 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
     struct yetty_yvterm_sdf_layer *layer, struct yetty_yclass_object *grid_obj,
     struct yetty_ydraw_target *target, struct yetty_ycore_rectangle rect, float cell_width,
     float cell_height, uint32_t cols, uint32_t rows, uint32_t root_row, uint32_t slot_count,
-    float visual_zoom_scale, float visual_zoom_off_x, float visual_zoom_off_y,
+    uint32_t back, float visual_zoom_scale, float visual_zoom_off_x, float visual_zoom_off_y,
     float cell_zoom_scale)
 {
     if (!layer || layer->headless || !layer->binder) {
@@ -987,9 +993,23 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
         }
     }
 
-    /* Pass 2 — index the drawables (SDF shapes, glyphs, expanded text runs),
-     * each anchored to its slot's signed visible row. The shader's rolling-row
-     * offset places it at that row, so figures scroll exactly with the text. */
+    /* A block is anchored on its BOTTOM line; a bottom that sits just below the
+     * viewport may still have its top poking into the pane in a scrolled-back
+     * view. The fold point therefore extends one screen height plus a look-ahead
+     * below the viewport before a slot is treated as "above" (negative anchor).
+     * The look-ahead is capped by the live scroll distance `back` (0 in the live
+     * view), so the oldest scrollback slots — which alias "below the bottom" on
+     * the ring — are never misread as bottom anchors. */
+    uint32_t lookahead = back < (uint32_t)YVTERM_SDF_ANCHOR_LOOKAHEAD_ROWS
+                             ? back
+                             : (uint32_t)YVTERM_SDF_ANCHOR_LOOKAHEAD_ROWS;
+    int fold_threshold = (int)rows + (int)lookahead;
+
+    /* Pass 2 — index the drawables (SDF shapes, glyphs, expanded text runs). The
+     * slot's signed visible row is the block's BOTTOM; the block's top row, where
+     * its local coordinates are anchored, is (bottom − (span − 1)). The shader's
+     * rolling-row offset places it at that top, so the block draws top-down from
+     * where its text sits while staying owned/evicted by its bottom line. */
     for (uint32_t slot = 0; slot < slot_count; ++slot) {
         uint32_t prim_count = yetty_yvterm_grid_slot_primitive_count(grid_obj, slot);
         if (prim_count == 0) {
@@ -1000,10 +1020,11 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
         if (row < 0) {
             row += (int)slot_count;
         }
-        if (row >= (int)rows) {
+        if (row >= fold_threshold) {
             row -= (int)slot_count; /* above the viewport — negative anchor */
         }
-        layer->cur_rolling_row = row;
+        uint32_t span = yetty_yvterm_grid_slot_span(grid_obj, slot);
+        layer->cur_rolling_row = row - (int)(span ? span - 1u : 0u);
         for (uint32_t prim = 0; prim < prim_count; ++prim) {
             uint32_t word_count = 0;
             const uint32_t *words =

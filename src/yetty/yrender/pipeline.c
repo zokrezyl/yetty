@@ -353,7 +353,18 @@ static struct yetty_ycore_void_result create_quad_vb(struct yetty_yrender_pipeli
     if (!p->quad_vertex_buffer) {
         return YETTY_ERR(yetty_ycore_void, "create_buffer (quad) failed");
     }
+    /* createBuffer never returns NULL on failure (Dawn hands back an error
+     * buffer and reports via the async uncaptured-error callback), so the
+     * non-NULL check above is not sufficient. getMappedRange DOES return NULL
+     * for a buffer that failed to allocate — and on wasm address 0 is writable
+     * linear memory, so an unchecked memcpy here silently corrupts instead of
+     * trapping. Check it and propagate. */
     void *m = wgpuBufferGetMappedRange(p->quad_vertex_buffer, 0, sizeof(verts));
+    if (!m) {
+        return YETTY_ERR(
+            yetty_ycore_void,
+            "wgpuBufferGetMappedRange (quad) returned NULL — buffer allocation failed");
+    }
     memcpy(m, verts, sizeof(verts));
     wgpuBufferUnmap(p->quad_vertex_buffer);
     return YETTY_OK_VOID();
