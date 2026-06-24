@@ -1137,25 +1137,37 @@ static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
      * libvterm cursor that many rows (newlines drive normal scrollback +
      * rolling_row bookkeeping). Only the receiver knows the cell height, so this
      * row count cannot be computed by the producer. */
-    if (YETTY_IS_OK(result) && content_bottom_px > 0.0f) {
-        if (text_cell.height > 0) {
-            uint32_t cell_h = (uint32_t)text_cell.height;
-            uint32_t reserve_rows = ((uint32_t)content_bottom_px + cell_h - 1u) / cell_h;
-            if (reserve_rows > 0u) {
-                char newlines[256];
-                memset(newlines, '\n', sizeof(newlines));
-                while (reserve_rows > 0u) {
-                    uint32_t chunk =
-                        reserve_rows < sizeof(newlines) ? reserve_rows : (uint32_t)sizeof(newlines);
-                    struct yetty_ycore_void_result feed_res =
-                        yetty_yvterm_vterm_feed(terminal->grid, newlines, chunk);
-                    if (YETTY_IS_ERR(feed_res)) {
-                        yetty_ycore_error_destroy(feed_res.error);
-                        break;
-                    }
-                    reserve_rows -= chunk;
-                }
+    uint32_t reserve_rows = 0u;
+    if (YETTY_IS_OK(result) && content_bottom_px > 0.0f && text_cell.height > 0) {
+        uint32_t cell_h = (uint32_t)text_cell.height;
+        reserve_rows = ((uint32_t)content_bottom_px + cell_h - 1u) / cell_h;
+        uint32_t remaining = reserve_rows;
+        char newlines[256];
+        memset(newlines, '\n', sizeof(newlines));
+        while (remaining > 0u) {
+            uint32_t chunk =
+                remaining < sizeof(newlines) ? remaining : (uint32_t)sizeof(newlines);
+            struct yetty_ycore_void_result feed_res =
+                yetty_yvterm_vterm_feed(terminal->grid, newlines, chunk);
+            if (YETTY_IS_ERR(feed_res)) {
+                yetty_ycore_error_destroy(feed_res.error);
+                break;
             }
+            remaining -= chunk;
+        }
+    }
+
+    /* Re-home the just-ingested rich block (composites + SDF records, attached on
+     * the top line during ingestion) onto its BOTTOM line, so the figure leaves
+     * the scrollback only when its lowest overlapping line is evicted — not its
+     * first. After the reserve newlines the cursor sits on the line just below
+     * the block, so the grid derives the block's bottom (cursor − 1) and top
+     * (cursor − reserve_rows) from reserve_rows. */
+    if (YETTY_IS_OK(result) && reserve_rows > 0u) {
+        struct yetty_ycore_void_result relocate_res =
+            yetty_yvterm_vterm_relocate_rich_to_bottom(terminal->grid, reserve_rows);
+        if (YETTY_IS_ERR(relocate_res)) {
+            yetty_ycore_error_destroy(relocate_res.error);
         }
     }
 

@@ -1037,7 +1037,12 @@ jobs:
         name: yetty-linux
         path: yetty-linux
     - name: Create archive
-      run: tar -czvf yetty-linux.tar.gz -C yetty-linux .
+      # upload-artifact strips the Unix executable bit, so the downloaded
+      # yinstall comes back as 0644. Re-apply +x before archiving so users
+      # can run it straight after `tar -xzf` without a manual chmod.
+      run: |
+        chmod +x yetty-linux/yinstall
+        tar -czvf yetty-linux.tar.gz -C yetty-linux .
     - uses: softprops/action-gh-release@v2
       with:
         files: yetty-linux.tar.gz
@@ -1054,7 +1059,12 @@ jobs:
         name: yetty-linux-aarch64
         path: yetty-linux-aarch64
     - name: Create archive
-      run: tar -czvf yetty-linux-aarch64.tar.gz -C yetty-linux-aarch64 .
+      # upload-artifact strips the Unix executable bit, so the downloaded
+      # yinstall comes back as 0644. Re-apply +x before archiving so users
+      # can run it straight after `tar -xzf` without a manual chmod.
+      run: |
+        chmod +x yetty-linux-aarch64/yinstall
+        tar -czvf yetty-linux-aarch64.tar.gz -C yetty-linux-aarch64 .
     - uses: softprops/action-gh-release@v2
       with:
         files: yetty-linux-aarch64.tar.gz
@@ -1071,7 +1081,12 @@ jobs:
         name: yetty-macos
         path: yetty-macos
     - name: Create archive
-      run: tar -czvf yetty-macos.tar.gz -C yetty-macos .
+      # upload-artifact strips the Unix executable bit, so the downloaded
+      # yinstall comes back as 0644. Re-apply +x before archiving so users
+      # can run it straight after `tar -xzf` without a manual chmod.
+      run: |
+        chmod +x yetty-macos/yinstall
+        tar -czvf yetty-macos.tar.gz -C yetty-macos .
     - uses: softprops/action-gh-release@v2
       with:
         files: yetty-macos.tar.gz
@@ -1088,7 +1103,12 @@ jobs:
         name: yetty-macos-x86_64
         path: yetty-macos-x86_64
     - name: Create archive
-      run: tar -czvf yetty-macos-x86_64.tar.gz -C yetty-macos-x86_64 .
+      # upload-artifact strips the Unix executable bit, so the downloaded
+      # yinstall comes back as 0644. Re-apply +x before archiving so users
+      # can run it straight after `tar -xzf` without a manual chmod.
+      run: |
+        chmod +x yetty-macos-x86_64/yinstall
+        tar -czvf yetty-macos-x86_64.tar.gz -C yetty-macos-x86_64 .
     - uses: softprops/action-gh-release@v2
       with:
         files: yetty-macos-x86_64.tar.gz

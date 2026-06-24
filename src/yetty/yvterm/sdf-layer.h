@@ -48,12 +48,14 @@ void yetty_yvterm_sdf_layer_destroy(struct yetty_yvterm_sdf_layer *layer);
  * the terminal cell metrics; cols/rows the visible grid; root_row + slot_count
  * the ring mapping the text pass uses (visible row r ↔ slot (r+root_row) %
  * slot_count) — passed in so figures land on exactly the rows their text does,
- * in both the live and scrolled-back views. */
+ * in both the live and scrolled-back views. `back` is root_row's offset behind
+ * the live base (the scroll distance, 0 in the live view); it caps how far
+ * BELOW the viewport bottom-anchored blocks are scanned for. */
 struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
     struct yetty_yvterm_sdf_layer *layer, struct yetty_yclass_object *grid_obj,
     struct yetty_ydraw_target *target, struct yetty_ycore_rectangle rect, float cell_width,
     float cell_height, uint32_t cols, uint32_t rows, uint32_t root_row, uint32_t slot_count,
-    float visual_zoom_scale, float visual_zoom_off_x, float visual_zoom_off_y,
+    uint32_t back, float visual_zoom_scale, float visual_zoom_off_x, float visual_zoom_off_y,
     float cell_zoom_scale);
 
 #ifdef __cplusplus
