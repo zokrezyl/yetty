@@ -84,12 +84,17 @@ classes:
       - slot: process_bytes
         slot_domain: yfigure
         impl: ymgui_figure_process_bytes_slot
+    doc: null
 exposed:
   - source_file: src/yetty/ymgui/figure.c
     type_text: "struct yetty_ymgui_factory_args {
     const struct yetty_context * context;
     struct yetty_ymgui_pipeline * pipeline;
 };"
+    doc: "/* The shared factory args struct is public (hosts embed it by value and
+ * hand its address to the registry). `expose` makes codegen re-emit this
+ * full definition into the generated figure.h for consumers; this TU has
+ * its own copy and the two never share a translation unit. */"
   - source_file: src/yetty/ymgui/figure.c
     name: yetty_ymgui_figure_create_local
     return_type: struct yetty_ymgui_figure_ptr_result
@@ -100,12 +105,14 @@ exposed:
         type: "struct yetty_ymgui_pipeline *"
       - name: context
         type: "const struct yetty_context *"
+    doc: null
   - source_file: src/yetty/ymgui/figure.c
     name: yetty_ymgui_figure_from_base
     return_type: struct yetty_ymgui_figure_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: null
   - source_file: src/yetty/ymgui/figure.c
     name: yetty_ymgui_figure_set_frame
     return_type: struct yetty_ycore_void_result
@@ -116,6 +123,7 @@ exposed:
         type: "const uint8_t *"
       - name: frame_size
         type: size_t
+    doc: null
   - source_file: src/yetty/ymgui/figure.c
     name: yetty_ymgui_figure_set_atlas
     return_type: struct yetty_ycore_void_result
@@ -130,6 +138,7 @@ exposed:
         type: uint32_t
       - name: atlas_h
         type: uint32_t
+    doc: null
   - source_file: src/yetty/ymgui/figure.c
     name: yetty_ymgui_register_factory
     return_type: struct yetty_ycore_void_result
@@ -138,12 +147,14 @@ exposed:
         type: "struct yetty_yfigure_registry *"
       - name: args
         type: "struct yetty_ymgui_factory_args *"
+    doc: null
   - source_file: src/yetty/ymgui/figure.c
     name: yetty_ymgui_factory_args_release
     return_type: struct yetty_ycore_void_result
     args:
       - name: args
         type: "struct yetty_ymgui_factory_args *"
+    doc: null
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

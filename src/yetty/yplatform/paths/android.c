@@ -13,10 +13,12 @@
  * at runtime from the process/package name. A hardcoded package would make
  * one app write into another app's sandbox (permission denied).
  *
- * assets_dir is a no-op ("/" placeholder) on Android — assets ship
- * inside the APK and are read via the NDK AAssetManager, not via
- * filesystem paths. Tools that need raw filesystem assets should
- * extract them to data_dir at startup (extract-assets/default.c).
+ * assets_dir is a no-op ("/" placeholder) on Android — there is no
+ * exec-relative asset location to point at. Assets are incbin-embedded in
+ * the app binary (baked into the APK by yetty_embed_assets) and unpacked to
+ * data_dir at first launch by the startup extract (extract-assets/default.c,
+ * called from yinit/android.c). Readers then open them as ordinary files
+ * under data_dir. (No NDK AAssetManager is used anywhere.)
  */
 
 #include <stdio.h>

@@ -3,21 +3,21 @@
  *
  * Runs via demo_runner_run_chrome instead of demo_runner_run. In standalone
  * (own-window) mode that makes the shared runner draw a caption strip and wire
- * the ychrome engine to the OS window_manager, so this borderless window can be:
+ * the ychrome engine to the OS window_chrome, so this borderless window can be:
  *
  *   - moved    — drag the caption strip at the top
  *   - maximized — double-click the caption strip
  *   - resized   — drag the right or bottom edge / bottom-right corner
  *
  * None of that touches ygui or yui: it's the standalone ychrome class driving
- * a yplatform:window_manager. The body below is ordinary ygui content (a label
+ * a yplatform:window_chrome. The body below is ordinary ygui content (a label
  * + a clickable button), which proves the chrome gestures and the widget tree
  * coexist — a press on a widget is claimed by the widget, a press on the empty
  * caption falls through to chrome.
  *
  * To adopt window chrome in another app, copy the integration in
  * demo/ygui/runner.c (search for `enable_chrome`): create + configure a chrome
- * object against rt->window_manager, draw a caption strip, feed it set_size on
+ * object against rt->window_chrome, draw a caption strip, feed it set_size on
  * resize, and route unclaimed mouse events through it.
  */
 #include "runner.h"

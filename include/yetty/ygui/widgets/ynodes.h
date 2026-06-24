@@ -43,6 +43,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_ynodes_create(struct yetty_ycla
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
+/*-----------------------------------------------------------------------------
+ * View.
+ *---------------------------------------------------------------------------*/
 void yetty_ygui_ynodes_view(const struct yetty_yclass_object *editor, float *pan_x, float *pan_y,
                             float *zoom);
 float yetty_ygui_ynodes_zoom(const struct yetty_yclass_object *editor);
@@ -57,6 +60,10 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_drop_links_for(struct yetty_ycl
 struct yetty_ycore_void_result yetty_ygui_ynodes_on_link_set(struct yetty_yclass_object *editor,
                                                              yetty_ygui_ynodes_link_cb cb,
                                                              void *userdata);
+/*-----------------------------------------------------------------------------
+ * Pending-link drag (driven by a ynode that captured the pointer on a pin
+ * press).
+ *---------------------------------------------------------------------------*/
 struct yetty_ycore_void_result yetty_ygui_ynodes_begin_link(struct yetty_yclass_object *editor,
                                                             struct yetty_yclass_object *from,
                                                             int pin, int output, float x, float y);
@@ -64,6 +71,9 @@ struct yetty_ycore_void_result yetty_ygui_ynodes_update_link(struct yetty_yclass
                                                              float x, float y);
 struct yetty_ycore_void_result yetty_ygui_ynodes_end_link(struct yetty_yclass_object *editor,
                                                           float x, float y);
+/*-----------------------------------------------------------------------------
+ * Add-node convenience.
+ *---------------------------------------------------------------------------*/
 struct yetty_yclass_object_ptr_result yetty_ygui_ynodes_add_node(struct yetty_yclass_object *editor,
                                                                  float gx, float gy);
 struct yetty_ycore_void_result yetty_ygui_ynodes_register_widget(struct yetty_yclass_object *editor,

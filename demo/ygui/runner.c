@@ -18,6 +18,8 @@
 #include "runner.h"
 
 #include <yetty/ycore/result.h>
+#include <yetty/yapp/app.h>
+#include <yetty/yclass/class.h>
 #include <yetty/ycore/types.h>
 #include <yetty/ycore/terminal-detect.h>
 #include <yetty/yconfig/config.h>
@@ -34,8 +36,8 @@
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yimage/yimage-gen.h>
-#include <yetty/yinit/yinit.h>
-#include <yetty/yplatform/extract-assets.h>
+#include <yetty/yplatform/gpu-context.h>
+#include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yplatform/paths.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/ycoroutine.h>
@@ -55,7 +57,7 @@
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/widgets/button.h>
 #include <yetty/ygui/widgets/label.h>
-#include <yetty/yplatform/window-manager.h>
+#include <yetty/yplatform/ywindow-chrome/window-chrome.h>
 
 /* Caption-strip height (px) for chrome-enabled demos. The drawn strip and the
  * engine's drag/double-click zone share this value. */
@@ -105,6 +107,38 @@ struct demo_runner {
     struct yetty_ygrid_grid *chrome_caption; /* pinned figure compositing chrome's bar */
     int chrome_last_hover;                   /* last hovered control — repaint on change */
 };
+
+/*
+ * yclass app wrapper. The standalone bring-up is a yapp:app subclass: the
+ * shared glfw_platform brings up the window/surface/GPU/channels and drives the
+ * run override below. The heavy per-demo state stays in `struct demo_runner`
+ * (the build_fn API the numbered demos depend on); the app data block just
+ * embeds it. demo_runner_run creates the app, stamps name/build/enable_chrome
+ * onto the embedded runner, then runs the platform sequence.
+ *
+ * yclass: the only hand-written file is this annotated runner.c; runner.gen.c is
+ * #included at the foot.
+ */
+struct [[clang::annotate("class@demoygui:app")]] [[clang::annotate("parent@yapp:app")]] yetty_demoygui_app {
+    struct demo_runner runner;
+};
+
+/* Result wrapper + codegen accessor/downcast forward-decls (this TU does not
+ * include its own generated header). */
+YETTY_YRESULT_DECLARE(yetty_demoygui_app_ptr, struct yetty_demoygui_app *);
+struct yetty_yclass_ptr_result yetty_demoygui_app_class_get(void);
+struct yetty_demoygui_app_ptr_result yetty_demoygui_app_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_demoygui_app_create(struct yetty_yclass_ctx *ctx);
+
+/* Platform bring-up sequence symbols (provided by the yplatform layer). The
+ * demo runner owns its own entry (demo_runner_run), so it drives this sequence
+ * directly rather than via the shared ymain/glfw.c. */
+struct yetty_ycore_void_result yetty_yplatform_register(void);
+struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_platform_create(
+    struct yetty_yclass_ctx *ctx);
+struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *app,
+                                                            int argc, char **argv);
 
 static struct yetty_ycore_int_result frame_tick(struct yetty_yevent_event_listener *listener,
                                                 const struct yetty_yui_event *ev)
@@ -520,11 +554,31 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
-static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, void *user)
+[[clang::annotate("override@yapp:app:init")]]
+static struct yetty_ycore_void_result demoygui_app_init(struct yetty_yclass_object *obj,
+                                                        struct yetty_yclass_object *platform)
 {
-    struct demo_runner *r = (struct demo_runner *)user;
+    (void)obj;
+    (void)platform;
+    return YETTY_OK_VOID();
+}
 
-    struct yetty_yframework_ptr_result frr = yetty_yframework_create(rt);
+[[clang::annotate("override@yapp:app:run")]]
+static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_object *obj,
+                                                       struct yetty_yclass_object *platform)
+{
+    struct yetty_demoygui_app_ptr_result app_res = yetty_demoygui_app_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "demoygui:app:run: app_from");
+    struct demo_runner *r = &app_res.value->runner;
+
+    const struct yetty_yplatform_gpu_context *gpu = yetty_yplatform_platform_gpu_context(platform);
+    struct yetty_ycore_xthread_event_pipe *input_pipe =
+        yetty_yplatform_platform_input_pipe(platform);
+    if (!gpu || !input_pipe) {
+        return YETTY_ERR(yetty_ycore_void, "demoygui:app:run: platform state not populated");
+    }
+
+    struct yetty_yframework_ptr_result frr = yetty_yframework_create(platform);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, frr, "demo_runner: yframework_create");
     r->yframework = frr.value;
     r->render_target = r->yframework->render_target;
@@ -602,7 +656,7 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
     struct yetty_context ctx = {.runtime = r->yframework, .event_loop = r->yframework->event_loop};
     {
         struct yetty_ycore_rectangle root_rect = {
-            .min = {0, 0}, .max = {(float)rt->surface_width, (float)rt->surface_height}};
+            .min = {0, 0}, .max = {(float)gpu->surface_width, (float)gpu->surface_height}};
         struct yetty_yclass_ctx yclass_ctx = {0};
         struct yetty_yclass_object_ptr_result obj_res = yetty_yfigure_container_create(&yclass_ctx);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, obj_res, "demo_runner: container_create");
@@ -637,7 +691,7 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "demo_runner: framework_create");
         r->engine = fr.value;
         struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
-            r->engine, (float)rt->surface_width, (float)rt->surface_height);
+            r->engine, (float)gpu->surface_width, (float)gpu->surface_height);
         if (YETTY_IS_ERR(vr)) {
             yetty_ycore_error_destroy(vr.error);
         }
@@ -695,10 +749,10 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
 
     /* Window-chrome engine — bind it to the borderless OS window's manager so
      * the caption strip and edges drive real move/resize/maximize. Borrowed
-     * window_manager comes from yinit via yframework; absent in headless. A
+     * window_chrome comes from yinit via yframework; absent in headless. A
      * failure here just leaves chrome disabled (window stays static) rather
      * than aborting the demo. */
-    if (r->enable_chrome && r->yframework->window_manager) {
+    if (r->enable_chrome && r->yframework->window_chrome) {
         struct yetty_ycore_void_result creg = yetty_ychrome_register();
         if (YETTY_IS_ERR(creg)) {
             yetty_ycore_error_destroy(creg.error);
@@ -706,18 +760,18 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         struct yetty_yclass_object_ptr_result cor = yetty_ychrome_chrome_create(NULL);
         if (YETTY_IS_OK(cor)) {
             r->chrome = cor.value;
-            struct yetty_ycore_void_result ccfg = yetty_ychrome_configure(r->chrome, r->yframework->window_manager, DEMO_CHROME_CAPTION_H,
+            struct yetty_ycore_void_result ccfg = yetty_ychrome_configure(r->chrome, r->yframework->window_chrome, DEMO_CHROME_CAPTION_H,
                 /*edge_size=*/8.0f, YETTY_YCHROME_FLAG_ALL);
             if (YETTY_IS_ERR(ccfg)) {
                 yetty_ycore_error_destroy(ccfg.error);
             }
-            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(r->chrome, (float)rt->surface_width, (float)rt->surface_height);
+            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(r->chrome, (float)gpu->surface_width, (float)gpu->surface_height);
             if (YETTY_IS_ERR(csz)) {
                 yetty_ycore_error_destroy(csz.error);
             }
             /* Composite the chrome-painted caption as a pinned top figure. */
             struct yetty_ycore_void_result cap =
-                runner_chrome_caption_create(r, &ctx, (float)rt->surface_width);
+                runner_chrome_caption_create(r, &ctx, (float)gpu->surface_width);
             if (YETTY_IS_ERR(cap)) {
                 ywarn("demo_runner: chrome caption create failed: %s", cap.error.msg);
                 yetty_ycore_error_destroy(cap.error);
@@ -777,7 +831,7 @@ static struct yetty_ycore_void_result worker(struct yetty_yinit_runtime *rt, voi
         }
     }
 
-    yetty_yevent_post_async(rt->platform_input_pipe,
+    yetty_yevent_post_async(input_pipe,
                             &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
     struct yetty_ycore_void_result run_res =
@@ -1475,15 +1529,53 @@ static int demo_runner_run_impl(int argc, char **argv, const char *name, demo_bu
         return run_client_mode(name, build, enable_chrome);
     }
 #endif
-    struct demo_runner r = {.name = name, .build = build, .enable_chrome = enable_chrome};
-    struct yetty_yinit_app_config cfg = {.extract_assets_fn = yetty_platform_extract_assets};
-    struct yetty_ycore_int_result run_result = yetty_yinit_run(argc, argv, &cfg, worker, &r);
+    /* Standalone: drive the platform bring-up sequence directly. The concrete
+     * app is this runner's demoygui:app; the platform calls its init/run. */
+    struct yetty_ycore_void_result platform_reg = yetty_yplatform_register();
+    if (YETTY_IS_ERR(platform_reg)) {
+        yetty_ycore_error_print(stderr, "demo-runner: platform register", platform_reg.error);
+        yetty_ycore_error_destroy(platform_reg.error);
+        return 1;
+    }
+    struct yetty_ycore_void_result yapp_reg = yetty_yapp_register();
+    if (YETTY_IS_ERR(yapp_reg)) {
+        yetty_ycore_error_print(stderr, "demo-runner: yapp register", yapp_reg.error);
+        yetty_ycore_error_destroy(yapp_reg.error);
+        return 1;
+    }
+
+    struct yetty_yclass_object_ptr_result app_res = yetty_demoygui_app_create(NULL);
+    if (YETTY_IS_ERR(app_res)) {
+        yetty_ycore_error_print(stderr, "demo-runner: app create", app_res.error);
+        yetty_ycore_error_destroy(app_res.error);
+        return 1;
+    }
+    struct yetty_demoygui_app_ptr_result app_data = yetty_demoygui_app_from(app_res.value);
+    if (YETTY_IS_ERR(app_data)) {
+        yetty_ycore_error_print(stderr, "demo-runner: app data", app_data.error);
+        yetty_ycore_error_destroy(app_data.error);
+        return 1;
+    }
+    app_data.value->runner.name = name;
+    app_data.value->runner.build = build;
+    app_data.value->runner.enable_chrome = enable_chrome;
+
+    struct yetty_yclass_object_ptr_result platform_res = yetty_yplatform_glfw_platform_create(NULL);
+    if (YETTY_IS_ERR(platform_res)) {
+        yetty_ycore_error_print(stderr, "demo-runner: platform create", platform_res.error);
+        yetty_ycore_error_destroy(platform_res.error);
+        return 1;
+    }
+
+    /* Single step — run() calls init(app, argc, argv) internally. */
+    struct yetty_ycore_void_result run_result =
+        yetty_yplatform_platform_run(platform_res.value, app_res.value, argc, argv);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "demo-runner: run", run_result.error);
         yetty_ycore_error_destroy(run_result.error);
         return 1;
     }
-    return run_result.value;
+    return 0;
 }
 
 int demo_runner_run(int argc, char **argv, const char *name, demo_build_fn build)
@@ -1497,3 +1589,5 @@ int demo_runner_run_chrome(int argc, char **argv, const char *name, demo_build_f
 {
     return demo_runner_run_impl(argc, argv, name, build, /*enable_chrome=*/1);
 }
+
+#include "runner.gen.c"

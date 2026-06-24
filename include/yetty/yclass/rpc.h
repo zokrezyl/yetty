@@ -16,21 +16,24 @@
  *
  * Error preservation policy
  * -------------------------
- * On RPC failure, the generated skel logs the impl's Result error
- * (file:line:func + msg + cause chain) via yetty_ycore_error_print to
- * the SERVER stderr / ytrace, then encodes only a one-byte status=1
- * in the wire response. The client stub maps that to a generic
- * `"<slot>: remote impl returned error"` Result.
+ * The CALL response carries a one-byte status (0 = OK, 1 = ERR). On
+ * success the value bytes follow; on error the generated skel appends
+ * the impl's whole Result error — serialized by
+ * yetty_ycore_error_serialize: every frame's msg, file, func, line
+ * across the entire cause chain. The client stub receives that
+ * variable-length blob (via yetty_yclass_rpc_call_alloc),
+ * reconstructs the chain with yetty_ycore_error_deserialize, and
+ * returns it as the `.cause` of a locally-raised
+ * `"<slot>: remote impl returned error"` head — so
+ * yetty_ycore_error_print on the caller shows the remote frames
+ * exactly as a local error would. The error path is thus symmetric
+ * with the value path.
  *
- * The structured chain is NOT carried over the wire because
- * yetty_ycore_error.msg must point to string-literal-lifetime
- * memory (per <yetty/ycore/result.h>); reconstructing a chain from
- * a runtime byte buffer would require a separate ownership model.
- *
- * Practical impact: when debugging a remote failure, correlate the
- * client's "remote impl returned error" line with the server's
- * yetty_ycore_error_print output (matching slot name + same ytrace
- * stream when the server runs under YTRACE_DEFAULT_ON=yes). */
+ * The skel ALSO logs the error to the SERVER stderr / ytrace before
+ * sending it, so a remote failure is visible on both ends. If the
+ * serialized chain does not fit the response buffer the skel falls
+ * back to a status-only reply and the client surfaces just the
+ * generic head (a debugging-context loss, never a correctness one). */
 
 #ifndef YCLASS_RPC_H
 #define YCLASS_RPC_H
@@ -146,11 +149,27 @@ struct yetty_yclass_rpc_session_ptr_result yetty_yclass_rpc_session_create(
 struct yetty_ycore_void_result yetty_yclass_rpc_session_destroy(struct yetty_yclass_rpc_session *s);
 
 /* Generic call. Packs (op, id) into the wire header. The successful
- * value is the response payload length in bytes. */
+ * value is the response payload length in bytes. The response is read
+ * into the caller-owned `resp` buffer; a response larger than
+ * `resp_max` is drained and rejected — use yetty_yclass_rpc_call_alloc
+ * when the response length is not known up front. */
 struct yetty_ycore_size_result yetty_yclass_rpc_call(struct yetty_yclass_rpc_session *s,
                                                      enum yetty_yclass_rpc_op op, uint32_t id,
                                                      const void *body, size_t body_len, void *resp,
                                                      size_t resp_max);
+
+/* Like yetty_yclass_rpc_call, but heap-allocates the response to fit whatever
+ * the peer returns — needed for CALL responses whose error path carries a
+ * variable-length serialized cause chain that will not fit a caller-sized
+ * buffer. On success `*resp_out` is a malloc'd buffer of `*resp_len_out` bytes
+ * that the CALLER frees; an empty (zero-length) response yields
+ * `*resp_out = NULL`, `*resp_len_out = 0`. The length is bounded by the wire
+ * BUF_MAX limit. */
+struct yetty_ycore_void_result yetty_yclass_rpc_call_alloc(struct yetty_yclass_rpc_session *s,
+                                                           enum yetty_yclass_rpc_op op, uint32_t id,
+                                                           const void *body, size_t body_len,
+                                                           uint8_t **resp_out,
+                                                           size_t *resp_len_out);
 
 /* T2 translation table — indexed by local slot. UINT32_MAX = unresolved
  * (no valid wire id can be ≥ 2^28 since the wire reserves the top 4

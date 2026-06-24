@@ -55,6 +55,7 @@ struct yetty_ycore_void_result yetty_yrdawn_register(void);
 
 struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_from_base(
     struct yetty_yfigure_figure *base);
+/* Upcast: object → its figure-base slice. Stable pointer. */
 struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yrdawn_register_factory(
     struct yetty_yfigure_registry *registry, struct yetty_yrdawn_factory_args *args);

@@ -550,34 +550,34 @@ struct yetty_ycore_void_result yetty_yclass_rpc_session_set_remote_id(
     return YETTY_OK_VOID();
 }
 
-struct yetty_ycore_size_result yetty_yclass_rpc_call(struct yetty_yclass_rpc_session *s,
-                                                     enum yetty_yclass_rpc_op op, uint32_t id,
-                                                     const void *body, size_t body_len, void *resp,
-                                                     size_t resp_max)
+/* Validate the (op, id, body) request parameters and write the request frame
+ * (header + body_len + body) to the session transport. Shared by
+ * yetty_yclass_rpc_call and yetty_yclass_rpc_call_alloc, which differ only in
+ * how they receive the response. */
+static struct yetty_ycore_void_result rpc_write_request(struct yetty_yclass_rpc_session *s,
+                                                        enum yetty_yclass_rpc_op op, uint32_t id,
+                                                        const void *body, size_t body_len)
 {
     if (!s) {
-        return YETTY_ERR(yetty_ycore_size, "rpc_call: NULL session");
+        return YETTY_ERR(yetty_ycore_void, "rpc_call: NULL session");
     }
     /* Reject before touching the wire: the body_len is a u32 on the
      * wire and the peer reads into a BUF_MAX-sized static buffer. */
     if (body_len > UINT32_MAX || body_len > BUF_MAX) {
-        return YETTY_ERR(yetty_ycore_size, "rpc_call: body_len exceeds wire/buffer limit");
+        return YETTY_ERR(yetty_ycore_void, "rpc_call: body_len exceeds wire/buffer limit");
     }
     /* The wire id field is 28 bits — RPC_HDR_MAKE silently masks
      * anything larger. */
     if (id > YETTY_YCLASS_RPC_ID_MASK) {
-        return YETTY_ERR(yetty_ycore_size, "rpc_call: id exceeds 28-bit wire field");
+        return YETTY_ERR(yetty_ycore_void, "rpc_call: id exceeds 28-bit wire field");
     }
     /* op occupies a 4-bit field; cap at the highest defined op so
      * undefined-but-fits-in-4-bits values are also caught. */
     if (op > YETTY_YCLASS_RPC_OP_CREATE) {
-        return YETTY_ERR(yetty_ycore_size, "rpc_call: op is not a defined yetty_yclass_rpc_op");
+        return YETTY_ERR(yetty_ycore_void, "rpc_call: op is not a defined yetty_yclass_rpc_op");
     }
     if (body_len > 0 && body == NULL) {
-        return YETTY_ERR(yetty_ycore_size, "rpc_call: body_len>0 but body is NULL");
-    }
-    if (resp_max > 0 && resp == NULL) {
-        return YETTY_ERR(yetty_ycore_size, "rpc_call: resp_max>0 but resp is NULL");
+        return YETTY_ERR(yetty_ycore_void, "rpc_call: body_len>0 but body is NULL");
     }
 
     uint32_t header = YETTY_YCLASS_RPC_HDR_MAKE(op, id);
@@ -585,14 +585,43 @@ struct yetty_ycore_size_result yetty_yclass_rpc_call(struct yetty_yclass_rpc_ses
 
     uint32_t bl = (uint32_t)body_len;
     if (write_full(s->transport, &header, 4) < 0) {
-        return YETTY_ERR(yetty_ycore_size, "rpc_call: short write on header");
+        return YETTY_ERR(yetty_ycore_void, "rpc_call: short write on header");
     }
     if (write_full(s->transport, &bl, 4) < 0) {
-        return YETTY_ERR(yetty_ycore_size, "rpc_call: short write on body_len");
+        return YETTY_ERR(yetty_ycore_void, "rpc_call: short write on body_len");
     }
     if (body_len && write_full(s->transport, body, body_len) < 0) {
-        return YETTY_ERR(yetty_ycore_size, "rpc_call: short write on body");
+        return YETTY_ERR(yetty_ycore_void, "rpc_call: short write on body");
     }
+    return YETTY_OK_VOID();
+}
+
+/* Read and discard `count` bytes from the transport so the next frame read
+ * starts aligned after an unwanted/oversized response. */
+static struct yetty_ycore_void_result rpc_drain(struct yetty_yclass_transport *transport,
+                                                size_t count)
+{
+    uint8_t drain[256];
+    while (count) {
+        size_t chunk = count > sizeof(drain) ? sizeof(drain) : count;
+        if (read_full(transport, drain, chunk) < 0) {
+            return YETTY_ERR(yetty_ycore_void, "rpc_call: short read while draining resp");
+        }
+        count -= chunk;
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_size_result yetty_yclass_rpc_call(struct yetty_yclass_rpc_session *s,
+                                                     enum yetty_yclass_rpc_op op, uint32_t id,
+                                                     const void *body, size_t body_len, void *resp,
+                                                     size_t resp_max)
+{
+    if (resp_max > 0 && resp == NULL) {
+        return YETTY_ERR(yetty_ycore_size, "rpc_call: resp_max>0 but resp is NULL");
+    }
+    struct yetty_ycore_void_result write_res = rpc_write_request(s, op, id, body, body_len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_size, write_res, "rpc_call: request write failed");
 
     uint32_t resp_len = 0;
     if (read_full(s->transport, &resp_len, 4) < 0) {
@@ -601,22 +630,59 @@ struct yetty_ycore_size_result yetty_yclass_rpc_call(struct yetty_yclass_rpc_ses
     if (resp_len > resp_max) {
         /* Drain the oversized payload so the next frame read starts
          * aligned. Without this we'd parse garbage from mid-stream. */
-        uint8_t drain[256];
-        size_t remain = resp_len;
-        while (remain) {
-            size_t chunk = remain > sizeof(drain) ? sizeof(drain) : remain;
-            if (read_full(s->transport, drain, chunk) < 0) {
-                return YETTY_ERR(yetty_ycore_size,
-                                 "rpc_call: short read while draining oversized resp");
-            }
-            remain -= chunk;
-        }
+        struct yetty_ycore_void_result drain_res = rpc_drain(s->transport, resp_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_size, drain_res, "rpc_call: drain oversized resp failed");
         return YETTY_ERR(yetty_ycore_size, "rpc_call: response exceeds caller's resp_max");
     }
     if (resp_len && read_full(s->transport, resp, resp_len) < 0) {
         return YETTY_ERR(yetty_ycore_size, "rpc_call: short read on resp body");
     }
     return YETTY_OK(yetty_ycore_size, (size_t)resp_len);
+}
+
+struct yetty_ycore_void_result yetty_yclass_rpc_call_alloc(struct yetty_yclass_rpc_session *s,
+                                                           enum yetty_yclass_rpc_op op, uint32_t id,
+                                                           const void *body, size_t body_len,
+                                                           uint8_t **resp_out, size_t *resp_len_out)
+{
+    if (!resp_out || !resp_len_out) {
+        return YETTY_ERR(yetty_ycore_void, "rpc_call_alloc: NULL out parameter");
+    }
+    *resp_out = NULL;
+    *resp_len_out = 0;
+
+    struct yetty_ycore_void_result write_res = rpc_write_request(s, op, id, body, body_len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, write_res, "rpc_call_alloc: request write failed");
+
+    uint32_t resp_len = 0;
+    if (read_full(s->transport, &resp_len, 4) < 0) {
+        return YETTY_ERR(yetty_ycore_void, "rpc_call_alloc: short read on resp_len");
+    }
+    /* The peer writes from a BUF_MAX-sized buffer, so a larger length means a
+     * corrupt frame; drain and reject rather than honour a hostile size. */
+    if (resp_len > BUF_MAX) {
+        struct yetty_ycore_void_result drain_res = rpc_drain(s->transport, resp_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, drain_res,
+                            "rpc_call_alloc: drain oversized resp failed");
+        return YETTY_ERR(yetty_ycore_void, "rpc_call_alloc: response exceeds BUF_MAX");
+    }
+    if (resp_len == 0) {
+        return YETTY_OK_VOID(); /* empty response: *resp_out stays NULL */
+    }
+
+    uint8_t *resp = malloc(resp_len);
+    if (!resp) {
+        struct yetty_ycore_void_result drain_res = rpc_drain(s->transport, resp_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, drain_res, "rpc_call_alloc: drain after oom failed");
+        return YETTY_ERR(yetty_ycore_void, "rpc_call_alloc: response buffer oom");
+    }
+    if (read_full(s->transport, resp, resp_len) < 0) {
+        free(resp);
+        return YETTY_ERR(yetty_ycore_void, "rpc_call_alloc: short read on resp body");
+    }
+    *resp_out = resp;
+    *resp_len_out = (size_t)resp_len;
+    return YETTY_OK_VOID();
 }
 
 struct uint32_result yetty_yclass_rpc_session_ensure_remote_id(struct yetty_yclass_rpc_session *s,

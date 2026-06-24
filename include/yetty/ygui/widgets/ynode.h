@@ -42,6 +42,9 @@ int yetty_ygui_ynode_pin_pos(const struct yetty_yclass_object *node, int output,
                              float *x, float *y);
 int yetty_ygui_ynode_pin_at(const struct yetty_yclass_object *node, float x, float y, int *output,
                             int *index);
+/*-----------------------------------------------------------------------------
+ * App-facing API.
+ *---------------------------------------------------------------------------*/
 struct yetty_ycore_void_result yetty_ygui_ynode_set_title(struct yetty_yclass_object *node,
                                                           const char *title);
 struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_pos(struct yetty_yclass_object *node,

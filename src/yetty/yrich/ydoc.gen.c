@@ -524,21 +524,28 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_toggle_format(struct yetty_yclas
                 ->handle,
             format_flag};
 #pragma pack(pop)
-        uint8_t resp_buf[1];
-        struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
-                                  sizeof(wire_args), resp_buf, sizeof(resp_buf));
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
                             "yetty_yrich_ydoc_toggle_format: RPC call failed");
-        size_t response_len = rpc_call_r.value;
         if (response_len < 1) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_void,
                              "yetty_yrich_ydoc_toggle_format: short RPC response");
         }
         if (resp_buf[0] != 0) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yetty_yrich_ydoc_toggle_format: remote impl returned error");
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error = YETTY_ERR(
+                yetty_ycore_void, "yetty_yrich_ydoc_toggle_format: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
         }
+        free(resp_buf);
         return YETTY_OK_VOID();
     } else {
         struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
@@ -589,21 +596,28 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_set_text_color(struct yetty_ycla
                 ->handle,
             color};
 #pragma pack(pop)
-        uint8_t resp_buf[1];
-        struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
-                                  sizeof(wire_args), resp_buf, sizeof(resp_buf));
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
                             "yetty_yrich_ydoc_set_text_color: RPC call failed");
-        size_t response_len = rpc_call_r.value;
         if (response_len < 1) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_void,
                              "yetty_yrich_ydoc_set_text_color: short RPC response");
         }
         if (resp_buf[0] != 0) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yetty_yrich_ydoc_set_text_color: remote impl returned error");
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error = YETTY_ERR(
+                yetty_ycore_void, "yetty_yrich_ydoc_set_text_color: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
         }
+        free(resp_buf);
         return YETTY_OK_VOID();
     } else {
         struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
@@ -654,21 +668,28 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_set_alignment(struct yetty_yclas
                 ->handle,
             halign};
 #pragma pack(pop)
-        uint8_t resp_buf[1];
-        struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
-                                  sizeof(wire_args), resp_buf, sizeof(resp_buf));
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
                             "yetty_yrich_ydoc_set_alignment: RPC call failed");
-        size_t response_len = rpc_call_r.value;
         if (response_len < 1) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_void,
                              "yetty_yrich_ydoc_set_alignment: short RPC response");
         }
         if (resp_buf[0] != 0) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yetty_yrich_ydoc_set_alignment: remote impl returned error");
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error = YETTY_ERR(
+                yetty_ycore_void, "yetty_yrich_ydoc_set_alignment: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
         }
+        free(resp_buf);
         return YETTY_OK_VOID();
     } else {
         struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
@@ -718,20 +739,27 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_set_heading(struct yetty_yclass_
                 ->handle,
             level};
 #pragma pack(pop)
-        uint8_t resp_buf[1];
-        struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
-                                  sizeof(wire_args), resp_buf, sizeof(resp_buf));
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
                             "yetty_yrich_ydoc_set_heading: RPC call failed");
-        size_t response_len = rpc_call_r.value;
         if (response_len < 1) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_void, "yetty_yrich_ydoc_set_heading: short RPC response");
         }
         if (resp_buf[0] != 0) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yetty_yrich_ydoc_set_heading: remote impl returned error");
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error = YETTY_ERR(
+                yetty_ycore_void, "yetty_yrich_ydoc_set_heading: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
         }
+        free(resp_buf);
         return YETTY_OK_VOID();
     } else {
         struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
@@ -782,21 +810,28 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_change_font_size(struct yetty_yc
                 ->handle,
             delta};
 #pragma pack(pop)
-        uint8_t resp_buf[1];
-        struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
-                                  sizeof(wire_args), resp_buf, sizeof(resp_buf));
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
                             "yetty_yrich_ydoc_change_font_size: RPC call failed");
-        size_t response_len = rpc_call_r.value;
         if (response_len < 1) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_void,
                              "yetty_yrich_ydoc_change_font_size: short RPC response");
         }
         if (resp_buf[0] != 0) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yetty_yrich_ydoc_change_font_size: remote impl returned error");
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error = YETTY_ERR(
+                yetty_ycore_void, "yetty_yrich_ydoc_change_font_size: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
         }
+        free(resp_buf);
         return YETTY_OK_VOID();
     } else {
         struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
@@ -843,12 +878,15 @@ size_t yetty_yrich_ydoc_toggle_format_skel(const void *body, size_t body_len, vo
     if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_toggle_format: handle_resolve",
                                 obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_ydoc_toggle_format(
         (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.format_flag);
@@ -857,9 +895,11 @@ size_t yetty_yrich_ydoc_toggle_format_skel(const void *body, size_t body_len, vo
     }
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_toggle_format", call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
     }
     ((uint8_t *)resp)[0] = 0;
     return 1;
@@ -898,12 +938,15 @@ size_t yetty_yrich_ydoc_set_text_color_skel(const void *body, size_t body_len, v
     if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_set_text_color: handle_resolve",
                                 obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_ydoc_set_text_color(
         (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.color);
@@ -912,9 +955,11 @@ size_t yetty_yrich_ydoc_set_text_color_skel(const void *body, size_t body_len, v
     }
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_set_text_color", call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
     }
     ((uint8_t *)resp)[0] = 0;
     return 1;
@@ -953,12 +998,15 @@ size_t yetty_yrich_ydoc_set_alignment_skel(const void *body, size_t body_len, vo
     if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_set_alignment: handle_resolve",
                                 obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_ydoc_set_alignment(
         (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.halign);
@@ -967,9 +1015,11 @@ size_t yetty_yrich_ydoc_set_alignment_skel(const void *body, size_t body_len, vo
     }
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_set_alignment", call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
     }
     ((uint8_t *)resp)[0] = 0;
     return 1;
@@ -1008,12 +1058,15 @@ size_t yetty_yrich_ydoc_set_heading_skel(const void *body, size_t body_len, void
     if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_set_heading: handle_resolve",
                                 obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_ydoc_set_heading(
         (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.level);
@@ -1022,9 +1075,11 @@ size_t yetty_yrich_ydoc_set_heading_skel(const void *body, size_t body_len, void
     }
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_set_heading", call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
     }
     ((uint8_t *)resp)[0] = 0;
     return 1;
@@ -1063,12 +1118,15 @@ size_t yetty_yrich_ydoc_change_font_size_skel(const void *body, size_t body_len,
     if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_change_font_size: handle_resolve",
                                 obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_ydoc_change_font_size(
         (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.delta);
@@ -1077,9 +1135,11 @@ size_t yetty_yrich_ydoc_change_font_size_skel(const void *body, size_t body_len,
     }
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yrich_ydoc_change_font_size", call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
     }
     ((uint8_t *)resp)[0] = 0;
     return 1;

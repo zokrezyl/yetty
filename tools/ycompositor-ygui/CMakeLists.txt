@@ -18,18 +18,15 @@ if(NOT YETTY_ENABLE_LIB_WEBGPU)
 endif()
 
 set(YCOMP_YGUI_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/yinit/glfw.c
+    ${YETTY_APP_BOOTSTRAP_SOURCES}
     ${YETTY_ROOT}/src/yetty/yframework/yframework.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
     ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
     ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
@@ -72,7 +69,7 @@ target_link_libraries(ycompositor-ygui PRIVATE
     yetty_ydraw_core
     yetty_yplatform_core
     yetty_yplatform_move_resize
-    yetty_yplatform_window_manager
+    yetty_yplatform_window_chrome
     yetty_ychrome
     yetty_yco
     yetty_telnet

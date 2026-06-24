@@ -356,21 +356,29 @@ struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_grid_size(
                 ->handle,
             rows, cols};
 #pragma pack(pop)
-        uint8_t resp_buf[1];
-        struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
-                                  sizeof(wire_args), resp_buf, sizeof(resp_buf));
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
                             "yetty_yrich_spreadsheet_set_grid_size: RPC call failed");
-        size_t response_len = rpc_call_r.value;
         if (response_len < 1) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_void,
                              "yetty_yrich_spreadsheet_set_grid_size: short RPC response");
         }
         if (resp_buf[0] != 0) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yetty_yrich_spreadsheet_set_grid_size: remote impl returned error");
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error =
+                YETTY_ERR(yetty_ycore_void,
+                          "yetty_yrich_spreadsheet_set_grid_size: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
         }
+        free(resp_buf);
         return YETTY_OK_VOID();
     } else {
         struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
@@ -422,21 +430,29 @@ struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_row_height(
                 ->handle,
             row, height};
 #pragma pack(pop)
-        uint8_t resp_buf[1];
-        struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
-                                  sizeof(wire_args), resp_buf, sizeof(resp_buf));
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
                             "yetty_yrich_spreadsheet_set_row_height: RPC call failed");
-        size_t response_len = rpc_call_r.value;
         if (response_len < 1) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_void,
                              "yetty_yrich_spreadsheet_set_row_height: short RPC response");
         }
         if (resp_buf[0] != 0) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yetty_yrich_spreadsheet_set_row_height: remote impl returned error");
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error =
+                YETTY_ERR(yetty_ycore_void,
+                          "yetty_yrich_spreadsheet_set_row_height: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
         }
+        free(resp_buf);
         return YETTY_OK_VOID();
     } else {
         struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
@@ -488,21 +504,29 @@ struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_col_width(
                 ->handle,
             col, width};
 #pragma pack(pop)
-        uint8_t resp_buf[1];
-        struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
-                                  sizeof(wire_args), resp_buf, sizeof(resp_buf));
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
                             "yetty_yrich_spreadsheet_set_col_width: RPC call failed");
-        size_t response_len = rpc_call_r.value;
         if (response_len < 1) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_void,
                              "yetty_yrich_spreadsheet_set_col_width: short RPC response");
         }
         if (resp_buf[0] != 0) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yetty_yrich_spreadsheet_set_col_width: remote impl returned error");
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error =
+                YETTY_ERR(yetty_ycore_void,
+                          "yetty_yrich_spreadsheet_set_col_width: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
         }
+        free(resp_buf);
         return YETTY_OK_VOID();
     } else {
         struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
@@ -565,22 +589,30 @@ struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_cell_value(
         size_t body_offset = sizeof(wire_args);
         memcpy(body_buf + body_offset, value.data, value.size);
         body_offset += value.size;
-        uint8_t resp_buf[1];
-        struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, body_buf,
-                                  body_total, resp_buf, sizeof(resp_buf));
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, body_buf,
+                                        body_total, &resp_buf, &response_len);
         free(body_buf);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
                             "yetty_yrich_spreadsheet_set_cell_value: RPC call failed");
-        size_t response_len = rpc_call_r.value;
         if (response_len < 1) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_void,
                              "yetty_yrich_spreadsheet_set_cell_value: short RPC response");
         }
         if (resp_buf[0] != 0) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yetty_yrich_spreadsheet_set_cell_value: remote impl returned error");
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error =
+                YETTY_ERR(yetty_ycore_void,
+                          "yetty_yrich_spreadsheet_set_cell_value: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
         }
+        free(resp_buf);
         return YETTY_OK_VOID();
     } else {
         struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
@@ -630,12 +662,15 @@ size_t yetty_yrich_spreadsheet_set_grid_size_skel(const void *body, size_t body_
         yetty_ycore_error_print(stderr,
                                 "[skel] yetty_yrich_spreadsheet_set_grid_size: handle_resolve",
                                 obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_spreadsheet_set_grid_size(
         (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.rows, wire_args.cols);
@@ -645,9 +680,11 @@ size_t yetty_yrich_spreadsheet_set_grid_size_skel(const void *body, size_t body_
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yrich_spreadsheet_set_grid_size",
                                 call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
     }
     ((uint8_t *)resp)[0] = 0;
     return 1;
@@ -688,12 +725,15 @@ size_t yetty_yrich_spreadsheet_set_row_height_skel(const void *body, size_t body
         yetty_ycore_error_print(stderr,
                                 "[skel] yetty_yrich_spreadsheet_set_row_height: handle_resolve",
                                 obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_spreadsheet_set_row_height(
         (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.row, wire_args.height);
@@ -703,9 +743,11 @@ size_t yetty_yrich_spreadsheet_set_row_height_skel(const void *body, size_t body
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yrich_spreadsheet_set_row_height",
                                 call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
     }
     ((uint8_t *)resp)[0] = 0;
     return 1;
@@ -746,12 +788,15 @@ size_t yetty_yrich_spreadsheet_set_col_width_skel(const void *body, size_t body_
         yetty_ycore_error_print(stderr,
                                 "[skel] yetty_yrich_spreadsheet_set_col_width: handle_resolve",
                                 obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_spreadsheet_set_col_width(
         (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.col, wire_args.width);
@@ -761,9 +806,11 @@ size_t yetty_yrich_spreadsheet_set_col_width_skel(const void *body, size_t body_
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yrich_spreadsheet_set_col_width",
                                 call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
     }
     ((uint8_t *)resp)[0] = 0;
     return 1;
@@ -811,12 +858,15 @@ size_t yetty_yrich_spreadsheet_set_cell_value_skel(const void *body, size_t body
         yetty_ycore_error_print(stderr,
                                 "[skel] yetty_yrich_spreadsheet_set_cell_value: handle_resolve",
                                 obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
     }
     struct yetty_ycore_void_result call_r = yetty_yrich_spreadsheet_set_cell_value(
         (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.row, wire_args.col, value_buf);
@@ -826,9 +876,11 @@ size_t yetty_yrich_spreadsheet_set_cell_value_skel(const void *body, size_t body
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_yrich_spreadsheet_set_cell_value",
                                 call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
     }
     ((uint8_t *)resp)[0] = 0;
     return 1;

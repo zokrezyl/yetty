@@ -16,6 +16,8 @@ methods:
         type: uint32_t
       - name: height_px
         type: uint32_t
+    doc: "/* configure: set the whole view in one call. zoom is clamped to the
+ * active provider's range; viewport to the engine's sanity bounds. */"
     local: true
     return_payload_type: null
   - slot: set_provider
@@ -27,6 +29,9 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: name
         type: "const char *"
+    doc: "/* set_provider: select a built-in provider by name (see
+ * yetty_ymap_provider_info for enumeration). Clears any custom provider;
+ * clamps the current zoom into the new provider's range. */"
     local: true
     return_payload_type: null
   - slot: set_custom_provider
@@ -46,6 +51,10 @@ methods:
         type: uint32_t
       - name: attribution
         type: "const char *"
+    doc: "/* set_custom_provider: arbitrary XYZ tile server. `url_template` is
+ * printf-style with three unsigned slots in z, x, y order (POSIX
+ * positional %1$u.. reorder for z/y/x servers). `attribution` is what the
+ * frontend must display; pass the provider's required credit line. */"
     local: true
     return_payload_type: null
   - slot: set_center
@@ -59,6 +68,7 @@ methods:
         type: double
       - name: longitude
         type: double
+    doc: "/* set_center / set_zoom / set_viewport: individual view setters. */"
     local: true
     return_payload_type: null
   - slot: set_zoom
@@ -70,6 +80,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: zoom
         type: uint32_t
+    doc: null
     local: true
     return_payload_type: null
   - slot: set_viewport
@@ -83,6 +94,7 @@ methods:
         type: uint32_t
       - name: height_px
         type: uint32_t
+    doc: null
     local: true
     return_payload_type: null
   - slot: pan_by_pixels
@@ -96,6 +108,9 @@ methods:
         type: double
       - name: delta_y
         type: double
+    doc: "/* pan_by_pixels: shift the view by a viewport-pixel delta — content
+ * follows the pointer (drag right → map moves right → center moves
+ * west). Latitude clamps so the viewport stays on the Mercator square. */"
     local: true
     return_payload_type: null
   - slot: zoom_by_at
@@ -111,6 +126,9 @@ methods:
         type: double
       - name: anchor_y
         type: double
+    doc: "/* zoom_by_at: zoom by `step` levels keeping the viewport pixel
+ * (anchor_x, anchor_y) on the same lat/lon — the wheel-zoom feel.
+ * Returns the (clamped) new zoom level. */"
     local: true
     return_payload_type: int
   - slot: get_zoom
@@ -120,6 +138,7 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* get_zoom: current zoom level (after clamping). */"
     local: true
     return_payload_type: int
   - slot: geolocate
@@ -129,6 +148,9 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* geolocate: center the view on this machine's public-IP location (one
+ * HTTPS request, city-level accuracy, see ymap's geoip notes).
+ * Best-effort: on error the view is unchanged and the caller decides. */"
     local: true
     return_payload_type: null
   - slot: attribution
@@ -138,6 +160,7 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* attribution: the credit line the frontend MUST display with the map. */"
     local: true
     return_payload_type: "const char *"
   - slot: is_vector
@@ -147,6 +170,8 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* is_vector: 1 when the active provider renders through the vector
+ * (SDF/MSDF) pipeline — frontends use it to pick drag-render pacing. */"
     local: true
     return_payload_type: int
   - slot: render
@@ -156,6 +181,9 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* render: fetch the covering tiles (parallel, disk-cached) and emit the
+ * visible map as a fresh ydraw drawable list (caller owns it). Pointer
+ * return -> local-only. */"
     local: true
     return_payload_type: "struct yetty_ydraw_drawable_list *"
   - slot: destroy
@@ -165,6 +193,7 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* destroy: free owned strings + the yclass allocation. */"
     local: true
     return_payload_type: null
 classes:
@@ -264,11 +293,13 @@ classes:
       - slot: destroy
         slot_domain: ymap
         impl: map_destroy
+    doc: null
 exposed:
   - source_file: src/yetty/ymap/map.c
     name: yetty_ymap_provider_count
     return_type: uint32_t
     args: []
+    doc: "/* Number of built-in providers. */"
   - source_file: src/yetty/ymap/map.c
     name: yetty_ymap_provider_info
     return_type: struct yetty_ycore_void_result
@@ -283,6 +314,8 @@ exposed:
         type: "uint32_t *"
       - name: out_is_vector
         type: "int *"
+    doc: "/* Metadata of built-in provider `index` (0..count-1). Any out pointer may
+ * be NULL. Strings are static — never freed by the caller. */"
   - source_file: src/yetty/ymap/map.c
     name: yetty_ymap_emit_osc
     return_type: struct yetty_ycore_void_result
@@ -291,6 +324,8 @@ exposed:
         type: "const struct yetty_ydraw_drawable_list *"
       - name: fd
         type: int
+    doc: "/* One-shot helper — serialize a rendered drawable list as a YDRAW_BIN OSC
+ * envelope (the ycat/scrolling path). Exposed as a free function for CLIs. */"
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

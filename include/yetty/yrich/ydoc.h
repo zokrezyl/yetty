@@ -69,10 +69,13 @@ struct yetty_yclass_object *yetty_yrich_ydoc_to(struct yetty_yrich_ydoc *data);
 
 struct yetty_ycore_void_result yetty_yrich_ydoc_toggle_format(struct yetty_yclass_object *obj,
                                                               uint32_t format_flag);
+/* Text colour — selection-scoped like toggle_format, absolute (no toggle). */
 struct yetty_ycore_void_result yetty_yrich_ydoc_set_text_color(struct yetty_yclass_object *obj,
                                                                uint32_t color);
+/* Paragraph alignment (enum yetty_yrich_halign). */
 struct yetty_ycore_void_result yetty_yrich_ydoc_set_alignment(struct yetty_yclass_object *obj,
                                                               uint32_t halign);
+/* Heading levels — 0 = normal text, 1..3 = headings (size + bold base). */
 struct yetty_ycore_void_result yetty_yrich_ydoc_set_heading(struct yetty_yclass_object *obj,
                                                             uint32_t level);
 struct yetty_ycore_void_result yetty_yrich_ydoc_change_font_size(struct yetty_yclass_object *obj,
@@ -97,6 +100,8 @@ struct yetty_ycore_void_result yetty_yrich_register(void);
 
 struct yetty_ycore_void_result yetty_yrich_paragraph_set_text(struct yetty_yclass_object *obj,
                                                               const char *text, size_t len);
+/* Style setters — the data slice is private to this TU; the yaml loader and
+ * future bindings reach the style through these. */
 struct yetty_ycore_void_result yetty_yrich_paragraph_set_font_size(struct yetty_yclass_object *obj,
                                                                    float font_size);
 struct yetty_ycore_void_result yetty_yrich_paragraph_set_color(struct yetty_yclass_object *obj,
@@ -114,7 +119,11 @@ struct yetty_yclass_object *yetty_yrich_ydoc_paragraph_at(struct yetty_yclass_ob
 struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_insert_image(struct yetty_yclass_object *obj,
                                                                     int32_t paragraph_index,
                                                                     float width, float height);
+/* Selected text as a fresh heap string (caller frees). NULL when the
+ * selection is empty or not a text selection. */
 char *yetty_yrich_ydoc_selection_text(struct yetty_yclass_object *obj);
+/* Drop every element and start over with one empty paragraph (File > New).
+ * The undo history is cleared — its ops reference dead elements. */
 struct yetty_ycore_void_result yetty_yrich_ydoc_clear(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yrich_ydoc_set_source_path(struct yetty_yclass_object *obj,
                                                                 const char *path);
@@ -135,6 +144,8 @@ struct yetty_ycore_void_result yetty_yrich_paragraph_run_get(struct yetty_yclass
                                                              size_t index, int32_t *out_start,
                                                              int32_t *out_end, uint32_t *out_format,
                                                              uint32_t *out_color);
+/* Append one styled run — loader-side; ranges must arrive sorted and
+ * non-overlapping (the writer emits them that way). */
 struct yetty_ycore_void_result yetty_yrich_paragraph_add_run(struct yetty_yclass_object *obj,
                                                              int32_t start, int32_t end,
                                                              uint32_t format, uint32_t color);

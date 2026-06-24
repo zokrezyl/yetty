@@ -15,7 +15,7 @@ struct yetty_ycore_void_result;
 struct yetty_ydraw_drawable_list_result;
 struct yetty_yui_event;
 struct yetty_ycore_void_result yetty_ychrome_configure(struct yetty_yclass_object *obj,
-                                                       struct yetty_yclass_object *window_manager,
+                                                       struct yetty_yclass_object *window_chrome,
                                                        float caption_height, float edge_size,
                                                        uint32_t flags);
 struct yetty_ycore_void_result yetty_ychrome_set_size(struct yetty_yclass_object *obj, float width,
@@ -131,7 +131,7 @@ struct yetty_yclass_object *yetty_ychrome_chrome_to(struct yetty_ychrome_chrome 
 }
 
 struct yetty_ycore_void_result yetty_ychrome_configure(struct yetty_yclass_object *obj,
-                                                       struct yetty_yclass_object *window_manager,
+                                                       struct yetty_yclass_object *window_chrome,
                                                        float caption_height, float edge_size,
                                                        uint32_t flags)
 {
@@ -157,7 +157,7 @@ struct yetty_ycore_void_result yetty_ychrome_configure(struct yetty_yclass_objec
         yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ychrome_configure: dispatch_lookup failed");
-    return ((yetty_ychrome_configure_fn)dispatch_impl_r.value)(obj, window_manager, caption_height,
+    return ((yetty_ychrome_configure_fn)dispatch_impl_r.value)(obj, window_chrome, caption_height,
                                                                edge_size, flags);
 }
 

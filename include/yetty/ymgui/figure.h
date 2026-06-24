@@ -21,6 +21,10 @@ struct yetty_ycore_rectangle;
 struct yetty_yfigure_registry;
 struct yetty_ymgui_pipeline;
 
+/* The shared factory args struct is public (hosts embed it by value and
+ * hand its address to the registry). `expose` makes codegen re-emit this
+ * full definition into the generated figure.h for consumers; this TU has
+ * its own copy and the two never share a translation unit. */
 struct yetty_ymgui_factory_args {
     const struct yetty_context *context;
     struct yetty_ymgui_pipeline *pipeline;

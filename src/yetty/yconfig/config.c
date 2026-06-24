@@ -3,6 +3,7 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yplatform/getopt.h>
+#include <yetty/yplatform/paths.h>
 #include <yaml.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1513,8 +1514,7 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
 
 /* Public create function */
 
-struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[],
-                                                 const struct yetty_yconfig_paths *paths)
+struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[])
 {
     struct config_impl *impl = calloc(1, sizeof(struct config_impl));
     if (!impl) {
@@ -1528,8 +1528,39 @@ struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[],
         return YETTY_ERR(yetty_yconfig, "failed to allocate config root");
     }
 
-    try_load_config_file(impl, argc, argv, paths);
-    store_platform_paths(impl, paths);
+    /* Resolve the platform directory layout (also creates the writable dirs)
+     * through the yplatform paths abstraction, and derive the config-view
+     * paths from it. This is the single place directories are resolved. */
+    struct yetty_yplatform_paths_ptr_result platform_paths_res = yetty_yplatform_paths_create();
+    if (!YETTY_IS_OK(platform_paths_res)) {
+        node_destroy(impl->root);
+        free(impl);
+        return YETTY_ERR(yetty_yconfig, "yconfig_create: failed to resolve platform paths",
+                         platform_paths_res);
+    }
+    struct yetty_yplatform_paths *platform_paths = platform_paths_res.value;
+    struct yetty_yconfig_paths paths = {
+        .shaders_dir = platform_paths->shaders_dir_buf,
+        .fonts_dir = platform_paths->fonts_dir_buf,
+        .runtime_dir = platform_paths->runtime_dir_buf,
+        .bin_dir = platform_paths->bin_dir_buf,
+        .config_dir = platform_paths->config_dir_buf,
+    };
+
+    /* Export the directories as YETTY_* env vars before loading config files so
+     * those files can reference them via $YETTY_RUNTIME_DIR etc. */
+    setenv("YETTY_SHADERS_DIR", platform_paths->shaders_dir_buf, 1);
+    setenv("YETTY_FONTS_DIR", platform_paths->fonts_dir_buf, 1);
+    setenv("YETTY_RUNTIME_DIR", platform_paths->runtime_dir_buf, 1);
+    setenv("YETTY_DATA_DIR", platform_paths->data_dir_buf, 1);
+    setenv("YETTY_CONFIG_DIR", platform_paths->config_dir_buf, 1);
+    setenv("YETTY_BIN_DIR", platform_paths->bin_dir_buf, 1);
+
+    try_load_config_file(impl, argc, argv, &paths);
+    store_platform_paths(impl, &paths);
+
+    /* The config tree copied every string it needed; release the owning paths. */
+    yetty_yplatform_paths_destroy(platform_paths);
 
     /* $SHELL overrides shell/default from yaml */
     const char *env_shell = getenv("SHELL");

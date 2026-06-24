@@ -7,7 +7,7 @@
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/pty-pipe-source.h>
 #include <yetty/yplatform/pty.h>
-#include <yetty/yplatform/clipboard-manager.h>
+#include <yetty/yplatform/yclipboard/clipboard.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yfont/font.h>
@@ -1332,10 +1332,9 @@ static struct yetty_ycore_void_result terminal_copy_selection(
     if (!terminal->sel_active) {
         return YETTY_OK_VOID();
     }
-    struct yetty_platform_clipboard_manager *cm =
-        terminal->context.yetty_context.runtime->clipboard_manager;
-    if (!cm || !cm->ops || !cm->ops->set_text) {
-        ydebug("terminal_copy_selection: no clipboard manager");
+    struct yetty_yclass_object *clipboard = terminal->context.yetty_context.runtime->clipboard;
+    if (!clipboard) {
+        ydebug("terminal_copy_selection: no clipboard");
         return YETTY_OK_VOID();
     }
 
@@ -1351,7 +1350,8 @@ static struct yetty_ycore_void_result terminal_copy_selection(
     }
 
     if (buf.size > 0) {
-        struct yetty_ycore_void_result sr = cm->ops->set_text(cm, (const char *)buf.data, buf.size);
+        struct yetty_ycore_void_result sr =
+            yetty_yplatform_clipboard_set_text(clipboard, (const char *)buf.data, buf.size);
         if (YETTY_IS_ERR(sr)) {
             yetty_ycore_buffer_destroy(&buf);
             return YETTY_ERR(yetty_ycore_void, "terminal_copy_selection: clipboard set_text failed",
@@ -1371,13 +1371,12 @@ static struct yetty_ycore_void_result terminal_copy_selection(
 static struct yetty_ycore_void_result terminal_paste_clipboard(
     struct yetty_yterminal_terminal *terminal)
 {
-    struct yetty_platform_clipboard_manager *cm =
-        terminal->context.yetty_context.runtime->clipboard_manager;
-    if (!cm || !cm->ops || !cm->ops->request_paste) {
-        ydebug("terminal_paste_clipboard: no clipboard manager");
+    struct yetty_yclass_object *clipboard = terminal->context.yetty_context.runtime->clipboard;
+    if (!clipboard) {
+        ydebug("terminal_paste_clipboard: no clipboard");
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result r = cm->ops->request_paste(cm);
+    struct yetty_ycore_void_result r = yetty_yplatform_clipboard_request_paste(clipboard);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
                         "terminal_paste_clipboard: clipboard request_paste failed");
     return YETTY_OK_VOID();

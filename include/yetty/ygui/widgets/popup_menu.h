@@ -51,6 +51,10 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_close(struct yetty_yclass_o
 struct yetty_ycore_int_result yetty_ygui_popup_menu_is_open(const struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_popup_menu_toggle_at(struct yetty_yclass_object *obj,
                                                                float x, float y);
+/* Drill-down menu support. The menu has no separate submenu objects —
+ * the host rebuilds the item list in place
+ * (clear → set_title → set_back → add_drill_item…), so a "drill item" is
+ * just a normal item whose callback repopulates the menu. */
 struct yetty_ycore_void_result yetty_ygui_popup_menu_clear(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_popup_menu_set_title(struct yetty_yclass_object *obj,
                                                                const char *title);

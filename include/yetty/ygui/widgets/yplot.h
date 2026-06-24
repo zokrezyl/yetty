@@ -18,6 +18,9 @@ extern "C" {
 
 struct yetty_yplot_buffer_input;
 
+/* Plot configuration. Defined here in the owning .c; codegen reproduces it
+ * into the generated header (consumers fill it by value, so the full
+ * definition is published via the `expose` annotation). */
 struct yetty_ygui_yplot_config {
     float x_min;
     float x_max;

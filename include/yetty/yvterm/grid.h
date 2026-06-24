@@ -35,6 +35,10 @@ enum yetty_yvterm_text_attr {
     YETTY_YVTERM_ATTR_STRIKE = 64,
     YETTY_YVTERM_ATTR_CONCEAL = 128,
 };
+/* One terminal text cell. Glyph lookup is renderer-owned; the model stores the
+ * source codepoint and style. width is 1 for normal cells, 2 for a wide glyph
+ * head, and 0 for the wide glyph spill cell. Exposed so the renderer packs from
+ * the bulk per-line accessor without copying. */
 struct yetty_yvterm_text_cell {
     uint32_t glyph_index;
     uint32_t codepoint;
@@ -45,6 +49,11 @@ struct yetty_yvterm_text_cell {
     uint8_t flags;
 };
 
+/* The unified terminal grid — the yclass data block. visible row N maps to:
+ *
+ *     lines[(base + N) % visible_rows]
+ *
+ * Whole-screen scroll advances base and reuses rolled-off line slots. */
 struct yetty_yclass_ptr_result yetty_yvterm_grid_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct
@@ -81,6 +90,9 @@ struct yetty_ycore_void_result yetty_yvterm_grid_resize(struct yetty_yclass_obje
 int yetty_yvterm_grid_is_dirty(struct yetty_yclass_object *obj);
 void yetty_yvterm_grid_cursor(struct yetty_yclass_object *obj, uint32_t *out_row, uint32_t *out_col,
                               uint32_t *out_visible);
+/* Absolute row at the top of the screen (rows scrolled off so far). The cursor's
+ * absolute output row is this + the visible cursor row — used to place anchored
+ * rich content on the rolling-row scroll. */
 uint32_t yetty_yvterm_grid_scroll_origin(struct yetty_yclass_object *obj);
 struct yetty_ycore_uint32_result yetty_yvterm_grid_append_primitive(struct yetty_yclass_object *obj,
                                                                     uint32_t row,
@@ -102,25 +114,46 @@ struct yetty_ycore_void_result yetty_yvterm_grid_set_selection(struct yetty_ycla
                                                                uint32_t head_col);
 struct yetty_ycore_void_result yetty_yvterm_grid_get_selection_text(struct yetty_yclass_object *obj,
                                                                     struct yetty_ycore_buffer *out);
+/* Word boundaries around (row, col): the inclusive [start_col, end_col] run of
+ * word chars covering the clicked cell. A click on a non-word cell selects just
+ * that cell. Used for double-click word selection. */
 void yetty_yvterm_grid_word_bounds(struct yetty_yclass_object *obj, uint32_t row, uint32_t col,
                                    uint32_t *out_start_col, uint32_t *out_end_col);
 void yetty_yvterm_grid_dims(struct yetty_yclass_object *obj, uint32_t *out_cols, uint32_t *out_rows,
                             uint32_t *out_base);
+/* The cell array for visible row `row` (length = cols). NULL if out of range. */
 const struct yetty_yvterm_text_cell *yetty_yvterm_grid_line_cells(struct yetty_yclass_object *obj,
                                                                   uint32_t row);
 int yetty_yvterm_grid_line_dirty(struct yetty_yclass_object *obj, uint32_t row);
+/* Composite array anchored on visible row `row`. Sets *out_count; may be NULL. */
 struct yetty_ydraw_composite *const *yetty_yvterm_grid_line_composites(
     struct yetty_yclass_object *obj, uint32_t row, uint32_t *out_count);
+/* Composite array on RAW ring slot `slot` (0..slot_count). Distinct from the
+ * visible-row accessor above: the text upload + shader address the ring by raw
+ * slot via root_row, so the composite pass must read by the SAME slot to scroll
+ * in lockstep (live AND scrolled-back). Sets *out_count; may be NULL. */
 struct yetty_ydraw_composite *const *yetty_yvterm_grid_slot_composites(
     struct yetty_yclass_object *obj, uint32_t slot, uint32_t *out_count);
+/* Number of raw drawable records (SDF / glyph / TEXT_DRAWABLE_LIST / FONT) stored
+ * on RAW ring slot `slot`. The SDF render pass walks these by slot — same raw-slot
+ * addressing the composite + text passes use — so figures and text scroll together. */
 uint32_t yetty_yvterm_grid_slot_primitive_count(struct yetty_yclass_object *obj, uint32_t slot);
+/* Words of primitive `index` on RAW ring slot `slot`. *out_word_count is set to the
+ * record's u32 length. Returns NULL (and *out_word_count 0) if slot/index are out of
+ * range. The returned span aliases the line's arena — read it, do not retain it. */
 const uint32_t *yetty_yvterm_grid_slot_primitive_words(struct yetty_yclass_object *obj,
                                                        uint32_t slot, uint32_t index,
                                                        uint32_t *out_word_count);
+/* Current selection rectangle (raw anchor/head; the renderer normalises to a
+ * reading-order stream). active=0 → no selection. */
 void yetty_yvterm_grid_selection(struct yetty_yclass_object *obj, int *out_active,
                                  uint32_t *out_anchor_row, uint32_t *out_anchor_col,
                                  uint32_t *out_head_row, uint32_t *out_head_col);
+/* Renderer has consumed the model; drop every dirty flag. */
 void yetty_yvterm_grid_clear_dirty(struct yetty_yclass_object *obj);
+/* Raw ring-slot accessors (slot in [0, line_count)) for the text upload, which
+ * is slot-indexed so the shader's root_row=base gives O(1) scroll. Distinct from
+ * the visible-row accessors above (which resolve the ring). */
 uint32_t yetty_yvterm_grid_slot_count(struct yetty_yclass_object *obj);
 const struct yetty_yvterm_text_cell *yetty_yvterm_grid_slot_cells(struct yetty_yclass_object *obj,
                                                                   uint32_t slot);

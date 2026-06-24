@@ -48,11 +48,20 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_create(struct yetty_ycl
 
 struct yetty_ycore_void_result yetty_yvterm_register(void);
 
+/* Create the terminal-content figure for one pane. The rect is set in pixels;
+ * cell_size is stored so the terminal can read it immediately after create. The
+ * terminal hooks (pty write, render request, mouse subscription) are stored for
+ * keyboard output and mouse-mode reporting.
+ *
+ * cell_size starts at a placeholder until the renderer build-out resolves exact
+ * metrics from the active font; the terminal overwrites it on the first resize.
+ * `context` is accepted now for that future font setup. */
 struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
     uint32_t cols, uint32_t rows, const struct yetty_context *context,
     yetty_yterminal_pty_write_fn pty_write_fn, void *pty_write_userdata,
     yetty_yterminal_request_render_fn request_render_fn, void *request_render_userdata,
     yetty_yterminal_mouse_sub_fn mouse_sub_fn, void *mouse_sub_userdata);
+/* Upcast to the figure base (first slice in the object). */
 struct yetty_yfigure_figure *yetty_yvterm_vterm_as_figure(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yvterm_vterm_feed(struct yetty_yclass_object *obj,
                                                        const char *bytes, size_t len);
@@ -90,7 +99,12 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_selection(struct yetty_ycl
                                                                 uint32_t head_col);
 struct yetty_ycore_void_result yetty_yvterm_vterm_get_selection_text(
     struct yetty_yclass_object *obj, struct yetty_ycore_buffer *out);
+/* Absolute index of the line at the live screen top: everything scrolled off so
+ * far. A wheel-up anchors one line below this and walks toward the floor. */
 uint32_t yetty_yvterm_vterm_get_live_anchor(struct yetty_yclass_object *obj);
+/* Oldest absolute line index still retained in the scrollback ring. Lines below
+ * this have been evicted, so a wheel-up clamps here. The ring keeps
+ * (slot_count - visible_rows) history lines. */
 uint32_t yetty_yvterm_vterm_get_scrollback_floor(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yvterm_vterm_set_view_top(struct yetty_yclass_object *obj,
                                                                int active,

@@ -7,33 +7,27 @@
 #include <stddef.h>
 #include <string.h>
 
-/* Forward decls — these accessors and skels are defined in each
- * class's own <stem>.gen.c; the lookup tables below name them
- * across translation units. */
-struct yetty_yclass_ptr_result yetty_yview_view_class_get(void);
+/* Forward decls. A class tagged platform@<x> is guarded by
+ * #ifdef YETTY_PLATFORM_<X> (registered only on that platform, where
+ * CMake compiles it); a cross-platform class is a WEAK ref so the
+ * lookup table never force-links an unused class into a minimal
+ * consumer. The chained submodule registers are weak externs. */
+struct yetty_yclass_ptr_result yetty_yview_view_class_get(void) __attribute__((weak));
 struct yetty_ycore_void_result yetty_yview_register(void);
 
-/* ---- yview: class name → accessor (lazy) ---------------------- */
+/* ---- yview: class name -> accessor (lazy) ---------------------- */
 
 static struct yetty_yclass_ptr_result yetty_yview_accessor_lookup(const char *name)
 {
-    if (strcmp(name, "yetty_yview_view") == 0) {
+    if (strcmp(name, "yetty_yview_view") == 0 && yetty_yview_view_class_get) {
         return yetty_yview_view_class_get();
     }
-    /* "Not mine": OK with NULL value — yetty_yclass_by_name walks to next hook. */
+    /* "Not mine": OK with NULL value -- yetty_yclass_by_name walks to next hook. */
     return YETTY_OK(yetty_yclass_ptr, NULL);
 }
 
 /* ---- yview: explicit yclass-RPC hook registration ------------- */
 
-/* Installs this module's server-side discovery hooks: the accessor
- * lookup feeds yetty_yclass_by_name()'s registry-miss path, and (when
- * the module exposes wire methods) the skel lookup feeds RPC skeleton
- * dispatch. Call once when the yclass RPC / remote-object server is
- * brought up — idempotent, so repeated calls (several hosts, re-init)
- * are no-ops. This replaces the former load-time installer: a module
- * merely being linked no longer mutates global state before main(),
- * and there is no abort() path on a constructor. */
 struct yetty_ycore_void_result yetty_yview_register(void)
 {
     static bool registered = false;

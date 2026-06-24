@@ -10,7 +10,7 @@
 #
 #   yetty_yplatform
 #     Server-side: libuv/os event loops, coroutine + workpool,
-#     pipe / pty-factory plumbing, clipboard manager, window-manager,
+#     pipe / pty-factory plumbing, clipboard manager, window-chrome,
 #     WebGPU surface + decoder glue, extract-assets, webasm shims.
 #     Pulls in libuv / wgpu / glfw — only the main yetty exec (and a
 #     few tools that actually need a GPU/event loop) should link this.
@@ -70,16 +70,55 @@ add_library(yetty_yplatform_core STATIC
     getopt.c
     paths/create.c
     paths/singleton.c
-    # window_manager yclass method stubs: pure yclass dispatch, no GLFW — the
-    # GLFW impl (window-manager.c) is desktop-only, but yui calls these stub
-    # symbols on every platform, so they must link everywhere (they early-return
-    # on the NULL object that non-desktop platforms always have). yplatform is
-    # codegen'd with --no-fold so the stubs stay in this platform-independent
-    # methods.gen.c while the GLFW accessor/factory live in rpc.gen.c (built by
-    # the desktop-only yetty_yplatform_window_manager target).
-    methods.gen.c
+    # Base (platform-independent) window-chrome yclass: the render→main producer
+    # slots + dispatch stubs. Lives here so any module that drives the window
+    # chrome (ychrome, yui's tabbar) links the stubs regardless of whether the
+    # platform's concrete window-chrome (glfw_window_chrome) is in the link. The
+    # GLFW handle_event override is a separate TU in the desktop window-chrome lib.
+    ywindow-chrome/window-chrome.c
+    # Base (platform-independent) clipboard yclass: the set_text / request_paste /
+    # drain dispatch stubs. Same rationale as window-chrome above — terminal.c and
+    # yrich link the stubs from core; the GLFW marshalling subclass (glfw_clipboard)
+    # is a separate TU built into the desktop platform sources.
+    yclipboard/clipboard.c
+    # Base (platform-independent) app yclass: the yapp:app abstraction — init /
+    # run dispatch stubs plus the weak app factory that concrete apps override.
+    # In core so the platform can host any yapp:app subclass without naming it.
+    ${YETTY_ROOT}/src/yetty/yapp/app.c
+    ${YETTY_ROOT}/src/yetty/yapp/rpc.gen.c
+    # Submodule accessor-lookup registrations. The yplatform module aggregator
+    # (yplatform/rpc.gen.c, compiled into yetty_yplatform_window_chrome) calls
+    # each of these; the references are declared weak so absence is tolerated
+    # on ELF where missing weak externs resolve to NULL. Mach-O's static
+    # linker does not honor that — it rejects any unresolved reference,
+    # weak or not — so the definitions must actually be present in the link.
+    # The lookup tables themselves are guarded by YETTY_PLATFORM_* macros
+    # (which are not globally set), so each definition compiles down to
+    # registering a lookup hook that just returns NULL for class names that
+    # don't belong to it.
+    yclipboard/rpc.gen.c
+    ywindow/rpc.gen.c
+    yplatform/rpc.gen.c
     ${_core_per_os}
 )
+
+# These base yclass TUs carry C23 [[clang::annotate(...)]] attributes.
+# Older clang (e.g. Apple clang 16) only knows the pre-rename `gnu2x` spelling;
+# newer clang accepts `gnu23`. Detect once and reuse the supported flag.
+if(NOT MSVC)
+    include(CheckCCompilerFlag)
+    check_c_compiler_flag("-std=gnu23" YETTY_HAS_STD_GNU23)
+    if(YETTY_HAS_STD_GNU23)
+        set(_yetty_yplatform_c23_flag "-std=gnu23")
+    else()
+        set(_yetty_yplatform_c23_flag "-std=gnu2x")
+    endif()
+    set_source_files_properties(
+        ywindow-chrome/window-chrome.c
+        yclipboard/clipboard.c
+        ${YETTY_ROOT}/src/yetty/yapp/app.c
+        PROPERTIES COMPILE_OPTIONS "${_yetty_yplatform_c23_flag}")
+endif()
 
 target_include_directories(yetty_yplatform_core PUBLIC
     ${YETTY_ROOT}/include
@@ -87,7 +126,7 @@ target_include_directories(yetty_yplatform_core PUBLIC
 )
 
 # yetty_ycore provides the result-type macros every API uses; yetty_yclass
-# provides the dispatch runtime the window_manager method stubs call.
+# provides the dispatch runtime the window_chrome method stubs call.
 target_link_libraries(yetty_yplatform_core PUBLIC yetty_ycore yetty_yclass)
 
 # Windows winsock + advapi (used by socket/ipc-socket/process impls).

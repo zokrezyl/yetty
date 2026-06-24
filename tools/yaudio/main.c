@@ -1,12 +1,14 @@
 /*
- * tools/yaudio/main.c - audio analyzer GUI.
+ * tools/yaudio/main.c - audio analyzer GUI (yclass class `yaudio:app`).
  *
- * Opens a window via yinit_run, hands the yinit_runtime to
- * yetty_yframework_create for the standard adapter / device / queue /
- * allocator / msdf / event-loop / render-target bring-up (same code
- * path the yetty terminal uses), then attaches a yui with a yplot
- * widget showing the RMS envelope and Prev/Next buttons that pan
- * across the detected noise intervals.
+ * Subclass of yapp:app. main() parses the WAV path, then drives the platform
+ * bring-up sequence directly (it can't route through the shared ymain entry: the
+ * positional path would trip yconfig's unknown-flag handling). The platform
+ * hands the runtime to run, which calls yetty_yframework_create for the standard
+ * adapter / device / queue / allocator / msdf / event-loop / render-target
+ * bring-up (same code path the yetty terminal uses), then attaches a yui with a
+ * yplot widget showing the RMS envelope and Prev/Next buttons that pan across
+ * the detected noise intervals.
  *
  * Startup is two-staged so the window appears immediately even for a
  * large file:
@@ -23,7 +25,10 @@
  * view if the selection changed) → clear target → yui_render → present.
  */
 
-#include <yetty/yinit/yinit.h>
+#include <yetty/yplatform/gpu-context.h>
+#include <yetty/yplatform/yplatform/platform.h>
+#include <yetty/yapp/app.h>
+#include <yetty/yclass/class.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yaudio/wav.h>
 #include <yetty/yaudio/envelope.h>
@@ -35,7 +40,6 @@
 #include <yetty/yevent/dispatch.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yplatform/platform-input-pipe.h>
-#include <yetty/yplatform/extract-assets.h>
 #include <yetty/yplatform/yworkpool.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
@@ -79,7 +83,7 @@ static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result
     }
 }
 
-struct yaudio_app {
+struct [[clang::annotate("class@yaudio:app")]] [[clang::annotate("parent@yapp:app")]] yetty_yaudio_app {
     const char *wav_path;
     struct yetty_yaudio_wav *wav;
     struct yetty_yaudio_envelope *env;
@@ -163,7 +167,7 @@ struct yaudio_app {
      * builds the real UI on the loop thread. */
     struct yetty_yplatform_yworkpool *load_pool;
     struct yetty_ycore_xthread_event_pipe *input_pipe; /* worker → loop wake */
-    struct yetty_yinit_runtime *rt;                    /* for build_widgets() in done() */
+    const struct yetty_yplatform_gpu_context *gpu;     /* for build_widgets() in done() */
 
     volatile double load_progress; /* 0..1, monotonic; worker writes, loop reads */
     volatile int load_phase;       /* enum yaudio_load_phase */
@@ -177,6 +181,22 @@ struct yaudio_app {
     int ui_built; /* real plot UI constructed yet? */
 };
 
+/* Result wrapper + codegen accessor/downcast forward-decls (this TU does not
+ * include its own generated header). */
+YETTY_YRESULT_DECLARE(yetty_yaudio_app_ptr, struct yetty_yaudio_app *);
+struct yetty_yclass_ptr_result yetty_yaudio_app_class_get(void);
+struct yetty_yaudio_app_ptr_result yetty_yaudio_app_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yaudio_app_create(struct yetty_yclass_ctx *ctx);
+
+/* Platform bring-up sequence symbols. yaudio owns its own main() (positional WAV
+ * path), so it drives this sequence directly rather than via ymain/glfw.c. */
+struct yetty_ycore_void_result yetty_yplatform_register(void);
+struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_platform_create(
+    struct yetty_yclass_ctx *ctx);
+struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *app,
+                                                            int argc, char **argv);
+
 #define MOD_SHIFT 0x0001u
 #define MOD_CTRL 0x0002u
 
@@ -189,7 +209,7 @@ struct yaudio_app {
  * threads use, and its write() is a full barrier — any load_progress /
  * load_phase store sequenced before it is visible to the loop thread by
  * the time it dispatches the RENDER. */
-static void yaudio_worker_wake(struct yaudio_app *app)
+static void yaudio_worker_wake(struct yetty_yaudio_app *app)
 {
     yetty_yevent_post_async(app->input_pipe, &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 }
@@ -200,7 +220,7 @@ static void yaudio_worker_wake(struct yaudio_app *app)
  * RENDERs across the whole load, not one per analysis frame). */
 static void yaudio_progress_cb(void *ud, double f)
 {
-    struct yaudio_app *app = ud;
+    struct yetty_yaudio_app *app = ud;
     double g;
     switch (app->load_phase) {
     case YAUDIO_PHASE_ENVELOPE:
@@ -220,7 +240,7 @@ static void yaudio_progress_cb(void *ud, double f)
     }
 }
 
-static struct yetty_ycore_void_result yaudio_load(struct yaudio_app *app)
+static struct yetty_ycore_void_result yaudio_load(struct yetty_yaudio_app *app)
 {
     app->load_phase = YAUDIO_PHASE_OPEN;
     app->load_progress = 0.0;
@@ -290,7 +310,7 @@ static struct yetty_ycore_void_result yaudio_load(struct yaudio_app *app)
  *     produces two output points (min, max), so the rendered line
  *     traces the actual sample range — no aliasing where adjacent
  *     buckets pick alternating-sign peaks. */
-static int load_waveform_window(struct yaudio_app *app, double t_min, double t_max)
+static int load_waveform_window(struct yetty_yaudio_app *app, double t_min, double t_max)
 {
     if (!app->wav || t_max <= t_min) {
         return 0;
@@ -377,7 +397,7 @@ static int load_waveform_window(struct yaudio_app *app, double t_min, double t_m
     return 1;
 }
 
-static void update_status_label(struct yaudio_app *app)
+static void update_status_label(struct yetty_yaudio_app *app)
 {
     char buf[192];
     if (app->iv->n == 0) {
@@ -399,7 +419,7 @@ static void update_status_label(struct yaudio_app *app)
     yinfo("status: %s", buf);
 }
 
-static void clamp_view(struct yaudio_app *app)
+static void clamp_view(struct yetty_yaudio_app *app)
 {
     double dur = (double)app->wav->frames / (double)app->wav->sample_rate;
     double span = app->view_t_max - app->view_t_min;
@@ -432,7 +452,7 @@ static void clamp_view(struct yaudio_app *app)
  * waveform decimation is deferred to flush_view_if_dirty(), which the
  * render loop calls once per frame. Drag/wheel handlers use this so a
  * burst of MOUSE_MOVE events doesn't choke the worker. */
-static void request_view_update(struct yaudio_app *app)
+static void request_view_update(struct yetty_yaudio_app *app)
 {
     if (!app->wav) {
         return;
@@ -442,7 +462,7 @@ static void request_view_update(struct yaudio_app *app)
     app->view_dirty = 1;
 }
 
-static void apply_view(struct yaudio_app *app)
+static void apply_view(struct yetty_yaudio_app *app)
 {
     if (!app->wav) {
         return;
@@ -499,7 +519,7 @@ static void apply_view(struct yaudio_app *app)
     }
 }
 
-static void recenter_plot_on_selected(struct yaudio_app *app)
+static void recenter_plot_on_selected(struct yetty_yaudio_app *app)
 {
     if (!app->plot_widget || app->iv->n == 0) {
         return;
@@ -539,7 +559,7 @@ static void recenter_plot_on_selected(struct yaudio_app *app)
  *   plain wheel        — scroll in time (pan)
  *   Ctrl + wheel       — zoom amplitude (waveform y range)
  *   Ctrl+Shift + wheel — zoom in time (around current center) */
-static void on_wheel(struct yaudio_app *app, float dy, int mods)
+static void on_wheel(struct yetty_yaudio_app *app, float dy, int mods)
 {
     if (dy == 0.0f) {
         return;
@@ -575,7 +595,7 @@ static void on_wheel(struct yaudio_app *app, float dy, int mods)
 static struct yetty_ycore_void_result on_prev_click(struct yetty_yclass_object *w, void *userdata)
 {
     (void)w;
-    struct yaudio_app *app = userdata;
+    struct yetty_yaudio_app *app = userdata;
     if (app->iv->n == 0) {
         return YETTY_OK_VOID();
     }
@@ -587,7 +607,7 @@ static struct yetty_ycore_void_result on_prev_click(struct yetty_yclass_object *
 static struct yetty_ycore_void_result on_next_click(struct yetty_yclass_object *w, void *userdata)
 {
     (void)w;
-    struct yaudio_app *app = userdata;
+    struct yetty_yaudio_app *app = userdata;
     if (app->iv->n == 0) {
         return YETTY_OK_VOID();
     }
@@ -596,7 +616,7 @@ static struct yetty_ycore_void_result on_next_click(struct yetty_yclass_object *
     return YETTY_OK_VOID();
 }
 
-static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt)
+static void build_widgets(struct yetty_yaudio_app *app, const struct yetty_yplatform_gpu_context *gpu)
 {
     struct yetty_ygui_framework *engine = yetty_yui_engine(app->yui);
     if (!engine) {
@@ -609,8 +629,8 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
         return;
     }
 
-    float W = (float)rt->surface_width;
-    float H = (float)rt->surface_height;
+    float W = (float)gpu->surface_width;
+    float H = (float)gpu->surface_height;
     float top = 36.0f; /* room for yui's tabbar */
     float sb_h = yetty_yui_statusbar_height(app->yui);
     float btn_strip_h = 48.0f;
@@ -791,7 +811,8 @@ static void build_widgets(struct yaudio_app *app, struct yetty_yinit_runtime *rt
 /* A caption + a progress bar, centred over an otherwise empty window. Built
  * before any file work so the window can present immediately; hidden by
  * yaudio_load_done() once the real plot UI replaces it. */
-static void build_loading_ui(struct yaudio_app *app, struct yetty_yinit_runtime *rt)
+static void build_loading_ui(struct yetty_yaudio_app *app,
+                             const struct yetty_yplatform_gpu_context *gpu)
 {
     struct yetty_ygui_framework *engine = yetty_yui_engine(app->yui);
     if (!engine) {
@@ -804,8 +825,8 @@ static void build_loading_ui(struct yaudio_app *app, struct yetty_yinit_runtime 
         return;
     }
 
-    float W = (float)rt->surface_width;
-    float H = (float)rt->surface_height;
+    float W = (float)gpu->surface_width;
+    float H = (float)gpu->surface_height;
     float bw = 460.0f;
     if (bw > W - 64.0f) {
         bw = W - 64.0f;
@@ -848,7 +869,7 @@ static void build_loading_ui(struct yaudio_app *app, struct yetty_yinit_runtime 
 
 /* Pull the latest worker-published progress into the bar + caption. Runs on
  * the loop thread, once per RENDER while the load is in flight. */
-static void update_loading_ui(struct yaudio_app *app)
+static void update_loading_ui(struct yetty_yaudio_app *app)
 {
     if (!app->load_bar) {
         return;
@@ -893,7 +914,7 @@ static void update_loading_ui(struct yaudio_app *app)
 static struct yetty_ycore_int_result yaudio_event_handler(
     struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *ev)
 {
-    struct yaudio_app *app = container_of(listener, struct yaudio_app, listener);
+    struct yetty_yaudio_app *app = container_of(listener, struct yetty_yaudio_app, listener);
 
     /* WINDOW_REFRESH (X11 Expose / uncover): tell the damage-aware target
      * to mark every tile dirty so the next render actually re-blits, then
@@ -1044,7 +1065,7 @@ static struct yetty_ycore_int_result yaudio_event_handler(
  * safe either way. */
 static void yaudio_load_run(void *ctx)
 {
-    struct yaudio_app *app = ctx;
+    struct yetty_yaudio_app *app = ctx;
 
     struct yetty_ycore_void_result r = yaudio_load(app);
     if (YETTY_IS_ERR(r)) {
@@ -1064,10 +1085,10 @@ static void yaudio_load_run(void *ctx)
  * retire the loading screen. */
 static void yaudio_load_done(void *ctx)
 {
-    struct yaudio_app *app = ctx;
+    struct yetty_yaudio_app *app = ctx;
 
     if (app->load_state == YAUDIO_LOAD_OK) {
-        build_widgets(app, app->rt);
+        build_widgets(app, app->gpu);
         app->ui_built = 1;
         if (app->load_bar) {
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(app->load_bar, 0));
@@ -1097,36 +1118,56 @@ static void yaudio_load_done(void *ctx)
 /* Render loop                                                              */
 /* ----------------------------------------------------------------------- */
 
-static struct yetty_ycore_void_result yaudio_worker(struct yetty_yinit_runtime *rt, void *user)
+[[clang::annotate("override@yapp:app:init")]]
+static struct yetty_ycore_void_result yaudio_app_init(struct yetty_yclass_object *obj,
+                                                      struct yetty_yclass_object *platform)
 {
-    struct yaudio_app *app = user;
+    (void)obj;
+    (void)platform;
+    return YETTY_OK_VOID();
+}
+
+[[clang::annotate("override@yapp:app:run")]]
+static struct yetty_ycore_void_result yaudio_app_run(struct yetty_yclass_object *obj,
+                                                     struct yetty_yclass_object *platform)
+{
+    struct yetty_yaudio_app_ptr_result app_res = yetty_yaudio_app_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "yaudio:app:run: app_from");
+    struct yetty_yaudio_app *app = app_res.value;
+
+    const struct yetty_yplatform_gpu_context *gpu = yetty_yplatform_platform_gpu_context(platform);
+    struct yetty_ycore_xthread_event_pipe *input_pipe =
+        yetty_yplatform_platform_input_pipe(platform);
+    if (!gpu || !input_pipe) {
+        return YETTY_ERR(yetty_ycore_void, "yaudio:app:run: platform state not populated");
+    }
 
     /* Standard GPU/event/render-target bring-up FIRST — the window and a
      * progress bar must come up before any heavy file work. Same call
      * yetty's own main uses (adapter, device, queue, allocator, msdf
      * generator, surface configuration, event loop, render target); the
      * runtime owns all of it and we borrow via app->ctx.runtime->X. */
-    struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(rt);
+    struct yetty_yframework_ptr_result yrt_res = yetty_yframework_create(platform);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yrt_res, "yaudio: yframework_create failed");
     app->runtime = yrt_res.value;
     app->ctx.runtime = app->runtime;
     app->ctx.pty_factory = NULL; /* yaudio has no terminal */
     app->ctx.event_loop = app->runtime->event_loop;
     app->render_target = app->runtime->render_target;
-    app->rt = rt;
-    app->input_pipe = rt->platform_input_pipe;
+    app->gpu = gpu;
+    app->input_pipe = input_pipe;
 
     /* yui — owns the scene-canvas + ygui engine. cell_w/h are mostly
      * arbitrary for our use; pick the same defaults yui's tabbar uses. */
     struct yetty_yui_ptr_result yr =
-        yetty_yui_create(&app->ctx, rt->surface_width, rt->surface_height, 8.0f, 16.0f);
+        yetty_yui_create(&app->ctx, gpu->surface_width, gpu->surface_height, 8.0f, 16.0f);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yui_create failed");
     app->yui = yr.value;
 
     /* Loading screen only — the real plot UI is built later, from
      * yaudio_load_done(), once the worker has the data. */
     app->last_posted_progress = -1.0;
-    build_loading_ui(app, rt);
+    build_loading_ui(app, gpu);
 
     /* Wire up our event handler on the runtime's libuv event loop. The
      * loop drives the platform_input_pipe; events dispatch into
@@ -1163,7 +1204,7 @@ static struct yetty_ycore_void_result yaudio_worker(struct yetty_yinit_runtime *
     }
 
     /* Present the first frame (the loading screen) immediately. */
-    yetty_yevent_post_async(rt->platform_input_pipe,
+    yetty_yevent_post_async(input_pipe,
                             &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
     /* Run the libuv loop until SHUTDOWN. Input-driven render coalesced via
@@ -1227,16 +1268,52 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    struct yaudio_app app = {.wav_path = wav_path};
-    struct yetty_yinit_app_config cfg = {
-        .extract_assets_fn = yetty_platform_extract_assets,
-    };
-    struct yetty_ycore_int_result run_result =
-        yetty_yinit_run(argc, argv, &cfg, yaudio_worker, &app);
+    /* Drive the platform bring-up directly. yconfig parses the argv we pass and
+     * exits on unknown flags, so hand it a clean argv (program name only) — the
+     * WAV path travels on the app object instead. */
+    struct yetty_ycore_void_result platform_reg = yetty_yplatform_register();
+    if (YETTY_IS_ERR(platform_reg)) {
+        yetty_ycore_error_print(stderr, "yaudio: platform register", platform_reg.error);
+        yetty_ycore_error_destroy(platform_reg.error);
+        return 1;
+    }
+    struct yetty_ycore_void_result yapp_reg = yetty_yapp_register();
+    if (YETTY_IS_ERR(yapp_reg)) {
+        yetty_ycore_error_print(stderr, "yaudio: yapp register", yapp_reg.error);
+        yetty_ycore_error_destroy(yapp_reg.error);
+        return 1;
+    }
+
+    struct yetty_yclass_object_ptr_result app_res = yetty_yaudio_app_create(NULL);
+    if (YETTY_IS_ERR(app_res)) {
+        yetty_ycore_error_print(stderr, "yaudio: app create", app_res.error);
+        yetty_ycore_error_destroy(app_res.error);
+        return 1;
+    }
+    struct yetty_yaudio_app_ptr_result app_data = yetty_yaudio_app_from(app_res.value);
+    if (YETTY_IS_ERR(app_data)) {
+        yetty_ycore_error_print(stderr, "yaudio: app data", app_data.error);
+        yetty_ycore_error_destroy(app_data.error);
+        return 1;
+    }
+    app_data.value->wav_path = wav_path;
+
+    struct yetty_yclass_object_ptr_result platform_res = yetty_yplatform_glfw_platform_create(NULL);
+    if (YETTY_IS_ERR(platform_res)) {
+        yetty_ycore_error_print(stderr, "yaudio: platform create", platform_res.error);
+        yetty_ycore_error_destroy(platform_res.error);
+        return 1;
+    }
+
+    char *clean_argv[] = {argv[0], NULL};
+    struct yetty_ycore_void_result run_result =
+        yetty_yplatform_platform_run(platform_res.value, app_res.value, 1, clean_argv);
     if (YETTY_IS_ERR(run_result)) {
         yetty_ycore_error_print(stderr, "yaudio: run", run_result.error);
         yetty_ycore_error_destroy(run_result.error);
         return 1;
     }
-    return run_result.value;
+    return 0;
 }
+
+#include "main.gen.c"

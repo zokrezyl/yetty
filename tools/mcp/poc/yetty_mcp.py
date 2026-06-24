@@ -215,6 +215,19 @@ def _draw_flame(args: list[str], folded: bytes) -> str:
     return _emit_figure(osc + b"\n" * _trailing_newlines(), "flame graph")
 
 
+def _draw_mesh(args: list[str]) -> str:
+    """Run ymesh (it emits the same OSC envelope as the other figure tools) and
+    write it to the terminal. Like yplot/yflame, ymesh's -w/-H are pixel
+    dimensions, not character columns — so we do NOT inject the terminal column
+    count. We pass --once so ymesh emits a single envelope and exits instead of
+    entering its interactive orbit-viewer loop (this subprocess has no
+    controlling TTY to drive that loop). ymesh appends its own trailing newline
+    in one-shot mode; strip it and re-add via _trailing_newlines() so the
+    YETTY_MCP_TRAILING_NL override applies uniformly across the figure tools."""
+    osc = _run_tool("ymesh", ["--once", *args]).rstrip(b"\n")
+    return _emit_figure(osc + b"\n" * _trailing_newlines(), "mesh")
+
+
 # ----------------------------------------------------------------------------
 # Tools
 # ----------------------------------------------------------------------------
@@ -363,7 +376,6 @@ def draw_circuit(circuit: str) -> str:
 
 
 @mcp.tool()
-<<<<<<< HEAD
 def draw_chart(data: str) -> str:
     """Render a data chart — bar, column, line, area, scatter, pie, donut,
     radar, treemap, or sankey — as a figure in the yetty terminal, from a
@@ -419,8 +431,6 @@ def draw_chart(data: str) -> str:
 
 
 @mcp.tool()
-=======
->>>>>>> 9413afca (yhello)
 def draw_plot(
     expression: str,
     width: int = 0,
@@ -582,6 +592,37 @@ def show_file(path: str, kind: str = "") -> str:
         raise RuntimeError(f"file not found: {p}")
     args = (["-c", kind] if kind else []) + [str(p)]
     return _draw_via_ycat(args, None, f"{p.name}")
+
+
+@mcp.tool()
+def show_mesh(path: str, width: int = 0, height: int = 0) -> str:
+    """Render a 3D mesh from a glTF 2.0 binary (.glb) file as a figure in the
+    yetty terminal, using the standalone `ymesh` engine. Use this to show 3D
+    geometry — models, CAD exports, procedurally generated meshes — inline at
+    the cursor. The mesh is Lambert-shaded from its surface normals and framed
+    by a bounding-box orbit camera.
+
+    `path` must point to a `.glb` file: a glTF 2.0 *binary* container with the
+    geometry embedded. Only the first mesh / first primitive is drawn, using its
+    positions, normals and indices — textures, UVs and materials are not yet
+    supported. If you have geometry as separate `.gltf` + `.bin` (+ textures),
+    pack it into a single self-contained `.glb` first, then pass that path.
+
+    Args:
+        path: filesystem path to the `.glb` file.
+        width: display width in PIXELS (0 → ymesh default, 600).
+        height: display height in PIXELS (0 → ymesh default, 600).
+    """
+    p = Path(path).expanduser()
+    if not p.is_file():
+        raise RuntimeError(f"file not found: {p}")
+    args: list[str] = []
+    if width > 0:
+        args += ["-w", str(width)]
+    if height > 0:
+        args += ["-H", str(height)]
+    args.append(str(p))
+    return _draw_mesh(args)
 
 
 @mcp.tool()

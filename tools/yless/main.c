@@ -373,16 +373,9 @@ static uint32_t parse_hex_rgb(const char *text, uint32_t fallback)
  * Falls back to YLESS_MUSIC_BG_RGB only if the config can't be loaded. */
 static uint32_t music_bg_rgb_from_config(void)
 {
-    struct yetty_yconfig_paths paths = {
-        .shaders_dir = getenv("YETTY_SHADERS_DIR"),
-        .fonts_dir = getenv("YETTY_FONTS_DIR"),
-        .runtime_dir = getenv("YETTY_RUNTIME_DIR"),
-        .bin_dir = getenv("YETTY_BIN_DIR"),
-        .config_dir = getenv("YETTY_CONFIG_DIR"),
-    };
     char prog[] = "yless";
     char *argv[] = {prog, NULL};
-    struct yetty_yconfig_result config_r = yetty_yconfig_create(1, argv, &paths);
+    struct yetty_yconfig_result config_r = yetty_yconfig_create(1, argv);
     if (YETTY_IS_ERR(config_r)) {
         yetty_ycore_error_destroy(config_r.error);
         return YLESS_MUSIC_BG_RGB;

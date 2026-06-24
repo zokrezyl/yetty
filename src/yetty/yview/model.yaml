@@ -22,6 +22,8 @@ methods:
         type: float
       - name: max_y
         type: float
+    doc: "/* configure: set the output fd, figure id/kind, opaque background, and rect.
+ * Call once after create(), before set_content(). */"
     local: true
     return_payload_type: null
   - slot: set_content
@@ -33,6 +35,7 @@ methods:
         type: "struct yetty_yclass_object *"
       - name: content
         type: "const struct yetty_ydraw_drawable_list *"
+    doc: null
     local: true
     return_payload_type: null
   - slot: set_text
@@ -46,6 +49,10 @@ methods:
         type: "const char *"
       - name: font_size
         type: float
+    doc: "/* set_text: render a UTF-8 string (newline-split into lines) as the view's
+ * content using the server figure's default font. The convenience FFI callers
+ * want when they have text but no drawable list (the pager / nvim case).
+ * font_size <= 0 selects a default. */"
     local: true
     return_payload_type: null
   - slot: set_plot
@@ -65,6 +72,11 @@ methods:
         type: float
       - name: y_max
         type: float
+    doc: "/* set_plot: render a yplot expression (yexpr-plot syntax — \"sin(x)\", or
+ * \"f=sin(x); g=cos(x)\") as the view's content: one yplot figure filling the
+ * rect (a plot doesn't scroll). x_max<=x_min or y_max<=y_min selects yplot's
+ * default ranges. The ygrid figure renders the yplot composite prim via the
+ * terminal's composite factory. */"
     local: true
     return_payload_type: null
   - slot: set_content_size
@@ -78,6 +90,7 @@ methods:
         type: float
       - name: content_h
         type: float
+    doc: null
     local: true
     return_payload_type: null
   - slot: scroll_to
@@ -91,6 +104,7 @@ methods:
         type: float
       - name: scroll_y
         type: float
+    doc: null
     local: true
     return_payload_type: null
   - slot: scroll_by
@@ -104,6 +118,7 @@ methods:
         type: float
       - name: delta_y
         type: float
+    doc: null
     local: true
     return_payload_type: null
   - slot: set_rect
@@ -121,6 +136,7 @@ methods:
         type: float
       - name: max_y
         type: float
+    doc: null
     local: true
     return_payload_type: null
   - slot: destroy
@@ -130,6 +146,7 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
+    doc: "/* destroy: clear the surface (DELETE_CHILD) and free the object. */"
     local: true
     return_payload_type: null
 classes:
@@ -206,6 +223,7 @@ classes:
       - slot: destroy
         slot_domain: yview
         impl: view_destroy
+    doc: null
 types:
   - name: yetty_yclass_object_ptr_result
     kind: result

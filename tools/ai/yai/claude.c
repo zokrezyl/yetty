@@ -226,8 +226,7 @@ static struct yetty_ycore_void_result claude_resolve_permission(struct yetty_ycl
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result handle_control_request(struct yai_app *app,
-                                                             yyjson_val *event)
+static struct yetty_ycore_void_result handle_control_request(struct yai_app *app, yyjson_val *event)
 {
     yyjson_val *request = yyjson_obj_get(event, "request");
     const char *subtype = yyjson_get_str(yyjson_obj_get(request, "subtype"));
@@ -255,9 +254,8 @@ static struct yetty_ycore_void_result handle_control_request(struct yai_app *app
      * push didn't), or when this tool was marked "always allow". Preserve
      * the tool input on the response (fail closed if it can't be copied —
      * never approve with empty input). */
-    const char *perm_mode = app->config.permission_mode;
-    int auto_mode =
-        strcmp(perm_mode, "auto") == 0 || strcmp(perm_mode, "bypassPermissions") == 0;
+    const char *perm_mode = app->config.claude.permission_mode;
+    int auto_mode = strcmp(perm_mode, "auto") == 0 || strcmp(perm_mode, "bypassPermissions") == 0;
     if (auto_mode || yai_tool_always_allowed(app, tool_name)) {
         yyjson_mut_doc *input_copy = yyjson_mut_doc_new(NULL);
         if (input_copy && input) {
@@ -391,8 +389,7 @@ static struct yetty_ycore_void_result handle_stream_event(struct yai_app *app, y
                     .kind = YAI_EVENT_TEXT_DELTA,
                     .text = {.text = yyjson_get_str(text), .len = yyjson_get_len(text)}};
                 struct yetty_ycore_void_result delta_res = yai_event_dispatch(app, &delta_event);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, delta_res,
-                                    "handle_stream_event: text_delta");
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, delta_res, "handle_stream_event: text_delta");
             }
         } else if (strcmp(delta_type, "thinking_delta") == 0) {
             yyjson_val *thinking = yyjson_obj_get(delta, "thinking");
@@ -725,12 +722,12 @@ static struct yetty_ycore_void_result claude_start(struct yetty_yclass_object *o
         return YETTY_ERR(yetty_ycore_void, "claude start: setenv YETTY_MCP_VIA_PARENT failed");
     }
 
-    const char *permission_mode = app->config.permission_mode;
+    const char *permission_mode = app->config.claude.permission_mode;
     /* An explicit allowlist wins; otherwise expand the chosen preset. */
-    const char *allowed_tools = app->config.allowed_tools[0]
-                                    ? app->config.allowed_tools
-                                    : claude_preset_tools(app->config.allowed_preset);
-    const char *model = app->config.model;
+    const char *allowed_tools = app->config.claude.allowed_tools[0]
+                                    ? app->config.claude.allowed_tools
+                                    : claude_preset_tools(app->config.claude.allowed_preset);
+    const char *model = app->config.claude.model;
 
     const char *args[24];
     int arg_count = 0;
@@ -762,9 +759,9 @@ static struct yetty_ycore_void_result claude_start(struct yetty_yclass_object *o
         args[arg_count++] = model;
     }
     /* "auto" leaves claude to its own default; anything else is passed. */
-    if (app->config.claude_effort[0] && strcmp(app->config.claude_effort, "auto") != 0) {
+    if (app->config.claude.effort[0] && strcmp(app->config.claude.effort, "auto") != 0) {
         args[arg_count++] = "--effort";
-        args[arg_count++] = app->config.claude_effort;
+        args[arg_count++] = app->config.claude.effort;
     }
     args[arg_count] = NULL;
 
@@ -828,11 +825,11 @@ static struct yetty_ycore_void_result claude_describe_config(struct yetty_yclass
     (void)obj;
     (void)app;
     /* Mirror the exact defaults claude_start applies. */
-    const char *permission_mode = app->config.permission_mode;
-    const char *allowed_tools = app->config.allowed_tools[0]
-                                    ? app->config.allowed_tools
-                                    : claude_preset_tools(app->config.allowed_preset);
-    const char *model = app->config.model;
+    const char *permission_mode = app->config.claude.permission_mode;
+    const char *allowed_tools = app->config.claude.allowed_tools[0]
+                                    ? app->config.claude.allowed_tools
+                                    : claude_preset_tools(app->config.claude.allowed_preset);
+    const char *model = app->config.claude.model;
     int written = snprintf(out, out_size,
                            "model: %s  [--model]\n"
                            "permission mode: %s  [--permission-mode]\n"
@@ -854,7 +851,7 @@ static struct yetty_ycore_void_result claude_config_knob(struct yetty_yclass_obj
     (void)obj;
     /* Show the same "auto" the permission prompt offers; a legacy
      * bypassPermissions value still selects the "auto" radio. */
-    const char *permission_mode = claude_permission_ui_mode(app->config.permission_mode);
+    const char *permission_mode = claude_permission_ui_mode(app->config.claude.permission_mode);
     /* One knob spec per line: ENGINE_FIELD|label|options|current. "tools" is a
      * preset; claude_preset_tools maps the preset name → the concrete tool
      * list at spawn. Radio option values must stay comma-free, hence the
@@ -862,10 +859,10 @@ static struct yetty_ycore_void_result claude_config_knob(struct yetty_yclass_obj
      * (apply_config / claude_start translate it). Reasoning effort is a model
      * parameter, so it lives on the model tab (main.c build_effort_knob). */
     int written = snprintf(out, out_size,
-                           "permission_mode|permission mode|"
+                           "permission-mode|permission mode|"
                            "default,acceptEdits,plan,auto|%s\n"
-                           "allowed_preset|tools|curated,readonly,edit,full|%s",
-                           permission_mode, app->config.allowed_preset);
+                           "allowed-preset|tools|curated,readonly,edit,full|%s",
+                           permission_mode, app->config.claude.allowed_preset);
     if (written < 0 || (size_t)written >= out_size) {
         return YETTY_ERR(yetty_ycore_void, "claude config_knob: spec truncated");
     }
@@ -889,7 +886,7 @@ static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_ob
      * side-effect is pushing a new permission mode into the running session
      * so it takes effect without waiting for the next spawn; everything else
      * (tools preset, model) is read fresh at the next spawn. */
-    if (strcmp(key, "permission_mode") != 0 || !app->child_alive || !app->child_stdin_open) {
+    if (strcmp(key, "permission-mode") != 0 || !app->child_alive || !app->child_stdin_open) {
         return YETTY_OK_VOID();
     }
     char request_id[32];
@@ -913,8 +910,7 @@ static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_ob
 
 [[clang::annotate("override@yai:claude:on_child_exit")]]
 static struct yetty_ycore_void_result claude_on_child_exit(struct yetty_yclass_object *obj,
-                                                           struct yai_app *app,
-                                                           int64_t exit_status)
+                                                           struct yai_app *app, int64_t exit_status)
 {
     (void)obj;
     /* The session child died — best-effort: every teardown step runs,
@@ -923,8 +919,7 @@ static struct yetty_ycore_void_result claude_on_child_exit(struct yetty_yclass_o
     if (!app->shutting_down) {
         if (exit_status != 0) {
             teardown = yetty_ycore_void_chain(teardown, yai_renderer_pin_hide(&app->renderer));
-            printf("\n" YAI_RED "✗ claude exited with status %lld — see %s and tmp/" YAI_RESET
-                   "\n",
+            printf("\n" YAI_RED "✗ claude exited with status %lld — see %s and tmp/" YAI_RESET "\n",
                    (long long)exit_status, app->transcript_path);
             teardown = yetty_ycore_void_chain(teardown, yai_render_flush_stdout());
             app->exit_code = 1;

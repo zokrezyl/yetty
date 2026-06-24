@@ -1,0 +1,305 @@
+methods: []
+classes:
+  - name: app
+    domain: ybrowser
+    accessor: yetty_ybrowser_app_class_get
+    type: regular
+    source_file: tools/ybrowser/browser-ui.c
+    parent:
+      domain: yapp
+      name: app
+    mixins: []
+    data: struct yetty_ybrowser_app
+    data_fields:
+      - name: app
+        type: struct app
+        get: false
+        set: false
+      - name: yframework
+        type: "struct yetty_yframework *"
+        get: false
+        set: false
+      - name: root_container
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: figure_registry
+        type: "struct yetty_yfigure_registry *"
+        get: false
+        set: false
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
+        get: false
+        set: false
+      - name: wire_sm
+        type: "struct yetty_ywire_wire_statemachine *"
+        get: false
+        set: false
+      - name: pty_pair
+        type: struct yetty_yplatform_memory_pty_pair
+        get: false
+        set: false
+      - name: has_pty_pair
+        type: int
+        get: false
+        set: false
+      - name: font
+        type: "struct yetty_yfont_font *"
+        get: false
+        set: false
+      - name: chrome
+        type: "struct yetty_ychrome_host *"
+        get: false
+        set: false
+      - name: figure_args
+        type: struct yetty_ygrid_factory_args
+        get: false
+        set: false
+      - name: listener
+        type: struct yetty_yevent_event_listener
+        get: false
+        set: false
+      - name: render_target
+        type: "struct yetty_ydraw_target *"
+        get: false
+        set: false
+      - name: initial_url
+        type: "const char *"
+        get: false
+        set: false
+      - name: prefetch_thread
+        type: pthread_t
+        get: false
+        set: false
+      - name: prefetch_started
+        type: int
+        get: false
+        set: false
+      - name: prefetch_url
+        type: "char *"
+        get: false
+        set: false
+      - name: prefetch_data
+        type: "char *"
+        get: false
+        set: false
+      - name: prefetch_len
+        type: size_t
+        get: false
+        set: false
+      - name: prefetch_eff
+        type: "char *"
+        get: false
+        set: false
+    ops:
+      - slot: init
+        slot_domain: yapp
+        impl: ybrowser_app_init
+      - slot: run
+        slot_domain: yapp
+        impl: sa_worker
+    doc: "/*
+ * Standalone browser UI as a yclass class `ybrowser:app` (subclass of yapp:app).
+ * The whole block is gated by YETTY_YBROWSER_HAS_STANDALONE (only the
+ * standalone, GPU-windowed build): in client / one-shot modes ybrowser has no
+ * window. codegen sees this class because the Makefile passes the guard macro
+ * via YCLASS_DEFINES; the generated browser-ui.gen.c is #included at the foot,
+ * inside the same guard, so reduced builds never compile it.
+ */"
+types:
+  - name: app
+    kind: struct
+    fields:
+      - name: fw
+        type: "struct yetty_ygui_framework *"
+      - name: root
+        type: "struct yetty_yclass_object *"
+      - name: tabbar
+        type: "struct yetty_yclass_object *"
+      - name: address
+        type: "struct yetty_yclass_object *"
+      - name: scroll
+        type: "struct yetty_yclass_object *"
+      - name: page
+        type: "struct yetty_yclass_object *"
+      - name: image
+        type: "struct yetty_yclass_object *"
+      - name: showing_image
+        type: int
+      - name: no_ui
+        type: int
+      - name: tabs
+        type: "struct tab[24]"
+      - name: n_tabs
+        type: int
+      - name: active
+        type: int
+      - name: cache
+        type: struct url_cache
+      - name: address_focused
+        type: int
+      - name: pending_render
+        type: int
+      - name: running
+        type: int
+      - name: viewport_w
+        type: float
+      - name: viewport_h
+        type: float
+      - name: font_size
+        type: float
+      - name: event_loop
+        type: "struct yetty_yevent_event_loop *"
+      - name: img_pool
+        type: "struct yetty_yplatform_yworkpool *"
+      - name: render_count
+        type: int
+      - name: img_dirty
+        type: int
+      - name: img_last_render_ms
+        type: double
+  - name: cache_entry
+    kind: struct
+    fields:
+      - name: url
+        type: "char *"
+      - name: data
+        type: "uint8_t *"
+      - name: len
+        type: size_t
+      - name: eff
+        type: "char *"
+      - name: seq
+        type: uint64_t
+  - name: content_kind
+    kind: enum
+    values:
+      - name: CK_HTML
+        value: 0
+      - name: CK_SVG
+        value: 1
+      - name: CK_IMAGE
+        value: 2
+  - name: tab
+    kind: struct
+    fields:
+      - name: engine
+        type: "struct yetty_ylexbor *"
+      - name: kind
+        type: enum content_kind
+      - name: raw
+        type: "uint8_t *"
+      - name: raw_len
+        type: size_t
+      - name: img_w
+        type: int
+      - name: img_h
+        type: int
+      - name: url
+        type: "char *"
+      - name: title
+        type: "char *"
+      - name: back
+        type: "char **"
+      - name: n_back
+        type: size_t
+      - name: cap_back
+        type: size_t
+      - name: fwd
+        type: "char **"
+      - name: n_fwd
+        type: size_t
+      - name: cap_fwd
+        type: size_t
+      - name: rendered_w
+        type: float
+      - name: needs_render
+        type: int
+      - name: scripts_pending
+        type: int
+      - name: dl_hash
+        type: uint64_t
+      - name: dl_size
+        type: size_t
+  - name: url_cache
+    kind: struct
+    fields:
+      - name: e
+        type: "struct cache_entry[16]"
+      - name: n
+        type: int
+      - name: seq
+        type: uint64_t
+      - name: total
+        type: size_t
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_yevent_event_listener
+    kind: struct
+    fields:
+      - name: handler
+        type: yetty_ycore_event_handler
+  - name: yetty_ygrid_factory_args
+    kind: struct
+    fields:
+      - name: default_font
+        type: "struct yetty_yfont_font *"
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
+      - name: absolute_coords
+        type: int
+  - name: yetty_yplatform_memory_pty_pair
+    kind: struct
+    fields:
+      - name: a
+        type: "struct yetty_platform_pty *"
+      - name: b
+        type: "struct yetty_platform_pty *"
+local_types:
+  content_kind: tools/ybrowser/browser-ui.c
+  cache_entry: tools/ybrowser/browser-ui.c
+  url_cache: tools/ybrowser/browser-ui.c
+  tab: tools/ybrowser/browser-ui.c
+  app: tools/ybrowser/browser-ui.c
+  stdout_pty: tools/ybrowser/browser-ui.c
+  yetty_ybrowser_app: tools/ybrowser/browser-ui.c
+  yetty_ybrowser_app_ptr_result: tools/ybrowser/browser-ui.c
+local_typedefs:
+  __int128_t:
+    source_file: tools/ybrowser/browser-ui.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: tools/ybrowser/browser-ui.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: tools/ybrowser/browser-ui.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: tools/ybrowser/browser-ui.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: tools/ybrowser/browser-ui.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

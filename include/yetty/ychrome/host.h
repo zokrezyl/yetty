@@ -9,12 +9,12 @@
  * It owns a ychrome:chrome engine (the gesture + self-rendered titlebar) plus a
  * pinned ygrid figure that composites the chrome's painted caption on top of
  * the app's content. The app supplies its yfigure container, a font, the GPU
- * context, and the OS window_manager (from yframework); everything else is
+ * context, and the OS window_chrome (from yframework); everything else is
  * internal.
  *
  * Usage:
  *   struct yetty_ychrome_host *chrome =
- *       yetty_ychrome_host_create(container, font, &ctx, rt->window_manager,
+ *       yetty_ychrome_host_create(container, font, &ctx, rt->window_chrome,
  *                                 width, height, 34.0f, 8.0f,
  *                                 YETTY_YCHROME_FLAG_ALL).value;
  *   // in the mouse path, after your own controls had their chance:
@@ -47,23 +47,23 @@ YETTY_YRESULT_DECLARE(yetty_ychrome_host_ptr, struct yetty_ychrome_host *);
 
 /* Create the chrome engine + its pinned caption figure under `container`.
  * `caption_height` / `edge_size` are in px; `flags` is YETTY_YCHROME_FLAG_*
- * (see <yetty/ychrome/chrome.h>). `window_manager` is the yplatform yclass
- * object (yframework->window_manager); pass NULL to render the bar without live
+ * (see <yetty/ychrome/chrome.h>). `window_chrome` is the yplatform yclass
+ * object (yframework->window_chrome); pass NULL to render the bar without live
  * OS-window control (e.g. in-terminal). All pointers are borrowed. */
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
     struct yetty_yclass_object *container_obj, struct yetty_yfont_font *font,
-    const struct yetty_context *ctx, struct yetty_yclass_object *window_manager, float width,
+    const struct yetty_context *ctx, struct yetty_yclass_object *window_chrome, float width,
     float height, float caption_height, float edge_size, unsigned int flags);
 
 /* Wire variant for client / in-terminal mode: instead of pinning figures into
  * a local container, EMIT the backdrop + caption as figure-tree records over
  * `producer` (the emit side of the figure wire), so they render in a hosting
  * yetty's pane. The opaque backdrop is what hides the host terminal's text
- * beneath the app. `producer` is borrowed; `window_manager` is typically a
+ * beneath the app. `producer` is borrowed; `window_chrome` is typically a
  * wire adapter (close/min/max → pane ops) or NULL. */
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
-    struct yetty_yfigure_producer *producer, struct yetty_yclass_object *window_manager,
-    float width, float height, float caption_height, float edge_size, unsigned int flags);
+    struct yetty_yfigure_producer *producer, struct yetty_yclass_object *window_chrome, float width,
+    float height, float caption_height, float edge_size, unsigned int flags);
 
 /* Explicitly remove the wire chrome's figures (backdrop + caption) from the
  * host pane by writing DELETE records straight to `fd` with a BLOCKING write.

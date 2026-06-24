@@ -1,10 +1,10 @@
 /*
  * yframework/yframework.h — generic GPU/event/RPC services layer.
  *
- * yframework sits between yinit (platform: window, surface, config, pipes)
- * and an app (yetty terminal, an analyzer/test harness, etc.). Given a
- * fully-populated `yetty_yinit_runtime`, yframework requests the WebGPU
- * adapter+device+queue, picks the surface format and present mode,
+ * yframework sits between the platform (window, surface, config, pipes — a
+ * yplatform:platform object) and an app (yetty terminal, an analyzer/test
+ * harness, etc.). Given a populated platform object, yframework requests the
+ * WebGPU adapter+device+queue, picks the surface format and present mode,
  * configures the surface, builds the GPU allocator, the MSDF generator,
  * the optional VNC and RPC servers, the event loop, the coroutine-aware
  * wgpu await machinery, and the render target.
@@ -15,8 +15,8 @@
  * shared.
  *
  * Lifetime rule: the app's lifetime is strictly nested inside yframework's.
- * Build order:  yinit -> yframework -> app.
- * Teardown:     app -> yframework -> yinit.
+ * Build order:  platform -> yframework -> app.
+ * Teardown:     app -> yframework -> platform.
  */
 
 #ifndef YETTY_YFRAMEWORK_YFRAMEWORK_H
@@ -30,10 +30,8 @@
 extern "C" {
 #endif
 
-struct yetty_yinit_runtime;
 struct yetty_yconfig_config;
 struct yetty_ycore_xthread_event_pipe;
-struct yetty_platform_clipboard_manager;
 struct yetty_yclass_object;
 struct yetty_yevent_event_loop;
 struct yetty_yplatform_wgpu;
@@ -48,17 +46,18 @@ struct yetty_context;
 struct yetty_yframework_factory_state;
 
 struct yetty_yframework {
-    /* Borrowed from yinit_runtime; not owned. yframework_destroy leaves
-     * these alone — yinit's teardown frees them. */
+    /* Borrowed from the platform object; not owned. yframework_destroy leaves
+     * these alone — the platform's teardown frees them. */
     struct yetty_yconfig_config *config;
     struct yetty_ycore_xthread_event_pipe *platform_input_pipe;
     struct yetty_ycore_xthread_event_pipe *output_pipe;
-    struct yetty_platform_clipboard_manager *clipboard_manager;
-    /* yplatform:window_manager yclass object (or NULL). Borrowed from yinit. */
-    struct yetty_yclass_object *window_manager;
+    /* yplatform:clipboard yclass object (or NULL). Borrowed from the platform. */
+    struct yetty_yclass_object *clipboard;
+    /* yplatform:window_chrome yclass object (or NULL). Borrowed from the platform. */
+    struct yetty_yclass_object *window_chrome;
 
     /* Adapter + device + queue + surface_format + allocator + msdf_generator,
-     * plus the embedded yinit_gpu_context with instance/surface/dims/x11. */
+     * plus the embedded yplatform_gpu_context with instance/surface/dims/x11. */
     struct yetty_yframework_gpu_context gpu;
 
     /* Selected from surface capabilities + `rendering/present-mode`
@@ -81,11 +80,10 @@ struct yetty_yframework {
 
 YETTY_YRESULT_DECLARE(yetty_yframework_ptr, struct yetty_yframework *);
 
-/* Build the runtime from a fully-populated yinit_runtime. On success the
+/* Build the runtime from a populated yplatform:platform object. On success the
  * returned pointer owns everything in the "owned" block above plus the
  * service objects it created (adapter, device, allocator, ...). */
-struct yetty_yframework_ptr_result yetty_yframework_create(
-    const struct yetty_yinit_runtime *yinit_rt);
+struct yetty_yframework_ptr_result yetty_yframework_create(struct yetty_yclass_object *platform);
 
 /* Tear down in reverse-creation order:
  *   render_target -> wgpu -> event_loop -> vnc -> rpc -> msdf -> allocator

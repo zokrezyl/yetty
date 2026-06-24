@@ -40,7 +40,7 @@
 #include <yetty/yevent/event.h>
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yplatform/platform-input-pipe.h>
-#include <yetty/yplatform/window-manager.h>
+#include <yetty/yplatform/ywindow-chrome/window-chrome.h>
 #include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* */
 #include <yetty/ychrome/host.h>   /* the shared window chrome (the ONE chrome) */
 
@@ -791,9 +791,9 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
          * the engine paints into. It overlays the SDF min/max/close and owns
          * drag/edge-resize/maximize for whatever the title-bar tabbar doesn't
          * consume (client-first). Best-effort, like the titlebar above. */
-        if (context->runtime && context->runtime->window_manager) {
+        if (context->runtime && context->runtime->window_chrome) {
             struct yetty_ychrome_host_ptr_result ch = yetty_ychrome_host_create(
-                yui->root_container_obj, yui->font, context, context->runtime->window_manager,
+                yui->root_container_obj, yui->font, context, context->runtime->window_chrome,
                 (float)surface_w, (float)surface_h, TITLEBAR_STRIP_H, 8.0f, YETTY_YCHROME_FLAG_ALL);
             if (YETTY_IS_OK(ch)) {
                 yui->chrome = ch.value;
@@ -2436,10 +2436,10 @@ static struct yetty_ycore_void_result yui_apply_cursor(struct yetty_yui *yui, fl
     if (shape == yui->last_cursor_shape) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yclass_object *wm = yui->ctx->runtime->window_manager;
+    struct yetty_yclass_object *wm = yui->ctx->runtime->window_chrome;
     if (wm) {
         struct yetty_ycore_void_result cursor_result =
-            yetty_yplatform_window_manager_set_cursor(wm, shape);
+            yetty_yplatform_window_chrome_set_cursor(wm, shape);
         if (YETTY_IS_ERR(cursor_result)) {
             yetty_ycore_error_destroy(cursor_result.error);
         }

@@ -44,6 +44,9 @@ struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_yclass_ob
                                                           struct yetty_yclass_object *menu);
 struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_yclass_object *obj,
                                                               int closable);
+/* Chromeless: drop the title strip and shrink the top padding so the
+ * body fills the frame. For docked/anchored panels (a status bar) the
+ * titlebar is wasted space and the window isn't meant to be dragged. */
 struct yetty_ycore_void_result yetty_ygui_window_set_chromeless(struct yetty_yclass_object *obj,
                                                                 int chromeless);
 

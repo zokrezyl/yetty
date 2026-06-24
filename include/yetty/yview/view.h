@@ -35,14 +35,25 @@ struct yetty_yview_view_ptr_result {
 struct yetty_yview_view_ptr_result yetty_yview_view_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object *yetty_yview_view_to(struct yetty_yview_view *data);
 
+/* configure: set the output fd, figure id/kind, opaque background, and rect.
+ * Call once after create(), before set_content(). */
 struct yetty_ycore_void_result yetty_yview_configure(struct yetty_yclass_object *obj, int fd,
                                                      uint32_t child_id, uint32_t kind,
                                                      uint32_t bg_color, float min_x, float min_y,
                                                      float max_x, float max_y);
 struct yetty_ycore_void_result yetty_yview_set_content(
     struct yetty_yclass_object *obj, const struct yetty_ydraw_drawable_list *content);
+/* set_text: render a UTF-8 string (newline-split into lines) as the view's
+ * content using the server figure's default font. The convenience FFI callers
+ * want when they have text but no drawable list (the pager / nvim case).
+ * font_size <= 0 selects a default. */
 struct yetty_ycore_void_result yetty_yview_set_text(struct yetty_yclass_object *obj,
                                                     const char *text, float font_size);
+/* set_plot: render a yplot expression (yexpr-plot syntax — "sin(x)", or
+ * "f=sin(x); g=cos(x)") as the view's content: one yplot figure filling the
+ * rect (a plot doesn't scroll). x_max<=x_min or y_max<=y_min selects yplot's
+ * default ranges. The ygrid figure renders the yplot composite prim via the
+ * terminal's composite factory. */
 struct yetty_ycore_void_result yetty_yview_set_plot(struct yetty_yclass_object *obj,
                                                     const char *expr, float x_min, float x_max,
                                                     float y_min, float y_max);
@@ -54,6 +65,7 @@ struct yetty_ycore_void_result yetty_yview_scroll_by(struct yetty_yclass_object 
                                                      float delta_y);
 struct yetty_ycore_void_result yetty_yview_set_rect(struct yetty_yclass_object *obj, float min_x,
                                                     float min_y, float max_x, float max_y);
+/* destroy: clear the surface (DELETE_CHILD) and free the object. */
 struct yetty_ycore_void_result yetty_yview_destroy(struct yetty_yclass_object *obj);
 
 typedef struct yetty_ycore_void_result (*yetty_yview_configure_fn)(struct yetty_yclass_object *,

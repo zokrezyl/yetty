@@ -191,25 +191,33 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_obj
                 ->handle,
             x, y, button};
 #pragma pack(pop)
-        uint8_t resp_buf[1 + sizeof(int)];
-        struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
-                                  sizeof(wire_args), resp_buf, sizeof(resp_buf));
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, rpc_call_r,
                             "yetty_ygui_widget_on_press: RPC call failed");
-        size_t response_len = rpc_call_r.value;
         if (response_len < 1) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_int, "yetty_ygui_widget_on_press: short RPC response");
         }
         if (resp_buf[0] != 0) {
-            return YETTY_ERR(yetty_ycore_int,
-                             "yetty_ygui_widget_on_press: remote impl returned error");
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_int_result remote_error = YETTY_ERR(
+                yetty_ycore_int, "yetty_ygui_widget_on_press: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
         }
-        if (response_len != sizeof(resp_buf)) {
+        if (response_len != 1 + sizeof(int)) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_int, "yetty_ygui_widget_on_press: truncated RPC payload");
         }
         int return_value;
         memcpy(&return_value, resp_buf + 1, sizeof(return_value));
+        free(resp_buf);
         return YETTY_OK(yetty_ycore_int, return_value);
     } else {
         struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
@@ -261,26 +269,34 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_release(struct yetty_yclass_o
                 ->handle,
             x, y, button};
 #pragma pack(pop)
-        uint8_t resp_buf[1 + sizeof(int)];
-        struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
-                                  sizeof(wire_args), resp_buf, sizeof(resp_buf));
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, rpc_call_r,
                             "yetty_ygui_widget_on_release: RPC call failed");
-        size_t response_len = rpc_call_r.value;
         if (response_len < 1) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_int, "yetty_ygui_widget_on_release: short RPC response");
         }
         if (resp_buf[0] != 0) {
-            return YETTY_ERR(yetty_ycore_int,
-                             "yetty_ygui_widget_on_release: remote impl returned error");
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_int_result remote_error = YETTY_ERR(
+                yetty_ycore_int, "yetty_ygui_widget_on_release: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
         }
-        if (response_len != sizeof(resp_buf)) {
+        if (response_len != 1 + sizeof(int)) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_int,
                              "yetty_ygui_widget_on_release: truncated RPC payload");
         }
         int return_value;
         memcpy(&return_value, resp_buf + 1, sizeof(return_value));
+        free(resp_buf);
         return YETTY_OK(yetty_ycore_int, return_value);
     } else {
         struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
@@ -331,25 +347,33 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_motion(struct yetty_yclass_ob
                 ->handle,
             x, y};
 #pragma pack(pop)
-        uint8_t resp_buf[1 + sizeof(int)];
-        struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
-                                  sizeof(wire_args), resp_buf, sizeof(resp_buf));
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, rpc_call_r,
                             "yetty_ygui_widget_on_motion: RPC call failed");
-        size_t response_len = rpc_call_r.value;
         if (response_len < 1) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_int, "yetty_ygui_widget_on_motion: short RPC response");
         }
         if (resp_buf[0] != 0) {
-            return YETTY_ERR(yetty_ycore_int,
-                             "yetty_ygui_widget_on_motion: remote impl returned error");
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_int_result remote_error = YETTY_ERR(
+                yetty_ycore_int, "yetty_ygui_widget_on_motion: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
         }
-        if (response_len != sizeof(resp_buf)) {
+        if (response_len != 1 + sizeof(int)) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_int, "yetty_ygui_widget_on_motion: truncated RPC payload");
         }
         int return_value;
         memcpy(&return_value, resp_buf + 1, sizeof(return_value));
+        free(resp_buf);
         return YETTY_OK(yetty_ycore_int, return_value);
     } else {
         struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
@@ -424,20 +448,27 @@ struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object
             container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)
                 ->handle};
 #pragma pack(pop)
-        uint8_t resp_buf[1];
-        struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
-                                  sizeof(wire_args), resp_buf, sizeof(resp_buf));
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
                             "yetty_ygui_constructor: RPC call failed");
-        size_t response_len = rpc_call_r.value;
         if (response_len < 1) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_void, "yetty_ygui_constructor: short RPC response");
         }
         if (resp_buf[0] != 0) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "yetty_ygui_constructor: remote impl returned error");
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error =
+                YETTY_ERR(yetty_ycore_void, "yetty_ygui_constructor: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
         }
+        free(resp_buf);
         return YETTY_OK_VOID();
     } else {
         struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
@@ -484,18 +515,26 @@ struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_object 
             container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)
                 ->handle};
 #pragma pack(pop)
-        uint8_t resp_buf[1];
-        struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
-                                  sizeof(wire_args), resp_buf, sizeof(resp_buf));
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r, "yetty_ygui_destructor: RPC call failed");
-        size_t response_len = rpc_call_r.value;
         if (response_len < 1) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_void, "yetty_ygui_destructor: short RPC response");
         }
         if (resp_buf[0] != 0) {
-            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_destructor: remote impl returned error");
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error =
+                YETTY_ERR(yetty_ycore_void, "yetty_ygui_destructor: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
         }
+        free(resp_buf);
         return YETTY_OK_VOID();
     } else {
         struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
@@ -548,25 +587,33 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_scroll(struct yetty_yclass_ob
                 ->handle,
             x, y, dx, dy};
 #pragma pack(pop)
-        uint8_t resp_buf[1 + sizeof(int)];
-        struct yetty_ycore_size_result rpc_call_r =
-            yetty_yclass_rpc_call(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id, &wire_args,
-                                  sizeof(wire_args), resp_buf, sizeof(resp_buf));
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, rpc_call_r,
                             "yetty_ygui_widget_on_scroll: RPC call failed");
-        size_t response_len = rpc_call_r.value;
         if (response_len < 1) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_int, "yetty_ygui_widget_on_scroll: short RPC response");
         }
         if (resp_buf[0] != 0) {
-            return YETTY_ERR(yetty_ycore_int,
-                             "yetty_ygui_widget_on_scroll: remote impl returned error");
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_int_result remote_error = YETTY_ERR(
+                yetty_ycore_int, "yetty_ygui_widget_on_scroll: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
         }
-        if (response_len != sizeof(resp_buf)) {
+        if (response_len != 1 + sizeof(int)) {
+            free(resp_buf);
             return YETTY_ERR(yetty_ycore_int, "yetty_ygui_widget_on_scroll: truncated RPC payload");
         }
         int return_value;
         memcpy(&return_value, resp_buf + 1, sizeof(return_value));
+        free(resp_buf);
         return YETTY_OK(yetty_ycore_int, return_value);
     } else {
         struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
@@ -672,12 +719,15 @@ size_t yetty_ygui_widget_on_press_skel(const void *body, size_t body_len, void *
     if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_ygui_widget_on_press: handle_resolve",
                                 obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
     }
     struct yetty_ycore_int_result call_r =
         yetty_ygui_widget_on_press((struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x,
@@ -687,9 +737,11 @@ size_t yetty_ygui_widget_on_press_skel(const void *body, size_t body_len, void *
     }
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_ygui_widget_on_press", call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
     }
     if (resp_max < 1 + sizeof(call_r.value)) {
         return 0;
@@ -734,12 +786,15 @@ size_t yetty_ygui_widget_on_release_skel(const void *body, size_t body_len, void
     if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_ygui_widget_on_release: handle_resolve",
                                 obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
     }
     struct yetty_ycore_int_result call_r =
         yetty_ygui_widget_on_release((struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x,
@@ -749,9 +804,11 @@ size_t yetty_ygui_widget_on_release_skel(const void *body, size_t body_len, void
     }
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_ygui_widget_on_release", call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
     }
     if (resp_max < 1 + sizeof(call_r.value)) {
         return 0;
@@ -795,12 +852,15 @@ size_t yetty_ygui_widget_on_motion_skel(const void *body, size_t body_len, void 
     if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_ygui_widget_on_motion: handle_resolve",
                                 obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
     }
     struct yetty_ycore_int_result call_r = yetty_ygui_widget_on_motion(
         (struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x, wire_args.y);
@@ -809,9 +869,11 @@ size_t yetty_ygui_widget_on_motion_skel(const void *body, size_t body_len, void 
     }
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_ygui_widget_on_motion", call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
     }
     if (resp_max < 1 + sizeof(call_r.value)) {
         return 0;
@@ -852,12 +914,15 @@ size_t yetty_ygui_constructor_skel(const void *body, size_t body_len, void *resp
     if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_ygui_constructor: handle_resolve",
                                 obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
     }
     struct yetty_ycore_void_result call_r =
         yetty_ygui_constructor((struct yetty_yclass_object *)obj_resolve_r.value);
@@ -866,9 +931,11 @@ size_t yetty_ygui_constructor_skel(const void *body, size_t body_len, void *resp
     }
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_ygui_constructor", call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
     }
     ((uint8_t *)resp)[0] = 0;
     return 1;
@@ -905,12 +972,15 @@ size_t yetty_ygui_destructor_skel(const void *body, size_t body_len, void *resp,
     if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_ygui_destructor: handle_resolve",
                                 obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
     }
     struct yetty_ycore_void_result call_r =
         yetty_ygui_destructor((struct yetty_yclass_object *)obj_resolve_r.value);
@@ -919,9 +989,11 @@ size_t yetty_ygui_destructor_skel(const void *body, size_t body_len, void *resp,
     }
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_ygui_destructor", call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
     }
     ((uint8_t *)resp)[0] = 0;
     return 1;
@@ -963,12 +1035,15 @@ size_t yetty_ygui_widget_on_scroll_skel(const void *body, size_t body_len, void 
     if (YETTY_IS_ERR(obj_resolve_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_ygui_widget_on_scroll: handle_resolve",
                                 obj_resolve_r.error);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
         if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
             return 0;
         }
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
     }
     struct yetty_ycore_int_result call_r =
         yetty_ygui_widget_on_scroll((struct yetty_yclass_object *)obj_resolve_r.value, wire_args.x,
@@ -978,9 +1053,11 @@ size_t yetty_ygui_widget_on_scroll_skel(const void *body, size_t body_len, void 
     }
     if (YETTY_IS_ERR(call_r)) {
         yetty_ycore_error_print(stderr, "[skel] yetty_ygui_widget_on_scroll", call_r.error);
-        yetty_ycore_error_destroy(call_r.error);
         ((uint8_t *)resp)[0] = 1;
-        return 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
     }
     if (resp_max < 1 + sizeof(call_r.value)) {
         return 0;

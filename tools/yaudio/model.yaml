@@ -1,0 +1,250 @@
+methods: []
+classes:
+  - name: app
+    domain: yaudio
+    accessor: yetty_yaudio_app_class_get
+    type: regular
+    source_file: tools/yaudio/main.c
+    parent:
+      domain: yapp
+      name: app
+    mixins: []
+    data: struct yetty_yaudio_app
+    data_fields:
+      - name: wav_path
+        type: "const char *"
+        get: false
+        set: false
+      - name: wav
+        type: "struct yetty_yaudio_wav *"
+        get: false
+        set: false
+      - name: env
+        type: "struct yetty_yaudio_envelope *"
+        get: false
+        set: false
+      - name: iv
+        type: "struct yetty_yaudio_intervals *"
+        get: false
+        set: false
+      - name: env_dbfs
+        type: "float *"
+        get: false
+        set: false
+      - name: env_dbfs_n
+        type: size_t
+        get: false
+        set: false
+      - name: selected
+        type: int
+        get: false
+        set: false
+      - name: runtime
+        type: "struct yetty_yframework *"
+        get: false
+        set: false
+      - name: ctx
+        type: struct yetty_context
+        get: false
+        set: false
+      - name: render_target
+        type: "struct yetty_ydraw_target *"
+        get: false
+        set: false
+      - name: listener
+        type: struct yetty_yevent_event_listener
+        get: false
+        set: false
+      - name: yui
+        type: "struct yetty_yui *"
+        get: false
+        set: false
+      - name: plot_widget
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: wave_widget
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: plots_vbox
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: prev_btn
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: next_btn
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: status_label
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: wave_raw
+        type: "float *"
+        get: false
+        set: false
+      - name: wave_raw_cap
+        type: size_t
+        get: false
+        set: false
+      - name: wave_dec
+        type: "float *"
+        get: false
+        set: false
+      - name: wave_dec_n
+        type: size_t
+        get: false
+        set: false
+      - name: view_t_min
+        type: double
+        get: false
+        set: false
+      - name: view_t_max
+        type: double
+        get: false
+        set: false
+      - name: wave_y_max
+        type: float
+        get: false
+        set: false
+      - name: dragging
+        type: int
+        get: false
+        set: false
+      - name: drag_start_mx
+        type: float
+        get: false
+        set: false
+      - name: drag_start_t_min
+        type: double
+        get: false
+        set: false
+      - name: drag_start_t_max
+        type: double
+        get: false
+        set: false
+      - name: drag_plot_w
+        type: float
+        get: false
+        set: false
+      - name: view_dirty
+        type: int
+        get: false
+        set: false
+      - name: load_pool
+        type: "struct yetty_yplatform_yworkpool *"
+        get: false
+        set: false
+      - name: input_pipe
+        type: "struct yetty_ycore_xthread_event_pipe *"
+        get: false
+        set: false
+      - name: gpu
+        type: "const struct yetty_yplatform_gpu_context *"
+        get: false
+        set: false
+      - name: load_progress
+        type: volatile double
+        get: false
+        set: false
+      - name: load_phase
+        type: volatile int
+        get: false
+        set: false
+      - name: load_state
+        type: volatile int
+        get: false
+        set: false
+      - name: load_err
+        type: "char[160]"
+        get: false
+        set: false
+      - name: last_posted_progress
+        type: double
+        get: false
+        set: false
+      - name: load_bar
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: load_label
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: ui_built
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: init
+        slot_domain: yapp
+        impl: yaudio_app_init
+      - slot: run
+        slot_domain: yapp
+        impl: yaudio_app_run
+    doc: null
+types:
+  - name: yetty_context
+    kind: struct
+    fields:
+      - name: runtime
+        type: "struct yetty_yframework *"
+      - name: pty_factory
+        type: "struct yetty_yplatform_pty_factory *"
+      - name: event_loop
+        type: "struct yetty_yevent_event_loop *"
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_yevent_event_listener
+    kind: struct
+    fields:
+      - name: handler
+        type: yetty_ycore_event_handler
+local_types:
+  yaudio_load_phase: tools/yaudio/main.c
+  yaudio_load_state: tools/yaudio/main.c
+  yetty_yaudio_app: tools/yaudio/main.c
+  yetty_yaudio_app_ptr_result: tools/yaudio/main.c
+local_typedefs:
+  __int128_t:
+    source_file: tools/yaudio/main.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: tools/yaudio/main.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: tools/yaudio/main.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: tools/yaudio/main.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: tools/yaudio/main.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

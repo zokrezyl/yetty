@@ -97,6 +97,33 @@ void yetty_ycore_error_print(FILE *out, const char *headline, struct yetty_ycore
  * Returns the number of bytes written (excluding the terminating NUL). */
 size_t yetty_ycore_error_snprint(char *buf, size_t bufsize, struct yetty_ycore_error err);
 
+/* Serialize an error and its full cause chain into `buf` for transport over a
+ * wire (used by the yclass RPC layer to carry a remote impl's error back to the
+ * caller). Layout, all little-endian, frames in order (top frame first):
+ *
+ *   u32 frame_count                    (top frame + every cause, capped)
+ *   repeat frame_count times:
+ *     u32 msg_len ; msg bytes          (string contents only, no NUL)
+ *     u32 file_len; file bytes
+ *     u32 func_len; func bytes
+ *     i32 line
+ *
+ * Returns the number of bytes written, or 0 if `buf` cannot hold the whole
+ * chain (the caller is then free to fall back to a status-only response — a
+ * lossy but non-fatal degradation). Does not allocate. */
+size_t yetty_ycore_error_serialize(struct yetty_ycore_error err, uint8_t *buf, size_t bufsize);
+
+/* Rebuild a heap cause-chain from bytes produced by yetty_ycore_error_serialize.
+ * Returns the head node of the chain (suitable to attach as the `.cause` of a
+ * locally-raised error), or NULL on empty / short / malformed input — a partial
+ * parse is rolled back and dropped, never half-returned.
+ *
+ * Ownership: every node is a SINGLE allocation that also stores its msg/file/
+ * func bytes inline, so yetty_ycore_error_destroy (which frees each cause node)
+ * frees the strings too — no separate free of the string fields is needed, and
+ * the chain follows the same lifetime rules as any locally-built one. */
+struct yetty_ycore_error *yetty_ycore_error_deserialize(const uint8_t *buf, size_t len);
+
 /* Create success result (void) */
 #define YETTY_OK_VOID() ((struct yetty_ycore_void_result){.ok = 1, .value = 0})
 

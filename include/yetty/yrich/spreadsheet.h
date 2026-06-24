@@ -59,6 +59,7 @@ struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_row_height(
     struct yetty_yclass_object *obj, int32_t row, float height);
 struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_col_width(
     struct yetty_yclass_object *obj, int32_t col, float width);
+/* Set a cell's text value — wire-marshallable slot (scalars + buffer). */
 struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_cell_value(
     struct yetty_yclass_object *obj, int32_t row, int32_t col, struct yetty_ycore_buffer value);
 

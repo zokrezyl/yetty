@@ -256,7 +256,7 @@ static struct yetty_ycore_void_result host_caption_refresh(struct yetty_ychrome_
  * Engine setup shared by both create paths.
  *=========================================================================*/
 
-static struct yetty_ychrome_host_ptr_result host_alloc(struct yetty_yclass_object *window_manager,
+static struct yetty_ychrome_host_ptr_result host_alloc(struct yetty_yclass_object *window_chrome,
                                                        float width, float height,
                                                        float caption_height, float edge_size,
                                                        unsigned int flags)
@@ -282,7 +282,7 @@ static struct yetty_ychrome_host_ptr_result host_alloc(struct yetty_yclass_objec
     host->caption_height = caption_height;
 
     struct yetty_ycore_void_result configure_result =
-        yetty_ychrome_configure(host->chrome, window_manager, caption_height, edge_size, flags);
+        yetty_ychrome_configure(host->chrome, window_chrome, caption_height, edge_size, flags);
     if (YETTY_IS_ERR(configure_result)) {
         struct yetty_ycore_void_result destroy_result = yetty_ychrome_destroy(host->chrome);
         free(host);
@@ -321,14 +321,14 @@ static struct yetty_ychrome_host_ptr_result host_build_fail(struct yetty_ychrome
 #ifdef YETTY_YCHROME_HAS_LOCAL
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
     struct yetty_yclass_object *container_obj, struct yetty_yfont_font *font,
-    const struct yetty_context *ctx, struct yetty_yclass_object *window_manager, float width,
+    const struct yetty_context *ctx, struct yetty_yclass_object *window_chrome, float width,
     float height, float caption_height, float edge_size, unsigned int flags)
 {
     if (!container_obj) {
         return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host_create: container required");
     }
     struct yetty_ychrome_host_ptr_result alloc_result =
-        host_alloc(window_manager, width, height, caption_height, edge_size, flags);
+        host_alloc(window_chrome, width, height, caption_height, edge_size, flags);
     YETTY_RETURN_IF_ERR(yetty_ychrome_host_ptr, alloc_result, "ychrome_host_create");
     struct yetty_ychrome_host *host = alloc_result.value;
 
@@ -359,14 +359,14 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
 #endif /* YETTY_YCHROME_HAS_LOCAL */
 
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
-    struct yetty_yfigure_producer *producer, struct yetty_yclass_object *window_manager,
-    float width, float height, float caption_height, float edge_size, unsigned int flags)
+    struct yetty_yfigure_producer *producer, struct yetty_yclass_object *window_chrome, float width,
+    float height, float caption_height, float edge_size, unsigned int flags)
 {
     if (!producer) {
         return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host_create_wire: producer required");
     }
     struct yetty_ychrome_host_ptr_result alloc_result =
-        host_alloc(window_manager, width, height, caption_height, edge_size, flags);
+        host_alloc(window_chrome, width, height, caption_height, edge_size, flags);
     YETTY_RETURN_IF_ERR(yetty_ychrome_host_ptr, alloc_result, "ychrome_host_create_wire");
     struct yetty_ychrome_host *host = alloc_result.value;
     host->producer = producer;

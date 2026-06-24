@@ -81,6 +81,7 @@
 #include <errno.h>
 #include <poll.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -90,6 +91,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
 
 #include <uv.h>
@@ -109,6 +111,9 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
 static struct yetty_ycore_void_result yai_set_edit_mode(struct yai_app *app, const char *mode);
 static struct yetty_ycore_void_result yai_release_dock_reservation(struct yai_app *app);
 static struct yetty_ycore_void_result apply_config_knob(struct yai_app *app, int knob_index);
+static void yai_hud_collect_values(struct yai_app *app, struct yai_hud_var_values *out);
+static struct yetty_ycore_void_result yai_text_hud_render(struct yai_app *app,
+                                                          const struct yai_hud_var_values *values);
 
 /*---------------------------------------------------------------------------
  * Error surfacing — yai_report_error is THE end consumer: print into
@@ -139,24 +144,23 @@ void yai_report_error(struct yai_app *app, const char *context,
 }
 
 /* Update the activity surfaces together: the animated shader glyph on
- * the pinned prompt row and, when present, the HUD state text. */
+ * the pinned prompt row and the HUD activity state (#{state}). */
 struct yetty_ycore_void_result yai_set_activity(struct yai_app *app, const char *glyph_name,
                                                 const char *state_text)
 {
     struct yetty_ycore_void_result glyph_res =
         yai_renderer_activity_set(&app->renderer, glyph_name);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, glyph_res, "yai_set_activity: glyph");
-    if (app->hud) {
-        struct yetty_ycore_void_result state_res = yai_hud_set_state(app->hud, state_text);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, state_res, "yai_set_activity: hud state");
-        struct yetty_ycore_void_result flush_res = yai_hud_flush(app->hud);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "yai_set_activity: hud flush");
-        return YETTY_OK_VOID();
-    }
-    /* Non-yetty tty: the state goes to the text status bar. */
-    struct yetty_ycore_void_result hud_res = yai_renderer_hud_state(&app->renderer, state_text);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "yai_set_activity: text hud state");
-    return YETTY_OK_VOID();
+    return yai_set_state(app, state_text);
+}
+
+/* Record the live activity state and re-render the HUD (whichever backend
+ * is active). The state is just one of the HUD format variables, so a
+ * change re-expands the whole format — cheap, the widget tree is stable. */
+struct yetty_ycore_void_result yai_set_state(struct yai_app *app, const char *state_text)
+{
+    snprintf(app->state_text, sizeof(app->state_text), "%s", state_text ? state_text : "");
+    return yai_refresh_hud_stats(app);
 }
 
 void yai_drop_pending_permission(struct yai_app *app)
@@ -186,8 +190,8 @@ void yai_tool_remember_allow(struct yai_app *app, const char *tool_name)
         app->always_allow_count >= YAI_ALWAYS_ALLOW_MAX) {
         return;
     }
-    snprintf(app->always_allow_tools[app->always_allow_count],
-             sizeof(app->always_allow_tools[0]), "%s", tool_name);
+    snprintf(app->always_allow_tools[app->always_allow_count], sizeof(app->always_allow_tools[0]),
+             "%s", tool_name);
     app->always_allow_count++;
 }
 
@@ -206,25 +210,16 @@ void yai_tool_remember_allow(struct yai_app *app, const char *tool_name)
  * route through one setter.
  *---------------------------------------------------------------------------*/
 
-/* Seed every setting with its default. Call once, before the file load. */
-static void yai_config_defaults(struct yai_app *app)
+/* The config section for the active engine (app->engine_name). */
+struct yai_engine_config *yai_active_engine_config(struct yai_app *app)
 {
-    struct yai_config *config = &app->config;
-    app->engine_name = "claude";
-    app->editor_mode_name = "emacs";
-    app->renderer.fold_lines = YAI_DEFAULT_FOLD_LINES;
-    app->renderer.show_thinking = 0;
-    config->model[0] = '\0';
-    snprintf(config->permission_mode, sizeof(config->permission_mode), "default");
-    snprintf(config->allowed_preset, sizeof(config->allowed_preset), "curated");
-    config->allowed_tools[0] = '\0';
-    snprintf(config->claude_effort, sizeof(config->claude_effort), "auto");
-    snprintf(config->codex_sandbox, sizeof(config->codex_sandbox), "workspace-write");
-    snprintf(config->codex_approval, sizeof(config->codex_approval), "never");
-    snprintf(config->codex_effort, sizeof(config->codex_effort), "default");
-    snprintf(config->gemini_approval_mode, sizeof(config->gemini_approval_mode), "default");
-    config->no_hud = 0;
-    config->hud_float = 0;
+    if (strcmp(app->engine_name, "codex") == 0) {
+        return &app->config.codex;
+    }
+    if (strcmp(app->engine_name, "gemini") == 0) {
+        return &app->config.gemini;
+    }
+    return &app->config.claude;
 }
 
 /* Parse a boolean-ish scalar ("1"/"true"/"yes" → 1). */
@@ -233,48 +228,264 @@ static int yai_config_truthy(const char *value)
     return strcmp(value, "1") == 0 || strcmp(value, "true") == 0 || strcmp(value, "yes") == 0;
 }
 
-/* Apply one setting by key. The single write path shared by the file loader,
- * the CLI parser, and the /config dialog. Returns 1 if the key was known. */
-static int yai_config_set(struct yai_app *app, const char *key, const char *value)
+/* The `defaults:` keys a backend may override (every global key except the
+ * `engine` selector itself, which chooses the backend). */
+static int yai_is_default_key(const char *key)
+{
+    return strcmp(key, "edit-mode") == 0 || strcmp(key, "fold-lines") == 0 ||
+           strcmp(key, "show-thinking") == 0 || strcmp(key, "hud-on") == 0 ||
+           strcmp(key, "hud-float") == 0 || strcmp(key, "hud-mode") == 0 ||
+           strcmp(key, "hud-format") == 0;
+}
+
+/* The active backend's verbatim override of `key`, or NULL when it inherits
+ * the global default. */
+static const char *yai_engine_override_get(const struct yai_engine_config *cfg, const char *key)
+{
+    for (int index = 0; index < cfg->override_count; index++) {
+        if (strcmp(cfg->overrides[index].key, key) == 0) {
+            return cfg->overrides[index].value;
+        }
+    }
+    return NULL;
+}
+
+/* Record (or replace) a backend's override of a `defaults:` key. Silently
+ * drops the override once the small fixed table is full. */
+static void yai_engine_override_set(struct yai_engine_config *cfg, const char *key,
+                                    const char *value)
+{
+    for (int index = 0; index < cfg->override_count; index++) {
+        if (strcmp(cfg->overrides[index].key, key) == 0) {
+            snprintf(cfg->overrides[index].value, sizeof(cfg->overrides[index].value), "%s", value);
+            return;
+        }
+    }
+    if (cfg->override_count >= YAI_BACKEND_OVERRIDE_MAX) {
+        return;
+    }
+    struct yai_setting *slot = &cfg->overrides[cfg->override_count++];
+    snprintf(slot->key, sizeof(slot->key), "%s", key);
+    snprintf(slot->value, sizeof(slot->value), "%s", value);
+}
+
+/* The HUD format in effect for the active engine: its per-backend override if
+ * set, else the global template. */
+static const char *yai_effective_hud_format(struct yai_app *app)
+{
+    const char *override = yai_engine_override_get(yai_active_engine_config(app), "hud-format");
+    return (override && override[0]) ? override : app->config.hud_format;
+}
+
+/* Whether the ygui HUD window is enabled for the active engine. */
+static int yai_effective_hud_on(struct yai_app *app)
+{
+    const char *override = yai_engine_override_get(yai_active_engine_config(app), "hud-on");
+    return override ? yai_config_truthy(override) : app->config.hud_on;
+}
+
+/* Whether the HUD floats (vs docks) for the active engine. */
+static int yai_effective_hud_float(struct yai_app *app)
+{
+    const char *override = yai_engine_override_get(yai_active_engine_config(app), "hud-float");
+    return override ? yai_config_truthy(override) : app->config.hud_float;
+}
+
+/* HUD rendering backend for the active engine: "yetty" (ygui window) or "text"
+ * (plain status bar). The text bar also serves as the fallback on non-yetty
+ * hosts where the ygui HUD has no window to render into. */
+static const char *yai_effective_hud_mode(struct yai_app *app)
+{
+    const char *override = yai_engine_override_get(yai_active_engine_config(app), "hud-mode");
+    const char *value = (override && override[0]) ? override : app->config.hud_mode;
+    return strcmp(value, "text") == 0 ? "text" : "yetty";
+}
+
+/* Store the HUD template as `count` verbatim pieces and recompute the
+ * concatenated hud_format the renderer parses (pieces joined directly, no
+ * separator). The pieces are kept so the YAML list round-trips on save. */
+static void yai_config_set_hud_parts(struct yai_config *config, const char *const *parts, int count)
+{
+    if (count < 0) {
+        count = 0;
+    }
+    if (count > YAI_HUD_FORMAT_PARTS_MAX) {
+        count = YAI_HUD_FORMAT_PARTS_MAX;
+    }
+    config->hud_format_part_count = count;
+    config->hud_format[0] = '\0';
+    size_t offset = 0;
+    for (int index = 0; index < count; index++) {
+        snprintf(config->hud_format_parts[index], YAI_HUD_FORMAT_PART_MAX, "%s", parts[index]);
+        size_t room = sizeof(config->hud_format) - offset;
+        int written = snprintf(config->hud_format + offset, room, "%s", parts[index]);
+        if (written > 0) {
+            offset += ((size_t)written < room) ? (size_t)written : room - 1;
+        }
+    }
+}
+
+/* Seed every setting with its default. Call once, before the file load. */
+static void yai_config_defaults(struct yai_app *app)
+{
+    struct yai_config *config = &app->config;
+    app->engine_name = "claude";
+    app->editor_mode_name = "emacs";
+    /* defaults */
+    snprintf(config->edit_mode, sizeof(config->edit_mode), "emacs");
+    config->fold_lines = YAI_DEFAULT_FOLD_LINES;
+    config->show_thinking = 0;
+    config->hud_on = 1;
+    config->hud_float = 0;
+    snprintf(config->hud_mode, sizeof(config->hud_mode), "yetty");
+    const char *const default_hud_parts[] = {YAI_DEFAULT_HUD_PART_0, YAI_DEFAULT_HUD_PART_1,
+                                             YAI_DEFAULT_HUD_PART_2, YAI_DEFAULT_HUD_PART_3,
+                                             YAI_DEFAULT_HUD_PART_4};
+    yai_config_set_hud_parts(config, default_hud_parts,
+                             (int)(sizeof(default_hud_parts) / sizeof(default_hud_parts[0])));
+    app->renderer.fold_lines = YAI_DEFAULT_FOLD_LINES;
+    app->renderer.show_thinking = 0;
+    /* claude */
+    config->claude.model[0] = '\0';
+    snprintf(config->claude.effort, sizeof(config->claude.effort), "auto");
+    snprintf(config->claude.permission_mode, sizeof(config->claude.permission_mode), "default");
+    snprintf(config->claude.allowed_preset, sizeof(config->claude.allowed_preset), "curated");
+    config->claude.allowed_tools[0] = '\0';
+    config->claude.override_count = 0;
+    /* codex */
+    config->codex.model[0] = '\0';
+    snprintf(config->codex.effort, sizeof(config->codex.effort), "default");
+    snprintf(config->codex.sandbox, sizeof(config->codex.sandbox), "workspace-write");
+    snprintf(config->codex.approval, sizeof(config->codex.approval), "never");
+    config->codex.override_count = 0;
+    /* gemini */
+    config->gemini.model[0] = '\0';
+    snprintf(config->gemini.approval_mode, sizeof(config->gemini.approval_mode), "default");
+    config->gemini.override_count = 0;
+}
+
+/* Apply a GLOBAL (`defaults:`) setting by key. `engine` selects the active
+ * backend; the rest seed the global default fields. The resolved live values
+ * (editor mode, renderer fold_lines / show_thinking) are produced separately
+ * by yai_config_resolve. Returns 1 if the key was a known global. */
+static int yai_config_set_global(struct yai_app *app, const char *key, const char *value)
 {
     struct yai_config *config = &app->config;
     if (strcmp(key, "engine") == 0) {
         app->engine_name = (strcmp(value, "codex") == 0)    ? "codex"
                            : (strcmp(value, "gemini") == 0) ? "gemini"
                                                             : "claude";
-    } else if (strcmp(key, "edit_mode") == 0) {
-        app->editor_mode_name = (strcmp(value, "vi") == 0) ? "vi" : "emacs";
-    } else if (strcmp(key, "model") == 0) {
-        snprintf(config->model, sizeof(config->model), "%s", value);
-    } else if (strcmp(key, "fold_lines") == 0) {
+    } else if (strcmp(key, "edit-mode") == 0) {
+        snprintf(config->edit_mode, sizeof(config->edit_mode), "%s",
+                 strcmp(value, "vi") == 0 ? "vi" : "emacs");
+    } else if (strcmp(key, "fold-lines") == 0) {
         int folded = atoi(value);
-        app->renderer.fold_lines = folded > 0 ? folded : YAI_DEFAULT_FOLD_LINES;
-    } else if (strcmp(key, "show_thinking") == 0) {
-        app->renderer.show_thinking = yai_config_truthy(value);
-    } else if (strcmp(key, "permission_mode") == 0) {
-        snprintf(config->permission_mode, sizeof(config->permission_mode), "%s", value);
-    } else if (strcmp(key, "allowed_preset") == 0) {
-        snprintf(config->allowed_preset, sizeof(config->allowed_preset), "%s", value);
-    } else if (strcmp(key, "allowed_tools") == 0) {
-        snprintf(config->allowed_tools, sizeof(config->allowed_tools), "%s", value);
-    } else if (strcmp(key, "claude_effort") == 0) {
-        snprintf(config->claude_effort, sizeof(config->claude_effort), "%s", value);
-    } else if (strcmp(key, "codex_sandbox") == 0) {
-        snprintf(config->codex_sandbox, sizeof(config->codex_sandbox), "%s", value);
-    } else if (strcmp(key, "codex_approval") == 0) {
-        snprintf(config->codex_approval, sizeof(config->codex_approval), "%s", value);
-    } else if (strcmp(key, "codex_effort") == 0) {
-        snprintf(config->codex_effort, sizeof(config->codex_effort), "%s", value);
-    } else if (strcmp(key, "gemini_approval_mode") == 0) {
-        snprintf(config->gemini_approval_mode, sizeof(config->gemini_approval_mode), "%s", value);
-    } else if (strcmp(key, "no_hud") == 0) {
-        config->no_hud = yai_config_truthy(value);
-    } else if (strcmp(key, "hud_float") == 0) {
+        config->fold_lines = folded > 0 ? folded : YAI_DEFAULT_FOLD_LINES;
+    } else if (strcmp(key, "show-thinking") == 0) {
+        config->show_thinking = yai_config_truthy(value);
+    } else if (strcmp(key, "hud-on") == 0) {
+        config->hud_on = yai_config_truthy(value);
+    } else if (strcmp(key, "hud-float") == 0) {
         config->hud_float = yai_config_truthy(value);
+    } else if (strcmp(key, "hud-mode") == 0) {
+        snprintf(config->hud_mode, sizeof(config->hud_mode), "%s",
+                 strcmp(value, "text") == 0 ? "text" : "yetty");
+    } else if (strcmp(key, "hud-format") == 0) {
+        /* A scalar hud_format is a one-piece list. */
+        const char *single[] = {value};
+        yai_config_set_hud_parts(config, single, 1);
     } else {
         return 0;
     }
     return 1;
+}
+
+/* Apply a setting to one engine's section. `key` is the unprefixed section
+ * key (model, effort, permission_mode, allowed_preset, allowed_tools,
+ * sandbox, approval, approval_mode). Returns 1 if known. */
+static int yai_config_set_engine_field(struct yai_engine_config *cfg, const char *key,
+                                       const char *value)
+{
+    if (strcmp(key, "model") == 0) {
+        snprintf(cfg->model, sizeof(cfg->model), "%s", value);
+    } else if (strcmp(key, "effort") == 0) {
+        snprintf(cfg->effort, sizeof(cfg->effort), "%s", value);
+    } else if (strcmp(key, "permission-mode") == 0) {
+        snprintf(cfg->permission_mode, sizeof(cfg->permission_mode), "%s", value);
+    } else if (strcmp(key, "allowed-preset") == 0) {
+        snprintf(cfg->allowed_preset, sizeof(cfg->allowed_preset), "%s", value);
+    } else if (strcmp(key, "allowed-tools") == 0) {
+        snprintf(cfg->allowed_tools, sizeof(cfg->allowed_tools), "%s", value);
+    } else if (strcmp(key, "sandbox") == 0) {
+        snprintf(cfg->sandbox, sizeof(cfg->sandbox), "%s", value);
+    } else if (strcmp(key, "approval") == 0) {
+        snprintf(cfg->approval, sizeof(cfg->approval), "%s", value);
+    } else if (strcmp(key, "approval-mode") == 0) {
+        snprintf(cfg->approval_mode, sizeof(cfg->approval_mode), "%s", value);
+    } else {
+        return 0;
+    }
+    return 1;
+}
+
+/* Apply one key/value found inside a backend's section: a backend-specific
+ * field, or — when it names a global default — a per-backend override. */
+static void yai_config_apply_engine_key(struct yai_engine_config *cfg, const char *key,
+                                        const char *value)
+{
+    if (yai_config_set_engine_field(cfg, key, value)) {
+        return;
+    }
+    if (yai_is_default_key(key)) {
+        yai_engine_override_set(cfg, key, value);
+    }
+}
+
+/* Resolve the live values consumed at runtime from the global defaults and the
+ * active backend's overrides: the editor mode and the renderer's fold_lines /
+ * show_thinking. The HUD-related defaults are resolved on demand instead (see
+ * yai_effective_hud_*). Call whenever the active engine or a default changes. */
+static void yai_config_resolve(struct yai_app *app)
+{
+    const struct yai_engine_config *cfg = yai_active_engine_config(app);
+    const char *edit_mode = yai_engine_override_get(cfg, "edit-mode");
+    if (!edit_mode) {
+        edit_mode = app->config.edit_mode;
+    }
+    app->editor_mode_name = (strcmp(edit_mode, "vi") == 0) ? "vi" : "emacs";
+    const char *fold = yai_engine_override_get(cfg, "fold-lines");
+    int folded = fold ? atoi(fold) : app->config.fold_lines;
+    app->renderer.fold_lines = folded > 0 ? folded : YAI_DEFAULT_FOLD_LINES;
+    const char *thinking = yai_engine_override_get(cfg, "show-thinking");
+    app->renderer.show_thinking =
+        thinking ? yai_config_truthy(thinking) : app->config.show_thinking;
+}
+
+/* The single live write path: CLI flags, the /config dialog, and the
+ * permission "auto" shortcut. Global keys set the defaults; every other key
+ * targets the ACTIVE engine's section. Legacy/prefixed knob + CLI keys
+ * (codex_sandbox, claude_effort, …) are normalized to section keys. The live
+ * values are re-resolved before returning. Returns 1 if the key was known. */
+static int yai_config_set(struct yai_app *app, const char *key, const char *value)
+{
+    int known;
+    if (yai_config_set_global(app, key, value)) {
+        known = 1;
+    } else {
+        const char *section_key = key;
+        if (strcmp(key, "claude-effort") == 0 || strcmp(key, "codex-effort") == 0) {
+            section_key = "effort";
+        } else if (strcmp(key, "codex-sandbox") == 0) {
+            section_key = "sandbox";
+        } else if (strcmp(key, "codex-approval") == 0) {
+            section_key = "approval";
+        } else if (strcmp(key, "gemini-approval-mode") == 0) {
+            section_key = "approval-mode";
+        }
+        known = yai_config_set_engine_field(yai_active_engine_config(app), section_key, value);
+    }
+    yai_config_resolve(app);
+    return known;
 }
 
 /* $XDG_CONFIG_HOME/yetty/yai.yaml, else $HOME/.config/yetty/yai.yaml.
@@ -332,11 +543,21 @@ static void yai_config_load(struct yai_app *app)
     }
     yaml_parser_set_input_file(&parser, file);
 
-    /* Flat top-level mapping of scalar key -> scalar value. Track depth so a
-     * (hand-added) nested value is skipped rather than mis-read as a key. */
+    /* Three-level layout: a top mapping holding `defaults:` (global scalar
+     * keys) and `backends:` (claude/codex/gemini sub-mappings). `depth` tracks
+     * mapping nesting (1 = top, 2 = inside defaults/backends, 3 = inside one
+     * backend); `section` selects where the scalars at depth 2/3 land. The one
+     * sequence value is `hud_format:` (a list of pieces); it is collected
+     * separately into hud_parts and concatenated at its SEQUENCE_END. */
+    enum { SECTION_NONE, SECTION_DEFAULTS, SECTION_BACKENDS } section = SECTION_NONE;
     int depth = 0;
     int have_key = 0;
     char pending_key[64] = {0};
+    struct yai_engine_config *backend_cfg = NULL;
+    int collecting_hud = 0;
+    struct yai_engine_config *hud_backend = NULL; /* non-NULL = backend override */
+    int hud_part_count = 0;
+    char hud_parts[YAI_HUD_FORMAT_PARTS_MAX][YAI_HUD_FORMAT_PART_MAX];
     int done = 0;
     while (!done) {
         yaml_event_t event;
@@ -344,28 +565,101 @@ static void yai_config_load(struct yai_app *app)
             break; /* malformed — stop, keep whatever was restored so far */
         }
         switch (event.type) {
-        case YAML_MAPPING_START_EVENT:
         case YAML_SEQUENCE_START_EVENT:
-            /* A container as a value: drop the dangling key, then descend. */
+            /* `hud_format:` as a list — collect its scalar pieces. */
+            if (have_key && strcmp(pending_key, "hud-format") == 0 &&
+                ((depth == 2 && section == SECTION_DEFAULTS) ||
+                 (depth == 3 && section == SECTION_BACKENDS && backend_cfg))) {
+                collecting_hud = 1;
+                hud_backend = (depth == 3) ? backend_cfg : NULL;
+                hud_part_count = 0;
+                have_key = 0;
+                break;
+            }
+            /* fallthrough: any other sequence is treated like a mapping value */
+            __attribute__((fallthrough));
+        case YAML_MAPPING_START_EVENT:
+            /* A container value. At depth 1 it opens `defaults:`/`backends:`;
+             * at depth 2 inside backends it opens one engine's section. */
+            if (depth == 1 && have_key) {
+                if (strcmp(pending_key, "defaults") == 0) {
+                    section = SECTION_DEFAULTS;
+                } else if (strcmp(pending_key, "backends") == 0) {
+                    section = SECTION_BACKENDS;
+                } else {
+                    section = SECTION_NONE;
+                }
+            } else if (depth == 2 && section == SECTION_BACKENDS && have_key) {
+                if (strcmp(pending_key, "codex") == 0) {
+                    backend_cfg = &app->config.codex;
+                } else if (strcmp(pending_key, "gemini") == 0) {
+                    backend_cfg = &app->config.gemini;
+                } else if (strcmp(pending_key, "claude") == 0) {
+                    backend_cfg = &app->config.claude;
+                } else {
+                    backend_cfg = NULL; /* unknown backend: ignore its keys */
+                }
+            }
             have_key = 0;
             depth++;
             break;
-        case YAML_MAPPING_END_EVENT:
         case YAML_SEQUENCE_END_EVENT:
-            depth--;
-            break;
-        case YAML_SCALAR_EVENT:
-            if (depth == 1) {
-                const char *text = (const char *)event.data.scalar.value;
-                if (!have_key) {
-                    snprintf(pending_key, sizeof(pending_key), "%s", text);
-                    have_key = 1;
-                } else {
-                    yai_config_set(app, pending_key, text);
-                    have_key = 0;
+            if (collecting_hud) {
+                /* Finalize the hud_format list: concatenate the pieces. */
+                const char *part_ptrs[YAI_HUD_FORMAT_PARTS_MAX];
+                for (int index = 0; index < hud_part_count; index++) {
+                    part_ptrs[index] = hud_parts[index];
                 }
+                if (hud_backend) {
+                    char joined[1024];
+                    size_t offset = 0;
+                    joined[0] = '\0';
+                    for (int index = 0; index < hud_part_count; index++) {
+                        size_t room = sizeof(joined) - offset;
+                        int written = snprintf(joined + offset, room, "%s", hud_parts[index]);
+                        if (written > 0) {
+                            offset += ((size_t)written < room) ? (size_t)written : room - 1;
+                        }
+                    }
+                    yai_engine_override_set(hud_backend, "hud-format", joined);
+                } else {
+                    yai_config_set_hud_parts(&app->config, part_ptrs, hud_part_count);
+                }
+                collecting_hud = 0;
+                hud_backend = NULL;
+                have_key = 0;
+                break;
+            }
+            __attribute__((fallthrough));
+        case YAML_MAPPING_END_EVENT:
+            depth--;
+            if (depth <= 1) {
+                section = SECTION_NONE;
+                backend_cfg = NULL;
+            } else if (depth == 2) {
+                backend_cfg = NULL;
+            }
+            have_key = 0;
+            break;
+        case YAML_SCALAR_EVENT: {
+            const char *text = (const char *)event.data.scalar.value;
+            if (collecting_hud) {
+                if (hud_part_count < YAI_HUD_FORMAT_PARTS_MAX) {
+                    snprintf(hud_parts[hud_part_count++], YAI_HUD_FORMAT_PART_MAX, "%s", text);
+                }
+            } else if (!have_key) {
+                snprintf(pending_key, sizeof(pending_key), "%s", text);
+                have_key = 1;
+            } else {
+                if (depth == 2 && section == SECTION_DEFAULTS) {
+                    yai_config_set_global(app, pending_key, text);
+                } else if (depth == 3 && section == SECTION_BACKENDS && backend_cfg) {
+                    yai_config_apply_engine_key(backend_cfg, pending_key, text);
+                }
+                have_key = 0;
             }
             break;
+        }
         case YAML_STREAM_END_EVENT:
             done = 1;
             break;
@@ -376,6 +670,7 @@ static void yai_config_load(struct yai_app *app)
     }
     yaml_parser_delete(&parser);
     (void)fclose(file);
+    yai_config_resolve(app);
 }
 
 /* Emit one `key: value` pair only when `value` is non-empty. */
@@ -409,9 +704,123 @@ static int yai_config_emit_if_set(yaml_emitter_t *emitter, const char *key, cons
     return yai_config_emit_pair(emitter, key, value);
 }
 
+/* Emit `key: "value"` with the value double-quoted. Needed for hud_format:
+ * it starts with '#' and embeds newlines, neither of which a plain YAML
+ * scalar permits. libyaml escapes the newlines as \n; the loader unescapes
+ * them back, and the format parser also accepts the two-char \n form. */
+static int yai_config_emit_quoted(yaml_emitter_t *emitter, const char *key, const char *value)
+{
+    yaml_event_t event;
+    if (!yaml_scalar_event_initialize(&event, NULL, NULL, (const yaml_char_t *)key, -1, 1, 1,
+                                      YAML_PLAIN_SCALAR_STYLE) ||
+        !yaml_emitter_emit(emitter, &event)) {
+        return 0;
+    }
+    if (!yaml_scalar_event_initialize(&event, NULL, NULL, (const yaml_char_t *)value, -1, 0, 1,
+                                      YAML_DOUBLE_QUOTED_SCALAR_STYLE)) {
+        return 0;
+    }
+    return yaml_emitter_emit(emitter, &event);
+}
+
+/* Emit a bare plain scalar (a key whose value is a nested block mapping). */
+static int yai_config_emit_scalar(yaml_emitter_t *emitter, const char *text)
+{
+    yaml_event_t event;
+    return yaml_scalar_event_initialize(&event, NULL, NULL, (const yaml_char_t *)text, -1, 1, 1,
+                                        YAML_PLAIN_SCALAR_STYLE) &&
+           yaml_emitter_emit(emitter, &event);
+}
+
+/* Open / close a block mapping as the current value. */
+static int yai_config_emit_map_start(yaml_emitter_t *emitter)
+{
+    yaml_event_t event;
+    return yaml_mapping_start_event_initialize(&event, NULL, NULL, /*implicit=*/1,
+                                               YAML_BLOCK_MAPPING_STYLE) &&
+           yaml_emitter_emit(emitter, &event);
+}
+
+static int yai_config_emit_map_end(yaml_emitter_t *emitter)
+{
+    yaml_event_t event;
+    return yaml_mapping_end_event_initialize(&event) && yaml_emitter_emit(emitter, &event);
+}
+
+/* Emit a single double-quoted scalar value (a sequence item). */
+static int yai_config_emit_quoted_value(yaml_emitter_t *emitter, const char *value)
+{
+    yaml_event_t event;
+    return yaml_scalar_event_initialize(&event, NULL, NULL, (const yaml_char_t *)value, -1, 0, 1,
+                                        YAML_DOUBLE_QUOTED_SCALAR_STYLE) &&
+           yaml_emitter_emit(emitter, &event);
+}
+
+/* Emit `hud_format:` as a block sequence of its pieces, each double-quoted (a
+ * piece may embed '#' and newlines). The loader concatenates them back. */
+static int yai_config_emit_hud_format(yaml_emitter_t *emitter, const struct yai_config *config)
+{
+    yaml_event_t event;
+    if (!yai_config_emit_scalar(emitter, "hud-format")) {
+        return 0;
+    }
+    if (!yaml_sequence_start_event_initialize(&event, NULL, NULL, /*implicit=*/1,
+                                              YAML_BLOCK_SEQUENCE_STYLE) ||
+        !yaml_emitter_emit(emitter, &event)) {
+        return 0;
+    }
+    /* part_count 0 means the format is a single scalar held in hud_format. */
+    int count = config->hud_format_part_count > 0 ? config->hud_format_part_count : 1;
+    for (int index = 0; index < count; index++) {
+        const char *part =
+            config->hud_format_part_count > 0 ? config->hud_format_parts[index] : config->hud_format;
+        if (!yai_config_emit_quoted_value(emitter, part)) {
+            return 0;
+        }
+    }
+    return yaml_sequence_end_event_initialize(&event) && yaml_emitter_emit(emitter, &event);
+}
+
+/* Emit one engine's section under `backends:`: `name:` then a block mapping of
+ * that engine's relevant keys, followed by any per-backend overrides of the
+ * global defaults (kept verbatim, so they round-trip). Returns the success
+ * flag. */
+static int yai_config_emit_engine(yaml_emitter_t *emitter, const char *name,
+                                  const struct yai_engine_config *cfg)
+{
+    if (!yai_config_emit_scalar(emitter, name) || !yai_config_emit_map_start(emitter)) {
+        return 0;
+    }
+    int ok = yai_config_emit_if_set(emitter, "model", cfg->model);
+    if (strcmp(name, "claude") == 0) {
+        ok = ok && yai_config_emit_pair(emitter, "permission-mode", cfg->permission_mode) &&
+             yai_config_emit_pair(emitter, "allowed-preset", cfg->allowed_preset) &&
+             yai_config_emit_if_set(emitter, "allowed-tools", cfg->allowed_tools) &&
+             yai_config_emit_pair(emitter, "effort", cfg->effort);
+    } else if (strcmp(name, "codex") == 0) {
+        ok = ok && yai_config_emit_pair(emitter, "sandbox", cfg->sandbox) &&
+             yai_config_emit_pair(emitter, "approval", cfg->approval) &&
+             yai_config_emit_pair(emitter, "effort", cfg->effort);
+    } else { /* gemini */
+        ok = ok && yai_config_emit_pair(emitter, "approval-mode", cfg->approval_mode);
+    }
+    /* hud_format is double-quoted (it embeds '#' and newlines); every other
+     * override is a plain scalar. */
+    for (int index = 0; ok && index < cfg->override_count; index++) {
+        const char *key = cfg->overrides[index].key;
+        const char *value = cfg->overrides[index].value;
+        ok = strcmp(key, "hud-format") == 0 ? yai_config_emit_quoted(emitter, key, value)
+                                            : yai_config_emit_pair(emitter, key, value);
+    }
+    if (!ok) {
+        return 0;
+    }
+    return yai_config_emit_map_end(emitter);
+}
+
 /* Write the live settings (app->config + engine/editor/renderer fields) as
- * YAML to the standard path. The keys match yai_config_set exactly, so a
- * written file reloads losslessly. Emitted with libyaml. */
+ * YAML to the standard path. The keys match the loader exactly, so a written
+ * file reloads losslessly. Emitted with libyaml. */
 static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
 {
     char path[512];
@@ -425,18 +834,29 @@ static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
         *slash = '\0';
         yai_mkdir_p(dir);
     }
-    FILE *file = fopen(path, "w");
+    /* Write to a sibling temp file and rename() it into place. An interrupted
+     * or failed save then never destroys the live config: a plain
+     * fopen(path, "w") truncates it up front, so a crash / Ctrl-C / racing
+     * second instance mid-write leaves an empty (comment-only) file. */
+    char temp_path[544];
+    snprintf(temp_path, sizeof(temp_path), "%s.tmp.%d", path, (int)getpid());
+    FILE *file = fopen(temp_path, "w");
     if (!file) {
         return YETTY_ERR(yetty_ycore_void, "yai_config_save: fopen failed");
     }
 
     /* Header comment first (libyaml's event API emits no comments), then the
      * emitter appends the mapping to the same stream. */
-    fputs("# yai config — auto-written on config change and on exit.\n", file);
+    fputs("# yai config — auto-written on startup, on config change, and on exit.\n"
+          "# Global keys under defaults:; per-backend settings under backends:.\n"
+          "# Any defaults: key may be set under a backend to override it there.\n"
+          "#\n",
+          file);
 
     yaml_emitter_t emitter;
     if (!yaml_emitter_initialize(&emitter)) {
         (void)fclose(file);
+        (void)unlink(temp_path);
         return YETTY_ERR(yetty_ycore_void, "yai_config_save: emitter init failed");
     }
     yaml_emitter_set_output_file(&emitter, file);
@@ -456,23 +876,24 @@ static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
     if (ok) {
         const struct yai_config *config = &app->config;
         char fold_lines[16];
-        snprintf(fold_lines, sizeof(fold_lines), "%d", app->renderer.fold_lines);
-        ok = yai_config_emit_pair(&emitter, "engine", app->engine_name) &&
-             yai_config_emit_pair(&emitter, "edit_mode", app->editor_mode_name) &&
-             yai_config_emit_pair(&emitter, "fold_lines", fold_lines) &&
-             yai_config_emit_pair(&emitter, "show_thinking",
-                                  app->renderer.show_thinking ? "1" : "0") &&
-             yai_config_emit_if_set(&emitter, "model", config->model) &&
-             yai_config_emit_pair(&emitter, "permission_mode", config->permission_mode) &&
-             yai_config_emit_pair(&emitter, "allowed_preset", config->allowed_preset) &&
-             yai_config_emit_if_set(&emitter, "allowed_tools", config->allowed_tools) &&
-             yai_config_emit_pair(&emitter, "claude_effort", config->claude_effort) &&
-             yai_config_emit_pair(&emitter, "codex_sandbox", config->codex_sandbox) &&
-             yai_config_emit_pair(&emitter, "codex_approval", config->codex_approval) &&
-             yai_config_emit_pair(&emitter, "codex_effort", config->codex_effort) &&
-             yai_config_emit_pair(&emitter, "gemini_approval_mode", config->gemini_approval_mode) &&
-             yai_config_emit_pair(&emitter, "no_hud", config->no_hud ? "1" : "0") &&
-             yai_config_emit_pair(&emitter, "hud_float", config->hud_float ? "1" : "0");
+        snprintf(fold_lines, sizeof(fold_lines), "%d", config->fold_lines);
+        /* defaults: { … } — the global settings. */
+        ok = yai_config_emit_scalar(&emitter, "defaults") && yai_config_emit_map_start(&emitter) &&
+             yai_config_emit_pair(&emitter, "engine", app->engine_name) &&
+             yai_config_emit_pair(&emitter, "edit-mode", config->edit_mode) &&
+             yai_config_emit_pair(&emitter, "fold-lines", fold_lines) &&
+             yai_config_emit_pair(&emitter, "show-thinking",
+                                  config->show_thinking ? "true" : "false") &&
+             yai_config_emit_pair(&emitter, "hud-on", config->hud_on ? "true" : "false") &&
+             yai_config_emit_pair(&emitter, "hud-float", config->hud_float ? "true" : "false") &&
+             yai_config_emit_pair(&emitter, "hud-mode", config->hud_mode) &&
+             yai_config_emit_hud_format(&emitter, config) && yai_config_emit_map_end(&emitter) &&
+             /* backends: { claude: {…}, codex: {…}, gemini: {…} }. */
+             yai_config_emit_scalar(&emitter, "backends") && yai_config_emit_map_start(&emitter) &&
+             yai_config_emit_engine(&emitter, "claude", &config->claude) &&
+             yai_config_emit_engine(&emitter, "codex", &config->codex) &&
+             yai_config_emit_engine(&emitter, "gemini", &config->gemini) &&
+             yai_config_emit_map_end(&emitter);
     }
     if (ok) {
         ok = yaml_mapping_end_event_initialize(&event) && yaml_emitter_emit(&emitter, &event);
@@ -488,10 +909,17 @@ static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
     yaml_emitter_delete(&emitter);
     if (!ok) {
         (void)fclose(file);
+        (void)unlink(temp_path);
         return YETTY_ERR(yetty_ycore_void, "yai_config_save: yaml emit failed");
     }
     if (fclose(file) != 0) {
+        (void)unlink(temp_path);
         return YETTY_ERR(yetty_ycore_void, "yai_config_save: fclose failed");
+    }
+    /* Atomic publish: the live config is replaced in one step, or not at all. */
+    if (rename(temp_path, path) != 0) {
+        (void)unlink(temp_path);
+        return YETTY_ERR(yetty_ycore_void, "yai_config_save: rename failed");
     }
     return YETTY_OK_VOID();
 }
@@ -755,15 +1183,10 @@ static struct yetty_ycore_void_result run_shell(struct yai_app *app, const char 
     }
     struct yetty_ycore_void_result suspend_res = suspend_terminal_ownership(app);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "run_shell: suspend");
-    if (app->hud) {
-        struct yetty_ycore_void_result state_res = yai_hud_set_state(app->hud, "⌨ shell");
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, state_res, "run_shell: hud state");
-        struct yetty_ycore_void_result flush_res = yai_hud_flush(app->hud);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "run_shell: hud flush");
-    }
+    struct yetty_ycore_void_result state_res = yai_set_state(app, "⌨ shell");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, state_res, "run_shell: hud state");
     printf(YAI_DIM "(entering %s — exit to return to yai%s)" YAI_RESET "\n",
-           command ? command : shell,
-           app->waiting ? "; the turn continues in the background" : "");
+           command ? command : shell, app->waiting ? "; the turn continues in the background" : "");
     struct yetty_ycore_void_result banner_flush_res = yai_render_flush_stdout();
     YETTY_RETURN_IF_ERR(yetty_ycore_void, banner_flush_res, "run_shell: flush");
 
@@ -824,9 +1247,8 @@ static struct yetty_ycore_void_result run_shell(struct yai_app *app, const char 
     if (app->waiting) {
         teardown =
             yetty_ycore_void_chain(teardown, yai_set_activity(app, "typing-dots", "… thinking"));
-    } else if (app->hud) {
-        teardown = yetty_ycore_void_chain(teardown, yai_hud_set_state(app->hud, "idle"));
-        teardown = yetty_ycore_void_chain(teardown, yai_hud_flush(app->hud));
+    } else {
+        teardown = yetty_ycore_void_chain(teardown, yai_set_state(app, "idle"));
     }
     YETTY_RETURN_IF_ERR(yetty_ycore_void, teardown, "run_shell: resume");
     return YETTY_OK_VOID();
@@ -838,7 +1260,7 @@ static struct yetty_ycore_void_result run_shell(struct yai_app *app, const char 
  * reference/quoting. On save+quit the text ABOVE the separator becomes
  * the prompt; it is NOT submitted (the user reviews, then presses Enter).
  * Mirrors run_shell's terminal handoff. */
-#define YAI_COMPOSE_SEPARATOR \
+#define YAI_COMPOSE_SEPARATOR                                                                      \
     "──────── write your message ABOVE · the assistant's last reply is below (reference) ────────"
 
 static struct yetty_ycore_void_result open_external_editor(struct yai_app *app)
@@ -1023,13 +1445,13 @@ struct yetty_ycore_void_result yai_handle_child_line(struct yai_app *app, const 
             fputc('\n', app->transcript_file) == EOF) {
             fclose(app->transcript_file);
             app->transcript_file = NULL;
-            transcript_res = YETTY_ERR(
-                yetty_ycore_void, "yai_handle_child_line: transcript write failed — disabled");
+            transcript_res = YETTY_ERR(yetty_ycore_void,
+                                       "yai_handle_child_line: transcript write failed — disabled");
         } else if (fflush(app->transcript_file) != 0) {
             fclose(app->transcript_file);
             app->transcript_file = NULL;
-            transcript_res = YETTY_ERR(
-                yetty_ycore_void, "yai_handle_child_line: transcript flush failed — disabled");
+            transcript_res = YETTY_ERR(yetty_ycore_void,
+                                       "yai_handle_child_line: transcript flush failed — disabled");
         }
     }
     /* Reassemble across lines so both framings work: JSONL (claude /
@@ -1100,7 +1522,8 @@ void yai_child_stdout_read_cb(uv_stream_t *stream, ssize_t nread, const uv_buf_t
     /* A single line (e.g. a base64 figure) can be large, but a child
      * that never emits a newline must not grow this without bound and
      * wrap the capacity math. Cap it. */
-    if ((size_t)nread > YAI_CHILD_OUT_MAX || app->child_out_len > YAI_CHILD_OUT_MAX - (size_t)nread) {
+    if ((size_t)nread > YAI_CHILD_OUT_MAX ||
+        app->child_out_len > YAI_CHILD_OUT_MAX - (size_t)nread) {
         free(buffer->base);
         yai_report_error(app, "child stdout",
                          YETTY_ERR(yetty_ycore_void, "yai_child_stdout_read_cb: line too large"));
@@ -1157,8 +1580,7 @@ void yai_child_exit_cb(uv_process_t *process, int64_t exit_status, int term_sign
     (void)term_signal;
     app->child_alive = 0;
     uv_timer_stop(&app->kill_timer);
-    yai_report_error(app, "engine exit",
-                     yetty_yai_on_child_exit(app->engine, app, exit_status));
+    yai_report_error(app, "engine exit", yetty_yai_on_child_exit(app->engine, app, exit_status));
 }
 
 /*---------------------------------------------------------------------------
@@ -1441,8 +1863,8 @@ struct yetty_ycore_void_result yai_begin_shutdown(struct yai_app *app)
         teardown = yetty_ycore_void_chain(teardown, yai_render_flush_stdout());
     }
     if (app->pending_permission.active) {
-        teardown = yetty_ycore_void_chain(teardown,
-                                          yetty_yai_resolve_permission(app->engine, app, 0));
+        teardown =
+            yetty_ycore_void_chain(teardown, yetty_yai_resolve_permission(app->engine, app, 0));
     }
     /* No animated glyph may survive the session — drop the pinned zone
      * for good before the teardown output. */
@@ -1494,13 +1916,8 @@ struct yetty_ycore_void_result yai_turn_finished(struct yai_app *app)
         app->turn_failed = 0;
         /* The scrollback already carries the red ✗ line(s); the
          * persistent state surface must say failed too, not "idle". */
-        if (app->hud) {
-            struct yetty_ycore_void_result state_res =
-                yai_hud_set_state(app->hud, "✗ turn failed");
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, state_res, "yai_turn_finished: hud state");
-            struct yetty_ycore_void_result flush_res = yai_hud_flush(app->hud);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "yai_turn_finished: hud flush");
-        }
+        struct yetty_ycore_void_result state_res = yai_set_state(app, "✗ turn failed");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, state_res, "yai_turn_finished: hud state");
     }
     if (app->queue_len > 0) {
         /* Pump the next queued message instead of prompting. */
@@ -1568,7 +1985,8 @@ static struct yetty_ycore_int_result parse_engine_knob(struct yai_app *app, int 
     int count = 0;
     int selected = -1;
     while (option_cursor < current_start && count < YAI_HUD_CONFIG_KNOB_MAX_OPTIONS) {
-        const char *option_end = memchr(option_cursor, ',', (size_t)(current_start - option_cursor));
+        const char *option_end =
+            memchr(option_cursor, ',', (size_t)(current_start - option_cursor));
         if (!option_end) {
             option_end = current_start;
         }
@@ -1640,7 +2058,7 @@ static void build_model_knob(struct yai_app *app, int knob_index, int tab,
     if (count > YAI_HUD_CONFIG_KNOB_MAX_OPTIONS) {
         count = YAI_HUD_CONFIG_KNOB_MAX_OPTIONS;
     }
-    const char *current = app->config.model;
+    const char *current = yai_active_engine_config(app)->model;
     int selected = 0; /* "default" */
     app->config_knobs[knob_index].is_edit_mode = 0;
     app->config_knobs[knob_index].is_model = 1;
@@ -1678,16 +2096,15 @@ static int build_effort_knob(struct yai_app *app, int knob_index, int tab,
     if (strcmp(app->engine_name, "codex") == 0) {
         list = codex_efforts;
         count = 5;
-        key = "codex_effort";
-        current = app->config.codex_effort;
+        key = "codex-effort";
     } else if (strcmp(app->engine_name, "claude") == 0) {
         list = claude_efforts;
         count = 6;
-        key = "claude_effort";
-        current = app->config.claude_effort;
+        key = "claude-effort";
     } else {
         return 0; /* gemini: no effort control */
     }
+    current = yai_active_engine_config(app)->effort;
     if (count > YAI_HUD_CONFIG_KNOB_MAX_OPTIONS) {
         count = YAI_HUD_CONFIG_KNOB_MAX_OPTIONS;
     }
@@ -1722,43 +2139,194 @@ static const char *backend_tab_title(const char *engine_name)
     return engine_name;
 }
 
-/* Refresh the HUD's model + cumulative session usage — the ygui HUD's
- * right column in yetty, or the text status bar's right segment elsewhere. */
+/* Format a quota reset epoch in the local timezone and the user's locale.
+ * With include_date: "Mon DD, H:MMam/pm" (a reset days out); otherwise
+ * "H:MMam/pm" (a reset later today). `out` is left "" when the epoch is
+ * unknown (0). */
+static void yai_format_reset_time(long long epoch, int include_date, char *out, size_t out_size)
+{
+    if (out_size == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (epoch <= 0) {
+        return;
+    }
+    time_t reset = (time_t)epoch;
+    struct tm broken;
+    if (!localtime_r(&reset, &broken)) {
+        return;
+    }
+    int hour12 = broken.tm_hour % 12;
+    if (hour12 == 0) {
+        hour12 = 12;
+    }
+    char ampm[8] = "";
+    strftime(ampm, sizeof(ampm), "%P", &broken); /* locale lowercase am/pm (glibc) */
+    if (!ampm[0]) {
+        snprintf(ampm, sizeof(ampm), "%s", broken.tm_hour < 12 ? "am" : "pm");
+    }
+    if (include_date) {
+        char month_day[16] = "";
+        strftime(month_day, sizeof(month_day), "%b %e", &broken); /* locale month abbr */
+        /* %e space-pads single-digit days; collapse the resulting double space. */
+        char squeezed[16];
+        size_t out_index = 0;
+        for (size_t index = 0; month_day[index] && out_index + 1 < sizeof(squeezed); index++) {
+            if (month_day[index] == ' ' && (out_index == 0 || squeezed[out_index - 1] == ' ')) {
+                continue;
+            }
+            squeezed[out_index++] = month_day[index];
+        }
+        squeezed[out_index] = '\0';
+        snprintf(out, out_size, "%s, %d:%02d%s", squeezed, hour12, broken.tm_min, ampm);
+    } else {
+        snprintf(out, out_size, "%d:%02d%s", hour12, broken.tm_min, ampm);
+    }
+}
+
+/* Resolve every HUD format variable from current app state. The atomic
+ * values come straight from usage / config / engine_name / the cached
+ * state + quota + last-turn fields; the #{turn}/#{session}/#{stats}
+ * composites reproduce the legacy strings so the default format reads well. */
+static void yai_hud_collect_values(struct yai_app *app, struct yai_hud_var_values *out)
+{
+    memset(out, 0, sizeof(*out));
+    const char *engine_model = yai_active_engine_config(app)->model;
+    const char *model = engine_model[0] ? engine_model : "default";
+    snprintf(out->value[YAI_HUD_VAR_STATE], YAI_HUD_VALUE_MAX, "%s", app->state_text);
+    snprintf(out->value[YAI_HUD_VAR_ENGINE], YAI_HUD_VALUE_MAX, "%s", app->engine_name);
+    snprintf(out->value[YAI_HUD_VAR_MODEL], YAI_HUD_VALUE_MAX, "%s", model);
+    snprintf(out->value[YAI_HUD_VAR_TITLE], YAI_HUD_VALUE_MAX, "%s", app->session_title);
+    snprintf(out->value[YAI_HUD_VAR_SESSION_ID], YAI_HUD_VALUE_MAX, "%s", app->session_id);
+    yai_format_tokens(app->usage.input, out->value[YAI_HUD_VAR_INPUT], YAI_HUD_VALUE_MAX);
+    yai_format_tokens(app->usage.output, out->value[YAI_HUD_VAR_OUTPUT], YAI_HUD_VALUE_MAX);
+    yai_format_tokens(app->usage.cache_read, out->value[YAI_HUD_VAR_CACHE], YAI_HUD_VALUE_MAX);
+    snprintf(out->value[YAI_HUD_VAR_COST], YAI_HUD_VALUE_MAX, "%.4f", app->usage.cost);
+    snprintf(out->value[YAI_HUD_VAR_TURNS], YAI_HUD_VALUE_MAX, "%d", app->usage.turns);
+    snprintf(out->value[YAI_HUD_VAR_QUOTA], YAI_HUD_VALUE_MAX, "%s", app->quota_text);
+    /* Decomposed quota: per-window percentage + locale reset time. Left empty
+     * until the proxy captures ratelimit headers (out was zeroed above). */
+    struct yai_quota quota;
+    yai_usage_proxy_quota(app, &quota);
+    if (quota.valid) {
+        snprintf(out->value[YAI_HUD_VAR_QUOTA_SESSION_PCT], YAI_HUD_VALUE_MAX, "%d",
+                 quota.session_pct);
+        snprintf(out->value[YAI_HUD_VAR_QUOTA_WEEK_PCT], YAI_HUD_VALUE_MAX, "%d", quota.week_pct);
+        yai_format_reset_time(quota.session_reset, /*include_date=*/0,
+                              out->value[YAI_HUD_VAR_QUOTA_SESSION_RESETS], YAI_HUD_VALUE_MAX);
+        yai_format_reset_time(quota.week_reset, /*include_date=*/1,
+                              out->value[YAI_HUD_VAR_QUOTA_WEEK_RESETS], YAI_HUD_VALUE_MAX);
+    }
+    yai_format_tokens(app->estimated_tokens, out->value[YAI_HUD_VAR_EST_TOKENS], YAI_HUD_VALUE_MAX);
+
+    const struct yai_turn_usage *turn = &app->last_turn;
+    double speed = turn->seconds > 0.0 ? (double)turn->output / turn->seconds : 0.0;
+    yai_format_tokens(turn->input, out->value[YAI_HUD_VAR_TURN_INPUT], YAI_HUD_VALUE_MAX);
+    yai_format_tokens(turn->output, out->value[YAI_HUD_VAR_TURN_OUTPUT], YAI_HUD_VALUE_MAX);
+    yai_format_tokens(turn->cache_read, out->value[YAI_HUD_VAR_TURN_CACHE], YAI_HUD_VALUE_MAX);
+    snprintf(out->value[YAI_HUD_VAR_TURN_COST], YAI_HUD_VALUE_MAX, "%.4f", turn->cost);
+    snprintf(out->value[YAI_HUD_VAR_TURN_TIME], YAI_HUD_VALUE_MAX, "%.1f", turn->seconds);
+    snprintf(out->value[YAI_HUD_VAR_TURN_SPEED], YAI_HUD_VALUE_MAX, "%.0f", speed);
+
+    /* #{turn} — the per-turn line (matches event.c's dispatch_usage). */
+    if (turn->valid) {
+        char input_text[16];
+        char cached_text[16];
+        char output_text[16];
+        yai_format_tokens(turn->input, input_text, sizeof(input_text));
+        yai_format_tokens(turn->cache_read, cached_text, sizeof(cached_text));
+        yai_format_tokens(turn->output, output_text, sizeof(output_text));
+        char timing_text[48] = "";
+        if (turn->seconds > 0.0) {
+            snprintf(timing_text, sizeof(timing_text), " · %.1fs · %.0f tok/s", turn->seconds,
+                     speed);
+        }
+        char cost_text[32] = "";
+        if (turn->has_cost) {
+            snprintf(cost_text, sizeof(cost_text), " · $%.4f", turn->cost);
+        }
+        snprintf(out->value[YAI_HUD_VAR_TURN], YAI_HUD_VALUE_MAX,
+                 "↑%s in · %s cached · ↓%s out%s%s", input_text, cached_text, output_text,
+                 timing_text, cost_text);
+    } else {
+        snprintf(out->value[YAI_HUD_VAR_TURN], YAI_HUD_VALUE_MAX, "waiting for first turn…");
+    }
+
+    /* #{session} — cumulative output + cost + turn count. */
+    char session_output[16];
+    yai_format_tokens(app->usage.output, session_output, sizeof(session_output));
+    char session_cost[32] = "";
+    if (app->usage.cost > 0.0) {
+        snprintf(session_cost, sizeof(session_cost), " · $%.4f", app->usage.cost);
+    }
+    snprintf(out->value[YAI_HUD_VAR_SESSION], YAI_HUD_VALUE_MAX, "session: ↓%s out%s · %d turn(s)",
+             session_output, session_cost, app->usage.turns);
+
+    /* #{stats} — the compact Σ token totals. */
+    char stat_input[16];
+    char stat_output[16];
+    yai_format_tokens(app->usage.input, stat_input, sizeof(stat_input));
+    yai_format_tokens(app->usage.output, stat_output, sizeof(stat_output));
+    snprintf(out->value[YAI_HUD_VAR_STATS], YAI_HUD_VALUE_MAX, "Σ ↑%s ↓%s", stat_input,
+             stat_output);
+}
+
+/* Render the format's first row onto the text status bar (left/center/right
+ * segments). The single-line text bar shows row 0 only; #[fg=...] becomes a
+ * truecolor escape, embedded so it overrides the bar's own segment color. */
+static struct yetty_ycore_void_result yai_text_hud_render(struct yai_app *app,
+                                                          const struct yai_hud_var_values *values)
+{
+    const struct yai_hud_format *format = &app->hud_format;
+    char cell[YAI_HUD_CELL_COUNT][320];
+    for (int index = 0; index < YAI_HUD_CELL_COUNT; index++) {
+        cell[index][0] = '\0';
+    }
+    struct yetty_ycore_rgba primary = {.r = 224, .g = 229, .b = 228, .a = 255};
+    for (int index = 0; index < format->span_count; index++) {
+        const struct yai_hud_format_span *span = &format->spans[index];
+        if (span->row != 0) {
+            continue;
+        }
+        char *destination = cell[span->cell];
+        size_t used = strlen(destination);
+        char escape[32];
+        if (span->color == YAI_HUD_COLOR_DEFAULT) {
+            snprintf(escape, sizeof(escape), "%s", YAI_FG_DEFAULT);
+        } else {
+            struct yetty_ycore_rgba rgba = yai_hud_format_span_rgba(span, primary);
+            snprintf(escape, sizeof(escape), "\033[38;2;%u;%u;%um", (unsigned)rgba.r,
+                     (unsigned)rgba.g, (unsigned)rgba.b);
+        }
+        char text[512];
+        yai_hud_format_expand_span(span, values, text, sizeof(text));
+        snprintf(destination + used, sizeof(cell[0]) - used, "%s%s", escape, text);
+    }
+    struct yetty_ycore_void_result res =
+        yai_renderer_hud_state(&app->renderer, cell[YAI_HUD_CELL_LEFT]);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "yai_text_hud_render: state");
+    res = yai_renderer_hud_quota(&app->renderer, cell[YAI_HUD_CELL_CENTER]);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "yai_text_hud_render: quota");
+    res = yai_renderer_hud_stats(&app->renderer, cell[YAI_HUD_CELL_RIGHT]);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, res, "yai_text_hud_render: stats");
+    return YETTY_OK_VOID();
+}
+
+/* Re-collect the HUD variables and re-render the configured format to the
+ * active backend (ygui HUD window, the text status bar, or nothing). */
 struct yetty_ycore_void_result yai_refresh_hud_stats(struct yai_app *app)
 {
-    const char *model = app->config.model[0] ? app->config.model : "default";
-    char input_text[16];
-    char output_text[16];
-    char cache_text[16];
-    yai_format_tokens(app->usage.input, input_text, sizeof(input_text));
-    yai_format_tokens(app->usage.output, output_text, sizeof(output_text));
-    yai_format_tokens(app->usage.cache_read, cache_text, sizeof(cache_text));
-
+    struct yai_hud_var_values values;
+    yai_hud_collect_values(app, &values);
     if (app->hud) {
-        char model_line[96];
-        snprintf(model_line, sizeof(model_line), "%s · %s", app->engine_name, model);
-        struct yetty_ycore_void_result model_res = yai_hud_set_model(app->hud, model_line);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, model_res, "yai_refresh_hud_stats: model");
-        char primary[96];
-        char secondary[96];
-        snprintf(primary, sizeof(primary), "Σ ↑%s ↓%s", input_text, output_text);
-        snprintf(secondary, sizeof(secondary), "cache %s · $%.4f · %d turn%s", cache_text,
-                 app->usage.cost, app->usage.turns, app->usage.turns == 1 ? "" : "s");
-        struct yetty_ycore_void_result stats_res = yai_hud_set_stats(app->hud, primary, secondary);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, stats_res, "yai_refresh_hud_stats: stats");
-        return YETTY_OK_VOID();
+        struct yetty_ycore_void_result render_res = yai_hud_render(app->hud, &values);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, render_res, "yai_refresh_hud_stats: render");
+        return yai_hud_flush(app->hud);
     }
-    /* Non-yetty tty: one compact line on the text status bar, each field in
-     * its own light brand color (foreground-only, so the bar's mint
-     * background carries through). */
-    char stats_line[320];
-    snprintf(stats_line, sizeof(stats_line),
-             YAI_PRIMARY "%s · %s" YAI_FG_DEFAULT YAI_MINT "  ↑%s ↓%s" YAI_FG_DEFAULT YAI_MUTED
-                         "  $%.4f · %d turn%s" YAI_FG_DEFAULT,
-             app->engine_name, model, input_text, output_text, app->usage.cost, app->usage.turns,
-             app->usage.turns == 1 ? "" : "s");
-    struct yetty_ycore_void_result hud_res = yai_renderer_hud_stats(&app->renderer, stats_line);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, hud_res, "yai_refresh_hud_stats: text hud");
+    if (app->renderer.text_hud) {
+        return yai_text_hud_render(app, &values);
+    }
     return YETTY_OK_VOID();
 }
 
@@ -1781,22 +2349,22 @@ static const char *config_knob_label(const struct yai_app *app, int index)
         return "model";
     }
     const char *key = app->config_knobs[index].key;
-    if (strcmp(key, "permission_mode") == 0) {
+    if (strcmp(key, "permission-mode") == 0) {
         return "permission mode";
     }
-    if (strcmp(key, "allowed_preset") == 0) {
+    if (strcmp(key, "allowed-preset") == 0) {
         return "tools";
     }
-    if (strcmp(key, "codex_sandbox") == 0) {
+    if (strcmp(key, "codex-sandbox") == 0) {
         return "sandbox";
     }
-    if (strcmp(key, "codex_approval") == 0) {
+    if (strcmp(key, "codex-approval") == 0) {
         return "approval";
     }
-    if (strcmp(key, "codex_effort") == 0 || strcmp(key, "claude_effort") == 0) {
+    if (strcmp(key, "codex-effort") == 0 || strcmp(key, "claude-effort") == 0) {
         return "reasoning effort";
     }
-    if (strcmp(key, "gemini_approval_mode") == 0) {
+    if (strcmp(key, "gemini-approval-mode") == 0) {
         return "approval mode";
     }
     return key;
@@ -1830,7 +2398,8 @@ static struct yetty_ycore_void_result build_config_knobs_text(struct yai_app *ap
             struct yetty_ycore_int_result parse_res =
                 parse_engine_knob(app, knob_index, one_spec, engine_labels[knob_index],
                                   sizeof(engine_labels[knob_index]), &throwaway);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, parse_res, "build_config_knobs_text: engine knob");
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, parse_res,
+                                "build_config_knobs_text: engine knob");
             if (parse_res.value > 0) {
                 knob_index++;
             }
@@ -1861,7 +2430,8 @@ static struct yetty_ycore_void_result config_tui_render(struct yai_app *app)
         printf("%s %-16s ", marker, config_knob_label(app, index));
         for (int option = 0; option < app->config_knobs[index].option_count; option++) {
             if (option == app->config_knobs[index].selected) {
-                printf(YAI_MINT YAI_BOLD "[%s]" YAI_RESET " ", app->config_knobs[index].options[option]);
+                printf(YAI_MINT YAI_BOLD "[%s]" YAI_RESET " ",
+                       app->config_knobs[index].options[option]);
             } else {
                 printf(YAI_DIM "%s" YAI_RESET " ", app->config_knobs[index].options[option]);
             }
@@ -1944,7 +2514,8 @@ static struct yetty_ycore_void_result config_tui_key(struct yai_app *app, unsign
     case ' ': {
         int options = app->config_knobs[selected].option_count;
         if (options > 0) {
-            app->config_knobs[selected].selected = (app->config_knobs[selected].selected + 1) % options;
+            app->config_knobs[selected].selected =
+                (app->config_knobs[selected].selected + 1) % options;
         }
         return config_tui_render(app);
     }
@@ -2030,12 +2601,13 @@ static struct yetty_ycore_void_result show_config(struct yai_app *app)
             return YETTY_ERR(yetty_ycore_void, "show_config: yai info truncated");
         }
 
-        const char *current_model = app->config.model[0] ? app->config.model : "(CLI default)";
+        const char *active_model = yai_active_engine_config(app)->model;
+        const char *current_model = active_model[0] ? active_model : "(CLI default)";
         char model_info[256];
-        int model_written = snprintf(
-            model_info, sizeof(model_info),
-            "current: %s\n"
-            "sets the model · applies next turn (claude: next session)", current_model);
+        int model_written = snprintf(model_info, sizeof(model_info),
+                                     "current: %s\n"
+                                     "sets the model · applies next turn (claude: next session)",
+                                     current_model);
         if (model_written < 0 || (size_t)model_written >= sizeof(model_info)) {
             return YETTY_ERR(yetty_ycore_void, "show_config: model info truncated");
         }
@@ -2286,9 +2858,9 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
              * "auto" is also the permission-mode knob's value — store it and
              * (claude) translate to bypassPermissions live; reopening /config
              * shows "auto" selected. */
-            yai_config_set(app, "permission_mode", "auto");
+            yai_config_set(app, "permission-mode", "auto");
             struct yetty_ycore_void_result mode_res =
-                yetty_yai_apply_config(app->engine, app, "permission_mode", "auto");
+                yetty_yai_apply_config(app->engine, app, "permission-mode", "auto");
             YETTY_RETURN_IF_ERR(yetty_ycore_void, mode_res, "handle_input_line: auto mode");
             /* The permission mode is a persisted config knob — keep the file
              * in step with the live change. */
@@ -2345,6 +2917,41 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
                 struct yetty_ycore_void_result prompt_res = show_prompt(app);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, prompt_res,
                                     "handle_input_line: prompt after usage");
+                return YETTY_OK_VOID();
+            }
+            if (strcmp(command->name, "title") == 0) {
+                /* /title <text> — set the session title (#{title} in the HUD).
+                 * Any text but newline; the line editor already stripped the
+                 * newline. Empty arg clears it. */
+                const char *title_arg = line + 1 + word_len;
+                size_t title_len = len - 1 - word_len;
+                while (title_len > 0 && title_arg[0] == ' ') {
+                    title_arg++;
+                    title_len--;
+                }
+                if (title_len >= sizeof(app->session_title)) {
+                    title_len = sizeof(app->session_title) - 1;
+                }
+                memcpy(app->session_title, title_arg, title_len);
+                app->session_title[title_len] = '\0';
+                struct yetty_ycore_void_result suspend_res =
+                    yai_renderer_zone_suspend(&app->renderer);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res,
+                                    "handle_input_line: title suspend");
+                if (app->session_title[0]) {
+                    printf(YAI_DIM "(session title set to \"%s\")" YAI_RESET "\n",
+                           app->session_title);
+                } else {
+                    printf(YAI_DIM "(session title cleared)" YAI_RESET "\n");
+                }
+                struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
+                flush_res =
+                    yetty_ycore_void_chain(flush_res, yai_renderer_zone_resume(&app->renderer));
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "handle_input_line: title flush");
+                yai_report_error(app, "hud refresh", yai_refresh_hud_stats(app));
+                struct yetty_ycore_void_result prompt_res = show_prompt(app);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, prompt_res,
+                                    "handle_input_line: prompt after title");
                 return YETTY_OK_VOID();
             }
             if (strcmp(command->name, "shell") == 0) {
@@ -2411,15 +3018,13 @@ static struct yetty_ycore_void_result handle_input_line(struct yai_app *app, con
     if (YETTY_IS_ERR(activity_res)) {
         yai_report_error(app, "activity", activity_res);
     }
-    struct yetty_ycore_void_result send_res =
-        yetty_yai_send_user_message(app->engine, app, copy);
+    struct yetty_ycore_void_result send_res = yetty_yai_send_user_message(app->engine, app, copy);
     free(copy);
     if (YETTY_IS_ERR(send_res)) {
         /* Recoverable UI flow: the prompt comes back, the user retries.
          * This is an end-consumer point for the send error. */
         app->waiting = 0;
-        yai_report_error(app, "activity clear",
-                         yai_renderer_activity_clear(&app->renderer));
+        yai_report_error(app, "activity clear", yai_renderer_activity_clear(&app->renderer));
         yai_report_error(app, "send", send_res);
         struct yetty_ycore_void_result prompt_res = show_prompt(app);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, prompt_res, "handle_input_line: prompt after send");
@@ -2548,8 +3153,7 @@ static struct yetty_ycore_void_result editor_interrupt(struct yai_app *app)
      * a deny (unblocking the CLI), then falls through to interrupt the
      * turn — Ctrl-C must work the same here as during any other request. */
     if (app->pending_permission.active) {
-        struct yetty_ycore_void_result deny_res =
-            yetty_yai_resolve_permission(app->engine, app, 0);
+        struct yetty_ycore_void_result deny_res = yetty_yai_resolve_permission(app->engine, app, 0);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, deny_res, "editor_interrupt: deny pending");
     }
     if (app->waiting && app->child_alive) {
@@ -2653,9 +3257,9 @@ static struct yetty_ycore_void_result permission_key(struct yai_app *app, unsign
         return yetty_yai_resolve_permission(app->engine, app, 1);
     case '!': {
         /* Auto: approve everything from now on, then allow the current. */
-        yai_config_set(app, "permission_mode", "auto");
+        yai_config_set(app, "permission-mode", "auto");
         struct yetty_ycore_void_result mode_res =
-            yetty_yai_apply_config(app->engine, app, "permission_mode", "auto");
+            yetty_yai_apply_config(app->engine, app, "permission-mode", "auto");
         YETTY_RETURN_IF_ERR(yetty_ycore_void, mode_res, "permission_key: auto mode");
         /* The permission mode is a persisted config knob — keep the file in
          * step with the live change. */
@@ -2688,7 +3292,8 @@ static struct yetty_ycore_void_result keyboard_input(struct yai_app *app, const 
     /* The settings TUI owns the keyboard while it's on the alt screen. */
     if (app->config_tui_active) {
         for (size_t index = 0; index < len && app->config_tui_active; index++) {
-            struct yetty_ycore_void_result key_res = config_tui_key(app, (unsigned char)bytes[index]);
+            struct yetty_ycore_void_result key_res =
+                config_tui_key(app, (unsigned char)bytes[index]);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, key_res, "keyboard_input: config tui key");
         }
         return YETTY_OK_VOID();
@@ -2700,7 +3305,8 @@ static struct yetty_ycore_void_result keyboard_input(struct yai_app *app, const 
         for (size_t index = 0; index < len && app->pending_permission.active; index++) {
             struct yetty_ycore_void_result verdict_res =
                 permission_key(app, (unsigned char)bytes[index]);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, verdict_res, "keyboard_input: permission verdict");
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, verdict_res,
+                                "keyboard_input: permission verdict");
         }
         return YETTY_OK_VOID();
     }
@@ -2822,15 +3428,16 @@ static struct yetty_ycore_void_result config_note(struct yai_app *app, const cha
  * scrollback note. Shared by the ygui dialog sync and the text TUI. */
 static struct yetty_ycore_void_result apply_config_knob(struct yai_app *app, int knob_index)
 {
-    const char *value = app->config_knobs[knob_index].options[app->config_knobs[knob_index].selected];
+    const char *value =
+        app->config_knobs[knob_index].options[app->config_knobs[knob_index].selected];
     if (app->config_knobs[knob_index].is_edit_mode) {
         struct yetty_ycore_void_result mode_res = yai_set_edit_mode(app, value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, mode_res, "apply_config_knob: edit mode");
         return config_note(app, "edit mode", value);
     }
     if (app->config_knobs[knob_index].is_model) {
-        /* "default" clears the override; the engines read config.model at
-         * the next spawn. */
+        /* "default" clears the override; the active engine reads its section's
+         * model at the next spawn. */
         const char *model = strcmp(value, "default") == 0 ? "" : value;
         yai_config_set(app, "model", model);
         struct yetty_ycore_void_result stats_res = yai_refresh_hud_stats(app);
@@ -2864,12 +3471,14 @@ static struct yetty_ycore_void_result config_dialog_sync(struct yai_app *app)
     }
     if (values.show_thinking != app->config_show_thinking_applied) {
         app->config_show_thinking_applied = values.show_thinking;
-        app->renderer.show_thinking = values.show_thinking;
+        app->config.show_thinking = values.show_thinking;
+        yai_config_resolve(app);
     }
     int fold_lines = (int)(values.fold_lines + 0.5f);
     if (fold_lines != app->config_fold_lines_applied) {
         app->config_fold_lines_applied = fold_lines;
-        app->renderer.fold_lines = fold_lines;
+        app->config.fold_lines = fold_lines > 0 ? fold_lines : YAI_DEFAULT_FOLD_LINES;
+        yai_config_resolve(app);
     }
     for (int knob = 0; knob < app->config_knob_count && knob < YAI_HUD_CONFIG_MAX_KNOBS; knob++) {
         int chosen = values.knob_selected[knob];
@@ -3034,8 +3643,7 @@ static void on_yface_osc(void *user, int wire_code, const uint8_t *args, size_t 
         return;
     case YETTY_OSC_SC_CLIENT_INPUT_RESIZE:
     case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE:
-        yai_report_error(app, "resize envelope",
-                         handle_resize_envelope(app, payload, payload_len));
+        yai_report_error(app, "resize envelope", handle_resize_envelope(app, payload, payload_len));
         return;
     case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_FOCUS:
         return; /* focus is client-side; the host's notion is ignored */
@@ -3195,8 +3803,7 @@ static struct yetty_ycore_void_result input_watchers_start(struct yai_app *app)
     }
     app->sigwinch_handle.data = app;
     if (uv_signal_start(&app->sigwinch_handle, on_sigwinch, SIGWINCH) != 0) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "input_watchers_start: sigwinch uv_signal_start failed");
+        return YETTY_ERR(yetty_ycore_void, "input_watchers_start: sigwinch uv_signal_start failed");
     }
     /* SIGTERM / SIGHUP → clean shutdown, so an external kill or a closed
      * pane restores the terminal instead of leaking input subscriptions. */
@@ -3277,6 +3884,8 @@ static struct yetty_ycore_void_result yai_set_edit_mode(struct yai_app *app, con
     struct yetty_ycore_void_result free_res = yetty_yclass_object_free(app->editor);
     app->editor = editor_res.value;
     app->editor_mode_name = target;
+    /* The edit-mode knob edits the global default, not a per-backend override. */
+    snprintf(app->config.edit_mode, sizeof(app->config.edit_mode), "%s", target);
     /* vi enters in insert; emacs has no modal indicator. The first
      * keystroke refreshes this, but set it now so the prompt is right
      * the instant the mode changes. */
@@ -3291,63 +3900,67 @@ static struct yetty_ycore_void_result yai_set_edit_mode(struct yai_app *app, con
  * diagnostics in main()). */
 static void print_usage(FILE *stream, const char *program)
 {
-    fprintf(stream,
-            "yai — a hackable AI-CLI TUI for yetty (Claude Code / Codex / Gemini)\n"
-            "\n"
-            "Usage:\n"
-            "  %s [options]\n"
-            "\n"
-            "Options (all engines):\n"
-            "  --engine <claude|codex|gemini>  AI CLI to drive (default: claude)\n"
-            "  --model <id>                    model override (engine-specific id)\n"
-            "  --edit-mode <emacs|vi>          line-editor mode (default: emacs)\n"
-            "  --show-thinking                 stream dim \"thinking\" text\n"
-            "  --fold-lines <n>                tool-output preview cap (default: 8)\n"
-            "  --no-hud                        no ygui status window; stats as plain text\n"
-            "  --hud-float                     float the HUD window instead of docking it\n"
-            "  --resume <id>                   resume a conversation (claude session / codex "
-            "thread)\n"
-            "  --markdown                      render answers as yetty markdown figures "
-            "(yetty host only)\n"
-            "  --animate                       animated activity glyph (costs ~100%% CPU; "
-            "default static)\n"
-            "  --rpc <port>                    msgpack-RPC control server on 127.0.0.1:<port>\n"
-            "  --connect <port> <method> [a…]  client: drive another running yai's --rpc server, "
-            "print reply, exit\n"
-            "                                  (methods: run \"<line>\" · status)\n"
-            "  -h, --help                      show this help and exit\n"
-            "\n"
-            "Options (claude):\n"
-            "  --permission-mode <default|acceptEdits|plan|auto>   (auto = approve all)\n"
-            "  --allowed-preset <curated|readonly|edit|full>\n"
-            "  --allowed-tools <comma-list>    explicit allowlist (overrides the preset)\n"
-            "  --claude-effort <auto|low|medium|high|xhigh|max>\n"
-            "\n"
-            "Options (codex):\n"
-            "  --codex-sandbox <read-only|workspace-write|danger-full-access>\n"
-            "  --codex-approval <never|on-request|untrusted>   (exec: only 'never' is serviceable)\n"
-            "  --codex-effort <minimal|low|medium|high>\n"
-            "\n"
-            "Options (gemini):\n"
-            "  --gemini-approval <default|auto_edit|yolo>\n"
-            "\n"
-            "Settings persist to the yetty config file; flags override the file for the run.\n"
-            "At the prompt:\n"
-            "  <text> + Enter   send a message to the agent\n"
-            "  /quit, /exit     quit (or Ctrl-D)\n"
-            "  /config          open the config panel (model, permissions, …)\n"
-            "  /shell, !<cmd>   drop to a shell; the prompt resumes when it exits\n"
-            "  Ctrl-G           edit the message in $EDITOR (with the last reply for reference)\n"
-            "  Ctrl-C           interrupt the turn in flight\n"
-            "  Tab / Up / Down  slash-command completion menu\n"
-            "\n"
-            "Each session's JSONL transcript is written to tmp/transcript-<session>.jsonl\n",
-            program);
+    fprintf(
+        stream,
+        "yai — a hackable AI-CLI TUI for yetty (Claude Code / Codex / Gemini)\n"
+        "\n"
+        "Usage:\n"
+        "  %s [options]\n"
+        "\n"
+        "Options (all engines):\n"
+        "  --engine <claude|codex|gemini>  AI CLI to drive (default: claude)\n"
+        "  --model <id>                    model override (engine-specific id)\n"
+        "  --edit-mode <emacs|vi>          line-editor mode (default: emacs)\n"
+        "  --show-thinking                 stream dim \"thinking\" text\n"
+        "  --fold-lines <n>                tool-output preview cap (default: 8)\n"
+        "  --no-hud                        no ygui status window; stats as plain text\n"
+        "  --hud-float                     float the HUD window instead of docking it\n"
+        "  --resume <id>                   resume a conversation (claude session / codex "
+        "thread)\n"
+        "  --markdown                      render answers as yetty markdown figures "
+        "(yetty host only)\n"
+        "  --animate                       animated activity glyph (costs ~100%% CPU; "
+        "default static)\n"
+        "  --rpc <port>                    msgpack-RPC control server on 127.0.0.1:<port>\n"
+        "  --connect <port> <method> [a…]  client: drive another running yai's --rpc server, "
+        "print reply, exit\n"
+        "                                  (methods: run \"<line>\" · status)\n"
+        "  -h, --help                      show this help and exit\n"
+        "\n"
+        "Options (claude):\n"
+        "  --permission-mode <default|acceptEdits|plan|auto>   (auto = approve all)\n"
+        "  --allowed-preset <curated|readonly|edit|full>\n"
+        "  --allowed-tools <comma-list>    explicit allowlist (overrides the preset)\n"
+        "  --claude-effort <auto|low|medium|high|xhigh|max>\n"
+        "\n"
+        "Options (codex):\n"
+        "  --codex-sandbox <read-only|workspace-write|danger-full-access>\n"
+        "  --codex-approval <never|on-request|untrusted>   (exec: only 'never' is serviceable)\n"
+        "  --codex-effort <minimal|low|medium|high>\n"
+        "\n"
+        "Options (gemini):\n"
+        "  --gemini-approval <default|auto_edit|yolo>\n"
+        "\n"
+        "Settings persist to the yetty config file; flags override the file for the run.\n"
+        "At the prompt:\n"
+        "  <text> + Enter   send a message to the agent\n"
+        "  /quit, /exit     quit (or Ctrl-D)\n"
+        "  /config          open the config panel (model, permissions, …)\n"
+        "  /shell, !<cmd>   drop to a shell; the prompt resumes when it exits\n"
+        "  Ctrl-G           edit the message in $EDITOR (with the last reply for reference)\n"
+        "  Ctrl-C           interrupt the turn in flight\n"
+        "  Tab / Up / Down  slash-command completion menu\n"
+        "\n"
+        "Each session's JSONL transcript is written to tmp/transcript-<session>.jsonl\n",
+        program);
 }
 
 int main(int argc, char **argv)
 {
     ytrace_init();
+    /* Honor the user's locale for time formatting (quota reset times use the
+     * locale's month names and am/pm markers). */
+    setlocale(LC_TIME, "");
 
     /* Client mode: `yai --connect <port> <method> [args...]` makes this
      * yai a one-shot client of ANOTHER running yai's --rpc server — send
@@ -3384,16 +3997,16 @@ int main(int argc, char **argv)
         const char *key;
     } value_flags[] = {
         {"--model", "model"},
-        {"--edit-mode", "edit_mode"},
-        {"--fold-lines", "fold_lines"},
-        {"--permission-mode", "permission_mode"},
-        {"--allowed-preset", "allowed_preset"},
-        {"--allowed-tools", "allowed_tools"},
-        {"--claude-effort", "claude_effort"},
-        {"--codex-sandbox", "codex_sandbox"},
-        {"--codex-approval", "codex_approval"},
-        {"--codex-effort", "codex_effort"},
-        {"--gemini-approval", "gemini_approval_mode"},
+        {"--edit-mode", "edit-mode"},
+        {"--fold-lines", "fold-lines"},
+        {"--permission-mode", "permission-mode"},
+        {"--allowed-preset", "allowed-preset"},
+        {"--allowed-tools", "allowed-tools"},
+        {"--claude-effort", "claude-effort"},
+        {"--codex-sandbox", "codex-sandbox"},
+        {"--codex-approval", "codex-approval"},
+        {"--codex-effort", "codex-effort"},
+        {"--gemini-approval", "gemini-approval-mode"},
     };
     const char *resume_session_id = NULL;
     int markdown_requested = 0;
@@ -3410,11 +4023,11 @@ int main(int argc, char **argv)
         } else if (strcmp(arg, "--animate") == 0) {
             animate_requested = 1;
         } else if (strcmp(arg, "--show-thinking") == 0) {
-            yai_config_set(app, "show_thinking", "1");
+            yai_config_set(app, "show-thinking", "1");
         } else if (strcmp(arg, "--no-hud") == 0) {
-            yai_config_set(app, "no_hud", "1");
+            yai_config_set(app, "hud-on", "0");
         } else if (strcmp(arg, "--hud-float") == 0) {
-            yai_config_set(app, "hud_float", "1");
+            yai_config_set(app, "hud-float", "1");
         } else if (strcmp(arg, "--rpc") == 0) {
             if (arg_index + 1 >= argc) {
                 fprintf(stderr, "yai: --rpc needs a port\n");
@@ -3466,6 +4079,16 @@ int main(int argc, char **argv)
             }
         }
     }
+    /* Materialize the resolved config to disk so the file always reflects the
+     * current schema (per-engine sections + the global hud_format) and is
+     * self-documenting from the first run — even if this session is later
+     * killed rather than exited cleanly. Best-effort: the renderer isn't up
+     * yet, so absorb any error here rather than routing it through the UI. */
+    struct yetty_ycore_void_result materialize_res = yai_config_save(app);
+    if (YETTY_IS_ERR(materialize_res)) {
+        yetty_ycore_error_destroy(materialize_res.error);
+    }
+
     const char *engine_name = app->engine_name;
     struct yetty_yclass_object_ptr_result engine_res = create_engine(engine_name);
     if (YETTY_IS_ERR(engine_res)) {
@@ -3540,9 +4163,8 @@ int main(int argc, char **argv)
     int stderr_fd = STDERR_FILENO;
     struct yetty_ycore_int_result stderr_log_res = child_stderr_log_open(engine_name, file_tag);
     if (YETTY_IS_ERR(stderr_log_res)) {
-        yai_report_error(
-            app, "child stderr log",
-            (struct yetty_ycore_void_result){.ok = 0, .error = stderr_log_res.error});
+        yai_report_error(app, "child stderr log",
+                         (struct yetty_ycore_void_result){.ok = 0, .error = stderr_log_res.error});
     } else {
         stderr_fd = stderr_log_res.value;
     }
@@ -3552,7 +4174,12 @@ int main(int argc, char **argv)
      * echoes the ESC bytes back and the host renders "^[" garbage. */
     yai_report_error(app, "raw input", enter_raw_input(app));
 
-    struct yai_hud_ptr_result hud_res = yai_hud_create(app->config.no_hud, app->config.hud_float);
+    /* The ygui HUD is built only when hud-on is true AND hud-mode selects it;
+     * "text" mode skips creation and falls through to the text status bar. */
+    int want_ygui_hud =
+        yai_effective_hud_on(app) && strcmp(yai_effective_hud_mode(app), "yetty") == 0;
+    struct yai_hud_ptr_result hud_res =
+        yai_hud_create(want_ygui_hud, yai_effective_hud_float(app));
     if (YETTY_IS_ERR(hud_res)) {
         yai_report_error(app, "hud create",
                          (struct yetty_ycore_void_result){.ok = 0, .error = hud_res.error});
@@ -3560,16 +4187,34 @@ int main(int argc, char **argv)
     } else {
         app->hud = hud_res.value;
     }
-    /* The ygui HUD window renders only under yetty. On any other tty there
-     * is no window (yai_hud_create returned NULL), so drive the renderer's
-     * text status bar instead — unless the HUD was disabled (--no-hud) or
-     * stdout is not a tty (pin_enabled is false: no bottom row to pin). */
-    if (!app->hud && app->renderer.pin_enabled && !app->renderer.pin_shader_glyphs &&
-        !app->config.no_hud) {
+    /* Whenever there is no ygui HUD window (yai_hud_create returned NULL —
+     * because hud-mode is "text", the host is not yetty, or creation failed),
+     * drive the renderer's text status bar instead. This is independent of the
+     * host: an explicit hud-mode "text" under yetty still wants the text bar,
+     * so it must NOT key off pin_shader_glyphs (host==yetty) — doing so wrongly
+     * suppressed the text bar whenever yai ran inside yetty. Skipped only when
+     * the HUD is disabled (hud_on=false) or stdout is not a tty (pin_enabled is
+     * false: no bottom row to pin). */
+    if (!app->hud && app->renderer.pin_enabled && yai_effective_hud_on(app)) {
         app->renderer.text_hud = 1;
     }
-    /* Seed the HUD right column with the model + zeroed stats so it reads
-     * sensibly before the first turn lands. */
+    /* Parse the configured HUD format (both backends read app->hud_format:
+     * the ygui HUD builds labels from it, the text bar expands its row 0).
+     * A bad format falls back to the built-in default so the HUD always has
+     * content. */
+    struct yetty_ycore_void_result format_res =
+        yai_hud_format_parse(&app->hud_format, yai_effective_hud_format(app));
+    if (YETTY_IS_ERR(format_res)) {
+        yai_report_error(app, "hud format", format_res);
+        yai_report_error(app, "hud format default",
+                         yai_hud_format_parse(&app->hud_format, YAI_DEFAULT_HUD_FORMAT));
+    }
+    if (app->hud) {
+        yai_report_error(app, "hud set format", yai_hud_set_format(app->hud, &app->hud_format));
+    }
+    /* Seed the HUD with the current values so it reads sensibly before the
+     * first turn lands (idle state, like the legacy HUD's default). */
+    snprintf(app->state_text, sizeof(app->state_text), "%s", "idle");
     yai_report_error(app, "hud stats", yai_refresh_hud_stats(app));
 
     struct yetty_yface_ptr_result yface_res = yetty_yface_create();
@@ -3699,8 +4344,8 @@ int main(int argc, char **argv)
      * it's the server thread id (differs from the file tag); gemini has
      * none, so the line is skipped. */
     if (app->session_id[0]) {
-        printf(YAI_MINT "session %s" YAI_RESET YAI_DIM " · resume: yai --engine %s --resume %s"
-                        YAI_RESET "\n",
+        printf(YAI_MINT "session %s" YAI_RESET YAI_DIM
+                        " · resume: yai --engine %s --resume %s" YAI_RESET "\n",
                app->session_id, app->engine_name, app->session_id);
     }
     printf(YAI_DIM "transcript saved to %s" YAI_RESET "\n", app->transcript_path);
@@ -3721,6 +4366,8 @@ int main(int argc, char **argv)
     }
     yai_drop_pending_permission(app);
     yai_command_table_destroy(&app->commands);
+    /* The HUD (destroyed above) only borrowed this; free it now. */
+    yai_hud_format_free(&app->hud_format);
     yai_renderer_destroy(&app->renderer);
     for (int history_index = 0; history_index < app->history_len; history_index++) {
         free(app->history[history_index]);

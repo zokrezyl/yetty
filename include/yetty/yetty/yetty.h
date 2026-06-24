@@ -2,6 +2,7 @@
 #define YETTY_YETTY_YETTY_H
 
 #include <yetty/ycore/result.h>
+#include <yetty/yplatform/gpu-context.h>
 #include <webgpu/webgpu.h>
 #include <stdint.h>
 
@@ -13,7 +14,6 @@ extern "C" {
 struct yetty_yetty_yetty;
 struct yetty_yconfig_config;
 struct yetty_ycore_xthread_event_pipe;
-struct yetty_platform_clipboard_manager;
 struct yetty_yplatform_pty_factory;
 struct yetty_yclass_object;
 struct yetty_yevent_event_loop;
@@ -21,49 +21,14 @@ struct yetty_ydraw_gpu_allocator;
 struct yetty_ymsdf_generator;
 struct yetty_yframework;
 
-/* Platform-supplied GPU bindings created by yinit. Embedded by value in
- * yetty_yframework_gpu_context so consumers can pass &gpu.app_gpu_context
- * by pointer to anything that wants the platform-level slice. */
-struct yetty_yinit_gpu_context {
-    WGPUInstance instance;
-    WGPUSurface surface;
-    uint32_t surface_width;
-    uint32_t surface_height;
-
-    /* HiDPI scale = framebuffer_size / window_size, captured at startup
-     * (default 1.0 on non-HiDPI). Pure read-only knob: anything that
-     * loads a size in CSS-pixel-ish units from the user's config (font
-     * size, padding) multiplies by this to render at framebuffer
-     * resolution. Rendering, hit-tests, render-target dimensions etc.
-     * are already in framebuffer pixels and ignore this field. */
-    float content_scale;
-
-    /* Optional X11 native handles. Populated by the platform layer on
-     * Linux/X11 (opaque here to keep Xlib out of this header); NULL / 0 on
-     * every other platform. yframework reads these only when picking the
-     * X11-tile render target — see yetty/yframework/yframework.c. */
-    void *x11_display;        /* Display * */
-    unsigned long x11_window; /* Window (XID) */
-};
-
-/* Convert a logical (CSS-pixel-ish) dimension to framebuffer pixels for
- * the given platform GPU context. The contract on `content_scale` (see
- * the comment above) is that every hardcoded chrome dimension — tab
- * strip height, titlebar buttons, splitter thickness, font sizes — is
- * authored in logical units and multiplied through this helper at the
- * use site so HiDPI / Retina displays render at the correct physical
- * size. NULL ctx or non-positive scale falls back to 1.0f, matching the
- * "platform without HiDPI" path. */
-static inline float yetty_dp_to_px(const struct yetty_yinit_gpu_context *gpu, float logical_px)
-{
-    float s = (gpu && gpu->content_scale > 0.0f) ? gpu->content_scale : 1.0f;
-    return logical_px * s;
-}
+/* The platform-supplied GPU bring-up slice (instance/surface/dims/scale/x11)
+ * and the yetty_dp_to_px helper now live in <yetty/yplatform/gpu-context.h>,
+ * included above — they belong to the platform layer that produces them. */
 
 /* Runtime-owned GPU objects, built on top of the platform slice above.
  * Created by yetty_yframework_create; lives on struct yetty_yframework. */
 struct yetty_yframework_gpu_context {
-    struct yetty_yinit_gpu_context app_gpu_context;
+    struct yetty_yplatform_gpu_context app_gpu_context;
     WGPUAdapter adapter;
     WGPUDevice device;
     WGPUQueue queue;

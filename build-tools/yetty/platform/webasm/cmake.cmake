@@ -16,10 +16,20 @@ add_compile_definitions(YETTY_WEB=1 YETTY_ANDROID=0)
 # Set shader directory path for web (used by card libraries)
 set(YETTY_SHADERS_DIR "/assets/shaders" CACHE STRING "Shader directory path")
 
-# Platform sources
+# Platform sources. The new yplatform app-injection bootstrap (webasm_platform +
+# the shared ymain/webasm entry + the per-OS window/clipboard yclass subclasses)
+# replaces the deleted yinit/webasm.c + yinit/webasm-run.c. window/webasm.c stays
+# — it provides the canvas C helpers the webasm_window class + surface read.
 set(YETTY_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/yinit/webasm.c
-    ${YETTY_ROOT}/src/yetty/yinit/webasm-run.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ymain/webasm.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ymain/webasm-input.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/platform.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/webasm.c
+    ${YETTY_ROOT}/src/yetty/yplatform/rpc.gen.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/webasm.c
+    ${YETTY_ROOT}/src/yetty/yetty/app.c
+    ${YETTY_ROOT}/src/yetty/yetty/rpc.gen.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/window/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/webasm.c
@@ -37,7 +47,6 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ynet/lwip-port.c
     ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webasm/brotli-glue.c
-    ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
 )
 
@@ -200,7 +209,16 @@ add_executable(ygreeter
     ${YETTY_ROOT}/src/yetty/yconfig/config.c
     ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
     ${YETTY_ROOT}/src/yetty/ynotify/ynotify.c
-    ${YETTY_ROOT}/src/yetty/yinit/webasm-run.c
+    # New yplatform app-injection bootstrap (replaces the deleted
+    # yinit/webasm-run.c). ygreeter owns its own main() (Class 2), so it pulls
+    # the webasm_platform + window/clipboard subclasses + the HTML5 input layer,
+    # but NOT ymain/webasm.c (that main is the yetty target's).
+    ${YETTY_ROOT}/src/yetty/yplatform/ymain/webasm-input.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/platform.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/webasm.c
+    ${YETTY_ROOT}/src/yetty/yplatform/rpc.gen.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/window/webasm.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/webasm.c
@@ -255,9 +273,9 @@ set_target_properties(ygreeter PROPERTIES
     LINK_DEPENDS ${YETTY_ROOT}/build-tools/web/yetty-assets-preload.js)
 
 # Standalone ygreeter's lib set (mirrors tools/ygreeter/CMakeLists.txt's
-# webgpu link line). move_resize / window_manager are desktop-only — on
-# webasm the window_manager symbols resolve via stubs in
-# yetty_yplatform_core (window_manager is NULL, the stubs early-return).
+# webgpu link line). move_resize / window_chrome are desktop-only — on
+# webasm the window_chrome symbols resolve via stubs in
+# yetty_yplatform_core (window_chrome is NULL, the stubs early-return).
 target_link_libraries(ygreeter PRIVATE
     yetty_ygui
     yetty_ywire

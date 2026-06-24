@@ -57,21 +57,21 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND YETTY_ENABLE_LIB_WEBGPU)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(YRICH_FONTCONFIG REQUIRED fontconfig)
 
-    # yinit / yframework / platform bring-up — no static lib exists for
-    # this layer, so each standalone-window binary pulls the sources in.
+    # yrich:app is a yapp:app subclass (class yrich:app in app.c). Its public
+    # entry yetty_yrich_app_run drives the glfw_platform bootstrap
+    # (${YETTY_APP_BOOTSTRAP_SOURCES}) directly — no shared ymain entry — so the
+    # thin ydoc / ysheet / yslide tools just hand it a document object. No static
+    # lib exists for this platform layer, so the sources are pulled in here.
     set(YRICH_APP_PLATFORM_SOURCES
-        ${YETTY_ROOT}/src/yetty/yinit/glfw.c
+        ${YETTY_APP_BOOTSTRAP_SOURCES}
         ${YETTY_ROOT}/src/yetty/yframework/yframework.c
         ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
-        ${YETTY_ROOT}/src/yetty/yplatform/clipboard/default.c
-        ${YETTY_ROOT}/src/yetty/yplatform/window/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/webgpu/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
         ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
-        ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
         ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
         ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
         ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
@@ -82,7 +82,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND YETTY_ENABLE_LIB_WEBGPU)
 
     add_library(yetty_yrich_app OBJECT
         yrich-shell.c
-        yrich-app.c
+        app.c
         ${YRICH_APP_PLATFORM_SOURCES}
     )
 
@@ -137,7 +137,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND YETTY_ENABLE_LIB_WEBGPU)
         yetty_ywire
         yetty_yplatform_core
         yetty_yplatform_move_resize
-        yetty_yplatform_window_manager
+        yetty_yplatform_window_chrome
         yetty_ychrome
         yetty_yco
         yetty_telnet

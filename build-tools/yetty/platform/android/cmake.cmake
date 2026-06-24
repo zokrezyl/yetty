@@ -39,8 +39,12 @@ file(MAKE_DIRECTORY ${ANDROID_ASSETS_DIR})
 
 # Platform sources — Android-specific + shared Unix components (all C)
 set(YETTY_PLATFORM_SOURCES
-    ${YETTY_ROOT}/src/yetty/yinit/android-glue.c
-    ${YETTY_ROOT}/src/yetty/yinit/android.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ymain/android-glue.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ymain/android.c
+    # The concrete app the android entry injects via yetty_yapp_create_app
+    # (its run() builds the framework/terminal — same yetty:app as desktop/web).
+    ${YETTY_ROOT}/src/yetty/yetty/app.c
+    ${YETTY_ROOT}/src/yetty/yetty/rpc.gen.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/android.c
     ${YETTY_ROOT}/src/yetty/yplatform/libuv-event-loop/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/coroutine/default.c
@@ -50,7 +54,6 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/ypty/memory-pty.c
     ${YETTY_ROOT}/src/yetty/yplatform/pty-factory/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/pipe/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/extract-assets/default.c
     ${YETTY_ROOT}/src/yetty/yncbin/incbin-assets.c
     ${YETTY_ROOT}/src/yetty/ypty/temu-pty.c
 )
@@ -186,7 +189,7 @@ add_library(ygreeter SHARED
     ${YETTY_ROOT}/src/yetty/yshadertoy/demo-shaders.c
     # Shared NDK app glue — window/input/IME/looper + android_main, calls
     # ygreeter's yetty_android_program_init/_term (resolved here).
-    ${YETTY_ROOT}/src/yetty/yinit/android-glue.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ymain/android-glue.c
     # Core sources ygreeter compiles directly (not provided as libs) —
     # mirrors tools/ygreeter/CMakeLists.txt's YGREETER_SOURCES + the
     # Android platform backends (default.c, not glfw/webasm).
@@ -325,7 +328,7 @@ add_library(yhello SHARED
     ${YETTY_ROOT}/src/yetty/yshadertoy/demo-shaders.c
     # Shared NDK app glue — window/input/IME/looper + android_main, calls
     # yhello's yetty_android_program_init/_term (resolved here).
-    ${YETTY_ROOT}/src/yetty/yinit/android-glue.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ymain/android-glue.c
     # Core sources yhello compiles directly (not provided as libs) —
     # mirrors tools/yhello/CMakeLists.txt's YHELLO_SOURCES + the Android
     # platform backends (default.c / android.c, not glfw).
@@ -371,8 +374,8 @@ if(NOT MSVC)
 endif()
 
 # Showcase lib set — mirrors the desktop tools/yhello/CMakeLists.txt link line
-# (minus the GLFW-only yetty_yplatform_move_resize / _window_manager, whose
-# window_manager stubs resolve via yetty_yplatform_core on Android) + the
+# (minus the GLFW-only yetty_yplatform_move_resize / _window_chrome, whose
+# window_chrome stubs resolve via yetty_yplatform_core on Android) + the
 # Android app glue libs (native_app_glue whole-archived so
 # ANativeActivity_onCreate is retained; android + log for the NDK).
 target_link_libraries(yhello PRIVATE

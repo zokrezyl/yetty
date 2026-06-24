@@ -39,6 +39,9 @@ struct yetty_ycore_void_result yetty_ygui_register(void);
 
 struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_yclass_object *obj,
                                                            const char *label);
+/* Draw the button as a window-control cell with an SDF icon instead of a text
+ * label: 0=none (normal label button), 1=minimize, 2=maximize, 3=close. Used by
+ * yetty's yui titlebar so its controls match the ychrome-driven tools. */
 struct yetty_ycore_void_result yetty_ygui_button_set_chrome_icon(struct yetty_yclass_object *obj,
                                                                  int kind);
 struct yetty_ycore_const_char_ptr_result yetty_ygui_button_get_label(

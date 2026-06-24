@@ -19,6 +19,7 @@ extern "C" {
 
 struct yetty_yrich_slide;
 
+/* Shape kinds — exposed in the generated slides.h. */
 enum yetty_yrich_shape_kind {
     YETTY_YRICH_SHAPE_RECTANGLE = 0,
     YETTY_YRICH_SHAPE_ELLIPSE = 1,

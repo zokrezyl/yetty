@@ -86,6 +86,9 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_o
                                                            struct yetty_ygui_emit_ctx *emit_ctx);
 struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_object *obj);
+/* Wheel / trackpad scroll. (dx, dy) are the deltas at (x, y). Default:
+ * not handled (0), so the framework keeps bubbling to an ancestor that
+ * scrolls. Scrollable widgets (scrollarea, filepicker) override this. */
 struct yetty_ycore_int_result yetty_ygui_widget_on_scroll(struct yetty_yclass_object *obj, float x,
                                                           float y, float dx, float dy);
 struct yetty_ycore_void_result yetty_ygui_widget_paint(struct yetty_yclass_object *obj,
@@ -114,6 +117,9 @@ struct yetty_yclass_object_ptr_result yetty_ygui_widget_create(struct yetty_ycla
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
+/* The flex layout pass is defined in layout.c — a non-class TU that produces
+ * no header of its own — but its public declaration belongs to the widget API,
+ * so expose it from here (codegen emits the prototype into widget.h). */
 struct yetty_ycore_void_result yetty_ygui_layout_compute(struct yetty_yclass_object *root,
                                                          struct yetty_ycore_rectangle root_rect);
 struct yetty_ygui_layout yetty_ygui_layout_default(void);
@@ -160,7 +166,9 @@ uint32_t yetty_ygui_widget_id(const struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_widget_set_dirty(struct yetty_yclass_object *obj);
 int yetty_ygui_widget_is_dirty(const struct yetty_yclass_object *obj);
 int yetty_ygui_widget_is_hovered(const struct yetty_yclass_object *obj);
+/* Create a parentless (root / top-level) widget of `cls`. */
 struct yetty_yclass_object_ptr_result yetty_ygui_widget_new(const struct yetty_yclass *cls);
+/* Create a widget of `cls` and add it as the last child of `parent`. */
 struct yetty_yclass_object_ptr_result yetty_ygui_widget_add(struct yetty_yclass_object *parent,
                                                             const struct yetty_yclass *cls);
 struct yetty_ycore_void_result yetty_ygui_widget_destroy(struct yetty_yclass_object *obj);

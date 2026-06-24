@@ -16,7 +16,7 @@
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yframework/yframework.h>
-#include <yetty/yplatform/window-manager.h>
+#include <yetty/yplatform/ywindow-chrome/window-chrome.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
@@ -74,7 +74,7 @@ struct yetty_yui_tabbar_model {
      * resize handles; we re-implement them in software here for all four
      * margins + corners. Right/bottom keep the top-left fixed → track
      * incrementally from resize_last. Left/top move the origin (handled by the
-     * window_manager from fresh geometry) → after each move the window-relative
+     * window_chrome from fresh geometry) → after each move the window-relative
      * cursor snaps back to the press anchor, so they measure from resize_anchor
      * (not updated) to avoid a feedback loop. Matches ychrome's engine. */
     int resizing;
@@ -113,7 +113,7 @@ struct yetty_yui_tabbar_model {
 
 /* Convert a logical (DP) chrome dimension to framebuffer pixels using
  * the bound context's HiDPI content_scale (see
- * yetty_yinit_gpu_context::content_scale). Falls back to 1× when ctx
+ * yetty_yplatform_gpu_context::content_scale). Falls back to 1× when ctx
  * isn't bound yet — pre-first-add the strip is never hit-tested or
  * laid out anyway, so this keeps callers free of NULL guards. */
 static inline float tabbar_dp(const struct yetty_yui_tabbar_model *bar, float dp)
@@ -690,10 +690,10 @@ static int event_y(const struct yetty_yui_event *e, float *out)
  * request onto the output_pipe). A failure here can only be an object-resolve
  * error, which is non-recoverable at this call site — absorb the chain so it
  * isn't leaked. */
-static void wm_absorb(struct yetty_ycore_void_result window_manager_result)
+static void wm_absorb(struct yetty_ycore_void_result window_chrome_result)
 {
-    if (YETTY_IS_ERR(window_manager_result)) {
-        yetty_ycore_error_destroy(window_manager_result.error);
+    if (YETTY_IS_ERR(window_chrome_result)) {
+        yetty_ycore_error_destroy(window_chrome_result.error);
     }
 }
 
@@ -784,7 +784,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_model_on_event(struct yetty_yui_t
      * Either way → start a window drag. */
     if (in_strip && event->type == YETTY_YCORE_MOUSE_DOWN && bar->count > 0) {
         struct yetty_yclass_object *wm =
-            bar->yetty_ctx ? bar->yetty_ctx->runtime->window_manager : NULL;
+            bar->yetty_ctx ? bar->yetty_ctx->runtime->window_chrome : NULL;
         if (wm) {
             bar->dragging = 1;
             bar->drag_move_grab_sent = 0;
@@ -810,9 +810,9 @@ struct yetty_ycore_int_result yetty_yui_tabbar_model_on_event(struct yetty_yui_t
     if (in_strip && event->type == YETTY_YCORE_MOUSE_DOUBLE_CLICK && event->mouse.button == 0 &&
         bar->count > 0) {
         struct yetty_yclass_object *wm =
-            bar->yetty_ctx ? bar->yetty_ctx->runtime->window_manager : NULL;
+            bar->yetty_ctx ? bar->yetty_ctx->runtime->window_chrome : NULL;
         if (wm) {
-            wm_absorb(yetty_yplatform_window_manager_toggle_maximize(wm));
+            wm_absorb(yetty_yplatform_window_chrome_toggle_maximize(wm));
         }
         bar->dragging = 0;
         ydebug("tabbar: double-click → toggle maximize");
@@ -825,7 +825,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_model_on_event(struct yetty_yui_t
      * duration of the drag. */
     if (bar->dragging) {
         struct yetty_yclass_object *wm =
-            bar->yetty_ctx ? bar->yetty_ctx->runtime->window_manager : NULL;
+            bar->yetty_ctx ? bar->yetty_ctx->runtime->window_chrome : NULL;
         if (event->type == YETTY_YCORE_MOUSE_MOVE || event->type == YETTY_YCORE_MOUSE_DRAG) {
             int dx = (int)(event->mouse.x - bar->drag_anchor_x);
             int dy = (int)(event->mouse.y - bar->drag_anchor_y);
@@ -844,14 +844,14 @@ struct yetty_ycore_int_result yetty_yui_tabbar_model_on_event(struct yetty_yui_t
                  * it's a no-op and the per-pixel drag_by below keeps
                  * driving glfwSetWindowPos. */
                 bar->drag_move_grab_sent = 1;
-                wm_absorb(yetty_yplatform_window_manager_begin_interactive_move(wm));
+                wm_absorb(yetty_yplatform_window_chrome_begin_interactive_move(wm));
             }
             ydebug("DRAGTRACE: [render-thread] tabbar MOVE during drag: "
                    "mouse=(%.1f,%.1f) anchor=(%.1f,%.1f) dx=%d dy=%d wm=%p",
                    event->mouse.x, event->mouse.y, bar->drag_anchor_x, bar->drag_anchor_y, dx, dy,
                    (void *)wm);
             if (wm && (dx != 0 || dy != 0)) {
-                wm_absorb(yetty_yplatform_window_manager_drag_by(wm, dx, dy));
+                wm_absorb(yetty_yplatform_window_chrome_drag_by(wm, dx, dy));
                 /* Don't update the anchor: glfwSetWindowPos absolutely
                  * repositions, which leaves the cursor exactly at the
                  * anchor in the moved window's frame. Resetting would
@@ -907,7 +907,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_model_on_event(struct yetty_yui_t
             break;
         }
         struct yetty_yclass_object *wm =
-            bar->yetty_ctx ? bar->yetty_ctx->runtime->window_manager : NULL;
+            bar->yetty_ctx ? bar->yetty_ctx->runtime->window_chrome : NULL;
 
         /* No `!bar->resizing` guard. On Wayland the compositor consumes
          * the entire gesture after begin_interactive_resize — including
@@ -933,7 +933,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_model_on_event(struct yetty_yui_t
                 bar->resize_anchor_y = my;
                 bar->resize_grab_sent = 0;
                 /* xdg-shell wire enum: top=1, bottom=2, left=4, right=8;
-                 * corners are bitwise OR. The window_manager applies the
+                 * corners are bitwise OR. The window_chrome applies the
                  * left-edge origin shift from fresh geometry. */
                 bar->resize_edge = (left ? YETTY_YCORE_RESIZE_EDGE_LEFT : 0) |
                                    (right ? YETTY_YCORE_RESIZE_EDGE_RIGHT : 0) |
@@ -962,7 +962,7 @@ struct yetty_ycore_int_result yetty_yui_tabbar_model_on_event(struct yetty_yui_t
                      * per-pixel resize_by below keeps driving
                      * glfwSetWindowSize. */
                     bar->resize_grab_sent = 1;
-                    wm_absorb(yetty_yplatform_window_manager_begin_interactive_resize(
+                    wm_absorb(yetty_yplatform_window_chrome_begin_interactive_resize(
                         wm, bar->resize_edge));
                 }
                 /* Per-axis delta: right/bottom track incrementally (top-left
@@ -980,8 +980,8 @@ struct yetty_ycore_int_result yetty_yui_tabbar_model_on_event(struct yetty_yui_t
                     bar->resize_last_y = my;
                 }
                 if (wm && (step_dx != 0 || step_dy != 0)) {
-                    wm_absorb(yetty_yplatform_window_manager_resize_by(wm, step_dx, step_dy,
-                                                                       bar->resize_edge));
+                    wm_absorb(yetty_yplatform_window_chrome_resize_by(wm, step_dx, step_dy,
+                                                                      bar->resize_edge));
                 }
                 return YETTY_OK(yetty_ycore_int, 1);
             }
@@ -1100,9 +1100,9 @@ void yetty_yui_tabbar_model_iconify(struct yetty_yui_tabbar_model *bar)
     if (!bar || !bar->yetty_ctx) {
         return;
     }
-    struct yetty_yclass_object *wm = bar->yetty_ctx->runtime->window_manager;
+    struct yetty_yclass_object *wm = bar->yetty_ctx->runtime->window_chrome;
     if (wm) {
-        wm_absorb(yetty_yplatform_window_manager_iconify(wm));
+        wm_absorb(yetty_yplatform_window_chrome_iconify(wm));
     }
 }
 
@@ -1111,9 +1111,9 @@ void yetty_yui_tabbar_model_toggle_maximize(struct yetty_yui_tabbar_model *bar)
     if (!bar || !bar->yetty_ctx) {
         return;
     }
-    struct yetty_yclass_object *wm = bar->yetty_ctx->runtime->window_manager;
+    struct yetty_yclass_object *wm = bar->yetty_ctx->runtime->window_chrome;
     if (wm) {
-        wm_absorb(yetty_yplatform_window_manager_toggle_maximize(wm));
+        wm_absorb(yetty_yplatform_window_chrome_toggle_maximize(wm));
     }
 }
 
@@ -1122,9 +1122,9 @@ void yetty_yui_tabbar_model_close_window(struct yetty_yui_tabbar_model *bar)
     if (!bar || !bar->yetty_ctx) {
         return;
     }
-    struct yetty_yclass_object *wm = bar->yetty_ctx->runtime->window_manager;
+    struct yetty_yclass_object *wm = bar->yetty_ctx->runtime->window_chrome;
     if (wm) {
-        wm_absorb(yetty_yplatform_window_manager_request_close(wm));
+        wm_absorb(yetty_yplatform_window_chrome_request_close(wm));
     }
 }
 
