@@ -400,7 +400,11 @@ endif()
 # -> AST). Sibling of src/yetty like src/libvterm / src/tinyemu. Builds the
 # yetty_cpython static lib + the py-parse tool, linking libc only. Its runtime
 # headers shadow CPython's <Python.h>, so they are kept PRIVATE to the lib.
-add_subdirectory(${YETTY_ROOT}/src/cpython ${CMAKE_BINARY_DIR}/src/cpython)
+# Its runtime headers use POSIX (<unistd.h>) and the lib compiles with -w, so it
+# is not yet ported to Windows — gated off there via the feature flag (#364).
+if(YETTY_ENABLE_FEATURE_CPYTHON)
+    add_subdirectory(${YETTY_ROOT}/src/cpython ${CMAKE_BINARY_DIR}/src/cpython)
+endif()
 
 # Shared desktop app-bootstrap sources. A standalone GLFW app (a tool/demo that
 # subclasses yapp:app) compiles these straight into its executable: the shared

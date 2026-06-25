@@ -174,18 +174,20 @@ struct yetty_ycore_void_result yai_renderer_hud_stats(struct yai_renderer *rende
 struct yetty_ycore_void_result yai_renderer_hud_quota(struct yai_renderer *renderer,
                                                       const char *text);
 
-/* Reserve / release the bottom terminal row for the text-HUD bar via a
- * DECSTBM scroll region (conversation text scrolls above it). Call
- * reserve at startup and after a resize / shell / alt-screen, release at
- * shutdown and before handing the terminal to a shell or the alt screen.
+/* Set up / tear down the text-HUD bar. The bar is the bottom row of the
+ * pinned zone (drawn by the renderer's zone, after a real `\n`), NOT a
+ * DECSTBM scroll region: a region confines the conversation to rows 1..N-1
+ * and drops lines scrolled off its top — and the rich figures anchored to
+ * them — instead of pushing them into the terminal's scrollback history.
+ * Call reserve at startup and after a resize / shell / alt-screen, release
+ * before handing the terminal to a shell or the alt screen and at shutdown.
  * No-ops unless the text HUD is active.
  *
- * anchor_top selects where the cursor lands after the region is set:
- *   - non-zero (startup): clear the screen and home the cursor to the top,
- *     so the banner + prompt start at the top of a fresh screen;
- *   - zero (mid-session re-reserve: resume, resize, config close): park the
- *     cursor at the bottom of the region so the prompt continues below the
- *     conversation already on screen. */
+ * anchor_top:
+ *   - non-zero (startup): clear the screen and home the cursor, so the
+ *     banner + prompt the caller prints next start at the top;
+ *   - zero (mid-session: resume, resize, config close): repaint the pinned
+ *     zone (prompt + bar) at the bottom of the conversation already on screen. */
 struct yetty_ycore_void_result yai_renderer_text_hud_reserve(struct yai_renderer *renderer,
                                                              int anchor_top);
 struct yetty_ycore_void_result yai_renderer_text_hud_release(struct yai_renderer *renderer);

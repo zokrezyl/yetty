@@ -303,15 +303,6 @@ static void zone_draw_prompt(const struct yai_renderer *renderer, int columns)
     }
 }
 
-static int terminal_rows(void)
-{
-    struct winsize size = {0};
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &size) != 0 || size.ws_row == 0) {
-        return 24;
-    }
-    return size.ws_row;
-}
-
 /* Display columns of `s`: one cell per UTF-8 codepoint, skipping CSI
  * escape sequences so the bar's embedded color codes don't count toward
  * width. */
@@ -337,31 +328,27 @@ static int text_hud_cols(const char *s)
     return cols;
 }
 
-/* Redraw the text-HUD bar on the last terminal row (reserved by the
- * DECSTBM scroll region). Absolute-positioned and cursor-preserving, so
- * it can refresh independently of the scrolling conversation above. The
- * row is a dark-mint band: bright-mint activity on the left, the
- * (self-colored) stats on the right, mint background filling the gap. */
-static struct yetty_ycore_void_result text_hud_redraw(struct yai_renderer *renderer)
+/* Draw the text-HUD status band at the cursor's CURRENT position — it is the
+ * bottom row of the pinned zone (see zone_draw), not a fixed last row carved
+ * out with a DECSTBM scroll region. A scroll region confines the conversation
+ * to rows 1..N-1 and DROPS lines scrolled off its top — and the rich figures
+ * anchored to those lines — instead of pushing them into the terminal's
+ * scrollback history. As a zone row the bar rides the same erase/redraw the
+ * prompt does (drawn after a real `\n`, which scrolls retired content into
+ * normal history), so the whole conversation scrolls naturally.
+ *
+ * Auto-wrap (DECAWM) is disabled around the band so filling the full width
+ * never spills onto a new row — that would desync the zone's row bookkeeping.
+ * A dark-mint band: bright-mint activity left, quota centered, stats right. */
+static void zone_draw_hud_bar(const struct yai_renderer *renderer, int columns)
 {
-    if (!renderer->text_hud) {
-        return YETTY_OK_VOID();
-    }
-    int columns = terminal_columns();
-    int rows = terminal_rows();
-    if (rows < 2 || columns < 2) {
-        return YETTY_OK_VOID();
+    if (columns < 2) {
+        return;
     }
     int left_cols = text_hud_cols(renderer->hud_state);
     int right_cols = text_hud_cols(renderer->hud_stats);
     int quota_cols = text_hud_cols(renderer->hud_quota);
-    /* Save cursor, jump to the reserved last row, clear it, then paint the
-     * mint band: activity on the left, quota centered, stats on the right,
-     * with the dark-mint background filling the gaps. Use DECSC/DECRC
-     * (ESC 7 / ESC 8) for save/restore, NOT CSI s / CSI u: libvterm (yetty,
-     * nvim, …) treats CSI s as DECSLRM and ignores CSI u, so the restore
-     * would no-op and strand the cursor on the bar row. */
-    printf("\0337\033[%d;1H\033[2K" YAI_HUD_BG, rows);
+    fputs("\033[?7l" YAI_HUD_BG, stdout); /* DECAWM off, then the mint band */
     printf(YAI_MINT_BRIGHT "%s" YAI_FG_DEFAULT, renderer->hud_state);
     int gap = columns - left_cols - right_cols - quota_cols;
     if (quota_cols > 0 && gap >= 2) {
@@ -377,62 +364,39 @@ static struct yetty_ycore_void_result text_hud_redraw(struct yai_renderer *rende
         }
     }
     fputs(renderer->hud_stats, stdout);
-    fputs(YAI_RESET "\0338", stdout);
-    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "text_hud_redraw: flush");
-    return YETTY_OK_VOID();
+    fputs(YAI_RESET "\033[?7h", stdout); /* reset colors, DECAWM back on */
 }
 
-/* Reserve the bottom row for the text HUD via a DECSTBM scroll region
- * (rows 1..N-1 scroll; row N is the fixed bar), then paint the bar.
- * See the header for what anchor_top selects. */
+/* Set up / refresh the text-HUD bar. NO DECSTBM scroll region — the bar is
+ * the bottom row of the pinned zone (zone_draw), so the conversation scrolls
+ * into the terminal's normal history. See the header for anchor_top. */
 struct yetty_ycore_void_result yai_renderer_text_hud_reserve(struct yai_renderer *renderer,
                                                              int anchor_top)
 {
     if (!renderer->text_hud) {
         return YETTY_OK_VOID();
     }
-    int rows = terminal_rows();
-    if (rows < 3) {
-        return YETTY_OK_VOID(); /* too short to spare a row */
-    }
     if (anchor_top) {
-        /* Startup: no conversation yet. Reserve rows 1..rows-1 to scroll,
-         * clear the screen, and home the cursor to the top — the caller
-         * prints the banner + prompt AFTER this, so they start at the top
-         * instead of jumping down to a cursor parked at the bottom. */
-        printf("\033[1;%dr\033[2J\033[H", rows - 1);
-    } else {
-        /* Mid-session re-reserve: PARK the cursor at the bottom of the
-         * region (row rows-1). Restoring the prior cursor would be wrong:
-         * if the screen was full the cursor sat on the last row — now the
-         * bar row, outside the region — so the prompt and all output would
-         * land there and nothing would scroll. */
-        printf("\033[1;%dr\033[%d;1H", rows - 1, rows - 1);
+        /* Startup: clear the screen and home the cursor so the banner + prompt
+         * (printed by the caller next) start at the top. The bar appears when
+         * the pinned zone is first drawn. No scroll region is set. */
+        printf("\033[2J\033[H");
+        return yai_render_flush_stdout();
     }
-    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "text_hud_reserve: region");
-    return text_hud_redraw(renderer);
+    /* Mid-session (resume / resize / config close): repaint the zone — prompt
+     * plus the bar as its bottom row — at the bottom of the conversation. */
+    return yai_renderer_pin_redraw(renderer);
 }
 
-/* Drop the scroll region (back to the full screen) and clear the bar. */
+/* Erase the bar. With no scroll region to drop, this just tears the pinned
+ * zone (prompt + bar) down so a shell / alt screen gets a clean surface; the
+ * caller re-shows the zone afterwards (text_hud_reserve / pin_show). */
 struct yetty_ycore_void_result yai_renderer_text_hud_release(struct yai_renderer *renderer)
 {
     if (!renderer->text_hud) {
         return YETTY_OK_VOID();
     }
-    int rows = terminal_rows();
-    /* Save the cursor BEFORE resetting the region: DECSTBM (\033[r) homes the
-     * cursor to row 1. Saving after the reset would capture (1,1), and the
-     * restore would strand the cursor at the top — the caller's final output
-     * (and the shell prompt after exit) would then land mid-screen over the
-     * conversation. Save real position, reset, clear the bar row, restore.
-     * DECSC/DECRC (ESC 7 / ESC 8), not CSI s / CSI u — libvterm ignores the
-     * latter (CSI s is DECSLRM there). */
-    printf("\0337\033[r\033[%d;1H\033[2K\0338", rows);
-    struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "text_hud_release: reset");
-    return YETTY_OK_VOID();
+    return yai_renderer_zone_suspend(renderer);
 }
 
 static struct yetty_ycore_void_result zone_draw(struct yai_renderer *renderer)
@@ -453,6 +417,14 @@ static struct yetty_ycore_void_result zone_draw(struct yai_renderer *renderer)
     renderer->zone_rows_below = 0;
     for (size_t row = 0; row < renderer->menu_row_count; row++) {
         printf("\n\033[2K%s", renderer->menu_rows[row]);
+        renderer->zone_rows_below++;
+    }
+    /* The text-HUD status bar is the bottom-most zone row: a real `\n` retires
+     * the row above into the terminal's normal scrollback (unlike a DECSTBM
+     * region, which would drop it), then the cursor walks back up below. */
+    if (renderer->text_hud) {
+        printf("\n\033[2K");
+        zone_draw_hud_bar(renderer, columns);
         renderer->zone_rows_below++;
     }
     if (renderer->zone_rows_below > 0) {
@@ -581,21 +553,30 @@ struct yetty_ycore_void_result yai_renderer_hud_state(struct yai_renderer *rende
                                                       const char *text)
 {
     snprintf(renderer->hud_state, sizeof(renderer->hud_state), "%s", text ? text : "");
-    return text_hud_redraw(renderer);
+    if (!renderer->text_hud) {
+        return YETTY_OK_VOID(); /* no text bar to repaint (ygui HUD owns it) */
+    }
+    return yai_renderer_pin_redraw(renderer);
 }
 
 struct yetty_ycore_void_result yai_renderer_hud_stats(struct yai_renderer *renderer,
                                                       const char *text)
 {
     snprintf(renderer->hud_stats, sizeof(renderer->hud_stats), "%s", text ? text : "");
-    return text_hud_redraw(renderer);
+    if (!renderer->text_hud) {
+        return YETTY_OK_VOID(); /* no text bar to repaint (ygui HUD owns it) */
+    }
+    return yai_renderer_pin_redraw(renderer);
 }
 
 struct yetty_ycore_void_result yai_renderer_hud_quota(struct yai_renderer *renderer,
                                                       const char *text)
 {
     snprintf(renderer->hud_quota, sizeof(renderer->hud_quota), "%s", text ? text : "");
-    return text_hud_redraw(renderer);
+    if (!renderer->text_hud) {
+        return YETTY_OK_VOID(); /* no text bar to repaint (ygui HUD owns it) */
+    }
+    return yai_renderer_pin_redraw(renderer);
 }
 
 struct yetty_ycore_void_result yai_renderer_menu_set(struct yai_renderer *renderer,

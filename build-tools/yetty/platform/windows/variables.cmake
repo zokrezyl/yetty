@@ -40,5 +40,11 @@ set(YETTY_ENABLE_TOOL_YNETSURF     OFF CACHE BOOL "" FORCE)
 # standalone GPU + poll() app whose yinit bring-up isn't ported yet.
 set(YETTY_ENABLE_TOOL_YAUDIO          OFF CACHE BOOL "" FORCE)
 
+# cpython (embedded Python 3.14 parser) + its only consumer, the yfspy tool:
+# src/cpython/src/runtime/Python.h includes <unistd.h> and the lib compiles with
+# -w (a GCC/clang flag). Not ported to Windows yet (issue #364).
+set(YETTY_ENABLE_FEATURE_CPYTHON OFF CACHE BOOL "" FORCE)
+set(YETTY_ENABLE_TOOL_YFSPY      OFF CACHE BOOL "" FORCE)
+
 # QA tools hardcode Linux LLVM paths.
 set(YETTY_ENABLE_TOOL_QA OFF CACHE BOOL "" FORCE)
