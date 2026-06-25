@@ -41,6 +41,16 @@ file(MAKE_DIRECTORY ${ANDROID_ASSETS_DIR})
 set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/ymain/android-glue.c
     ${YETTY_ROOT}/src/yetty/yplatform/ymain/android.c
+    # The platform/window/clipboard yclasses: the base platform (defines the
+    # yetty_yplatform_platform_* stubs the entry + yframework call) and base
+    # window, plus the android subclasses android_platform / android_window /
+    # android_clipboard that the entry instantiates (base clipboard ships in
+    # yetty_yplatform_core). Mirrors the desktop platform.c + glfw subclass set.
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/platform.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/android.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/android.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/android.c
     # The concrete app the android entry injects via yetty_yapp_create_app
     # (its run() builds the framework/terminal — same yetty:app as desktop/web).
     ${YETTY_ROOT}/src/yetty/yetty/app.c

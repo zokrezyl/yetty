@@ -25,6 +25,12 @@ set(YETTY_PLATFORM_SOURCES
     # iOS platform code). Mirrors the desktop platform.c + glfw.c pairing.
     ${YETTY_ROOT}/src/yetty/yplatform/yplatform/platform.c
     ${YETTY_ROOT}/src/yetty/yplatform/yplatform/ios-tvos.c
+    # The window + clipboard yclasses ios_platform_init() instantiates: the base
+    # window class plus the ios_window / ios_clipboard subclasses (base clipboard
+    # ships in yetty_yplatform_core). Mirrors the desktop window/clipboard set.
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/ios-tvos.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/ios-tvos.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/ios-tvos.m
     ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
     ${YETTY_ROOT}/src/yetty/ypty/temu-pty.c

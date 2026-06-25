@@ -282,7 +282,7 @@ static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result
 static bool scene_is_animating(int tab_index, int entry);
 
 /* TEMP latency instrumentation. */
-#include <time.h>
+#include <yetty/yplatform/time.h> /* portable monotonic clock (POSIX + Windows) */
 #if defined(__ANDROID__)
 #include <android/log.h>
 #define YPERF(...) __android_log_print(4, "yhello", __VA_ARGS__)
@@ -291,9 +291,7 @@ static bool scene_is_animating(int tab_index, int entry);
 #endif
 static double yperf_ms(void)
 {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1e6;
+    return yetty_yplatform_ytime_monotonic_sec() * 1000.0;
 }
 static double g_last_present_ms;
 

@@ -33,6 +33,7 @@ struct yetty_ycore_void_result yetty_yplatform_android_clipboard_configure(
 
 /* platform_init slot dispatcher (generated) — run() calls init() through it. */
 struct yetty_ycore_void_result yetty_yplatform_platform_init(struct yetty_yclass_object *obj,
+                                                             struct yetty_yclass_object *app,
                                                              int argc, char **argv);
 
 YETTY_YRESULT_DECLARE(yetty_yplatform_android_platform_ptr,
@@ -64,8 +65,10 @@ static struct yetty_yplatform_android_platform *android_platform_data(
 
 YETTY_ANNOTATE("override@yplatform:android_platform:platform_init")
 static struct yetty_ycore_void_result android_platform_init(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *app,
                                                             int argc, char **argv)
 {
+    (void)app;
     struct yetty_yplatform_android_platform *data = android_platform_data(obj);
     if (!data) {
         return YETTY_ERR(yetty_ycore_void, "android_platform_init: data_get");
@@ -99,9 +102,10 @@ static struct yetty_ycore_void_result android_platform_init(struct yetty_yclass_
 
 YETTY_ANNOTATE("override@yplatform:android_platform:platform_run")
 static struct yetty_ycore_void_result android_platform_run(struct yetty_yclass_object *obj,
+                                                           struct yetty_yclass_object *app,
                                                            int argc, char **argv)
 {
-    struct yetty_ycore_void_result init_res = yetty_yplatform_platform_init(obj, argc, argv);
+    struct yetty_ycore_void_result init_res = yetty_yplatform_platform_init(obj, app, argc, argv);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, init_res, "android_platform_run: init");
     /* android_main (ymain/android.c) owns the ALooper run loop; nothing to drive
      * here. */
