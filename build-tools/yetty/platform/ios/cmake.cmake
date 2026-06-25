@@ -18,6 +18,12 @@ file(MAKE_DIRECTORY ${IOS_ASSETS_DIR})
 # references its symbol; the forkpty(3) call itself is guarded out on iOS.
 set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/ymain/ios-tvos.m
+    # The platform yclass: the base (yplatform/platform.c — defines the
+    # yetty_yplatform_platform_* stubs ios-tvos.m / yframework call) plus the
+    # platform@ios subclass that platform_create() instantiates. Mirrors the
+    # desktop platform.c + glfw.c pairing in linux/macos/windows cmake.cmake.
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/platform.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/ios-tvos.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/ios-tvos.m
     ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
     ${YETTY_ROOT}/src/yetty/ypty/temu-pty.c

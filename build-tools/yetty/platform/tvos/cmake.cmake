@@ -19,6 +19,12 @@ file(MAKE_DIRECTORY ${TVOS_ASSETS_DIR})
 # branch here on YETTY_TVOS.
 set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/ymain/ios-tvos.m
+    # The platform yclass: the base (yplatform/platform.c — defines the
+    # yetty_yplatform_platform_* stubs ios-tvos.m / yframework call) plus the
+    # platform@ios subclass that platform_create() instantiates (tvOS shares the
+    # iOS platform code). Mirrors the desktop platform.c + glfw.c pairing.
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/platform.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/ios-tvos.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/ios-tvos.m
     ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
     ${YETTY_ROOT}/src/yetty/ypty/temu-pty.c
