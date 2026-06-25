@@ -46,31 +46,31 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_container_fn)(
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(
     struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_constructor_fn yetty_ygui_widget_yetty_ygui_constructor_check =
     widget_default_constructor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_destructor_fn yetty_ygui_widget_yetty_ygui_destructor_check =
     widget_default_destructor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_press_fn yetty_ygui_widget_yetty_ygui_widget_on_press_check =
     widget_default_on_press;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_release_fn yetty_ygui_widget_yetty_ygui_widget_on_release_check =
     widget_default_on_release;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_motion_fn yetty_ygui_widget_yetty_ygui_widget_on_motion_check =
     widget_default_on_motion;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_scroll_fn yetty_ygui_widget_yetty_ygui_widget_on_scroll_check =
     widget_default_on_scroll;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_paint_fn yetty_ygui_widget_yetty_ygui_widget_paint_check =
     widget_default_paint;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_emit_container_fn
     yetty_ygui_widget_yetty_ygui_widget_emit_container_check = widget_default_emit_container;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_emit_body_fn yetty_ygui_widget_yetty_ygui_widget_emit_body_check =
     widget_default_emit_body;
 

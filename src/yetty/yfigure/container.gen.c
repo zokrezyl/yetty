@@ -56,37 +56,37 @@ typedef struct yetty_ycore_void_result (*yetty_yfigure_process_bytes_fn)(
 typedef struct yetty_ycore_char_ptr_result (*yetty_yfigure_dump_state_fn)(
     struct yetty_yclass_object *, int);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_destroy_fn yetty_yfigure_container_yetty_yfigure_destroy_check =
     container_destroy;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_render_fn yetty_yfigure_container_yetty_yfigure_render_check =
     container_render;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_constructor_fn yetty_yfigure_container_yetty_yfigure_constructor_check =
     yetty_yfigure_container_constructor_impl;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_add_child_fn yetty_yfigure_container_yetty_yfigure_add_child_check =
     yetty_yfigure_container_add_child_impl;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_remove_child_by_id_fn
     yetty_yfigure_container_yetty_yfigure_remove_child_by_id_check =
         yetty_yfigure_container_remove_child_by_id_impl;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_raise_child_by_id_fn
     yetty_yfigure_container_yetty_yfigure_raise_child_by_id_check =
         yetty_yfigure_container_raise_child_by_id_impl;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_process_records_fn
     yetty_yfigure_container_yetty_yfigure_process_records_check =
         yetty_yfigure_container_process_records_impl;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_process_input_fn yetty_yfigure_container_yetty_yfigure_process_input_check =
     container_process_input_slot;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_process_bytes_fn yetty_yfigure_container_yetty_yfigure_process_bytes_check =
     container_process_bytes_slot;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_dump_state_fn yetty_yfigure_container_yetty_yfigure_dump_state_check =
     container_dump_state_slot;
 

@@ -42,6 +42,19 @@
 #endif
 #endif
 
+/* "may be unused" marker for a function/variable. The GNU __attribute__((unused))
+ * spelling works on gcc/clang (including the Android NDK, which compiles these
+ * TUs as pre-C23 and so rejects the [[maybe_unused]] bracket form); MSVC rejects
+ * __attribute__ entirely, so expand to nothing there (an unused-symbol warning is
+ * harmless). */
+#ifndef YETTY_MAYBE_UNUSED
+#if defined(__clang__) || defined(__GNUC__)
+#define YETTY_MAYBE_UNUSED __attribute__((unused))
+#else
+#define YETTY_MAYBE_UNUSED
+#endif
+#endif
+
 struct yetty_yclass_object;
 struct yetty_yclass;
 struct yetty_yclass_slot_table;

@@ -5,7 +5,7 @@
  *                         consumes our OSC envelopes; we ship them
  *                         over stdout. stdin delivers real keystrokes.
  *   otherwise           → STANDALONE mode. We open our own window via
- *                         yinit_run + yframework_create, spin up a
+ *                         the yplatform bootstrap + yframework_create, spin up a
  *                         local yfigure_container that's fed by an
  *                         in-process wire_statemachine reading from
  *                         the consumer end of a memory pty pair (the
@@ -2796,7 +2796,8 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_object *
  * react by running the app's mode-specific stop hook. */
 static struct yetty_ycore_void_result build_ui(struct app *app)
 {
-    /* yinit already ran ygreeter_extract_assets_cb early in startup, so
+    /* ygreeter's assets are placed early in startup (installer/bundle on
+     * desktop/web; the Android program-init's extractor), so
      * <data_dir>/logo-*.jpeg, yetty-unchained-2.mp4 and README.md are
      * on disk by the time we get here. The three discover_* probes
      * record absolute paths into the app struct for later use by the
@@ -3791,7 +3792,7 @@ static int run_client_mode(void)
 
 #ifdef YETTY_YGREETER_HAS_STANDALONE
 /*=============================================================================
- * STANDALONE MODE — yinit_run + yframework + local container + wire SM +
+ * STANDALONE MODE — yplatform bootstrap + yframework + local container + wire SM +
  * KEY→bytes encoder.
  *
  * The ygui framework's output_pty is the producer end of a memory pty
@@ -4557,7 +4558,7 @@ static struct yetty_ycore_void_result ygreeter_verify_assets(const char *data_di
 
 /* ygreeter's own incbin extractor (logos + demo video), used by the Android
  * program-init below. Desktop/web place assets via the installer / bundle. */
-__attribute__((unused)) static struct yetty_ycore_void_result ygreeter_extract_assets_cb(void)
+YETTY_MAYBE_UNUSED static struct yetty_ycore_void_result ygreeter_extract_assets_cb(void)
 {
     const char *data_dir = yetty_yplatform_get_data_dir();
     if (!data_dir || !*data_dir) {
@@ -4586,11 +4587,10 @@ static void *ygreeter_android_render_thread(void *arg)
     struct ygreeter_android_thread_args *targs = arg;
     /* Blocks: builds the framework, the UI and the chrome, runs the event
      * loop, then tears the whole lot down when the loop is stopped (the
-     * non-emscripten tail of standalone_worker). NOTE: the Android standalone
-     * path is pending the new yplatform Android entry (content-scale + NDK glue
-     * that replace the removed yinit/android-glue.c); it cannot link until that
-     * lands. The call below tracks the migrated yapp:app:run signature so only
-     * the platform glue remains. */
+     * non-emscripten tail of standalone_worker). The Android standalone path
+     * uses the yplatform Android entry (content-scale + NDK glue now in
+     * src/yetty/yplatform/ymain/android-glue.c). The call below tracks the
+     * migrated yapp:app:run signature. */
     struct yetty_ycore_void_result run_res = standalone_worker(targs->app_obj, targs->platform);
     if (YETTY_IS_ERR(run_res)) {
         LOGE("ygreeter standalone worker: %s",
@@ -4717,7 +4717,7 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
         .surface = state->surface,
         .surface_width = (uint32_t)width,
         .surface_height = (uint32_t)height,
-        .content_scale = yetty_yinit_android_content_scale(state->app),
+        .content_scale = yetty_yplatform_android_content_scale(state->app),
     };
     struct yetty_ycore_void_result populate =
         yetty_yplatform_platform_set_gpu_context(targs->platform, &gpu);

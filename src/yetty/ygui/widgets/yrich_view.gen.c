@@ -35,21 +35,21 @@ typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_release_fn)(
 typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_motion_fn)(
     struct yetty_yclass_object *, float, float);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_constructor_fn yetty_ygui_yrich_view_yetty_ygui_constructor_check =
     yrich_view_ctor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_destructor_fn yetty_ygui_yrich_view_yetty_ygui_destructor_check = yrich_view_dtor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_emit_body_fn yetty_ygui_yrich_view_yetty_ygui_widget_emit_body_check =
     yrich_view_emit_body;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_press_fn yetty_ygui_yrich_view_yetty_ygui_widget_on_press_check =
     yrich_view_on_press;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_release_fn yetty_ygui_yrich_view_yetty_ygui_widget_on_release_check =
     yrich_view_on_release;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_motion_fn yetty_ygui_yrich_view_yetty_ygui_widget_on_motion_check =
     yrich_view_on_motion;
 

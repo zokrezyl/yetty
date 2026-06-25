@@ -90,9 +90,23 @@ static struct yetty_ycore_void_result yetty_app_run(struct yetty_yclass_object *
 
     struct yetty_ycore_void_result run_res = yetty_run(yetty);
 
+#ifndef __EMSCRIPTEN__
+    /* Desktop/native: event_loop->start() (inside yetty_run) blocked until the
+     * terminal was shut down, so by the time we get here the app is really
+     * exiting — tear everything down.
+     *
+     * On webasm yetty_run is NON-blocking: event_loop->start() registers the
+     * emscripten main loop and returns immediately, and the browser drives
+     * frames only AFTER this function (and main()) return. Destroying yetty /
+     * yframework / the pty factory here would tear the terminal and the WebGPU
+     * device down on the very first tick, leaving a blank canvas. The runtime
+     * must outlive this call for program lifetime — the browser owns the loop —
+     * so on webasm it is intentionally leaked (mirrors the pre-refactor webasm
+     * worker). */
     (void)yetty_destroy(yetty);
     (void)yetty_yframework_destroy(framework);
     pty_factory->ops->destroy(pty_factory);
+#endif
     return run_res;
 }
 

@@ -21,31 +21,31 @@ typedef struct yetty_ycore_void_result (*yetty_ygrid_add_record_fn)(struct yetty
 typedef struct yetty_ycore_void_result (*yetty_ygrid_clear_fn)(struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_ygrid_destroy_fn)(struct yetty_yclass_object *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_render_fn yetty_ygrid_grid_yetty_yfigure_render_check = ygrid_render_slot;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_destroy_fn yetty_ygrid_grid_yetty_yfigure_destroy_check = ygrid_destroy_slot;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygrid_add_record_fn yetty_ygrid_grid_yetty_ygrid_add_record_check =
     yetty_ygrid_grid_add_record_impl;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygrid_clear_fn yetty_ygrid_grid_yetty_ygrid_clear_check = yetty_ygrid_grid_clear_impl;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygrid_destroy_fn yetty_ygrid_grid_yetty_ygrid_destroy_check =
     yetty_ygrid_grid_destroy_impl;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_process_bytes_fn yetty_ygrid_grid_yetty_yfigure_process_bytes_check =
     yetty_ygrid_grid_process_bytes_impl;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_reset_content_fn yetty_ygrid_grid_yetty_yfigure_reset_content_check =
     yetty_ygrid_grid_reset_content_impl;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_dump_state_fn yetty_ygrid_grid_yetty_yfigure_dump_state_check =
     yetty_ygrid_grid_dump_state_impl;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_set_scroll_fn yetty_ygrid_grid_yetty_yfigure_set_scroll_check =
     yetty_ygrid_grid_set_scroll_impl;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_set_content_size_fn yetty_ygrid_grid_yetty_yfigure_set_content_size_check =
     yetty_ygrid_grid_set_content_size_impl;
 

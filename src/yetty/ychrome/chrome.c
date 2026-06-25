@@ -200,7 +200,8 @@ static int chrome_event_xy(const struct yetty_yui_event *event, float *out_x, fl
 /* Bind the engine to a window_chrome and set the caption/edge geometry. Call
  * once after create(), before feeding events. window_chrome is borrowed. */
 YETTY_ANNOTATE("virtual@ychrome:chrome:configure")
-YETTY_ANNOTATE("local@ychrome:configure") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@ychrome:configure")
+static struct yetty_ycore_void_result
     chrome_configure(struct yetty_yclass_object *obj, struct yetty_yclass_object *window_chrome,
                      float caption_height, float edge_size, uint32_t flags)
 {
@@ -221,7 +222,8 @@ YETTY_ANNOTATE("local@ychrome:configure") static struct yetty_ycore_void_result
 /* Update the window size so the right/bottom edge bands track it. Call on every
  * resize. */
 YETTY_ANNOTATE("virtual@ychrome:chrome:set_size")
-YETTY_ANNOTATE("local@ychrome:set_size") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@ychrome:set_size")
+static struct yetty_ycore_void_result
     chrome_set_size(struct yetty_yclass_object *obj, float width, float height)
 {
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
@@ -233,8 +235,8 @@ YETTY_ANNOTATE("local@ychrome:set_size") static struct yetty_ycore_void_result
 }
 
 YETTY_ANNOTATE("virtual@ychrome:chrome:destroy")
-YETTY_ANNOTATE("local@ychrome:destroy") static struct yetty_ycore_void_result
-    chrome_destroy(struct yetty_yclass_object *obj)
+YETTY_ANNOTATE("local@ychrome:destroy")
+static struct yetty_ycore_void_result chrome_destroy(struct yetty_yclass_object *obj)
 {
     /* No owned resources (window_chrome is borrowed) — just free the object. */
     return yetty_yclass_object_free(obj);
@@ -260,7 +262,8 @@ static void chrome_edges_at(const struct yetty_ychrome_chrome *chrome, float x, 
 }
 
 YETTY_ANNOTATE("virtual@ychrome:chrome:edge_cursor_at")
-YETTY_ANNOTATE("local@ychrome:edge_cursor_at") static struct yetty_ycore_int_result
+YETTY_ANNOTATE("local@ychrome:edge_cursor_at")
+static struct yetty_ycore_int_result
     chrome_edge_cursor_at(struct yetty_yclass_object *obj, float x, float y)
 {
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
@@ -315,8 +318,8 @@ static int chrome_button_at(const struct yetty_ychrome_chrome *chrome, float x, 
  * glyphs flush right. The caller composites the list as a pinned top figure and
  * destroys it. Uses font_id=-1 (the default font), so no font dependency. */
 YETTY_ANNOTATE("virtual@ychrome:chrome:render")
-YETTY_ANNOTATE("local@ychrome:render") static struct yetty_ydraw_drawable_list_result
-    chrome_render(struct yetty_yclass_object *obj)
+YETTY_ANNOTATE("local@ychrome:render")
+static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, data_r, "chrome render: object");
@@ -397,7 +400,8 @@ YETTY_ANNOTATE("local@ychrome:render") static struct yetty_ydraw_drawable_list_r
  * processing it), 0 if it's not a chrome gesture. Forward events here only
  * after your own controls (buttons, tabs) had their chance. */
 YETTY_ANNOTATE("virtual@ychrome:chrome:handle_event")
-YETTY_ANNOTATE("local@ychrome:handle_event") static struct yetty_ycore_int_result
+YETTY_ANNOTATE("local@ychrome:handle_event")
+static struct yetty_ycore_int_result
     chrome_handle_event(struct yetty_yclass_object *obj, const struct yetty_yui_event *event)
 {
     if (!event) {

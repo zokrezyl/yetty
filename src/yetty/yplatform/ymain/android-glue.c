@@ -118,16 +118,16 @@ static void ime_call(struct android_app *app, int show)
     }
 }
 
-void yetty_yinit_android_show_keyboard(struct android_app *app)
+void yetty_yplatform_android_show_keyboard(struct android_app *app)
 {
     ime_call(app, 1);
 }
-void yetty_yinit_android_hide_keyboard(struct android_app *app)
+void yetty_yplatform_android_hide_keyboard(struct android_app *app)
 {
     ime_call(app, 0);
 }
 
-float yetty_yinit_android_content_scale(struct android_app *app)
+float yetty_yplatform_android_content_scale(struct android_app *app)
 {
     int32_t density = (app && app->config) ? AConfiguration_getDensity(app->config) : 0;
     /* DEFAULT (0), ANY (0xfffe) and NONE (0xffff) are sentinels, not real
@@ -139,7 +139,7 @@ float yetty_yinit_android_content_scale(struct android_app *app)
     return (float)density / 160.0f;
 }
 
-void yetty_yinit_android_mkdir_p(const char *path)
+void yetty_yplatform_android_mkdir_p(const char *path)
 {
     char tmp[512];
     size_t len;
@@ -499,7 +499,7 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event)
              * back after dismissing it with the Back button. Programs that
              * don't want an IME (the ygui showcase) opt out. */
             if (!state->suppress_soft_keyboard) {
-                yetty_yinit_android_show_keyboard(app);
+                yetty_yplatform_android_show_keyboard(app);
             }
             ev.type = YETTY_YCORE_MOUSE_DOWN;
             ev.mouse.x = x;

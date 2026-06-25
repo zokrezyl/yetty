@@ -1678,7 +1678,7 @@ def emit_class_accessor(cls: dict) -> str:
     # otherwise collide on the static variable name.
     qcls = qualified_class(cls)
     typecheck_lines = [
-        f"[[maybe_unused]]\n"
+        f"YETTY_MAYBE_UNUSED\n"
         f"static {op_c_name(op)}_fn {qcls}_{op_c_name(op)}_check = {op['impl']};"
         for op in cls["ops"]
     ]

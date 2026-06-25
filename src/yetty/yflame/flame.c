@@ -575,7 +575,8 @@ static int button_hit(float x, float y)
 /* configure: set graph width, row height, min visible box width, and flags.
  * 0 selects the default for each. Call after create(), before parse(). */
 YETTY_ANNOTATE("virtual@yflame:flame:configure")
-YETTY_ANNOTATE("local@yflame:configure") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yflame:configure")
+static struct yetty_ycore_void_result
     flame_configure(struct yetty_yclass_object *obj, float width, float frame_height,
                     float min_width, uint32_t flags)
 {
@@ -592,7 +593,8 @@ YETTY_ANNOTATE("local@yflame:configure") static struct yetty_ycore_void_result
 /* parse: ingest folded-stack text, build the call tree, index it. Resets focus
  * to the root and clears any hover highlight. */
 YETTY_ANNOTATE("virtual@yflame:flame:parse")
-YETTY_ANNOTATE("local@yflame:parse") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yflame:parse")
+static struct yetty_ycore_void_result
     flame_parse(struct yetty_yclass_object *obj, const char *input, size_t len)
 {
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
@@ -644,8 +646,8 @@ YETTY_ANNOTATE("local@yflame:parse") static struct yetty_ycore_void_result
 /* render: lay out the focus subtree and emit it as a fresh ydraw drawable list
  * (caller owns it). Pointer return -> local-only. */
 YETTY_ANNOTATE("virtual@yflame:flame:render")
-YETTY_ANNOTATE("local@yflame:render") static struct yetty_ydraw_drawable_list_result
-    flame_render(struct yetty_yclass_object *obj)
+YETTY_ANNOTATE("local@yflame:render")
+static struct yetty_ydraw_drawable_list_result flame_render(struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, flame_r, "yflame render: from_obj");
@@ -703,7 +705,8 @@ YETTY_ANNOTATE("local@yflame:render") static struct yetty_ydraw_drawable_list_re
 /* hit_test: id of the frame at content-coordinate (x,y) in the current focus
  * layout, or -1 if none. */
 YETTY_ANNOTATE("virtual@yflame:flame:hit_test")
-YETTY_ANNOTATE("local@yflame:hit_test") static struct yetty_ycore_int_result
+YETTY_ANNOTATE("local@yflame:hit_test")
+static struct yetty_ycore_int_result
     flame_hit_test(struct yetty_yclass_object *obj, float x, float y)
 {
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
@@ -743,8 +746,8 @@ YETTY_ANNOTATE("local@yflame:hit_test") static struct yetty_ycore_int_result
 
 /* focus: zoom so the given node fills the full width (its subtree is shown). */
 YETTY_ANNOTATE("virtual@yflame:flame:focus")
-YETTY_ANNOTATE("local@yflame:focus") static struct yetty_ycore_void_result
-    flame_focus(struct yetty_yclass_object *obj, int32_t node_id)
+YETTY_ANNOTATE("local@yflame:focus")
+static struct yetty_ycore_void_result flame_focus(struct yetty_yclass_object *obj, int32_t node_id)
 {
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame focus: from_obj");
@@ -758,8 +761,8 @@ YETTY_ANNOTATE("local@yflame:focus") static struct yetty_ycore_void_result
 
 /* focus_parent: zoom out one level (focus the current node's parent). */
 YETTY_ANNOTATE("virtual@yflame:flame:focus_parent")
-YETTY_ANNOTATE("local@yflame:focus_parent") static struct yetty_ycore_void_result
-    flame_focus_parent(struct yetty_yclass_object *obj)
+YETTY_ANNOTATE("local@yflame:focus_parent")
+static struct yetty_ycore_void_result flame_focus_parent(struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame focus_parent: from_obj");
@@ -775,8 +778,8 @@ YETTY_ANNOTATE("local@yflame:focus_parent") static struct yetty_ycore_void_resul
 
 /* reset: zoom back out to the whole graph (root). */
 YETTY_ANNOTATE("virtual@yflame:flame:reset")
-YETTY_ANNOTATE("local@yflame:reset") static struct yetty_ycore_void_result
-    flame_reset(struct yetty_yclass_object *obj)
+YETTY_ANNOTATE("local@yflame:reset")
+static struct yetty_ycore_void_result flame_reset(struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame reset: from_obj");
@@ -787,7 +790,8 @@ YETTY_ANNOTATE("local@yflame:reset") static struct yetty_ycore_void_result
 
 /* set_highlight: mark a node as hovered (-1 clears) for the next render. */
 YETTY_ANNOTATE("virtual@yflame:flame:set_highlight")
-YETTY_ANNOTATE("local@yflame:set_highlight") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yflame:set_highlight")
+static struct yetty_ycore_void_result
     flame_set_highlight(struct yetty_yclass_object *obj, int32_t node_id)
 {
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
@@ -799,8 +803,8 @@ YETTY_ANNOTATE("local@yflame:set_highlight") static struct yetty_ycore_void_resu
 
 /* destroy: free the tree, the node index, and the object. */
 YETTY_ANNOTATE("virtual@yflame:flame:destroy")
-YETTY_ANNOTATE("local@yflame:destroy") static struct yetty_ycore_void_result
-    flame_obj_destroy(struct yetty_yclass_object *obj)
+YETTY_ANNOTATE("local@yflame:destroy")
+static struct yetty_ycore_void_result flame_obj_destroy(struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     if (YETTY_IS_ERR(flame_r)) {

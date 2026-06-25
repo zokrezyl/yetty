@@ -39,23 +39,23 @@ typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_release_fn)(
 typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_scroll_fn)(
     struct yetty_yclass_object *, float, float, float, float);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_constructor_fn yetty_ygui_ynodes_yetty_ygui_constructor_check =
     ynodes_constructor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_destructor_fn yetty_ygui_ynodes_yetty_ygui_destructor_check = ynodes_destructor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_paint_fn yetty_ygui_ynodes_yetty_ygui_widget_paint_check = ynodes_paint;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_press_fn yetty_ygui_ynodes_yetty_ygui_widget_on_press_check =
     ynodes_on_press;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_motion_fn yetty_ygui_ynodes_yetty_ygui_widget_on_motion_check =
     ynodes_on_motion;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_release_fn yetty_ygui_ynodes_yetty_ygui_widget_on_release_check =
     ynodes_on_release;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_scroll_fn yetty_ygui_ynodes_yetty_ygui_widget_on_scroll_check =
     ynodes_on_scroll;
 

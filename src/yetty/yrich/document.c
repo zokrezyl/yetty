@@ -147,8 +147,8 @@ static struct yetty_ycore_void_result document_constructor(struct yetty_yclass_o
  *=========================================================================*/
 
 YETTY_ANNOTATE("virtual@yrich:document:document_destroy")
-YETTY_ANNOTATE("local@yrich:document_destroy") static struct yetty_ycore_void_result
-    document_default_destroy(struct yetty_yclass_object *obj)
+YETTY_ANNOTATE("local@yrich:document_destroy")
+static struct yetty_ycore_void_result document_default_destroy(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "document_destroy: data_get");
@@ -551,8 +551,8 @@ static struct yetty_ycore_float_result document_default_content_height(
  *=========================================================================*/
 
 YETTY_ANNOTATE("virtual@yrich:document:document_render")
-YETTY_ANNOTATE("local@yrich:document_render") static struct yetty_ycore_void_result
-    document_default_render(struct yetty_yclass_object *obj)
+YETTY_ANNOTATE("local@yrich:document_render")
+static struct yetty_ycore_void_result document_default_render(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "document_render: data_get");
@@ -593,7 +593,8 @@ YETTY_ANNOTATE("local@yrich:document_render") static struct yetty_ycore_void_res
  * (forwarded to the sync callback). Concrete kinds override to apply the
  * op to their own state and chain up for the base bookkeeping. */
 YETTY_ANNOTATE("virtual@yrich:document:document_apply_op")
-YETTY_ANNOTATE("local@yrich:document_apply_op") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yrich:document_apply_op")
+static struct yetty_ycore_void_result
     document_default_apply_op(struct yetty_yclass_object *obj, struct yetty_yrich_operation *op,
                               int local_flag)
 {

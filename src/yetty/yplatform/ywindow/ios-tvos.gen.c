@@ -38,24 +38,24 @@ typedef struct yetty_ycore_int_result (*yetty_yplatform_window_should_close_fn)(
 typedef struct yetty_ycore_void_result (*yetty_yplatform_window_set_title_fn)(
     struct yetty_yclass_object *, const char *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_open_fn yetty_yplatform_ios_window_yetty_yplatform_window_open_check =
     ios_window_open;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_get_size_fn
     yetty_yplatform_ios_window_yetty_yplatform_window_get_size_check = ios_window_get_size;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_get_framebuffer_size_fn
     yetty_yplatform_ios_window_yetty_yplatform_window_get_framebuffer_size_check =
         ios_window_get_framebuffer_size;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_get_content_scale_fn
     yetty_yplatform_ios_window_yetty_yplatform_window_get_content_scale_check =
         ios_window_get_content_scale;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_should_close_fn
     yetty_yplatform_ios_window_yetty_yplatform_window_should_close_check = ios_window_should_close;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_set_title_fn
     yetty_yplatform_ios_window_yetty_yplatform_window_set_title_check = ios_window_set_title;
 

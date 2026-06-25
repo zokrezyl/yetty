@@ -23,10 +23,10 @@ typedef struct yetty_ycore_void_result (*yetty_yplatform_platform_init_fn)(
 typedef struct yetty_ycore_void_result (*yetty_yplatform_platform_run_fn)(
     struct yetty_yclass_object *, struct yetty_yclass_object *, int, char **);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_platform_init_fn
     yetty_yplatform_glfw_platform_yetty_yplatform_platform_init_check = glfw_platform_init;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_platform_run_fn
     yetty_yplatform_glfw_platform_yetty_yplatform_platform_run_check = glfw_platform_run;
 

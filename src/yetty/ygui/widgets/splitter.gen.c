@@ -27,12 +27,12 @@ typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct ye
 typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_motion_fn)(
     struct yetty_yclass_object *, float, float);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_paint_fn yetty_ygui_splitter_yetty_ygui_widget_paint_check = paint;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_press_fn yetty_ygui_splitter_yetty_ygui_widget_on_press_check =
     on_press;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_motion_fn yetty_ygui_splitter_yetty_ygui_widget_on_motion_check =
     on_motion;
 

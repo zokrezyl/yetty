@@ -93,10 +93,10 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
     }
     LOGI("Initializing yetty (android)...");
 
-    yetty_yinit_android_mkdir_p(yetty_yplatform_get_cache_dir());
-    yetty_yinit_android_mkdir_p(yetty_yplatform_get_runtime_dir());
-    yetty_yinit_android_mkdir_p(yetty_yplatform_get_data_dir());
-    yetty_yinit_android_mkdir_p(yetty_yplatform_get_config_dir());
+    yetty_yplatform_android_mkdir_p(yetty_yplatform_get_cache_dir());
+    yetty_yplatform_android_mkdir_p(yetty_yplatform_get_runtime_dir());
+    yetty_yplatform_android_mkdir_p(yetty_yplatform_get_data_dir());
+    yetty_yplatform_android_mkdir_p(yetty_yplatform_get_config_dir());
 
     /* No shell command line on Android — synthesize one. Default to --qemu
      * (external qemu-system-riscv64 from nativeLibraryDir), same as before. */
@@ -165,7 +165,7 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
         .surface = state->surface,
         .surface_width = (uint32_t)width,
         .surface_height = (uint32_t)height,
-        .content_scale = yetty_yinit_android_content_scale(state->app),
+        .content_scale = yetty_yplatform_android_content_scale(state->app),
     };
     struct yetty_ycore_void_result populate =
         yetty_yplatform_platform_set_gpu_context(args->platform, &gpu);
@@ -206,7 +206,7 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
                                  .resize = {.width = (float)width, .height = (float)height}};
     state->pipe->ops->write(state->pipe, &ev, sizeof(ev));
 
-    yetty_yinit_android_show_keyboard(state->app);
+    yetty_yplatform_android_show_keyboard(state->app);
     ydebug("android: render thread started (ALooper drives the OS loop)");
 }
 

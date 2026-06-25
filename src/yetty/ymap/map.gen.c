@@ -64,35 +64,35 @@ typedef struct yetty_ydraw_drawable_list_result (*yetty_ymap_render_fn)(
     struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_ymap_destroy_fn)(struct yetty_yclass_object *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymap_configure_fn yetty_ymap_map_yetty_ymap_configure_check = map_configure;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymap_set_provider_fn yetty_ymap_map_yetty_ymap_set_provider_check = map_set_provider;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymap_set_custom_provider_fn yetty_ymap_map_yetty_ymap_set_custom_provider_check =
     map_set_custom_provider;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymap_set_center_fn yetty_ymap_map_yetty_ymap_set_center_check = map_set_center;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymap_set_zoom_fn yetty_ymap_map_yetty_ymap_set_zoom_check = map_set_zoom;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymap_set_viewport_fn yetty_ymap_map_yetty_ymap_set_viewport_check = map_set_viewport;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymap_pan_by_pixels_fn yetty_ymap_map_yetty_ymap_pan_by_pixels_check =
     map_pan_by_pixels;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymap_zoom_by_at_fn yetty_ymap_map_yetty_ymap_zoom_by_at_check = map_zoom_by_at;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymap_get_zoom_fn yetty_ymap_map_yetty_ymap_get_zoom_check = map_get_zoom;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymap_geolocate_fn yetty_ymap_map_yetty_ymap_geolocate_check = map_geolocate;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymap_attribution_fn yetty_ymap_map_yetty_ymap_attribution_check = map_attribution;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymap_is_vector_fn yetty_ymap_map_yetty_ymap_is_vector_check = map_is_vector;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymap_render_fn yetty_ymap_map_yetty_ymap_render_check = map_render;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymap_destroy_fn yetty_ymap_map_yetty_ymap_destroy_check = map_destroy;
 
 struct yetty_yclass_ptr_result yetty_ymap_map_class_get(void)

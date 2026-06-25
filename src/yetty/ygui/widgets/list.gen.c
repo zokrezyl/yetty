@@ -27,13 +27,13 @@ typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct ye
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yetty_yclass_object *,
                                                                      struct yetty_ygui_emit_ctx *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_constructor_fn yetty_ygui_list_yetty_ygui_constructor_check = ctor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_destructor_fn yetty_ygui_list_yetty_ygui_destructor_check = dtor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_press_fn yetty_ygui_list_yetty_ygui_widget_on_press_check = on_press;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_paint_fn yetty_ygui_list_yetty_ygui_widget_paint_check = paint;
 
 struct yetty_yclass_ptr_result yetty_ygui_list_class_get(void)

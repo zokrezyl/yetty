@@ -267,7 +267,8 @@ static struct yetty_ycore_int_result widget_default_on_scroll(struct yetty_yclas
 }
 
 YETTY_ANNOTATE("virtual@ygui:widget:widget_paint")
-YETTY_ANNOTATE("local@ygui:widget_paint") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@ygui:widget_paint")
+static struct yetty_ycore_void_result
     widget_default_paint(struct yetty_yclass_object *obj, struct yetty_ygui_emit_ctx *emit_ctx)
 {
     (void)obj;
@@ -276,7 +277,8 @@ YETTY_ANNOTATE("local@ygui:widget_paint") static struct yetty_ycore_void_result
 }
 
 YETTY_ANNOTATE("virtual@ygui:widget:widget_emit_container")
-YETTY_ANNOTATE("local@ygui:widget_emit_container") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@ygui:widget_emit_container")
+static struct yetty_ycore_void_result
     widget_default_emit_container(struct yetty_yclass_object *obj,
                                   struct yetty_ygui_emit_ctx *emit_ctx)
 {
@@ -286,7 +288,8 @@ YETTY_ANNOTATE("local@ygui:widget_emit_container") static struct yetty_ycore_voi
 }
 
 YETTY_ANNOTATE("virtual@ygui:widget:widget_emit_body")
-YETTY_ANNOTATE("local@ygui:widget_emit_body") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@ygui:widget_emit_body")
+static struct yetty_ycore_void_result
     widget_default_emit_body(struct yetty_yclass_object *obj, struct yetty_ygui_emit_ctx *emit_ctx)
 {
     (void)obj;

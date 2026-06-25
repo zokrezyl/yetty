@@ -1,14 +1,14 @@
 # tools/yaudio - audio analyzer GUI.
 #
-# Reuses the yinit platform-bootstrap layer (window, WGPU surface,
+# Reuses the yplatform platform-bootstrap layer (window, WGPU surface,
 # event pipes) compiled inline alongside this binary. Same platform
 # source list as the main yetty target — minus ymain/glfw.c (we
 # supply our own main here) and the yetty-specific YETTY_SOURCES.
 
 # Linux-only for v1. Darwin lacks librt and the yaudio link line still
 # uses POSIX-Linux-flavoured deps (rt, fontconfig via pkg-config). The
-# other platforms' yinit code is also event-driven and doesn't fit
-# yinit_run yet.
+# other platforms' bootstrap code is also event-driven and doesn't fit
+# the yplatform entry path yet.
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     return()
 endif()
@@ -51,7 +51,7 @@ target_compile_definitions(yaudio PRIVATE
     YETTY_USE_FORKPTY=1
 )
 
-# Link against the platform/core libs that the inline yplatform/yinit
+# Link against the platform/core libs that the inline yplatform
 # sources reference. Same set yetty itself uses, minus the yetty-
 # terminal libs (yterm/yui/yrich/...) we don't need. PUBLIC includes
 # propagate webgpu headers (yetty_ywebgpu) and GLFW headers (glfw3).

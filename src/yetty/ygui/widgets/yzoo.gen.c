@@ -22,11 +22,11 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(
     struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_constructor_fn yetty_ygui_yzoo_yetty_ygui_constructor_check = yzoo_ctor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_destructor_fn yetty_ygui_yzoo_yetty_ygui_destructor_check = yzoo_dtor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_emit_body_fn yetty_ygui_yzoo_yetty_ygui_widget_emit_body_check =
     yzoo_emit_body;
 

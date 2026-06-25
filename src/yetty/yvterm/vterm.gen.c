@@ -11,9 +11,9 @@
 #include <stdlib.h> /* calloc/free for proxy + buffer marshalling */
 #include <string.h> /* memcpy/strcmp/strlen */
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_render_fn yetty_yvterm_vterm_yetty_yfigure_render_check = vterm_render_slot;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_destroy_fn yetty_yvterm_vterm_yetty_yfigure_destroy_check = vterm_destroy_slot;
 
 struct yetty_yclass_ptr_result yetty_yvterm_vterm_class_get(void)

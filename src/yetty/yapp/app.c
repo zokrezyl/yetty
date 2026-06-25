@@ -20,7 +20,8 @@ struct yetty_yclass_ptr_result yetty_yapp_app_class_get(void);
 struct yetty_yapp_app_ptr_result yetty_yapp_app_from(struct yetty_yclass_object *obj);
 
 YETTY_ANNOTATE("virtual@yapp:app:init")
-YETTY_ANNOTATE("local@yapp:init") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yapp:init")
+static struct yetty_ycore_void_result
     yapp_default_init(struct yetty_yclass_object *app, struct yetty_yclass_object *platform)
 {
     (void)app;
@@ -29,7 +30,8 @@ YETTY_ANNOTATE("local@yapp:init") static struct yetty_ycore_void_result
 }
 
 YETTY_ANNOTATE("virtual@yapp:app:run")
-YETTY_ANNOTATE("local@yapp:run") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yapp:run")
+static struct yetty_ycore_void_result
     yapp_default_run(struct yetty_yclass_object *app, struct yetty_yclass_object *platform)
 {
     (void)app;

@@ -165,7 +165,8 @@ static float clamp_scroll(float offset, float content, float viewport)
 /* configure: set the output fd, figure id/kind, opaque background, and rect.
  * Call once after create(), before set_content(). */
 YETTY_ANNOTATE("virtual@yview:view:configure")
-YETTY_ANNOTATE("local@yview:configure") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yview:configure")
+static struct yetty_ycore_void_result
     view_configure(struct yetty_yclass_object *obj, int fd, uint32_t child_id, uint32_t kind,
                    uint32_t bg_color, float min_x, float min_y, float max_x, float max_y)
 {
@@ -249,7 +250,8 @@ static struct yetty_ycore_void_result view_ship(struct yetty_yview_view *view,
 }
 
 YETTY_ANNOTATE("virtual@yview:view:set_content")
-YETTY_ANNOTATE("local@yview:set_content") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yview:set_content")
+static struct yetty_ycore_void_result
     view_set_content(struct yetty_yclass_object *obj,
                      const struct yetty_ydraw_drawable_list *content)
 {
@@ -318,7 +320,8 @@ static struct yetty_ycore_void_result append_text_line(struct yetty_ydraw_drawab
  * want when they have text but no drawable list (the pager / nvim case).
  * font_size <= 0 selects a default. */
 YETTY_ANNOTATE("virtual@yview:view:set_text")
-YETTY_ANNOTATE("local@yview:set_text") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yview:set_text")
+static struct yetty_ycore_void_result
     view_set_text(struct yetty_yclass_object *obj, const char *text, float font_size)
 {
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
@@ -376,7 +379,8 @@ YETTY_ANNOTATE("local@yview:set_text") static struct yetty_ycore_void_result
  * default ranges. The ygrid figure renders the yplot composite prim via the
  * terminal's composite factory. */
 YETTY_ANNOTATE("virtual@yview:view:set_plot")
-YETTY_ANNOTATE("local@yview:set_plot") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yview:set_plot")
+static struct yetty_ycore_void_result
     view_set_plot(struct yetty_yclass_object *obj, const char *expr, float x_min, float x_max,
                   float y_min, float y_max)
 {
@@ -421,7 +425,8 @@ YETTY_ANNOTATE("local@yview:set_plot") static struct yetty_ycore_void_result
 }
 
 YETTY_ANNOTATE("virtual@yview:view:set_content_size")
-YETTY_ANNOTATE("local@yview:set_content_size") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yview:set_content_size")
+static struct yetty_ycore_void_result
     view_set_content_size(struct yetty_yclass_object *obj, float content_w, float content_h)
 {
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
@@ -448,7 +453,8 @@ YETTY_ANNOTATE("local@yview:set_content_size") static struct yetty_ycore_void_re
 }
 
 YETTY_ANNOTATE("virtual@yview:view:scroll_to")
-YETTY_ANNOTATE("local@yview:scroll_to") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yview:scroll_to")
+static struct yetty_ycore_void_result
     view_scroll_to(struct yetty_yclass_object *obj, float scroll_x, float scroll_y)
 {
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
@@ -479,7 +485,8 @@ YETTY_ANNOTATE("local@yview:scroll_to") static struct yetty_ycore_void_result
 }
 
 YETTY_ANNOTATE("virtual@yview:view:scroll_by")
-YETTY_ANNOTATE("local@yview:scroll_by") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yview:scroll_by")
+static struct yetty_ycore_void_result
     view_scroll_by(struct yetty_yclass_object *obj, float delta_x, float delta_y)
 {
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
@@ -492,9 +499,9 @@ YETTY_ANNOTATE("local@yview:scroll_by") static struct yetty_ycore_void_result
 }
 
 YETTY_ANNOTATE("virtual@yview:view:set_rect")
-YETTY_ANNOTATE("local@yview:set_rect") static struct yetty_ycore_void_result
-    view_set_rect(struct yetty_yclass_object *obj, float min_x, float min_y, float max_x,
-                  float max_y)
+YETTY_ANNOTATE("local@yview:set_rect")
+static struct yetty_ycore_void_result view_set_rect(struct yetty_yclass_object *obj, float min_x,
+                                                    float min_y, float max_x, float max_y)
 {
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview set_rect: object");
@@ -520,8 +527,8 @@ YETTY_ANNOTATE("local@yview:set_rect") static struct yetty_ycore_void_result
 
 /* destroy: clear the surface (DELETE_CHILD) and free the object. */
 YETTY_ANNOTATE("virtual@yview:view:destroy")
-YETTY_ANNOTATE("local@yview:destroy") static struct yetty_ycore_void_result
-    view_destroy(struct yetty_yclass_object *obj)
+YETTY_ANNOTATE("local@yview:destroy")
+static struct yetty_ycore_void_result view_destroy(struct yetty_yclass_object *obj)
 {
     /* Best-effort teardown: even if the slice can't be resolved we still free
      * the object. Stash (not swallow) any resolve error as the first error. */

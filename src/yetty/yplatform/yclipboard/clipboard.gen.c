@@ -23,14 +23,14 @@ typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_request_paste
 typedef struct yetty_ycore_void_result (*yetty_yplatform_clipboard_drain_fn)(
     struct yetty_yclass_object *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_clipboard_set_text_fn
     yetty_yplatform_clipboard_yetty_yplatform_clipboard_set_text_check = clipboard_default_set_text;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_clipboard_request_paste_fn
     yetty_yplatform_clipboard_yetty_yplatform_clipboard_request_paste_check =
         clipboard_default_request_paste;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_clipboard_drain_fn
     yetty_yplatform_clipboard_yetty_yplatform_clipboard_drain_check = clipboard_default_drain;
 

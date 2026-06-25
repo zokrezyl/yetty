@@ -29,16 +29,16 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yetty_yclass_object *,
                                                                      struct yetty_ygui_emit_ctx *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_press_fn yetty_ygui_tabbar_yetty_ygui_widget_on_press_check =
     tabbar_on_press;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_on_release_fn yetty_ygui_tabbar_yetty_ygui_widget_on_release_check =
     tabbar_on_release;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_constructor_fn yetty_ygui_tabbar_yetty_ygui_constructor_check =
     tabbar_constructor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_paint_fn yetty_ygui_tabbar_yetty_ygui_widget_paint_check = tabbar_paint;
 
 struct yetty_yclass_ptr_result yetty_ygui_tabbar_class_get(void)

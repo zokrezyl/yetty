@@ -67,48 +67,48 @@ typedef struct yetty_ycore_void_result (*yetty_yrich_document_on_key_down_fn)(
 typedef struct yetty_ycore_void_result (*yetty_yrich_document_on_text_input_fn)(
     struct yetty_yclass_object *, struct yetty_ycore_buffer);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yrich_constructor_fn yetty_yrich_document_yetty_yrich_constructor_check =
     document_constructor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yrich_document_destroy_fn yetty_yrich_document_yetty_yrich_document_destroy_check =
     document_default_destroy;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yrich_document_content_width_fn
     yetty_yrich_document_yetty_yrich_document_content_width_check = document_default_content_width;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yrich_document_content_height_fn
     yetty_yrich_document_yetty_yrich_document_content_height_check =
         document_default_content_height;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yrich_document_render_fn yetty_yrich_document_yetty_yrich_document_render_check =
     document_default_render;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yrich_document_apply_op_fn yetty_yrich_document_yetty_yrich_document_apply_op_check =
     document_default_apply_op;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yrich_document_undo_fn yetty_yrich_document_yetty_yrich_document_undo_check =
     document_default_undo;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yrich_document_redo_fn yetty_yrich_document_yetty_yrich_document_redo_check =
     document_default_redo;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_mouse_down_fn
     yetty_yrich_document_yetty_yrich_document_on_mouse_down_check = document_default_on_mouse_down;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_mouse_up_fn
     yetty_yrich_document_yetty_yrich_document_on_mouse_up_check = document_default_on_mouse_up;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_mouse_drag_fn
     yetty_yrich_document_yetty_yrich_document_on_mouse_drag_check = document_default_on_mouse_drag;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_mouse_double_click_fn
     yetty_yrich_document_yetty_yrich_document_on_mouse_double_click_check =
         document_default_on_mouse_double_click;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_key_down_fn
     yetty_yrich_document_yetty_yrich_document_on_key_down_check = document_default_on_key_down;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yrich_document_on_text_input_fn
     yetty_yrich_document_yetty_yrich_document_on_text_input_check = document_default_on_text_input;
 

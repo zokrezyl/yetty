@@ -53,24 +53,24 @@ typedef struct yetty_ycore_void_result (*yetty_yview_set_rect_fn)(struct yetty_y
                                                                   float, float, float, float);
 typedef struct yetty_ycore_void_result (*yetty_yview_destroy_fn)(struct yetty_yclass_object *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yview_configure_fn yetty_yview_view_yetty_yview_configure_check = view_configure;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yview_set_content_fn yetty_yview_view_yetty_yview_set_content_check = view_set_content;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yview_set_text_fn yetty_yview_view_yetty_yview_set_text_check = view_set_text;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yview_set_plot_fn yetty_yview_view_yetty_yview_set_plot_check = view_set_plot;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yview_set_content_size_fn yetty_yview_view_yetty_yview_set_content_size_check =
     view_set_content_size;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yview_scroll_to_fn yetty_yview_view_yetty_yview_scroll_to_check = view_scroll_to;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yview_scroll_by_fn yetty_yview_view_yetty_yview_scroll_by_check = view_scroll_by;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yview_set_rect_fn yetty_yview_view_yetty_yview_set_rect_check = view_set_rect;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yview_destroy_fn yetty_yview_view_yetty_yview_destroy_check = view_destroy;
 
 struct yetty_yclass_ptr_result yetty_yview_view_class_get(void)

@@ -1332,7 +1332,8 @@ struct yetty_yfigure_figure *yetty_yvterm_vterm_as_figure(struct yetty_yclass_ob
 }
 
 YETTY_ANNOTATE("expose")
-YETTY_ANNOTATE("expose") struct yetty_ycore_void_result
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result
     yetty_yvterm_vterm_feed(struct yetty_yclass_object *obj, const char *bytes, size_t len)
 {
     struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);

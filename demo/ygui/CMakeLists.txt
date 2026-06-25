@@ -4,7 +4,7 @@
 # build_ui().
 #
 # Builds gated on Linux + WebGPU (matches ygreeter — the only other
-# standalone-window app sharing the same yinit/yframework path).
+# standalone-window app sharing the same yplatform/yframework path).
 
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux")
     return()

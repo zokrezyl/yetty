@@ -20,11 +20,11 @@ typedef struct yetty_ycore_void_result (*yetty_yai_on_child_exit_fn)(struct yett
 typedef struct yetty_ycore_void_result (*yetty_yai_on_child_eof_fn)(struct yetty_yclass_object *, struct yai_app *);
 typedef struct yetty_ycore_void_result (*yetty_yai_interrupt_fn)(struct yetty_yclass_object *, struct yai_app *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yai_on_child_exit_fn yetty_yai_turn_engine_yetty_yai_on_child_exit_check = turn_engine_on_child_exit;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yai_on_child_eof_fn yetty_yai_turn_engine_yetty_yai_on_child_eof_check = turn_engine_on_child_eof;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yai_interrupt_fn yetty_yai_turn_engine_yetty_yai_interrupt_check = turn_engine_interrupt;
 
 struct yetty_yclass_ptr_result yetty_yai_turn_engine_class_get(void)

@@ -398,7 +398,7 @@ int main(int argc, char **argv)
 #ifdef YETTY_YBROWSER_HAS_STANDALONE
         int in_yetty = yetty_running_under_yetty();
         if (!in_yetty) {
-            /* Hand yinit a clean argv (just the program name) so it does
+            /* Hand the platform bootstrap a clean argv (just the program name) so it does
 			 * not try to parse ybrowser's URL/flags as yetty options. */
             char record_arg[1100];
             char *clean_argv[3];

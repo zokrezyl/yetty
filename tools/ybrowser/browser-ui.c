@@ -1613,7 +1613,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 
 /* ===========================================================================
  * Standalone mode — own GPU window (no host yetty). Mirrors demo/ygui's
- * runner: yinit_run brings up the window + WebGPU; we build a local
+ * runner: the yplatform bootstrap brings up the window + WebGPU; we build a local
  * yfigure container, drive the ygui framework into it over an in-process
  * memory-pty + wire SM, and render that tree ourselves. Local GLFW input
  * (mouse button / move / WHEEL / keys) feeds straight into the framework —

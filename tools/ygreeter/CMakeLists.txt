@@ -2,7 +2,7 @@
 #   - TERM_PROGRAM=yetty  → CLIENT mode. Ships OSC envelopes over stdout
 #                           to the host yetty. libuv-driven, no GPU.
 #   - otherwise           → STANDALONE mode. Opens its own GPU window
-#                           via yinit_run + yframework_create, renders
+#                           via the yplatform bootstrap + yframework_create, renders
 #                           the figure tree locally through an in-process
 #                           wire SM → yfigure_container → render_target.
 #
