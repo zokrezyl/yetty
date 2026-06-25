@@ -51,6 +51,10 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
     ${YETTY_ROOT}/src/yetty/yplatform/ywindow/android.c
     ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/android.c
+    # yplatform module aggregator — defines yetty_yplatform_register (the entry
+    # calls it). On desktop it lives in the glfw lib; android has no glfw, so
+    # compile it into the lib here (as iOS/tvOS/webasm do).
+    ${YETTY_ROOT}/src/yetty/yplatform/rpc.gen.c
     # The concrete app the android entry injects via yetty_yapp_create_app
     # (its run() builds the framework/terminal — same yetty:app as desktop/web).
     ${YETTY_ROOT}/src/yetty/yetty/app.c
