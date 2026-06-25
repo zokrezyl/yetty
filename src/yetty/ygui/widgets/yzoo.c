@@ -24,15 +24,14 @@ struct yetty_ygui_yzoo_ptr_result yetty_ygui_yzoo_from(struct yetty_yclass_objec
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yplatform/time.h>
 
-struct [[clang::annotate("class@ygui:yzoo")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
-yetty_ygui_yzoo {
+struct YETTY_ANNOTATE("class@ygui:yzoo") YETTY_ANNOTATE("parent@ygui:ydraw_embed") yetty_ygui_yzoo {
     struct yetty_yzoo *zoo;
     double start_time;
     float scene_w;
     float scene_h;
 };
 
-[[clang::annotate("override@ygui:yzoo:constructor")]]
+YETTY_ANNOTATE("override@ygui:yzoo:constructor")
 static struct yetty_ycore_void_result yzoo_ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -53,7 +52,7 @@ static struct yetty_ycore_void_result yzoo_ctor(struct yetty_yclass_object *ycla
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:yzoo:destructor")]]
+YETTY_ANNOTATE("override@ygui:yzoo:destructor")
 static struct yetty_ycore_void_result yzoo_dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -66,7 +65,7 @@ static struct yetty_ycore_void_result yzoo_dtor(struct yetty_yclass_object *ycla
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:yzoo:widget_emit_body")]]
+YETTY_ANNOTATE("override@ygui:yzoo:widget_emit_body")
 static struct yetty_ycore_void_result yzoo_emit_body(struct yetty_yclass_object *yclass_obj,
                                                      struct yetty_ygui_emit_ctx *ctx)
 {

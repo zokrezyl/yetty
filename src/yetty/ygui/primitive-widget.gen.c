@@ -18,7 +18,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_o
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(
     struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_emit_body_fn
     yetty_ygui_primitive_widget_yetty_ygui_widget_emit_body_check = primitive_emit_body;
 

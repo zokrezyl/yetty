@@ -49,8 +49,12 @@ find_package(Threads REQUIRED)
 # its own libuv client loop, so uv_a is listed explicitly.
 # yetty_yfont_shader_glyph is the name->codepoint table for the activity
 # status line's animated glyph (PUA-B, rendered by the host text layer).
+# yetty_ymarkdown renders assistant answers to a ydraw drawable list in-process;
+# yai frames it as a YDRAW_BIN envelope itself (yface + ydraw-core come
+# transitively via yetty_ygui), so markdown no longer shells out to ycat.
 target_link_libraries(yai PRIVATE yetty_ygui yetty_yclass yetty_yfont_shader_glyph
-                                  yyjson::yyjson uv_a Threads::Threads msgpack-c yaml)
+                                  yetty_ymarkdown yyjson::yyjson uv_a Threads::Threads msgpack-c
+                                  yaml)
 
 # proxy.c forwards the child's Anthropic traffic over HTTPS with libcurl to
 # capture live rate-limit/quota headers.

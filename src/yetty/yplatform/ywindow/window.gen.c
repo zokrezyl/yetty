@@ -45,31 +45,31 @@ typedef struct yetty_ycore_int_result (*yetty_yplatform_window_should_close_fn)(
 typedef struct yetty_ycore_void_result (*yetty_yplatform_window_set_title_fn)(
     struct yetty_yclass_object *, const char *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_open_fn yetty_yplatform_window_yetty_yplatform_window_open_check =
     window_default_open;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_destroy_fn
     yetty_yplatform_window_yetty_yplatform_window_destroy_check = window_default_destroy;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_create_surface_fn
     yetty_yplatform_window_yetty_yplatform_window_create_surface_check =
         window_default_create_surface;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_get_size_fn
     yetty_yplatform_window_yetty_yplatform_window_get_size_check = window_default_get_size;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_get_framebuffer_size_fn
     yetty_yplatform_window_yetty_yplatform_window_get_framebuffer_size_check =
         window_default_get_framebuffer_size;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_get_content_scale_fn
     yetty_yplatform_window_yetty_yplatform_window_get_content_scale_check =
         window_default_get_content_scale;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_should_close_fn
     yetty_yplatform_window_yetty_yplatform_window_should_close_check = window_default_should_close;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yplatform_window_set_title_fn
     yetty_yplatform_window_yetty_yplatform_window_set_title_check = window_default_set_title;
 

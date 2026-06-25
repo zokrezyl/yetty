@@ -27,15 +27,15 @@ struct yetty_ygui_ybrowser_ptr_result yetty_ygui_ybrowser_from(struct yetty_ycla
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:ybrowser")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
-yetty_ygui_ybrowser {
+struct YETTY_ANNOTATE("class@ygui:ybrowser") YETTY_ANNOTATE("parent@ygui:ydraw_embed")
+    yetty_ygui_ybrowser {
     char *html;
     size_t html_len;
     float rendered_w;
     float rendered_h;
 };
 
-[[clang::annotate("override@ygui:ybrowser:constructor")]]
+YETTY_ANNOTATE("override@ygui:ybrowser:constructor")
 static struct yetty_ycore_void_result ybr_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -53,7 +53,7 @@ static struct yetty_ycore_void_result ybr_constructor(struct yetty_yclass_object
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:ybrowser:destructor")]]
+YETTY_ANNOTATE("override@ygui:ybrowser:destructor")
 static struct yetty_ycore_void_result ybr_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -119,7 +119,7 @@ static struct yetty_ycore_void_result ybr_render(struct yetty_yclass_object *ycl
 #endif
 }
 
-[[clang::annotate("override@ygui:ybrowser:widget_emit_body")]]
+YETTY_ANNOTATE("override@ygui:ybrowser:widget_emit_body")
 static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_object *yclass_obj,
                                                     struct yetty_ygui_emit_ctx *ctx)
 {
@@ -150,7 +150,7 @@ static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_object *
     return ((fn_t)impl)(yclass_obj, ctx);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_ybrowser_set_html(struct yetty_yclass_object *obj,
                                                             const char *html, size_t len)
 {

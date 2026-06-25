@@ -44,28 +44,28 @@ typedef struct yetty_ycore_void_result (*yetty_yfigure_set_scroll_fn)(struct yet
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_content_size_fn)(
     struct yetty_yclass_object *, float, float);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_render_fn yetty_yfigure_figure_yetty_yfigure_render_check =
     yetty_yfigure_figure_default_render;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_destroy_fn yetty_yfigure_figure_yetty_yfigure_destroy_check =
     yetty_yfigure_figure_default_destroy;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_process_input_fn yetty_yfigure_figure_yetty_yfigure_process_input_check =
     yetty_yfigure_figure_default_process_input;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_process_bytes_fn yetty_yfigure_figure_yetty_yfigure_process_bytes_check =
     yetty_yfigure_figure_default_process_bytes;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_reset_content_fn yetty_yfigure_figure_yetty_yfigure_reset_content_check =
     yetty_yfigure_figure_default_reset_content;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_dump_state_fn yetty_yfigure_figure_yetty_yfigure_dump_state_check =
     yetty_yfigure_figure_default_dump_state;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_set_scroll_fn yetty_yfigure_figure_yetty_yfigure_set_scroll_check =
     yetty_yfigure_figure_default_set_scroll;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_set_content_size_fn yetty_yfigure_figure_yetty_yfigure_set_content_size_check =
     yetty_yfigure_figure_default_set_content_size;
 

@@ -65,36 +65,36 @@ typedef struct yetty_ycore_void_result (*yetty_ycircuit_set_highlight_fn)(
     struct yetty_yclass_object *, int32_t);
 typedef struct yetty_ycore_void_result (*yetty_ycircuit_destroy_fn)(struct yetty_yclass_object *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ycircuit_configure_fn yetty_ycircuit_circuit_yetty_ycircuit_configure_check =
     circuit_configure;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ycircuit_parse_fn yetty_ycircuit_circuit_yetty_ycircuit_parse_check = circuit_parse;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ycircuit_clear_fn yetty_ycircuit_circuit_yetty_ycircuit_clear_check = circuit_clear;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ycircuit_add_component_fn yetty_ycircuit_circuit_yetty_ycircuit_add_component_check =
     circuit_add_component;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ycircuit_add_ic_fn yetty_ycircuit_circuit_yetty_ycircuit_add_ic_check = circuit_add_ic;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ycircuit_add_wire_fn yetty_ycircuit_circuit_yetty_ycircuit_add_wire_check =
     circuit_add_wire;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ycircuit_add_junction_fn yetty_ycircuit_circuit_yetty_ycircuit_add_junction_check =
     circuit_add_junction;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ycircuit_add_label_fn yetty_ycircuit_circuit_yetty_ycircuit_add_label_check =
     circuit_add_label;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ycircuit_render_fn yetty_ycircuit_circuit_yetty_ycircuit_render_check = circuit_render;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ycircuit_hit_test_fn yetty_ycircuit_circuit_yetty_ycircuit_hit_test_check =
     circuit_hit_test;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ycircuit_set_highlight_fn yetty_ycircuit_circuit_yetty_ycircuit_set_highlight_check =
     circuit_set_highlight;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ycircuit_destroy_fn yetty_ycircuit_circuit_yetty_ycircuit_destroy_check =
     circuit_obj_destroy;
 

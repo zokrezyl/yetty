@@ -33,7 +33,7 @@
 
 /* Base window data slice. The base is abstract — it owns no state (the native
  * handle, if any, is private to each subclass), so this slice is empty. */
-struct [[clang::annotate("class@yplatform:window")]] yetty_yplatform_window {
+struct YETTY_ANNOTATE("class@yplatform:window") yetty_yplatform_window {
     char reserved;
 };
 
@@ -52,10 +52,10 @@ struct yetty_yplatform_window_ptr_result yetty_yplatform_window_from(
  * override into a loud runtime error rather than silent wrong behaviour.
  *=========================================================================*/
 
-[[clang::annotate("virtual@yplatform:window:window_open")]] [[clang::annotate(
-    "local@yplatform:window_open")]]
-static struct yetty_ycore_void_result window_default_open(struct yetty_yclass_object *obj,
-                                                          int width, int height, const char *title)
+YETTY_ANNOTATE("virtual@yplatform:window:window_open")
+YETTY_ANNOTATE("local@yplatform:window_open")
+static struct yetty_ycore_void_result
+    window_default_open(struct yetty_yclass_object *obj, int width, int height, const char *title)
 {
     (void)obj;
     (void)width;
@@ -64,8 +64,8 @@ static struct yetty_ycore_void_result window_default_open(struct yetty_yclass_ob
     return YETTY_ERR(yetty_ycore_void, "window_open: not implemented by base window class");
 }
 
-[[clang::annotate("virtual@yplatform:window:window_destroy")]] [[clang::annotate(
-    "local@yplatform:window_destroy")]]
+YETTY_ANNOTATE("virtual@yplatform:window:window_destroy")
+YETTY_ANNOTATE("local@yplatform:window_destroy")
 static struct yetty_ycore_void_result window_default_destroy(struct yetty_yclass_object *obj)
 {
     /* Teardown is optional — a platform whose native object is owned by the OS
@@ -78,10 +78,10 @@ static struct yetty_ycore_void_result window_default_destroy(struct yetty_yclass
  * the result value is a WGPUSurface — both passed as void* so this abstraction
  * stays free of <webgpu/webgpu.h>; the subclass casts. The native handle stays
  * private to the subclass. */
-[[clang::annotate("virtual@yplatform:window:window_create_surface")]] [[clang::annotate(
-    "local@yplatform:window_create_surface")]]
-static struct yetty_yclass_void_ptr_result window_default_create_surface(
-    struct yetty_yclass_object *obj, void *instance)
+YETTY_ANNOTATE("virtual@yplatform:window:window_create_surface")
+YETTY_ANNOTATE("local@yplatform:window_create_surface")
+static struct yetty_yclass_void_ptr_result
+    window_default_create_surface(struct yetty_yclass_object *obj, void *instance)
 {
     (void)obj;
     (void)instance;
@@ -89,10 +89,10 @@ static struct yetty_yclass_void_ptr_result window_default_create_surface(
                      "window_create_surface: not implemented by base window class");
 }
 
-[[clang::annotate("virtual@yplatform:window:window_get_size")]] [[clang::annotate(
-    "local@yplatform:window_get_size")]]
-static struct yetty_ycore_void_result window_default_get_size(struct yetty_yclass_object *obj,
-                                                              int *width, int *height)
+YETTY_ANNOTATE("virtual@yplatform:window:window_get_size")
+YETTY_ANNOTATE("local@yplatform:window_get_size")
+static struct yetty_ycore_void_result
+    window_default_get_size(struct yetty_yclass_object *obj, int *width, int *height)
 {
     (void)obj;
     (void)width;
@@ -100,10 +100,10 @@ static struct yetty_ycore_void_result window_default_get_size(struct yetty_yclas
     return YETTY_ERR(yetty_ycore_void, "window_get_size: not implemented by base window class");
 }
 
-[[clang::annotate("virtual@yplatform:window:window_get_framebuffer_size")]] [[clang::annotate(
-    "local@yplatform:window_get_framebuffer_size")]]
-static struct yetty_ycore_void_result window_default_get_framebuffer_size(
-    struct yetty_yclass_object *obj, int *width, int *height)
+YETTY_ANNOTATE("virtual@yplatform:window:window_get_framebuffer_size")
+YETTY_ANNOTATE("local@yplatform:window_get_framebuffer_size")
+static struct yetty_ycore_void_result
+    window_default_get_framebuffer_size(struct yetty_yclass_object *obj, int *width, int *height)
 {
     (void)obj;
     (void)width;
@@ -112,10 +112,10 @@ static struct yetty_ycore_void_result window_default_get_framebuffer_size(
                      "window_get_framebuffer_size: not implemented by base window class");
 }
 
-[[clang::annotate("virtual@yplatform:window:window_get_content_scale")]] [[clang::annotate(
-    "local@yplatform:window_get_content_scale")]]
-static struct yetty_ycore_void_result window_default_get_content_scale(
-    struct yetty_yclass_object *obj, float *xscale, float *yscale)
+YETTY_ANNOTATE("virtual@yplatform:window:window_get_content_scale")
+YETTY_ANNOTATE("local@yplatform:window_get_content_scale")
+static struct yetty_ycore_void_result
+    window_default_get_content_scale(struct yetty_yclass_object *obj, float *xscale, float *yscale)
 {
     (void)obj;
     (void)xscale;
@@ -124,18 +124,18 @@ static struct yetty_ycore_void_result window_default_get_content_scale(
                      "window_get_content_scale: not implemented by base window class");
 }
 
-[[clang::annotate("virtual@yplatform:window:window_should_close")]] [[clang::annotate(
-    "local@yplatform:window_should_close")]]
+YETTY_ANNOTATE("virtual@yplatform:window:window_should_close")
+YETTY_ANNOTATE("local@yplatform:window_should_close")
 static struct yetty_ycore_int_result window_default_should_close(struct yetty_yclass_object *obj)
 {
     (void)obj;
     return YETTY_ERR(yetty_ycore_int, "window_should_close: not implemented by base window class");
 }
 
-[[clang::annotate("virtual@yplatform:window:window_set_title")]] [[clang::annotate(
-    "local@yplatform:window_set_title")]]
-static struct yetty_ycore_void_result window_default_set_title(struct yetty_yclass_object *obj,
-                                                               const char *title)
+YETTY_ANNOTATE("virtual@yplatform:window:window_set_title")
+YETTY_ANNOTATE("local@yplatform:window_set_title")
+static struct yetty_ycore_void_result
+    window_default_set_title(struct yetty_yclass_object *obj, const char *title)
 {
     (void)obj;
     (void)title;

@@ -41,6 +41,20 @@ file(MAKE_DIRECTORY ${ANDROID_ASSETS_DIR})
 set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/ymain/android-glue.c
     ${YETTY_ROOT}/src/yetty/yplatform/ymain/android.c
+    # The platform/window/clipboard yclasses: the base platform (defines the
+    # yetty_yplatform_platform_* stubs the entry + yframework call) and base
+    # window, plus the android subclasses android_platform / android_window /
+    # android_clipboard that the entry instantiates (base clipboard ships in
+    # yetty_yplatform_core). Mirrors the desktop platform.c + glfw subclass set.
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/platform.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/android.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/android.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/android.c
+    # yplatform module aggregator — defines yetty_yplatform_register (the entry
+    # calls it). On desktop it lives in the glfw lib; android has no glfw, so
+    # compile it into the lib here (as iOS/tvOS/webasm do).
+    ${YETTY_ROOT}/src/yetty/yplatform/rpc.gen.c
     # The concrete app the android entry injects via yetty_yapp_create_app
     # (its run() builds the framework/terminal — same yetty:app as desktop/web).
     ${YETTY_ROOT}/src/yetty/yetty/app.c
@@ -190,6 +204,15 @@ add_library(ygreeter SHARED
     # Shared NDK app glue — window/input/IME/looper + android_main, calls
     # ygreeter's yetty_android_program_init/_term (resolved here).
     ${YETTY_ROOT}/src/yetty/yplatform/ymain/android-glue.c
+    # The platform/window/clipboard yclass layer (yframework calls the
+    # yetty_yplatform_platform_* stubs + yetty_yplatform_register). Same set the
+    # yetty lib gets via YETTY_PLATFORM_SOURCES.
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/platform.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/android.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/android.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/android.c
+    ${YETTY_ROOT}/src/yetty/yplatform/rpc.gen.c
     # Core sources ygreeter compiles directly (not provided as libs) —
     # mirrors tools/ygreeter/CMakeLists.txt's YGREETER_SOURCES + the
     # Android platform backends (default.c, not glfw/webasm).
@@ -329,6 +352,14 @@ add_library(yhello SHARED
     # Shared NDK app glue — window/input/IME/looper + android_main, calls
     # yhello's yetty_android_program_init/_term (resolved here).
     ${YETTY_ROOT}/src/yetty/yplatform/ymain/android-glue.c
+    # The platform/window/clipboard yclass layer (yframework calls the
+    # yetty_yplatform_platform_* stubs + yetty_yplatform_register).
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/platform.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yplatform/android.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/android.c
+    ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/android.c
+    ${YETTY_ROOT}/src/yetty/yplatform/rpc.gen.c
     # Core sources yhello compiles directly (not provided as libs) —
     # mirrors tools/yhello/CMakeLists.txt's YHELLO_SOURCES + the Android
     # platform backends (default.c / android.c, not glfw).

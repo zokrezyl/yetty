@@ -15,7 +15,7 @@ struct yetty_ycore_int_result;
 struct yetty_ycore_int_result yetty_yai_feed_byte(struct yetty_yclass_object * obj, struct yai_app * app, int byte);
 typedef struct yetty_ycore_int_result (*yetty_yai_feed_byte_fn)(struct yetty_yclass_object *, struct yai_app *, int);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yai_feed_byte_fn yetty_yai_editor_yetty_yai_feed_byte_check = editor_feed_byte;
 
 struct yetty_yclass_ptr_result yetty_yai_editor_class_get(void)

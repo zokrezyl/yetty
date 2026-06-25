@@ -1613,7 +1613,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 
 /* ===========================================================================
  * Standalone mode — own GPU window (no host yetty). Mirrors demo/ygui's
- * runner: yinit_run brings up the window + WebGPU; we build a local
+ * runner: the yplatform bootstrap brings up the window + WebGPU; we build a local
  * yfigure container, drive the ygui framework into it over an in-process
  * memory-pty + wire SM, and render that tree ourselves. Local GLFW input
  * (mouse button / move / WHEEL / keys) feeds straight into the framework —
@@ -1654,7 +1654,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
  * via YCLASS_DEFINES; the generated browser-ui.gen.c is #included at the foot,
  * inside the same guard, so reduced builds never compile it.
  */
-struct [[clang::annotate("class@ybrowser:app")]] [[clang::annotate("parent@yapp:app")]] yetty_ybrowser_app {
+struct YETTY_ANNOTATE("class@ybrowser:app") YETTY_ANNOTATE("parent@yapp:app") yetty_ybrowser_app {
     struct app app;
     struct yetty_yframework *yframework;
     struct yetty_yclass_object *root_container;
@@ -2019,7 +2019,7 @@ static const char *encode_special_key(uint32_t key, char *scratch, size_t scratc
     }
 }
 
-[[clang::annotate("override@yapp:app:init")]]
+YETTY_ANNOTATE("override@yapp:app:init")
 static struct yetty_ycore_void_result ybrowser_app_init(struct yetty_yclass_object *obj,
                                                         struct yetty_yclass_object *platform)
 {
@@ -2028,7 +2028,7 @@ static struct yetty_ycore_void_result ybrowser_app_init(struct yetty_yclass_obje
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yapp:app:run")]]
+YETTY_ANNOTATE("override@yapp:app:run")
 static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
                                                 struct yetty_yclass_object *platform)
 {

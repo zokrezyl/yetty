@@ -27,13 +27,13 @@ struct yai_app;
 /* The class@ annotation needs a struct to sit on; the base carries no
  * per-instance state (the line buffer is in struct yai_app, mode scratch
  * is in the subclass). */
-struct [[clang::annotate("class@yai:editor")]] yetty_yai_editor {
+struct YETTY_ANNOTATE("class@yai:editor") yetty_yai_editor {
     char unused;
 };
 
 YETTY_YRESULT_DECLARE(yetty_yai_editor_ptr, struct yetty_yai_editor *);
 
-[[clang::annotate("virtual@yai:editor:feed_byte")]] [[clang::annotate("local@yai:feed_byte")]]
+YETTY_ANNOTATE("virtual@yai:editor:feed_byte") YETTY_ANNOTATE("local@yai:feed_byte")
 static struct yetty_ycore_int_result editor_feed_byte(struct yetty_yclass_object *obj,
                                                       struct yai_app *app, int byte)
 {

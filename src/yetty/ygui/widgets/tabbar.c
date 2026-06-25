@@ -92,8 +92,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_yclass_
  * Tabbar instance data.
  *---------------------------------------------------------------------------*/
 
-struct [[clang::annotate("class@ygui:tabbar")]] [[clang::annotate("parent@ygui:hbox")]]
-yetty_ygui_tabbar {
+struct YETTY_ANNOTATE("class@ygui:tabbar") YETTY_ANNOTATE("parent@ygui:hbox") yetty_ygui_tabbar {
     int active_index;
     /* When set, each pill paints a close-x in its right band and a
      * click landing there fires this callback (with the tab index)
@@ -332,7 +331,7 @@ static struct yetty_ycore_int_result tabbar_pt_in_plus(struct yetty_yclass_objec
  * consume their own clicks). We consume it ONLY when it lands on the "+";
  * a press anywhere else on the strip stays unconsumed so it falls through
  * to the host's window drag-to-move handler. */
-[[clang::annotate("override@ygui:tabbar:widget_on_press")]]
+YETTY_ANNOTATE("override@ygui:tabbar:widget_on_press")
 static struct yetty_ycore_int_result tabbar_on_press(struct yetty_yclass_object *yclass_obj,
                                                      float x, float y, int button)
 {
@@ -351,7 +350,7 @@ static struct yetty_ycore_int_result tabbar_on_press(struct yetty_yclass_object 
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:tabbar:widget_on_release")]]
+YETTY_ANNOTATE("override@ygui:tabbar:widget_on_release")
 static struct yetty_ycore_int_result tabbar_on_release(struct yetty_yclass_object *yclass_obj,
                                                        float x, float y, int button)
 {
@@ -376,7 +375,7 @@ static struct yetty_ycore_int_result tabbar_on_release(struct yetty_yclass_objec
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:tabbar:constructor")]]
+YETTY_ANNOTATE("override@ygui:tabbar:constructor")
 static struct yetty_ycore_void_result tabbar_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -450,7 +449,7 @@ static struct yetty_ycore_void_result paint_label(struct yetty_ygui_emit_ctx *ct
                                               /*layer=*/0, /*font_id=*/-1, /*rotation=*/0.0f);
 }
 
-[[clang::annotate("override@ygui:tabbar:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:tabbar:widget_paint")
 static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_object *yclass_obj,
                                                    struct yetty_ygui_emit_ctx *ctx)
 {
@@ -592,7 +591,7 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_object *y
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_yclass_object *tabbar,
                                                                 const char *label)
 {
@@ -630,7 +629,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_ycl
     return YETTY_OK(yetty_yclass_object_ptr, header);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_yclass_object *tabbar,
                                                             int index)
 {
@@ -660,7 +659,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_yclass_
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_tabbar_set_label(struct yetty_yclass_object *tabbar,
                                                            int index, const char *label)
 {
@@ -681,7 +680,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_label(struct yetty_yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_ygui_tabbar_count(const struct yetty_yclass_object *tabbar)
 {
     if (!tabbar) {
@@ -696,7 +695,7 @@ int yetty_ygui_tabbar_count(const struct yetty_yclass_object *tabbar)
     return n;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_int_result yetty_ygui_tabbar_active(const struct yetty_yclass_object *tabbar)
 {
     if (!tabbar) {
@@ -709,7 +708,7 @@ struct yetty_ycore_int_result yetty_ygui_tabbar_active(const struct yetty_yclass
     return YETTY_OK(yetty_ycore_int, td->active_index);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_yclass_object *tabbar,
                                                             int index)
 {
@@ -744,7 +743,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_yclass_
     return yetty_ygui_widget_emit(tabbar, &ev);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_close(struct yetty_yclass_object *tabbar,
                                                               yetty_ygui_tab_close_cb cb,
                                                               void *userdata)
@@ -760,7 +759,7 @@ struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_close(struct yetty_yclas
     return yetty_ygui_widget_set_dirty(tabbar);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_new_tab(struct yetty_yclass_object *tabbar,
                                                                 yetty_ygui_tab_new_cb cb,
                                                                 void *userdata)

@@ -123,9 +123,8 @@ struct yetty_ydraw_target;
  * The vterm yclass class — a yfigure subclass owning the unified model.
  *=========================================================================*/
 
-struct [[clang::annotate("class@yvterm:vterm"),
-         clang::annotate("include@yetty/yterminal/terminal.h")]] [[clang::annotate(
-    "parent@yfigure:figure")]] yetty_yvterm_vterm {
+struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("include@yetty/yterminal/terminal.h")
+    YETTY_ANNOTATE("parent@yfigure:figure") yetty_yvterm_vterm {
     /* The terminal model lives in a separate class@yvterm:grid object; this
      * figure composes it and renders it. Owned: disposed in the destroy slot. */
     struct yetty_yclass_object *grid_obj;
@@ -1162,7 +1161,7 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
 /* Render the unified model into the figure's target: walk dirty lines, resolve
  * glyphs, upload, draw the grid quad. The render narrows to the inset content
  * rect (a docked HUD reserved a band) before drawing. */
-[[clang::annotate("override@yvterm:vterm:yfigure:render")]]
+YETTY_ANNOTATE("override@yvterm:vterm:yfigure:render")
 static struct yetty_ycore_void_result vterm_render_slot(struct yetty_yclass_object *obj,
                                                         struct yetty_ydraw_target *target)
 {
@@ -1181,7 +1180,7 @@ static struct yetty_ycore_void_result vterm_render_slot(struct yetty_yclass_obje
     return vterm_render_grid(vterm, target, rect);
 }
 
-[[clang::annotate("override@yvterm:vterm:yfigure:destroy")]]
+YETTY_ANNOTATE("override@yvterm:vterm:yfigure:destroy")
 static struct yetty_ycore_void_result vterm_destroy_slot(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
@@ -1218,7 +1217,7 @@ typedef struct yetty_ycore_void_result (*yetty_yvterm_clear_hook_fn)(void *userd
  * cell_size starts at a placeholder until the renderer build-out resolves exact
  * metrics from the active font; the terminal overwrites it on the first resize.
  * `context` is accepted now for that future font setup. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
     uint32_t cols, uint32_t rows, const struct yetty_context *context,
     yetty_yterminal_pty_write_fn pty_write_fn, void *pty_write_userdata,
@@ -1318,7 +1317,7 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
 }
 
 /* Upcast to the figure base (first slice in the object). */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yfigure_figure *yetty_yvterm_vterm_as_figure(struct yetty_yclass_object *obj)
 {
     if (!obj) {
@@ -1332,9 +1331,10 @@ struct yetty_yfigure_figure *yetty_yvterm_vterm_as_figure(struct yetty_yclass_ob
     return figure_res.value;
 }
 
-[[clang::annotate("expose")]] [[clang::annotate("expose")]]
-struct yetty_ycore_void_result yetty_yvterm_vterm_feed(struct yetty_yclass_object *obj,
-                                                       const char *bytes, size_t len)
+YETTY_ANNOTATE("expose")
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result
+    yetty_yvterm_vterm_feed(struct yetty_yclass_object *obj, const char *bytes, size_t len)
 {
     struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
     if (!vterm) {
@@ -1343,7 +1343,7 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_feed(struct yetty_yclass_objec
     return yetty_yvterm_grid_feed(vterm->grid_obj, bytes, len);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_resize(struct yetty_yclass_object *obj,
                                                          struct yetty_ycore_grid_size grid_size,
                                                          struct yetty_ycore_pixel_size cell_size)
@@ -1389,7 +1389,7 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_resize(struct yetty_yclass_obj
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_pixel_size yetty_yvterm_vterm_cell_size(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
@@ -1399,7 +1399,7 @@ struct yetty_ycore_pixel_size yetty_yvterm_vterm_cell_size(struct yetty_yclass_o
     return vterm->cell_size;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_yvterm_vterm_is_dirty(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
@@ -1409,7 +1409,7 @@ int yetty_yvterm_vterm_is_dirty(struct yetty_yclass_object *obj)
     return vterm->view_dirty || yetty_yvterm_grid_is_dirty(vterm->grid_obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_yvterm_vterm_set_content_inset(struct yetty_yclass_object *obj, float top, float right,
                                           float bottom, float left)
 {
@@ -1423,7 +1423,7 @@ void yetty_yvterm_vterm_set_content_inset(struct yetty_yclass_object *obj, float
     vterm->content_inset_left = left;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_yvterm_vterm_get_content_inset(struct yetty_yclass_object *obj, float *out_top,
                                           float *out_right, float *out_bottom, float *out_left)
 {
@@ -1442,7 +1442,7 @@ void yetty_yvterm_vterm_get_content_inset(struct yetty_yclass_object *obj, float
     }
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_yvterm_vterm_set_clear_hook(struct yetty_yclass_object *obj,
                                        yetty_yvterm_clear_hook_fn fn, void *userdata)
 {
@@ -1454,7 +1454,7 @@ void yetty_yvterm_vterm_set_clear_hook(struct yetty_yclass_object *obj,
                                      userdata);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_yvterm_vterm_cursor(struct yetty_yclass_object *obj, uint32_t *out_row,
                                uint32_t *out_col, uint32_t *out_visible)
 {
@@ -1474,7 +1474,7 @@ void yetty_yvterm_vterm_cursor(struct yetty_yclass_object *obj, uint32_t *out_ro
     yetty_yvterm_grid_cursor(vterm->grid_obj, out_row, out_col, out_visible);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_yvterm_vterm_word_bounds(struct yetty_yclass_object *obj, uint32_t row, uint32_t col,
                                     uint32_t *out_start_col, uint32_t *out_end_col)
 {
@@ -1491,7 +1491,7 @@ void yetty_yvterm_vterm_word_bounds(struct yetty_yclass_object *obj, uint32_t ro
     yetty_yvterm_grid_word_bounds(vterm->grid_obj, row, col, out_start_col, out_end_col);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 uint32_t yetty_yvterm_vterm_scroll_origin(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
@@ -1502,7 +1502,7 @@ uint32_t yetty_yvterm_vterm_scroll_origin(struct yetty_yclass_object *obj)
  * Rich-content insertion — delegated to the grid model.
  *=========================================================================*/
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_append_primitive(
     struct yetty_yclass_object *obj, uint32_t row, const uint32_t *words, uint32_t word_count)
 {
@@ -1513,7 +1513,7 @@ struct yetty_ycore_uint32_result yetty_yvterm_vterm_append_primitive(
     return yetty_yvterm_grid_append_primitive(vterm->grid_obj, row, words, word_count);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_attach_composite(
     struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_composite *composite)
 {
@@ -1524,7 +1524,7 @@ struct yetty_ycore_uint32_result yetty_yvterm_vterm_attach_composite(
     return yetty_yvterm_grid_attach_composite(vterm->grid_obj, row, composite);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_relocate_rich_to_bottom(
     struct yetty_yclass_object *obj, uint32_t span_rows)
 {
@@ -1535,7 +1535,7 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_relocate_rich_to_bottom(
     return yetty_yvterm_grid_relocate_rich_to_bottom(vterm->grid_obj, span_rows);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_clear_rich_line(struct yetty_yclass_object *obj,
                                                                   uint32_t row)
 {
@@ -1546,7 +1546,7 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_clear_rich_line(struct yetty_y
     return yetty_yvterm_grid_clear_rich_line(vterm->grid_obj, row);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_clear_rich_all(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
@@ -1561,7 +1561,7 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_clear_rich_all(struct yetty_yc
  * (except the renderer-local view/zoom state).
  *=========================================================================*/
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_register_wire(
     struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *sm)
 {
@@ -1572,21 +1572,21 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_register_wire(
     return yetty_yvterm_grid_register_wire(vterm->grid_obj, sm);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_yvterm_vterm_on_char(struct yetty_yclass_object *obj, uint32_t codepoint, int mods)
 {
     struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
     return vterm ? yetty_yvterm_grid_on_char(vterm->grid_obj, codepoint, mods) : 0;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_yvterm_vterm_on_key(struct yetty_yclass_object *obj, int key, int mods)
 {
     struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
     return vterm ? yetty_yvterm_grid_on_key(vterm->grid_obj, key, mods) : 0;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_set_selection(struct yetty_yclass_object *obj,
                                                                 int active, uint32_t anchor_row,
                                                                 uint32_t anchor_col,
@@ -1601,7 +1601,7 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_selection(struct yetty_ycl
                                            head_row, head_col);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_get_selection_text(
     struct yetty_yclass_object *obj, struct yetty_ycore_buffer *out)
 {
@@ -1616,7 +1616,7 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_get_selection_text(
  * is, so the anchor and floor are both 0 (no wheel-up range). */
 /* Absolute index of the line at the live screen top: everything scrolled off so
  * far. A wheel-up anchors one line below this and walks toward the floor. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 uint32_t yetty_yvterm_vterm_get_live_anchor(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
@@ -1629,7 +1629,7 @@ uint32_t yetty_yvterm_vterm_get_live_anchor(struct yetty_yclass_object *obj)
 /* Oldest absolute line index still retained in the scrollback ring. Lines below
  * this have been evicted, so a wheel-up clamps here. The ring keeps
  * (slot_count - visible_rows) history lines. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 uint32_t yetty_yvterm_vterm_get_scrollback_floor(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
@@ -1644,7 +1644,7 @@ uint32_t yetty_yvterm_vterm_get_scrollback_floor(struct yetty_yclass_object *obj
     return live > history_cap ? live - history_cap : 0u;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_set_view_top(struct yetty_yclass_object *obj,
                                                                int active,
                                                                uint32_t view_top_total_idx)
@@ -1663,7 +1663,7 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_view_top(struct yetty_ycla
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_set_visual_zoom(struct yetty_yclass_object *obj,
                                                                   float scale, float offset_x,
                                                                   float offset_y)

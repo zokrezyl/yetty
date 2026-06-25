@@ -20,9 +20,9 @@ typedef struct yetty_ycore_void_result (*yetty_yapp_init_fn)(struct yetty_yclass
 typedef struct yetty_ycore_void_result (*yetty_yapp_run_fn)(struct yetty_yclass_object *,
                                                             struct yetty_yclass_object *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yapp_init_fn yetty_yapp_app_yetty_yapp_init_check = yapp_default_init;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yapp_run_fn yetty_yapp_app_yetty_yapp_run_check = yapp_default_run;
 
 struct yetty_yclass_ptr_result yetty_yapp_app_class_get(void)

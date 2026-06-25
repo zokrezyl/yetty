@@ -36,9 +36,8 @@ struct yetty_yplatform_glfw_window_chrome_ptr_result yetty_yplatform_glfw_window
     struct yetty_yclass_object *obj);
 
 /* Private subclass state. */
-struct [[clang::annotate("class@yplatform:glfw_window_chrome")]] [[clang::annotate(
-    "platform@glfw")]] [[clang::annotate("parent@yplatform:window_chrome")]]
-yetty_yplatform_glfw_window_chrome {
+struct YETTY_ANNOTATE("class@yplatform:glfw_window_chrome") YETTY_ANNOTATE("platform@glfw")
+    YETTY_ANNOTATE("parent@yplatform:window_chrome") yetty_yplatform_glfw_window_chrome {
     GLFWwindow *window; /* borrowed — owned by the caller. */
     /* Used by handle_event(WINDOW_CLOSE) to post SHUTDOWN to the render thread. */
     struct yetty_ycore_xthread_event_pipe *input_pipe;
@@ -69,7 +68,7 @@ static struct yetty_yplatform_glfw_window_chrome *glfw_window_chrome_data(
 
 /* Bind the native window + main→render response pipe. Call once after create()
  * and the base window_chrome_configure(). Both borrowed. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yplatform_glfw_window_chrome_attach(
     struct yetty_yclass_object *obj, void *os_window,
     struct yetty_ycore_xthread_event_pipe *input_pipe)
@@ -86,7 +85,7 @@ struct yetty_ycore_void_result yetty_yplatform_glfw_window_chrome_attach(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:glfw_window_chrome:window_chrome_destroy")]]
+YETTY_ANNOTATE("override@yplatform:glfw_window_chrome:window_chrome_destroy")
 static struct yetty_ycore_void_result glfw_window_chrome_destroy(struct yetty_yclass_object *obj)
 {
     struct yetty_yplatform_glfw_window_chrome *chrome = glfw_window_chrome_data(obj);
@@ -100,7 +99,7 @@ static struct yetty_ycore_void_result glfw_window_chrome_destroy(struct yetty_yc
     return yetty_yclass_object_free(obj);
 }
 
-[[clang::annotate("override@yplatform:glfw_window_chrome:window_chrome_handle_event")]]
+YETTY_ANNOTATE("override@yplatform:glfw_window_chrome:window_chrome_handle_event")
 static struct yetty_ycore_void_result glfw_window_chrome_handle_event(
     struct yetty_yclass_object *obj, const struct yetty_yui_event *event)
 {

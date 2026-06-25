@@ -105,7 +105,7 @@ struct yai_pending_permission {
 };
 
 /* A captured per-backend override of a `defaults:` key (edit_mode, fold_lines,
- * show_thinking, hud_on, hud_float, hud_mode, hud_format). The value is kept verbatim so
+ * show_thinking, hud_on, hud_float, hud_mode, markdown_mode, hud_format). The value is kept verbatim so
  * it round-trips losslessly; the effective typed value is parsed at resolve
  * time (see yai_config_resolve / yai_effective_hud_*). */
 struct yai_setting {
@@ -155,6 +155,12 @@ struct yai_config {
     int hud_on;            /* 1 = ygui HUD window; 0 = stats as plain text */
     int hud_float;         /* 1 = float the HUD instead of docking */
     char hud_mode[8];      /* "yetty" = ygui HUD; "text" = plain text bar */
+    /* Markdown rendering backend for completed assistant answers, the sibling
+     * of hud_mode: "yetty" = render through yetty's SDF/MSDF markdown facility
+     * (a ycat figure envelope); "text" = plain styled text. "yetty" only takes
+     * effect on the yetty host (the figure envelope can't display elsewhere)
+     * and falls back to text off-host or if ycat fails. */
+    char markdown_mode[8];
     char hud_format[1024]; /* global HUD template = the parts concatenated */
     /* The HUD template authored as a sequence of pieces (YAML list); the app
      * concatenates them into hud_format. Kept verbatim so the list round-trips

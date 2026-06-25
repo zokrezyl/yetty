@@ -187,7 +187,7 @@ define codegen_one
 mod="$(1)"; spec="$$mod"; \
 for s in $(YCLASS_MODULES); do case "$$s" in "$$mod"=*) spec="$$s";; esac; done; \
 case "$$spec" in *=*) src_dir=$${spec#*=};; *) src_dir="src/yetty/$$mod";; esac; \
-sources=$$(grep -lrE 'clang::annotate\("(class|mixin)@'"$$mod"':' "$$src_dir" --include='*.c' --exclude='*.gen.c' | LC_ALL=C sort); \
+sources=$$(grep -lrE '(clang::annotate|YETTY_ANNOTATE)\("(class|mixin)@'"$$mod"':' "$$src_dir" --include='*.c' --exclude='*.gen.c' | LC_ALL=C sort); \
 if [ -z "$$sources" ]; then echo "ERROR: no annotated sources under $$src_dir"; exit 1; fi; \
 nofold=""; case " $(YCLASS_NOFOLD) " in *" $$mod "*) nofold="--no-fold";; esac; \
 echo "  codegen: $$mod"; \
@@ -529,14 +529,14 @@ config-webasm-ytrace-release: ## Configure WebAssembly ytrace release build
 build-webasm-ytrace-debug: ## Build WebAssembly ytrace debug
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YTRACE_DEBUG)/build.ninja" ]; then $(MAKE) config-webasm-ytrace-debug; fi
 	PATH="$(WEBASM_PATH)" bash -c 'cmake --build $(BUILD_DIR_WEBASM_YTRACE_DEBUG) --target yetty $(CMAKE_PARALLEL)'
-	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YTRACE_DEBUG)/
+	@cp build-tools/web/serve.py $(BUILD_DIR_WEBASM_YTRACE_DEBUG)/
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YTRACE_DEBUG)
 
 .PHONY: build-webasm-ytrace-release
 build-webasm-ytrace-release: ## Build WebAssembly ytrace release (CDB generation handled by CMake)
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YTRACE_RELEASE)/build.ninja" ]; then $(MAKE) config-webasm-ytrace-release; fi
 	PATH="$(WEBASM_PATH)" bash -c 'cmake --build $(BUILD_DIR_WEBASM_YTRACE_RELEASE) --target yetty $(CMAKE_PARALLEL)'
-	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YTRACE_RELEASE)/
+	@cp build-tools/web/serve.py $(BUILD_DIR_WEBASM_YTRACE_RELEASE)/
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YTRACE_RELEASE)
 
 .PHONY: config-webasm-yinfo-debug
@@ -551,7 +551,7 @@ config-webasm-yinfo-debug: ## Configure WebAssembly yinfo debug build (minimal l
 build-webasm-yinfo-debug: ## Build WebAssembly yinfo debug (minimal logging)
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YINFO_DEBUG)/build.ninja" ]; then $(MAKE) config-webasm-yinfo-debug; fi
 	PATH="$(WEBASM_PATH)" bash -c 'cmake --build $(BUILD_DIR_WEBASM_YINFO_DEBUG) --target yetty $(CMAKE_PARALLEL)'
-	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YINFO_DEBUG)/
+	@cp build-tools/web/serve.py $(BUILD_DIR_WEBASM_YINFO_DEBUG)/
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YINFO_DEBUG)
 
 .PHONY: config-webasm-yinfo-release
@@ -566,7 +566,7 @@ config-webasm-yinfo-release: ## Configure WebAssembly yinfo release build (minim
 build-webasm-yinfo-release: ## Build WebAssembly yinfo release (minimal logging)
 	@if [ ! -f "$(BUILD_DIR_WEBASM_YINFO_RELEASE)/build.ninja" ]; then $(MAKE) config-webasm-yinfo-release; fi
 	PATH="$(WEBASM_PATH)" bash -c 'cmake --build $(BUILD_DIR_WEBASM_YINFO_RELEASE) --target yetty $(CMAKE_PARALLEL)'
-	@cp build-tools/web/index.html build-tools/web/serve.py $(BUILD_DIR_WEBASM_YINFO_RELEASE)/
+	@cp build-tools/web/serve.py $(BUILD_DIR_WEBASM_YINFO_RELEASE)/
 	@$(MAKE) verify-webasm BUILD_DIR=$(BUILD_DIR_WEBASM_YINFO_RELEASE)
 
 .PHONY: verify-webasm

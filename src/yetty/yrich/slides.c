@@ -50,24 +50,24 @@ struct yetty_ycore_void_result yetty_yrich_shape_set_text(struct yetty_yclass_ob
  * Shape
  *=========================================================================*/
 
-struct [[clang::annotate("class@yrich:shape")]] [[clang::annotate("parent@yrich:element")]]
-yetty_yrich_shape {
+struct YETTY_ANNOTATE("class@yrich:shape") YETTY_ANNOTATE("parent@yrich:element")
+    yetty_yrich_shape {
     uint32_t kind; /* enum yetty_yrich_shape_kind */
     struct yetty_yrich_rect bounds;
 
-    [[clang::annotate("property")]] uint32_t fill_color;
-    [[clang::annotate("property")]] uint32_t stroke_color;
-    [[clang::annotate("property")]] float stroke_width;
-    [[clang::annotate("property")]] float rotation; /* degrees */
-    [[clang::annotate("property")]] float corner_radius;
+    YETTY_ANNOTATE("property") uint32_t fill_color;
+    YETTY_ANNOTATE("property") uint32_t stroke_color;
+    YETTY_ANNOTATE("property") float stroke_width;
+    YETTY_ANNOTATE("property") float rotation; /* degrees */
+    YETTY_ANNOTATE("property") float corner_radius;
 
     /* Text-box only — kept here so a single shape data slice covers all
 	 * shape kinds without needing per-kind subtypes. */
     char *text; /* owned, may be NULL */
     size_t text_len;
     struct yetty_yrich_text_style text_style;
-    [[clang::annotate("property")]] uint32_t text_align;  /* enum yetty_yrich_halign */
-    [[clang::annotate("property")]] uint32_t text_valign; /* enum yetty_yrich_valign */
+    YETTY_ANNOTATE("property") uint32_t text_align;  /* enum yetty_yrich_halign */
+    YETTY_ANNOTATE("property") uint32_t text_valign; /* enum yetty_yrich_valign */
 
     int editing;
     int32_t cursor_pos;
@@ -80,7 +80,7 @@ yetty_yrich_shape {
 };
 
 /* Shape kinds — exposed in the generated slides.h. */
-enum [[clang::annotate("expose")]] yetty_yrich_shape_kind {
+enum YETTY_ANNOTATE("expose") yetty_yrich_shape_kind {
     YETTY_YRICH_SHAPE_RECTANGLE = 0,
     YETTY_YRICH_SHAPE_ELLIPSE,
     YETTY_YRICH_SHAPE_TEXTBOX,
@@ -89,7 +89,7 @@ enum [[clang::annotate("expose")]] yetty_yrich_shape_kind {
     YETTY_YRICH_SHAPE_IMAGE,
 };
 
-[[clang::annotate("override@yrich:shape:constructor")]]
+YETTY_ANNOTATE("override@yrich:shape:constructor")
 static struct yetty_ycore_void_result shape_constructor(struct yetty_yclass_object *obj)
 {
     struct yetty_ycore_void_result super_res =
@@ -110,7 +110,7 @@ static struct yetty_ycore_void_result shape_constructor(struct yetty_yclass_obje
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:shape:element_destroy")]]
+YETTY_ANNOTATE("override@yrich:shape:element_destroy")
 static struct yetty_ycore_void_result shape_destroy(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_shape_ptr_result data_res = yetty_yrich_shape_from(obj);
@@ -121,7 +121,7 @@ static struct yetty_ycore_void_result shape_destroy(struct yetty_yclass_object *
                                   (yetty_yclass_method_id_t)yetty_yrich_element_destroy);
 }
 
-[[clang::annotate("override@yrich:shape:element_bounds")]]
+YETTY_ANNOTATE("override@yrich:shape:element_bounds")
 static struct yetty_ycore_void_result shape_bounds(struct yetty_yclass_object *obj,
                                                    struct yetty_yrich_rect *out_bounds)
 {
@@ -134,7 +134,7 @@ static struct yetty_ycore_void_result shape_bounds(struct yetty_yclass_object *o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:shape:element_is_editable")]]
+YETTY_ANNOTATE("override@yrich:shape:element_is_editable")
 static struct yetty_ycore_int_result shape_is_editable(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_shape_ptr_result data_res = yetty_yrich_shape_from(obj);
@@ -142,7 +142,7 @@ static struct yetty_ycore_int_result shape_is_editable(struct yetty_yclass_objec
     return YETTY_OK(yetty_ycore_int, data_res.value->kind == YETTY_YRICH_SHAPE_TEXTBOX ? 1 : 0);
 }
 
-[[clang::annotate("override@yrich:shape:element_begin_edit")]]
+YETTY_ANNOTATE("override@yrich:shape:element_begin_edit")
 static struct yetty_ycore_void_result shape_begin_edit(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_shape_ptr_result data_res = yetty_yrich_shape_from(obj);
@@ -155,7 +155,7 @@ static struct yetty_ycore_void_result shape_begin_edit(struct yetty_yclass_objec
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:shape:element_end_edit")]]
+YETTY_ANNOTATE("override@yrich:shape:element_end_edit")
 static struct yetty_ycore_void_result shape_end_edit(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_shape_ptr_result data_res = yetty_yrich_shape_from(obj);
@@ -166,7 +166,7 @@ static struct yetty_ycore_void_result shape_end_edit(struct yetty_yclass_object 
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:shape:element_is_editing")]]
+YETTY_ANNOTATE("override@yrich:shape:element_is_editing")
 static struct yetty_ycore_int_result shape_is_editing(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_shape_ptr_result data_res = yetty_yrich_shape_from(obj);
@@ -218,7 +218,7 @@ static struct yetty_ycore_void_result emit_text(struct yetty_ydraw_drawable_list
                                               layer + 1, shape->text_style.font_id, 0.0f);
 }
 
-[[clang::annotate("override@yrich:shape:element_render")]]
+YETTY_ANNOTATE("override@yrich:shape:element_render")
 static struct yetty_ycore_void_result shape_render(struct yetty_yclass_object *obj,
                                                    struct yetty_ydraw_drawable_list *drawable_list,
                                                    uint32_t layer, int selected)
@@ -299,7 +299,7 @@ static struct yetty_ycore_void_result shape_render(struct yetty_yclass_object *o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:shape:element_insert_text")]]
+YETTY_ANNOTATE("override@yrich:shape:element_insert_text")
 static struct yetty_ycore_void_result shape_insert_text(struct yetty_yclass_object *obj,
                                                         struct yetty_ycore_buffer text)
 {
@@ -336,7 +336,7 @@ static struct yetty_ycore_void_result shape_insert_text(struct yetty_yclass_obje
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:shape:element_delete_sel")]]
+YETTY_ANNOTATE("override@yrich:shape:element_delete_sel")
 static struct yetty_ycore_void_result shape_delete_sel(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_shape_ptr_result data_res = yetty_yrich_shape_from(obj);
@@ -356,7 +356,7 @@ static struct yetty_ycore_void_result shape_delete_sel(struct yetty_yclass_objec
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_shape_set_text(struct yetty_yclass_object *obj,
                                                           const char *text, size_t len)
 {
@@ -378,7 +378,7 @@ struct yetty_ycore_void_result yetty_yrich_shape_set_text(struct yetty_yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_shape_set_font_size(struct yetty_yclass_object *obj,
                                                                float font_size)
 {
@@ -390,7 +390,7 @@ struct yetty_ycore_void_result yetty_yrich_shape_set_font_size(struct yetty_ycla
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_shape_set_text_color(struct yetty_yclass_object *obj,
                                                                 uint32_t color)
 {
@@ -400,7 +400,7 @@ struct yetty_ycore_void_result yetty_yrich_shape_set_text_color(struct yetty_ycl
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_shape_set_image_source(struct yetty_yclass_object *obj,
                                                                   const char *source)
 {
@@ -425,9 +425,8 @@ struct yetty_ycore_void_result yetty_yrich_shape_set_image_source(struct yetty_y
  * Slides document
  *=========================================================================*/
 
-struct [[clang::annotate("class@yrich:slides"),
-         clang::annotate("include@yetty/yrich/yrich-types.h")]] [[clang::annotate(
-    "parent@yrich:document")]] yetty_yrich_slides {
+struct YETTY_ANNOTATE("class@yrich:slides") YETTY_ANNOTATE("include@yetty/yrich/yrich-types.h")
+    YETTY_ANNOTATE("parent@yrich:document") yetty_yrich_slides {
     float slide_width;
     float slide_height;
 
@@ -474,7 +473,7 @@ static struct yetty_ycore_void_result slide_add_shape(struct yetty_yrich_slide *
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:slides:constructor")]]
+YETTY_ANNOTATE("override@yrich:slides:constructor")
 static struct yetty_ycore_void_result slides_constructor(struct yetty_yclass_object *obj)
 {
     struct yetty_ycore_void_result super_res =
@@ -488,7 +487,7 @@ static struct yetty_ycore_void_result slides_constructor(struct yetty_yclass_obj
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:slides:document_destroy")]]
+YETTY_ANNOTATE("override@yrich:slides:document_destroy")
 static struct yetty_ycore_void_result slides_destroy(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_slides_ptr_result data_res = yetty_yrich_slides_from(obj);
@@ -503,7 +502,7 @@ static struct yetty_ycore_void_result slides_destroy(struct yetty_yclass_object 
                                   (yetty_yclass_method_id_t)yetty_yrich_document_destroy);
 }
 
-[[clang::annotate("override@yrich:slides:document_content_width")]]
+YETTY_ANNOTATE("override@yrich:slides:document_content_width")
 static struct yetty_ycore_float_result slides_content_width(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_slides_ptr_result data_res = yetty_yrich_slides_from(obj);
@@ -511,7 +510,7 @@ static struct yetty_ycore_float_result slides_content_width(struct yetty_yclass_
     return YETTY_OK(yetty_ycore_float, data_res.value->slide_width);
 }
 
-[[clang::annotate("override@yrich:slides:document_content_height")]]
+YETTY_ANNOTATE("override@yrich:slides:document_content_height")
 static struct yetty_ycore_float_result slides_content_height(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_slides_ptr_result data_res = yetty_yrich_slides_from(obj);
@@ -519,7 +518,7 @@ static struct yetty_ycore_float_result slides_content_height(struct yetty_yclass
     return YETTY_OK(yetty_ycore_float, data_res.value->slide_height);
 }
 
-[[clang::annotate("override@yrich:slides:document_render")]]
+YETTY_ANNOTATE("override@yrich:slides:document_render")
 static struct yetty_ycore_void_result slides_render(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_slides_ptr_result data_res = yetty_yrich_slides_from(obj);
@@ -572,7 +571,7 @@ static struct yetty_ycore_void_result slides_render(struct yetty_yclass_object *
  * Slide management
  *=========================================================================*/
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_slides_set_slide_size(struct yetty_yclass_object *obj,
                                                                  float width, float height)
 {
@@ -583,7 +582,7 @@ struct yetty_ycore_void_result yetty_yrich_slides_set_slide_size(struct yetty_yc
     return yetty_yrich_document_mark_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yrich_slide_ptr_result yetty_yrich_slides_add_slide(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_slides_ptr_result data_res = yetty_yrich_slides_from(obj);
@@ -608,7 +607,7 @@ struct yetty_yrich_slide_ptr_result yetty_yrich_slides_add_slide(struct yetty_yc
     return YETTY_OK(yetty_yrich_slide_ptr, slide_res.value);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yrich_slide *yetty_yrich_slides_slide_at(struct yetty_yclass_object *obj,
                                                       int32_t index)
 {
@@ -624,7 +623,7 @@ struct yetty_yrich_slide *yetty_yrich_slides_slide_at(struct yetty_yclass_object
     return slides->slides[index];
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int32_t yetty_yrich_slides_current(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_slides_ptr_result data_res = yetty_yrich_slides_from(obj);
@@ -639,7 +638,7 @@ int32_t yetty_yrich_slides_current(struct yetty_yclass_object *obj)
  * Navigation slots — scalar args, wire-marshallable.
  *=========================================================================*/
 
-[[clang::annotate("virtual@yrich:slides:slides_set_current")]]
+YETTY_ANNOTATE("virtual@yrich:slides:slides_set_current")
 static struct yetty_ycore_void_result slides_set_current(struct yetty_yclass_object *obj,
                                                          int32_t index)
 {
@@ -656,7 +655,7 @@ static struct yetty_ycore_void_result slides_set_current(struct yetty_yclass_obj
     return yetty_yrich_document_mark_dirty(obj);
 }
 
-[[clang::annotate("virtual@yrich:slides:slides_next")]]
+YETTY_ANNOTATE("virtual@yrich:slides:slides_next")
 static struct yetty_ycore_void_result slides_next(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_slides_ptr_result data_res = yetty_yrich_slides_from(obj);
@@ -664,7 +663,7 @@ static struct yetty_ycore_void_result slides_next(struct yetty_yclass_object *ob
     return slides_set_current(obj, data_res.value->current_slide + 1);
 }
 
-[[clang::annotate("virtual@yrich:slides:slides_prev")]]
+YETTY_ANNOTATE("virtual@yrich:slides:slides_prev")
 static struct yetty_ycore_void_result slides_prev(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_slides_ptr_result data_res = yetty_yrich_slides_from(obj);
@@ -741,7 +740,7 @@ static struct yetty_yclass_object_ptr_result add_shape_to_current(struct yetty_y
     return YETTY_OK(yetty_yclass_object_ptr, shape_obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_rectangle(
     struct yetty_yclass_object *obj, float x, float y, float width, float height)
 {
@@ -749,7 +748,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_rectangle(
     return add_shape_to_current(obj, YETTY_YRICH_SHAPE_RECTANGLE, bounds);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_ellipse(
     struct yetty_yclass_object *obj, float x, float y, float width, float height)
 {
@@ -757,7 +756,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_ellipse(
     return add_shape_to_current(obj, YETTY_YRICH_SHAPE_ELLIPSE, bounds);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_textbox(
     struct yetty_yclass_object *obj, float x, float y, float width, float height, const char *text,
     size_t text_len)
@@ -800,7 +799,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_textbox(
     return shape_res;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_line(struct yetty_yclass_object *obj,
                                                                   float x1, float y1, float x2,
                                                                   float y2)
@@ -809,7 +808,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_line(struct yetty_y
     return add_shape_to_current(obj, YETTY_YRICH_SHAPE_LINE, bounds);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_image(struct yetty_yclass_object *obj,
                                                                    float x, float y, float width,
                                                                    float height)

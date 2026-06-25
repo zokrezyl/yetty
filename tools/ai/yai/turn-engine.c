@@ -23,7 +23,7 @@
 #include <stdint.h>
 #include <stdio.h>
 
-struct [[clang::annotate("class@yai:turn_engine")]] [[clang::annotate("parent@yai:engine")]]
+struct YETTY_ANNOTATE("class@yai:turn_engine") YETTY_ANNOTATE("parent@yai:engine")
 yetty_yai_turn_engine {
     /* The class@ annotation needs a struct to sit on; the per-turn
      * lifecycle state (open-handle count, failure flag) lives in
@@ -51,7 +51,7 @@ static void turn_engine_handle_closed_cb(uv_handle_t *handle)
     yai_report_error(app, "turn boundary", yai_turn_finished(app));
 }
 
-[[clang::annotate("override@yai:turn_engine:on_child_exit")]]
+YETTY_ANNOTATE("override@yai:turn_engine:on_child_exit")
 static struct yetty_ycore_void_result turn_engine_on_child_exit(struct yetty_yclass_object *obj,
                                                                 struct yai_app *app,
                                                                 int64_t exit_status)
@@ -73,7 +73,7 @@ static struct yetty_ycore_void_result turn_engine_on_child_exit(struct yetty_ycl
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yai:turn_engine:on_child_eof")]]
+YETTY_ANNOTATE("override@yai:turn_engine:on_child_eof")
 static struct yetty_ycore_void_result turn_engine_on_child_eof(struct yetty_yclass_object *obj,
                                                                struct yai_app *app)
 {
@@ -94,7 +94,7 @@ static struct yetty_ycore_void_result turn_engine_on_child_eof(struct yetty_ycla
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yai:turn_engine:interrupt")]]
+YETTY_ANNOTATE("override@yai:turn_engine:interrupt")
 static struct yetty_ycore_void_result turn_engine_interrupt(struct yetty_yclass_object *obj,
                                                             struct yai_app *app)
 {

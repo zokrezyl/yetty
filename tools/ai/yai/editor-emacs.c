@@ -26,7 +26,7 @@
 #include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
 
-struct [[clang::annotate("class@yai:emacs")]] [[clang::annotate("parent@yai:editor")]]
+struct YETTY_ANNOTATE("class@yai:emacs") YETTY_ANNOTATE("parent@yai:editor")
 yetty_yai_emacs {
     char unused;
 };
@@ -157,7 +157,7 @@ static int emacs_plain(struct yai_app *app, char byte)
     return editor_cmd_insert_char(app, byte);
 }
 
-[[clang::annotate("override@yai:emacs:feed_byte")]]
+YETTY_ANNOTATE("override@yai:emacs:feed_byte")
 static struct yetty_ycore_int_result emacs_feed_byte(struct yetty_yclass_object *obj,
                                                      struct yai_app *app, int byte)
 {

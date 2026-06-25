@@ -500,6 +500,43 @@ static struct yetty_ycore_void_result sdf_install_wire_font(
     return YETTY_OK_VOID();
 }
 
+/* Install the built-in MSDF default font at slot 0. Text records that ride the
+ * canvas default (font_id < 0) — markdown, charts, diagrams, any ydraw producer
+ * that ships no FONT resource of its own — resolve to slot 0; without a font
+ * there, expand_text_span drops every glyph silently (the bug that left ycat
+ * README/markdown blank while ypdf, which embeds its own font into slots 1.. via
+ * sdf_install_wire_font, rendered fine). This is the same default font the
+ * terminal installs at slot 0 of every ygrid figure. Best-effort: a missing CDB
+ * leaves slot 0 empty so only default-font text fails to render; the terminal
+ * stays up. */
+static struct yetty_ycore_void_result sdf_install_default_font(struct yetty_yvterm_sdf_layer *layer,
+                                                               const char *fonts_dir)
+{
+    if (!layer->font_cache || !fonts_dir || !*fonts_dir) {
+        return YETTY_OK_VOID();
+    }
+    const char *font_family = "DejaVuSansMNerdFontMono";
+    char cdb_path[1024];
+    snprintf(cdb_path, sizeof(cdb_path), "%s/../msdf-fonts/%s-Regular.cdb", fonts_dir, font_family);
+    if (!yetty_yplatform_file_exists(cdb_path)) {
+        ydebug("sdf-layer: default font CDB missing (%s) — default-font text will not render",
+               cdb_path);
+        return YETTY_OK_VOID();
+    }
+
+    struct yetty_yfont_cache_ref_result ref =
+        yetty_yfont_cache_get_font(layer->font_cache, "ydraw_default", cdb_path);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ref, "sdf-layer: default font cache get_font");
+
+    struct yetty_ycore_void_result sr = sdf_set_font(layer, 0u, ref.value.font);
+    if (YETTY_IS_ERR(sr)) {
+        yetty_yfont_cache_release_font(layer->font_cache, ref.value.handle);
+        return YETTY_ERR(yetty_ycore_void, "sdf-layer: default font set_font", sr);
+    }
+    ydebug("sdf-layer: default font installed at slot 0 (%s)", cdb_path);
+    return YETTY_OK_VOID();
+}
+
 /*===========================================================================
  * Bucketing + indexing (one frame's worth)
  *=========================================================================*/
@@ -897,6 +934,16 @@ struct yetty_yvterm_sdf_layer_ptr_result yetty_yvterm_sdf_layer_create(
     } else {
         ydebug("sdf-layer: font cache unavailable: %s", font_cache_r.error.msg);
         yetty_ycore_error_destroy(font_cache_r.error);
+    }
+
+    /* Slot 0 = the canvas default font, so font_id<0 text records (markdown,
+     * charts, diagrams, …) expand into glyphs instead of being dropped. */
+    const char *fonts_dir =
+        context->runtime->config->ops->get_string(context->runtime->config, "paths/fonts", "");
+    struct yetty_ycore_void_result df = sdf_install_default_font(layer, fonts_dir);
+    if (YETTY_IS_ERR(df)) {
+        ydebug("sdf-layer: default font install failed: %s", df.error.msg);
+        yetty_ycore_error_destroy(df.error);
     }
 
     struct yetty_ycore_void_result sl = load_sdf_lib(layer);

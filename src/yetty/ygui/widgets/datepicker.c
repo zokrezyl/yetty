@@ -29,8 +29,8 @@ struct yetty_ygui_datepicker_ptr_result yetty_ygui_datepicker_from(struct yetty_
 #define DP_MUTED 0xFFA8A79Fu  /* BRAND_TEXT_SECONDARY (159,167,168) */
 #define DP_ACCENT 0xFF92A86Bu /* BRAND_ACCENT        (107,168,146) */
 
-struct [[clang::annotate("class@ygui:datepicker")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] yetty_ygui_datepicker {
+struct YETTY_ANNOTATE("class@ygui:datepicker") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_datepicker {
     int shown_year;
     int shown_month; /* 0-based */
     int sel_year;
@@ -100,7 +100,7 @@ static struct yetty_ycore_void_result dp_frame(struct yetty_ygui_emit_ctx *ctx, 
                                                      stroke_w, &g);
 }
 
-[[clang::annotate("override@ygui:datepicker:constructor")]]
+YETTY_ANNOTATE("override@ygui:datepicker:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -118,7 +118,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:datepicker:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:datepicker:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
@@ -190,7 +190,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:datepicker:widget_on_press")]]
+YETTY_ANNOTATE("override@ygui:datepicker:widget_on_press")
 static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass_obj, float x,
                                               float y, int btn)
 {
@@ -253,7 +253,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_datepicker_set_date(struct yetty_yclass_object *obj,
                                                               int year, int month_0_based, int day)
 {
@@ -271,7 +271,7 @@ struct yetty_ycore_void_result yetty_ygui_datepicker_set_date(struct yetty_yclas
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_ygui_datepicker_get_date(const struct yetty_yclass_object *obj, int *year,
                                     int *month_0_based, int *day)
 {

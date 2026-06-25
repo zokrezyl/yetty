@@ -32,8 +32,8 @@ struct yetty_ygui_filepicker_ptr_result yetty_ygui_filepicker_from(struct yetty_
 #define FP_DIR 0xFF92A86Bu       /* BRAND_ACCENT        (107,168,146) */
 #define FP_SEL_BG 0xFF1F1A14u    /* BRAND_BG_LIFTED     (20,26,31)  */
 
-struct [[clang::annotate("class@ygui:filepicker")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] yetty_ygui_filepicker {
+struct YETTY_ANNOTATE("class@ygui:filepicker") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_filepicker {
     char *cwd;
     char **entries;
     int entry_count;
@@ -146,7 +146,7 @@ static struct yetty_ycore_void_result fp_load_dir(struct yetty_ygui_filepicker *
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:filepicker:constructor")]]
+YETTY_ANNOTATE("override@ygui:filepicker:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -164,7 +164,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:filepicker:destructor")]]
+YETTY_ANNOTATE("override@ygui:filepicker:destructor")
 static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -176,7 +176,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_ob
     return yetty_ygui_super_void(obj, fp_class(), (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:filepicker:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:filepicker:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
@@ -270,7 +270,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
 /* Drag-to-scroll: while this picker holds the pointer capture, translate
  * vertical drag into a row offset. The paint already windows + clips to
  * [scroll, scroll+visible), so changing scroll is all that's needed. */
-[[clang::annotate("override@ygui:filepicker:widget_on_motion")]]
+YETTY_ANNOTATE("override@ygui:filepicker:widget_on_motion")
 static struct yetty_ycore_int_result fp_on_motion(struct yetty_yclass_object *yclass_obj, float x,
                                                   float y)
 {
@@ -314,7 +314,7 @@ static struct yetty_ycore_int_result fp_on_motion(struct yetty_yclass_object *yc
 
 /* Wheel / trackpad scroll over the list. dy>0 (wheel up) moves toward the
  * top. Consumed only when the list overflows, so it bubbles otherwise. */
-[[clang::annotate("override@ygui:filepicker:widget_on_scroll")]]
+YETTY_ANNOTATE("override@ygui:filepicker:widget_on_scroll")
 static struct yetty_ycore_int_result fp_on_scroll(struct yetty_yclass_object *yclass_obj, float x,
                                                   float y, float dx, float dy)
 {
@@ -352,7 +352,7 @@ static struct yetty_ycore_int_result fp_on_scroll(struct yetty_yclass_object *yc
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:filepicker:widget_on_press")]]
+YETTY_ANNOTATE("override@ygui:filepicker:widget_on_press")
 static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass_obj, float x,
                                               float y, int btn)
 {
@@ -468,7 +468,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_filepicker_set_dir(struct yetty_yclass_object *obj,
                                                              const char *path)
 {
@@ -494,7 +494,7 @@ struct yetty_ycore_void_result yetty_ygui_filepicker_set_dir(struct yetty_yclass
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 const char *yetty_ygui_filepicker_get_dir(const struct yetty_yclass_object *obj)
 {
     if (!obj) {

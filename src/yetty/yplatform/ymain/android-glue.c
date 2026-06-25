@@ -118,16 +118,16 @@ static void ime_call(struct android_app *app, int show)
     }
 }
 
-void yetty_yinit_android_show_keyboard(struct android_app *app)
+void yetty_yplatform_android_show_keyboard(struct android_app *app)
 {
     ime_call(app, 1);
 }
-void yetty_yinit_android_hide_keyboard(struct android_app *app)
+void yetty_yplatform_android_hide_keyboard(struct android_app *app)
 {
     ime_call(app, 0);
 }
 
-float yetty_yinit_android_content_scale(struct android_app *app)
+float yetty_yplatform_android_content_scale(struct android_app *app)
 {
     int32_t density = (app && app->config) ? AConfiguration_getDensity(app->config) : 0;
     /* DEFAULT (0), ANY (0xfffe) and NONE (0xffff) are sentinels, not real
@@ -139,7 +139,175 @@ float yetty_yinit_android_content_scale(struct android_app *app)
     return (float)density / 160.0f;
 }
 
-void yetty_yinit_android_mkdir_p(const char *path)
+/* ---- clipboard (ClipboardManager over JNI) ------------------------------
+ * yplatform/yclipboard/android.c forwards to these C-ABI entry points, which
+ * take no app argument, so they reach the activity/JavaVM through the NDK
+ * process-singleton app cached by android_main below. ClipboardManager's
+ * get/setPrimaryClip are plain system-service IPC and safe from the
+ * native_app_glue thread (unlike View methods), so no UI-thread hop is needed. */
+static struct android_app *yetty_yplatform_android_clipboard_app;
+
+/* Acquire a JNIEnv for the calling thread, attaching if needed. `out_attached`
+ * tells the caller whether it must DetachCurrentThread afterwards. */
+static JNIEnv *android_clipboard_env(JavaVM **out_vm, int *out_attached)
+{
+    struct android_app *app = yetty_yplatform_android_clipboard_app;
+    if (!app || !app->activity) {
+        return NULL;
+    }
+    JavaVM *vm = app->activity->vm;
+    JNIEnv *env = NULL;
+    int attached = 0;
+    if ((*vm)->GetEnv(vm, (void **)&env, JNI_VERSION_1_6) != JNI_OK) {
+        if ((*vm)->AttachCurrentThread(vm, &env, NULL) != JNI_OK) {
+            return NULL;
+        }
+        attached = 1;
+    }
+    *out_vm = vm;
+    *out_attached = attached;
+    return env;
+}
+
+/* activity.getSystemService("clipboard") -> ClipboardManager (local ref). */
+static jobject android_clipboard_service(JNIEnv *env, jobject activity)
+{
+    jclass act_cls = (*env)->GetObjectClass(env, activity);
+    jmethodID get_service = (*env)->GetMethodID(env, act_cls, "getSystemService",
+                                                "(Ljava/lang/String;)Ljava/lang/Object;");
+    jstring name = (*env)->NewStringUTF(env, "clipboard");
+    jobject clipboard = (*env)->CallObjectMethod(env, activity, get_service, name);
+    (*env)->DeleteLocalRef(env, name);
+    (*env)->DeleteLocalRef(env, act_cls);
+    return clipboard;
+}
+
+int yetty_yplatform_android_clipboard_set_text(const char *text, size_t len)
+{
+    if (!text) {
+        return -1;
+    }
+    JavaVM *vm = NULL;
+    int attached = 0;
+    JNIEnv *env = android_clipboard_env(&vm, &attached);
+    if (!env) {
+        return -1;
+    }
+    int result = -1;
+    jobject activity = yetty_yplatform_android_clipboard_app->activity->clazz;
+    jobject clipboard = android_clipboard_service(env, activity);
+    char *ztext = malloc(len + 1);
+    if (clipboard && ztext) {
+        memcpy(ztext, text, len);
+        ztext[len] = '\0';
+        jstring jtext = (*env)->NewStringUTF(env, ztext);
+        jclass clip_data_cls = (*env)->FindClass(env, "android/content/ClipData");
+        jmethodID new_plain = (*env)->GetStaticMethodID(
+            env, clip_data_cls, "newPlainText",
+            "(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Landroid/content/ClipData;");
+        jstring label = (*env)->NewStringUTF(env, "yetty");
+        jobject clip = (*env)->CallStaticObjectMethod(env, clip_data_cls, new_plain, label, jtext);
+        jclass mgr_cls = (*env)->GetObjectClass(env, clipboard);
+        jmethodID set_primary = (*env)->GetMethodID(env, mgr_cls, "setPrimaryClip",
+                                                    "(Landroid/content/ClipData;)V");
+        (*env)->CallVoidMethod(env, clipboard, set_primary, clip);
+        if ((*env)->ExceptionCheck(env)) {
+            (*env)->ExceptionClear(env);
+        } else {
+            result = 0;
+        }
+        (*env)->DeleteLocalRef(env, mgr_cls);
+        (*env)->DeleteLocalRef(env, clip);
+        (*env)->DeleteLocalRef(env, label);
+        (*env)->DeleteLocalRef(env, clip_data_cls);
+        (*env)->DeleteLocalRef(env, jtext);
+    }
+    free(ztext);
+    if (clipboard) {
+        (*env)->DeleteLocalRef(env, clipboard);
+    }
+    if (attached) {
+        (*vm)->DetachCurrentThread(vm);
+    }
+    return result;
+}
+
+int yetty_yplatform_android_clipboard_request_paste(
+    struct yetty_ycore_xthread_event_pipe *response_pipe)
+{
+    if (!response_pipe) {
+        return -1;
+    }
+    char *copy = NULL;
+    JavaVM *vm = NULL;
+    int attached = 0;
+    JNIEnv *env = android_clipboard_env(&vm, &attached);
+    if (env) {
+        jobject activity = yetty_yplatform_android_clipboard_app->activity->clazz;
+        jobject clipboard = android_clipboard_service(env, activity);
+        if (clipboard) {
+            jclass mgr_cls = (*env)->GetObjectClass(env, clipboard);
+            jmethodID get_primary = (*env)->GetMethodID(env, mgr_cls, "getPrimaryClip",
+                                                        "()Landroid/content/ClipData;");
+            jobject clip = (*env)->CallObjectMethod(env, clipboard, get_primary);
+            if (clip) {
+                jclass clip_cls = (*env)->GetObjectClass(env, clip);
+                jmethodID item_count = (*env)->GetMethodID(env, clip_cls, "getItemCount", "()I");
+                if ((*env)->CallIntMethod(env, clip, item_count) > 0) {
+                    jmethodID item_at = (*env)->GetMethodID(
+                        env, clip_cls, "getItemAt", "(I)Landroid/content/ClipData$Item;");
+                    jobject item = (*env)->CallObjectMethod(env, clip, item_at, 0);
+                    jclass item_cls = (*env)->GetObjectClass(env, item);
+                    jmethodID coerce = (*env)->GetMethodID(
+                        env, item_cls, "coerceToText",
+                        "(Landroid/content/Context;)Ljava/lang/CharSequence;");
+                    jobject seq = (*env)->CallObjectMethod(env, item, coerce, activity);
+                    if (seq) {
+                        jclass seq_cls = (*env)->GetObjectClass(env, seq);
+                        jmethodID to_string =
+                            (*env)->GetMethodID(env, seq_cls, "toString", "()Ljava/lang/String;");
+                        jstring jstr = (*env)->CallObjectMethod(env, seq, to_string);
+                        if (jstr) {
+                            const char *utf8 = (*env)->GetStringUTFChars(env, jstr, NULL);
+                            if (utf8) {
+                                size_t copy_len = strlen(utf8);
+                                copy = malloc(copy_len + 1);
+                                if (copy) {
+                                    memcpy(copy, utf8, copy_len + 1);
+                                }
+                                (*env)->ReleaseStringUTFChars(env, jstr, utf8);
+                            }
+                            (*env)->DeleteLocalRef(env, jstr);
+                        }
+                        (*env)->DeleteLocalRef(env, seq_cls);
+                        (*env)->DeleteLocalRef(env, seq);
+                    }
+                    (*env)->DeleteLocalRef(env, item_cls);
+                    (*env)->DeleteLocalRef(env, item);
+                }
+                (*env)->DeleteLocalRef(env, clip_cls);
+                (*env)->DeleteLocalRef(env, clip);
+            }
+            (*env)->DeleteLocalRef(env, mgr_cls);
+            (*env)->DeleteLocalRef(env, clipboard);
+        }
+        if (attached) {
+            (*vm)->DetachCurrentThread(vm);
+        }
+    }
+    /* Post the paste result (copy may be NULL for empty / non-text clips); the
+     * event-loop receiver owns and frees it. On a failed/short write the bytes
+     * never leave, so free locally — same contract as the desktop clipboard. */
+    struct yetty_yui_event response = {.type = YETTY_YCORE_PASTE, .payload = copy};
+    struct yetty_ycore_size_result write_result =
+        response_pipe->ops->write(response_pipe, &response, sizeof(response));
+    if (YETTY_IS_ERR(write_result) || write_result.value != sizeof(response)) {
+        free(copy);
+    }
+    return 0;
+}
+
+void yetty_yplatform_android_mkdir_p(const char *path)
 {
     char tmp[512];
     size_t len;
@@ -499,7 +667,7 @@ static int32_t handle_input(struct android_app *app, AInputEvent *event)
              * back after dismissing it with the Back button. Programs that
              * don't want an IME (the ygui showcase) opt out. */
             if (!state->suppress_soft_keyboard) {
-                yetty_yinit_android_show_keyboard(app);
+                yetty_yplatform_android_show_keyboard(app);
             }
             ev.type = YETTY_YCORE_MOUSE_DOWN;
             ev.mouse.x = x;
@@ -634,6 +802,8 @@ void android_main(struct android_app *app)
 
     state.app = app;
     app->userData = &state;
+    /* Cache the process-singleton app for the parameterless clipboard bridge. */
+    yetty_yplatform_android_clipboard_app = app;
     app->onAppCmd = handle_cmd;
     app->onInputEvent = handle_input;
 

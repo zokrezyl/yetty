@@ -28,8 +28,8 @@ struct yetty_ygui_spinner_ptr_result yetty_ygui_spinner_from(struct yetty_yclass
 #define COLOR_TEXT 0xFFE4E5E0u
 #define COLOR_ACC 0xFF92A86Bu
 
-struct [[clang::annotate("class@ygui:spinner")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-yetty_ygui_spinner {
+struct YETTY_ANNOTATE("class@ygui:spinner") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_spinner {
     float value, min_v, max_v, step;
 };
 
@@ -41,7 +41,7 @@ static inline void yetty_ycore_error_destroy_unused(struct yetty_ycore_void_resu
     }
 }
 
-[[clang::annotate("override@ygui:spinner:constructor")]]
+YETTY_ANNOTATE("override@ygui:spinner:constructor")
 static struct yetty_ycore_void_result spinner_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -59,7 +59,7 @@ static struct yetty_ycore_void_result spinner_constructor(struct yetty_yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:spinner:widget_on_press")]]
+YETTY_ANNOTATE("override@ygui:spinner:widget_on_press")
 static struct yetty_ycore_int_result spinner_on_press(struct yetty_yclass_object *yclass_obj,
                                                       float x, float y, int button)
 {
@@ -134,7 +134,7 @@ static struct yetty_ycore_void_result paint_text(struct yetty_ygui_emit_ctx *ctx
     return yetty_ydraw_drawable_list_add_text(ctx->ygrid_drawable_list, x, y, &tb, fs, c, 0, -1, 0);
 }
 
-[[clang::annotate("override@ygui:spinner:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:spinner:widget_paint")
 static struct yetty_ycore_void_result spinner_paint(struct yetty_yclass_object *yclass_obj,
                                                     struct yetty_ygui_emit_ctx *ctx)
 {
@@ -172,7 +172,7 @@ static struct yetty_ycore_void_result spinner_paint(struct yetty_yclass_object *
     return paint_text(ctx, buf, r.min.x + third + 8, ty, fs, COLOR_TEXT);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_spinner_set_value(struct yetty_yclass_object *obj,
                                                             float v)
 {
@@ -185,7 +185,7 @@ struct yetty_ycore_void_result yetty_ygui_spinner_set_value(struct yetty_yclass_
     d->value = v;
     return yetty_ygui_widget_set_dirty(obj);
 }
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_yclass_object *obj,
                                                             float mn, float mx, float step)
 {
@@ -200,7 +200,7 @@ struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_yclass_
     d->step = step > 0 ? step : 1;
     return yetty_ygui_widget_set_dirty(obj);
 }
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_float_result yetty_ygui_spinner_get_value(const struct yetty_yclass_object *obj)
 {
     if (!obj) {

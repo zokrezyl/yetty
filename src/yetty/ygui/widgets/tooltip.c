@@ -32,12 +32,12 @@ struct yetty_ygui_tooltip_ptr_result yetty_ygui_tooltip_from(struct yetty_yclass
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:tooltip")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-yetty_ygui_tooltip {
+struct YETTY_ANNOTATE("class@ygui:tooltip") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_tooltip {
     char *text;
 };
 
-[[clang::annotate("override@ygui:tooltip:constructor")]]
+YETTY_ANNOTATE("override@ygui:tooltip:constructor")
 static struct yetty_ycore_void_result tooltip_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -55,7 +55,7 @@ static struct yetty_ycore_void_result tooltip_constructor(struct yetty_yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:tooltip:destructor")]]
+YETTY_ANNOTATE("override@ygui:tooltip:destructor")
 static struct yetty_ycore_void_result tooltip_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -68,7 +68,7 @@ static struct yetty_ycore_void_result tooltip_destructor(struct yetty_yclass_obj
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:tooltip:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:tooltip:widget_paint")
 static struct yetty_ycore_void_result tooltip_paint(struct yetty_yclass_object *yclass_obj,
                                                     struct yetty_ygui_emit_ctx *ctx)
 {
@@ -95,7 +95,7 @@ static struct yetty_ycore_void_result tooltip_paint(struct yetty_yclass_object *
                                               /*font_id=*/-1, /*rotation=*/0.0f);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_tooltip_set_text(struct yetty_yclass_object *obj,
                                                            const char *text)
 {
@@ -119,7 +119,7 @@ struct yetty_ycore_void_result yetty_ygui_tooltip_set_text(struct yetty_yclass_o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_const_char_ptr_result yetty_ygui_tooltip_get_text(
     const struct yetty_yclass_object *obj)
 {

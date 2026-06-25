@@ -32,7 +32,7 @@
 
 #include <stdio.h>
 
-struct [[clang::annotate("class@yai:vi")]] [[clang::annotate("parent@yai:editor")]] yetty_yai_vi {
+struct YETTY_ANNOTATE("class@yai:vi") YETTY_ANNOTATE("parent@yai:editor") yetty_yai_vi {
     int normal;     /* 0 = insert sub-mode, 1 = normal */
     int pending_op; /* a pending operator byte: 'd', 'c', 'r', or 0 */
     /* `.` repeat: the byte sequence of the last text-changing normal
@@ -282,7 +282,7 @@ static int vi_insert(struct yai_app *app, struct yetty_yai_vi *vi, char byte)
     return editor_cmd_insert_char(app, byte);
 }
 
-[[clang::annotate("override@yai:vi:feed_byte")]]
+YETTY_ANNOTATE("override@yai:vi:feed_byte")
 static struct yetty_ycore_int_result vi_feed_byte(struct yetty_yclass_object *obj,
                                                   struct yai_app *app, int byte)
 {

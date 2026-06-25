@@ -151,7 +151,13 @@ function(yetty_stage_webasm_assets)
             # through an ygrid figure since the yui→ygui refactor; without its
             # shader staged here the chrome ygrid fails to create on webasm and
             # the whole UI silently fails to render.
-            "${YETTY_ROOT}/src/yetty/ygrid/ygrid.wgsl")
+            "${YETTY_ROOT}/src/yetty/ygrid/ygrid.wgsl"
+            # yvterm-sdf-layer.wgsl — the yvterm "vterm-as-figure" SDF pass that
+            # rasterizes ycat inline rich content (markdown/charts/diagrams). The
+            # refactor made sdf-layer.c load this from <paths/shaders>; without it
+            # staged, sdf_layer_create fails ("load_layer_shader") and ycat rich
+            # content is silently disabled on webasm.
+            "${YETTY_ROOT}/src/yetty/yvterm/yvterm-sdf-layer.wgsl")
         get_filename_component(_NAME "${_SHADER}" NAME)
         _stage_one("${_SHADER}" "data/shaders" "${_NAME}" TRUE "/data")
     endforeach()

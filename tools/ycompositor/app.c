@@ -55,7 +55,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ycompositor:app")]] [[clang::annotate("parent@yapp:app")]] yetty_ycompositor_app {
+struct YETTY_ANNOTATE("class@ycompositor:app") YETTY_ANNOTATE("parent@yapp:app") yetty_ycompositor_app {
     int quit;
     struct yetty_context ctx;
     struct yetty_yframework *yrt;
@@ -491,7 +491,7 @@ static void handle_event(struct yetty_ycompositor_app *app, const struct yetty_y
     }
 }
 
-[[clang::annotate("override@yapp:app:init")]]
+YETTY_ANNOTATE("override@yapp:app:init")
 static struct yetty_ycore_void_result ycompositor_app_init(struct yetty_yclass_object *obj,
                                                            struct yetty_yclass_object *platform)
 {
@@ -500,7 +500,7 @@ static struct yetty_ycore_void_result ycompositor_app_init(struct yetty_yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yapp:app:run")]]
+YETTY_ANNOTATE("override@yapp:app:run")
 static struct yetty_ycore_void_result ycompositor_app_run(struct yetty_yclass_object *obj,
                                                           struct yetty_yclass_object *platform)
 {

@@ -30,14 +30,14 @@ struct yetty_yplatform_ios_window_ptr_result yetty_yplatform_ios_window_from(
 /* Cached metrics pushed from the UIKit bootstrap. framebuffer_* is in physical
  * pixels; content_scale is UIScreen.nativeScale. Logical size is derived as
  * framebuffer / scale. */
-struct [[clang::annotate("class@yplatform:ios_window")]] [[clang::annotate(
-    "platform@ios")]] [[clang::annotate("parent@yplatform:window")]] yetty_yplatform_ios_window {
+struct YETTY_ANNOTATE("class@yplatform:ios_window") YETTY_ANNOTATE("platform@ios")
+    YETTY_ANNOTATE("parent@yplatform:window") yetty_yplatform_ios_window {
     int framebuffer_width;
     int framebuffer_height;
     float content_scale;
 };
 
-[[clang::annotate("override@yplatform:ios_window:window_open")]]
+YETTY_ANNOTATE("override@yplatform:ios_window:window_open")
 static struct yetty_ycore_void_result ios_window_open(struct yetty_yclass_object *obj, int width,
                                                       int height, const char *title)
 {
@@ -50,7 +50,7 @@ static struct yetty_ycore_void_result ios_window_open(struct yetty_yclass_object
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:ios_window:window_get_size")]]
+YETTY_ANNOTATE("override@yplatform:ios_window:window_get_size")
 static struct yetty_ycore_void_result ios_window_get_size(struct yetty_yclass_object *obj,
                                                           int *width, int *height)
 {
@@ -66,7 +66,7 @@ static struct yetty_ycore_void_result ios_window_get_size(struct yetty_yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:ios_window:window_get_framebuffer_size")]]
+YETTY_ANNOTATE("override@yplatform:ios_window:window_get_framebuffer_size")
 static struct yetty_ycore_void_result ios_window_get_framebuffer_size(
     struct yetty_yclass_object *obj, int *width, int *height)
 {
@@ -81,7 +81,7 @@ static struct yetty_ycore_void_result ios_window_get_framebuffer_size(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:ios_window:window_get_content_scale")]]
+YETTY_ANNOTATE("override@yplatform:ios_window:window_get_content_scale")
 static struct yetty_ycore_void_result ios_window_get_content_scale(struct yetty_yclass_object *obj,
                                                                    float *xscale, float *yscale)
 {
@@ -97,7 +97,7 @@ static struct yetty_ycore_void_result ios_window_get_content_scale(struct yetty_
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:ios_window:window_should_close")]]
+YETTY_ANNOTATE("override@yplatform:ios_window:window_should_close")
 static struct yetty_ycore_int_result ios_window_should_close(struct yetty_yclass_object *obj)
 {
     /* iOS/tvOS apps are terminated by the OS, never by a window-close request. */
@@ -105,7 +105,7 @@ static struct yetty_ycore_int_result ios_window_should_close(struct yetty_yclass
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
-[[clang::annotate("override@yplatform:ios_window:window_set_title")]]
+YETTY_ANNOTATE("override@yplatform:ios_window:window_set_title")
 static struct yetty_ycore_void_result ios_window_set_title(struct yetty_yclass_object *obj,
                                                            const char *title)
 {
@@ -116,7 +116,7 @@ static struct yetty_ycore_void_result ios_window_set_title(struct yetty_yclass_o
 }
 
 /* Push framebuffer metrics from the UIKit bootstrap / layout-resize callback. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yplatform_ios_window_set_metrics(
     struct yetty_yclass_object *obj, int framebuffer_width, int framebuffer_height,
     float content_scale)

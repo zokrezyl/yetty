@@ -28,7 +28,7 @@ struct yai_tool_name_entry {
 
 /* Engine-private state: the tool_use_id -> tool name ring (to label
  * results) and the interrupt request counter. */
-struct [[clang::annotate("class@yai:claude")]] [[clang::annotate("parent@yai:engine")]]
+struct YETTY_ANNOTATE("class@yai:claude") YETTY_ANNOTATE("parent@yai:engine")
 yetty_yai_claude {
     struct yai_tool_name_entry tool_names[YAI_TOOL_NAME_MAP_SIZE];
     int tool_name_next;
@@ -199,7 +199,7 @@ static struct yetty_ycore_void_result send_permission_response(struct yai_app *a
 
 /* resolve_permission slot: answer the pending request. `allowed`:
  * 1 = allow (echoes the input back as updatedInput), 0 = deny. */
-[[clang::annotate("override@yai:claude:resolve_permission")]]
+YETTY_ANNOTATE("override@yai:claude:resolve_permission")
 static struct yetty_ycore_void_result claude_resolve_permission(struct yetty_yclass_object *obj,
                                                                 struct yai_app *app, int allowed)
 {
@@ -541,7 +541,7 @@ static struct yetty_ycore_void_result handle_result_event(struct yai_app *app, y
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yai:claude:handle_event")]]
+YETTY_ANNOTATE("override@yai:claude:handle_event")
 static struct yetty_ycore_void_result claude_handle_event(struct yetty_yclass_object *obj,
                                                           struct yai_app *app,
                                                           struct yyjson_val *event)
@@ -622,7 +622,7 @@ static struct yetty_ycore_void_result claude_handle_event(struct yetty_yclass_ob
  * Turn / lifecycle slots
  *---------------------------------------------------------------------------*/
 
-[[clang::annotate("override@yai:claude:send_user_message")]]
+YETTY_ANNOTATE("override@yai:claude:send_user_message")
 static struct yetty_ycore_void_result claude_send_user_message(struct yetty_yclass_object *obj,
                                                                struct yai_app *app,
                                                                const char *text)
@@ -645,7 +645,7 @@ static struct yetty_ycore_void_result claude_send_user_message(struct yetty_ycla
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yai:claude:interrupt")]]
+YETTY_ANNOTATE("override@yai:claude:interrupt")
 static struct yetty_ycore_void_result claude_interrupt(struct yetty_yclass_object *obj,
                                                        struct yai_app *app)
 {
@@ -709,7 +709,7 @@ static const char *claude_preset_tools(const char *preset)
     return "Read,Bash(git *),mcp__yetty"; /* curated (default) */
 }
 
-[[clang::annotate("override@yai:claude:start")]]
+YETTY_ANNOTATE("override@yai:claude:start")
 static struct yetty_ycore_void_result claude_start(struct yetty_yclass_object *obj,
                                                    struct yai_app *app)
 {
@@ -817,7 +817,7 @@ static struct yetty_ycore_void_result claude_start(struct yetty_yclass_object *o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yai:claude:describe_config")]]
+YETTY_ANNOTATE("override@yai:claude:describe_config")
 static struct yetty_ycore_void_result claude_describe_config(struct yetty_yclass_object *obj,
                                                              struct yai_app *app, char *out,
                                                              size_t out_size)
@@ -843,7 +843,7 @@ static struct yetty_ycore_void_result claude_describe_config(struct yetty_yclass
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yai:claude:config_knob")]]
+YETTY_ANNOTATE("override@yai:claude:config_knob")
 static struct yetty_ycore_void_result claude_config_knob(struct yetty_yclass_object *obj,
                                                          struct yai_app *app, char *out,
                                                          size_t out_size)
@@ -871,7 +871,7 @@ static struct yetty_ycore_void_result claude_config_knob(struct yetty_yclass_obj
 
 /* A live set_permission_mode control_request into the running session, so a
  * permission-mode change applies immediately (storage is in app->config). */
-[[clang::annotate("override@yai:claude:apply_config")]]
+YETTY_ANNOTATE("override@yai:claude:apply_config")
 static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_object *obj,
                                                           struct yai_app *app, const char *key,
                                                           const char *value)
@@ -908,7 +908,7 @@ static struct yetty_ycore_void_result claude_apply_config(struct yetty_yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yai:claude:on_child_exit")]]
+YETTY_ANNOTATE("override@yai:claude:on_child_exit")
 static struct yetty_ycore_void_result claude_on_child_exit(struct yetty_yclass_object *obj,
                                                            struct yai_app *app, int64_t exit_status)
 {
@@ -932,7 +932,7 @@ static struct yetty_ycore_void_result claude_on_child_exit(struct yetty_yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yai:claude:on_child_eof")]]
+YETTY_ANNOTATE("override@yai:claude:on_child_eof")
 static struct yetty_ycore_void_result claude_on_child_eof(struct yetty_yclass_object *obj,
                                                           struct yai_app *app)
 {

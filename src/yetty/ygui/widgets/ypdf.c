@@ -20,12 +20,11 @@ struct yetty_ygui_ypdf_ptr_result yetty_ygui_ypdf_from(struct yetty_yclass_objec
 
 /* ypdf adds no ops or state on top of ydraw_embed; the class exists only
  * so callers can name it in yetty_ygui_add. The 1-byte slice is unused. */
-struct [[clang::annotate("class@ygui:ypdf")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
-yetty_ygui_ypdf {
+struct YETTY_ANNOTATE("class@ygui:ypdf") YETTY_ANNOTATE("parent@ygui:ydraw_embed") yetty_ygui_ypdf {
     char unused;
 };
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_ypdf_set_file(struct yetty_yclass_object *obj,
                                                         const char *path)
 {

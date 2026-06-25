@@ -40,8 +40,7 @@ struct yetty_ygui_window_ptr_result yetty_ygui_window_from(struct yetty_yclass_o
 #define WIN_GRIP 0xFFA8A79Fu     /* BRAND_TEXT_SECONDARY */
 #define WIN_CLOSE 0xFFA8A79Fu    /* BRAND_TEXT_SECONDARY */
 
-struct [[clang::annotate("class@ygui:window")]] [[clang::annotate("parent@ygui:vbox")]]
-yetty_ygui_window {
+struct YETTY_ANNOTATE("class@ygui:window") YETTY_ANNOTATE("parent@ygui:vbox") yetty_ygui_window {
     char *title;
     struct yetty_yclass_object *body; /* auto-allocated child, owned by tree */
     struct yetty_yclass_object *menu; /* borrowed, opened by the hamburger */
@@ -118,7 +117,7 @@ static struct yetty_ycore_void_result win_rounded(struct yetty_ygui_emit_ctx *ct
                                                              stroke, stroke_w, &g);
 }
 
-[[clang::annotate("override@ygui:window:constructor")]]
+YETTY_ANNOTATE("override@ygui:window:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -153,7 +152,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     return yetty_ygui_widget_layout_set(d->body, &bl);
 }
 
-[[clang::annotate("override@ygui:window:destructor")]]
+YETTY_ANNOTATE("override@ygui:window:destructor")
 static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -165,7 +164,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_ob
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:window:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:window:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
@@ -225,7 +224,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:window:widget_on_press")]]
+YETTY_ANNOTATE("override@ygui:window:widget_on_press")
 static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass_obj, float x,
                                               float y, int btn)
 {
@@ -278,7 +277,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
-[[clang::annotate("override@ygui:window:widget_on_motion")]]
+YETTY_ANNOTATE("override@ygui:window:widget_on_motion")
 static struct yetty_ycore_int_result on_motion(struct yetty_yclass_object *yclass_obj, float x,
                                                float y)
 {
@@ -308,7 +307,7 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_object *yclas
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:window:widget_on_release")]]
+YETTY_ANNOTATE("override@ygui:window:widget_on_release")
 static struct yetty_ycore_int_result on_release(struct yetty_yclass_object *yclass_obj, float x,
                                                 float y, int btn)
 {
@@ -323,7 +322,7 @@ static struct yetty_ycore_int_result on_release(struct yetty_yclass_object *ycla
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object *yetty_ygui_window_body(struct yetty_yclass_object *obj)
 {
     if (!obj) {
@@ -332,7 +331,7 @@ struct yetty_yclass_object *yetty_ygui_window_body(struct yetty_yclass_object *o
     return ((struct yetty_ygui_window *)yetty_ygui_window_from(obj).value)->body;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_yclass_object *obj,
                                                            const char *title)
 {
@@ -355,7 +354,7 @@ struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_yclass_o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_yclass_object *obj,
                                                           struct yetty_yclass_object *menu)
 {
@@ -369,7 +368,7 @@ struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_yclass_ob
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_yclass_object *obj,
                                                               int closable)
 {
@@ -386,7 +385,7 @@ struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_yclas
 /* Chromeless: drop the title strip and shrink the top padding so the
  * body fills the frame. For docked/anchored panels (a status bar) the
  * titlebar is wasted space and the window isn't meant to be dragged. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_window_set_chromeless(struct yetty_yclass_object *obj,
                                                                 int chromeless)
 {

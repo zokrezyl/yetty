@@ -59,9 +59,8 @@ struct yetty_yclass_ptr_result yetty_yplatform_webasm_platform_class_get(void);
 struct yetty_yplatform_webasm_platform_ptr_result yetty_yplatform_webasm_platform_from(
     struct yetty_yclass_object *obj);
 
-struct [[clang::annotate("class@yplatform:webasm_platform")]] [[clang::annotate(
-    "platform@webasm")]] [[clang::annotate("parent@yplatform:platform")]]
-yetty_yplatform_webasm_platform {
+struct YETTY_ANNOTATE("class@yplatform:webasm_platform") YETTY_ANNOTATE("platform@webasm")
+    YETTY_ANNOTATE("parent@yplatform:platform") yetty_yplatform_webasm_platform {
     struct yetty_yconfig_config *config;
     struct yetty_yclass_object *window;                 /* yplatform:webasm_window */
     struct yetty_yclass_object *clipboard;              /* yplatform:webasm_clipboard */
@@ -82,7 +81,7 @@ static struct yetty_yplatform_webasm_platform *webasm_platform_data(struct yetty
     return data.value;
 }
 
-[[clang::annotate("override@yplatform:webasm_platform:platform_init")]]
+YETTY_ANNOTATE("override@yplatform:webasm_platform:platform_init")
 static struct yetty_ycore_void_result webasm_platform_init(struct yetty_yclass_object *obj,
                                                            struct yetty_yclass_object *app,
                                                            int argc, char **argv)
@@ -145,7 +144,7 @@ static struct yetty_ycore_void_result webasm_platform_init(struct yetty_yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:webasm_platform:platform_run")]]
+YETTY_ANNOTATE("override@yplatform:webasm_platform:platform_run")
 static struct yetty_ycore_void_result webasm_platform_run(struct yetty_yclass_object *obj,
                                                           struct yetty_yclass_object *app, int argc,
                                                           char **argv)

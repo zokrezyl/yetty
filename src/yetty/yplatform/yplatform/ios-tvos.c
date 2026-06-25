@@ -33,6 +33,7 @@ struct yetty_ycore_void_result yetty_yplatform_ios_clipboard_configure(
 
 /* platform_init slot dispatcher (generated) — run() calls init() through it. */
 struct yetty_ycore_void_result yetty_yplatform_platform_init(struct yetty_yclass_object *obj,
+                                                             struct yetty_yclass_object *app,
                                                              int argc, char **argv);
 
 YETTY_YRESULT_DECLARE(yetty_yplatform_ios_platform_ptr, struct yetty_yplatform_ios_platform *);
@@ -40,9 +41,8 @@ struct yetty_yclass_ptr_result yetty_yplatform_ios_platform_class_get(void);
 struct yetty_yplatform_ios_platform_ptr_result yetty_yplatform_ios_platform_from(
     struct yetty_yclass_object *obj);
 
-struct [[clang::annotate("class@yplatform:ios_platform")]] [[clang::annotate(
-    "platform@ios")]] [[clang::annotate("parent@yplatform:platform")]]
-yetty_yplatform_ios_platform {
+struct YETTY_ANNOTATE("class@yplatform:ios_platform") YETTY_ANNOTATE("platform@ios")
+    YETTY_ANNOTATE("parent@yplatform:platform") yetty_yplatform_ios_platform {
     struct yetty_yconfig_config *config;
     struct yetty_yclass_object *window;                 /* yplatform:ios_window */
     struct yetty_yclass_object *clipboard;              /* yplatform:ios_clipboard */
@@ -60,10 +60,12 @@ static struct yetty_yplatform_ios_platform *ios_platform_data(struct yetty_yclas
     return data.value;
 }
 
-[[clang::annotate("override@yplatform:ios_platform:platform_init")]]
-static struct yetty_ycore_void_result ios_platform_init(struct yetty_yclass_object *obj, int argc,
+YETTY_ANNOTATE("override@yplatform:ios_platform:platform_init")
+static struct yetty_ycore_void_result ios_platform_init(struct yetty_yclass_object *obj,
+                                                        struct yetty_yclass_object *app, int argc,
                                                         char **argv)
 {
+    (void)app;
     struct yetty_yplatform_ios_platform *data = ios_platform_data(obj);
     if (!data) {
         return YETTY_ERR(yetty_ycore_void, "ios_platform_init: data_get");
@@ -97,11 +99,12 @@ static struct yetty_ycore_void_result ios_platform_init(struct yetty_yclass_obje
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:ios_platform:platform_run")]]
-static struct yetty_ycore_void_result ios_platform_run(struct yetty_yclass_object *obj, int argc,
+YETTY_ANNOTATE("override@yplatform:ios_platform:platform_run")
+static struct yetty_ycore_void_result ios_platform_run(struct yetty_yclass_object *obj,
+                                                       struct yetty_yclass_object *app, int argc,
                                                        char **argv)
 {
-    struct yetty_ycore_void_result init_res = yetty_yplatform_platform_init(obj, argc, argv);
+    struct yetty_ycore_void_result init_res = yetty_yplatform_platform_init(obj, app, argc, argv);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, init_res, "ios_platform_run: init");
     /* UIApplicationMain (ymain/ios-tvos.m) owns the run loop; nothing to drive
      * here. */

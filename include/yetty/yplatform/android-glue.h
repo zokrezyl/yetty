@@ -13,8 +13,8 @@
  *   yetty_android_program_term  — tear it down.
  * The glue resolves them at link time (exactly one implementation per .so). */
 
-#ifndef YETTY_YINIT_ANDROID_GLUE_H
-#define YETTY_YINIT_ANDROID_GLUE_H
+#ifndef YETTY_YPLATFORM_ANDROID_GLUE_H
+#define YETTY_YPLATFORM_ANDROID_GLUE_H
 
 #include <android/log.h>
 #include <android/native_window.h>
@@ -40,7 +40,7 @@ struct yetty_yplatform_app_state {
     ANativeWindow *window;
     /* Terminal program: the yetty app. NULL for other programs. */
     struct yetty_yetty_yetty *yetty;
-    /* Built by program_init from a synthetic yinit_runtime; owned here,
+    /* Built by program_init during Android bring-up; owned here,
      * outlives the app object. */
     struct yetty_yframework *yframework;
     struct yetty_ycore_xthread_event_pipe *pipe;
@@ -79,11 +79,11 @@ struct yetty_ycore_void_result yetty_android_program_term(struct yetty_yplatform
 /* --- glue helpers usable by program implementations -------------------- */
 
 /* Recursive mkdir (mode 0755), ignores existing dirs. */
-void yetty_yinit_android_mkdir_p(const char *path);
+void yetty_yplatform_android_mkdir_p(const char *path);
 
 /* Pop / dismiss the soft IME via the JNI InputMethodManager bridge. */
-void yetty_yinit_android_show_keyboard(struct android_app *app);
-void yetty_yinit_android_hide_keyboard(struct android_app *app);
+void yetty_yplatform_android_show_keyboard(struct android_app *app);
+void yetty_yplatform_android_hide_keyboard(struct android_app *app);
 
 /* HiDPI content scale (logical -> physical pixels), derived from the display
  * density. This is the Android analogue of the desktop framebuffer/window
@@ -91,10 +91,10 @@ void yetty_yinit_android_hide_keyboard(struct android_app *app);
  * Android's DisplayMetrics.density, so a 420-dpi phone yields 2.625. The
  * surface is sized in physical pixels; the renderer divides by this to lay
  * UI out in logical units. Returns 1.0 when the density is unknown. */
-float yetty_yinit_android_content_scale(struct android_app *app);
+float yetty_yplatform_android_content_scale(struct android_app *app);
 
 /* Defined in yplatform/webgpu-surface/android.c. */
 WGPUSurface yetty_yplatform_create_surface_from_window(WGPUInstance instance,
                                                        ANativeWindow *window);
 
-#endif /* YETTY_YINIT_ANDROID_GLUE_H */
+#endif /* YETTY_YPLATFORM_ANDROID_GLUE_H */

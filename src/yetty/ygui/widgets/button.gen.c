@@ -23,12 +23,12 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yetty_yclass_object *,
                                                                      struct yetty_ygui_emit_ctx *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_constructor_fn yetty_ygui_button_yetty_ygui_constructor_check =
     button_constructor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_destructor_fn yetty_ygui_button_yetty_ygui_destructor_check = button_destructor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_paint_fn yetty_ygui_button_yetty_ygui_widget_paint_check = button_paint;
 
 struct yetty_yclass_ptr_result yetty_ygui_button_class_get(void)

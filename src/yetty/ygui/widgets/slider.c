@@ -28,14 +28,14 @@ struct yetty_ygui_slider_ptr_result yetty_ygui_slider_from(struct yetty_yclass_o
 #define COLOR_FILL 0xFF92A86Bu /* BRAND_ACCENT */
 #define COLOR_THUMB 0xFFE4E5E0u
 
-struct [[clang::annotate("class@ygui:slider")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-yetty_ygui_slider {
+struct YETTY_ANNOTATE("class@ygui:slider") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_slider {
     float min_val;
     float max_val;
     float value;
 };
 
-[[clang::annotate("override@ygui:slider:constructor")]]
+YETTY_ANNOTATE("override@ygui:slider:constructor")
 static struct yetty_ycore_void_result slider_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -101,7 +101,7 @@ static struct yetty_ycore_void_result paint_circle(struct yetty_ygui_emit_ctx *c
                                                         0.0f, &geom);
 }
 
-[[clang::annotate("override@ygui:slider:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:slider:widget_paint")
 static struct yetty_ycore_void_result slider_paint(struct yetty_yclass_object *yclass_obj,
                                                    struct yetty_ygui_emit_ctx *ctx)
 {
@@ -145,7 +145,7 @@ static struct yetty_ycore_void_result slider_paint(struct yetty_yclass_object *y
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:slider:widget_on_press")]]
+YETTY_ANNOTATE("override@ygui:slider:widget_on_press")
 static struct yetty_ycore_int_result slider_on_press(struct yetty_yclass_object *yclass_obj,
                                                      float x, float y, int button)
 {
@@ -183,7 +183,7 @@ static struct yetty_ycore_int_result slider_on_press(struct yetty_yclass_object 
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:slider:widget_on_motion")]]
+YETTY_ANNOTATE("override@ygui:slider:widget_on_motion")
 static struct yetty_ycore_int_result slider_on_motion(struct yetty_yclass_object *yclass_obj,
                                                       float x, float y)
 {
@@ -200,7 +200,7 @@ static struct yetty_ycore_int_result slider_on_motion(struct yetty_yclass_object
     return slider_on_press((struct yetty_yclass_object *)obj, x, y, 0);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_slider_set_range(struct yetty_yclass_object *obj,
                                                            float min, float max)
 {
@@ -216,7 +216,7 @@ struct yetty_ycore_void_result yetty_ygui_slider_set_range(struct yetty_yclass_o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_slider_set_value(struct yetty_yclass_object *obj,
                                                            float value)
 {
@@ -230,7 +230,7 @@ struct yetty_ycore_void_result yetty_ygui_slider_set_value(struct yetty_yclass_o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_float_result yetty_ygui_slider_get_value(const struct yetty_yclass_object *obj)
 {
     if (!obj) {

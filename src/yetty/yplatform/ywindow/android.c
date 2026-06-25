@@ -22,15 +22,14 @@ struct yetty_yplatform_android_window_ptr_result yetty_yplatform_android_window_
     struct yetty_yclass_object *obj);
 
 /* Cached framebuffer metrics pushed from the NDK glue. */
-struct [[clang::annotate("class@yplatform:android_window")]] [[clang::annotate(
-    "platform@android")]] [[clang::annotate("parent@yplatform:window")]]
-yetty_yplatform_android_window {
+struct YETTY_ANNOTATE("class@yplatform:android_window") YETTY_ANNOTATE("platform@android")
+    YETTY_ANNOTATE("parent@yplatform:window") yetty_yplatform_android_window {
     int framebuffer_width;
     int framebuffer_height;
     float content_scale;
 };
 
-[[clang::annotate("override@yplatform:android_window:window_open")]]
+YETTY_ANNOTATE("override@yplatform:android_window:window_open")
 static struct yetty_ycore_void_result android_window_open(struct yetty_yclass_object *obj,
                                                           int width, int height, const char *title)
 {
@@ -42,7 +41,7 @@ static struct yetty_ycore_void_result android_window_open(struct yetty_yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:android_window:window_get_size")]]
+YETTY_ANNOTATE("override@yplatform:android_window:window_get_size")
 static struct yetty_ycore_void_result android_window_get_size(struct yetty_yclass_object *obj,
                                                               int *width, int *height)
 {
@@ -59,7 +58,7 @@ static struct yetty_ycore_void_result android_window_get_size(struct yetty_yclas
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:android_window:window_get_framebuffer_size")]]
+YETTY_ANNOTATE("override@yplatform:android_window:window_get_framebuffer_size")
 static struct yetty_ycore_void_result android_window_get_framebuffer_size(
     struct yetty_yclass_object *obj, int *width, int *height)
 {
@@ -75,7 +74,7 @@ static struct yetty_ycore_void_result android_window_get_framebuffer_size(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:android_window:window_get_content_scale")]]
+YETTY_ANNOTATE("override@yplatform:android_window:window_get_content_scale")
 static struct yetty_ycore_void_result android_window_get_content_scale(
     struct yetty_yclass_object *obj, float *xscale, float *yscale)
 {
@@ -92,7 +91,7 @@ static struct yetty_ycore_void_result android_window_get_content_scale(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:android_window:window_should_close")]]
+YETTY_ANNOTATE("override@yplatform:android_window:window_should_close")
 static struct yetty_ycore_int_result android_window_should_close(struct yetty_yclass_object *obj)
 {
     /* Android apps are terminated by the OS, never by a window-close request. */
@@ -100,7 +99,7 @@ static struct yetty_ycore_int_result android_window_should_close(struct yetty_yc
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
-[[clang::annotate("override@yplatform:android_window:window_set_title")]]
+YETTY_ANNOTATE("override@yplatform:android_window:window_set_title")
 static struct yetty_ycore_void_result android_window_set_title(struct yetty_yclass_object *obj,
                                                                const char *title)
 {
@@ -111,7 +110,7 @@ static struct yetty_ycore_void_result android_window_set_title(struct yetty_ycla
 }
 
 /* Push framebuffer metrics from the NDK glue / resize callback. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yplatform_android_window_set_metrics(
     struct yetty_yclass_object *obj, int framebuffer_width, int framebuffer_height,
     float content_scale)

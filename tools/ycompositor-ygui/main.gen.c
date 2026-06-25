@@ -11,9 +11,9 @@
 #include <stdlib.h>  /* calloc/free for proxy + buffer marshalling */
 #include <string.h>  /* memcpy/strcmp/strlen */
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yapp_init_fn yetty_ycompositorygui_app_yetty_yapp_init_check = ycompositorygui_app_init;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yapp_run_fn yetty_ycompositorygui_app_yetty_yapp_run_check = ycompositorygui_app_run;
 
 struct yetty_yclass_ptr_result yetty_ycompositorygui_app_class_get(void)

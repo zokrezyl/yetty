@@ -40,8 +40,8 @@ struct yetty_ycore_void_result yetty_yrich_element_bounds(struct yetty_yclass_ob
  * Element base data slice — the first slice in every element object.
  *=========================================================================*/
 
-struct [[clang::annotate("class@yrich:element"),
-         clang::annotate("include@yetty/yrich/yrich-types.h")]] yetty_yrich_element {
+struct YETTY_ANNOTATE("class@yrich:element") YETTY_ANNOTATE("include@yetty/yrich/yrich-types.h")
+    yetty_yrich_element {
     yetty_yrich_element_id id;
 };
 
@@ -51,7 +51,7 @@ struct [[clang::annotate("class@yrich:element"),
  * domain, so it installs its own impl for the shared slot.
  *=========================================================================*/
 
-[[clang::annotate("override@yrich:element:constructor")]]
+YETTY_ANNOTATE("override@yrich:element:constructor")
 static struct yetty_ycore_void_result element_constructor(struct yetty_yclass_object *obj)
 {
     (void)obj;
@@ -66,18 +66,18 @@ static struct yetty_ycore_void_result element_constructor(struct yetty_yclass_ob
 /* element_destroy: free element-specific state, then the object. The base
  * owns no heap state, so the default just frees the object; concrete kinds
  * override, free their own fields and chain up via yetty_yrich_super_void. */
-[[clang::annotate("virtual@yrich:element:element_destroy")]] [[clang::annotate(
-    "local@yrich:element_destroy")]]
+YETTY_ANNOTATE("virtual@yrich:element:element_destroy")
+YETTY_ANNOTATE("local@yrich:element_destroy")
 static struct yetty_ycore_void_result element_default_destroy(struct yetty_yclass_object *obj)
 {
     return yetty_yclass_object_free(obj);
 }
 
 /* element_bounds: write the axis-aligned bounding box into *out_bounds. */
-[[clang::annotate("virtual@yrich:element:element_bounds")]] [[clang::annotate(
-    "local@yrich:element_bounds")]]
-static struct yetty_ycore_void_result element_default_bounds(struct yetty_yclass_object *obj,
-                                                             struct yetty_yrich_rect *out_bounds)
+YETTY_ANNOTATE("virtual@yrich:element:element_bounds")
+YETTY_ANNOTATE("local@yrich:element_bounds")
+static struct yetty_ycore_void_result
+    element_default_bounds(struct yetty_yclass_object *obj, struct yetty_yrich_rect *out_bounds)
 {
     (void)obj;
     if (!out_bounds) {
@@ -88,7 +88,7 @@ static struct yetty_ycore_void_result element_default_bounds(struct yetty_yclass
 }
 
 /* element_hit_test: point-in-element; default is point-in-bounds. */
-[[clang::annotate("virtual@yrich:element:element_hit_test")]]
+YETTY_ANNOTATE("virtual@yrich:element:element_hit_test")
 static struct yetty_ycore_int_result element_default_hit_test(struct yetty_yclass_object *obj,
                                                               float x, float y)
 {
@@ -99,11 +99,12 @@ static struct yetty_ycore_int_result element_default_hit_test(struct yetty_yclas
 }
 
 /* element_render: emit ydraw primitives at the given base layer. */
-[[clang::annotate("virtual@yrich:element:element_render")]] [[clang::annotate(
-    "local@yrich:element_render")]]
-static struct yetty_ycore_void_result element_default_render(
-    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *drawable_list,
-    uint32_t layer, int selected)
+YETTY_ANNOTATE("virtual@yrich:element:element_render")
+YETTY_ANNOTATE("local@yrich:element_render")
+static struct yetty_ycore_void_result
+    element_default_render(struct yetty_yclass_object *obj,
+                           struct yetty_ydraw_drawable_list *drawable_list, uint32_t layer,
+                           int selected)
 {
     (void)obj;
     (void)drawable_list;
@@ -112,28 +113,28 @@ static struct yetty_ycore_void_result element_default_render(
     return YETTY_ERR(yetty_ycore_void, "yrich element: render not implemented by this element");
 }
 
-[[clang::annotate("virtual@yrich:element:element_is_editable")]]
+YETTY_ANNOTATE("virtual@yrich:element:element_is_editable")
 static struct yetty_ycore_int_result element_default_is_editable(struct yetty_yclass_object *obj)
 {
     (void)obj;
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
-[[clang::annotate("virtual@yrich:element:element_begin_edit")]]
+YETTY_ANNOTATE("virtual@yrich:element:element_begin_edit")
 static struct yetty_ycore_void_result element_default_begin_edit(struct yetty_yclass_object *obj)
 {
     (void)obj;
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("virtual@yrich:element:element_end_edit")]]
+YETTY_ANNOTATE("virtual@yrich:element:element_end_edit")
 static struct yetty_ycore_void_result element_default_end_edit(struct yetty_yclass_object *obj)
 {
     (void)obj;
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("virtual@yrich:element:element_is_editing")]]
+YETTY_ANNOTATE("virtual@yrich:element:element_is_editing")
 static struct yetty_ycore_int_result element_default_is_editing(struct yetty_yclass_object *obj)
 {
     (void)obj;
@@ -142,7 +143,7 @@ static struct yetty_ycore_int_result element_default_is_editing(struct yetty_ycl
 
 /* element_insert_text: insert UTF-8 text at the cursor. Non-editable
  * elements ignore text input. */
-[[clang::annotate("virtual@yrich:element:element_insert_text")]]
+YETTY_ANNOTATE("virtual@yrich:element:element_insert_text")
 static struct yetty_ycore_void_result element_default_insert_text(struct yetty_yclass_object *obj,
                                                                   struct yetty_ycore_buffer text)
 {
@@ -152,7 +153,7 @@ static struct yetty_ycore_void_result element_default_insert_text(struct yetty_y
 }
 
 /* element_delete_sel: delete current selection or character before cursor. */
-[[clang::annotate("virtual@yrich:element:element_delete_sel")]]
+YETTY_ANNOTATE("virtual@yrich:element:element_delete_sel")
 static struct yetty_ycore_void_result element_default_delete_sel(struct yetty_yclass_object *obj)
 {
     (void)obj;
@@ -164,7 +165,7 @@ static struct yetty_ycore_void_result element_default_delete_sel(struct yetty_yc
  * has no generated property accessor).
  *=========================================================================*/
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yrich_element_id_result yetty_yrich_element_id_value(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_element_ptr_result data_res = yetty_yrich_element_from(obj);
@@ -172,7 +173,7 @@ struct yetty_yrich_element_id_result yetty_yrich_element_id_value(struct yetty_y
     return YETTY_OK(yetty_yrich_element_id, data_res.value->id);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_element_set_id(struct yetty_yclass_object *obj,
                                                           yetty_yrich_element_id id)
 {

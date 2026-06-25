@@ -44,25 +44,25 @@ typedef struct yetty_ycore_void_result (*yetty_yflame_set_highlight_fn)(
     struct yetty_yclass_object *, int32_t);
 typedef struct yetty_ycore_void_result (*yetty_yflame_destroy_fn)(struct yetty_yclass_object *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yflame_configure_fn yetty_yflame_flame_yetty_yflame_configure_check = flame_configure;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yflame_parse_fn yetty_yflame_flame_yetty_yflame_parse_check = flame_parse;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yflame_render_fn yetty_yflame_flame_yetty_yflame_render_check = flame_render;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yflame_hit_test_fn yetty_yflame_flame_yetty_yflame_hit_test_check = flame_hit_test;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yflame_focus_fn yetty_yflame_flame_yetty_yflame_focus_check = flame_focus;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yflame_focus_parent_fn yetty_yflame_flame_yetty_yflame_focus_parent_check =
     flame_focus_parent;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yflame_reset_fn yetty_yflame_flame_yetty_yflame_reset_check = flame_reset;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yflame_set_highlight_fn yetty_yflame_flame_yetty_yflame_set_highlight_check =
     flame_set_highlight;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yflame_destroy_fn yetty_yflame_flame_yetty_yflame_destroy_check = flame_obj_destroy;
 
 struct yetty_yclass_ptr_result yetty_yflame_flame_class_get(void)

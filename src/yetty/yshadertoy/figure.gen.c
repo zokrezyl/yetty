@@ -11,13 +11,13 @@
 #include <stdlib.h> /* calloc/free for proxy + buffer marshalling */
 #include <string.h> /* memcpy/strcmp/strlen */
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_render_fn yetty_yshadertoy_figure_yetty_yfigure_render_check =
     figure_render_slot;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_destroy_fn yetty_yshadertoy_figure_yetty_yfigure_destroy_check =
     figure_destroy_slot;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yfigure_process_bytes_fn yetty_yshadertoy_figure_yetty_yfigure_process_bytes_check =
     figure_process_bytes_slot;
 

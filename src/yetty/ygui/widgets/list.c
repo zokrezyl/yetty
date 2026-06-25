@@ -22,15 +22,15 @@ struct yetty_ygui_list_ptr_result yetty_ygui_list_from(struct yetty_yclass_objec
 #define COLOR_BAR 0xFF92A86Bu
 #define ROW_H 24.0f
 
-struct [[clang::annotate("class@ygui:list")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-yetty_ygui_list {
+struct YETTY_ANNOTATE("class@ygui:list") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_list {
     char **rows;
     int n;
     int cap;
     int selected;
 };
 
-[[clang::annotate("override@ygui:list:constructor")]]
+YETTY_ANNOTATE("override@ygui:list:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -47,7 +47,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:list:destructor")]]
+YETTY_ANNOTATE("override@ygui:list:destructor")
 static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -62,7 +62,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_ob
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:list:widget_on_press")]]
+YETTY_ANNOTATE("override@ygui:list:widget_on_press")
 static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass_obj, float x,
                                               float y, int btn)
 {
@@ -90,7 +90,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:list:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:list:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
@@ -148,7 +148,7 @@ static int grow(struct yetty_ygui_list *d, int n)
     return 1;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_list_add(struct yetty_yclass_object *obj,
                                                    const char *label)
 {
@@ -171,7 +171,7 @@ struct yetty_ycore_void_result yetty_ygui_list_add(struct yetty_yclass_object *o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_list_set_selected(struct yetty_yclass_object *obj, int i)
 {
     if (!obj) {
@@ -184,7 +184,7 @@ struct yetty_ycore_void_result yetty_ygui_list_set_selected(struct yetty_yclass_
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_int_result yetty_ygui_list_get_selected(const struct yetty_yclass_object *obj)
 {
     if (!obj) {

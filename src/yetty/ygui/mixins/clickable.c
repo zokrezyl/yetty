@@ -22,7 +22,7 @@
 typedef struct yetty_ycore_void_result (*yetty_ygui_click_cb)(struct yetty_yclass_object *obj,
                                                               void *userdata);
 
-struct [[clang::annotate("mixin@ygui:clickable")]] yetty_ygui_clickable {
+struct YETTY_ANNOTATE("mixin@ygui:clickable") yetty_ygui_clickable {
     int pressed;
     float press_x, press_y;
     yetty_ygui_click_cb on_click;
@@ -40,7 +40,7 @@ YETTY_YRESULT_DECLARE(yetty_ygui_clickable_ptr, struct yetty_ygui_clickable *);
 struct yetty_yclass_ptr_result yetty_ygui_clickable_mixin_get(void);
 struct yetty_ygui_clickable_ptr_result yetty_ygui_clickable_from(struct yetty_yclass_object *obj);
 
-[[clang::annotate("override@ygui:clickable:widget_on_press")]]
+YETTY_ANNOTATE("override@ygui:clickable:widget_on_press")
 static struct yetty_ycore_int_result clickable_on_press(struct yetty_yclass_object *yclass_obj,
                                                         float x, float y, int button)
 {
@@ -59,7 +59,7 @@ static struct yetty_ycore_int_result clickable_on_press(struct yetty_yclass_obje
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:clickable:widget_on_release")]]
+YETTY_ANNOTATE("override@ygui:clickable:widget_on_release")
 static struct yetty_ycore_int_result clickable_on_release(struct yetty_yclass_object *yclass_obj,
                                                           float x, float y, int button)
 {
@@ -96,7 +96,7 @@ static struct yetty_ycore_int_result clickable_on_release(struct yetty_yclass_ob
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_clickable_on_click_set(struct yetty_yclass_object *obj,
                                                                  yetty_ygui_click_cb cb,
                                                                  void *userdata)
@@ -112,7 +112,7 @@ struct yetty_ycore_void_result yetty_ygui_clickable_on_click_set(struct yetty_yc
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_int_result yetty_ygui_clickable_is_pressed(const struct yetty_yclass_object *obj)
 {
     if (!obj) {
@@ -125,7 +125,7 @@ struct yetty_ycore_int_result yetty_ygui_clickable_is_pressed(const struct yetty
     return YETTY_OK(yetty_ycore_int, cd->pressed);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_clickable_press_pos(const struct yetty_yclass_object *obj,
                                                               float *x, float *y)
 {

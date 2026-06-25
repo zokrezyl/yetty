@@ -39,7 +39,7 @@ struct yetty_ycore_xthread_event_pipe;
  * shape. The data block is opaque outside this TU: the per-OS subclass producer
  * sets these during platform_run through the setters below, and yframework plus
  * the app read them back through the getters. */
-struct [[clang::annotate("class@yplatform:platform")]] yetty_yplatform_platform {
+struct YETTY_ANNOTATE("class@yplatform:platform") yetty_yplatform_platform {
     struct yetty_yplatform_gpu_context gpu;            /* WebGPU instance/surface + geometry */
     struct yetty_yconfig_config *config;               /* owned for run()'s duration */
     struct yetty_ycore_xthread_event_pipe *input_pipe; /* main → worker events */
@@ -59,11 +59,11 @@ struct yetty_yplatform_platform_ptr_result yetty_yplatform_platform_from(
  * defaults make a missing override a loud error.
  *=========================================================================*/
 
-[[clang::annotate("virtual@yplatform:platform:platform_init")]] [[clang::annotate(
-    "local@yplatform:platform_init")]]
-static struct yetty_ycore_void_result platform_default_init(struct yetty_yclass_object *obj,
-                                                            struct yetty_yclass_object *app,
-                                                            int argc, char **argv)
+YETTY_ANNOTATE("virtual@yplatform:platform:platform_init")
+YETTY_ANNOTATE("local@yplatform:platform_init")
+static struct yetty_ycore_void_result
+    platform_default_init(struct yetty_yclass_object *obj, struct yetty_yclass_object *app,
+                          int argc, char **argv)
 {
     (void)obj;
     (void)app;
@@ -72,11 +72,11 @@ static struct yetty_ycore_void_result platform_default_init(struct yetty_yclass_
     return YETTY_ERR(yetty_ycore_void, "platform_init: not implemented by base platform class");
 }
 
-[[clang::annotate("virtual@yplatform:platform:platform_run")]] [[clang::annotate(
-    "local@yplatform:platform_run")]]
-static struct yetty_ycore_void_result platform_default_run(struct yetty_yclass_object *obj,
-                                                           struct yetty_yclass_object *app,
-                                                           int argc, char **argv)
+YETTY_ANNOTATE("virtual@yplatform:platform:platform_run")
+YETTY_ANNOTATE("local@yplatform:platform_run")
+static struct yetty_ycore_void_result
+    platform_default_run(struct yetty_yclass_object *obj, struct yetty_yclass_object *app, int argc,
+                         char **argv)
 {
     (void)obj;
     (void)app;
@@ -104,7 +104,7 @@ static struct yetty_yplatform_platform *platform_data(struct yetty_yclass_object
     return data.value;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yplatform_platform_set_gpu_context(
     struct yetty_yclass_object *obj, const struct yetty_yplatform_gpu_context *gpu)
 {
@@ -116,7 +116,7 @@ struct yetty_ycore_void_result yetty_yplatform_platform_set_gpu_context(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yplatform_platform_set_services(
     struct yetty_yclass_object *obj, struct yetty_yconfig_config *config,
     struct yetty_ycore_xthread_event_pipe *input_pipe, struct yetty_yclass_object *clipboard,
@@ -131,7 +131,7 @@ struct yetty_ycore_void_result yetty_yplatform_platform_set_services(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 const struct yetty_yplatform_gpu_context *yetty_yplatform_platform_gpu_context(
     struct yetty_yclass_object *obj)
 {
@@ -139,14 +139,14 @@ const struct yetty_yplatform_gpu_context *yetty_yplatform_platform_gpu_context(
     return data ? &data->gpu : NULL;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yconfig_config *yetty_yplatform_platform_config(struct yetty_yclass_object *obj)
 {
     struct yetty_yplatform_platform *data = platform_data(obj);
     return data ? data->config : NULL;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_xthread_event_pipe *yetty_yplatform_platform_input_pipe(
     struct yetty_yclass_object *obj)
 {
@@ -154,14 +154,14 @@ struct yetty_ycore_xthread_event_pipe *yetty_yplatform_platform_input_pipe(
     return data ? data->input_pipe : NULL;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object *yetty_yplatform_platform_clipboard(struct yetty_yclass_object *obj)
 {
     struct yetty_yplatform_platform *data = platform_data(obj);
     return data ? data->clipboard : NULL;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object *yetty_yplatform_platform_window_chrome(struct yetty_yclass_object *obj)
 {
     struct yetty_yplatform_platform *data = platform_data(obj);

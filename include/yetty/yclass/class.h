@@ -26,6 +26,35 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* yclass annotations (class@/parent@/override@/property/...) exist only for the
+ * codegen and FFI extractors, which parse the sources with clang. The compiled
+ * binary never needs them, and MSVC's C parser rejects an attribute in some
+ * positions (e.g. prefixing a struct member) — so the annotation expands to the
+ * clang attribute only under clang/gcc and to nothing elsewhere. Codegen reads
+ * the payload through the macro via its spelling location. Kept identical to the
+ * YETTY_ANNOTATE in <yetty/ycore/ffi-annotations.h>; the #ifndef lets either
+ * header define it first. */
+#ifndef YETTY_ANNOTATE
+#if defined(__clang__) || defined(__GNUC__)
+#define YETTY_ANNOTATE(annotation) __attribute__((annotate(annotation)))
+#else
+#define YETTY_ANNOTATE(annotation)
+#endif
+#endif
+
+/* "may be unused" marker for a function/variable. The GNU __attribute__((unused))
+ * spelling works on gcc/clang (including the Android NDK, which compiles these
+ * TUs as pre-C23 and so rejects the [[maybe_unused]] bracket form); MSVC rejects
+ * __attribute__ entirely, so expand to nothing there (an unused-symbol warning is
+ * harmless). */
+#ifndef YETTY_MAYBE_UNUSED
+#if defined(__clang__) || defined(__GNUC__)
+#define YETTY_MAYBE_UNUSED __attribute__((unused))
+#else
+#define YETTY_MAYBE_UNUSED
+#endif
+#endif
+
 struct yetty_yclass_object;
 struct yetty_yclass;
 struct yetty_yclass_slot_table;

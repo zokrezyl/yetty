@@ -74,7 +74,7 @@ typedef struct yetty_ycore_void_result (*yetty_yrdawn_request_render_fn)(void *u
 
 struct yetty_yrdawn_factory_state; /* opaque — defined below */
 
-struct [[clang::annotate("expose")]] yetty_yrdawn_factory_args {
+struct YETTY_ANNOTATE("expose") yetty_yrdawn_factory_args {
     /* Borrowed — used for GPU bring-up and event loop reach. */
     const struct yetty_context *context;
 
@@ -96,8 +96,8 @@ struct [[clang::annotate("expose")]] yetty_yrdawn_factory_args {
  * Figure struct
  *=========================================================================*/
 
-struct [[clang::annotate("class@yrdawn:figure")]] [[clang::annotate("parent@yfigure:figure")]]
-yetty_yrdawn_figure {
+struct YETTY_ANNOTATE("class@yrdawn:figure") YETTY_ANNOTATE("parent@yfigure:figure")
+    yetty_yrdawn_figure {
     /* Set by SUB_HELLO. Until then the figure rejects CMD/BULK/BYE. */
     uint32_t figure_id;
     int connected;
@@ -885,7 +885,7 @@ static struct yetty_ycore_void_result yrdawn_figure_destroy(struct yetty_yclass_
  *=========================================================================*/
 
 /* yclass cross-domain override of yfigure:render. */
-[[clang::annotate("override@yrdawn:figure:yfigure:render")]]
+YETTY_ANNOTATE("override@yrdawn:figure:yfigure:render")
 static struct yetty_ycore_void_result yrdawn_figure_render_slot(struct yetty_yclass_object *obj,
                                                                 struct yetty_ydraw_target *target)
 {
@@ -893,27 +893,27 @@ static struct yetty_ycore_void_result yrdawn_figure_render_slot(struct yetty_ycl
 }
 
 /* yclass cross-domain override of yfigure:destroy. */
-[[clang::annotate("override@yrdawn:figure:yfigure:destroy")]]
+YETTY_ANNOTATE("override@yrdawn:figure:yfigure:destroy")
 static struct yetty_ycore_void_result yrdawn_figure_destroy_slot(struct yetty_yclass_object *obj)
 {
     return yrdawn_figure_destroy(obj);
 }
 
-[[clang::annotate("override@yrdawn:figure:yfigure:process_input")]]
+YETTY_ANNOTATE("override@yrdawn:figure:yfigure:process_input")
 static struct yetty_ycore_void_result yrdawn_figure_process_input_slot(
     struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *statemachine)
 {
     return yrdawn_figure_process_input(obj, statemachine);
 }
 
-[[clang::annotate("override@yrdawn:figure:yfigure:process_bytes")]]
+YETTY_ANNOTATE("override@yrdawn:figure:yfigure:process_bytes")
 static struct yetty_ycore_void_result yrdawn_figure_process_bytes_slot(
     struct yetty_yclass_object *obj, const uint8_t *bytes, size_t bytes_len)
 {
     return yrdawn_figure_process_bytes(obj, bytes, bytes_len);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_from_base(
     struct yetty_yfigure_figure *base)
 {
@@ -933,7 +933,7 @@ struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_from_base(
 }
 
 /* Upcast: object → its figure-base slice. Stable pointer. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(struct yetty_yclass_object *obj)
 {
     return yetty_yfigure_figure_from(obj).value;
@@ -991,7 +991,7 @@ static struct yetty_yfigure_figure_ptr_result yrdawn_factory(struct yetty_ycore_
     return YETTY_OK(yetty_yfigure_figure_ptr, base_r.value);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrdawn_register_factory(
     struct yetty_yfigure_registry *registry, struct yetty_yrdawn_factory_args *args)
 {
@@ -1002,7 +1002,7 @@ struct yetty_ycore_void_result yetty_yrdawn_register_factory(
                                            args);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrdawn_factory_args_release(
     struct yetty_yrdawn_factory_args *args)
 {

@@ -52,9 +52,9 @@ struct yetty_ycore_void_result yetty_yrich_document_redo(struct yetty_yclass_obj
  * Document base data slice — the first slice in every document object.
  *=========================================================================*/
 
-struct [[clang::annotate("class@yrich:document"),
-         clang::annotate("include@yetty/yrich/yrich-operation.h"),
-         clang::annotate("include@yetty/yrich/yrich-types.h")]] yetty_yrich_document {
+struct YETTY_ANNOTATE("class@yrich:document")
+    YETTY_ANNOTATE("include@yetty/yrich/yrich-operation.h")
+        YETTY_ANNOTATE("include@yetty/yrich/yrich-types.h") yetty_yrich_document {
     /* Elements — flat array of element objects, insertion ordered, owned. */
     struct yetty_yclass_object **elements;
     size_t element_count;
@@ -95,7 +95,7 @@ static struct yetty_yrich_document_ptr_result ddata(struct yetty_yclass_object *
  * the element subclasses can chain their constructor/destroy overrides.
  *=========================================================================*/
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_super_void(struct yetty_yclass_object *obj,
                                                       const struct yetty_yclass *self_class,
                                                       yetty_yclass_method_id_t method_id)
@@ -125,7 +125,7 @@ struct yetty_ycore_void_result yetty_yrich_super_void(struct yetty_yclass_object
  * Module constructor slot — auto-called by every generated <class>_create.
  *=========================================================================*/
 
-[[clang::annotate("virtual@yrich:document:constructor")]]
+YETTY_ANNOTATE("virtual@yrich:document:constructor")
 static struct yetty_ycore_void_result document_constructor(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
@@ -146,8 +146,8 @@ static struct yetty_ycore_void_result document_constructor(struct yetty_yclass_o
  * yetty_yrich_super_void (the base impl frees the object).
  *=========================================================================*/
 
-[[clang::annotate("virtual@yrich:document:document_destroy")]] [[clang::annotate(
-    "local@yrich:document_destroy")]]
+YETTY_ANNOTATE("virtual@yrich:document:document_destroy")
+YETTY_ANNOTATE("local@yrich:document_destroy")
 static struct yetty_ycore_void_result document_default_destroy(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
@@ -195,7 +195,7 @@ static struct yetty_ycore_void_result document_default_destroy(struct yetty_ycla
  * Dirty tracking
  *=========================================================================*/
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_document_mark_dirty(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
@@ -208,7 +208,7 @@ struct yetty_ycore_void_result yetty_yrich_document_mark_dirty(struct yetty_ycla
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_yrich_document_is_dirty(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
@@ -219,7 +219,7 @@ int yetty_yrich_document_is_dirty(struct yetty_yclass_object *obj)
     return data_res.value->dirty;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_document_clear_dirty(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
@@ -232,7 +232,7 @@ struct yetty_ycore_void_result yetty_yrich_document_clear_dirty(struct yetty_ycl
  * Render target / colors
  *=========================================================================*/
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_document_set_buffer(
     struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *drawable_list)
 {
@@ -242,7 +242,7 @@ struct yetty_ycore_void_result yetty_yrich_document_set_buffer(
     return yetty_yrich_document_mark_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ydraw_drawable_list *yetty_yrich_document_buffer(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
@@ -253,7 +253,7 @@ struct yetty_ydraw_drawable_list *yetty_yrich_document_buffer(struct yetty_yclas
     return data_res.value->buffer;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_document_set_bg_color(struct yetty_yclass_object *obj,
                                                                  uint32_t color)
 {
@@ -263,7 +263,7 @@ struct yetty_ycore_void_result yetty_yrich_document_set_bg_color(struct yetty_yc
     return yetty_yrich_document_mark_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 uint32_t yetty_yrich_document_bg_color(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
@@ -278,7 +278,7 @@ uint32_t yetty_yrich_document_bg_color(struct yetty_yclass_object *obj)
  * Callbacks
  *=========================================================================*/
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_document_set_dirty_cb(struct yetty_yclass_object *obj,
                                                                  yetty_yrich_dirty_cb callback,
                                                                  void *userdata)
@@ -290,7 +290,7 @@ struct yetty_ycore_void_result yetty_yrich_document_set_dirty_cb(struct yetty_yc
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_document_set_sync_cb(struct yetty_yclass_object *obj,
                                                                 yetty_yrich_sync_cb callback,
                                                                 void *userdata)
@@ -306,7 +306,7 @@ struct yetty_ycore_void_result yetty_yrich_document_set_sync_cb(struct yetty_ycl
  * Element list
  *=========================================================================*/
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yrich_element_id_result yetty_yrich_document_next_id(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
@@ -327,7 +327,7 @@ static struct yetty_ycore_void_result element_list_grow(struct yetty_yrich_docum
 }
 
 /* Allocate an operation tagged with the document's logical clock + session. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yrich_operation_ptr_result yetty_yrich_document_create_op(
     struct yetty_yclass_object *obj, uint32_t op_type)
 {
@@ -340,7 +340,7 @@ struct yetty_yrich_operation_ptr_result yetty_yrich_document_create_op(
 
 /* Take ownership of the element object. Generates an Insert op (the op log
  * is best-effort bookkeeping; its failures are absorbed here). */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_document_add_element(
     struct yetty_yclass_object *obj, struct yetty_yclass_object *element_obj)
 {
@@ -389,7 +389,7 @@ struct yetty_ycore_void_result yetty_yrich_document_add_element(
     return yetty_yrich_document_mark_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_document_remove_element(struct yetty_yclass_object *obj,
                                                                    yetty_yrich_element_id id)
 {
@@ -434,7 +434,7 @@ struct yetty_ycore_void_result yetty_yrich_document_remove_element(struct yetty_
     return YETTY_ERR(yetty_ycore_void, "document_remove_element: id not found");
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object *yetty_yrich_document_find(struct yetty_yclass_object *obj,
                                                       yetty_yrich_element_id id)
 {
@@ -459,7 +459,7 @@ struct yetty_yclass_object *yetty_yrich_document_find(struct yetty_yclass_object
 }
 
 /* Hit-test in reverse z-order (last drawn = topmost). */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object *yetty_yrich_document_element_at(struct yetty_yclass_object *obj,
                                                             float x, float y)
 {
@@ -488,7 +488,7 @@ struct yetty_yclass_object *yetty_yrich_document_element_at(struct yetty_yclass_
  * Selection
  *=========================================================================*/
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yrich_selection *yetty_yrich_document_selection(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
@@ -499,7 +499,7 @@ struct yetty_yrich_selection *yetty_yrich_document_selection(struct yetty_yclass
     return &data_res.value->selection;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_yrich_document_is_selected(struct yetty_yclass_object *obj, yetty_yrich_element_id id)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
@@ -517,7 +517,7 @@ int yetty_yrich_document_is_selected(struct yetty_yclass_object *obj, yetty_yric
     return 0;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_document_clear_selection(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
@@ -530,7 +530,7 @@ struct yetty_ycore_void_result yetty_yrich_document_clear_selection(struct yetty
  * Content size slots — concrete kinds override.
  *=========================================================================*/
 
-[[clang::annotate("virtual@yrich:document:document_content_width")]]
+YETTY_ANNOTATE("virtual@yrich:document:document_content_width")
 static struct yetty_ycore_float_result document_default_content_width(
     struct yetty_yclass_object *obj)
 {
@@ -538,7 +538,7 @@ static struct yetty_ycore_float_result document_default_content_width(
     return YETTY_OK(yetty_ycore_float, 0.0f);
 }
 
-[[clang::annotate("virtual@yrich:document:document_content_height")]]
+YETTY_ANNOTATE("virtual@yrich:document:document_content_height")
 static struct yetty_ycore_float_result document_default_content_height(
     struct yetty_yclass_object *obj)
 {
@@ -550,8 +550,8 @@ static struct yetty_ycore_float_result document_default_content_height(
  * Render slot — default iterates elements in order.
  *=========================================================================*/
 
-[[clang::annotate("virtual@yrich:document:document_render")]] [[clang::annotate(
-    "local@yrich:document_render")]]
+YETTY_ANNOTATE("virtual@yrich:document:document_render")
+YETTY_ANNOTATE("local@yrich:document_render")
 static struct yetty_ycore_void_result document_default_render(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
@@ -592,11 +592,11 @@ static struct yetty_ycore_void_result document_default_render(struct yetty_yclas
 /* Apply an operation. `local_flag` non-zero marks a locally-originated op
  * (forwarded to the sync callback). Concrete kinds override to apply the
  * op to their own state and chain up for the base bookkeeping. */
-[[clang::annotate("virtual@yrich:document:document_apply_op")]] [[clang::annotate(
-    "local@yrich:document_apply_op")]]
-static struct yetty_ycore_void_result document_default_apply_op(struct yetty_yclass_object *obj,
-                                                                struct yetty_yrich_operation *op,
-                                                                int local_flag)
+YETTY_ANNOTATE("virtual@yrich:document:document_apply_op")
+YETTY_ANNOTATE("local@yrich:document_apply_op")
+static struct yetty_ycore_void_result
+    document_default_apply_op(struct yetty_yclass_object *obj, struct yetty_yrich_operation *op,
+                              int local_flag)
 {
     if (!op) {
         return YETTY_ERR(yetty_ycore_void, "document_apply_op: NULL op");
@@ -632,7 +632,7 @@ static struct yetty_ycore_void_result document_default_apply_op(struct yetty_ycl
 
 /* Drop the undo/redo stacks — used after destructive resets (File > New)
  * whose recorded ops reference elements that no longer exist. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_document_clear_history(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
@@ -642,7 +642,7 @@ struct yetty_ycore_void_result yetty_yrich_document_clear_history(struct yetty_y
 }
 
 /* Run a command and push it onto the history. Takes ownership of cmd. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_document_execute(struct yetty_yclass_object *obj,
                                                             struct yetty_yrich_command *cmd)
 {
@@ -654,7 +654,7 @@ struct yetty_ycore_void_result yetty_yrich_document_execute(struct yetty_yclass_
     return yetty_yrich_history_execute(&data_res.value->history, cmd, obj);
 }
 
-[[clang::annotate("virtual@yrich:document:document_undo")]]
+YETTY_ANNOTATE("virtual@yrich:document:document_undo")
 static struct yetty_ycore_void_result document_default_undo(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
@@ -668,7 +668,7 @@ static struct yetty_ycore_void_result document_default_undo(struct yetty_yclass_
     return undo_res;
 }
 
-[[clang::annotate("virtual@yrich:document:document_redo")]]
+YETTY_ANNOTATE("virtual@yrich:document:document_redo")
 static struct yetty_ycore_void_result document_default_redo(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
@@ -687,7 +687,7 @@ static struct yetty_ycore_void_result document_default_redo(struct yetty_yclass_
  * a YETTY_YRICH_MOD_* bitmask so the slots stay wire-marshallable.
  *=========================================================================*/
 
-[[clang::annotate("virtual@yrich:document:document_on_mouse_down")]]
+YETTY_ANNOTATE("virtual@yrich:document:document_on_mouse_down")
 static struct yetty_ycore_void_result document_default_on_mouse_down(
     struct yetty_yclass_object *obj, float x, float y, uint32_t button, uint32_t mods)
 {
@@ -722,7 +722,7 @@ static struct yetty_ycore_void_result document_default_on_mouse_down(
     return yetty_yrich_document_mark_dirty(obj);
 }
 
-[[clang::annotate("virtual@yrich:document:document_on_mouse_up")]]
+YETTY_ANNOTATE("virtual@yrich:document:document_on_mouse_up")
 static struct yetty_ycore_void_result document_default_on_mouse_up(struct yetty_yclass_object *obj,
                                                                    float x, float y,
                                                                    uint32_t button, uint32_t mods)
@@ -735,7 +735,7 @@ static struct yetty_ycore_void_result document_default_on_mouse_up(struct yetty_
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("virtual@yrich:document:document_on_mouse_drag")]]
+YETTY_ANNOTATE("virtual@yrich:document:document_on_mouse_drag")
 static struct yetty_ycore_void_result document_default_on_mouse_drag(
     struct yetty_yclass_object *obj, float x, float y, uint32_t button, uint32_t mods)
 {
@@ -747,7 +747,7 @@ static struct yetty_ycore_void_result document_default_on_mouse_drag(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("virtual@yrich:document:document_on_mouse_double_click")]]
+YETTY_ANNOTATE("virtual@yrich:document:document_on_mouse_double_click")
 static struct yetty_ycore_void_result document_default_on_mouse_double_click(
     struct yetty_yclass_object *obj, float x, float y, uint32_t button, uint32_t mods)
 {
@@ -769,7 +769,7 @@ static struct yetty_ycore_void_result document_default_on_mouse_double_click(
     return yetty_yrich_document_mark_dirty(obj);
 }
 
-[[clang::annotate("virtual@yrich:document:document_on_key_down")]]
+YETTY_ANNOTATE("virtual@yrich:document:document_on_key_down")
 static struct yetty_ycore_void_result document_default_on_key_down(struct yetty_yclass_object *obj,
                                                                    uint32_t key, uint32_t mods)
 {
@@ -789,7 +789,7 @@ static struct yetty_ycore_void_result document_default_on_key_down(struct yetty_
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("virtual@yrich:document:document_on_text_input")]]
+YETTY_ANNOTATE("virtual@yrich:document:document_on_text_input")
 static struct yetty_ycore_void_result document_default_on_text_input(
     struct yetty_yclass_object *obj, struct yetty_ycore_buffer text)
 {

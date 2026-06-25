@@ -38,37 +38,29 @@ struct yetty_yplatform_window_chrome_ptr_result yetty_yplatform_window_chrome_fr
 struct yetty_yclass_object *yetty_yplatform_window_chrome_to(
     struct yetty_yplatform_window_chrome *data);
 
-/* clang-format on */
 struct yetty_ycore_void_result yetty_yplatform_window_chrome_destroy(
     struct yetty_yclass_object *obj);
-/* clang-format on */
 struct yetty_ycore_void_result yetty_yplatform_window_chrome_handle_event(
     struct yetty_yclass_object *obj, const struct yetty_yui_event *event);
-/* clang-format on */
+/* Bind the chrome to its render→main bus. The platform subclass binds the native
+ * window + response pipe separately (e.g. glfw_window_chrome_attach), so each
+ * class writes only its own data slice. output_pipe is borrowed. */
 struct yetty_ycore_void_result yetty_yplatform_window_chrome_configure(
     struct yetty_yclass_object *obj, struct yetty_ycore_xthread_event_pipe *output_pipe);
-/* clang-format on */
 struct yetty_ycore_void_result yetty_yplatform_window_chrome_iconify(
     struct yetty_yclass_object *obj);
-/* clang-format on */
 struct yetty_ycore_void_result yetty_yplatform_window_chrome_toggle_maximize(
     struct yetty_yclass_object *obj);
-/* clang-format on */
 struct yetty_ycore_void_result yetty_yplatform_window_chrome_request_close(
     struct yetty_yclass_object *obj);
-/* clang-format on */
 struct yetty_ycore_void_result yetty_yplatform_window_chrome_drag_by(
     struct yetty_yclass_object *obj, int dx, int dy);
-/* clang-format on */
 struct yetty_ycore_void_result yetty_yplatform_window_chrome_resize_by(
     struct yetty_yclass_object *obj, int dx, int dy, int edge);
-/* clang-format on */
 struct yetty_ycore_void_result yetty_yplatform_window_chrome_begin_interactive_move(
     struct yetty_yclass_object *obj);
-/* clang-format on */
 struct yetty_ycore_void_result yetty_yplatform_window_chrome_begin_interactive_resize(
     struct yetty_yclass_object *obj, int edge);
-/* clang-format on */
 struct yetty_ycore_void_result yetty_yplatform_window_chrome_set_cursor(
     struct yetty_yclass_object *obj, int shape);
 

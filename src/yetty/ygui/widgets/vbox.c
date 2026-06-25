@@ -19,7 +19,7 @@ struct yetty_ygui_vbox_ptr_result yetty_ygui_vbox_from(struct yetty_yclass_objec
 
 #include <yetty/ygui/primitive-widget.h>
 
-[[clang::annotate("override@ygui:vbox:constructor")]]
+YETTY_ANNOTATE("override@ygui:vbox:constructor")
 static struct yetty_ycore_void_result vbox_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -34,8 +34,8 @@ static struct yetty_ycore_void_result vbox_constructor(struct yetty_yclass_objec
     return yetty_ygui_widget_layout_set(obj, &l);
 }
 
-struct [[clang::annotate("class@ygui:vbox")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-yetty_ygui_vbox {
+struct YETTY_ANNOTATE("class@ygui:vbox") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_vbox {
     char _empty;
 };
 

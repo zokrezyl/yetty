@@ -35,18 +35,18 @@ typedef struct yetty_ycore_void_result (*yetty_ymusic_set_highlight_fn)(
     struct yetty_yclass_object *, int32_t);
 typedef struct yetty_ycore_void_result (*yetty_ymusic_destroy_fn)(struct yetty_yclass_object *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymusic_configure_fn yetty_ymusic_music_yetty_ymusic_configure_check = music_configure;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymusic_parse_fn yetty_ymusic_music_yetty_ymusic_parse_check = music_parse;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymusic_render_fn yetty_ymusic_music_yetty_ymusic_render_check = music_render;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymusic_hit_test_fn yetty_ymusic_music_yetty_ymusic_hit_test_check = music_hit_test;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymusic_set_highlight_fn yetty_ymusic_music_yetty_ymusic_set_highlight_check =
     music_set_highlight;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ymusic_destroy_fn yetty_ymusic_music_yetty_ymusic_destroy_check = music_obj_destroy;
 
 struct yetty_yclass_ptr_result yetty_ymusic_music_class_get(void)

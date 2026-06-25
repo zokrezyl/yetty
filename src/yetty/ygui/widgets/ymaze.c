@@ -24,15 +24,15 @@ struct yetty_ygui_ymaze_ptr_result yetty_ygui_ymaze_from(struct yetty_yclass_obj
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yplatform/time.h>
 
-struct [[clang::annotate("class@ygui:ymaze")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
-yetty_ygui_ymaze {
+struct YETTY_ANNOTATE("class@ygui:ymaze") YETTY_ANNOTATE("parent@ygui:ydraw_embed")
+    yetty_ygui_ymaze {
     struct yetty_ymaze *maze;
     double start_time;
     float scene_w;
     float scene_h;
 };
 
-[[clang::annotate("override@ygui:ymaze:constructor")]]
+YETTY_ANNOTATE("override@ygui:ymaze:constructor")
 static struct yetty_ycore_void_result ymz_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -53,7 +53,7 @@ static struct yetty_ycore_void_result ymz_constructor(struct yetty_yclass_object
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:ymaze:destructor")]]
+YETTY_ANNOTATE("override@ygui:ymaze:destructor")
 static struct yetty_ycore_void_result ymz_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -66,7 +66,7 @@ static struct yetty_ycore_void_result ymz_destructor(struct yetty_yclass_object 
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:ymaze:widget_emit_body")]]
+YETTY_ANNOTATE("override@ygui:ymaze:widget_emit_body")
 static struct yetty_ycore_void_result ymz_emit_body(struct yetty_yclass_object *yclass_obj,
                                                     struct yetty_ygui_emit_ctx *ctx)
 {

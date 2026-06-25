@@ -24,8 +24,8 @@ struct yetty_ygui_table_ptr_result yetty_ygui_table_from(struct yetty_yclass_obj
 #define COLOR_HEADER_TEXT 0xFF92A86Bu
 #define ROW_H 22.0f
 
-struct [[clang::annotate("class@ygui:table")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-yetty_ygui_table {
+struct YETTY_ANNOTATE("class@ygui:table") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_table {
     char **headers;
     int n_cols;
     char ***rows;
@@ -33,7 +33,7 @@ yetty_ygui_table {
     int rows_cap;
 };
 
-[[clang::annotate("override@ygui:table:constructor")]]
+YETTY_ANNOTATE("override@ygui:table:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -59,7 +59,7 @@ static void free_row(char **row, int n_cols)
     free(row);
 }
 
-[[clang::annotate("override@ygui:table:destructor")]]
+YETTY_ANNOTATE("override@ygui:table:destructor")
 static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -78,7 +78,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_ob
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:table:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:table:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
@@ -132,7 +132,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_table_set_columns(struct yetty_yclass_object *obj,
                                                             int n_cols, const char *const *headers)
 {
@@ -164,7 +164,7 @@ struct yetty_ycore_void_result yetty_ygui_table_set_columns(struct yetty_yclass_
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_table_add_row(struct yetty_yclass_object *obj,
                                                         const char *const *cells, int n_cells)
 {
@@ -207,7 +207,7 @@ struct yetty_ycore_void_result yetty_ygui_table_add_row(struct yetty_yclass_obje
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_table_clear_rows(struct yetty_yclass_object *obj)
 {
     if (!obj) {

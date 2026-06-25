@@ -41,8 +41,8 @@ struct yetty_ygui_collapsing_header_ptr_result yetty_ygui_collapsing_header_from
 #define CH_CHEVRON 0xFF92A86Bu   /* BRAND_ACCENT      (107,168,146) */
 #define CH_HOVER 0xFFA5C574u     /* BRAND_ACCENT_BRIGHT (116,197,165) */
 
-struct [[clang::annotate("class@ygui:collapsing_header")]] [[clang::annotate("parent@ygui:vbox")]]
-yetty_ygui_collapsing_header {
+struct YETTY_ANNOTATE("class@ygui:collapsing_header") YETTY_ANNOTATE("parent@ygui:vbox")
+    yetty_ygui_collapsing_header {
     char *title;
     int open;
     /* Authored full height, captured the first time the section is
@@ -145,7 +145,7 @@ static struct yetty_ycore_void_result ch_apply_open(struct yetty_yclass_object *
     return ch_set_children_hidden(obj, d->open ? 0 : 1);
 }
 
-[[clang::annotate("override@ygui:collapsing_header:constructor")]]
+YETTY_ANNOTATE("override@ygui:collapsing_header:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -167,7 +167,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     return yetty_ygui_widget_layout_set(obj, &l);
 }
 
-[[clang::annotate("override@ygui:collapsing_header:destructor")]]
+YETTY_ANNOTATE("override@ygui:collapsing_header:destructor")
 static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -178,7 +178,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_ob
     return yetty_ygui_super_void(obj, ch_class(), (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:collapsing_header:widget_on_press")]]
+YETTY_ANNOTATE("override@ygui:collapsing_header:widget_on_press")
 static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass_obj, float x,
                                               float y, int btn)
 {
@@ -201,7 +201,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:collapsing_header:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:collapsing_header:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
@@ -254,7 +254,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_title(
     struct yetty_yclass_object *obj, const char *title)
 {
@@ -277,7 +277,7 @@ struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_title(
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_open(
     struct yetty_yclass_object *obj, int open)
 {
@@ -291,7 +291,7 @@ struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_open(
     return ch_apply_open(obj, d);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_ygui_collapsing_header_is_open(const struct yetty_yclass_object *obj)
 {
     if (!obj) {

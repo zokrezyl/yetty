@@ -23,7 +23,7 @@ struct yetty_ygui_yplot_ptr_result yetty_ygui_yplot_from(struct yetty_yclass_obj
 /* Plot configuration. Defined here in the owning .c; codegen reproduces it
  * into the generated header (consumers fill it by value, so the full
  * definition is published via the `expose` annotation). */
-struct [[clang::annotate("expose")]] yetty_ygui_yplot_config {
+struct YETTY_ANNOTATE("expose") yetty_ygui_yplot_config {
     float x_min;
     float x_max;
     float y_min;
@@ -46,8 +46,7 @@ struct yplot_buf_slot {
     uint32_t color;
 };
 
-struct [[clang::annotate("class@ygui:yplot")]] [[clang::annotate("parent@ygui:widget")]]
-yetty_ygui_yplot {
+struct YETTY_ANNOTATE("class@ygui:yplot") YETTY_ANNOTATE("parent@ygui:widget") yetty_ygui_yplot {
     char *source;
     size_t source_len;
     struct yetty_ygui_yplot_config cfg;
@@ -71,7 +70,7 @@ static void yplot_free_buffers(struct yetty_ygui_yplot *d)
     d->buffer_count = 0;
 }
 
-[[clang::annotate("override@ygui:yplot:constructor")]]
+YETTY_ANNOTATE("override@ygui:yplot:constructor")
 static struct yetty_ycore_void_result yplot_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -89,7 +88,7 @@ static struct yetty_ycore_void_result yplot_constructor(struct yetty_yclass_obje
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:yplot:destructor")]]
+YETTY_ANNOTATE("override@ygui:yplot:destructor")
 static struct yetty_ycore_void_result yplot_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -103,7 +102,7 @@ static struct yetty_ycore_void_result yplot_destructor(struct yetty_yclass_objec
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:yplot:widget_emit_container")]]
+YETTY_ANNOTATE("override@ygui:yplot:widget_emit_container")
 static struct yetty_ycore_void_result yplot_emit_container(struct yetty_yclass_object *yclass_obj,
                                                            struct yetty_ygui_emit_ctx *ctx)
 {
@@ -114,7 +113,7 @@ static struct yetty_ycore_void_result yplot_emit_container(struct yetty_yclass_o
                                         /*init_payload=*/NULL, /*init_payload_bytes=*/0);
 }
 
-[[clang::annotate("override@ygui:yplot:widget_emit_body")]]
+YETTY_ANNOTATE("override@ygui:yplot:widget_emit_body")
 static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_object *yclass_obj,
                                                       struct yetty_ygui_emit_ctx *ctx)
 {
@@ -224,7 +223,7 @@ static struct yetty_ycore_void_result yplot_emit_body(struct yetty_yclass_object
     return fr;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_yclass_object *obj,
                                                            const char *source)
 {
@@ -249,7 +248,7 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_yclass_o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_yplot_set_config(
     struct yetty_yclass_object *obj, const struct yetty_ygui_yplot_config *cfg)
 {
@@ -268,7 +267,7 @@ struct yetty_ycore_void_result yetty_ygui_yplot_set_config(
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_yplot_set_buffers(
     struct yetty_yclass_object *obj, const char *source, size_t source_len,
     const struct yetty_yplot_buffer_input *buffers, size_t buffer_count,

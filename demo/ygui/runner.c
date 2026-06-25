@@ -5,7 +5,7 @@
  *                         to the hosting yetty; stdin feeds keystrokes.
  *                         No own window. Backed by a libuv loop.
  *   otherwise           → STANDALONE mode. Opens its own GPU window via
- *                         yinit_run + yframework, routes ygui through
+ *                         the yplatform bootstrap + yframework, routes ygui through
  *                         an in-process wire_statemachine into a local
  *                         yfigure_container, renders that tree itself.
  *
@@ -749,7 +749,7 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
 
     /* Window-chrome engine — bind it to the borderless OS window's manager so
      * the caption strip and edges drive real move/resize/maximize. Borrowed
-     * window_chrome comes from yinit via yframework; absent in headless. A
+     * window_chrome comes from yplatform via yframework; absent in headless. A
      * failure here just leaves chrome disabled (window stays static) rather
      * than aborting the demo. */
     if (r->enable_chrome && r->yframework->window_chrome) {

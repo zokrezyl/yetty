@@ -32,8 +32,8 @@ struct yetty_ygui_toggle_ptr_result yetty_ygui_toggle_from(struct yetty_yclass_o
 #define COLOR_KNOB 0xFFE4E5E0u
 #define COLOR_TEXT 0xFFE4E5E0u
 
-struct [[clang::annotate("class@ygui:toggle")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]] yetty_ygui_toggle {
+struct YETTY_ANNOTATE("class@ygui:toggle") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    YETTY_ANNOTATE("uses@ygui:clickable") yetty_ygui_toggle {
     char *label;
     int on;
 };
@@ -58,7 +58,7 @@ static struct yetty_ycore_void_result on_click_flip(struct yetty_yclass_object *
     return yetty_ygui_widget_emit(obj, &ev);
 }
 
-[[clang::annotate("override@ygui:toggle:constructor")]]
+YETTY_ANNOTATE("override@ygui:toggle:constructor")
 static struct yetty_ycore_void_result toggle_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -73,7 +73,7 @@ static struct yetty_ycore_void_result toggle_constructor(struct yetty_yclass_obj
     return yetty_ygui_clickable_on_click_set(obj, on_click_flip, NULL);
 }
 
-[[clang::annotate("override@ygui:toggle:destructor")]]
+YETTY_ANNOTATE("override@ygui:toggle:destructor")
 static struct yetty_ycore_void_result toggle_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -125,7 +125,7 @@ static struct yetty_ycore_void_result paint_circle(struct yetty_ygui_emit_ctx *c
                                                         0.0f, &geom);
 }
 
-[[clang::annotate("override@ygui:toggle:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:toggle:widget_paint")
 static struct yetty_ycore_void_result toggle_paint(struct yetty_yclass_object *yclass_obj,
                                                    struct yetty_ygui_emit_ctx *ctx)
 {
@@ -165,7 +165,7 @@ static struct yetty_ycore_void_result toggle_paint(struct yetty_yclass_object *y
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_toggle_set_label(struct yetty_yclass_object *obj,
                                                            const char *label)
 {
@@ -189,7 +189,7 @@ struct yetty_ycore_void_result yetty_ygui_toggle_set_label(struct yetty_yclass_o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_toggle_set_on(struct yetty_yclass_object *obj, int on)
 {
     if (!obj) {
@@ -202,7 +202,7 @@ struct yetty_ycore_void_result yetty_ygui_toggle_set_on(struct yetty_yclass_obje
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_int_result yetty_ygui_toggle_get_on(const struct yetty_yclass_object *obj)
 {
     if (!obj) {

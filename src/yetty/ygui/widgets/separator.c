@@ -22,7 +22,7 @@ struct yetty_ygui_separator_ptr_result yetty_ygui_separator_from(struct yetty_yc
 
 #define COLOR_BORDER 0xFF474A36u
 
-[[clang::annotate("override@ygui:separator:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:separator:widget_paint")
 static struct yetty_ycore_void_result separator_paint(struct yetty_yclass_object *yclass_obj,
                                                       struct yetty_ygui_emit_ctx *ctx)
 {
@@ -46,8 +46,8 @@ static struct yetty_ycore_void_result separator_paint(struct yetty_yclass_object
                                                      0u, 0.0f, &geom);
 }
 
-struct [[clang::annotate("class@ygui:separator")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] yetty_ygui_separator {
+struct YETTY_ANNOTATE("class@ygui:separator") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_separator {
     char _empty;
 };
 

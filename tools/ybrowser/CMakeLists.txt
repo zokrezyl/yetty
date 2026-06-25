@@ -5,7 +5,7 @@
 #   standalone       : own GPU window; local mouse/keyboard, so scrolling,
 #                      clicking and link navigation all work.
 #
-# Standalone needs the yinit/yframework GPU bring-up (Linux + WebGPU), the
+# Standalone needs the yplatform/yframework GPU bring-up (Linux + WebGPU), the
 # same sources the ygui demos inline. When unavailable we still build the
 # one-shot + client modes.
 
@@ -53,7 +53,7 @@ if(YBROWSER_STANDALONE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(YBROWSER_FONTCONFIG REQUIRED fontconfig)
 
-    # Platform / yinit / yframework sources — no static lib exists for this
+    # yplatform / yframework sources — no static lib exists for this
     # layer (window, surface, event pipes carry file-static state), so each
     # standalone-window binary inlines them, same as demo/ygui/runner.
     target_sources(ybrowser PRIVATE

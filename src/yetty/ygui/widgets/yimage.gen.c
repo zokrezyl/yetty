@@ -26,15 +26,15 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_container_fn)(
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(
     struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_constructor_fn yetty_ygui_yimage_yetty_ygui_constructor_check =
     yimage_constructor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_destructor_fn yetty_ygui_yimage_yetty_ygui_destructor_check = yimage_destructor;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_emit_container_fn
     yetty_ygui_yimage_yetty_ygui_widget_emit_container_check = yimage_emit_container;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_emit_body_fn yetty_ygui_yimage_yetty_ygui_widget_emit_body_check =
     yimage_emit_body;
 

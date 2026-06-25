@@ -179,8 +179,7 @@ struct ygrid_id_index_entry {
  * The figure
  *=========================================================================*/
 
-struct [[clang::annotate("class@ygrid:grid")]] [[clang::annotate("parent@yfigure:figure")]]
-yetty_ygrid_grid {
+struct YETTY_ANNOTATE("class@ygrid:grid") YETTY_ANNOTATE("parent@yfigure:figure") yetty_ygrid_grid {
     /* Owned. Built at create time. Used by process_input to walk the
      * routed-record payload as a stream of SDF/glyph/TEXT_DRAWABLE_LIST records
      * and feed each one into the ygrid's flat byte buffer. */
@@ -2574,7 +2573,7 @@ static struct yetty_ycore_char_ptr_result ygrid_dump(const struct yetty_yfigure_
 /* yclass cross-domain override of the yfigure:render slot. Recovers the
  * typed body from the object header (body begins at obj + 1) and forwards
  * to the existing render impl. */
-[[clang::annotate("override@ygrid:grid:yfigure:render")]]
+YETTY_ANNOTATE("override@ygrid:grid:yfigure:render")
 static struct yetty_ycore_void_result ygrid_render_slot(struct yetty_yclass_object *obj,
                                                         struct yetty_ydraw_target *target)
 {
@@ -2582,7 +2581,7 @@ static struct yetty_ycore_void_result ygrid_render_slot(struct yetty_yclass_obje
 }
 
 /* yclass cross-domain override of yfigure:destroy. Body sits at obj + 1. */
-[[clang::annotate("override@ygrid:grid:yfigure:destroy")]]
+YETTY_ANNOTATE("override@ygrid:grid:yfigure:destroy")
 static struct yetty_ycore_void_result ygrid_destroy_slot(struct yetty_yclass_object *obj)
 {
     return ygrid_destroy((struct yetty_yfigure_figure *)(obj + 1));
@@ -3287,7 +3286,7 @@ struct yetty_ycore_void_result yetty_ygrid_set_font(struct yetty_ygrid_grid *gri
  * is correct for every current caller.
  *=========================================================================*/
 
-[[clang::annotate("virtual@ygrid:grid:add_record")]]
+YETTY_ANNOTATE("virtual@ygrid:grid:add_record")
 static struct yetty_ycore_void_result yetty_ygrid_grid_add_record_impl(
     struct yetty_yclass_object *obj, struct yetty_ycore_buffer record)
 {
@@ -3297,7 +3296,7 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_add_record_impl(
     return yetty_ygrid_add_record_local(grid, record.data, record.size);
 }
 
-[[clang::annotate("virtual@ygrid:grid:clear")]]
+YETTY_ANNOTATE("virtual@ygrid:grid:clear")
 static struct yetty_ycore_void_result yetty_ygrid_grid_clear_impl(struct yetty_yclass_object *obj)
 {
     struct yetty_ygrid_grid_ptr_result grid_r = ygrid_from_obj(obj);
@@ -3306,27 +3305,27 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_clear_impl(struct yetty_y
     return yetty_ygrid_clear_local(grid);
 }
 
-[[clang::annotate("virtual@ygrid:grid:destroy")]]
+YETTY_ANNOTATE("virtual@ygrid:grid:destroy")
 static struct yetty_ycore_void_result yetty_ygrid_grid_destroy_impl(struct yetty_yclass_object *obj)
 {
     return ygrid_destroy((struct yetty_yfigure_figure *)(obj + 1));
 }
 
-[[clang::annotate("override@ygrid:grid:yfigure:process_bytes")]]
+YETTY_ANNOTATE("override@ygrid:grid:yfigure:process_bytes")
 static struct yetty_ycore_void_result yetty_ygrid_grid_process_bytes_impl(
     struct yetty_yclass_object *obj, const uint8_t *bytes, size_t bytes_len)
 {
     return ygrid_process_bytes((struct yetty_yfigure_figure *)(obj + 1), bytes, bytes_len);
 }
 
-[[clang::annotate("override@ygrid:grid:yfigure:reset_content")]]
+YETTY_ANNOTATE("override@ygrid:grid:yfigure:reset_content")
 static struct yetty_ycore_void_result yetty_ygrid_grid_reset_content_impl(
     struct yetty_yclass_object *obj)
 {
     return ygrid_reset_content((struct yetty_yfigure_figure *)(obj + 1));
 }
 
-[[clang::annotate("override@ygrid:grid:yfigure:dump_state")]]
+YETTY_ANNOTATE("override@ygrid:grid:yfigure:dump_state")
 static struct yetty_ycore_char_ptr_result yetty_ygrid_grid_dump_state_impl(
     struct yetty_yclass_object *obj, int indent)
 {
@@ -3337,7 +3336,7 @@ static struct yetty_ycore_char_ptr_result yetty_ygrid_grid_dump_state_impl(
  * SET_CHILD_SCROLL / SET_CHILD_CONTENT_SIZE, or the terminal's autonomous
  * wheel/key handler). Both wrap the in-process setters and mark the figure
  * base dirty so the compositor repaints the (re-clipped) viewport. */
-[[clang::annotate("override@ygrid:grid:yfigure:set_scroll")]]
+YETTY_ANNOTATE("override@ygrid:grid:yfigure:set_scroll")
 static struct yetty_ycore_void_result yetty_ygrid_grid_set_scroll_impl(
     struct yetty_yclass_object *obj, float scroll_x, float scroll_y)
 {
@@ -3348,7 +3347,7 @@ static struct yetty_ycore_void_result yetty_ygrid_grid_set_scroll_impl(
     return yetty_yfigure_figure_dirty_set(obj, 1);
 }
 
-[[clang::annotate("override@ygrid:grid:yfigure:set_content_size")]]
+YETTY_ANNOTATE("override@ygrid:grid:yfigure:set_content_size")
 static struct yetty_ycore_void_result yetty_ygrid_grid_set_content_size_impl(
     struct yetty_yclass_object *obj, float content_w, float content_h)
 {

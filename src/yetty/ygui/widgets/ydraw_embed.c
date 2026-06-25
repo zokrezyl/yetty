@@ -35,12 +35,12 @@ struct yetty_ygui_ydraw_embed_ptr_result yetty_ygui_ydraw_embed_from(
 
 #define RICH_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
 
-struct [[clang::annotate("class@ygui:ydraw_embed")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] yetty_ygui_ydraw_embed {
+struct YETTY_ANNOTATE("class@ygui:ydraw_embed") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_ydraw_embed {
     struct yetty_ydraw_drawable_list *buf;
 };
 
-[[clang::annotate("override@ygui:ydraw_embed:constructor")]]
+YETTY_ANNOTATE("override@ygui:ydraw_embed:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -55,7 +55,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:ydraw_embed:destructor")]]
+YETTY_ANNOTATE("override@ygui:ydraw_embed:destructor")
 static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -134,7 +134,7 @@ static void translate_prim(uint32_t *prim, size_t bytes, float dx, float dy)
     }
 }
 
-[[clang::annotate("override@ygui:ydraw_embed:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:ydraw_embed:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
@@ -216,7 +216,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_ydraw_embed_set_buffer(
     struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *buf)
 {

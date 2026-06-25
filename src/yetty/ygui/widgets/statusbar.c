@@ -26,13 +26,13 @@ struct yetty_ygui_statusbar_ptr_result yetty_ygui_statusbar_from(struct yetty_yc
 #define COLOR_BG 0xFF14100Bu   /* BRAND_BG */
 #define COLOR_TEXT 0xFFA8A79Fu /* BRAND_TEXT_SECONDARY */
 
-struct [[clang::annotate("class@ygui:statusbar")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] yetty_ygui_statusbar {
+struct YETTY_ANNOTATE("class@ygui:statusbar") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_statusbar {
     char *left;
     char *right;
 };
 
-[[clang::annotate("override@ygui:statusbar:constructor")]]
+YETTY_ANNOTATE("override@ygui:statusbar:constructor")
 static struct yetty_ycore_void_result statusbar_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -52,7 +52,7 @@ static struct yetty_ycore_void_result statusbar_constructor(struct yetty_yclass_
     return yetty_ygui_widget_layout_set(obj, &l);
 }
 
-[[clang::annotate("override@ygui:statusbar:destructor")]]
+YETTY_ANNOTATE("override@ygui:statusbar:destructor")
 static struct yetty_ycore_void_result statusbar_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -66,7 +66,7 @@ static struct yetty_ycore_void_result statusbar_destructor(struct yetty_yclass_o
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:statusbar:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:statusbar:widget_paint")
 static struct yetty_ycore_void_result statusbar_paint(struct yetty_yclass_object *yclass_obj,
                                                       struct yetty_ygui_emit_ctx *ctx)
 {
@@ -128,7 +128,7 @@ static char *dup_or_null(const char *s)
     return c;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_statusbar_set_left(struct yetty_yclass_object *obj,
                                                              const char *text)
 {
@@ -146,7 +146,7 @@ struct yetty_ycore_void_result yetty_ygui_statusbar_set_left(struct yetty_yclass
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_statusbar_set_right(struct yetty_yclass_object *obj,
                                                               const char *text)
 {

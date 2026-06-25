@@ -57,8 +57,7 @@ static inline void destroy_safe(struct yetty_ycore_void_result r)
     }
 }
 
-struct [[clang::annotate("class@yrich:app")]] [[clang::annotate("parent@yapp:app")]]
-yetty_yrich_app {
+struct YETTY_ANNOTATE("class@yrich:app") YETTY_ANNOTATE("parent@yapp:app") yetty_yrich_app {
     int quit;
     enum yetty_yrich_app_kind kind;
     struct yetty_yclass_object *doc;         /* borrowed until handed to the view */
@@ -442,7 +441,7 @@ static struct yetty_ycore_void_result handle_event(struct yetty_yrich_app *app,
     }
 }
 
-[[clang::annotate("override@yapp:app:init")]]
+YETTY_ANNOTATE("override@yapp:app:init")
 static struct yetty_ycore_void_result yrich_app_init(struct yetty_yclass_object *obj,
                                                      struct yetty_yclass_object *platform)
 {
@@ -451,7 +450,7 @@ static struct yetty_ycore_void_result yrich_app_init(struct yetty_yclass_object 
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yapp:app:run")]]
+YETTY_ANNOTATE("override@yapp:app:run")
 static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *obj,
                                                     struct yetty_yclass_object *platform)
 {

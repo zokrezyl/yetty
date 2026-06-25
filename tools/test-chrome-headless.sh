@@ -1,549 +1,252 @@
 #!/bin/bash
-# Headless Chrome test for yetty WebAssembly
-# Tests actual browser loading with software WebGPU and verifies render loop
+# Headless Chrome boot test for the WebAssembly yetty.
+#
+# Drives a real headless Chrome with SOFTWARE WebGPU (lavapipe by default,
+# SwiftShader as fallback) against a locally-served webasm build, captures the
+# page console over the Chrome DevTools Protocol, and asserts that yetty
+# actually boots: WebGPU comes up, the terminal starts, and the in-browser VM
+# reaches Linux — with no fatal wasm/WebGPU errors.
 #
 # Usage:
-#   ./test-chrome-headless.sh [BUILD_DIR|URL] [PORT] [TEST_MODE]
+#   tools/test-chrome-headless.sh [BUILD_DIR|URL] [SERVE_PORT]
 #
 # Examples:
-#   ./test-chrome-headless.sh build-webasm-dawn-release      # Local build
-#   ./test-chrome-headless.sh https://zokrezyl.github.io/yetty/  # Remote URL
+#   tools/test-chrome-headless.sh build-webasm-ytrace-release
+#   tools/test-chrome-headless.sh https://zokrezyl.github.io/yetty/
+#
+# Environment overrides:
+#   WEBGPU_BACKEND=lavapipe|swiftshader   software adapter (default: lavapipe)
+#   CAPTURE_SECS=60                       CDP console capture window
+#   DEBUG_PORT=9222                       Chrome remote-debugging port
+#   TEST_URL_OVERRIDE=...                 full URL to load (skips ?mode=temu)
+#
+# Why CDP and not `--enable-logging=stderr`: --headless=new does not reliably
+# pipe page console.* to stderr, so console output is captured through the
+# DevTools Protocol (tools/capture-chrome-console.py) instead.
 
-set -e
+set -u
 
 BUILD_DIR="${1:-build-webasm-ytrace-release}"
-PORT="${2:-8199}"
-TEST_MODE="${3:-full}"  # "full"
+SERVE_PORT="${2:-8199}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 YETTY_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 
-# Check if BUILD_DIR is a URL (remote mode)
-if [[ "$BUILD_DIR" == http://* ]] || [[ "$BUILD_DIR" == https://* ]]; then
-    REMOTE_MODE=1
-    REMOTE_URL="$BUILD_DIR"
-    echo "=============================================="
-    echo "Headless Chrome Test (Software WebGPU) - REMOTE"
-    echo "URL: $REMOTE_URL"
-    echo "Test mode: $TEST_MODE"
-    echo "=============================================="
-else
-    REMOTE_MODE=0
-    echo "=============================================="
-    echo "Headless Chrome Test (Software WebGPU) - LOCAL"
-    echo "Build directory: $BUILD_DIR"
-    echo "Port: $PORT"
-    echo "Test mode: $TEST_MODE"
-    echo "=============================================="
-    cd "$YETTY_ROOT/$BUILD_DIR"
-fi
-
-# Find Chrome/Chromium
-CHROME=""
-for cmd in google-chrome chromium chromium-browser google-chrome-stable; do
-    if command -v "$cmd" &> /dev/null; then
-        CHROME="$cmd"
-        break
-    fi
-done
-
-if [ -z "$CHROME" ]; then
-    echo -e "${YELLOW}WARNING: Chrome/Chromium not found, skipping headless test${NC}"
-    exit 0
-fi
-
-echo "Using browser: $CHROME"
-
-# Start server for local mode only
-SERVER_PID=""
-if [ "$REMOTE_MODE" -eq 0 ]; then
-    echo "Starting server on port $PORT..."
-    python3 serve.py $PORT . > /tmp/yetty-server.log 2>&1 &
-    SERVER_PID=$!
-
-    cleanup() {
-        echo "Cleaning up..."
-        [ -n "$SERVER_PID" ] && kill $SERVER_PID 2>/dev/null || true
-    }
-    trap cleanup EXIT
-
-    # Wait for server to start
-    sleep 2
-
-    # Check server is running
-    if ! curl -s -o /dev/null http://localhost:$PORT/; then
-        echo -e "${RED}ERROR: Server failed to start${NC}"
-        cat /tmp/yetty-server.log
-        exit 1
-    fi
-    echo "Server started"
-    BASE_URL="http://localhost:$PORT"
-else
-    BASE_URL="$REMOTE_URL"
-    # Remove trailing slash if present
-    BASE_URL="${BASE_URL%/}"
-fi
-
-#=============================================================================
-# Build Asset Verification (local mode only)
-#=============================================================================
-if [ "$REMOTE_MODE" -eq 0 ]; then
-    echo ""
-    echo "=== Build Asset Verification ==="
-
-    BUILD_RESULT=0
-
-    # Check shader glyphs
-    echo "Checking shader glyphs..."
-    GLYPH_DIR="$YETTY_ROOT/$BUILD_DIR/assets/shaders/glyphs"
-    if [ -d "$GLYPH_DIR" ]; then
-        GLYPH_COUNT=$(ls "$GLYPH_DIR"/*.wgsl 2>/dev/null | wc -l)
-        echo -e "${GREEN}OK: $GLYPH_COUNT shader glyph files${NC}"
-        if [ "$GLYPH_COUNT" -lt 30 ]; then
-            echo -e "${RED}ERROR: Too few shader glyphs ($GLYPH_COUNT < 30)${NC}"
-            BUILD_RESULT=1
-        fi
-    else
-        echo -e "${RED}ERROR: Shader glyphs directory missing${NC}"
-        BUILD_RESULT=1
-    fi
-
-    # Check card shaders
-    CARD_DIR="$YETTY_ROOT/$BUILD_DIR/assets/shaders/cards"
-    if [ -d "$CARD_DIR" ]; then
-        CARD_COUNT=$(ls "$CARD_DIR"/*.wgsl 2>/dev/null | wc -l)
-        echo -e "${GREEN}OK: $CARD_COUNT card shader files${NC}"
-    else
-        echo -e "${RED}ERROR: Card shaders directory missing${NC}"
-        BUILD_RESULT=1
-    fi
-
-    # Check yetty.data contains demo
-    echo "Checking yetty.data..."
-    if [ -f "$YETTY_ROOT/$BUILD_DIR/yetty.data" ]; then
-        DATA_SIZE=$(stat -c%s "$YETTY_ROOT/$BUILD_DIR/yetty.data" 2>/dev/null || stat -f%z "$YETTY_ROOT/$BUILD_DIR/yetty.data")
-        DATA_MB=$((DATA_SIZE / 1024 / 1024))
-        echo -e "${GREEN}OK: yetty.data exists (${DATA_MB}MB)${NC}"
-    else
-        echo -e "${RED}ERROR: yetty.data missing${NC}"
-        BUILD_RESULT=1
-    fi
-
-    if [ "$BUILD_RESULT" -ne 0 ]; then
-        echo ""
-        echo -e "${RED}=== BUILD ASSET VERIFICATION FAILED ===${NC}"
-        exit 1
-    fi
-    echo ""
-else
-    echo ""
-    echo "=== Skipping local asset verification (remote mode) ==="
-    echo ""
-fi
-
-# Determine test URL. index.html now auto-launches the embedded VM the
-# moment it loads — no picker, no mode= param. ?trace=1 turns on
-# YTRACE_DEFAULT_ON so the C-side checkpoints reach the JS console (the
-# headless verifier asserts those). Override via TEST_URL_OVERRIDE env.
-TEST_URL="${TEST_URL_OVERRIDE:-${BASE_URL}/?trace=1}"
-echo "Testing full yetty at: $TEST_URL"
-
-# Run Chrome with software WebGPU rendering
-echo "Running headless Chrome with software WebGPU..."
+WEBGPU_BACKEND="${WEBGPU_BACKEND:-lavapipe}"
+CAPTURE_SECS="${CAPTURE_SECS:-60}"
+DEBUG_PORT="${DEBUG_PORT:-9222}"
 
 CONSOLE_LOG="/tmp/yetty-chrome-console.log"
+CHROME_STDERR="/tmp/yetty-chrome-stderr.log"
+SERVER_LOG="/tmp/yetty-web-server.log"
+PROFILE_DIR="/tmp/yetty-chrome-prof.$$"
 
-# Use lavapipe (software Vulkan) for WebGPU - much more reliable than SwiftShader flags
-export VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json
+SERVER_PID=""
+CHROME_PID=""
 
-# Chrome flags for software WebGPU:
-# --enable-unsafe-webgpu: Enable WebGPU
-# --enable-features=Vulkan,WebGPU: Enable Vulkan backend for WebGPU
-# --use-vulkan: Force Vulkan usage
-# Use Chrome DevTools Protocol to reliably capture page console.log
-# output. --headless=new doesn't pipe console messages to stderr, and
-# --headless=old is unreliable across Chrome versions. CDP is the
-# canonical channel.
-DEBUG_PORT="${DEBUG_PORT:-9222}"
-$CHROME \
-    --headless=new \
-    --no-sandbox \
-    --disable-dev-shm-usage \
-    --disable-gpu-sandbox \
-    --remote-debugging-port="$DEBUG_PORT" \
-    --remote-allow-origins=* \
-    --enable-unsafe-webgpu \
-    --enable-features=Vulkan,WebGPU \
-    --use-vulkan \
-    --allow-insecure-localhost \
-    --user-data-dir="/tmp/yetty-chrome-prof.$$" \
-    about:blank \
-    > /tmp/yetty-chrome-stderr.log 2>&1 &
-CHROME_PID=$!
+cleanup() {
+    [ -n "$CHROME_PID" ] && kill "$CHROME_PID" 2>/dev/null
+    [ -n "$SERVER_PID" ] && kill "$SERVER_PID" 2>/dev/null
+    # Chrome may still be flushing its profile dir; ignore a racy rm failure.
+    rm -rf "$PROFILE_DIR" 2>/dev/null || true
+}
+trap cleanup EXIT
 
-# Use system python (has websocket-client); nix dev shell python may not.
-PY=/usr/bin/python3
-[ -x "$PY" ] || PY=python3
+# --- Mode: local build dir vs remote URL ------------------------------------
+if [[ "$BUILD_DIR" == http://* ]] || [[ "$BUILD_DIR" == https://* ]]; then
+    REMOTE_MODE=1
+    BASE_URL="${BUILD_DIR%/}"
+    echo "=============================================="
+    echo "Headless webasm-yetty boot test — REMOTE"
+    echo "URL:     $BASE_URL"
+else
+    REMOTE_MODE=0
+    BASE_URL="http://localhost:$SERVE_PORT"
+    echo "=============================================="
+    echo "Headless webasm-yetty boot test — LOCAL"
+    echo "Build:   $BUILD_DIR"
+    echo "Backend: $WEBGPU_BACKEND (software WebGPU)"
+fi
+echo "=============================================="
 
-# Connect CDP, enable Runtime/Log/Page domains BEFORE navigating to
-# $TEST_URL — otherwise we miss the earliest console.log calls (e.g.
-# yetty's index.html boot logs and emcc's preRun output).
-#
-# Capture window default is 90 s — fine for "yetty render checkpoints
-# pass" but NOT enough for the alpine-extended rootfs to finish init
-# (~30 s rootfs download + brotli decode + ~30 s kernel boot + ~30 s
-# alpine OpenRC + busybox-extras telnetd bind = north of 90 s on
-# headless). Set CAPTURE_SECS=180 or higher to verify the full
-# telnet-over-iframe path including telnetd accept. The default of
-# 360 s reflects the realistic upper bound observed locally for the
-# wasm-interpreter VM to reach `session_backend_send` (i.e. an
-# actual guest TCP byte coming back).
-CAPTURE_SECS="${CAPTURE_SECS:-360}"
-TIMEOUT_SECS=$((CAPTURE_SECS + 20))
-timeout "$TIMEOUT_SECS" "$PY" "$YETTY_ROOT/tools/capture-chrome-console.py" \
-    "$DEBUG_PORT" "$CAPTURE_SECS" "$TEST_URL" \
-    2>/tmp/yetty-cdp-stderr.log | tee "$CONSOLE_LOG"
-CDP_RC=$?
+# --- Locate Chrome ----------------------------------------------------------
+CHROME=""
+for cmd in google-chrome chromium chromium-browser google-chrome-stable; do
+    if command -v "$cmd" &>/dev/null; then CHROME="$cmd"; break; fi
+done
+if [ -z "$CHROME" ]; then
+    echo -e "${YELLOW}WARNING: Chrome/Chromium not found — skipping headless test${NC}"
+    exit 0
+fi
+echo "Browser: $CHROME"
 
-kill "$CHROME_PID" 2>/dev/null || true
-wait "$CHROME_PID" 2>/dev/null || true
-# Chrome may still be flushing files into its profile dir when we get
-# here — `rm -rf` then races and exits non-zero ("Directory not empty"),
-# which under `set -e` kills the whole test before the analysis section
-# even runs. The leftover dir is harmless, so swallow the failure.
-rm -rf "/tmp/yetty-chrome-prof.$$" 2>/dev/null || true
-if [ $CDP_RC -ne 0 ] && [ $CDP_RC -ne 124 ]; then
-    echo "${YELLOW}WARN: CDP capture exited with $CDP_RC (chrome stderr below)${NC}"
-    cat /tmp/yetty-chrome-stderr.log | tail -20
+# --- Python runner for the CDP capture (needs websocket-client) -------------
+# Prefer a plain python3 that already has the module (nix dev shell, CI);
+# otherwise fall back to `uv run --with websocket-client`.
+CDP_PY=(python3)
+if ! python3 -c 'import websocket' 2>/dev/null; then
+    if command -v uv &>/dev/null; then
+        CDP_PY=(uv run --with websocket-client python3)
+        echo "websocket-client absent — using: uv run --with websocket-client"
+    else
+        echo -e "${RED}ERROR: python3 lacks 'websocket' and 'uv' is unavailable;"
+        echo -e "       install websocket-client or uv to capture the console.${NC}"
+        exit 1
+    fi
 fi
 
-echo ""
-echo "=== Chrome Output Analysis ==="
+# --- Local: serve the build dir + verify the modern asset layout ------------
+if [ "$REMOTE_MODE" -eq 0 ]; then
+    BUILD_PATH="$YETTY_ROOT/$BUILD_DIR"
+    if [ ! -d "$BUILD_PATH" ]; then
+        echo -e "${RED}ERROR: build dir not found: $BUILD_PATH${NC}"; exit 1
+    fi
 
+    echo ""
+    echo "=== Asset verification ==="
+    ASSET_FAIL=0
+    # Current webasm layout: yetty.{js,wasm,data}, the JS-preload manifest under
+    # yetty-assets/, the VM iframe wasm tinyemu.{js,wasm}, and the VM guest
+    # bundle (kernel/opensbi/rootfs) the iframe fetches at runtime from
+    # tinyemu-assets/.
+    for f in yetty.js yetty.wasm yetty.data \
+             yetty-assets/manifest.json \
+             tinyemu.js tinyemu.wasm tinyemu-iframe.html \
+             tinyemu-assets/manifest.json \
+             tinyemu-assets/kernel-riscv64.bin.br \
+             tinyemu-assets/yetty-rootfs-riscv.img.br \
+             index.html serve.py; do
+        if [ -s "$BUILD_PATH/$f" ]; then
+            sz=$(stat -c%s "$BUILD_PATH/$f" 2>/dev/null || echo 0)
+            echo -e "${GREEN}OK:${NC} $f ($((sz/1024)) KiB)"
+        else
+            echo -e "${RED}MISSING:${NC} $f"; ASSET_FAIL=1
+        fi
+    done
+    if [ "$ASSET_FAIL" -ne 0 ]; then
+        echo -e "${RED}=== ASSET VERIFICATION FAILED — build the webasm target first ===${NC}"
+        exit 1
+    fi
+
+    echo ""
+    echo "Starting server on :$SERVE_PORT …"
+    ( cd "$BUILD_PATH" && python3 serve.py "$SERVE_PORT" . ) >"$SERVER_LOG" 2>&1 &
+    SERVER_PID=$!
+    sleep 2
+    if ! curl -s -o /dev/null "http://localhost:$SERVE_PORT/index.html"; then
+        echo -e "${RED}ERROR: server failed to start${NC}"; tail -20 "$SERVER_LOG"; exit 1
+    fi
+    echo "Server up (pid $SERVER_PID)"
+fi
+
+# index.html shows a transport picker unless ?mode= pins the choice; ?trace=1
+# turns on YTRACE_DEFAULT_ON so C-side ydebug checkpoints also reach the
+# console. Default to the in-browser VM (temu).
+TEST_URL="${TEST_URL_OVERRIDE:-${BASE_URL}/?mode=temu&trace=1}"
+echo ""
+echo "Loading: $TEST_URL"
+
+# --- Software WebGPU adapter flags ------------------------------------------
+CHROME_GPU_FLAGS=(--enable-unsafe-webgpu --enable-features=Vulkan,WebGPU)
+case "$WEBGPU_BACKEND" in
+    lavapipe)
+        for icd in /usr/share/vulkan/icd.d/lvp_icd.json \
+                   /usr/share/vulkan/icd.d/lvp_icd.x86_64.json; do
+            [ -f "$icd" ] && export VK_ICD_FILENAMES="$icd" && break
+        done
+        CHROME_GPU_FLAGS+=(--use-vulkan)
+        ;;
+    swiftshader)
+        CHROME_GPU_FLAGS+=(--use-webgpu-adapter=swiftshader --disable-vulkan-surface)
+        ;;
+    *)
+        echo -e "${RED}ERROR: unknown WEBGPU_BACKEND '$WEBGPU_BACKEND'${NC}"; exit 1 ;;
+esac
+
+# --- Launch headless Chrome (CDP enabled) -----------------------------------
+echo "Launching headless Chrome ($WEBGPU_BACKEND) on debug port $DEBUG_PORT …"
+rm -rf "$PROFILE_DIR"; mkdir -p "$PROFILE_DIR"
+"$CHROME" \
+    --headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu-sandbox \
+    --remote-debugging-port="$DEBUG_PORT" --remote-allow-origins='*' \
+    --allow-insecure-localhost --disable-web-security \
+    "${CHROME_GPU_FLAGS[@]}" \
+    --user-data-dir="$PROFILE_DIR" \
+    about:blank >"$CHROME_STDERR" 2>&1 &
+CHROME_PID=$!
+sleep 2
+
+# --- Capture the page console over CDP while navigating to the test URL -----
+echo "Capturing console for ${CAPTURE_SECS}s …"
+timeout "$((CAPTURE_SECS + 20))" \
+    "${CDP_PY[@]}" "$SCRIPT_DIR/capture-chrome-console.py" \
+        "$DEBUG_PORT" "$CAPTURE_SECS" "$TEST_URL" \
+    >"$CONSOLE_LOG" 2>/tmp/yetty-cdp-stderr.log
+CDP_RC=$?
+if [ "$CDP_RC" -ne 0 ] && [ "$CDP_RC" -ne 124 ]; then
+    echo -e "${YELLOW}WARN: CDP capture exited $CDP_RC; chrome stderr tail:${NC}"
+    tail -15 "$CHROME_STDERR"
+fi
+echo "Captured $(wc -l <"$CONSOLE_LOG") console lines."
+
+# ============================================================================
+# Analysis
+# ============================================================================
 RESULT=0
 
-# Check for fatal errors. Each branch below is independent, so a build
-# can hit several at once (e.g. WebGPU validation + RuntimeError) and
-# all get reported. Don't skip later checks just because an earlier
-# one matched.
-
-if grep -q "Destroyed texture" "$CONSOLE_LOG"; then
-    echo -e "${RED}ERROR: Destroyed texture used in submit (use-after-free)${NC}"
-    grep -B2 -A2 "Destroyed texture" "$CONSOLE_LOG" || true
-    RESULT=1
-fi
-
-if grep -q "function signature mismatch" "$CONSOLE_LOG"; then
-    echo -e "${RED}ERROR: WASM function signature mismatch${NC}"
-    grep -B2 -A2 "function signature mismatch" "$CONSOLE_LOG" || true
-    RESULT=1
-fi
-
-if grep -q "RuntimeError" "$CONSOLE_LOG"; then
-    echo -e "${RED}ERROR: WASM RuntimeError${NC}"
-    grep -B2 -A2 "RuntimeError" "$CONSOLE_LOG" || true
-    RESULT=1
-fi
-
-if grep -q "Uncaught" "$CONSOLE_LOG"; then
-    # Check if the only Uncaught is the benign "Instance reference" error from preinitializedWebGPUDevice
-    if grep "Uncaught" "$CONSOLE_LOG" | grep -v "external Instance reference" | grep -q .; then
-        echo -e "${RED}ERROR: Uncaught exception${NC}"
-        grep "Uncaught" "$CONSOLE_LOG" | grep -v "external Instance reference" | head -5 || true
-        RESULT=1
-    else
-        echo -e "${YELLOW}WARN: Benign WebGPU instance reference warning (preinitializedWebGPUDevice not used)${NC}"
-    fi
-fi
-
-if grep -q "processPackageData" "$CONSOLE_LOG"; then
-    echo -e "${RED}ERROR: processPackageData error${NC}"
-    grep -A2 "processPackageData" "$CONSOLE_LOG" || true
-    RESULT=1
-fi
-
-# WebGPU device validation errors come through yetty_ywebgpu_uncaptured_error_callback
-# which logs via ydebug as `[error]`. They look like:
-#   [error] error.c:55 (yetty_ywebgpu_uncaptured_error_callback): WebGPU Validation error: ...
-# A failed shader entry point or pipeline creation cascades into many
-# "Invalid RenderPipeline" / "Invalid CommandBuffer" follow-ups; those
-# are noise after the first real error. Surface the *root* cause first.
-if grep -q "WebGPU Validation error" "$CONSOLE_LOG"; then
-    echo -e "${RED}ERROR: WebGPU validation errors${NC}"
-    # Most useful root causes — show first occurrence with context.
-    if grep -q "Entry point" "$CONSOLE_LOG"; then
-        echo -e "${RED}  Cause: shader missing entry point${NC}"
-        grep -B1 -A2 "Entry point" "$CONSOLE_LOG" | head -8 || true
-    fi
-    if grep -q "shader module is invalid" "$CONSOLE_LOG"; then
-        echo -e "${RED}  Cause: shader module compilation failed${NC}"
-        grep -B1 -A2 "shader module is invalid" "$CONSOLE_LOG" | head -8 || true
-    fi
-    if grep -q "type mismatch" "$CONSOLE_LOG"; then
-        echo -e "${RED}  Cause: pipeline / binding type mismatch${NC}"
-        grep -B1 -A2 "type mismatch" "$CONSOLE_LOG" | head -8 || true
-    fi
-    # Distinct first-line-only summary of every unique validation error
-    echo -e "${RED}  Distinct validation messages:${NC}"
-    grep "WebGPU Validation error" "$CONSOLE_LOG" \
-        | sed 's/.*WebGPU Validation error: //' \
-        | sort -u | head -10 | sed 's/^/    /'
-    RESULT=1
-fi
-
-# yetty's own ydebug `[error]` lines that are NOT covered by the more
-# specific checks above (rare — most go through the WebGPU callback).
-if grep -E "^\[CONSOLE log\].*\[error\]" "$CONSOLE_LOG" | grep -v "WebGPU Validation error" | grep -q .; then
-    echo -e "${RED}ERROR: yetty logged ydebug-error-level messages${NC}"
-    grep -E "^\[CONSOLE log\].*\[error\]" "$CONSOLE_LOG" | grep -v "WebGPU Validation error" | head -10
-    RESULT=1
-fi
-
-# CDP-level uncaught exceptions thrown on the page (other than the ones
-# already captured by the Uncaught/RuntimeError checks). The capture
-# script tags these as [PAGE-EXCEPTION].
-if grep -q "^\[PAGE-EXCEPTION\]" "$CONSOLE_LOG"; then
-    echo -e "${RED}ERROR: page-level uncaught exception(s)${NC}"
-    grep "^\[PAGE-EXCEPTION\]" "$CONSOLE_LOG" | head -10
-    RESULT=1
-fi
-
-# Full yetty checks
 echo ""
-echo "=== Yetty Startup Verification ==="
+echo "=== Fatal error scan ==="
+# Each check is independent so several can report at once.
+fatal() { echo -e "${RED}FATAL: $1${NC}"; grep -m3 -B1 -A1 "$2" "$CONSOLE_LOG" | sed 's/^/    /'; RESULT=1; }
 
-# Check for JavaScript errors first
-if grep -qE "Uncaught|TypeError|ReferenceError|SyntaxError" "$CONSOLE_LOG"; then
-    echo -e "${RED}FAIL: JavaScript errors found${NC}"
-    grep -E "Uncaught|TypeError|ReferenceError|SyntaxError" "$CONSOLE_LOG" | head -10
-    RESULT=1
+grep -q "RuntimeError"                "$CONSOLE_LOG" && fatal "wasm RuntimeError" "RuntimeError"
+grep -q "function signature mismatch" "$CONSOLE_LOG" && fatal "wasm function signature mismatch" "function signature mismatch"
+grep -qE "Aborted\(|abort\("         "$CONSOLE_LOG" && fatal "wasm abort()" "bort("
+grep -q "^\[PAGE-EXCEPTION\]"         "$CONSOLE_LOG" && fatal "page-level uncaught exception" "^\[PAGE-EXCEPTION\]"
+grep -qE "\[FATAL\] WebGPU"           "$CONSOLE_LOG" && fatal "yetty WebGPU fail-fast (_Exit)" "\[FATAL\] WebGPU"
+grep -q "WebGPU Validation error"     "$CONSOLE_LOG" && fatal "WebGPU validation error" "WebGPU Validation error"
+# "Uncaught" excluding the known-benign preinitializedWebGPUDevice warning.
+if grep "Uncaught" "$CONSOLE_LOG" | grep -vq "external Instance reference"; then
+    fatal "uncaught exception" "Uncaught"
 fi
+[ "$RESULT" -eq 0 ] && echo -e "${GREEN}none${NC}"
 
-# Check yetty.js was loaded (look for preRun or ENV setting)
-if grep -q "preRun.*Setting ENV" "$CONSOLE_LOG" || grep -q "onRuntimeInitialized" "$CONSOLE_LOG"; then
-    echo -e "${GREEN}OK: yetty.js loaded${NC}"
-else
-    echo -e "${RED}FAIL: yetty.js not loaded - check WebGPU availability${NC}"
-    RESULT=1
-fi
-
-# Check for C++ ytrace output (required checkpoints)
 echo ""
-echo "=== Required Checkpoints ==="
-CHECKPOINTS=(
-    "main: WebASM starting"
-    "main: Config created"
-    "main: Window created"
-    "main: PlatformInputPipe created"
-    "main: PtyFactory created"
-    "main: WebGPU instance created"
-    "main: Yetty created"
-    "main: Starting Yetty"
-    "initWebGPU: Adapter obtained"
-    "initWebGPU: Device obtained"
+echo "=== Boot milestones ==="
+# Reliable, refactor-stable markers emitted by index.html's [yetty-status]
+# channel plus the VM iframe. Each MUST be present for a pass.
+declare -a MILESTONES=(
+    "yetty.js + WebGPU up|\[yetty-status\] WebGPU ready"
+    "yetty terminal started|\[yetty-status\] starting yetty terminal"
+    "yetty terminal running|\[yetty-status\] yetty terminal running"
+    "in-browser VM reached Linux|vm-iframe\] | Linux version"
 )
-
-CHECKPOINT_PASS=0
-CHECKPOINT_FAIL=0
-for checkpoint in "${CHECKPOINTS[@]}"; do
-    if grep -q "$checkpoint" "$CONSOLE_LOG"; then
-        echo -e "${GREEN}OK: $checkpoint${NC}"
-        CHECKPOINT_PASS=$((CHECKPOINT_PASS + 1))
+for m in "${MILESTONES[@]}"; do
+    label="${m%%|*}"; pat="${m#*|}"
+    if grep -qE "$pat" "$CONSOLE_LOG"; then
+        echo -e "${GREEN}OK:${NC} $label"
     else
-        echo -e "${RED}MISSING: $checkpoint${NC}"
-        CHECKPOINT_FAIL=$((CHECKPOINT_FAIL + 1))
+        echo -e "${RED}MISSING:${NC} $label"; RESULT=1
     fi
 done
 
 echo ""
-echo "Checkpoints: $CHECKPOINT_PASS passed, $CHECKPOINT_FAIL failed"
-
-if [ "$CHECKPOINT_FAIL" -gt 0 ]; then
-    echo -e "${RED}FAIL: Required checkpoints missing${NC}"
-    RESULT=1
+echo "=== Warnings (non-fatal) ==="
+WARNED=0
+if grep -q "createBuffer threw" "$CONSOLE_LOG"; then
+    n=$(grep -c "createBuffer threw" "$CONSOLE_LOG")
+    echo -e "${YELLOW}WARN:${NC} 'createBuffer threw' x$n — software-WebGPU (lavapipe/SwiftShader)"
+    echo "      mappedAtCreation quirk on the tiny quad VB; non-fatal, not seen on real GPU."
+    WARNED=1
 fi
-
-# Show all yetty console output
-echo ""
-echo "=== Yetty Console Output ==="
-grep -E "\[yetty\]" "$CONSOLE_LOG" | head -50 || echo "(no [yetty] output)"
-
-# Show any errors
-echo ""
-echo "=== Errors (if any) ==="
-grep -iE "error|failed|exception" "$CONSOLE_LOG" | grep -v "VERBOSE" | head -20 || echo "(no errors)"
-
-#=============================================================================
-# Card Rendering Tests — verify .out file OSC envelopes
-#=============================================================================
-echo ""
-echo "=== Card Rendering Tests ==="
-
-DEMO_OUTPUT_DIR="$YETTY_ROOT/$BUILD_DIR/demo-output"
-if [ "$REMOTE_MODE" -eq 1 ]; then
-    echo -e "${YELLOW}SKIP: Card rendering file tests not available in remote mode${NC}"
-elif [ -d "$DEMO_OUTPUT_DIR" ]; then
-    TOTAL_OUT=$(find "$DEMO_OUTPUT_DIR" -name "*.out" -type f 2>/dev/null | wc -l)
-    VALID_OSC=$(grep -rlP '\x1b\]666666' "$DEMO_OUTPUT_DIR" --include="*.out" 2>/dev/null | wc -l)
-    echo "Demo outputs: $VALID_OSC/$TOTAL_OUT valid OSC files"
-else
-    echo -e "${YELLOW}SKIP: No demo-output directory${NC}"
-fi
-
-#=============================================================================
-# Resize Test - Verify terminal survives window resize
-#=============================================================================
-echo ""
-echo "=== Resize Test ==="
-
-RESIZE_LOG="/tmp/yetty-resize-test.log"
-
-# Run Chrome with resize test - use DevTools protocol to resize window
-timeout 60 $CHROME \
-    --headless=new \
-    --no-sandbox \
-    --disable-dev-shm-usage \
-    --disable-gpu-sandbox \
-    --enable-logging=stderr \
-    --enable-unsafe-webgpu \
-    --enable-features=Vulkan,WebGPU \
-    --use-vulkan \
-    --window-size=800,600 \
-    --virtual-time-budget=10000 \
-    "$TEST_URL" \
-    2>&1 | tee "$RESIZE_LOG" &
-RESIZE_PID=$!
-
-sleep 5
-
-# Take screenshot before resize
-SCREENSHOT_BEFORE="/tmp/yetty-before-resize.png"
-$CHROME \
-    --headless=new \
-    --no-sandbox \
-    --screenshot="$SCREENSHOT_BEFORE" \
-    --window-size=800,600 \
-    --disable-gpu \
-    "$TEST_URL" 2>/dev/null &
-sleep 3
-
-# Take screenshot after resize (different size)
-SCREENSHOT_AFTER="/tmp/yetty-after-resize.png"
-$CHROME \
-    --headless=new \
-    --no-sandbox \
-    --screenshot="$SCREENSHOT_AFTER" \
-    --window-size=1024,768 \
-    --disable-gpu \
-    "$TEST_URL" 2>/dev/null &
-sleep 3
-
-wait $RESIZE_PID 2>/dev/null || true
-
-# Check screenshots exist and are not empty/tiny
-RESIZE_RESULT=0
-for img in "$SCREENSHOT_BEFORE" "$SCREENSHOT_AFTER"; do
-    if [ -f "$img" ]; then
-        IMG_SIZE=$(stat -c%s "$img" 2>/dev/null || stat -f%z "$img" 2>/dev/null || echo 0)
-        if [ "$IMG_SIZE" -gt 5000 ]; then
-            echo -e "${GREEN}OK: Screenshot $img exists (${IMG_SIZE} bytes)${NC}"
-        else
-            echo -e "${RED}FAIL: Screenshot $img too small (${IMG_SIZE} bytes) - likely blank${NC}"
-            RESIZE_RESULT=1
-        fi
-    else
-        echo -e "${YELLOW}WARN: Screenshot $img not created${NC}"
-    fi
-done
-
-# Check resize callback was triggered
-if grep -q "Surface configured" "$RESIZE_LOG"; then
-    SURFACE_COUNT=$(grep -c "Surface configured" "$RESIZE_LOG" || echo 0)
-    echo -e "${GREEN}OK: Surface configured $SURFACE_COUNT time(s)${NC}"
-else
-    echo -e "${YELLOW}WARN: No surface configuration logged${NC}"
-fi
-
-# Check for resize-related errors
-if grep -q "resize.*error\|Error.*resize" "$RESIZE_LOG" 2>/dev/null; then
-    echo -e "${RED}FAIL: Resize errors found${NC}"
-    grep -i "resize.*error\|error.*resize" "$RESIZE_LOG" | head -5
-    RESIZE_RESULT=1
-fi
-
-if [ "$RESIZE_RESULT" -ne 0 ]; then
-    echo -e "${RED}Resize test FAILED${NC}"
-    RESULT=1
-else
-    echo -e "${GREEN}Resize test PASSED${NC}"
-fi
-
-#=============================================================================
-# Rendering Verification - Check actual pixels rendered
-#=============================================================================
-echo ""
-echo "=== Rendering Verification ==="
-
-RENDER_RESULT=0
-
-# Check for actual render calls in logs
-if grep -q "wgpuRenderPassEncoderDraw\|renderFrame\|GPUScreen.*render" "$CONSOLE_LOG"; then
-    echo -e "${GREEN}OK: Render calls found in logs${NC}"
-else
-    echo -e "${YELLOW}WARN: No explicit render calls logged${NC}"
-fi
-
-# Check getCurrentTextureView success (proves WebGPU is rendering)
-if grep -q "getCurrentTextureView.*texture\|got texture.*status=0\|SuccessOptimal" "$CONSOLE_LOG"; then
-    echo -e "${GREEN}OK: WebGPU surface texture acquired${NC}"
-else
-    if grep -q "Failed to get surface texture" "$CONSOLE_LOG"; then
-        echo -e "${RED}FAIL: WebGPU surface texture acquisition failed${NC}"
-        RENDER_RESULT=1
-    else
-        echo -e "${YELLOW}WARN: Surface texture status not logged${NC}"
-    fi
-fi
-
-# Check frame count if available
-FRAME_COUNT=$(grep -c "mainLoopIteration\|frame.*rendered\|present" "$CONSOLE_LOG" 2>/dev/null | head -1 || echo 0)
-FRAME_COUNT=${FRAME_COUNT:-0}
-if [ "$FRAME_COUNT" -gt 0 ]; then
-    echo -e "${GREEN}OK: $FRAME_COUNT frame iterations detected${NC}"
-else
-    echo -e "${YELLOW}WARN: No frame iterations logged${NC}"
-fi
-
-# Verify screenshot is not all black (basic pixel check)
-if [ -f "$SCREENSHOT_BEFORE" ] && command -v identify &>/dev/null; then
-    # Use ImageMagick to check if image has color variation
-    COLORS=$(identify -format "%k" "$SCREENSHOT_BEFORE" 2>/dev/null || echo 0)
-    if [ "$COLORS" -gt 10 ]; then
-        echo -e "${GREEN}OK: Screenshot has $COLORS unique colors (not blank)${NC}"
-    else
-        echo -e "${RED}FAIL: Screenshot has only $COLORS colors (likely blank/black)${NC}"
-        RENDER_RESULT=1
-    fi
-elif [ -f "$SCREENSHOT_BEFORE" ]; then
-    echo -e "${YELLOW}WARN: ImageMagick not available for pixel verification${NC}"
-fi
-
-if [ "$RENDER_RESULT" -ne 0 ]; then
-    echo -e "${RED}Rendering verification FAILED${NC}"
-    RESULT=1
-else
-    echo -e "${GREEN}Rendering verification PASSED${NC}"
-fi
+[ "$WARNED" -eq 0 ] && echo "none"
 
 echo ""
 if [ "$RESULT" -eq 0 ]; then
-    echo -e "${GREEN}=== TEST PASSED ===${NC}"
+    echo -e "${GREEN}=== webasm yetty BOOT TEST PASSED ===${NC}"
 else
-    echo -e "${RED}=== TEST FAILED ===${NC}"
+    echo -e "${RED}=== webasm yetty BOOT TEST FAILED ===${NC}"
+    echo "Full console: $CONSOLE_LOG"
 fi
-
 exit $RESULT

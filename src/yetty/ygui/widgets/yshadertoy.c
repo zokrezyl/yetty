@@ -28,14 +28,14 @@ struct yetty_ygui_yshadertoy_ptr_result yetty_ygui_yshadertoy_from(struct yetty_
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:yshadertoy")]] [[clang::annotate("parent@ygui:widget")]]
-yetty_ygui_yshadertoy {
+struct YETTY_ANNOTATE("class@ygui:yshadertoy") YETTY_ANNOTATE("parent@ygui:widget")
+    yetty_ygui_yshadertoy {
     char *src;
     size_t len;
     int dirty; /* source changed since last ship → re-emit body */
 };
 
-[[clang::annotate("override@ygui:yshadertoy:constructor")]]
+YETTY_ANNOTATE("override@ygui:yshadertoy:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -52,7 +52,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:yshadertoy:destructor")]]
+YETTY_ANNOTATE("override@ygui:yshadertoy:destructor")
 static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -64,7 +64,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_ob
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:yshadertoy:widget_emit_container")]]
+YETTY_ANNOTATE("override@ygui:yshadertoy:widget_emit_container")
 static struct yetty_ycore_void_result emit_container(struct yetty_yclass_object *yclass_obj,
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
@@ -75,7 +75,7 @@ static struct yetty_ycore_void_result emit_container(struct yetty_yclass_object 
                                         r.max.y, NULL, 0);
 }
 
-[[clang::annotate("override@ygui:yshadertoy:widget_emit_body")]]
+YETTY_ANNOTATE("override@ygui:yshadertoy:widget_emit_body")
 static struct yetty_ycore_void_result emit_body(struct yetty_yclass_object *yclass_obj,
                                                 struct yetty_ygui_emit_ctx *ctx)
 {
@@ -99,7 +99,7 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_object *ycla
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_yshadertoy_set_source(struct yetty_yclass_object *obj,
                                                                 const char *src, size_t len)
 {

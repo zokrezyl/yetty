@@ -34,25 +34,25 @@ typedef struct yetty_ycore_void_result (*yetty_yai_config_knob_fn)(struct yetty_
 typedef struct yetty_ycore_void_result (*yetty_yai_apply_config_fn)(struct yetty_yclass_object *, struct yai_app *, const char *, const char *);
 typedef struct yetty_ycore_void_result (*yetty_yai_resolve_permission_fn)(struct yetty_yclass_object *, struct yai_app *, int);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yai_start_fn yetty_yai_engine_yetty_yai_start_check = engine_start;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yai_send_user_message_fn yetty_yai_engine_yetty_yai_send_user_message_check = engine_send_user_message;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yai_handle_event_fn yetty_yai_engine_yetty_yai_handle_event_check = engine_handle_event;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yai_interrupt_fn yetty_yai_engine_yetty_yai_interrupt_check = engine_interrupt;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yai_on_child_exit_fn yetty_yai_engine_yetty_yai_on_child_exit_check = engine_on_child_exit;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yai_on_child_eof_fn yetty_yai_engine_yetty_yai_on_child_eof_check = engine_on_child_eof;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yai_describe_config_fn yetty_yai_engine_yetty_yai_describe_config_check = engine_describe_config;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yai_config_knob_fn yetty_yai_engine_yetty_yai_config_knob_check = engine_config_knob;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yai_apply_config_fn yetty_yai_engine_yetty_yai_apply_config_check = engine_apply_config;
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_yai_resolve_permission_fn yetty_yai_engine_yetty_yai_resolve_permission_check = engine_resolve_permission;
 
 struct yetty_yclass_ptr_result yetty_yai_engine_class_get(void)

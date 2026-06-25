@@ -18,7 +18,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_paint(struct yetty_yclass_objec
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yetty_yclass_object *,
                                                                      struct yetty_ygui_emit_ctx *);
 
-[[maybe_unused]]
+YETTY_MAYBE_UNUSED
 static yetty_ygui_widget_paint_fn yetty_ygui_separator_yetty_ygui_widget_paint_check =
     separator_paint;
 

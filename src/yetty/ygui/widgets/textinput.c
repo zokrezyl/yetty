@@ -34,9 +34,8 @@ struct yetty_ygui_textinput_ptr_result yetty_ygui_textinput_from(struct yetty_yc
 #define COLOR_TEXT 0xFFE4E5E0u
 #define COLOR_PLACEHOLDER 0xFFA8A79Fu
 
-struct [[clang::annotate("class@ygui:textinput")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]]
-yetty_ygui_textinput {
+struct YETTY_ANNOTATE("class@ygui:textinput") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    YETTY_ANNOTATE("uses@ygui:clickable") yetty_ygui_textinput {
     char *text;
     size_t text_len;
     size_t cap;
@@ -81,7 +80,7 @@ static struct yetty_ycore_void_result on_click_focus(struct yetty_yclass_object 
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("override@ygui:textinput:constructor")]]
+YETTY_ANNOTATE("override@ygui:textinput:constructor")
 static struct yetty_ycore_void_result textinput_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -101,7 +100,7 @@ static struct yetty_ycore_void_result textinput_constructor(struct yetty_yclass_
     return yetty_ygui_clickable_on_click_set(obj, on_click_focus, NULL);
 }
 
-[[clang::annotate("override@ygui:textinput:destructor")]]
+YETTY_ANNOTATE("override@ygui:textinput:destructor")
 static struct yetty_ycore_void_result textinput_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -149,7 +148,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
                                                              0u, 0.0f, &geom);
 }
 
-[[clang::annotate("override@ygui:textinput:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:textinput:widget_paint")
 static struct yetty_ycore_void_result textinput_paint(struct yetty_yclass_object *yclass_obj,
                                                       struct yetty_ygui_emit_ctx *ctx)
 {
@@ -224,7 +223,7 @@ static int ensure_cap(struct yetty_ygui_textinput *d, size_t need)
     return 1;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_textinput_set_text(struct yetty_yclass_object *obj,
                                                              const char *text)
 {
@@ -249,7 +248,7 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_text(struct yetty_yclass
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_const_char_ptr_result yetty_ygui_textinput_get_text(
     const struct yetty_yclass_object *obj)
 {
@@ -264,7 +263,7 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_textinput_get_text(
     return YETTY_OK(yetty_ycore_const_char_ptr, d->text ? d->text : "");
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_textinput_set_placeholder(struct yetty_yclass_object *obj,
                                                                     const char *placeholder)
 {
@@ -288,7 +287,7 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_placeholder(struct yetty
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_textinput_set_focus(struct yetty_yclass_object *obj,
                                                               int focused)
 {
@@ -302,7 +301,7 @@ struct yetty_ycore_void_result yetty_ygui_textinput_set_focus(struct yetty_yclas
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_int_result yetty_ygui_textinput_handle_key(struct yetty_yclass_object *obj,
                                                               uint32_t key)
 {

@@ -1,8 +1,8 @@
 /*
  * yhello — ygreeter's UI running directly against yfigures.
  *
- * yhello is standalone-only: it opens its own window through yinit_run +
- * yframework_create, creates a local yfigure_container, and wires ygui to it
+ * yhello is standalone-only: it opens its own window through the yplatform
+ * bootstrap + yframework_create, creates a local yfigure_container, and wires ygui to it
  * with yetty_ygui_framework_set_container_obj. There is no terminal client
  * mode, no PTY, no OSC/DCS envelope, and no wire_statemachine in the render
  * path.
@@ -282,7 +282,7 @@ static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result
 static bool scene_is_animating(int tab_index, int entry);
 
 /* TEMP latency instrumentation. */
-#include <time.h>
+#include <yetty/yplatform/time.h> /* portable monotonic clock (POSIX + Windows) */
 #if defined(__ANDROID__)
 #include <android/log.h>
 #define YPERF(...) __android_log_print(4, "yhello", __VA_ARGS__)
@@ -291,9 +291,7 @@ static bool scene_is_animating(int tab_index, int entry);
 #endif
 static double yperf_ms(void)
 {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1e6;
+    return yetty_yplatform_ytime_monotonic_sec() * 1000.0;
 }
 static double g_last_present_ms;
 
@@ -2811,7 +2809,8 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_object *
  * react by running the app's mode-specific stop hook. */
 static struct yetty_ycore_void_result build_ui(struct app *app)
 {
-    /* yinit already ran yhello_extract_assets_cb early in startup, so
+    /* yhello's assets are placed early in startup (installer/bundle on
+     * desktop/web; the Android program-init's extractor), so
      * <data_dir>/logo-*.jpeg, yetty-unchained-2.mp4 and README.md are
      * on disk by the time we get here. The three discover_* probes
      * record absolute paths into the app struct for later use by the
@@ -2978,7 +2977,7 @@ static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, v
 
 #ifdef YETTY_YHELLO_HAS_STANDALONE
 /*=============================================================================
- * STANDALONE MODE — yinit_run + yframework + local container + direct yfigures
+ * STANDALONE MODE — yplatform bootstrap + yframework + local container + direct yfigures
  * dispatch.
  *
  * ygui emits figure records directly into root_container through the yclass slot
@@ -3306,7 +3305,7 @@ static void standalone_stop(struct app *app)
  * YETTY_YHELLO_HAS_STANDALONE via YCLASS_DEFINES; main.gen.c is #included at the
  * foot, inside the same guard, so reduced builds never compile it.
  */
-struct [[clang::annotate("class@yhello:app")]] [[clang::annotate("parent@yapp:app")]] yetty_yhello_app {
+struct YETTY_ANNOTATE("class@yhello:app") YETTY_ANNOTATE("parent@yapp:app") yetty_yhello_app {
     struct app app;
 };
 
@@ -3325,7 +3324,7 @@ struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_
                                                             struct yetty_yclass_object *app,
                                                             int argc, char **argv);
 
-[[clang::annotate("override@yapp:app:init")]]
+YETTY_ANNOTATE("override@yapp:app:init")
 static struct yetty_ycore_void_result yhello_app_init(struct yetty_yclass_object *obj,
                                                       struct yetty_yclass_object *platform)
 {
@@ -3334,7 +3333,7 @@ static struct yetty_ycore_void_result yhello_app_init(struct yetty_yclass_object
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yapp:app:run")]]
+YETTY_ANNOTATE("override@yapp:app:run")
 static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_object *obj,
                                                         struct yetty_yclass_object *platform)
 {
@@ -3671,7 +3670,7 @@ static struct yetty_ycore_void_result yhello_verify_assets(const char *data_dir)
 
 /* yhello's own incbin extractor (logos + demo video), used by the Android
  * program-init below. Desktop/web place assets via the installer / bundle. */
-__attribute__((unused)) static struct yetty_ycore_void_result yhello_extract_assets_cb(void)
+YETTY_MAYBE_UNUSED static struct yetty_ycore_void_result yhello_extract_assets_cb(void)
 {
     const char *data_dir = yetty_yplatform_get_data_dir();
     if (!data_dir || !*data_dir) {
@@ -3700,11 +3699,10 @@ static void *yhello_android_render_thread(void *arg)
     struct yhello_android_thread_args *targs = arg;
     /* Blocks: builds the framework, the UI and the chrome, runs the event
      * loop, then tears the whole lot down when the loop is stopped (the
-     * non-emscripten tail of standalone_worker). NOTE: the Android standalone
-     * path is pending the new yplatform Android entry (content-scale + NDK glue
-     * that replace the removed yinit/android-glue.c); it cannot link until that
-     * lands. The call below tracks the migrated yapp:app:run signature so only
-     * the platform glue remains. */
+     * non-emscripten tail of standalone_worker). The Android standalone path
+     * uses the yplatform Android entry (content-scale + NDK glue now in
+     * src/yetty/yplatform/ymain/android-glue.c). The call below tracks the
+     * migrated yapp:app:run signature. */
     struct yetty_ycore_void_result run_res = standalone_worker(targs->app_obj, targs->platform);
     if (YETTY_IS_ERR(run_res)) {
         LOGE("yhello standalone worker: %s",
@@ -3831,7 +3829,7 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
         .surface = state->surface,
         .surface_width = (uint32_t)width,
         .surface_height = (uint32_t)height,
-        .content_scale = yetty_yinit_android_content_scale(state->app),
+        .content_scale = yetty_yplatform_android_content_scale(state->app),
     };
     struct yetty_ycore_void_result populate =
         yetty_yplatform_platform_set_gpu_context(targs->platform, &gpu);
