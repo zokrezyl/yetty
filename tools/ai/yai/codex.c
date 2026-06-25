@@ -142,19 +142,24 @@ static struct yetty_ycore_void_result codex_render_item(struct yai_app *app, yyj
     if (!item_type) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "codex_render_item: suspend");
     if (strcmp(item_type, "agent_message") == 0) {
-        const char *text = yyjson_get_str(yyjson_obj_get(item, "text"));
+        yyjson_val *text_value = yyjson_obj_get(item, "text");
+        const char *text = yyjson_get_str(text_value);
         if (text && text[0]) {
-            printf("\n" YAI_MINT YAI_BOLD "codex" YAI_RESET " %s\n", text);
-            struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "codex_render_item: flush");
+            struct yai_event begin = {.kind = YAI_EVENT_MESSAGE_BEGIN};
+            struct yetty_ycore_void_result begin_res = yai_event_dispatch(app, &begin);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, begin_res, "codex_render_item: begin");
+
+            struct yai_event delta = {
+                .kind = YAI_EVENT_TEXT_DELTA,
+                .text = {.text = text, .len = yyjson_get_len(text_value)}};
+            struct yetty_ycore_void_result delta_res = yai_event_dispatch(app, &delta);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, delta_res, "codex_render_item: text");
         }
-        struct yetty_ycore_void_result resume_res = yai_renderer_zone_resume(&app->renderer);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, resume_res, "codex_render_item: resume");
         return YETTY_OK_VOID();
     }
+    struct yetty_ycore_void_result suspend_res = yai_renderer_zone_suspend(&app->renderer);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, suspend_res, "codex_render_item: suspend");
     if (strcmp(item_type, "reasoning") == 0) {
         if (app->renderer.show_thinking) {
             const char *text = yyjson_get_str(yyjson_obj_get(item, "text"));
@@ -304,6 +309,9 @@ static struct yetty_ycore_void_result codex_handle_event(struct yetty_yclass_obj
         return YETTY_OK_VOID();
     }
     if (strcmp(kind, "turn.completed") == 0) {
+        struct yai_event turn_end = {.kind = YAI_EVENT_TURN_END};
+        struct yetty_ycore_void_result end_res = yai_event_dispatch(app, &turn_end);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, end_res, "codex handle_event: turn end");
         struct yetty_ycore_void_result usage_res =
             codex_render_usage(app, yyjson_obj_get(event, "usage"));
         YETTY_RETURN_IF_ERR(yetty_ycore_void, usage_res, "codex handle_event: usage");
