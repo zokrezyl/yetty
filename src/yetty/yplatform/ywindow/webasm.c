@@ -27,13 +27,12 @@ struct yetty_yplatform_webasm_window_ptr_result yetty_yplatform_webasm_window_fr
     struct yetty_yclass_object *obj);
 
 /* No webasm-specific state — the canvas is global to the emscripten runtime. */
-struct [[clang::annotate("class@yplatform:webasm_window")]] [[clang::annotate(
-    "platform@webasm")]] [[clang::annotate("parent@yplatform:window")]]
-yetty_yplatform_webasm_window {
+struct YETTY_ANNOTATE("class@yplatform:webasm_window") YETTY_ANNOTATE("platform@webasm")
+    YETTY_ANNOTATE("parent@yplatform:window") yetty_yplatform_webasm_window {
     char reserved;
 };
 
-[[clang::annotate("override@yplatform:webasm_window:window_open")]]
+YETTY_ANNOTATE("override@yplatform:webasm_window:window_open")
 static struct yetty_ycore_void_result webasm_window_open(struct yetty_yclass_object *obj, int width,
                                                          int height, const char *title)
 {
@@ -46,7 +45,7 @@ static struct yetty_ycore_void_result webasm_window_open(struct yetty_yclass_obj
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:webasm_window:window_destroy")]]
+YETTY_ANNOTATE("override@yplatform:webasm_window:window_destroy")
 static struct yetty_ycore_void_result webasm_window_destroy(struct yetty_yclass_object *obj)
 {
     (void)obj;
@@ -54,7 +53,7 @@ static struct yetty_ycore_void_result webasm_window_destroy(struct yetty_yclass_
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:webasm_window:window_get_size")]]
+YETTY_ANNOTATE("override@yplatform:webasm_window:window_get_size")
 static struct yetty_ycore_void_result webasm_window_get_size(struct yetty_yclass_object *obj,
                                                              int *width, int *height)
 {
@@ -63,7 +62,7 @@ static struct yetty_ycore_void_result webasm_window_get_size(struct yetty_yclass
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:webasm_window:window_get_framebuffer_size")]]
+YETTY_ANNOTATE("override@yplatform:webasm_window:window_get_framebuffer_size")
 static struct yetty_ycore_void_result webasm_window_get_framebuffer_size(
     struct yetty_yclass_object *obj, int *width, int *height)
 {
@@ -72,7 +71,7 @@ static struct yetty_ycore_void_result webasm_window_get_framebuffer_size(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:webasm_window:window_get_content_scale")]]
+YETTY_ANNOTATE("override@yplatform:webasm_window:window_get_content_scale")
 static struct yetty_ycore_void_result webasm_window_get_content_scale(
     struct yetty_yclass_object *obj, float *xscale, float *yscale)
 {
@@ -81,14 +80,14 @@ static struct yetty_ycore_void_result webasm_window_get_content_scale(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:webasm_window:window_should_close")]]
+YETTY_ANNOTATE("override@yplatform:webasm_window:window_should_close")
 static struct yetty_ycore_int_result webasm_window_should_close(struct yetty_yclass_object *obj)
 {
     (void)obj;
     return YETTY_OK(yetty_ycore_int, yetty_yplatform_webasm_should_close());
 }
 
-[[clang::annotate("override@yplatform:webasm_window:window_set_title")]]
+YETTY_ANNOTATE("override@yplatform:webasm_window:window_set_title")
 static struct yetty_ycore_void_result webasm_window_set_title(struct yetty_yclass_object *obj,
                                                               const char *title)
 {

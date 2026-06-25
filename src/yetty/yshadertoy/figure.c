@@ -75,8 +75,8 @@
  * Figure struct
  * ========================================================================= */
 
-struct [[clang::annotate("class@yshadertoy:figure")]] [[clang::annotate("parent@yfigure:figure")]]
-yetty_yshadertoy_figure {
+struct YETTY_ANNOTATE("class@yshadertoy:figure") YETTY_ANNOTATE("parent@yfigure:figure")
+    yetty_yshadertoy_figure {
     /* Borrowed. Held to mint the binder on first render (GPU handles),
      * to reach the event loop (anim timer + repaint nudge), and config. */
     const struct yetty_context *context;
@@ -589,20 +589,20 @@ static struct yetty_ycore_void_result figure_destroy(struct yetty_yclass_object 
  * yclass slot overrides — every slot takes the object handle.
  * ========================================================================= */
 
-[[clang::annotate("override@yshadertoy:figure:yfigure:render")]]
+YETTY_ANNOTATE("override@yshadertoy:figure:yfigure:render")
 static struct yetty_ycore_void_result figure_render_slot(struct yetty_yclass_object *obj,
                                                          struct yetty_ydraw_target *target)
 {
     return figure_render(obj, target);
 }
 
-[[clang::annotate("override@yshadertoy:figure:yfigure:destroy")]]
+YETTY_ANNOTATE("override@yshadertoy:figure:yfigure:destroy")
 static struct yetty_ycore_void_result figure_destroy_slot(struct yetty_yclass_object *obj)
 {
     return figure_destroy(obj);
 }
 
-[[clang::annotate("override@yshadertoy:figure:yfigure:process_bytes")]]
+YETTY_ANNOTATE("override@yshadertoy:figure:yfigure:process_bytes")
 static struct yetty_ycore_void_result figure_process_bytes_slot(struct yetty_yclass_object *obj,
                                                                 const uint8_t *bytes,
                                                                 size_t bytes_len)
@@ -677,7 +677,7 @@ static struct yetty_yclass_object_ptr_result figure_construct(struct yetty_ycore
  * parent container. The figure reaches the GPU, event loop (anim timer +
  * repaint nudge) and config through `context`. Returns the yclass object
  * handle — pass it to set_source / as_figure. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object_ptr_result yetty_yshadertoy_create(struct yetty_ycore_rectangle rect,
                                                               const char *shader_src,
                                                               size_t shader_len,
@@ -688,14 +688,14 @@ struct yetty_yclass_object_ptr_result yetty_yshadertoy_create(struct yetty_ycore
 
 /* Upcast to the figure base handle (a Result — the object may not be of this
  * class). */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yfigure_figure_ptr_result yetty_yshadertoy_as_figure(struct yetty_yclass_object *obj)
 {
     return yetty_yfigure_figure_from(obj);
 }
 
 /* Replace the shader text and force a recompile on the next render. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yshadertoy_set_source(struct yetty_yclass_object *obj,
                                                            const char *shader_src,
                                                            size_t shader_len)
@@ -734,7 +734,7 @@ static struct yetty_yfigure_figure_ptr_result yshadertoy_factory(
  * No args bundle: the registry hands the host context to the factory at
  * mint time. Call from yframework's register_figure_factories (the same
  * place ymgui/yrdawn register), once per host registry. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yshadertoy_register_factory(
     struct yetty_yfigure_registry *registry)
 {

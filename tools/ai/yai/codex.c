@@ -16,7 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@yai:codex")]] [[clang::annotate("parent@yai:turn_engine")]]
+struct YETTY_ANNOTATE("class@yai:codex") YETTY_ANNOTATE("parent@yai:turn_engine")
 yetty_yai_codex {
     /* The class@ annotation needs a struct to sit on; codex keeps no
      * engine-private state (the thread id lives in app->session_id,
@@ -26,7 +26,7 @@ yetty_yai_codex {
 
 YETTY_YRESULT_DECLARE(yetty_yai_codex_ptr, struct yetty_yai_codex *);
 
-[[clang::annotate("override@yai:codex:start")]]
+YETTY_ANNOTATE("override@yai:codex:start")
 static struct yetty_ycore_void_result codex_start(struct yetty_yclass_object *obj,
                                                   struct yai_app *app)
 {
@@ -50,7 +50,7 @@ static struct yetty_ycore_void_result codex_start(struct yetty_yclass_object *ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yai:codex:send_user_message")]]
+YETTY_ANNOTATE("override@yai:codex:send_user_message")
 static struct yetty_ycore_void_result codex_send_user_message(struct yetty_yclass_object *obj,
                                                               struct yai_app *app, const char *text)
 {
@@ -225,7 +225,7 @@ static struct yetty_ycore_void_result codex_render_usage(struct yai_app *app, yy
     return yai_event_dispatch(app, &usage_event);
 }
 
-[[clang::annotate("override@yai:codex:describe_config")]]
+YETTY_ANNOTATE("override@yai:codex:describe_config")
 static struct yetty_ycore_void_result codex_describe_config(struct yetty_yclass_object *obj,
                                                             struct yai_app *app, char *out,
                                                             size_t out_size)
@@ -247,7 +247,7 @@ static struct yetty_ycore_void_result codex_describe_config(struct yetty_yclass_
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yai:codex:config_knob")]]
+YETTY_ANNOTATE("override@yai:codex:config_knob")
 static struct yetty_ycore_void_result codex_config_knob(struct yetty_yclass_object *obj,
                                                         struct yai_app *app, char *out,
                                                         size_t out_size)
@@ -268,7 +268,7 @@ static struct yetty_ycore_void_result codex_config_knob(struct yetty_yclass_obje
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yai:codex:handle_event")]]
+YETTY_ANNOTATE("override@yai:codex:handle_event")
 static struct yetty_ycore_void_result codex_handle_event(struct yetty_yclass_object *obj,
                                                          struct yai_app *app,
                                                          struct yyjson_val *event)

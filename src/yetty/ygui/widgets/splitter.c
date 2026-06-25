@@ -29,8 +29,8 @@ typedef void (*yetty_ygui_splitter_change_cb)(struct yetty_yclass_object *splitt
 #define COLOR_GRIP 0xFF92A86Bu
 #define SPLITTER_MIN 40.0f
 
-struct [[clang::annotate("class@ygui:splitter")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] yetty_ygui_splitter {
+struct YETTY_ANNOTATE("class@ygui:splitter") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_splitter {
     /* axis_plus1: 0 = auto (derive from parent flex direction); 1 =
      * column-bar (horizontal bar between stacked siblings → vertical
      * resize); 2 = row-bar (vertical bar between side-by-side siblings
@@ -73,7 +73,7 @@ static int splitter_axis_row(struct yetty_yclass_object *obj, const struct yetty
     return 1;
 }
 
-[[clang::annotate("override@ygui:splitter:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:splitter:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
@@ -118,7 +118,7 @@ static struct yetty_yclass_object *splitter_prev_sibling(struct yetty_yclass_obj
     return prev;
 }
 
-[[clang::annotate("override@ygui:splitter:widget_on_press")]]
+YETTY_ANNOTATE("override@ygui:splitter:widget_on_press")
 static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass_obj, float x,
                                               float y, int btn)
 {
@@ -130,7 +130,7 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:splitter:widget_on_motion")]]
+YETTY_ANNOTATE("override@ygui:splitter:widget_on_motion")
 static struct yetty_ycore_int_result on_motion(struct yetty_yclass_object *yclass_obj, float x,
                                                float y)
 {
@@ -217,7 +217,7 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_object *yclas
  * drives the resize itself off the reported delta.
  *---------------------------------------------------------------------------*/
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_splitter_set_axis(struct yetty_yclass_object *obj,
                                                             int row)
 {
@@ -236,7 +236,7 @@ struct yetty_ycore_void_result yetty_ygui_splitter_set_axis(struct yetty_yclass_
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_int_result yetty_ygui_splitter_get_axis(const struct yetty_yclass_object *obj)
 {
     if (!obj) {
@@ -255,7 +255,7 @@ struct yetty_ycore_int_result yetty_ygui_splitter_get_axis(const struct yetty_yc
     return YETTY_OK(yetty_ycore_int, d->axis_plus1 == 0 ? -1 : d->axis_plus1 - 1);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_splitter_set_min(struct yetty_yclass_object *obj,
                                                            float min_size)
 {
@@ -274,7 +274,7 @@ struct yetty_ycore_void_result yetty_ygui_splitter_set_min(struct yetty_yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_splitter_on_change(struct yetty_yclass_object *obj,
                                                              yetty_ygui_splitter_change_cb cb,
                                                              void *userdata)

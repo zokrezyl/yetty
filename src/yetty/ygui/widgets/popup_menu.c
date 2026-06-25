@@ -69,8 +69,8 @@ struct menu_item {
     int is_drill;
 };
 
-struct [[clang::annotate("class@ygui:popup_menu")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] yetty_ygui_popup_menu {
+struct YETTY_ANNOTATE("class@ygui:popup_menu") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_popup_menu {
     struct menu_item *items;
     int n_items;
     int cap;
@@ -81,7 +81,7 @@ struct [[clang::annotate("class@ygui:popup_menu")]] [[clang::annotate(
     int modal;       /* stored for parity; doesn't affect layout */
 };
 
-[[clang::annotate("override@ygui:popup_menu:constructor")]]
+YETTY_ANNOTATE("override@ygui:popup_menu:constructor")
 static struct yetty_ycore_void_result popup_menu_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -108,7 +108,7 @@ static struct yetty_ycore_void_result popup_menu_constructor(struct yetty_yclass
     return yetty_ygui_widget_layout_set(obj, &l);
 }
 
-[[clang::annotate("override@ygui:popup_menu:destructor")]]
+YETTY_ANNOTATE("override@ygui:popup_menu:destructor")
 static struct yetty_ycore_void_result popup_menu_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -219,7 +219,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
                                                              0u, 0.0f, &geom);
 }
 
-[[clang::annotate("override@ygui:popup_menu:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:popup_menu:widget_paint")
 static struct yetty_ycore_void_result popup_menu_paint(struct yetty_yclass_object *yclass_obj,
                                                        struct yetty_ygui_emit_ctx *ctx)
 {
@@ -267,7 +267,7 @@ static struct yetty_ycore_void_result popup_menu_paint(struct yetty_yclass_objec
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:popup_menu:widget_on_press")]]
+YETTY_ANNOTATE("override@ygui:popup_menu:widget_on_press")
 static struct yetty_ycore_int_result popup_menu_on_press(struct yetty_yclass_object *yclass_obj,
                                                          float x, float y, int button)
 {
@@ -323,7 +323,7 @@ static struct yetty_ycore_int_result popup_menu_on_press(struct yetty_yclass_obj
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:popup_menu:widget_on_motion")]]
+YETTY_ANNOTATE("override@ygui:popup_menu:widget_on_motion")
 static struct yetty_ycore_int_result popup_menu_on_motion(struct yetty_yclass_object *yclass_obj,
                                                           float x, float y)
 {
@@ -347,7 +347,7 @@ static struct yetty_ycore_int_result popup_menu_on_motion(struct yetty_yclass_ob
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_popup_menu_add_item(struct yetty_yclass_object *obj,
                                                               const char *label,
                                                               yetty_ygui_menu_item_cb cb,
@@ -376,7 +376,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_add_item(struct yetty_yclas
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_popup_menu_add_separator(struct yetty_yclass_object *obj)
 {
     if (!obj) {
@@ -411,7 +411,7 @@ static struct yetty_ycore_void_result mark_last_drill(struct yetty_yclass_object
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_popup_menu_open_at(struct yetty_yclass_object *obj,
                                                              float x, float y)
 {
@@ -434,7 +434,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_open_at(struct yetty_yclass
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_popup_menu_close(struct yetty_yclass_object *obj)
 {
     if (!obj) {
@@ -456,7 +456,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_close(struct yetty_yclass_o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_int_result yetty_ygui_popup_menu_is_open(const struct yetty_yclass_object *obj)
 {
     if (!obj) {
@@ -469,7 +469,7 @@ struct yetty_ycore_int_result yetty_ygui_popup_menu_is_open(const struct yetty_y
     return YETTY_OK(yetty_ycore_int, d->open);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_popup_menu_toggle_at(struct yetty_yclass_object *obj,
                                                                float x, float y)
 {
@@ -488,7 +488,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_toggle_at(struct yetty_ycla
  * the host rebuilds the item list in place
  * (clear → set_title → set_back → add_drill_item…), so a "drill item" is
  * just a normal item whose callback repopulates the menu. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_popup_menu_clear(struct yetty_yclass_object *obj)
 {
     if (!obj) {
@@ -507,7 +507,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_clear(struct yetty_yclass_o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_popup_menu_set_title(struct yetty_yclass_object *obj,
                                                                const char *title)
 {
@@ -530,7 +530,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_set_title(struct yetty_ycla
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_popup_menu_set_back(struct yetty_yclass_object *obj,
                                                               const char *label,
                                                               yetty_ygui_menu_item_cb cb,
@@ -545,7 +545,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_set_back(struct yetty_yclas
     return mark_last_drill(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_popup_menu_add_drill_item(struct yetty_yclass_object *obj,
                                                                     const char *label,
                                                                     yetty_ygui_menu_item_cb cb,
@@ -556,7 +556,7 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_add_drill_item(struct yetty
     return mark_last_drill(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_popup_menu_set_modal(struct yetty_yclass_object *obj,
                                                                int modal)
 {

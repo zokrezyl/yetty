@@ -43,8 +43,8 @@
  * (it's a chrome-widget base), but yclass codegen needs a `class@`
  * annotation to sit on something. The struct's size contributes 1
  * byte to the instance layout, which is harmless. */
-struct [[clang::annotate("class@ygui:primitive_widget")]] [[clang::annotate("parent@ygui:widget")]]
-yetty_ygui_primitive_widget {
+struct YETTY_ANNOTATE("class@ygui:primitive_widget") YETTY_ANNOTATE("parent@ygui:widget")
+    yetty_ygui_primitive_widget {
     char unused;
 };
 
@@ -57,7 +57,7 @@ struct yetty_yclass_ptr_result yetty_ygui_primitive_widget_class_get(void);
 struct yetty_ygui_primitive_widget_ptr_result yetty_ygui_primitive_widget_from(
     struct yetty_yclass_object *obj);
 
-[[clang::annotate("override@ygui:primitive_widget:widget_emit_body")]]
+YETTY_ANNOTATE("override@ygui:primitive_widget:widget_emit_body")
 static struct yetty_ycore_void_result primitive_emit_body(struct yetty_yclass_object *yclass_obj,
                                                           struct yetty_ygui_emit_ctx *ctx)
 {

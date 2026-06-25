@@ -25,8 +25,8 @@ struct yetty_yplatform_glfw_window_ptr_result yetty_yplatform_glfw_window_from(
     struct yetty_yclass_object *obj);
 
 /* Private subclass state: the native GLFW window, owned here. */
-struct [[clang::annotate("class@yplatform:glfw_window")]] [[clang::annotate(
-    "platform@glfw")]] [[clang::annotate("parent@yplatform:window")]] yetty_yplatform_glfw_window {
+struct YETTY_ANNOTATE("class@yplatform:glfw_window") YETTY_ANNOTATE("platform@glfw")
+    YETTY_ANNOTATE("parent@yplatform:window") yetty_yplatform_glfw_window {
     struct GLFWwindow *handle;
 };
 
@@ -69,7 +69,7 @@ static const char *glfw_open_reason(void)
     }
 }
 
-[[clang::annotate("override@yplatform:glfw_window:window_open")]]
+YETTY_ANNOTATE("override@yplatform:glfw_window:window_open")
 static struct yetty_ycore_void_result glfw_window_open(struct yetty_yclass_object *obj, int width,
                                                        int height, const char *title)
 {
@@ -90,7 +90,7 @@ static struct yetty_ycore_void_result glfw_window_open(struct yetty_yclass_objec
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:glfw_window:window_destroy")]]
+YETTY_ANNOTATE("override@yplatform:glfw_window:window_destroy")
 static struct yetty_ycore_void_result glfw_window_destroy(struct yetty_yclass_object *obj)
 {
     struct yetty_yplatform_glfw_window_ptr_result data = yetty_yplatform_glfw_window_from(obj);
@@ -102,7 +102,7 @@ static struct yetty_ycore_void_result glfw_window_destroy(struct yetty_yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:glfw_window:window_get_size")]]
+YETTY_ANNOTATE("override@yplatform:glfw_window:window_get_size")
 static struct yetty_ycore_void_result glfw_window_get_size(struct yetty_yclass_object *obj,
                                                            int *width, int *height)
 {
@@ -114,7 +114,7 @@ static struct yetty_ycore_void_result glfw_window_get_size(struct yetty_yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:glfw_window:window_get_framebuffer_size")]]
+YETTY_ANNOTATE("override@yplatform:glfw_window:window_get_framebuffer_size")
 static struct yetty_ycore_void_result glfw_window_get_framebuffer_size(
     struct yetty_yclass_object *obj, int *width, int *height)
 {
@@ -126,7 +126,7 @@ static struct yetty_ycore_void_result glfw_window_get_framebuffer_size(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:glfw_window:window_get_content_scale")]]
+YETTY_ANNOTATE("override@yplatform:glfw_window:window_get_content_scale")
 static struct yetty_ycore_void_result glfw_window_get_content_scale(struct yetty_yclass_object *obj,
                                                                     float *xscale, float *yscale)
 {
@@ -138,14 +138,14 @@ static struct yetty_ycore_void_result glfw_window_get_content_scale(struct yetty
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:glfw_window:window_should_close")]]
+YETTY_ANNOTATE("override@yplatform:glfw_window:window_should_close")
 static struct yetty_ycore_int_result glfw_window_should_close(struct yetty_yclass_object *obj)
 {
     GLFWwindow *window = glfw_window_handle(obj);
     return YETTY_OK(yetty_ycore_int, window ? glfwWindowShouldClose(window) : 1);
 }
 
-[[clang::annotate("override@yplatform:glfw_window:window_set_title")]]
+YETTY_ANNOTATE("override@yplatform:glfw_window:window_set_title")
 static struct yetty_ycore_void_result glfw_window_set_title(struct yetty_yclass_object *obj,
                                                             const char *title)
 {
@@ -157,7 +157,7 @@ static struct yetty_ycore_void_result glfw_window_set_title(struct yetty_yclass_
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:glfw_window:window_create_surface")]]
+YETTY_ANNOTATE("override@yplatform:glfw_window:window_create_surface")
 static struct yetty_yclass_void_ptr_result glfw_window_create_surface(
     struct yetty_yclass_object *obj, void *instance)
 {

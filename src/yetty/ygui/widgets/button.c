@@ -32,8 +32,8 @@ struct yetty_ygui_button_ptr_result yetty_ygui_button_from(struct yetty_yclass_o
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:button")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]] yetty_ygui_button {
+struct YETTY_ANNOTATE("class@ygui:button") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    YETTY_ANNOTATE("uses@ygui:clickable") yetty_ygui_button {
     char *label;
     /* Window-control icon drawn as an SDF primitive instead of a text label:
      * 0=none (plain label button), 1=minimize (bar), 2=maximize (box outline),
@@ -43,7 +43,7 @@ struct [[clang::annotate("class@ygui:button")]] [[clang::annotate(
     int chrome_icon;
 };
 
-[[clang::annotate("override@ygui:button:constructor")]]
+YETTY_ANNOTATE("override@ygui:button:constructor")
 static struct yetty_ycore_void_result button_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -57,7 +57,7 @@ static struct yetty_ycore_void_result button_constructor(struct yetty_yclass_obj
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:button:destructor")]]
+YETTY_ANNOTATE("override@ygui:button:destructor")
 static struct yetty_ycore_void_result button_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -107,7 +107,7 @@ static uint32_t pack_darken(uint32_t c)
     return (a << 24) | (b << 16) | (g << 8) | r;
 }
 
-[[clang::annotate("override@ygui:button:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:button:widget_paint")
 static struct yetty_ycore_void_result button_paint(struct yetty_yclass_object *yclass_obj,
                                                    struct yetty_ygui_emit_ctx *ctx)
 {
@@ -261,7 +261,7 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_object *y
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_yclass_object *obj,
                                                            const char *label)
 {
@@ -288,7 +288,7 @@ struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_yclass_o
 /* Draw the button as a window-control cell with an SDF icon instead of a text
  * label: 0=none (normal label button), 1=minimize, 2=maximize, 3=close. Used by
  * yetty's yui titlebar so its controls match the ychrome-driven tools. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_button_set_chrome_icon(struct yetty_yclass_object *obj,
                                                                  int kind)
 {
@@ -302,7 +302,7 @@ struct yetty_ycore_void_result yetty_ygui_button_set_chrome_icon(struct yetty_yc
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_const_char_ptr_result yetty_ygui_button_get_label(
     const struct yetty_yclass_object *obj)
 {

@@ -19,13 +19,12 @@ struct yetty_ygui_yvideo_ptr_result yetty_ygui_yvideo_from(struct yetty_yclass_o
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:yvideo")]] [[clang::annotate("parent@ygui:widget")]]
-yetty_ygui_yvideo {
+struct YETTY_ANNOTATE("class@ygui:yvideo") YETTY_ANNOTATE("parent@ygui:widget") yetty_ygui_yvideo {
     uint8_t *bytes;
     size_t len;
 };
 
-[[clang::annotate("override@ygui:yvideo:constructor")]]
+YETTY_ANNOTATE("override@ygui:yvideo:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -40,7 +39,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:yvideo:destructor")]]
+YETTY_ANNOTATE("override@ygui:yvideo:destructor")
 static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -52,7 +51,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_ob
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:yvideo:widget_emit_container")]]
+YETTY_ANNOTATE("override@ygui:yvideo:widget_emit_container")
 static struct yetty_ycore_void_result emit_container(struct yetty_yclass_object *yclass_obj,
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
@@ -62,7 +61,7 @@ static struct yetty_ycore_void_result emit_container(struct yetty_yclass_object 
                                         r.min.x, r.min.y, r.max.x, r.max.y, NULL, 0);
 }
 
-[[clang::annotate("override@ygui:yvideo:widget_emit_body")]]
+YETTY_ANNOTATE("override@ygui:yvideo:widget_emit_body")
 static struct yetty_ycore_void_result emit_body(struct yetty_yclass_object *yclass_obj,
                                                 struct yetty_ygui_emit_ctx *ctx)
 {
@@ -144,7 +143,7 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_object *ycla
     return er;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_yvideo_set_bytes(struct yetty_yclass_object *obj,
                                                            const uint8_t *bytes, size_t len)
 {

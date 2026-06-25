@@ -61,8 +61,8 @@ struct yetty_ycore_void_result yetty_yrich_paragraph_set_text(struct yetty_yclas
  * Paragraph
  *=========================================================================*/
 
-struct [[clang::annotate("class@yrich:paragraph")]] [[clang::annotate("parent@yrich:element")]]
-yetty_yrich_paragraph {
+struct YETTY_ANNOTATE("class@yrich:paragraph") YETTY_ANNOTATE("parent@yrich:element")
+    yetty_yrich_paragraph {
     struct yetty_yrich_rect bounds;
 
     char *text; /* owned, NUL-terminated */
@@ -578,7 +578,7 @@ static int32_t paragraph_caret_from_point(const struct yetty_yrich_paragraph *pa
     return paragraph_caret_at(paragraph, (size_t)line_index, (size_t)column);
 }
 
-[[clang::annotate("override@yrich:paragraph:constructor")]]
+YETTY_ANNOTATE("override@yrich:paragraph:constructor")
 static struct yetty_ycore_void_result paragraph_constructor(struct yetty_yclass_object *obj)
 {
     struct yetty_ycore_void_result super_res =
@@ -594,7 +594,7 @@ static struct yetty_ycore_void_result paragraph_constructor(struct yetty_yclass_
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:paragraph:element_destroy")]]
+YETTY_ANNOTATE("override@yrich:paragraph:element_destroy")
 static struct yetty_ycore_void_result paragraph_destroy(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
@@ -605,7 +605,7 @@ static struct yetty_ycore_void_result paragraph_destroy(struct yetty_yclass_obje
                                   (yetty_yclass_method_id_t)yetty_yrich_element_destroy);
 }
 
-[[clang::annotate("override@yrich:paragraph:element_bounds")]]
+YETTY_ANNOTATE("override@yrich:paragraph:element_bounds")
 static struct yetty_ycore_void_result paragraph_bounds(struct yetty_yclass_object *obj,
                                                        struct yetty_yrich_rect *out_bounds)
 {
@@ -618,14 +618,14 @@ static struct yetty_ycore_void_result paragraph_bounds(struct yetty_yclass_objec
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:paragraph:element_is_editable")]]
+YETTY_ANNOTATE("override@yrich:paragraph:element_is_editable")
 static struct yetty_ycore_int_result paragraph_is_editable(struct yetty_yclass_object *obj)
 {
     (void)obj;
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@yrich:paragraph:element_begin_edit")]]
+YETTY_ANNOTATE("override@yrich:paragraph:element_begin_edit")
 static struct yetty_ycore_void_result paragraph_begin_edit(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
@@ -638,7 +638,7 @@ static struct yetty_ycore_void_result paragraph_begin_edit(struct yetty_yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:paragraph:element_end_edit")]]
+YETTY_ANNOTATE("override@yrich:paragraph:element_end_edit")
 static struct yetty_ycore_void_result paragraph_end_edit(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
@@ -649,7 +649,7 @@ static struct yetty_ycore_void_result paragraph_end_edit(struct yetty_yclass_obj
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:paragraph:element_is_editing")]]
+YETTY_ANNOTATE("override@yrich:paragraph:element_is_editing")
 static struct yetty_ycore_int_result paragraph_is_editing(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
@@ -774,7 +774,7 @@ static int paragraph_render_line_visitor(const struct paragraph_line *line, size
     return 0;
 }
 
-[[clang::annotate("override@yrich:paragraph:element_render")]]
+YETTY_ANNOTATE("override@yrich:paragraph:element_render")
 static struct yetty_ycore_void_result paragraph_render(
     struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *drawable_list,
     uint32_t layer, int selected)
@@ -880,7 +880,7 @@ static struct yetty_ycore_void_result paragraph_text_delete_range(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:paragraph:element_insert_text")]]
+YETTY_ANNOTATE("override@yrich:paragraph:element_insert_text")
 static struct yetty_ycore_void_result paragraph_insert_text(struct yetty_yclass_object *obj,
                                                             struct yetty_ycore_buffer text)
 {
@@ -890,7 +890,7 @@ static struct yetty_ycore_void_result paragraph_insert_text(struct yetty_yclass_
                                     (const char *)text.data, text.size);
 }
 
-[[clang::annotate("override@yrich:paragraph:element_delete_sel")]]
+YETTY_ANNOTATE("override@yrich:paragraph:element_delete_sel")
 static struct yetty_ycore_void_result paragraph_delete_sel(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
@@ -902,7 +902,7 @@ static struct yetty_ycore_void_result paragraph_delete_sel(struct yetty_yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_paragraph_set_text(struct yetty_yclass_object *obj,
                                                               const char *text, size_t len)
 {
@@ -928,7 +928,7 @@ struct yetty_ycore_void_result yetty_yrich_paragraph_set_text(struct yetty_yclas
 
 /* Style setters — the data slice is private to this TU; the yaml loader and
  * future bindings reach the style through these. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_paragraph_set_font_size(struct yetty_yclass_object *obj,
                                                                    float font_size)
 {
@@ -943,7 +943,7 @@ struct yetty_ycore_void_result yetty_yrich_paragraph_set_font_size(struct yetty_
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_paragraph_set_color(struct yetty_yclass_object *obj,
                                                                uint32_t color)
 {
@@ -953,7 +953,7 @@ struct yetty_ycore_void_result yetty_yrich_paragraph_set_color(struct yetty_ycla
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_paragraph_set_format(struct yetty_yclass_object *obj,
                                                                 uint32_t format)
 {
@@ -967,8 +967,8 @@ struct yetty_ycore_void_result yetty_yrich_paragraph_set_format(struct yetty_ycl
  * InlineImage
  *=========================================================================*/
 
-struct [[clang::annotate("class@yrich:inline_image")]] [[clang::annotate("parent@yrich:element")]]
-yetty_yrich_inline_image {
+struct YETTY_ANNOTATE("class@yrich:inline_image") YETTY_ANNOTATE("parent@yrich:element")
+    yetty_yrich_inline_image {
     struct yetty_yrich_rect bounds;
     char *source;   /* owned base64/path, may be NULL */
     char *alt_text; /* owned, may be NULL */
@@ -976,7 +976,7 @@ yetty_yrich_inline_image {
     uint32_t align; /* enum yetty_yrich_halign */
 };
 
-[[clang::annotate("override@yrich:inline_image:constructor")]]
+YETTY_ANNOTATE("override@yrich:inline_image:constructor")
 static struct yetty_ycore_void_result inline_image_constructor(struct yetty_yclass_object *obj)
 {
     struct yetty_ycore_void_result super_res =
@@ -989,7 +989,7 @@ static struct yetty_ycore_void_result inline_image_constructor(struct yetty_ycla
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:inline_image:element_destroy")]]
+YETTY_ANNOTATE("override@yrich:inline_image:element_destroy")
 static struct yetty_ycore_void_result inline_image_destroy(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_inline_image_ptr_result data_res = yetty_yrich_inline_image_from(obj);
@@ -1001,7 +1001,7 @@ static struct yetty_ycore_void_result inline_image_destroy(struct yetty_yclass_o
                                   (yetty_yclass_method_id_t)yetty_yrich_element_destroy);
 }
 
-[[clang::annotate("override@yrich:inline_image:element_bounds")]]
+YETTY_ANNOTATE("override@yrich:inline_image:element_bounds")
 static struct yetty_ycore_void_result inline_image_bounds(struct yetty_yclass_object *obj,
                                                           struct yetty_yrich_rect *out_bounds)
 {
@@ -1014,7 +1014,7 @@ static struct yetty_ycore_void_result inline_image_bounds(struct yetty_yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:inline_image:element_render")]]
+YETTY_ANNOTATE("override@yrich:inline_image:element_render")
 static struct yetty_ycore_void_result inline_image_render(
     struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *drawable_list,
     uint32_t layer, int selected)
@@ -1061,9 +1061,8 @@ static struct yetty_ycore_void_result inline_image_render(
  * Document
  *=========================================================================*/
 
-struct [[clang::annotate("class@yrich:ydoc"),
-         clang::annotate("include@yetty/yrich/yrich-types.h")]] [[clang::annotate(
-    "parent@yrich:document")]] yetty_yrich_ydoc {
+struct YETTY_ANNOTATE("class@yrich:ydoc") YETTY_ANNOTATE("include@yetty/yrich/yrich-types.h")
+    YETTY_ANNOTATE("parent@yrich:document") yetty_yrich_ydoc {
     float page_width;
     float margin;
 
@@ -1081,7 +1080,7 @@ struct [[clang::annotate("class@yrich:ydoc"),
     char *source_path;
 };
 
-[[clang::annotate("override@yrich:ydoc:constructor")]]
+YETTY_ANNOTATE("override@yrich:ydoc:constructor")
 static struct yetty_ycore_void_result ydoc_constructor(struct yetty_yclass_object *obj)
 {
     struct yetty_ycore_void_result super_res = yetty_yrich_super_void(
@@ -1094,7 +1093,7 @@ static struct yetty_ycore_void_result ydoc_constructor(struct yetty_yclass_objec
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yrich:ydoc:document_destroy")]]
+YETTY_ANNOTATE("override@yrich:ydoc:document_destroy")
 static struct yetty_ycore_void_result ydoc_destroy(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
@@ -1107,7 +1106,7 @@ static struct yetty_ycore_void_result ydoc_destroy(struct yetty_yclass_object *o
                                   (yetty_yclass_method_id_t)yetty_yrich_document_destroy);
 }
 
-[[clang::annotate("override@yrich:ydoc:document_content_width")]]
+YETTY_ANNOTATE("override@yrich:ydoc:document_content_width")
 static struct yetty_ycore_float_result ydoc_content_width(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
@@ -1115,7 +1114,7 @@ static struct yetty_ycore_float_result ydoc_content_width(struct yetty_yclass_ob
     return YETTY_OK(yetty_ycore_float, data_res.value->page_width);
 }
 
-[[clang::annotate("override@yrich:ydoc:document_content_height")]]
+YETTY_ANNOTATE("override@yrich:ydoc:document_content_height")
 static struct yetty_ycore_float_result ydoc_content_height(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
@@ -1132,7 +1131,7 @@ static struct yetty_ycore_float_result ydoc_content_height(struct yetty_yclass_o
     return YETTY_OK(yetty_ycore_float, height);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_ydoc_set_page_width(struct yetty_yclass_object *obj,
                                                                float width)
 {
@@ -1149,7 +1148,7 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_set_page_width(struct yetty_ycla
     return yetty_yrich_document_mark_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_ydoc_set_margin(struct yetty_yclass_object *obj,
                                                            float margin)
 {
@@ -1176,7 +1175,7 @@ static struct yetty_ycore_void_result paragraph_list_push(struct yetty_yrich_ydo
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_add_paragraph(
     struct yetty_yclass_object *obj, const char *text, size_t text_len)
 {
@@ -1256,7 +1255,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_add_paragraph(
     return YETTY_OK(yetty_yclass_object_ptr, paragraph_obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object *yetty_yrich_ydoc_paragraph_at(struct yetty_yclass_object *obj,
                                                           int32_t index)
 {
@@ -1288,7 +1287,7 @@ static struct yetty_ycore_void_result image_list_push(struct yetty_yrich_ydoc *y
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_insert_image(struct yetty_yclass_object *obj,
                                                                     int32_t paragraph_index,
                                                                     float width, float height)
@@ -1771,7 +1770,7 @@ static int32_t word_jump_right(const struct yetty_yrich_paragraph *paragraph, in
     return pos;
 }
 
-[[clang::annotate("override@yrich:ydoc:document_on_mouse_down")]]
+YETTY_ANNOTATE("override@yrich:ydoc:document_on_mouse_down")
 static struct yetty_ycore_void_result ydoc_on_mouse_down(struct yetty_yclass_object *obj, float x,
                                                          float y, uint32_t button, uint32_t mods)
 {
@@ -1812,7 +1811,7 @@ static struct yetty_ycore_void_result ydoc_on_mouse_down(struct yetty_yclass_obj
     return ydoc_set_caret(obj, hit_obj, anchor, caret);
 }
 
-[[clang::annotate("override@yrich:ydoc:document_on_mouse_drag")]]
+YETTY_ANNOTATE("override@yrich:ydoc:document_on_mouse_drag")
 static struct yetty_ycore_void_result ydoc_on_mouse_drag(struct yetty_yclass_object *obj, float x,
                                                          float y, uint32_t button, uint32_t mods)
 {
@@ -1873,7 +1872,7 @@ static struct yetty_ycore_void_result ydoc_caret_vertical(struct yetty_yclass_ob
     return ydoc_set_caret(obj, target_obj, anchor, target_caret);
 }
 
-[[clang::annotate("override@yrich:ydoc:document_on_key_down")]]
+YETTY_ANNOTATE("override@yrich:ydoc:document_on_key_down")
 static struct yetty_ycore_void_result ydoc_on_key_down(struct yetty_yclass_object *obj,
                                                        uint32_t key, uint32_t mods)
 {
@@ -2007,7 +2006,7 @@ static struct yetty_ycore_void_result ydoc_on_key_down(struct yetty_yclass_objec
     }
 }
 
-[[clang::annotate("override@yrich:ydoc:document_on_text_input")]]
+YETTY_ANNOTATE("override@yrich:ydoc:document_on_text_input")
 static struct yetty_ycore_void_result ydoc_on_text_input(struct yetty_yclass_object *obj,
                                                          struct yetty_ycore_buffer text)
 {
@@ -2040,7 +2039,7 @@ static struct yetty_ycore_void_result ydoc_on_text_input(struct yetty_yclass_obj
     return ydoc_execute_edit(obj, delete_op, insert_res.value);
 }
 
-[[clang::annotate("override@yrich:ydoc:document_on_mouse_double_click")]]
+YETTY_ANNOTATE("override@yrich:ydoc:document_on_mouse_double_click")
 static struct yetty_ycore_void_result ydoc_on_mouse_double_click(struct yetty_yclass_object *obj,
                                                                  float x, float y, uint32_t button,
                                                                  uint32_t mods)
@@ -2071,7 +2070,7 @@ static struct yetty_ycore_void_result ydoc_on_mouse_double_click(struct yetty_yc
 
 /* Selected text as a fresh heap string (caller frees). NULL when the
  * selection is empty or not a text selection. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 char *yetty_yrich_ydoc_selection_text(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
@@ -2118,7 +2117,7 @@ static struct yetty_ycore_void_result ydoc_super_apply_op(struct yetty_yclass_ob
     return ((yetty_yrich_document_apply_op_fn)impl_res.value)(obj, op, local_flag);
 }
 
-[[clang::annotate("override@yrich:ydoc:document_apply_op")]]
+YETTY_ANNOTATE("override@yrich:ydoc:document_apply_op")
 static struct yetty_ycore_void_result ydoc_apply_op(struct yetty_yclass_object *obj,
                                                     struct yetty_yrich_operation *op,
                                                     int local_flag)
@@ -2179,7 +2178,7 @@ static struct yetty_ycore_void_result ydoc_apply_op(struct yetty_yclass_object *
  * Render override — re-layout (wrap widths / stacking) before painting.
  *-------------------------------------------------------------------------*/
 
-[[clang::annotate("override@yrich:ydoc:document_render")]]
+YETTY_ANNOTATE("override@yrich:ydoc:document_render")
 static struct yetty_ycore_void_result ydoc_render(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
@@ -2193,7 +2192,7 @@ static struct yetty_ycore_void_result ydoc_render(struct yetty_yclass_object *ob
  * Formatting slots — wire-marshallable (scalars only).
  *-------------------------------------------------------------------------*/
 
-[[clang::annotate("virtual@yrich:ydoc:ydoc_toggle_format")]]
+YETTY_ANNOTATE("virtual@yrich:ydoc:ydoc_toggle_format")
 static struct yetty_ycore_void_result ydoc_toggle_format_impl(struct yetty_yclass_object *obj,
                                                               uint32_t format_flag)
 {
@@ -2223,7 +2222,7 @@ static struct yetty_ycore_void_result ydoc_toggle_format_impl(struct yetty_yclas
 }
 
 /* Text colour — selection-scoped like toggle_format, absolute (no toggle). */
-[[clang::annotate("virtual@yrich:ydoc:ydoc_set_text_color")]]
+YETTY_ANNOTATE("virtual@yrich:ydoc:ydoc_set_text_color")
 static struct yetty_ycore_void_result ydoc_set_text_color_impl(struct yetty_yclass_object *obj,
                                                                uint32_t color)
 {
@@ -2251,7 +2250,7 @@ static struct yetty_ycore_void_result ydoc_set_text_color_impl(struct yetty_ycla
 }
 
 /* Paragraph alignment (enum yetty_yrich_halign). */
-[[clang::annotate("virtual@yrich:ydoc:ydoc_set_alignment")]]
+YETTY_ANNOTATE("virtual@yrich:ydoc:ydoc_set_alignment")
 static struct yetty_ycore_void_result ydoc_set_alignment_impl(struct yetty_yclass_object *obj,
                                                               uint32_t halign)
 {
@@ -2266,7 +2265,7 @@ static struct yetty_ycore_void_result ydoc_set_alignment_impl(struct yetty_yclas
 }
 
 /* Heading levels — 0 = normal text, 1..3 = headings (size + bold base). */
-[[clang::annotate("virtual@yrich:ydoc:ydoc_set_heading")]]
+YETTY_ANNOTATE("virtual@yrich:ydoc:ydoc_set_heading")
 static struct yetty_ycore_void_result ydoc_set_heading_impl(struct yetty_yclass_object *obj,
                                                             uint32_t level)
 {
@@ -2302,7 +2301,7 @@ static struct yetty_ycore_void_result ydoc_set_heading_impl(struct yetty_yclass_
     return yetty_yrich_document_mark_dirty(obj);
 }
 
-[[clang::annotate("virtual@yrich:ydoc:ydoc_change_font_size")]]
+YETTY_ANNOTATE("virtual@yrich:ydoc:ydoc_change_font_size")
 static struct yetty_ycore_void_result ydoc_change_font_size_impl(struct yetty_yclass_object *obj,
                                                                  float delta)
 {
@@ -2331,7 +2330,7 @@ static struct yetty_ycore_void_result ydoc_change_font_size_impl(struct yetty_yc
 
 /* Drop every element and start over with one empty paragraph (File > New).
  * The undo history is cleared — its ops reference dead elements. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_ydoc_clear(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
@@ -2368,7 +2367,7 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_clear(struct yetty_yclass_object
     return ydoc_set_caret(obj, paragraph_res.value, 0, 0);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_ydoc_set_source_path(struct yetty_yclass_object *obj,
                                                                 const char *path)
 {
@@ -2388,7 +2387,7 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_set_source_path(struct yetty_ycl
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 const char *yetty_yrich_ydoc_source_path(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
@@ -2404,7 +2403,7 @@ const char *yetty_yrich_ydoc_source_path(struct yetty_yclass_object *obj)
  * slices are private to this TU.
  *-------------------------------------------------------------------------*/
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_float_result yetty_yrich_ydoc_page_width(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
@@ -2412,7 +2411,7 @@ struct yetty_ycore_float_result yetty_yrich_ydoc_page_width(struct yetty_yclass_
     return YETTY_OK(yetty_ycore_float, data_res.value->page_width);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_float_result yetty_yrich_ydoc_margin(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
@@ -2420,7 +2419,7 @@ struct yetty_ycore_float_result yetty_yrich_ydoc_margin(struct yetty_yclass_obje
     return YETTY_OK(yetty_ycore_float, data_res.value->margin);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_size_result yetty_yrich_ydoc_paragraph_count(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
@@ -2428,7 +2427,7 @@ struct yetty_ycore_size_result yetty_yrich_ydoc_paragraph_count(struct yetty_ycl
     return YETTY_OK(yetty_ycore_size, data_res.value->paragraph_count);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 const char *yetty_yrich_paragraph_text(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
@@ -2439,7 +2438,7 @@ const char *yetty_yrich_paragraph_text(struct yetty_yclass_object *obj)
     return data_res.value->text ? data_res.value->text : "";
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_size_result yetty_yrich_paragraph_text_len(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
@@ -2447,7 +2446,7 @@ struct yetty_ycore_size_result yetty_yrich_paragraph_text_len(struct yetty_yclas
     return YETTY_OK(yetty_ycore_size, data_res.value->text_len);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_float_result yetty_yrich_paragraph_font_size(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
@@ -2455,7 +2454,7 @@ struct yetty_ycore_float_result yetty_yrich_paragraph_font_size(struct yetty_ycl
     return YETTY_OK(yetty_ycore_float, data_res.value->style.font_size);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_yrich_paragraph_color(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
@@ -2463,7 +2462,7 @@ struct yetty_ycore_uint32_result yetty_yrich_paragraph_color(struct yetty_yclass
     return YETTY_OK(yetty_ycore_uint32, data_res.value->style.color);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_yrich_paragraph_format(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
@@ -2471,7 +2470,7 @@ struct yetty_ycore_uint32_result yetty_yrich_paragraph_format(struct yetty_yclas
     return YETTY_OK(yetty_ycore_uint32, data_res.value->style.format);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_yrich_paragraph_alignment(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
@@ -2479,7 +2478,7 @@ struct yetty_ycore_uint32_result yetty_yrich_paragraph_alignment(struct yetty_yc
     return YETTY_OK(yetty_ycore_uint32, data_res.value->halign);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_paragraph_set_alignment(struct yetty_yclass_object *obj,
                                                                    uint32_t halign)
 {
@@ -2489,7 +2488,7 @@ struct yetty_ycore_void_result yetty_yrich_paragraph_set_alignment(struct yetty_
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_size_result yetty_yrich_paragraph_run_count(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
@@ -2497,7 +2496,7 @@ struct yetty_ycore_size_result yetty_yrich_paragraph_run_count(struct yetty_ycla
     return YETTY_OK(yetty_ycore_size, data_res.value->run_count);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_paragraph_run_get(struct yetty_yclass_object *obj,
                                                              size_t index, int32_t *out_start,
                                                              int32_t *out_end, uint32_t *out_format,
@@ -2519,7 +2518,7 @@ struct yetty_ycore_void_result yetty_yrich_paragraph_run_get(struct yetty_yclass
 
 /* Append one styled run — loader-side; ranges must arrive sorted and
  * non-overlapping (the writer emits them that way). */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yrich_paragraph_add_run(struct yetty_yclass_object *obj,
                                                              int32_t start, int32_t end,
                                                              uint32_t format, uint32_t color)

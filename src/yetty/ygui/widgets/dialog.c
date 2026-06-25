@@ -38,14 +38,13 @@ struct yetty_ygui_dialog_ptr_result yetty_ygui_dialog_from(struct yetty_yclass_o
 #define COLOR_TITLE_TEXT 0xFFE4E5E0u
 #define COLOR_CLOSE 0xFF9FA7A8u /* BRAND_TEXT_SECONDARY */
 
-struct [[clang::annotate("class@ygui:dialog")]] [[clang::annotate("parent@ygui:vbox")]]
-yetty_ygui_dialog {
+struct YETTY_ANNOTATE("class@ygui:dialog") YETTY_ANNOTATE("parent@ygui:vbox") yetty_ygui_dialog {
     char *title;
     int open;
     int closable; /* draw a titlebar ✕ close button */
 };
 
-[[clang::annotate("override@ygui:dialog:constructor")]]
+YETTY_ANNOTATE("override@ygui:dialog:constructor")
 static struct yetty_ycore_void_result dialog_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -71,7 +70,7 @@ static struct yetty_ycore_void_result dialog_constructor(struct yetty_yclass_obj
     return yetty_ygui_widget_layout_set(obj, &l);
 }
 
-[[clang::annotate("override@ygui:dialog:destructor")]]
+YETTY_ANNOTATE("override@ygui:dialog:destructor")
 static struct yetty_ycore_void_result dialog_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -120,7 +119,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
                                                              0u, 0.0f, &geom);
 }
 
-[[clang::annotate("override@ygui:dialog:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:dialog:widget_paint")
 static struct yetty_ycore_void_result dialog_paint(struct yetty_yclass_object *yclass_obj,
                                                    struct yetty_ygui_emit_ctx *ctx)
 {
@@ -167,7 +166,7 @@ static struct yetty_ycore_void_result dialog_paint(struct yetty_yclass_object *y
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_dialog_set_title(struct yetty_yclass_object *obj,
                                                            const char *title)
 {
@@ -194,7 +193,7 @@ struct yetty_ycore_void_result yetty_ygui_dialog_set_title(struct yetty_yclass_o
 /* Enable/disable the titlebar ✕ close button. The widget only draws it;
  * the host hit-tests the top-right DIALOG_CLOSE_W square of the titlebar
  * and calls yetty_ygui_dialog_close. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_dialog_set_closable(struct yetty_yclass_object *obj,
                                                               int closable)
 {
@@ -207,7 +206,7 @@ struct yetty_ycore_void_result yetty_ygui_dialog_set_closable(struct yetty_yclas
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_dialog_open_at(struct yetty_yclass_object *obj, float x,
                                                          float y, float width, float height)
 {
@@ -229,7 +228,7 @@ struct yetty_ycore_void_result yetty_ygui_dialog_open_at(struct yetty_yclass_obj
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_dialog_close(struct yetty_yclass_object *obj)
 {
     if (!obj) {
@@ -250,7 +249,7 @@ struct yetty_ycore_void_result yetty_ygui_dialog_close(struct yetty_yclass_objec
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_int_result yetty_ygui_dialog_is_open(const struct yetty_yclass_object *obj)
 {
     if (!obj) {

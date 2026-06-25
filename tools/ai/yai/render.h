@@ -45,9 +45,10 @@ struct yai_renderer {
     int fold_lines;    /* tool-output preview cap */
     int show_thinking; /* stream dim thinking text */
     /* Render completed assistant answers as a yetty markdown figure
-     * (via ycat) instead of plain text. Opt-in via --markdown, and only
-     * on the yetty host (the figure envelope can't display elsewhere);
-     * falls back to plain text if ycat is unavailable or fails. */
+     * (via ycat) instead of plain text. Driven by the `markdown-mode`
+     * setting ({yetty,text}, default yetty — see yai_effective_markdown_mode):
+     * only "yetty" on the yetty host renders the figure (the envelope can't
+     * display elsewhere); falls back to plain text off-host or if ycat fails. */
     int render_markdown;
     /* Use the animated shader glyph for the activity indicator. OFF by
      * default: an animated glyph keeps yetty's renderer running every

@@ -43,9 +43,8 @@ struct yetty_yplatform_glfw_clipboard_ptr_result yetty_yplatform_glfw_clipboard_
     struct yetty_yclass_object *obj);
 
 /* Private subclass state: the cross-thread pipes, borrowed (owned by caller). */
-struct [[clang::annotate("class@yplatform:glfw_clipboard")]] [[clang::annotate(
-    "platform@glfw")]] [[clang::annotate("parent@yplatform:clipboard")]]
-yetty_yplatform_glfw_clipboard {
+struct YETTY_ANNOTATE("class@yplatform:glfw_clipboard") YETTY_ANNOTATE("platform@glfw")
+    YETTY_ANNOTATE("parent@yplatform:clipboard") yetty_yplatform_glfw_clipboard {
     struct yetty_ycore_xthread_event_pipe *output_pipe; /* render → main marshalling bus */
     struct yetty_ycore_xthread_event_pipe *input_pipe;  /* main → render paste responses */
 };
@@ -151,7 +150,7 @@ static void write_primary_selection(const char *text, size_t len)
 
 /* Bind the render→main marshalling bus and the main→render response pipe. Both
  * are borrowed. Call once after create(), before any other slot. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yplatform_glfw_clipboard_configure(
     struct yetty_yclass_object *obj, struct yetty_ycore_xthread_event_pipe *output_pipe,
     struct yetty_ycore_xthread_event_pipe *input_pipe)
@@ -168,7 +167,7 @@ struct yetty_ycore_void_result yetty_yplatform_glfw_clipboard_configure(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:glfw_clipboard:clipboard_set_text")]]
+YETTY_ANNOTATE("override@yplatform:glfw_clipboard:clipboard_set_text")
 static struct yetty_ycore_void_result glfw_clipboard_set_text(struct yetty_yclass_object *obj,
                                                               const char *text, size_t len)
 {
@@ -202,7 +201,7 @@ static struct yetty_ycore_void_result glfw_clipboard_set_text(struct yetty_yclas
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:glfw_clipboard:clipboard_request_paste")]]
+YETTY_ANNOTATE("override@yplatform:glfw_clipboard:clipboard_request_paste")
 static struct yetty_ycore_void_result glfw_clipboard_request_paste(struct yetty_yclass_object *obj)
 {
     struct yetty_yplatform_glfw_clipboard *data = glfw_clipboard_data(obj);
@@ -223,7 +222,7 @@ static struct yetty_ycore_void_result glfw_clipboard_request_paste(struct yetty_
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:glfw_clipboard:clipboard_drain")]]
+YETTY_ANNOTATE("override@yplatform:glfw_clipboard:clipboard_drain")
 static struct yetty_ycore_void_result glfw_clipboard_drain(struct yetty_yclass_object *obj)
 {
     struct yetty_yplatform_glfw_clipboard *data = glfw_clipboard_data(obj);

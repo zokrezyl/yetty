@@ -40,14 +40,14 @@ struct rich_line {
     int cap;
 };
 
-struct [[clang::annotate("class@ygui:rich")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-yetty_ygui_rich {
+struct YETTY_ANNOTATE("class@ygui:rich") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_rich {
     struct rich_line *lines;
     int n_lines;
     int cap;
 };
 
-[[clang::annotate("override@ygui:rich:constructor")]]
+YETTY_ANNOTATE("override@ygui:rich:constructor")
 static struct yetty_ycore_void_result rich_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -74,7 +74,7 @@ static void free_line(struct rich_line *line)
     line->cap = 0;
 }
 
-[[clang::annotate("override@ygui:rich:destructor")]]
+YETTY_ANNOTATE("override@ygui:rich:destructor")
 static struct yetty_ycore_void_result rich_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -90,7 +90,7 @@ static struct yetty_ycore_void_result rich_destructor(struct yetty_yclass_object
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:rich:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:rich:widget_paint")
 static struct yetty_ycore_void_result rich_paint(struct yetty_yclass_object *yclass_obj,
                                                  struct yetty_ygui_emit_ctx *ctx)
 {
@@ -186,7 +186,7 @@ static int spans_grow(struct rich_line *l, int need)
     return 1;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_yclass_object *obj)
 {
     if (!obj) {
@@ -202,7 +202,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_clear(struct yetty_yclass_object 
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_yclass_object *obj)
 {
     if (!obj) {
@@ -221,7 +221,7 @@ struct yetty_ycore_void_result yetty_ygui_rich_add_line(struct yetty_yclass_obje
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_rich_add_span(struct yetty_yclass_object *obj,
                                                         const char *text, float font_size,
                                                         uint32_t color_rgba)

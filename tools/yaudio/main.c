@@ -83,7 +83,7 @@ static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result
     }
 }
 
-struct [[clang::annotate("class@yaudio:app")]] [[clang::annotate("parent@yapp:app")]] yetty_yaudio_app {
+struct YETTY_ANNOTATE("class@yaudio:app") YETTY_ANNOTATE("parent@yapp:app") yetty_yaudio_app {
     const char *wav_path;
     struct yetty_yaudio_wav *wav;
     struct yetty_yaudio_envelope *env;
@@ -1118,7 +1118,7 @@ static void yaudio_load_done(void *ctx)
 /* Render loop                                                              */
 /* ----------------------------------------------------------------------- */
 
-[[clang::annotate("override@yapp:app:init")]]
+YETTY_ANNOTATE("override@yapp:app:init")
 static struct yetty_ycore_void_result yaudio_app_init(struct yetty_yclass_object *obj,
                                                       struct yetty_yclass_object *platform)
 {
@@ -1127,7 +1127,7 @@ static struct yetty_ycore_void_result yaudio_app_init(struct yetty_yclass_object
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yapp:app:run")]]
+YETTY_ANNOTATE("override@yapp:app:run")
 static struct yetty_ycore_void_result yaudio_app_run(struct yetty_yclass_object *obj,
                                                      struct yetty_yclass_object *platform)
 {

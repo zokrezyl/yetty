@@ -45,7 +45,7 @@ void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance);
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_pty_write_fn)(const char *bytes,
                                                                          size_t len,
                                                                          void *userdata);
-enum [[clang::annotate("expose")]] yetty_yvterm_text_attr {
+enum YETTY_ANNOTATE("expose") yetty_yvterm_text_attr {
     YETTY_YVTERM_ATTR_BOLD = 1u << 0,
     YETTY_YVTERM_ATTR_UNDERLINE = 1u << 1,
     YETTY_YVTERM_ATTR_UNDERLINE2 = 1u << 2,
@@ -60,7 +60,7 @@ enum [[clang::annotate("expose")]] yetty_yvterm_text_attr {
  * source codepoint and style. width is 1 for normal cells, 2 for a wide glyph
  * head, and 0 for the wide glyph spill cell. Exposed so the renderer packs from
  * the bulk per-line accessor without copying. */
-struct [[clang::annotate("expose")]] yetty_yvterm_text_cell {
+struct YETTY_ANNOTATE("expose") yetty_yvterm_text_cell {
     uint32_t glyph_index;
     uint32_t codepoint;
     uint32_t fg;
@@ -135,7 +135,7 @@ typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int clic
  *     lines[(base + N) % visible_rows]
  *
  * Whole-screen scroll advances base and reuses rolled-off line slots. */
-struct [[clang::annotate("class@yvterm:grid")]] yetty_yvterm_grid {
+struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
     struct yetty_yvterm_line *lines;
     uint32_t line_count;
     uint32_t visible_rows;
@@ -1298,7 +1298,7 @@ static struct yetty_ycore_void_result grid_model_resize(struct yetty_yvterm_grid
  * Lifecycle — create/destroy the grid object (a plain yclass class).
  *=========================================================================*/
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object_ptr_result yetty_yvterm_grid_make(uint32_t cols, uint32_t rows)
 {
     if (cols == 0 || rows == 0) {
@@ -1329,7 +1329,7 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_grid_make(uint32_t cols, uint
     return YETTY_OK(yetty_yclass_object_ptr, obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_grid_dispose(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
@@ -1338,7 +1338,7 @@ struct yetty_ycore_void_result yetty_yvterm_grid_dispose(struct yetty_yclass_obj
     return yetty_yclass_object_free(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_yvterm_grid_set_pty_write(struct yetty_yclass_object *obj,
                                      yetty_yvterm_grid_pty_write_fn fn, void *userdata)
 {
@@ -1351,7 +1351,7 @@ void yetty_yvterm_grid_set_pty_write(struct yetty_yclass_object *obj,
     grid_res.value->pty_write_userdata = userdata;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_yvterm_grid_set_clear_hook(struct yetty_yclass_object *obj,
                                       yetty_yvterm_grid_clear_hook_fn fn, void *userdata)
 {
@@ -1364,7 +1364,7 @@ void yetty_yvterm_grid_set_clear_hook(struct yetty_yclass_object *obj,
     grid_res.value->clear_hook_userdata = userdata;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_yvterm_grid_set_card_sub(struct yetty_yclass_object *obj,
                                     yetty_yvterm_grid_card_sub_fn fn, void *userdata)
 {
@@ -1384,7 +1384,7 @@ void yetty_yvterm_grid_set_card_sub(struct yetty_yclass_object *obj,
 /* Defined below; declared here so grid_feed can drain libvterm's replies. */
 static struct yetty_ycore_void_result grid_flush_output(struct yetty_yvterm_grid *grid);
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_grid_feed(struct yetty_yclass_object *obj,
                                                       const char *bytes, size_t len)
 {
@@ -1402,7 +1402,7 @@ struct yetty_ycore_void_result yetty_yvterm_grid_feed(struct yetty_yclass_object
     return grid_flush_output(grid_res.value);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_grid_resize(struct yetty_yclass_object *obj,
                                                         uint32_t cols, uint32_t rows)
 {
@@ -1414,7 +1414,7 @@ struct yetty_ycore_void_result yetty_yvterm_grid_resize(struct yetty_yclass_obje
     return grid_model_resize(grid_res.value, cols, rows);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_yvterm_grid_is_dirty(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
@@ -1425,7 +1425,7 @@ int yetty_yvterm_grid_is_dirty(struct yetty_yclass_object *obj)
     return grid_res.value->has_dirty;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_yvterm_grid_cursor(struct yetty_yclass_object *obj, uint32_t *out_row, uint32_t *out_col,
                               uint32_t *out_visible)
 {
@@ -1450,7 +1450,7 @@ void yetty_yvterm_grid_cursor(struct yetty_yclass_object *obj, uint32_t *out_row
 /* Absolute row at the top of the screen (rows scrolled off so far). The cursor's
  * absolute output row is this + the visible cursor row — used to place anchored
  * rich content on the rolling-row scroll. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 uint32_t yetty_yvterm_grid_scroll_origin(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
@@ -1465,7 +1465,7 @@ uint32_t yetty_yvterm_grid_scroll_origin(struct yetty_yclass_object *obj)
  * Rich-content insertion.
  *=========================================================================*/
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_yvterm_grid_append_primitive(struct yetty_yclass_object *obj,
                                                                     uint32_t row,
                                                                     const uint32_t *words,
@@ -1501,7 +1501,7 @@ struct yetty_ycore_uint32_result yetty_yvterm_grid_append_primitive(struct yetty
     return YETTY_OK(yetty_ycore_uint32, index);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_yvterm_grid_attach_composite(
     struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_composite *composite)
 {
@@ -1538,7 +1538,7 @@ struct yetty_ycore_uint32_result yetty_yvterm_grid_attach_composite(
  * line via attach_composite / append_primitive during ingestion; those rows are
  * never recycled during their own reserve (the scroll blanks the rows below the
  * block), so the top line still holds the content here. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_grid_relocate_rich_to_bottom(
     struct yetty_yclass_object *obj, uint32_t span_rows)
 {
@@ -1565,7 +1565,7 @@ struct yetty_ycore_void_result yetty_yvterm_grid_relocate_rich_to_bottom(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_grid_clear_rich_line(struct yetty_yclass_object *obj,
                                                                  uint32_t row)
 {
@@ -1580,7 +1580,7 @@ struct yetty_ycore_void_result yetty_yvterm_grid_clear_rich_line(struct yetty_yc
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_grid_clear_rich_all(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
@@ -1675,7 +1675,7 @@ static struct yetty_ycore_void_result grid_wire_default(void *userdata,
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_grid_register_wire(
     struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *sm)
 {
@@ -1687,7 +1687,7 @@ struct yetty_ycore_void_result yetty_yvterm_grid_register_wire(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_yvterm_grid_on_char(struct yetty_yclass_object *obj, uint32_t codepoint, int mods)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
@@ -1707,7 +1707,7 @@ int yetty_yvterm_grid_on_char(struct yetty_yclass_object *obj, uint32_t codepoin
     return 1;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_yvterm_grid_on_key(struct yetty_yclass_object *obj, int key, int mods)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
@@ -1771,7 +1771,7 @@ int yetty_yvterm_grid_on_key(struct yetty_yclass_object *obj, int key, int mods)
     return 1;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_grid_set_selection(struct yetty_yclass_object *obj,
                                                                int active, uint32_t anchor_row,
                                                                uint32_t anchor_col,
@@ -1788,7 +1788,7 @@ struct yetty_ycore_void_result yetty_yvterm_grid_set_selection(struct yetty_ycla
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_grid_get_selection_text(struct yetty_yclass_object *obj,
                                                                     struct yetty_ycore_buffer *out)
 {
@@ -1853,7 +1853,7 @@ static int grid_is_word_char(uint32_t cp)
 /* Word boundaries around (row, col): the inclusive [start_col, end_col] run of
  * word chars covering the clicked cell. A click on a non-word cell selects just
  * that cell. Used for double-click word selection. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_yvterm_grid_word_bounds(struct yetty_yclass_object *obj, uint32_t row, uint32_t col,
                                    uint32_t *out_start_col, uint32_t *out_end_col)
 {
@@ -1888,7 +1888,7 @@ void yetty_yvterm_grid_word_bounds(struct yetty_yclass_object *obj, uint32_t row
  * hot path cheap.
  *=========================================================================*/
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_yvterm_grid_dims(struct yetty_yclass_object *obj, uint32_t *out_cols, uint32_t *out_rows,
                             uint32_t *out_base)
 {
@@ -1911,7 +1911,7 @@ void yetty_yvterm_grid_dims(struct yetty_yclass_object *obj, uint32_t *out_cols,
 }
 
 /* The cell array for visible row `row` (length = cols). NULL if out of range. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 const struct yetty_yvterm_text_cell *yetty_yvterm_grid_line_cells(struct yetty_yclass_object *obj,
                                                                   uint32_t row)
 {
@@ -1927,7 +1927,7 @@ const struct yetty_yvterm_text_cell *yetty_yvterm_grid_line_cells(struct yetty_y
     return line_at(grid, row)->text_cells;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_yvterm_grid_line_dirty(struct yetty_yclass_object *obj, uint32_t row)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
@@ -1943,7 +1943,7 @@ int yetty_yvterm_grid_line_dirty(struct yetty_yclass_object *obj, uint32_t row)
 }
 
 /* Composite array anchored on visible row `row`. Sets *out_count; may be NULL. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ydraw_composite *const *yetty_yvterm_grid_line_composites(
     struct yetty_yclass_object *obj, uint32_t row, uint32_t *out_count)
 {
@@ -1970,7 +1970,7 @@ struct yetty_ydraw_composite *const *yetty_yvterm_grid_line_composites(
  * visible-row accessor above: the text upload + shader address the ring by raw
  * slot via root_row, so the composite pass must read by the SAME slot to scroll
  * in lockstep (live AND scrolled-back). Sets *out_count; may be NULL. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ydraw_composite *const *yetty_yvterm_grid_slot_composites(
     struct yetty_yclass_object *obj, uint32_t slot, uint32_t *out_count)
 {
@@ -1996,7 +1996,7 @@ struct yetty_ydraw_composite *const *yetty_yvterm_grid_slot_composites(
 /* Number of raw drawable records (SDF / glyph / TEXT_DRAWABLE_LIST / FONT) stored
  * on RAW ring slot `slot`. The SDF render pass walks these by slot — same raw-slot
  * addressing the composite + text passes use — so figures and text scroll together. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 uint32_t yetty_yvterm_grid_slot_primitive_count(struct yetty_yclass_object *obj, uint32_t slot)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
@@ -2016,7 +2016,7 @@ uint32_t yetty_yvterm_grid_slot_primitive_count(struct yetty_yclass_object *obj,
  * figure draws top-down from where its text sits, while the block is owned (and
  * evicted) by its bottom line. 0 means the slot carries no relocated block —
  * the renderer then treats it as a single-row anchor. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 uint32_t yetty_yvterm_grid_slot_span(struct yetty_yclass_object *obj, uint32_t slot)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
@@ -2034,7 +2034,7 @@ uint32_t yetty_yvterm_grid_slot_span(struct yetty_yclass_object *obj, uint32_t s
 /* Words of primitive `index` on RAW ring slot `slot`. *out_word_count is set to the
  * record's u32 length. Returns NULL (and *out_word_count 0) if slot/index are out of
  * range. The returned span aliases the line's arena — read it, do not retain it. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 const uint32_t *yetty_yvterm_grid_slot_primitive_words(struct yetty_yclass_object *obj,
                                                        uint32_t slot, uint32_t index,
                                                        uint32_t *out_word_count)
@@ -2064,7 +2064,7 @@ const uint32_t *yetty_yvterm_grid_slot_primitive_words(struct yetty_yclass_objec
 
 /* Current selection rectangle (raw anchor/head; the renderer normalises to a
  * reading-order stream). active=0 → no selection. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_yvterm_grid_selection(struct yetty_yclass_object *obj, int *out_active,
                                  uint32_t *out_anchor_row, uint32_t *out_anchor_col,
                                  uint32_t *out_head_row, uint32_t *out_head_col)
@@ -2094,7 +2094,7 @@ void yetty_yvterm_grid_selection(struct yetty_yclass_object *obj, int *out_activ
 }
 
 /* Renderer has consumed the model; drop every dirty flag. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_yvterm_grid_clear_dirty(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
@@ -2112,7 +2112,7 @@ void yetty_yvterm_grid_clear_dirty(struct yetty_yclass_object *obj)
 /* Raw ring-slot accessors (slot in [0, line_count)) for the text upload, which
  * is slot-indexed so the shader's root_row=base gives O(1) scroll. Distinct from
  * the visible-row accessors above (which resolve the ring). */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 uint32_t yetty_yvterm_grid_slot_count(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
@@ -2123,7 +2123,7 @@ uint32_t yetty_yvterm_grid_slot_count(struct yetty_yclass_object *obj)
     return grid_res.value->line_count;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 const struct yetty_yvterm_text_cell *yetty_yvterm_grid_slot_cells(struct yetty_yclass_object *obj,
                                                                   uint32_t slot)
 {
@@ -2139,7 +2139,7 @@ const struct yetty_yvterm_text_cell *yetty_yvterm_grid_slot_cells(struct yetty_y
     return grid->lines[slot].text_cells;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_yvterm_grid_slot_dirty(struct yetty_yclass_object *obj, uint32_t slot)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);

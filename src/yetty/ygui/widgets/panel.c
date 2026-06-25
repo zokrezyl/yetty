@@ -28,14 +28,14 @@ struct yetty_ygui_panel_ptr_result yetty_ygui_panel_from(struct yetty_yclass_obj
 #include <yetty/ysdf/funcs.gen.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:panel")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-yetty_ygui_panel {
+struct YETTY_ANNOTATE("class@ygui:panel") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_panel {
     struct yetty_ycore_rgba bg;
     struct yetty_ycore_rgba border;
     float border_width;
 };
 
-[[clang::annotate("override@ygui:panel:constructor")]]
+YETTY_ANNOTATE("override@ygui:panel:constructor")
 static struct yetty_ycore_void_result panel_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -57,7 +57,7 @@ static uint32_t pack_rgba(struct yetty_ycore_rgba c)
     return (uint32_t)c.r | ((uint32_t)c.g << 8) | ((uint32_t)c.b << 16) | ((uint32_t)c.a << 24);
 }
 
-[[clang::annotate("override@ygui:panel:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:panel:widget_paint")
 static struct yetty_ycore_void_result panel_paint(struct yetty_yclass_object *yclass_obj,
                                                   struct yetty_ygui_emit_ctx *ctx)
 {
@@ -86,7 +86,7 @@ static struct yetty_ycore_void_result panel_paint(struct yetty_yclass_object *yc
                                                      pack_rgba(d->border), d->border_width, &geom);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_yclass_object *obj,
                                                        struct yetty_ycore_rgba color)
 {
@@ -100,7 +100,7 @@ struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_yclass_objec
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_yclass_object *obj,
                                                            struct yetty_ycore_rgba color,
                                                            float width_px)

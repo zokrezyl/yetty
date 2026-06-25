@@ -19,13 +19,13 @@ struct yetty_ygui_chip_ptr_result yetty_ygui_chip_from(struct yetty_yclass_objec
 #define COLOR_BG 0xFF2C261Eu
 #define COLOR_TEXT 0xFFE4E5E0u
 
-struct [[clang::annotate("class@ygui:chip")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]] yetty_ygui_chip {
+struct YETTY_ANNOTATE("class@ygui:chip") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    YETTY_ANNOTATE("uses@ygui:clickable") yetty_ygui_chip {
     char *label;
     int closable;
 };
 
-[[clang::annotate("override@ygui:chip:constructor")]]
+YETTY_ANNOTATE("override@ygui:chip:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -40,7 +40,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:chip:destructor")]]
+YETTY_ANNOTATE("override@ygui:chip:destructor")
 static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -52,7 +52,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_ob
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:chip:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:chip:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
@@ -88,7 +88,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_chip_set_label(struct yetty_yclass_object *obj,
                                                          const char *label)
 {
@@ -111,7 +111,7 @@ struct yetty_ycore_void_result yetty_ygui_chip_set_label(struct yetty_yclass_obj
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_chip_set_closable(struct yetty_yclass_object *obj, int c)
 {
     if (!obj) {

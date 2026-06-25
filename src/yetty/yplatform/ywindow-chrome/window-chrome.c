@@ -31,7 +31,7 @@
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/ytrace/ytrace.h>
 
-struct [[clang::annotate("class@yplatform:window_chrome")]] yetty_yplatform_window_chrome {
+struct YETTY_ANNOTATE("class@yplatform:window_chrome") yetty_yplatform_window_chrome {
     /* Borrowed render→main marshalling bus — owned by the caller, set via
      * configure(). The producer slots write typed events here. */
     struct yetty_ycore_xthread_event_pipe *output_pipe;
@@ -82,8 +82,8 @@ static void post_event(struct yetty_yplatform_window_chrome *chrome,
  * window + response pipe separately (e.g. glfw_window_chrome_attach), so each
  * class writes only its own data slice. output_pipe is borrowed. */
 /* clang-format off */
-[[clang::annotate("virtual@yplatform:window_chrome:window_chrome_configure")]]
-[[clang::annotate("local@yplatform:window_chrome_configure")]]
+YETTY_ANNOTATE("virtual@yplatform:window_chrome:window_chrome_configure")
+YETTY_ANNOTATE("local@yplatform:window_chrome_configure")
 /* clang-format on */
 static struct yetty_ycore_void_result window_chrome_configure(
     struct yetty_yclass_object *obj, struct yetty_ycore_xthread_event_pipe *output_pipe)
@@ -99,8 +99,8 @@ static struct yetty_ycore_void_result window_chrome_configure(
 }
 
 /* clang-format off */
-[[clang::annotate("virtual@yplatform:window_chrome:window_chrome_destroy")]]
-[[clang::annotate("local@yplatform:window_chrome_destroy")]]
+YETTY_ANNOTATE("virtual@yplatform:window_chrome:window_chrome_destroy")
+YETTY_ANNOTATE("local@yplatform:window_chrome_destroy")
 /* clang-format on */
 static struct yetty_ycore_void_result window_chrome_destroy(struct yetty_yclass_object *obj)
 {
@@ -112,8 +112,8 @@ static struct yetty_ycore_void_result window_chrome_destroy(struct yetty_yclass_
  *===========================================================================*/
 
 /* clang-format off */
-[[clang::annotate("virtual@yplatform:window_chrome:window_chrome_iconify")]]
-[[clang::annotate("local@yplatform:window_chrome_iconify")]]
+YETTY_ANNOTATE("virtual@yplatform:window_chrome:window_chrome_iconify")
+YETTY_ANNOTATE("local@yplatform:window_chrome_iconify")
 /* clang-format on */
 static struct yetty_ycore_void_result window_chrome_iconify(struct yetty_yclass_object *obj)
 {
@@ -125,8 +125,8 @@ static struct yetty_ycore_void_result window_chrome_iconify(struct yetty_yclass_
 }
 
 /* clang-format off */
-[[clang::annotate("virtual@yplatform:window_chrome:window_chrome_toggle_maximize")]]
-[[clang::annotate("local@yplatform:window_chrome_toggle_maximize")]]
+YETTY_ANNOTATE("virtual@yplatform:window_chrome:window_chrome_toggle_maximize")
+YETTY_ANNOTATE("local@yplatform:window_chrome_toggle_maximize")
 /* clang-format on */
 static struct yetty_ycore_void_result window_chrome_toggle_maximize(struct yetty_yclass_object *obj)
 {
@@ -138,8 +138,8 @@ static struct yetty_ycore_void_result window_chrome_toggle_maximize(struct yetty
 }
 
 /* clang-format off */
-[[clang::annotate("virtual@yplatform:window_chrome:window_chrome_request_close")]]
-[[clang::annotate("local@yplatform:window_chrome_request_close")]]
+YETTY_ANNOTATE("virtual@yplatform:window_chrome:window_chrome_request_close")
+YETTY_ANNOTATE("local@yplatform:window_chrome_request_close")
 /* clang-format on */
 static struct yetty_ycore_void_result window_chrome_request_close(struct yetty_yclass_object *obj)
 {
@@ -151,8 +151,8 @@ static struct yetty_ycore_void_result window_chrome_request_close(struct yetty_y
 }
 
 /* clang-format off */
-[[clang::annotate("virtual@yplatform:window_chrome:window_chrome_drag_by")]]
-[[clang::annotate("local@yplatform:window_chrome_drag_by")]]
+YETTY_ANNOTATE("virtual@yplatform:window_chrome:window_chrome_drag_by")
+YETTY_ANNOTATE("local@yplatform:window_chrome_drag_by")
 /* clang-format on */
 static struct yetty_ycore_void_result window_chrome_drag_by(struct yetty_yclass_object *obj, int dx,
                                                             int dy)
@@ -169,11 +169,10 @@ static struct yetty_ycore_void_result window_chrome_drag_by(struct yetty_yclass_
 }
 
 /* clang-format off */
-[[clang::annotate("virtual@yplatform:window_chrome:window_chrome_resize_by")]] [[clang::annotate(
-    "local@yplatform:window_chrome_resize_by")]]
-/* clang-format on */
-static struct yetty_ycore_void_result window_chrome_resize_by(struct yetty_yclass_object *obj,
-                                                              int dx, int dy, int edge)
+YETTY_ANNOTATE("virtual@yplatform:window_chrome:window_chrome_resize_by") YETTY_ANNOTATE("local@yplatform:window_chrome_resize_by")
+    /* clang-format on */
+    static struct yetty_ycore_void_result
+    window_chrome_resize_by(struct yetty_yclass_object *obj, int dx, int dy, int edge)
 {
     if (dx == 0 && dy == 0) {
         return YETTY_OK_VOID();
@@ -187,8 +186,8 @@ static struct yetty_ycore_void_result window_chrome_resize_by(struct yetty_yclas
 }
 
 /* clang-format off */
-[[clang::annotate("virtual@yplatform:window_chrome:window_chrome_begin_interactive_move")]]
-[[clang::annotate("local@yplatform:window_chrome_begin_interactive_move")]]
+YETTY_ANNOTATE("virtual@yplatform:window_chrome:window_chrome_begin_interactive_move")
+YETTY_ANNOTATE("local@yplatform:window_chrome_begin_interactive_move")
 /* clang-format on */
 static struct yetty_ycore_void_result window_chrome_begin_interactive_move(
     struct yetty_yclass_object *obj)
@@ -201,8 +200,8 @@ static struct yetty_ycore_void_result window_chrome_begin_interactive_move(
 }
 
 /* clang-format off */
-[[clang::annotate("virtual@yplatform:window_chrome:window_chrome_begin_interactive_resize")]]
-[[clang::annotate("local@yplatform:window_chrome_begin_interactive_resize")]]
+YETTY_ANNOTATE("virtual@yplatform:window_chrome:window_chrome_begin_interactive_resize")
+YETTY_ANNOTATE("local@yplatform:window_chrome_begin_interactive_resize")
 /* clang-format on */
 static struct yetty_ycore_void_result window_chrome_begin_interactive_resize(
     struct yetty_yclass_object *obj, int edge)
@@ -216,8 +215,8 @@ static struct yetty_ycore_void_result window_chrome_begin_interactive_resize(
 }
 
 /* clang-format off */
-[[clang::annotate("virtual@yplatform:window_chrome:window_chrome_set_cursor")]]
-[[clang::annotate("local@yplatform:window_chrome_set_cursor")]]
+YETTY_ANNOTATE("virtual@yplatform:window_chrome:window_chrome_set_cursor")
+YETTY_ANNOTATE("local@yplatform:window_chrome_set_cursor")
 /* clang-format on */
 static struct yetty_ycore_void_result window_chrome_set_cursor(struct yetty_yclass_object *obj,
                                                                int shape)
@@ -235,8 +234,8 @@ static struct yetty_ycore_void_result window_chrome_set_cursor(struct yetty_ycla
  *===========================================================================*/
 
 /* clang-format off */
-[[clang::annotate("virtual@yplatform:window_chrome:window_chrome_handle_event")]]
-[[clang::annotate("local@yplatform:window_chrome_handle_event")]]
+YETTY_ANNOTATE("virtual@yplatform:window_chrome:window_chrome_handle_event")
+YETTY_ANNOTATE("local@yplatform:window_chrome_handle_event")
 /* clang-format on */
 static struct yetty_ycore_void_result window_chrome_handle_event(
     struct yetty_yclass_object *obj, const struct yetty_yui_event *event)

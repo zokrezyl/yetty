@@ -33,8 +33,8 @@ struct yetty_ygui_scrollarea_ptr_result yetty_ygui_scrollarea_from(struct yetty_
 #define SCROLLBAR_W 6.0f
 #define SCROLLBAR_MIN_THUMB 24.0f
 
-struct [[clang::annotate("class@ygui:scrollarea")]] [[clang::annotate(
-    "parent@ygui:vbox")]] [[clang::annotate("uses@ygui:draggable")]] yetty_ygui_scrollarea {
+struct YETTY_ANNOTATE("class@ygui:scrollarea") YETTY_ANNOTATE("parent@ygui:vbox")
+    YETTY_ANNOTATE("uses@ygui:draggable") yetty_ygui_scrollarea {
     float offset;       /* scroll position in px (0 = top) */
     float max_offset;   /* content_h - viewport_h, clamped >= 0 (cached) */
     float thumb_travel; /* track_h - thumb_h, clamped >= 0 (cached) */
@@ -92,7 +92,7 @@ static struct yetty_ycore_void_result scrollarea_on_drag(struct yetty_yclass_obj
 /* Wheel / trackpad scroll. dy>0 (wheel up) moves toward the top. Consumed
  * only when there's room to scroll, so it bubbles to an enclosing
  * scrollable when this one is empty/short. */
-[[clang::annotate("override@ygui:scrollarea:widget_on_scroll")]]
+YETTY_ANNOTATE("override@ygui:scrollarea:widget_on_scroll")
 static struct yetty_ycore_int_result on_scroll(struct yetty_yclass_object *yclass_obj, float x,
                                                float y, float dx, float dy)
 {
@@ -113,7 +113,7 @@ static struct yetty_ycore_int_result on_scroll(struct yetty_yclass_object *yclas
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:scrollarea:constructor")]]
+YETTY_ANNOTATE("override@ygui:scrollarea:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -137,7 +137,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     return yetty_ygui_draggable_on_drag_set(obj, scrollarea_on_drag, NULL);
 }
 
-[[clang::annotate("override@ygui:scrollarea:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:scrollarea:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {

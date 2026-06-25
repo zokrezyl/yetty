@@ -23,15 +23,15 @@ struct yetty_ygui_progress_ptr_result yetty_ygui_progress_from(struct yetty_ycla
 #define COLOR_TRACK 0xFF2C261Eu
 #define COLOR_FILL 0xFF92A86Bu
 
-struct [[clang::annotate("class@ygui:progress")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] yetty_ygui_progress {
+struct YETTY_ANNOTATE("class@ygui:progress") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_progress {
     float value;
     /* Fill colour (0xAABBGGRR). 0 = use the default brand fill. Lets a
      * caller (ytop's per-core bars) tint each bar differently. */
     uint32_t accent;
 };
 
-[[clang::annotate("override@ygui:progress:constructor")]]
+YETTY_ANNOTATE("override@ygui:progress:constructor")
 static struct yetty_ycore_void_result progress_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -74,7 +74,7 @@ static struct yetty_ycore_void_result paint_rounded(struct yetty_ygui_emit_ctx *
                                                              0u, 0.0f, &geom);
 }
 
-[[clang::annotate("override@ygui:progress:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:progress:widget_paint")
 static struct yetty_ycore_void_result progress_paint(struct yetty_yclass_object *yclass_obj,
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
@@ -104,7 +104,7 @@ static struct yetty_ycore_void_result progress_paint(struct yetty_yclass_object 
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_yclass_object *obj,
                                                              float value)
 {
@@ -124,7 +124,7 @@ struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_yclass
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_float_result yetty_ygui_progress_get_value(const struct yetty_yclass_object *obj)
 {
     if (!obj) {
@@ -137,7 +137,7 @@ struct yetty_ycore_float_result yetty_ygui_progress_get_value(const struct yetty
     return YETTY_OK(yetty_ycore_float, d->value);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_progress_set_accent(struct yetty_yclass_object *obj,
                                                               uint32_t color)
 {

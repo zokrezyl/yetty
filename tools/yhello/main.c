@@ -3306,7 +3306,7 @@ static void standalone_stop(struct app *app)
  * YETTY_YHELLO_HAS_STANDALONE via YCLASS_DEFINES; main.gen.c is #included at the
  * foot, inside the same guard, so reduced builds never compile it.
  */
-struct [[clang::annotate("class@yhello:app")]] [[clang::annotate("parent@yapp:app")]] yetty_yhello_app {
+struct YETTY_ANNOTATE("class@yhello:app") YETTY_ANNOTATE("parent@yapp:app") yetty_yhello_app {
     struct app app;
 };
 
@@ -3325,7 +3325,7 @@ struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_
                                                             struct yetty_yclass_object *app,
                                                             int argc, char **argv);
 
-[[clang::annotate("override@yapp:app:init")]]
+YETTY_ANNOTATE("override@yapp:app:init")
 static struct yetty_ycore_void_result yhello_app_init(struct yetty_yclass_object *obj,
                                                       struct yetty_yclass_object *platform)
 {
@@ -3334,7 +3334,7 @@ static struct yetty_ycore_void_result yhello_app_init(struct yetty_yclass_object
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yapp:app:run")]]
+YETTY_ANNOTATE("override@yapp:app:run")
 static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_object *obj,
                                                         struct yetty_yclass_object *platform)
 {

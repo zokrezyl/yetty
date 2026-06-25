@@ -34,9 +34,8 @@ struct yetty_ygui_checkbox_ptr_result yetty_ygui_checkbox_from(struct yetty_ycla
 #define COLOR_TEXT 0xFFE4E5E0u
 #define COLOR_CHECK 0xFF14100Bu /* BRAND_BG — dark check on bright accent */
 
-struct [[clang::annotate("class@ygui:checkbox")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]]
-yetty_ygui_checkbox {
+struct YETTY_ANNOTATE("class@ygui:checkbox") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    YETTY_ANNOTATE("uses@ygui:clickable") yetty_ygui_checkbox {
     char *label;
     int checked;
 };
@@ -61,7 +60,7 @@ static struct yetty_ycore_void_result on_click_toggle(struct yetty_yclass_object
     return yetty_ygui_widget_emit(obj, &ev);
 }
 
-[[clang::annotate("override@ygui:checkbox:constructor")]]
+YETTY_ANNOTATE("override@ygui:checkbox:constructor")
 static struct yetty_ycore_void_result checkbox_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -77,7 +76,7 @@ static struct yetty_ycore_void_result checkbox_constructor(struct yetty_yclass_o
     return yetty_ygui_clickable_on_click_set(obj, on_click_toggle, NULL);
 }
 
-[[clang::annotate("override@ygui:checkbox:destructor")]]
+YETTY_ANNOTATE("override@ygui:checkbox:destructor")
 static struct yetty_ycore_void_result checkbox_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -117,7 +116,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
                                                              0u, 0.0f, &geom);
 }
 
-[[clang::annotate("override@ygui:checkbox:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:checkbox:widget_paint")
 static struct yetty_ycore_void_result checkbox_paint(struct yetty_yclass_object *yclass_obj,
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
@@ -159,7 +158,7 @@ static struct yetty_ycore_void_result checkbox_paint(struct yetty_yclass_object 
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_checkbox_set_label(struct yetty_yclass_object *obj,
                                                              const char *label)
 {
@@ -183,7 +182,7 @@ struct yetty_ycore_void_result yetty_ygui_checkbox_set_label(struct yetty_yclass
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_checkbox_set_checked(struct yetty_yclass_object *obj,
                                                                int checked)
 {
@@ -197,7 +196,7 @@ struct yetty_ycore_void_result yetty_ygui_checkbox_set_checked(struct yetty_ycla
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_int_result yetty_ygui_checkbox_get_checked(const struct yetty_yclass_object *obj)
 {
     if (!obj) {

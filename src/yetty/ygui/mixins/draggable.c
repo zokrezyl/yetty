@@ -27,7 +27,7 @@
 typedef struct yetty_ycore_void_result (*yetty_ygui_drag_cb)(struct yetty_yclass_object *obj,
                                                              float dx, float dy, void *userdata);
 
-struct [[clang::annotate("mixin@ygui:draggable")]] yetty_ygui_draggable {
+struct YETTY_ANNOTATE("mixin@ygui:draggable") yetty_ygui_draggable {
     int dragging;
     float last_x, last_y;
     yetty_ygui_drag_cb on_drag;
@@ -45,7 +45,7 @@ YETTY_YRESULT_DECLARE(yetty_ygui_draggable_ptr, struct yetty_ygui_draggable *);
 struct yetty_yclass_ptr_result yetty_ygui_draggable_mixin_get(void);
 struct yetty_ygui_draggable_ptr_result yetty_ygui_draggable_from(struct yetty_yclass_object *obj);
 
-[[clang::annotate("override@ygui:draggable:widget_on_press")]]
+YETTY_ANNOTATE("override@ygui:draggable:widget_on_press")
 static struct yetty_ycore_int_result draggable_on_press(struct yetty_yclass_object *yclass_obj,
                                                         float x, float y, int button)
 {
@@ -66,7 +66,7 @@ static struct yetty_ycore_int_result draggable_on_press(struct yetty_yclass_obje
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:draggable:widget_on_motion")]]
+YETTY_ANNOTATE("override@ygui:draggable:widget_on_motion")
 static struct yetty_ycore_int_result draggable_on_motion(struct yetty_yclass_object *yclass_obj,
                                                          float x, float y)
 {
@@ -93,7 +93,7 @@ static struct yetty_ycore_int_result draggable_on_motion(struct yetty_yclass_obj
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:draggable:widget_on_release")]]
+YETTY_ANNOTATE("override@ygui:draggable:widget_on_release")
 static struct yetty_ycore_int_result draggable_on_release(struct yetty_yclass_object *yclass_obj,
                                                           float x, float y, int button)
 {
@@ -112,7 +112,7 @@ static struct yetty_ycore_int_result draggable_on_release(struct yetty_yclass_ob
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_draggable_on_drag_set(struct yetty_yclass_object *obj,
                                                                 yetty_ygui_drag_cb cb,
                                                                 void *userdata)
@@ -128,7 +128,7 @@ struct yetty_ycore_void_result yetty_ygui_draggable_on_drag_set(struct yetty_ycl
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_int_result yetty_ygui_draggable_is_dragging(
     const struct yetty_yclass_object *obj)
 {

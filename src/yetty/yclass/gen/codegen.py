@@ -268,12 +268,22 @@ def _annotate_value(attr_node: dict, file_bytes_cache: dict, current_file: str):
     a node carries a `loc.file` indicator) tells us which file to
     slice. `file_bytes_cache` memoises the read of each header. """
     rng = attr_node.get("range", {})
-    beg = rng.get("begin", {}); end = rng.get("end", {})
-    if "offset" not in beg or "offset" not in end:
+    beg = rng.get("begin", {})
+    # The payload string is the text written at the USE site. yclass annotations
+    # are spelled YETTY_ANNOTATE("...") (a function-like macro whose body is just
+    # `annotate(annotation)` — the value is the call-site argument), so read the
+    # EXPANSION location, which points at the macro invocation in the .c source.
+    # A raw [[clang::annotate("...")]] has no expansion and carries a flat offset;
+    # fall back to the spelling for anything odd. The expansion range spans only
+    # the macro-name token, so slice a generous window from its start and take
+    # the first annotate("...") — each AnnotateAttr points at its own invocation,
+    # so the first match is this annotation's payload.
+    loc = beg.get("expansionLoc") or beg
+    if "offset" not in loc:
+        loc = beg.get("spellingLoc", {})
+    if "offset" not in loc:
         return None
-    # The range itself may also carry a `file` override (the attribute
-    # could live in a header included only inside one specific decl).
-    attr_file = beg.get("file") or current_file
+    attr_file = loc.get("file") or current_file
     if not attr_file:
         return None
     blob = file_bytes_cache.get(attr_file)
@@ -283,10 +293,9 @@ def _annotate_value(attr_node: dict, file_bytes_cache: dict, current_file: str):
         except OSError:
             return None
         file_bytes_cache[attr_file] = blob
-    start = beg["offset"]
-    stop = end["offset"] + end.get("tokLen", 1)
-    text = blob[start:stop].decode("utf-8", errors="replace")
-    m = re.search(r'annotate\s*\(\s*"([^"]*)"', text)
+    start = loc["offset"]
+    text = blob[start:start + 256].decode("utf-8", errors="replace")
+    m = re.search(r'annotate\s*\(\s*"([^"]*)"', text, re.IGNORECASE)
     return m.group(1) if m else None
 
 
@@ -691,21 +700,31 @@ def _doc_above(begin_offset, comments: list, blob: bytes):
     mistaken for a declaration's documentation."""
     if begin_offset is None:
         return None
+    # A `/* clang-format off|on */` directive is tooling, never documentation —
+    # they commonly wrap the YETTY_ANNOTATE block above a decl. Skip them as
+    # candidates and treat them as transparent in the gap below.
+    directive = re.compile(r"^\s*/\*\s*clang-format\s+(?:on|off)\s*\*/\s*$")
     candidate = None
     for span in comments:
         if span[1] <= begin_offset:
+            if directive.match(span[2]):
+                continue
             candidate = span
         else:
             break
     if candidate is None:
         return None
     gap = blob[candidate[1]:begin_offset].decode("utf-8", "replace")
-    # Only whitespace + attribute blocks may separate doc from decl.
-    if re.sub(r"\[\[.*?\]\]", "", gap, flags=re.S).strip() != "":
+    # Only whitespace, attribute blocks, and clang-format directives may separate
+    # doc from decl. Attributes are written either raw ([[...]]) or via the
+    # YETTY_ANNOTATE("...") macro.
+    attr = (r"\[\[.*?\]\]|YETTY_ANNOTATE\s*\([^)]*\)"
+            r"|/\*\s*clang-format\s+(?:on|off)\s*\*/")
+    if re.sub(attr, "", gap, flags=re.S).strip() != "":
         return None
     # Reject when a blank line intervenes — replace attributes with a marker
     # first so an attribute on its own line isn't read as a blank line.
-    if re.search(r"\n[ \t]*\n", re.sub(r"\[\[.*?\]\]", "X", gap, flags=re.S)):
+    if re.search(r"\n[ \t]*\n", re.sub(attr, "X", gap, flags=re.S)):
         return None
     return candidate[2].rstrip("\n")
 
@@ -800,7 +819,14 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
         if comments is None:
             comments = _harvest_comments(blob)
             comments_by_file[decl_file] = comments
-        begin = decl.get("range", {}).get("begin", {}).get("offset")
+        # When the decl is prefixed by a YETTY_ANNOTATE("...") macro, its
+        # range.begin is the macro location split into spelling/expansion rather
+        # than a flat offset. The expansion is the macro use-site in this .c, the
+        # offset the doc-gap scan needs; fall back to spelling, then flat.
+        begin_node = decl.get("range", {}).get("begin", {})
+        begin = (begin_node.get("offset")
+                 or begin_node.get("expansionLoc", {}).get("offset")
+                 or begin_node.get("spellingLoc", {}).get("offset"))
         return _doc_above(begin, comments, blob)
 
     for path in sources:

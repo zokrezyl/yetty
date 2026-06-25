@@ -22,15 +22,15 @@ struct yetty_ygui_stepper_ptr_result yetty_ygui_stepper_from(struct yetty_yclass
 #define COLOR_TEXT 0xFFE4E5E0u
 #define COLOR_NUM 0xFF14100Bu
 
-struct [[clang::annotate("class@ygui:stepper")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-yetty_ygui_stepper {
+struct YETTY_ANNOTATE("class@ygui:stepper") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_stepper {
     char **labels;
     int n;
     int cap;
     int current;
 };
 
-[[clang::annotate("override@ygui:stepper:constructor")]]
+YETTY_ANNOTATE("override@ygui:stepper:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -48,7 +48,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:stepper:destructor")]]
+YETTY_ANNOTATE("override@ygui:stepper:destructor")
 static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -63,7 +63,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_ob
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:stepper:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:stepper:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
@@ -135,7 +135,7 @@ static int grow(struct yetty_ygui_stepper *d, int n)
     return 1;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_yclass_object *obj,
                                                            const char *label)
 {
@@ -162,7 +162,7 @@ struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_yclass_o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_stepper_set_current(struct yetty_yclass_object *obj,
                                                               int i)
 {

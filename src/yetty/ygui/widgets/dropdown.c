@@ -34,9 +34,8 @@ struct yetty_ygui_dropdown_ptr_result yetty_ygui_dropdown_from(struct yetty_ycla
 #define COLOR_TEXT 0xFFE4E5E0u
 #define COLOR_CHEVRON 0xFFA8A79Fu
 
-struct [[clang::annotate("class@ygui:dropdown")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]]
-yetty_ygui_dropdown {
+struct YETTY_ANNOTATE("class@ygui:dropdown") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    YETTY_ANNOTATE("uses@ygui:clickable") yetty_ygui_dropdown {
     char **options;
     int n_options;
     int cap;
@@ -83,7 +82,7 @@ static struct yetty_ycore_void_result on_click_open(struct yetty_yclass_object *
     return yetty_ygui_popup_menu_toggle_at(d->menu, r.min.x, r.max.y + 2.0f);
 }
 
-[[clang::annotate("override@ygui:dropdown:constructor")]]
+YETTY_ANNOTATE("override@ygui:dropdown:constructor")
 static struct yetty_ycore_void_result dropdown_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -102,7 +101,7 @@ static struct yetty_ycore_void_result dropdown_constructor(struct yetty_yclass_o
     return yetty_ygui_clickable_on_click_set(obj, on_click_open, NULL);
 }
 
-[[clang::annotate("override@ygui:dropdown:destructor")]]
+YETTY_ANNOTATE("override@ygui:dropdown:destructor")
 static struct yetty_ycore_void_result dropdown_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -150,7 +149,7 @@ static struct yetty_ycore_void_result paint_box(struct yetty_ygui_emit_ctx *ctx,
                                                              0u, 0.0f, &geom);
 }
 
-[[clang::annotate("override@ygui:dropdown:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:dropdown:widget_paint")
 static struct yetty_ycore_void_result dropdown_paint(struct yetty_yclass_object *yclass_obj,
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
@@ -207,7 +206,7 @@ static int options_grow(struct yetty_ygui_dropdown *d, int need)
     return 1;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_dropdown_add_option(struct yetty_yclass_object *obj,
                                                               const char *label)
 {
@@ -239,7 +238,7 @@ struct yetty_ycore_void_result yetty_ygui_dropdown_add_option(struct yetty_yclas
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_dropdown_set_selected(struct yetty_yclass_object *obj,
                                                                 int index)
 {
@@ -256,7 +255,7 @@ struct yetty_ycore_void_result yetty_ygui_dropdown_set_selected(struct yetty_ycl
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_int_result yetty_ygui_dropdown_get_selected(
     const struct yetty_yclass_object *obj)
 {
@@ -270,7 +269,7 @@ struct yetty_ycore_int_result yetty_ygui_dropdown_get_selected(
     return YETTY_OK(yetty_ycore_int, d->selected);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_dropdown_set_menu(struct yetty_yclass_object *obj,
                                                             struct yetty_yclass_object *menu)
 {

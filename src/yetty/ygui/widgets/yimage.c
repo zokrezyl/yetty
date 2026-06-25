@@ -33,13 +33,12 @@ struct yetty_ygui_yimage_ptr_result yetty_ygui_yimage_from(struct yetty_yclass_o
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:yimage")]] [[clang::annotate("parent@ygui:widget")]]
-yetty_ygui_yimage {
+struct YETTY_ANNOTATE("class@ygui:yimage") YETTY_ANNOTATE("parent@ygui:widget") yetty_ygui_yimage {
     uint8_t *bytes;
     size_t len;
 };
 
-[[clang::annotate("override@ygui:yimage:constructor")]]
+YETTY_ANNOTATE("override@ygui:yimage:constructor")
 static struct yetty_ycore_void_result yimage_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -54,7 +53,7 @@ static struct yetty_ycore_void_result yimage_constructor(struct yetty_yclass_obj
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:yimage:destructor")]]
+YETTY_ANNOTATE("override@ygui:yimage:destructor")
 static struct yetty_ycore_void_result yimage_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -72,7 +71,7 @@ static struct yetty_ycore_void_result yimage_destructor(struct yetty_yclass_obje
  * emits the helper switches to SET_CHILD_RECT so the binder cache
  * stays warm. The kind is hardcoded here — the framework class
  * system doesn't know about figure kinds. */
-[[clang::annotate("override@ygui:yimage:widget_emit_container")]]
+YETTY_ANNOTATE("override@ygui:yimage:widget_emit_container")
 static struct yetty_ycore_void_result yimage_emit_container(struct yetty_yclass_object *yclass_obj,
                                                             struct yetty_ygui_emit_ctx *ctx)
 {
@@ -83,7 +82,7 @@ static struct yetty_ycore_void_result yimage_emit_container(struct yetty_yclass_
                                         /*init_payload=*/NULL, /*init_payload_bytes=*/0);
 }
 
-[[clang::annotate("override@ygui:yimage:widget_emit_body")]]
+YETTY_ANNOTATE("override@ygui:yimage:widget_emit_body")
 static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_object *yclass_obj,
                                                        struct yetty_ygui_emit_ctx *ctx)
 {
@@ -173,7 +172,7 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_objec
     return er;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_yclass_object *obj,
                                                            const uint8_t *bytes, size_t len)
 {
@@ -197,7 +196,7 @@ struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_yclass_o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_const_uint8_ptr_result yetty_ygui_yimage_bytes(
     const struct yetty_yclass_object *obj)
 {
@@ -211,7 +210,7 @@ struct yetty_ycore_const_uint8_ptr_result yetty_ygui_yimage_bytes(
     return YETTY_OK(yetty_ycore_const_uint8_ptr, d->bytes);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_size_result yetty_ygui_yimage_bytes_len(const struct yetty_yclass_object *obj)
 {
     if (!obj) {

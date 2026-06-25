@@ -19,14 +19,14 @@ struct yetty_ygui_breadcrumbs_ptr_result yetty_ygui_breadcrumbs_from(
 #define COLOR_TEXT 0xFFE4E5E0u
 #define COLOR_SEP 0xFFA8A79Fu
 
-struct [[clang::annotate("class@ygui:breadcrumbs")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] yetty_ygui_breadcrumbs {
+struct YETTY_ANNOTATE("class@ygui:breadcrumbs") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_breadcrumbs {
     char **items;
     int n_items;
     int cap;
 };
 
-[[clang::annotate("override@ygui:breadcrumbs:constructor")]]
+YETTY_ANNOTATE("override@ygui:breadcrumbs:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -43,7 +43,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:breadcrumbs:destructor")]]
+YETTY_ANNOTATE("override@ygui:breadcrumbs:destructor")
 static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -58,7 +58,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_ob
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:breadcrumbs:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:breadcrumbs:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
@@ -110,7 +110,7 @@ static int grow(struct yetty_ygui_breadcrumbs *d, int n)
     return 1;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_breadcrumbs_add(struct yetty_yclass_object *obj,
                                                           const char *text)
 {
@@ -133,7 +133,7 @@ struct yetty_ycore_void_result yetty_ygui_breadcrumbs_add(struct yetty_yclass_ob
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_breadcrumbs_clear(struct yetty_yclass_object *obj)
 {
     if (!obj) {

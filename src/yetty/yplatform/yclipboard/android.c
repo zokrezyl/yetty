@@ -30,13 +30,12 @@ struct yetty_yplatform_android_clipboard_ptr_result yetty_yplatform_android_clip
     struct yetty_yclass_object *obj);
 
 /* Private subclass state: the pipe paste results are posted to (borrowed). */
-struct [[clang::annotate("class@yplatform:android_clipboard")]] [[clang::annotate(
-    "platform@android")]] [[clang::annotate("parent@yplatform:clipboard")]]
-yetty_yplatform_android_clipboard {
+struct YETTY_ANNOTATE("class@yplatform:android_clipboard") YETTY_ANNOTATE("platform@android")
+    YETTY_ANNOTATE("parent@yplatform:clipboard") yetty_yplatform_android_clipboard {
     struct yetty_ycore_xthread_event_pipe *response_pipe;
 };
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yplatform_android_clipboard_configure(
     struct yetty_yclass_object *obj, struct yetty_ycore_xthread_event_pipe *response_pipe)
 {
@@ -51,7 +50,7 @@ struct yetty_ycore_void_result yetty_yplatform_android_clipboard_configure(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:android_clipboard:clipboard_set_text")]]
+YETTY_ANNOTATE("override@yplatform:android_clipboard:clipboard_set_text")
 static struct yetty_ycore_void_result android_clipboard_set_text(struct yetty_yclass_object *obj,
                                                                  const char *text, size_t len)
 {
@@ -62,7 +61,7 @@ static struct yetty_ycore_void_result android_clipboard_set_text(struct yetty_yc
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:android_clipboard:clipboard_request_paste")]]
+YETTY_ANNOTATE("override@yplatform:android_clipboard:clipboard_request_paste")
 static struct yetty_ycore_void_result android_clipboard_request_paste(
     struct yetty_yclass_object *obj)
 {

@@ -25,15 +25,15 @@ struct yetty_ygui_yjungle_ptr_result yetty_ygui_yjungle_from(struct yetty_yclass
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yplatform/time.h>
 
-struct [[clang::annotate("class@ygui:yjungle")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
-yetty_ygui_yjungle {
+struct YETTY_ANNOTATE("class@ygui:yjungle") YETTY_ANNOTATE("parent@ygui:ydraw_embed")
+    yetty_ygui_yjungle {
     struct yetty_yjungle *jungle;
     double start_time;
     float scene_w;
     float scene_h;
 };
 
-[[clang::annotate("override@ygui:yjungle:constructor")]]
+YETTY_ANNOTATE("override@ygui:yjungle:constructor")
 static struct yetty_ycore_void_result yjungle_ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -55,7 +55,7 @@ static struct yetty_ycore_void_result yjungle_ctor(struct yetty_yclass_object *y
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:yjungle:destructor")]]
+YETTY_ANNOTATE("override@ygui:yjungle:destructor")
 static struct yetty_ycore_void_result yjungle_dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -68,7 +68,7 @@ static struct yetty_ycore_void_result yjungle_dtor(struct yetty_yclass_object *y
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:yjungle:widget_emit_body")]]
+YETTY_ANNOTATE("override@ygui:yjungle:widget_emit_body")
 static struct yetty_ycore_void_result yjungle_emit_body(struct yetty_yclass_object *yclass_obj,
                                                         struct yetty_ygui_emit_ctx *ctx)
 {

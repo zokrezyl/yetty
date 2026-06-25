@@ -28,14 +28,14 @@ struct yetty_ygui_label_ptr_result yetty_ygui_label_from(struct yetty_yclass_obj
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:label")]] [[clang::annotate("parent@ygui:primitive_widget")]]
-yetty_ygui_label {
+struct YETTY_ANNOTATE("class@ygui:label") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_label {
     char *text;
     float font_size;
     struct yetty_ycore_rgba color;
 };
 
-[[clang::annotate("override@ygui:label:constructor")]]
+YETTY_ANNOTATE("override@ygui:label:constructor")
 static struct yetty_ycore_void_result label_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -51,7 +51,7 @@ static struct yetty_ycore_void_result label_constructor(struct yetty_yclass_obje
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:label:destructor")]]
+YETTY_ANNOTATE("override@ygui:label:destructor")
 static struct yetty_ycore_void_result label_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -69,7 +69,7 @@ static uint32_t pack_rgba(struct yetty_ycore_rgba c)
     return (uint32_t)c.r | ((uint32_t)c.g << 8) | ((uint32_t)c.b << 16) | ((uint32_t)c.a << 24);
 }
 
-[[clang::annotate("override@ygui:label:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:label:widget_paint")
 static struct yetty_ycore_void_result label_paint(struct yetty_yclass_object *yclass_obj,
                                                   struct yetty_ygui_emit_ctx *ctx)
 {
@@ -102,7 +102,7 @@ static struct yetty_ycore_void_result label_paint(struct yetty_yclass_object *yc
                                               /*rotation=*/0.0f);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_label_set_text(struct yetty_yclass_object *obj,
                                                          const char *text)
 {
@@ -126,7 +126,7 @@ struct yetty_ycore_void_result yetty_ygui_label_set_text(struct yetty_yclass_obj
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_const_char_ptr_result yetty_ygui_label_get_text(
     const struct yetty_yclass_object *obj)
 {
@@ -140,7 +140,7 @@ struct yetty_ycore_const_char_ptr_result yetty_ygui_label_get_text(
     return YETTY_OK(yetty_ycore_const_char_ptr, d->text);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_label_set_font_size(struct yetty_yclass_object *obj,
                                                               float size_px)
 {
@@ -154,7 +154,7 @@ struct yetty_ycore_void_result yetty_ygui_label_set_font_size(struct yetty_yclas
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_label_set_color(struct yetty_yclass_object *obj,
                                                           struct yetty_ycore_rgba color)
 {

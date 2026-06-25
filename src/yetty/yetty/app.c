@@ -25,8 +25,7 @@
 #include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/ytrace/ytrace.h>
 
-struct [[clang::annotate("class@yetty:app")]] [[clang::annotate("parent@yapp:app")]]
-yetty_yetty_app {
+struct YETTY_ANNOTATE("class@yetty:app") YETTY_ANNOTATE("parent@yapp:app") yetty_yetty_app {
     char reserved;
 };
 
@@ -37,7 +36,7 @@ struct yetty_yclass_ptr_result yetty_yetty_app_class_get(void);
 struct yetty_yetty_app_ptr_result yetty_yetty_app_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object_ptr_result yetty_yetty_app_create(struct yetty_yclass_ctx *ctx);
 
-[[clang::annotate("override@yapp:app:init")]]
+YETTY_ANNOTATE("override@yapp:app:init")
 static struct yetty_ycore_void_result yetty_app_init(struct yetty_yclass_object *obj,
                                                      struct yetty_yclass_object *platform)
 {
@@ -46,7 +45,7 @@ static struct yetty_ycore_void_result yetty_app_init(struct yetty_yclass_object 
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yapp:app:run")]]
+YETTY_ANNOTATE("override@yapp:app:run")
 static struct yetty_ycore_void_result yetty_app_run(struct yetty_yclass_object *obj,
                                                     struct yetty_yclass_object *platform)
 {

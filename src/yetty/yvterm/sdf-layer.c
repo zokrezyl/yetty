@@ -509,8 +509,8 @@ static struct yetty_ycore_void_result sdf_install_wire_font(
  * terminal installs at slot 0 of every ygrid figure. Best-effort: a missing CDB
  * leaves slot 0 empty so only default-font text fails to render; the terminal
  * stays up. */
-static struct yetty_ycore_void_result sdf_install_default_font(
-    struct yetty_yvterm_sdf_layer *layer, const char *fonts_dir)
+static struct yetty_ycore_void_result sdf_install_default_font(struct yetty_yvterm_sdf_layer *layer,
+                                                               const char *fonts_dir)
 {
     if (!layer->font_cache || !fonts_dir || !*fonts_dir) {
         return YETTY_OK_VOID();

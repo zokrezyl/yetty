@@ -21,8 +21,8 @@ struct yetty_ygui_radio_ptr_result yetty_ygui_radio_from(struct yetty_yclass_obj
 #define COLOR_INNER_ON 0xFF92A86Bu
 #define COLOR_TEXT 0xFFE4E5E0u
 
-struct [[clang::annotate("class@ygui:radio")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] [[clang::annotate("uses@ygui:clickable")]] yetty_ygui_radio {
+struct YETTY_ANNOTATE("class@ygui:radio") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    YETTY_ANNOTATE("uses@ygui:clickable") yetty_ygui_radio {
     char *label;
     int selected;
 };
@@ -43,7 +43,7 @@ static struct yetty_ycore_void_result on_click(struct yetty_yclass_object *yclas
     return yetty_ygui_widget_emit(obj, &ev);
 }
 
-[[clang::annotate("override@ygui:radio:constructor")]]
+YETTY_ANNOTATE("override@ygui:radio:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -58,7 +58,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     return yetty_ygui_clickable_on_click_set(obj, on_click, NULL);
 }
 
-[[clang::annotate("override@ygui:radio:destructor")]]
+YETTY_ANNOTATE("override@ygui:radio:destructor")
 static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -70,7 +70,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_ob
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:radio:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:radio:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
@@ -108,7 +108,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_radio_set_label(struct yetty_yclass_object *obj,
                                                           const char *label)
 {
@@ -131,7 +131,7 @@ struct yetty_ycore_void_result yetty_ygui_radio_set_label(struct yetty_yclass_ob
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_radio_set_selected(struct yetty_yclass_object *obj, int s)
 {
     if (!obj) {
@@ -144,7 +144,7 @@ struct yetty_ycore_void_result yetty_ygui_radio_set_selected(struct yetty_yclass
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_int_result yetty_ygui_radio_is_selected(const struct yetty_yclass_object *obj)
 {
     if (!obj) {

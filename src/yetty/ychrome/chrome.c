@@ -69,7 +69,7 @@
 /* Feature flags for configure(). OR them together; FLAG_ALL enables the lot.
  * Defined here in the owning .c; codegen reproduces the enum into the generated
  * chrome.h for consumers. */
-enum [[clang::annotate("expose")]] yetty_ychrome_flag {
+enum YETTY_ANNOTATE("expose") yetty_ychrome_flag {
     YETTY_YCHROME_FLAG_DRAG = 0x1,     /* caption drag moves the window */
     YETTY_YCHROME_FLAG_RESIZE = 0x2,   /* right/bottom edges resize */
     YETTY_YCHROME_FLAG_MAXIMIZE = 0x4, /* caption double-click toggles max */
@@ -98,8 +98,8 @@ enum {
 #define YCHROME_HOVER_BG 0xFF463A30u       /* lifted strip */
 #define YCHROME_HOVER_CLOSE_BG 0xFF3B3BC8u /* #C83B3B red */
 
-struct [[clang::annotate("class@ychrome:chrome"),
-         clang::annotate("include@yetty/ydraw-core/drawable-list.h")]] yetty_ychrome_chrome {
+struct YETTY_ANNOTATE("class@ychrome:chrome")
+    YETTY_ANNOTATE("include@yetty/ydraw-core/drawable-list.h") yetty_ychrome_chrome {
     /* Borrowed yplatform:window_chrome yclass object — set by configure(). */
     struct yetty_yclass_object *window_chrome;
 
@@ -199,12 +199,10 @@ static int chrome_event_xy(const struct yetty_yui_event *event, float *out_x, fl
 
 /* Bind the engine to a window_chrome and set the caption/edge geometry. Call
  * once after create(), before feeding events. window_chrome is borrowed. */
-[[clang::annotate("virtual@ychrome:chrome:configure")]] [[clang::annotate(
-    "local@ychrome:configure")]]
-static struct yetty_ycore_void_result chrome_configure(struct yetty_yclass_object *obj,
-                                                       struct yetty_yclass_object *window_chrome,
-                                                       float caption_height, float edge_size,
-                                                       uint32_t flags)
+YETTY_ANNOTATE("virtual@ychrome:chrome:configure")
+YETTY_ANNOTATE("local@ychrome:configure") static struct yetty_ycore_void_result
+    chrome_configure(struct yetty_yclass_object *obj, struct yetty_yclass_object *window_chrome,
+                     float caption_height, float edge_size, uint32_t flags)
 {
     /* window_chrome may be NULL: the in-terminal / client case has no OS
      * window to drive. Chrome still renders its caption and tracks hover so the
@@ -222,9 +220,9 @@ static struct yetty_ycore_void_result chrome_configure(struct yetty_yclass_objec
 
 /* Update the window size so the right/bottom edge bands track it. Call on every
  * resize. */
-[[clang::annotate("virtual@ychrome:chrome:set_size")]] [[clang::annotate("local@ychrome:set_size")]]
-static struct yetty_ycore_void_result chrome_set_size(struct yetty_yclass_object *obj, float width,
-                                                      float height)
+YETTY_ANNOTATE("virtual@ychrome:chrome:set_size")
+YETTY_ANNOTATE("local@ychrome:set_size") static struct yetty_ycore_void_result
+    chrome_set_size(struct yetty_yclass_object *obj, float width, float height)
 {
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "chrome set_size: object");
@@ -234,8 +232,9 @@ static struct yetty_ycore_void_result chrome_set_size(struct yetty_yclass_object
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("virtual@ychrome:chrome:destroy")]] [[clang::annotate("local@ychrome:destroy")]]
-static struct yetty_ycore_void_result chrome_destroy(struct yetty_yclass_object *obj)
+YETTY_ANNOTATE("virtual@ychrome:chrome:destroy")
+YETTY_ANNOTATE("local@ychrome:destroy") static struct yetty_ycore_void_result
+    chrome_destroy(struct yetty_yclass_object *obj)
 {
     /* No owned resources (window_chrome is borrowed) — just free the object. */
     return yetty_yclass_object_free(obj);
@@ -260,10 +259,9 @@ static void chrome_edges_at(const struct yetty_ychrome_chrome *chrome, float x, 
     *bottom = y <= chrome->height && y > chrome->height - edge;
 }
 
-[[clang::annotate("virtual@ychrome:chrome:edge_cursor_at")]] [[clang::annotate(
-    "local@ychrome:edge_cursor_at")]]
-static struct yetty_ycore_int_result chrome_edge_cursor_at(struct yetty_yclass_object *obj, float x,
-                                                           float y)
+YETTY_ANNOTATE("virtual@ychrome:chrome:edge_cursor_at")
+YETTY_ANNOTATE("local@ychrome:edge_cursor_at") static struct yetty_ycore_int_result
+    chrome_edge_cursor_at(struct yetty_yclass_object *obj, float x, float y)
 {
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, data_r, "chrome edge_cursor_at: object");
@@ -316,8 +314,9 @@ static int chrome_button_at(const struct yetty_ychrome_chrome *chrome, float x, 
  * background spanning (width × caption_height) plus the minimize/maximize/close
  * glyphs flush right. The caller composites the list as a pinned top figure and
  * destroys it. Uses font_id=-1 (the default font), so no font dependency. */
-[[clang::annotate("virtual@ychrome:chrome:render")]] [[clang::annotate("local@ychrome:render")]]
-static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass_object *obj)
+YETTY_ANNOTATE("virtual@ychrome:chrome:render")
+YETTY_ANNOTATE("local@ychrome:render") static struct yetty_ydraw_drawable_list_result
+    chrome_render(struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, data_r, "chrome render: object");
@@ -397,10 +396,9 @@ static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass
 /* Feed one mouse event. Returns 1 if chrome claimed it (the app should stop
  * processing it), 0 if it's not a chrome gesture. Forward events here only
  * after your own controls (buttons, tabs) had their chance. */
-[[clang::annotate("virtual@ychrome:chrome:handle_event")]] [[clang::annotate(
-    "local@ychrome:handle_event")]]
-static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_object *obj,
-                                                         const struct yetty_yui_event *event)
+YETTY_ANNOTATE("virtual@ychrome:chrome:handle_event")
+YETTY_ANNOTATE("local@ychrome:handle_event") static struct yetty_ycore_int_result
+    chrome_handle_event(struct yetty_yclass_object *obj, const struct yetty_yui_event *event)
 {
     if (!event) {
         return YETTY_OK(yetty_ycore_int, 0);
@@ -616,7 +614,7 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_obj
 /* Current window-control button under the pointer (1=minimize, 2=maximize,
  * 3=close; 0=none). Hosts poll this after forwarding an event and re-paint the
  * caption when it changes, so the hover highlight tracks the pointer. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_int_result yetty_ychrome_hover_button(struct yetty_yclass_object *obj)
 {
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);

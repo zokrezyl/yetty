@@ -19,12 +19,12 @@ struct yetty_ygui_textarea_ptr_result yetty_ygui_textarea_from(struct yetty_ycla
 #define COLOR_BORDER 0xFF474A36u
 #define COLOR_TEXT 0xFFE4E5E0u
 
-struct [[clang::annotate("class@ygui:textarea")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] yetty_ygui_textarea {
+struct YETTY_ANNOTATE("class@ygui:textarea") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_textarea {
     char *text;
 };
 
-[[clang::annotate("override@ygui:textarea:constructor")]]
+YETTY_ANNOTATE("override@ygui:textarea:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -39,7 +39,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:textarea:destructor")]]
+YETTY_ANNOTATE("override@ygui:textarea:destructor")
 static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -51,7 +51,7 @@ static struct yetty_ycore_void_result dtor(struct yetty_yclass_object *yclass_ob
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("override@ygui:textarea:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:textarea:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
@@ -99,7 +99,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_textarea_set_text(struct yetty_yclass_object *obj,
                                                             const char *text)
 {
@@ -122,7 +122,7 @@ struct yetty_ycore_void_result yetty_ygui_textarea_set_text(struct yetty_yclass_
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_const_char_ptr_result yetty_ygui_textarea_get_text(
     const struct yetty_yclass_object *obj)
 {

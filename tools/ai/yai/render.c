@@ -5,6 +5,17 @@
 
 #include <yetty/yfont/shader-glyph.h>
 
+/* In-process markdown → YDRAW_BIN: yai renders the answer with the same
+ * ymarkdown library ycat uses and frames it as a YDRAW_BIN OSC envelope
+ * itself, instead of shelling out to the ycat binary. The terminal anchors
+ * the drawable-list's text records to the cursor's grid line, so the rich
+ * block scrolls with the conversation text. */
+#include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/yface/yface.h>
+#include <yetty/ymarkdown/ymarkdown.h>
+#include <yetty/ycore/types.h>
+#include <yetty/yterminal/dcs-codes.h>
+
 #include <errno.h>
 #include <fcntl.h>
 #include <poll.h>
@@ -1115,59 +1126,68 @@ static struct yetty_ycore_int_result run_render_tool(const char *kind, const cha
 static struct yetty_ycore_int_result render_markdown_buffer(struct yai_renderer *renderer,
                                                             const char *bytes, size_t len)
 {
-    /* Stage the markdown in a temp file so ycat reads a file arg — no
-     * stdin pipe, so no producer/consumer deadlock with our capture. */
-    const char *temp_dir = getenv("TMPDIR");
-    if (!temp_dir || !temp_dir[0]) {
-        temp_dir = "/tmp";
-    }
-    char template_path[1024];
-    int written = snprintf(template_path, sizeof(template_path), "%s/yetty-draw-XXXXXX", temp_dir);
-    if (written < 0 || (size_t)written >= sizeof(template_path)) {
+    /* Render the answer to a ydraw drawable list in-process — the same
+     * yetty_ymarkdown path ycat drives — and frame it as a YDRAW_BIN OSC
+     * envelope ourselves (no ycat subprocess). The terminal ingests the
+     * envelope at the cursor's grid line and reserves rows with real
+     * newlines, so the rich text scrolls with the conversation. Cell metrics
+     * mirror ycat's defaults (8x16, width = terminal columns). */
+    struct yetty_ymarkdown_render_config config = {
+        .cell_width = 8,
+        .cell_height = 16,
+        .width_cells = (uint32_t)terminal_columns(),
+        .height_cells = 0,
+    };
+    struct yetty_ymarkdown_render_result render_res =
+        yetty_ymarkdown_render(bytes, len, NULL, 0, &config);
+    if (YETTY_IS_ERR(render_res)) {
+        /* Best-effort: a render failure falls back to plain text. */
+        yetty_ycore_error_destroy(render_res.error);
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    int temp_fd = mkstemp(template_path);
-    if (temp_fd < 0) {
+    struct yetty_ydraw_drawable_list *drawables = render_res.value.buffer;
+
+    /* Serialize + frame as a YDRAW_BIN envelope (mirrors
+     * yetty_ycat_osc_bin_emit, writing through yai's non-blocking PTY
+     * writer). */
+    const uint8_t *raw_bytes = NULL;
+    size_t raw_size = yetty_ydraw_drawable_list_serialize(drawables, &raw_bytes);
+    if (raw_size == 0 || !raw_bytes) {
+        yetty_ydraw_drawable_list_destroy(drawables);
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    size_t flushed = 0;
-    int write_failed = 0;
-    while (flushed < len) {
-        ssize_t chunk = write(temp_fd, bytes + flushed, len - flushed);
-        if (chunk < 0 && errno == EINTR) {
-            continue;
-        }
-        if (chunk <= 0) {
-            write_failed = 1;
-            break;
-        }
-        flushed += (size_t)chunk;
+    struct yetty_yface_bin_meta meta = {
+        .magic = YETTY_YFACE_BIN_MAGIC,
+        .version = YETTY_YFACE_BIN_VERSION,
+        .compressed = YETTY_YFACE_COMP_LZ4F,
+        .compression_algo = 0,
+        .raw_size = raw_size,
+        .reserved = {0, 0},
+    };
+    struct yetty_ycore_buffer envelope = {0};
+    struct yetty_ycore_void_result emit_res = yetty_yface_emit(
+        YETTY_DCS_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw_bytes, raw_size, &envelope);
+    yetty_ydraw_drawable_list_destroy(drawables);
+    if (YETTY_IS_ERR(emit_res)) {
+        yetty_ycore_buffer_destroy(&envelope);
+        return YETTY_ERR(yetty_ycore_int, "render_markdown_buffer: yface_emit", emit_res);
     }
-    close(temp_fd);
-    if (write_failed) {
-        unlink(template_path);
+    if (envelope.size == 0) {
+        yetty_ycore_buffer_destroy(&envelope);
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    unsigned char *envelope = NULL;
-    size_t envelope_len = 0;
-    struct yetty_ycore_int_result run_res =
-        run_render_tool("markdown", template_path, &envelope, &envelope_len);
-    unlink(template_path);
-    YETTY_RETURN_IF_ERR(yetty_ycore_int, run_res, "render_markdown_buffer: run ycat");
-    if (!run_res.value) {
-        return YETTY_OK(yetty_ycore_int, 0);
-    }
+
     /* Label it like a normal answer, then the figure, then a newline so
      * the next write starts below the figure. */
     printf("\n" YAI_MINT YAI_BOLD "%s" YAI_RESET "\n", renderer->engine_label);
     struct yetty_ycore_void_result flush_res = yai_render_flush_stdout();
     if (YETTY_IS_ERR(flush_res)) {
-        free(envelope);
+        yetty_ycore_buffer_destroy(&envelope);
         return YETTY_ERR(yetty_ycore_int, "render_markdown_buffer: pre-flush", flush_res);
     }
     struct yetty_ycore_void_result write_res =
-        write_all_to_terminal(STDOUT_FILENO, envelope, envelope_len);
-    free(envelope);
+        write_all_to_terminal(STDOUT_FILENO, envelope.data, envelope.size);
+    yetty_ycore_buffer_destroy(&envelope);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, write_res, "render_markdown_buffer: envelope write");
     if (fputc('\n', stdout) == EOF) {
         return YETTY_ERR(yetty_ycore_int, "render_markdown_buffer: trailing newline");

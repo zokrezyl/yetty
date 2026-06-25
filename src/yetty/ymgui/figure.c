@@ -55,8 +55,8 @@
  * object pointer directly.
  *=========================================================================*/
 
-struct [[clang::annotate("class@ymgui:figure")]] [[clang::annotate("parent@yfigure:figure")]]
-yetty_ymgui_figure {
+struct YETTY_ANNOTATE("class@ymgui:figure") YETTY_ANNOTATE("parent@yfigure:figure")
+    yetty_ymgui_figure {
     /* Borrowed — shared shader/pipeline/sampler. */
     struct yetty_ymgui_pipeline *pipeline;
 
@@ -93,7 +93,7 @@ YETTY_YRESULT_DECLARE(yetty_ymgui_figure_ptr, struct yetty_ymgui_figure *);
  * hand its address to the registry). `expose` makes codegen re-emit this
  * full definition into the generated figure.h for consumers; this TU has
  * its own copy and the two never share a translation unit. */
-struct [[clang::annotate("expose")]] yetty_ymgui_factory_args {
+struct YETTY_ANNOTATE("expose") yetty_ymgui_factory_args {
     /* Borrowed — used to lazily build `pipeline` on first mint. The
      * underlying context (GPU device / queue / config) must outlive the
      * args struct. */
@@ -798,27 +798,27 @@ static struct yetty_ycore_void_result ymgui_figure_process_bytes(struct yetty_yc
  * object and forwards to the object-keyed impl above.
  *=========================================================================*/
 
-[[clang::annotate("override@ymgui:figure:yfigure:render")]]
+YETTY_ANNOTATE("override@ymgui:figure:yfigure:render")
 static struct yetty_ycore_void_result ymgui_figure_render_slot(struct yetty_yclass_object *obj,
                                                                struct yetty_ydraw_target *target)
 {
     return ymgui_figure_render(obj, target);
 }
 
-[[clang::annotate("override@ymgui:figure:yfigure:destroy")]]
+YETTY_ANNOTATE("override@ymgui:figure:yfigure:destroy")
 static struct yetty_ycore_void_result ymgui_figure_destroy_slot(struct yetty_yclass_object *obj)
 {
     return ymgui_figure_destroy(obj);
 }
 
-[[clang::annotate("override@ymgui:figure:yfigure:process_input")]]
+YETTY_ANNOTATE("override@ymgui:figure:yfigure:process_input")
 static struct yetty_ycore_void_result ymgui_figure_process_input_slot(
     struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *statemachine)
 {
     return ymgui_figure_process_input(obj, statemachine);
 }
 
-[[clang::annotate("override@ymgui:figure:yfigure:process_bytes")]]
+YETTY_ANNOTATE("override@ymgui:figure:yfigure:process_bytes")
 static struct yetty_ycore_void_result ymgui_figure_process_bytes_slot(
     struct yetty_yclass_object *obj, const uint8_t *bytes, size_t bytes_len)
 {
@@ -867,7 +867,7 @@ static struct yetty_yclass_object_ptr_result ymgui_figure_create_object(
     return YETTY_OK(yetty_yclass_object_ptr, obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create_local(
     struct yetty_ycore_rectangle rect, struct yetty_ymgui_pipeline *pipeline,
     const struct yetty_context *context)
@@ -878,7 +878,7 @@ struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_create_local(
     return yetty_ymgui_figure_from(obj_r.value);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_from_base(struct yetty_yclass_object *obj)
 {
     if (!obj) {
@@ -895,7 +895,7 @@ struct yetty_ymgui_figure_ptr_result yetty_ymgui_figure_from_base(struct yetty_y
     return yetty_ymgui_figure_from(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ymgui_figure_set_frame(struct yetty_yclass_object *obj,
                                                             const uint8_t *frame_bytes,
                                                             size_t frame_size)
@@ -936,7 +936,7 @@ struct yetty_ycore_void_result yetty_ymgui_figure_set_frame(struct yetty_yclass_
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ymgui_figure_set_atlas(struct yetty_yclass_object *obj,
                                                             const uint8_t *atlas_bytes,
                                                             size_t atlas_size, uint32_t atlas_w,
@@ -1050,7 +1050,7 @@ static struct yetty_yfigure_figure_ptr_result ymgui_factory(struct yetty_ycore_r
     return YETTY_OK(yetty_yfigure_figure_ptr, base_r.value);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ymgui_register_factory(struct yetty_yfigure_registry *registry,
                                                             struct yetty_ymgui_factory_args *args)
 {
@@ -1060,7 +1060,7 @@ struct yetty_ycore_void_result yetty_ymgui_register_factory(struct yetty_yfigure
     return yetty_yfigure_registry_register(registry, YETTY_YFIGURE_KIND_YMGUI, ymgui_factory, args);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ymgui_factory_args_release(
     struct yetty_ymgui_factory_args *args)
 {

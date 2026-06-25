@@ -51,9 +51,8 @@ struct yetty_ygui_yrich_view_ptr_result yetty_ygui_yrich_view_from(struct yetty_
 
 #define YRICH_VIEW_TYPE_BASE(t) ((uint32_t)(t) & ~YETTY_YDRAW_HAS_ID_FLAG)
 
-struct [[clang::annotate("class@ygui:yrich_view"),
-         clang::annotate("include@yetty/yrich/yrich-types.h")]] [[clang::annotate(
-    "parent@ygui:ydraw_embed")]] yetty_ygui_yrich_view {
+struct YETTY_ANNOTATE("class@ygui:yrich_view") YETTY_ANNOTATE("include@yetty/yrich/yrich-types.h")
+    YETTY_ANNOTATE("parent@ygui:ydraw_embed") yetty_ygui_yrich_view {
     struct yetty_yclass_object *doc; /* yrich document object — owned iff `own` */
     int own;
     float rendered_w;
@@ -68,7 +67,7 @@ static const struct yetty_yclass *yrich_view_class(void)
                                    "yetty_ygui_yrich_view_class_get");
 }
 
-[[clang::annotate("override@ygui:yrich_view:constructor")]]
+YETTY_ANNOTATE("override@ygui:yrich_view:constructor")
 static struct yetty_ycore_void_result yrich_view_ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -86,7 +85,7 @@ static struct yetty_ycore_void_result yrich_view_ctor(struct yetty_yclass_object
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:yrich_view:destructor")]]
+YETTY_ANNOTATE("override@ygui:yrich_view:destructor")
 static struct yetty_ycore_void_result yrich_view_dtor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -225,7 +224,7 @@ static struct yetty_ycore_void_result yrich_view_render(struct yetty_yclass_obje
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:yrich_view:widget_emit_body")]]
+YETTY_ANNOTATE("override@ygui:yrich_view:widget_emit_body")
 static struct yetty_ycore_void_result yrich_view_emit_body(struct yetty_yclass_object *yclass_obj,
                                                            struct yetty_ygui_emit_ctx *ctx)
 {
@@ -266,7 +265,7 @@ static void to_doc_coords(struct yetty_yclass_object *obj, float x, float y, flo
     *dy = y - r.min.y;
 }
 
-[[clang::annotate("override@ygui:yrich_view:widget_on_press")]]
+YETTY_ANNOTATE("override@ygui:yrich_view:widget_on_press")
 static struct yetty_ycore_int_result yrich_view_on_press(struct yetty_yclass_object *yclass_obj,
                                                          float x, float y, int button)
 {
@@ -288,7 +287,7 @@ static struct yetty_ycore_int_result yrich_view_on_press(struct yetty_yclass_obj
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:yrich_view:widget_on_release")]]
+YETTY_ANNOTATE("override@ygui:yrich_view:widget_on_release")
 static struct yetty_ycore_int_result yrich_view_on_release(struct yetty_yclass_object *yclass_obj,
                                                            float x, float y, int button)
 {
@@ -310,7 +309,7 @@ static struct yetty_ycore_int_result yrich_view_on_release(struct yetty_yclass_o
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:yrich_view:widget_on_motion")]]
+YETTY_ANNOTATE("override@ygui:yrich_view:widget_on_motion")
 static struct yetty_ycore_int_result yrich_view_on_motion(struct yetty_yclass_object *yclass_obj,
                                                           float x, float y)
 {
@@ -334,7 +333,7 @@ static struct yetty_ycore_int_result yrich_view_on_motion(struct yetty_yclass_ob
 /*-----------------------------------------------------------------------------
  * Public API — model attachment + host-driven keyboard forwarding.
  *---------------------------------------------------------------------------*/
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_yclass_object *obj,
                                                                   struct yetty_yclass_object *doc,
                                                                   int own)
@@ -368,7 +367,7 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_y
 /* Force a re-render at the next emit even when neither the rect nor the
  * document's own dirty flag changed — used after a host action (toolbar
  * button, programmatic edit) mutates the document. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_yrich_view_invalidate(struct yetty_yclass_object *obj)
 {
     if (!obj) {
@@ -382,7 +381,7 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_invalidate(struct yetty_ycl
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object *yetty_ygui_yrich_view_document(const struct yetty_yclass_object *obj)
 {
     if (!obj) {
@@ -393,7 +392,7 @@ struct yetty_yclass_object *yetty_ygui_yrich_view_document(const struct yetty_yc
     return d->doc;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_yrich_view_content_size(
     const struct yetty_yclass_object *obj, float *w, float *h)
 {
@@ -428,7 +427,7 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_content_size(
 
 /* Re-fit the widget's authored size to the document's content extent so
  * the surrounding scrollarea tracks growth/shrink after edits. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_yrich_view_fit_content(struct yetty_yclass_object *obj)
 {
     float content_w = 0.0f;
@@ -445,7 +444,7 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_fit_content(struct yetty_yc
     return yetty_ygui_widget_set_size(obj, content_w, content_h);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_yclass_object *obj,
                                                               uint32_t key, uint32_t mods)
 {
@@ -463,7 +462,7 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_yclas
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_yclass_object *obj,
                                                                const char *text, size_t len)
 {

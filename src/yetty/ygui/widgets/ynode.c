@@ -71,8 +71,7 @@ struct ynode_pin {
     uint32_t color;
 };
 
-struct [[clang::annotate("class@ygui:ynode")]] [[clang::annotate("parent@ygui:vbox")]]
-yetty_ygui_ynode {
+struct YETTY_ANNOTATE("class@ygui:ynode") YETTY_ANNOTATE("parent@ygui:vbox") yetty_ygui_ynode {
     char *title;
     float gx, gy; /* graph-space top-left */
     float gw, gh; /* graph-space size */
@@ -126,7 +125,7 @@ static float ynode_view_zoom(struct yetty_yclass_object *node)
 /*-----------------------------------------------------------------------------
  * Lifecycle.
  *---------------------------------------------------------------------------*/
-[[clang::annotate("override@ygui:ynode:constructor")]]
+YETTY_ANNOTATE("override@ygui:ynode:constructor")
 static struct yetty_ycore_void_result ynode_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -172,7 +171,7 @@ static void ynode_free_pins(struct ynode_pin *pins, size_t count)
     free(pins);
 }
 
-[[clang::annotate("override@ygui:ynode:destructor")]]
+YETTY_ANNOTATE("override@ygui:ynode:destructor")
 static struct yetty_ycore_void_result ynode_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -215,7 +214,7 @@ static struct yetty_ycore_void_result ynode_apply_layout(struct yetty_yclass_obj
     return yetty_ygui_widget_layout_set(node, &l);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_ynode_reflow(struct yetty_yclass_object *node)
 {
     if (!node) {
@@ -230,7 +229,7 @@ struct yetty_ycore_void_result yetty_ygui_ynode_reflow(struct yetty_yclass_objec
     return ynode_apply_layout(node, d, pan_x, pan_y, zoom);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_ygui_ynode_pin_pos(const struct yetty_yclass_object *node, int output, int index,
                              float *x, float *y)
 {
@@ -259,7 +258,7 @@ int yetty_ygui_ynode_pin_pos(const struct yetty_yclass_object *node, int output,
     return 1;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_ygui_ynode_pin_at(const struct yetty_yclass_object *node, float x, float y, int *output,
                             int *index)
 {
@@ -313,7 +312,7 @@ static int ynode_resize_grip_at(struct yetty_yclass_object *node, float x, float
  * Paint — frame, title bar, title text, pins. Child widgets paint after
  * (the engine's pre-order walk recurses into them).
  *---------------------------------------------------------------------------*/
-[[clang::annotate("override@ygui:ynode:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:ynode:widget_paint")
 static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_object *yclass_obj,
                                                   struct yetty_ygui_emit_ctx *ctx)
 {
@@ -422,7 +421,7 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_object *yc
 /*-----------------------------------------------------------------------------
  * Pointer handling — move the node, or start/drive a link off a pin.
  *---------------------------------------------------------------------------*/
-[[clang::annotate("override@ygui:ynode:widget_on_press")]]
+YETTY_ANNOTATE("override@ygui:ynode:widget_on_press")
 static struct yetty_ycore_int_result ynode_on_press(struct yetty_yclass_object *yclass_obj, float x,
                                                     float y, int button)
 {
@@ -479,7 +478,7 @@ static struct yetty_ycore_int_result ynode_on_press(struct yetty_yclass_object *
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-[[clang::annotate("override@ygui:ynode:widget_on_motion")]]
+YETTY_ANNOTATE("override@ygui:ynode:widget_on_motion")
 static struct yetty_ycore_int_result ynode_on_motion(struct yetty_yclass_object *yclass_obj,
                                                      float x, float y)
 {
@@ -564,7 +563,7 @@ static struct yetty_ycore_int_result ynode_on_motion(struct yetty_yclass_object 
     return YETTY_OK(yetty_ycore_int, 0);
 }
 
-[[clang::annotate("override@ygui:ynode:widget_on_release")]]
+YETTY_ANNOTATE("override@ygui:ynode:widget_on_release")
 static struct yetty_ycore_int_result ynode_on_release(struct yetty_yclass_object *yclass_obj,
                                                       float x, float y, int button)
 {
@@ -588,7 +587,7 @@ static struct yetty_ycore_int_result ynode_on_release(struct yetty_yclass_object
 /*-----------------------------------------------------------------------------
  * App-facing API.
  *---------------------------------------------------------------------------*/
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_ynode_set_title(struct yetty_yclass_object *node,
                                                           const char *title)
 {
@@ -608,7 +607,7 @@ struct yetty_ycore_void_result yetty_ygui_ynode_set_title(struct yetty_yclass_ob
     return yetty_ygui_widget_set_dirty(node);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_pos(struct yetty_yclass_object *node,
                                                               float gx, float gy)
 {
@@ -621,7 +620,7 @@ struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_pos(struct yetty_yclas
     return yetty_ygui_ynode_reflow(node);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_ygui_ynode_graph_pos(const struct yetty_yclass_object *node, float *gx, float *gy)
 {
     if (!node) {
@@ -642,7 +641,7 @@ void yetty_ygui_ynode_graph_pos(const struct yetty_yclass_object *node, float *g
     }
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_size(struct yetty_yclass_object *node,
                                                                float gw, float gh)
 {
@@ -655,7 +654,7 @@ struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_size(struct yetty_ycla
     return yetty_ygui_ynode_reflow(node);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 void yetty_ygui_ynode_graph_size(const struct yetty_yclass_object *node, float *gw, float *gh)
 {
     if (!node) {
@@ -714,19 +713,19 @@ static struct uint32_result ynode_add_pin(struct yetty_yclass_object *node, int 
     return YETTY_OK(uint32, index);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct uint32_result yetty_ygui_ynode_add_input(struct yetty_yclass_object *node, const char *name)
 {
     return ynode_add_pin(node, 0, name);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct uint32_result yetty_ygui_ynode_add_output(struct yetty_yclass_object *node, const char *name)
 {
     return ynode_add_pin(node, 1, name);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_ygui_ynode_input_count(const struct yetty_yclass_object *node)
 {
     if (!node) {
@@ -735,7 +734,7 @@ int yetty_ygui_ynode_input_count(const struct yetty_yclass_object *node)
     return (int)ynode_data((struct yetty_yclass_object *)node)->in_count;
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 int yetty_ygui_ynode_output_count(const struct yetty_yclass_object *node)
 {
     if (!node) {

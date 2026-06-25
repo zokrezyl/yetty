@@ -92,9 +92,8 @@ struct yetty_yplatform_glfw_platform_ptr_result yetty_yplatform_glfw_platform_fr
 
 /* No per-instance state: the bootstrap below owns the window / surface / pipes /
  * runtime for the duration of run(). */
-struct [[clang::annotate("class@yplatform:glfw_platform")]] [[clang::annotate(
-    "platform@glfw")]] [[clang::annotate("parent@yplatform:platform")]]
-yetty_yplatform_glfw_platform {
+struct YETTY_ANNOTATE("class@yplatform:glfw_platform") YETTY_ANNOTATE("platform@glfw")
+    YETTY_ANNOTATE("parent@yplatform:platform") yetty_yplatform_glfw_platform {
     char reserved;
 };
 
@@ -175,7 +174,7 @@ static void glfw_platform_event_loop(GLFWwindow *window, int *running,
     }
 }
 
-[[clang::annotate("override@yplatform:glfw_platform:platform_init")]]
+YETTY_ANNOTATE("override@yplatform:glfw_platform:platform_init")
 static struct yetty_ycore_void_result glfw_platform_init(struct yetty_yclass_object *obj,
                                                          struct yetty_yclass_object *app, int argc,
                                                          char **argv)
@@ -189,7 +188,7 @@ static struct yetty_ycore_void_result glfw_platform_init(struct yetty_yclass_obj
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:glfw_platform:platform_run")]]
+YETTY_ANNOTATE("override@yplatform:glfw_platform:platform_run")
 static struct yetty_ycore_void_result glfw_platform_run(struct yetty_yclass_object *obj,
                                                         struct yetty_yclass_object *app, int argc,
                                                         char **argv)

@@ -11,7 +11,7 @@
 
 #include <stddef.h>
 
-struct [[clang::annotate("class@yapp:app")]] yetty_yapp_app {
+struct YETTY_ANNOTATE("class@yapp:app") yetty_yapp_app {
     char reserved;
 };
 
@@ -19,18 +19,18 @@ YETTY_YRESULT_DECLARE(yetty_yapp_app_ptr, struct yetty_yapp_app *);
 struct yetty_yclass_ptr_result yetty_yapp_app_class_get(void);
 struct yetty_yapp_app_ptr_result yetty_yapp_app_from(struct yetty_yclass_object *obj);
 
-[[clang::annotate("virtual@yapp:app:init")]] [[clang::annotate("local@yapp:init")]]
-static struct yetty_ycore_void_result yapp_default_init(struct yetty_yclass_object *app,
-                                                        struct yetty_yclass_object *platform)
+YETTY_ANNOTATE("virtual@yapp:app:init")
+YETTY_ANNOTATE("local@yapp:init") static struct yetty_ycore_void_result
+    yapp_default_init(struct yetty_yclass_object *app, struct yetty_yclass_object *platform)
 {
     (void)app;
     (void)platform;
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("virtual@yapp:app:run")]] [[clang::annotate("local@yapp:run")]]
-static struct yetty_ycore_void_result yapp_default_run(struct yetty_yclass_object *app,
-                                                       struct yetty_yclass_object *platform)
+YETTY_ANNOTATE("virtual@yapp:app:run")
+YETTY_ANNOTATE("local@yapp:run") static struct yetty_ycore_void_result
+    yapp_default_run(struct yetty_yclass_object *app, struct yetty_yclass_object *platform)
 {
     (void)app;
     (void)platform;
@@ -44,7 +44,7 @@ static struct yetty_ycore_void_result yapp_default_run(struct yetty_yclass_objec
  * register — its own app class. Declaration only: there is no default. A binary
  * that links a platform entry without defining this fails to link, by design.
  */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_yclass_object_ptr_result yetty_yapp_create_app(struct yetty_yclass_ctx *ctx);
 
 #include "app.gen.c"

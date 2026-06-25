@@ -31,7 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@yai:gemini")]] [[clang::annotate("parent@yai:turn_engine")]]
+struct YETTY_ANNOTATE("class@yai:gemini") YETTY_ANNOTATE("parent@yai:turn_engine")
 yetty_yai_gemini {
     /* The class@ annotation needs a struct to sit on; gemini keeps no
      * engine-private state. */
@@ -40,7 +40,7 @@ yetty_yai_gemini {
 
 YETTY_YRESULT_DECLARE(yetty_yai_gemini_ptr, struct yetty_yai_gemini *);
 
-[[clang::annotate("override@yai:gemini:start")]]
+YETTY_ANNOTATE("override@yai:gemini:start")
 static struct yetty_ycore_void_result gemini_start(struct yetty_yclass_object *obj,
                                                    struct yai_app *app)
 {
@@ -62,7 +62,7 @@ static struct yetty_ycore_void_result gemini_start(struct yetty_yclass_object *o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yai:gemini:send_user_message")]]
+YETTY_ANNOTATE("override@yai:gemini:send_user_message")
 static struct yetty_ycore_void_result gemini_send_user_message(struct yetty_yclass_object *obj,
                                                                struct yai_app *app,
                                                                const char *text)
@@ -101,7 +101,7 @@ static struct yetty_ycore_void_result gemini_send_user_message(struct yetty_ycla
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yai:gemini:describe_config")]]
+YETTY_ANNOTATE("override@yai:gemini:describe_config")
 static struct yetty_ycore_void_result gemini_describe_config(struct yetty_yclass_object *obj,
                                                              struct yai_app *app, char *out,
                                                              size_t out_size)
@@ -120,7 +120,7 @@ static struct yetty_ycore_void_result gemini_describe_config(struct yetty_yclass
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yai:gemini:config_knob")]]
+YETTY_ANNOTATE("override@yai:gemini:config_knob")
 static struct yetty_ycore_void_result gemini_config_knob(struct yetty_yclass_object *obj,
                                                          struct yai_app *app, char *out,
                                                          size_t out_size)
@@ -136,7 +136,7 @@ static struct yetty_ycore_void_result gemini_config_knob(struct yetty_yclass_obj
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yai:gemini:handle_event")]]
+YETTY_ANNOTATE("override@yai:gemini:handle_event")
 static struct yetty_ycore_void_result gemini_handle_event(struct yetty_yclass_object *obj,
                                                           struct yai_app *app,
                                                           struct yyjson_val *event)

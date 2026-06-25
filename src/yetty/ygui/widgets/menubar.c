@@ -26,7 +26,7 @@ struct yetty_ygui_menubar_ptr_result yetty_ygui_menubar_from(struct yetty_yclass
 
 #include <stdlib.h>
 
-[[clang::annotate("override@ygui:menubar:constructor")]]
+YETTY_ANNOTATE("override@ygui:menubar:constructor")
 static struct yetty_ycore_void_result menubar_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -52,7 +52,7 @@ static struct yetty_ycore_void_result on_trigger_click(struct yetty_yclass_objec
     return yetty_ygui_popup_menu_toggle_at(menu, r.min.x, r.max.y + 2.0f);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_menubar_add(struct yetty_yclass_object *bar,
                                                       const char *label,
                                                       struct yetty_yclass_object *menu)
@@ -75,8 +75,7 @@ struct yetty_ycore_void_result yetty_ygui_menubar_add(struct yetty_yclass_object
     return yetty_ygui_clickable_on_click_set(btn, on_trigger_click, menu);
 }
 
-struct [[clang::annotate("class@ygui:menubar")]] [[clang::annotate("parent@ygui:hbox")]]
-yetty_ygui_menubar {
+struct YETTY_ANNOTATE("class@ygui:menubar") YETTY_ANNOTATE("parent@ygui:hbox") yetty_ygui_menubar {
     char _empty;
 };
 

@@ -50,13 +50,13 @@ struct yetty_ygui_ydiagram_ptr_result yetty_ygui_ydiagram_from(struct yetty_ycla
 #include <stdlib.h>
 #include <string.h>
 
-struct [[clang::annotate("class@ygui:ydiagram")]] [[clang::annotate("parent@ygui:ydraw_embed")]]
-yetty_ygui_ydiagram {
+struct YETTY_ANNOTATE("class@ygui:ydiagram") YETTY_ANNOTATE("parent@ygui:ydraw_embed")
+    yetty_ygui_ydiagram {
     char *source; /* Mermaid text, owned (NUL-terminated); for get_source. */
     size_t source_len;
 };
 
-[[clang::annotate("override@ygui:ydiagram:constructor")]]
+YETTY_ANNOTATE("override@ygui:ydiagram:constructor")
 static struct yetty_ycore_void_result ydiagram_constructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -72,7 +72,7 @@ static struct yetty_ycore_void_result ydiagram_constructor(struct yetty_yclass_o
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:ydiagram:destructor")]]
+YETTY_ANNOTATE("override@ygui:ydiagram:destructor")
 static struct yetty_ycore_void_result ydiagram_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -86,7 +86,7 @@ static struct yetty_ycore_void_result ydiagram_destructor(struct yetty_yclass_ob
                                  (yetty_yclass_method_id_t)yetty_ygui_destructor);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_ydiagram_set_source(struct yetty_yclass_object *obj,
                                                               const char *source)
 {
@@ -157,7 +157,7 @@ struct yetty_ycore_void_result yetty_ygui_ydiagram_set_source(struct yetty_yclas
 #endif
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_const_char_ptr_result yetty_ygui_ydiagram_get_source(
     const struct yetty_yclass_object *obj)
 {

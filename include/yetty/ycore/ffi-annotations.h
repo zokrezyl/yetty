@@ -16,10 +16,14 @@
 #ifndef YETTY_YCORE_FFI_ANNOTATIONS_H
 #define YETTY_YCORE_FFI_ANNOTATIONS_H
 
+/* Also defined (identically) in <yetty/yclass/class.h>; the #ifndef lets
+ * whichever header is included first define it. */
+#ifndef YETTY_ANNOTATE
 #if defined(__clang__) || defined(__GNUC__)
-#define YETTY_ANNOTATE(s) __attribute__((annotate(s)))
+#define YETTY_ANNOTATE(annotation) __attribute__((annotate(annotation)))
 #else
-#define YETTY_ANNOTATE(s)
+#define YETTY_ANNOTATE(annotation)
+#endif
 #endif
 
 /* Parameter roles */

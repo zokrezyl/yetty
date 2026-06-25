@@ -26,6 +26,22 @@
 #include <stddef.h>
 #include <stdint.h>
 
+/* yclass annotations (class@/parent@/override@/property/...) exist only for the
+ * codegen and FFI extractors, which parse the sources with clang. The compiled
+ * binary never needs them, and MSVC's C parser rejects an attribute in some
+ * positions (e.g. prefixing a struct member) — so the annotation expands to the
+ * clang attribute only under clang/gcc and to nothing elsewhere. Codegen reads
+ * the payload through the macro via its spelling location. Kept identical to the
+ * YETTY_ANNOTATE in <yetty/ycore/ffi-annotations.h>; the #ifndef lets either
+ * header define it first. */
+#ifndef YETTY_ANNOTATE
+#if defined(__clang__) || defined(__GNUC__)
+#define YETTY_ANNOTATE(annotation) __attribute__((annotate(annotation)))
+#else
+#define YETTY_ANNOTATE(annotation)
+#endif
+#endif
+
 struct yetty_yclass_object;
 struct yetty_yclass;
 struct yetty_yclass_slot_table;

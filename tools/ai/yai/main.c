@@ -235,7 +235,7 @@ static int yai_is_default_key(const char *key)
     return strcmp(key, "edit-mode") == 0 || strcmp(key, "fold-lines") == 0 ||
            strcmp(key, "show-thinking") == 0 || strcmp(key, "hud-on") == 0 ||
            strcmp(key, "hud-float") == 0 || strcmp(key, "hud-mode") == 0 ||
-           strcmp(key, "hud-format") == 0;
+           strcmp(key, "markdown-mode") == 0 || strcmp(key, "hud-format") == 0;
 }
 
 /* The active backend's verbatim override of `key`, or NULL when it inherits
@@ -301,6 +301,17 @@ static const char *yai_effective_hud_mode(struct yai_app *app)
     return strcmp(value, "text") == 0 ? "text" : "yetty";
 }
 
+/* Markdown rendering backend for the active engine: "yetty" (render answers as
+ * SDF/MSDF markdown figures) or "text" (plain styled text). The yetty mode only
+ * displays on the yetty host; the renderer gates it on that and falls back to
+ * text elsewhere (see the render_markdown wiring in main()). */
+static const char *yai_effective_markdown_mode(struct yai_app *app)
+{
+    const char *override = yai_engine_override_get(yai_active_engine_config(app), "markdown-mode");
+    const char *value = (override && override[0]) ? override : app->config.markdown_mode;
+    return strcmp(value, "text") == 0 ? "text" : "yetty";
+}
+
 /* Store the HUD template as `count` verbatim pieces and recompute the
  * concatenated hud_format the renderer parses (pieces joined directly, no
  * separator). The pieces are kept so the YAML list round-trips on save. */
@@ -338,6 +349,7 @@ static void yai_config_defaults(struct yai_app *app)
     config->hud_on = 1;
     config->hud_float = 0;
     snprintf(config->hud_mode, sizeof(config->hud_mode), "yetty");
+    snprintf(config->markdown_mode, sizeof(config->markdown_mode), "yetty");
     const char *const default_hud_parts[] = {YAI_DEFAULT_HUD_PART_0, YAI_DEFAULT_HUD_PART_1,
                                              YAI_DEFAULT_HUD_PART_2, YAI_DEFAULT_HUD_PART_3,
                                              YAI_DEFAULT_HUD_PART_4};
@@ -389,6 +401,9 @@ static int yai_config_set_global(struct yai_app *app, const char *key, const cha
         config->hud_float = yai_config_truthy(value);
     } else if (strcmp(key, "hud-mode") == 0) {
         snprintf(config->hud_mode, sizeof(config->hud_mode), "%s",
+                 strcmp(value, "text") == 0 ? "text" : "yetty");
+    } else if (strcmp(key, "markdown-mode") == 0) {
+        snprintf(config->markdown_mode, sizeof(config->markdown_mode), "%s",
                  strcmp(value, "text") == 0 ? "text" : "yetty");
     } else if (strcmp(key, "hud-format") == 0) {
         /* A scalar hud_format is a one-piece list. */
@@ -887,6 +902,7 @@ static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
              yai_config_emit_pair(&emitter, "hud-on", config->hud_on ? "true" : "false") &&
              yai_config_emit_pair(&emitter, "hud-float", config->hud_float ? "true" : "false") &&
              yai_config_emit_pair(&emitter, "hud-mode", config->hud_mode) &&
+             yai_config_emit_pair(&emitter, "markdown-mode", config->markdown_mode) &&
              yai_config_emit_hud_format(&emitter, config) && yai_config_emit_map_end(&emitter) &&
              /* backends: { claude: {…}, codex: {…}, gemini: {…} }. */
              yai_config_emit_scalar(&emitter, "backends") && yai_config_emit_map_start(&emitter) &&
@@ -2711,6 +2727,7 @@ static struct yetty_ycore_void_result show_config(struct yai_app *app)
                            "transcript: %s\n"
                            "fold lines: %d  [--fold-lines]\n"
                            "show thinking: %s  [--show-thinking]\n"
+                           "markdown: %s  [--markdown/--no-markdown]\n"
                            "hud: off  [--no-hud]\n"
                            "turn in flight: %s · queued %d/%d\n"
                            "## %s\n"
@@ -2718,8 +2735,8 @@ static struct yetty_ycore_void_result show_config(struct yai_app *app)
                            app->engine_name, app->session_id[0] ? app->session_id : "(none yet)",
                            app->transcript_file ? app->transcript_path : "(disabled)",
                            app->renderer.fold_lines, app->renderer.show_thinking ? "on" : "off",
-                           app->waiting ? "yes" : "no", app->queue_len, YAI_QUEUE_MAX,
-                           app->engine_name, engine_rows);
+                           yai_effective_markdown_mode(app), app->waiting ? "yes" : "no",
+                           app->queue_len, YAI_QUEUE_MAX, app->engine_name, engine_rows);
     if (written < 0 || (size_t)written >= sizeof(config_text)) {
         return YETTY_ERR(yetty_ycore_void, "show_config: config text truncated");
     }
@@ -3917,8 +3934,9 @@ static void print_usage(FILE *stream, const char *program)
         "  --hud-float                     float the HUD window instead of docking it\n"
         "  --resume <id>                   resume a conversation (claude session / codex "
         "thread)\n"
-        "  --markdown                      render answers as yetty markdown figures "
-        "(yetty host only)\n"
+        "  --markdown                      render answers as SDF/MSDF markdown figures "
+        "(markdown-mode yetty; yetty host only)\n"
+        "  --no-markdown                   render answers as plain text (markdown-mode text)\n"
         "  --animate                       animated activity glyph (costs ~100%% CPU; "
         "default static)\n"
         "  --rpc <port>                    msgpack-RPC control server on 127.0.0.1:<port>\n"
@@ -4009,7 +4027,6 @@ int main(int argc, char **argv)
         {"--gemini-approval", "gemini-approval-mode"},
     };
     const char *resume_session_id = NULL;
-    int markdown_requested = 0;
     int animate_requested = 0;
     int rpc_port = 0; /* external control server; 0 = off (set via --rpc) */
     for (int arg_index = 1; arg_index < argc; arg_index++) {
@@ -4019,7 +4036,9 @@ int main(int argc, char **argv)
             free(app);
             return 0;
         } else if (strcmp(arg, "--markdown") == 0) {
-            markdown_requested = 1;
+            yai_config_set(app, "markdown-mode", "yetty");
+        } else if (strcmp(arg, "--no-markdown") == 0) {
+            yai_config_set(app, "markdown-mode", "text");
         } else if (strcmp(arg, "--animate") == 0) {
             animate_requested = 1;
         } else if (strcmp(arg, "--show-thinking") == 0) {
@@ -4143,9 +4162,12 @@ int main(int argc, char **argv)
     }
     yai_renderer_init(&app->renderer, app->renderer.fold_lines, app->renderer.show_thinking,
                       engine_name);
-    /* --markdown renders answers as yetty markdown figures; only the
-     * yetty host can display the envelope, so require it. */
-    app->renderer.render_markdown = markdown_requested && app->renderer.pin_shader_glyphs;
+    /* markdown-mode "yetty" renders answers through the SDF/MSDF markdown
+     * facility (a ycat figure envelope); only the yetty host can display the
+     * envelope, so require it — off-host falls back to plain text. Parallel to
+     * the want_ygui_hud gate below. */
+    app->renderer.render_markdown =
+        strcmp(yai_effective_markdown_mode(app), "yetty") == 0 && app->renderer.pin_shader_glyphs;
     /* --animate: the animated shader glyph (default static — see render.h). */
     app->renderer.animate_glyph = animate_requested;
     yai_renderer_pin_setup(&app->renderer, app->stdin_buf, &app->stdin_len, &app->stdin_cursor);

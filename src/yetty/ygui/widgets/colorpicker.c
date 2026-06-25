@@ -20,12 +20,12 @@ struct yetty_ygui_colorpicker_ptr_result yetty_ygui_colorpicker_from(
 #define COLOR_BORDER 0xFF474A36u
 #define COLOR_TEXT 0xFFE4E5E0u
 
-struct [[clang::annotate("class@ygui:colorpicker")]] [[clang::annotate(
-    "parent@ygui:primitive_widget")]] yetty_ygui_colorpicker {
+struct YETTY_ANNOTATE("class@ygui:colorpicker") YETTY_ANNOTATE("parent@ygui:primitive_widget")
+    yetty_ygui_colorpicker {
     uint32_t color;
 };
 
-[[clang::annotate("override@ygui:colorpicker:constructor")]]
+YETTY_ANNOTATE("override@ygui:colorpicker:constructor")
 static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
@@ -40,7 +40,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@ygui:colorpicker:widget_paint")]]
+YETTY_ANNOTATE("override@ygui:colorpicker:widget_paint")
 static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_obj,
                                             struct yetty_ygui_emit_ctx *ctx)
 {
@@ -71,7 +71,7 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     return yguix_text(ctx, hex, r.min.x + sw_w + 12, ty, fs, COLOR_TEXT);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_colorpicker_set_color(struct yetty_yclass_object *obj,
                                                                 uint32_t c)
 {
@@ -85,7 +85,7 @@ struct yetty_ycore_void_result yetty_ygui_colorpicker_set_color(struct yetty_ycl
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_ygui_colorpicker_get_color(
     const struct yetty_yclass_object *obj)
 {

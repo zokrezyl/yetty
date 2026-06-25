@@ -31,14 +31,13 @@ struct yetty_yplatform_webasm_clipboard_ptr_result yetty_yplatform_webasm_clipbo
     struct yetty_yclass_object *obj);
 
 /* Private subclass state: the pipe paste results are posted to (borrowed). */
-struct [[clang::annotate("class@yplatform:webasm_clipboard")]] [[clang::annotate(
-    "platform@webasm")]] [[clang::annotate("parent@yplatform:clipboard")]]
-yetty_yplatform_webasm_clipboard {
+struct YETTY_ANNOTATE("class@yplatform:webasm_clipboard") YETTY_ANNOTATE("platform@webasm")
+    YETTY_ANNOTATE("parent@yplatform:clipboard") yetty_yplatform_webasm_clipboard {
     struct yetty_ycore_xthread_event_pipe *response_pipe;
 };
 
 /* Bind the pipe that paste results are delivered on. Borrowed. */
-[[clang::annotate("expose")]]
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yplatform_webasm_clipboard_configure(
     struct yetty_yclass_object *obj, struct yetty_ycore_xthread_event_pipe *response_pipe)
 {
@@ -52,7 +51,7 @@ struct yetty_ycore_void_result yetty_yplatform_webasm_clipboard_configure(
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:webasm_clipboard:clipboard_set_text")]]
+YETTY_ANNOTATE("override@yplatform:webasm_clipboard:clipboard_set_text")
 static struct yetty_ycore_void_result webasm_clipboard_set_text(struct yetty_yclass_object *obj,
                                                                 const char *text, size_t len)
 {
@@ -63,7 +62,7 @@ static struct yetty_ycore_void_result webasm_clipboard_set_text(struct yetty_ycl
     return YETTY_OK_VOID();
 }
 
-[[clang::annotate("override@yplatform:webasm_clipboard:clipboard_request_paste")]]
+YETTY_ANNOTATE("override@yplatform:webasm_clipboard:clipboard_request_paste")
 static struct yetty_ycore_void_result webasm_clipboard_request_paste(
     struct yetty_yclass_object *obj)
 {
