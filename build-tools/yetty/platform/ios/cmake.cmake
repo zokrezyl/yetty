@@ -31,6 +31,12 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
     ${YETTY_ROOT}/src/yetty/yplatform/ywindow/ios-tvos.c
     ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/ios-tvos.c
+    # UIPasteboard companion (Obj-C) implementing the clipboard set/paste bridge.
+    ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/ios-tvos.m
+    # yplatform module aggregator — defines yetty_yplatform_register (the entry
+    # calls it). On desktop it lives in the glfw lib, on webasm in the exec; iOS
+    # has neither, so compile it into the exec here.
+    ${YETTY_ROOT}/src/yetty/yplatform/rpc.gen.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/ios-tvos.m
     ${YETTY_ROOT}/src/yetty/ypty/forkpty.c
     ${YETTY_ROOT}/src/yetty/ypty/temu-pty.c
