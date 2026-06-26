@@ -63,6 +63,8 @@ if(YETTY_ENABLE_TOOL_QA)
                      ${CMAKE_BINARY_DIR}/qa-tools/lib/naming-convention)
     add_subdirectory(${YETTY_ROOT}/qa-tools/analysis/result-checker
                      ${CMAKE_BINARY_DIR}/qa-tools/analysis/result-checker)
+    add_subdirectory(${YETTY_ROOT}/qa-tools/analysis/out-param
+                     ${CMAKE_BINARY_DIR}/qa-tools/analysis/out-param)
     add_subdirectory(${YETTY_ROOT}/qa-tools/analysis/naming-convention
                      ${CMAKE_BINARY_DIR}/qa-tools/analysis/naming-convention)
     add_subdirectory(${YETTY_ROOT}/qa-tools/refactoring/naming-convention

@@ -21,14 +21,22 @@ qa-tools/
 │   ├── check-scan-build.py         Clang Static Analyzer
 │   ├── check-osv-scanner.py        OSV / lockfile CVE scan
 │   ├── check-trivy.py              Aqua Trivy fs scan
-│   └── check-grype.py              Anchore Grype dir scan
-├── refactoring/              tools that *modify* the codebase
-│   ├── code-format/
-│   │   └── apply-format.py         clang-format -i (in place)
-│   └── replace                     existing search-replace helper
-└── custom/                   project-specific clang LibTooling tools
-    └── result-checker/             enforces Result-type return rule
+│   ├── check-grype.py              Anchore Grype dir scan
+│   ├── result-checker/             LibTooling: enforces Result-type return rule
+│   ├── yclass/                     LibTooling: flags hand-rolled object/slice pointer arithmetic
+│   ├── out-param/                  LibTooling: flags small values returned as a cluster of scalar pointer out-params
+│   └── naming-convention/          LibTooling: naming-convention diagnostics
+└── refactoring/              tools that *modify* the codebase
+    ├── code-format/
+    │   └── apply-format.py         clang-format -i (in place)
+    ├── naming-convention/          LibTooling: applies naming-convention fixes
+    └── replace                     existing search-replace helper
 ```
+
+The LibTooling checkers (`result-checker`, `yclass`, `out-param`,
+`naming-convention`) are C++ clang tools, built as part of the CMake project
+when `YETTY_ENABLE_TOOL_QA` is on. Each has a `run-*.sh` that intersects the
+source tree with `build-*/compile_commands.json` and invokes the built binary.
 
 ## Scope
 
