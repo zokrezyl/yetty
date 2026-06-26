@@ -51,6 +51,17 @@ if(YETTY_ENABLE_FEATURE_YMESH AND YETTY_ENABLE_LIB_WEBGPU)
     target_link_libraries(yetty_yterminal yetty_ymesh)
 endif()
 
+# yvideo composite factory — terminal.c registers it so inbound YDRAW_BIN
+# yvideo records (type 0x80000006) decode + render. The factory symbol
+# (yetty_yvideo_factory_create) exists only when the yvideo feature, OpenH264,
+# and WebGPU are all enabled; gate the macro + link on exactly that. (The
+# always-built yshadertoy prim factory needs no gate — like yplot/yimage it
+# resolves transitively through the final executable's link.)
+if(YETTY_ENABLE_FEATURE_YVIDEO AND YETTY_ENABLE_LIB_OPENH264 AND YETTY_ENABLE_LIB_WEBGPU)
+    target_compile_definitions(yetty_yterminal PRIVATE YETTY_HAS_YVIDEO=1)
+    target_link_libraries(yetty_yterminal yetty_yvideo)
+endif()
+
 # Pane background fill shader.
 incbin_add_resources(yetty_yterminal
     background_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/background-layer.wgsl"
