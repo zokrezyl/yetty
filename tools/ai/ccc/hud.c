@@ -151,7 +151,13 @@ static void terminal_pixels(float *width_px, float *height_px)
 static void window_rect(const struct ccc_hud *hud, float *min_x, float *min_y, float *width,
                         float *height)
 {
-    const struct yetty_ygui_layout *layout = yetty_ygui_widget_layout_get(hud->window);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(hud->window);
+    if (YETTY_IS_ERR(layout_res)) {
+        yetty_ycore_error_destroy(layout_res.error);
+        *min_x = *min_y = *width = *height = 0.0f;
+        return;
+    }
+    const struct yetty_ygui_layout *layout = layout_res.value;
     *min_x = layout->pos_x;
     *min_y = layout->pos_y;
     *width = layout->width;

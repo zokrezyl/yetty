@@ -972,11 +972,21 @@ static int key_cb(struct yetty_ygui_framework *fw, uint32_t key, int mods, void 
  * feeding the press to the framework so chrome widgets see it first. */
 static void page_click(struct app *a, float x, float y)
 {
-    int in_addr = pt_in_rect(yetty_ygui_widget_rect(a->address), x, y);
+    struct yetty_ycore_rectangle_result address_rect_res = yetty_ygui_widget_rect(a->address);
+    if (YETTY_IS_ERR(address_rect_res)) {
+        yetty_ycore_error_destroy(address_rect_res.error);
+        return;
+    }
+    int in_addr = pt_in_rect(address_rect_res.value, x, y);
     err_ok(yetty_ygui_textinput_set_focus(a->address, in_addr ? 1 : 0));
     a->address_focused = in_addr;
 
-    struct yetty_ycore_rectangle pr = yetty_ygui_widget_rect(a->page);
+    struct yetty_ycore_rectangle_result page_rect_res = yetty_ygui_widget_rect(a->page);
+    if (YETTY_IS_ERR(page_rect_res)) {
+        yetty_ycore_error_destroy(page_rect_res.error);
+        return;
+    }
+    struct yetty_ycore_rectangle pr = page_rect_res.value;
     if (!pt_in_rect(pr, x, y)) {
         return;
     }
@@ -1165,7 +1175,12 @@ static struct yetty_yclass_object *add_nav_button(struct yetty_yclass_object *pa
         return NULL;
     }
     err_ok(yetty_ygui_button_set_label(r.value, label));
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(r.value);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(r.value);
+    if (YETTY_IS_ERR(layout_res)) {
+        yetty_ycore_error_destroy(layout_res.error);
+        return NULL;
+    }
+    struct yetty_ygui_layout l = *layout_res.value;
     l.width = w;
     l.flex_grow = 0.0f;
     l.flex_shrink = 0.0f;
@@ -1197,7 +1212,12 @@ static int build_ui(struct app *a)
     }
     a->tabbar = tr.value;
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(a->tabbar);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(a->tabbar);
+        if (YETTY_IS_ERR(layout_res)) {
+            yetty_ycore_error_destroy(layout_res.error);
+            return -1;
+        }
+        struct yetty_ygui_layout l = *layout_res.value;
         l.height = 36.0f;
         l.gap = 4.0f;
         /* Leave room on the right for the window controls (min/max/close) the
@@ -1215,7 +1235,12 @@ static int build_ui(struct app *a)
 	 * stays created so tab bookkeeping elsewhere keeps working; it just takes
 	 * no space and never paints. */
     if (a->no_ui) {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(a->tabbar);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(a->tabbar);
+        if (YETTY_IS_ERR(layout_res)) {
+            yetty_ycore_error_destroy(layout_res.error);
+            return -1;
+        }
+        struct yetty_ygui_layout l = *layout_res.value;
         l.height = 0.0f;
         err_ok(yetty_ygui_widget_layout_set(a->tabbar, &l));
         err_ok(yetty_ygui_widget_set_visible(a->tabbar, 0));
@@ -1230,7 +1255,12 @@ static int build_ui(struct app *a)
     }
     struct yetty_yclass_object *toolbar = br.value;
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(toolbar);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(toolbar);
+        if (YETTY_IS_ERR(layout_res)) {
+            yetty_ycore_error_destroy(layout_res.error);
+            return -1;
+        }
+        struct yetty_ygui_layout l = *layout_res.value;
         l.height = 44.0f;
         l.gap = 6.0f;
         l.padding_top = 7.0f;
@@ -1243,7 +1273,12 @@ static int build_ui(struct app *a)
 
     /* --no-ui: collapse + hide the address/nav toolbar too. */
     if (a->no_ui) {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(toolbar);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(toolbar);
+        if (YETTY_IS_ERR(layout_res)) {
+            yetty_ycore_error_destroy(layout_res.error);
+            return -1;
+        }
+        struct yetty_ygui_layout l = *layout_res.value;
         l.height = 0.0f;
         l.padding_top = 0.0f;
         l.padding_bottom = 0.0f;
@@ -1264,7 +1299,12 @@ static int build_ui(struct app *a)
     a->address = ar.value;
     err_ok(yetty_ygui_textinput_set_placeholder(a->address, "Type a URL and press Enter"));
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(a->address);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(a->address);
+        if (YETTY_IS_ERR(layout_res)) {
+            yetty_ycore_error_destroy(layout_res.error);
+            return -1;
+        }
+        struct yetty_ygui_layout l = *layout_res.value;
         l.flex_grow = 1.0f;
         err_ok(yetty_ygui_widget_layout_set(a->address, &l));
     }
@@ -1278,7 +1318,12 @@ static int build_ui(struct app *a)
     }
     a->scroll = sr.value;
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(a->scroll);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(a->scroll);
+        if (YETTY_IS_ERR(layout_res)) {
+            yetty_ycore_error_destroy(layout_res.error);
+            return -1;
+        }
+        struct yetty_ygui_layout l = *layout_res.value;
         l.flex_grow = 1.0f;
         err_ok(yetty_ygui_widget_layout_set(a->scroll, &l));
     }
@@ -1312,7 +1357,12 @@ static int build_ui(struct app *a)
  * scrollarea (and the page follows pane resizes). */
 static void set_content_height(struct app *a, struct yetty_yclass_object *w, int height_px)
 {
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(w);
+    if (YETTY_IS_ERR(layout_res)) {
+        yetty_ycore_error_destroy(layout_res.error);
+        return;
+    }
+    struct yetty_ygui_layout l = *layout_res.value;
     l.width = -1.0f;
     l.height = (float)height_px;
     err_ok(yetty_ygui_widget_layout_set(w, &l));
@@ -1321,7 +1371,12 @@ static void set_content_height(struct app *a, struct yetty_yclass_object *w, int
 /* HTML (ylexbor) or SVG (ysvg) → a draw list painted by the page embed. */
 static void render_doc(struct app *a, struct tab *t)
 {
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(a->page);
+    struct yetty_ycore_rectangle_result page_rect_res = yetty_ygui_widget_rect(a->page);
+    if (YETTY_IS_ERR(page_rect_res)) {
+        yetty_ycore_error_destroy(page_rect_res.error);
+        return;
+    }
+    struct yetty_ycore_rectangle r = page_rect_res.value;
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
     if (w <= 1.0f) {
@@ -1406,7 +1461,12 @@ static void render_doc(struct app *a, struct tab *t)
  * aspect ratio (so tall images scroll). */
 static void render_image(struct app *a, struct tab *t)
 {
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(a->image);
+    struct yetty_ycore_rectangle_result image_rect_res = yetty_ygui_widget_rect(a->image);
+    if (YETTY_IS_ERR(image_rect_res)) {
+        yetty_ycore_error_destroy(image_rect_res.error);
+        return;
+    }
+    struct yetty_ycore_rectangle r = image_rect_res.value;
     float w = r.max.x - r.min.x;
     if (w <= 1.0f) {
         return;
