@@ -813,7 +813,12 @@ static struct yetty_ycore_void_result append_admin_record(struct yetty_ycore_buf
                                                           uint32_t admin_op, const uint8_t *body,
                                                           uint32_t body_len)
 {
-    /* Payload = u32 admin_op | body. */
+    /* Payload = u32 admin_op | body. Guard the addition: body_len within 4 of
+     * UINT32_MAX would wrap `total` small while the full body is still written,
+     * emitting a malformed (length-underreporting) record. */
+    if (body_len > UINT32_MAX - 4u) {
+        return YETTY_ERR(yetty_ycore_void, "append_admin_record: body too large");
+    }
     uint32_t total = 4 + body_len;
     struct yetty_ycore_void_result r;
     r = write_u32_le(dst, total);
@@ -1303,6 +1308,11 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
     }
 
     size_t body_size = yetty_ydraw_drawable_list_size(figure_dl);
+    if (body_size > UINT32_MAX) {
+        yetty_ydraw_drawable_list_destroy(figure_dl);
+        return YETTY_ERR(yetty_ycore_void,
+                         "yetty_ygui_framework_walk_emit_body: figure body exceeds u32");
+    }
     if (body_size > 0) {
         const void *body_data = yetty_ydraw_drawable_list_data(figure_dl);
         struct yetty_ycore_void_result fr = yetty_ygui_emit_figure_body(
