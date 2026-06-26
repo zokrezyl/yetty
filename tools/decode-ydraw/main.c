@@ -286,7 +286,10 @@ static int walk_prims(const uint8_t *p, const uint8_t *end, int indent)
             uint32_t id, plen;
             memcpy(&id, p + 4, 4);
             memcpy(&plen, p + 8, 4);
-            if (p + 12 + plen > end) {
+            /* Compare lengths, not pointers: `p + 12` is in-bounds (checked
+             * above), so forming `p + 12 + plen` for a huge untrusted plen
+             * would be undefined behaviour. */
+            if (plen > (size_t)(end - p) - 12u) {
                 fprintf(stderr, "%sprim #%d CMD_GROUP id=%u body truncated (%u B needed)\n", prefix,
                         idx, id, plen);
                 return -1;
@@ -329,7 +332,10 @@ static int walk_prims(const uint8_t *p, const uint8_t *end, int indent)
         uint32_t payload_size;
         memcpy(&payload_size, p + 4, 4);
         psize = 8u + payload_size;
-        if (p + psize > end) {
+        /* `p + 8` is in-bounds (checked above); compare the payload length
+         * against the remaining bytes rather than forming `p + psize`, which
+         * is undefined behaviour for a huge untrusted payload_size. */
+        if (payload_size > (size_t)(end - p) - 8u) {
             fprintf(stderr,
                     "%sprim #%d FAM type 0x%08x payload truncated "
                     "(%u B needed, %zu remaining)\n",

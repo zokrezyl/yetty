@@ -196,7 +196,7 @@ static struct yetty_ycore_void_result process_tile_data(struct yetty_yvnc_client
         int w, h, subsamp, cs;
         if (tjDecompressHeader3(client->jpeg_decompressor, client->recv_buffer,
                                 client->current_tile.data_size, &w, &h, &subsamp, &cs) == 0) {
-            if ((uint16_t)w == client->width && (uint16_t)h == client->height) {
+            if (w == client->width && h == client->height) {
                 uint8_t *full_frame = malloc(client->width * client->height * 4);
                 if (full_frame) {
                     tjDecompress2(client->jpeg_decompressor, client->recv_buffer,
