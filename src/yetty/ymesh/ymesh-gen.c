@@ -759,6 +759,15 @@ static struct yetty_ydraw_composite_ptr_result ymesh_create_instance(
     const uint32_t *data = (const uint32_t *)buffer_data;
     const uint32_t *payload = data + 2;
 
+    /* The fixed mesh header spans payload[0..18] (bbox, camera, mode,
+     * vcount/icount/isize). `sizeof(composite_record)` only guarantees the
+     * 8-byte type+payload_size header, so a record with payload_size < 76
+     * would let the reads below run off the end before the variable-data
+     * size check. Require the full fixed header first. */
+    if (size < (size_t)(2u + 19u) * sizeof(uint32_t)) {
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: record too small for mesh header");
+    }
+
     float bx = *(const float *)&payload[0];
     float by = *(const float *)&payload[1];
     float bw = *(const float *)&payload[2];

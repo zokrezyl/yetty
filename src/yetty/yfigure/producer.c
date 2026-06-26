@@ -68,6 +68,12 @@ static struct yetty_ycore_void_result append_admin_record(struct yetty_ycore_buf
                                                           uint32_t admin_op, const uint8_t *body,
                                                           uint32_t body_len)
 {
+    /* payload = u32 admin_op | body. Guard the addition: body_len within 4 of
+     * UINT32_MAX would wrap payload_len small while the full body is still
+     * written, emitting a malformed (length-underreporting) record. */
+    if (body_len > UINT32_MAX - 4u) {
+        return YETTY_ERR(yetty_ycore_void, "producer append_admin: body too large");
+    }
     uint32_t payload_len = 4 + body_len;
     struct yetty_ycore_void_result write_result = write_uint32_le(destination, payload_len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, write_result, "producer append_admin: length");
