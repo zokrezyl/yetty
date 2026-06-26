@@ -2439,11 +2439,28 @@ static int style_set_property(JSContext *ctx, JSValueConst obj, JSAtom prop, JSV
 
     struct kv kvs[64];
     char *parse_buf = strdup(buf);
+    if (!parse_buf) {
+        free(buf);
+        JS_FreeCString(ctx, vstr);
+        return -1;
+    }
     int n = parse_style_decl(parse_buf, kvs, 64);
 
-    /* Build new decl string. */
-    size_t cap = alen + klen + vlen + 8;
+    /* Build new decl string. The rebuild loop re-serializes every existing
+     * declaration with normalized "; " and ": " separators (up to 4 bytes
+     * per pair more than the compact ";"/":" the source attribute may use),
+     * plus the appended key/value. `alen + klen + vlen + 8` did not account
+     * for that per-pair expansion and overflowed `out` for inputs with
+     * several compact declarations. Reserve 4 bytes per existing pair plus
+     * one appended pair, and the terminating NUL. */
+    size_t cap = alen + klen + vlen + 4 * ((size_t)n + 1) + 1;
     char *out = malloc(cap);
+    if (!out) {
+        free(buf);
+        free(parse_buf);
+        JS_FreeCString(ctx, vstr);
+        return -1;
+    }
     out[0] = '\0';
     int wrote = 0;
     for (int i = 0; i < n; i++) {

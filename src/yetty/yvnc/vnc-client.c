@@ -399,16 +399,26 @@ static struct yetty_ycore_void_result process_rect_data(struct yetty_yvnc_client
     uint16_t rw = client->current_rect.width;
     uint16_t rh = client->current_rect.height;
 
-    uint8_t *pixels = malloc(rw * rh * 4);
+    /* rw/rh are attacker-controlled (a malicious server frames the rect).
+     * `rw * rh * 4` is evaluated in int and overflows for large rects
+     * (65535*65535*4 exceeds INT_MAX), producing an undersized malloc the
+     * texture write then overruns. Match the frame-header path's 8192 clamp
+     * and do the byte math in size_t. */
+    if (rw > 8192 || rh > 8192) {
+        return YETTY_ERR(yetty_ycore_void, "process_rect_data: rect dimensions too large");
+    }
+    size_t rect_bytes = (size_t)rw * (size_t)rh * 4u;
+
+    uint8_t *pixels = malloc(rect_bytes ? rect_bytes : 1);
     if (!pixels) {
         return YETTY_ERR(yetty_ycore_void, "process_rect_data: alloc failed");
     }
 
-    memset(pixels, 0, rw * rh * 4);
+    memset(pixels, 0, rect_bytes);
 
     switch (client->current_rect.encoding) {
     case YETTY_YVNC_VNC_ENCODING_RAW:
-        if (client->current_rect.data_size == (uint32_t)(rw * rh * 4)) {
+        if (client->current_rect.data_size == rect_bytes) {
             memcpy(pixels, client->recv_buffer, client->current_rect.data_size);
         }
         break;
@@ -451,7 +461,7 @@ static struct yetty_ycore_void_result process_rect_data(struct yetty_yvnc_client
             layout.rowsPerImage = rh;
 
             WGPUExtent3D size = {uw, uh, 1};
-            wgpuQueueWriteTexture(client->queue, &dst, pixels, rw * rh * 4, &layout, &size);
+            wgpuQueueWriteTexture(client->queue, &dst, pixels, rect_bytes, &layout, &size);
         }
     }
 

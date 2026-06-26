@@ -50,6 +50,13 @@ extern const unsigned int gymesh_blit_shaderSize;
 #define YMESH_OFFSCREEN_MAX 1024u
 #define YMESH_OFFSCREEN_MIN 16u
 
+/* Upper bounds on the vertex/index counts read off the wire. Generous (a
+ * 16M-vertex mesh already needs ~384 MB of position+normal data) but small
+ * enough that the `vcount * 3` pointer arithmetic stays within uint32 and the
+ * 64-bit record-size check below cannot overflow. */
+#define YMESH_MAX_VERTICES (16u * 1024u * 1024u)
+#define YMESH_MAX_INDICES (64u * 1024u * 1024u)
+
 /*=============================================================================
  * 3D-pass uniform layout (must match Uniforms struct in ymesh.wgsl).
  *===========================================================================*/
@@ -780,6 +787,24 @@ static struct yetty_ydraw_composite_ptr_result ymesh_create_instance(
     }
     if (vcount == 0 || icount == 0) {
         return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: empty mesh");
+    }
+
+    /* vcount/icount/isize come straight off the wire. Before deriving the
+     * positions/normals/indices pointers (and uploading vcount*3 floats +
+     * icount*isize bytes to the GPU), confirm the record actually carries
+     * that much data — otherwise the uploads read out of bounds past
+     * buffer_data. The dimension caps keep the `vcount * 3` pointer math
+     * below within uint32 and the 64-bit size check free of overflow. */
+    if (vcount > YMESH_MAX_VERTICES || icount > YMESH_MAX_INDICES) {
+        return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: vertex/index count out of range");
+    }
+    {
+        const size_t mesh_data_offset = (size_t)(2u + 19u) * sizeof(uint32_t);
+        uint64_t need = (uint64_t)mesh_data_offset + (uint64_t)vcount * 3u * sizeof(float) +
+                        (uint64_t)vcount * 3u * sizeof(float) + (uint64_t)icount * isize;
+        if ((uint64_t)size < need) {
+            return YETTY_ERR(yetty_ydraw_composite_ptr, "ymesh: record too small for mesh data");
+        }
     }
 
     const float *positions = (const float *)(payload + 19);

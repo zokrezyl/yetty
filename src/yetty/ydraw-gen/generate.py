@@ -42,6 +42,20 @@ TEXTURE_FORMATS = {
     'rgba8': ('RGBA8Unorm', 'WGPUTextureFormat_RGBA8Unorm', 'texture_2d<f32>', 'atlas_rgba8'),
 }
 
+# Texture format -> bytes per pixel. Used by create_instance to bound the
+# pixel region (tex_w*tex_h*bpp) against the bytes the wire record actually
+# carries, so an attacker-supplied dimension cannot drive an out-of-bounds
+# upload into a GPU texture.
+TEXTURE_FORMAT_BPP = {
+    'r8':    1,
+    'rgba8': 4,
+}
+
+# Upper bound on a single texture dimension read off the wire. Far above any
+# real GPU maxTextureDimension2D, but small enough that tex_w*tex_h*bpp cannot
+# overflow the 64-bit product used in the bounds check.
+TEXTURE_MAX_DIM = 32768
+
 SAMPLER_FILTERS = {
     'linear':  1,  # WGPUFilterMode_Linear
     'nearest': 0,  # WGPUFilterMode_Nearest
@@ -123,6 +137,7 @@ def calculate_layout(schema):
             'name': t['name'],
             'format': fmt_key,
             'format_const': fmt_const,
+            'format_bpp': TEXTURE_FORMAT_BPP[fmt_key],
             'wgsl_type': wgsl_type,
             'atlas_name': atlas_name,
             'sampler_filter': sampler_filter,
@@ -664,6 +679,45 @@ def generate_c_source(schema, uniforms, buffers, textures):
     else:
         instance_resources_wiring = ''
 
+    # Record-bounds validation, emitted at the very top of create_instance
+    # (before any allocation, so a rejection is a plain early return). Each
+    # texture's pixel region (tex_w*tex_h*bpp) is bounded against the bytes the
+    # wire record actually carries. Without this, an attacker-supplied
+    # dimension drives the binder to upload heap past buffer_data into a GPU
+    # texture (out-of-bounds read / infoleak). All arithmetic is 64-bit so a
+    # crafted dimension or preceding-buffer length cannot wrap the check.
+    def texture_validate_block(t):
+        if t['pixels_buffer'] is None:
+            return ''
+        buf_idx = next(i for i, b in enumerate(buffers) if b['name'] == t['pixels_buffer'])
+        sum_expr = ''.join(
+            f' + payload[{uniforms_word_count + k}]' for k in range(buf_idx))
+        min_header_words = 2 + buffer_data_offset
+        return f'''    /* Bounds-check texture '{t["name"]}' pixels against the wire record. */
+    {{
+        const uint32_t *payload = (const uint32_t *)buffer_data + 2;
+        if (size < (size_t){min_header_words}u * sizeof(uint32_t))
+            return YETTY_ERR(yetty_ydraw_composite_ptr,
+                             "{name}: record too small for texture header");
+        uint32_t tex_w = payload[{t["width_wire_offset"]}];
+        uint32_t tex_h = payload[{t["height_wire_offset"]}];
+        if (tex_w > {TEXTURE_MAX_DIM}u || tex_h > {TEXTURE_MAX_DIM}u)
+            return YETTY_ERR(yetty_ydraw_composite_ptr,
+                             "{name}: texture dimensions out of range");
+        uint64_t pixels_word_off = (uint64_t){buffer_data_offset}u{sum_expr};
+        uint64_t pixels_byte_off = (2ull + pixels_word_off) * sizeof(uint32_t);
+        uint64_t tex_need = (uint64_t)tex_w * (uint64_t)tex_h * {t["format_bpp"]}u;
+        if (pixels_byte_off > (uint64_t)size ||
+            tex_need > (uint64_t)size - pixels_byte_off)
+            return YETTY_ERR(yetty_ydraw_composite_ptr,
+                             "{name}: texture pixels exceed record");
+    }}'''
+
+    texture_record_validation = '\n'.join(
+        block for block in (texture_validate_block(t) for t in textures) if block)
+    if texture_record_validation:
+        texture_record_validation = '\n' + texture_record_validation + '\n'
+
     # ------------------------------------------------------------------
     # Hook surface — see hooks_enabled() docstring. When opted in, the
     # generated factory delegates four lifecycle points to extern
@@ -1020,7 +1074,7 @@ static struct yetty_ydraw_composite_ptr_result
 {{
     if (!buffer_data || size < sizeof(struct yetty_ydraw_composite_record))
         return YETTY_ERR(yetty_ydraw_composite_ptr, "invalid buffer data");
-
+{texture_record_validation}
     struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
     if (!factory->pipeline)
         return YETTY_ERR(yetty_ydraw_composite_ptr,
