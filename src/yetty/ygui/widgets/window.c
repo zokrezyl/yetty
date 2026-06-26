@@ -134,7 +134,9 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     d->chromeless = 0;
     d->dragging = 0;
     /* Reserve the title strip; stretch the body across the width. */
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "window ctor: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.padding_top = WINDOW_TITLE_H;
     l.padding_left = 1.0f;
     l.padding_right = 1.0f;
@@ -147,7 +149,10 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
         yetty_ygui_widget_add(obj, yetty_ygui_vbox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "window: body add");
     d->body = br.value;
-    struct yetty_ygui_layout bl = *yetty_ygui_widget_layout_get(d->body);
+    struct yetty_ygui_layout_const_ptr_result body_layout_res =
+        yetty_ygui_widget_layout_get(d->body);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, body_layout_res, "window ctor: body layout_get");
+    struct yetty_ygui_layout bl = *body_layout_res.value;
     bl.flex_grow = 1.0f;
     return yetty_ygui_widget_layout_set(d->body, &bl);
 }
@@ -175,7 +180,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     struct yetty_ygui_window_ptr_result d_dr = yetty_ygui_window_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
     struct yetty_ygui_window *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
@@ -236,7 +243,9 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass
     if (d->chromeless) {
         return YETTY_OK(yetty_ycore_int, 0); /* no titlebar = nothing to grab */
     }
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "on_press: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float by = r.min.y + (WINDOW_TITLE_H - WINDOW_BTN) * 0.5f;
 
     /* Close "x" — emit a CLOSE event the app subscribes to. */
@@ -266,7 +275,9 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass
     /* A press elsewhere on the title strip starts a window drag. Below
      * the title strip the press falls through to the body children. */
     if (y - r.min.y <= WINDOW_TITLE_H) {
-        const struct yetty_ygui_layout *l = yetty_ygui_widget_layout_get(obj);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, layout_res, "on_press: layout_get");
+        const struct yetty_ygui_layout *l = layout_res.value;
         d->dragging = 1;
         d->drag_pos_x = l->pos_x;
         d->drag_pos_y = l->pos_y;
@@ -292,7 +303,9 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_object *yclas
      * relative to the parent content box, and the cursor delta is in the
      * same units, so adding it tracks the pointer regardless of parent
      * offset. Make sure absolute positioning stays on. */
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, layout_res, "on_motion: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.absolute = 1;
     l.pos_x = d->drag_pos_x + (x - d->drag_cursor_x);
     l.pos_y = d->drag_pos_y + (y - d->drag_cursor_y);
@@ -323,12 +336,14 @@ static struct yetty_ycore_int_result on_release(struct yetty_yclass_object *ycla
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_yclass_object *yetty_ygui_window_body(struct yetty_yclass_object *obj)
+struct yetty_yclass_object_ptr_result yetty_ygui_window_body(struct yetty_yclass_object *obj)
 {
     if (!obj) {
-        return NULL;
+        return YETTY_ERR(yetty_yclass_object_ptr, "yetty_ygui_window_body: NULL obj");
     }
-    return ((struct yetty_ygui_window *)yetty_ygui_window_from(obj).value)->body;
+    struct yetty_ygui_window_ptr_result data_res = yetty_ygui_window_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, data_res, "yetty_ygui_window_body: data_get");
+    return YETTY_OK(yetty_yclass_object_ptr, data_res.value->body);
 }
 
 YETTY_ANNOTATE("expose")
@@ -396,7 +411,9 @@ struct yetty_ycore_void_result yetty_ygui_window_set_chromeless(struct yetty_ycl
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_window_set_chromeless: data_get");
     struct yetty_ygui_window *d = d_dr.value;
     d->chromeless = chromeless ? 1 : 0;
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "window_set_chromeless: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.padding_top = chromeless ? 8.0f : WINDOW_TITLE_H;
     struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "window_set_chromeless: layout");

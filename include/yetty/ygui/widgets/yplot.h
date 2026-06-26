@@ -44,20 +44,15 @@ struct yetty_ygui_yplot_ptr_result {
     };
 };
 struct yetty_ygui_yplot_ptr_result yetty_ygui_yplot_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_yplot_to(struct yetty_ygui_yplot *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_yplot_to(struct yetty_ygui_yplot *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_yplot_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_yclass_object *obj,
-                                                           const char *source);
-struct yetty_ycore_void_result yetty_ygui_yplot_set_config(
-    struct yetty_yclass_object *obj, const struct yetty_ygui_yplot_config *cfg);
-struct yetty_ycore_void_result yetty_ygui_yplot_set_buffers(
-    struct yetty_yclass_object *obj, const char *source, size_t source_len,
-    const struct yetty_yplot_buffer_input *buffers, size_t buffer_count,
-    const struct yetty_ygui_yplot_config *config);
+struct yetty_ycore_void_result yetty_ygui_yplot_set_source(struct yetty_yclass_object *obj, const char *source);
+struct yetty_ycore_void_result yetty_ygui_yplot_set_config(struct yetty_yclass_object *obj, const struct yetty_ygui_yplot_config *cfg);
+struct yetty_ycore_void_result yetty_ygui_yplot_set_buffers(struct yetty_yclass_object *obj, const char *source, size_t source_len, const struct yetty_yplot_buffer_input *buffers, size_t buffer_count, const struct yetty_ygui_yplot_config *config);
 
 #ifdef __cplusplus
 }

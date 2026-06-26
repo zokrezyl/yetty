@@ -127,7 +127,9 @@ static struct yetty_ycore_void_result ybr_emit_body(struct yetty_yclass_object *
     struct yetty_ygui_ybrowser_ptr_result d_dr = yetty_ygui_ybrowser_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "ybr_emit_body: data_get");
     struct yetty_ygui_ybrowser *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "ybr_emit_body: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
     if (d->html && (w != d->rendered_w || h != d->rendered_h)) {

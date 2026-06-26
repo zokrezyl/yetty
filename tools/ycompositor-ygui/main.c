@@ -182,19 +182,21 @@ static struct yetty_yclass_object *cy_add(struct yetty_yclass_object *parent,
     return r.value;
 }
 
-static void build_scene(struct yetty_ycompositorygui_app *app)
+static struct yetty_ycore_void_result build_scene(struct yetty_ycompositorygui_app *app)
 {
     /* Outer window — it becomes the framework root, so the layout pass
      * stretches it to the viewport automatically. */
     struct yetty_yclass_object *win = cy_add(NULL, yetty_ygui_window_class_get());
     if (!win) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "build_scene: window create");
     }
     app->win = win;
     yetty_ycore_error_destroy_safe(yetty_ygui_window_set_title(win, "ycompositor-ygui demo"));
-    struct yetty_yclass_object *body = yetty_ygui_window_body(win);
+    struct yetty_yclass_object_ptr_result body_res = yetty_ygui_window_body(win);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, body_res, "build_scene: window body");
+    struct yetty_yclass_object *body = body_res.value;
     if (!body) {
-        return;
+        return YETTY_ERR(yetty_ycore_void, "build_scene: window body is NULL");
     }
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_apply_css(
         body, "display: flex; flex-direction: column; padding: 16px; gap: 12px;"));
@@ -290,6 +292,7 @@ static void build_scene(struct yetty_ycompositorygui_app *app)
             yetty_ygui_statusbar_set_left(sb, "ycompositor-ygui — ygui via process_records"));
         yetty_ycore_error_destroy_safe(yetty_ygui_statusbar_set_right(sb, "v0.1"));
     }
+    return YETTY_OK_VOID();
 }
 
 /* Push the current ygui scene through the compositor. Called from
@@ -456,8 +459,13 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
                 yerror("ycompositor-ygui[osc]: process_records failed: %s", pr.error.msg);
                 yetty_ycore_error_destroy(pr.error);
             }
-            if (yetty_yfigure_container_as_figure(app->root)) {
-                yetty_yfigure_figure_dirty_set(app->root, 1);
+            struct yetty_yfigure_figure_ptr_result figure_res =
+                yetty_yfigure_container_as_figure(app->root);
+            if (YETTY_IS_ERR(figure_res)) {
+                yerror("ycompositor-ygui[osc]: container as_figure failed: %s", figure_res.error.msg);
+                yetty_ycore_error_destroy(figure_res.error);
+            } else if (figure_res.value) {
+                yetty_ycore_error_destroy_safe(yetty_yfigure_figure_dirty_set(app->root, 1));
             }
         }
     } else {
@@ -731,9 +739,16 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
     YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "ycompositorygui:app:run: app_from");
     struct yetty_ycompositorygui_app *app = app_res.value;
 
-    const struct yetty_yplatform_gpu_context *gpu = yetty_yplatform_platform_gpu_context(platform);
-    struct yetty_ycore_xthread_event_pipe *input_pipe =
+    struct yetty_yplatform_gpu_context_const_ptr_result gpu_res =
+        yetty_yplatform_platform_gpu_context(platform);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gpu_res, "ycompositorygui:app:run: gpu_context");
+    const struct yetty_yplatform_gpu_context *gpu = gpu_res.value;
+
+    struct yetty_ycore_xthread_event_pipe_ptr_result input_pipe_res =
         yetty_yplatform_platform_input_pipe(platform);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, input_pipe_res, "ycompositorygui:app:run: input_pipe");
+    struct yetty_ycore_xthread_event_pipe *input_pipe = input_pipe_res.value;
+
     if (!gpu || !input_pipe) {
         return YETTY_ERR(yetty_ycore_void, "ycompositorygui:app:run: platform state not populated");
     }
@@ -843,7 +858,8 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
         struct yetty_ycore_void_result scr =
             yetty_ygui_framework_set_container_obj(app->ygui, app->root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scr, "framework set_container_obj failed");
-        build_scene(app);
+        struct yetty_ycore_void_result scene_res = build_scene(app);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, scene_res, "build_scene failed");
         if (app->win) {
             struct yetty_ycore_void_result rootr =
                 yetty_ygui_framework_set_root(app->ygui, app->win);

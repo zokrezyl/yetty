@@ -31,14 +31,13 @@ struct yetty_ygui_ybrowser_ptr_result {
     };
 };
 struct yetty_ygui_ybrowser_ptr_result yetty_ygui_ybrowser_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_ybrowser_to(struct yetty_ygui_ybrowser *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_ybrowser_to(struct yetty_ygui_ybrowser *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_ybrowser_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_ybrowser_set_html(struct yetty_yclass_object *obj,
-                                                            const char *html, size_t len);
+struct yetty_ycore_void_result yetty_ygui_ybrowser_set_html(struct yetty_yclass_object *obj, const char *html, size_t len);
 
 #ifdef __cplusplus
 }

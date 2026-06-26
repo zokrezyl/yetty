@@ -1242,8 +1242,8 @@ static struct yetty_ycore_void_result emit_element(struct yetty_ydraw_drawable_l
  * 0 selects the default for each. Call after create(), before render(). */
 YETTY_ANNOTATE("virtual@ymusic:music:configure")
 YETTY_ANNOTATE("local@ymusic:configure")
-static struct yetty_ycore_void_result
-    music_configure(struct yetty_yclass_object *obj, float width, float staff_space, uint32_t flags)
+static struct yetty_ycore_void_result music_configure(struct yetty_yclass_object *obj, float width,
+                                                      float staff_space, uint32_t flags)
 {
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, music_r, "ymusic configure: from_obj");
@@ -1258,8 +1258,8 @@ static struct yetty_ycore_void_result
  * and clears any selection. */
 YETTY_ANNOTATE("virtual@ymusic:music:parse")
 YETTY_ANNOTATE("local@ymusic:parse")
-static struct yetty_ycore_void_result
-    music_parse(struct yetty_yclass_object *obj, const char *input, size_t len)
+static struct yetty_ycore_void_result music_parse(struct yetty_yclass_object *obj,
+                                                  const char *input, size_t len)
 {
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, music_r, "ymusic parse: from_obj");
@@ -1544,8 +1544,8 @@ static struct yetty_ydraw_drawable_list_result music_render(struct yetty_yclass_
  * (x,y), or YETTY_YMUSIC_NO_ELEMENT. Requires a prior render() for the layout. */
 YETTY_ANNOTATE("virtual@ymusic:music:hit_test")
 YETTY_ANNOTATE("local@ymusic:hit_test")
-static struct yetty_ycore_int_result
-    music_hit_test(struct yetty_yclass_object *obj, float x, float y)
+static struct yetty_ycore_int_result music_hit_test(struct yetty_yclass_object *obj, float x,
+                                                    float y)
 {
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, music_r, "ymusic hit_test: from_obj");
@@ -1571,8 +1571,8 @@ static struct yetty_ycore_int_result
 /* set_highlight: mark an element as selected (-1 clears) for the next render. */
 YETTY_ANNOTATE("virtual@ymusic:music:set_highlight")
 YETTY_ANNOTATE("local@ymusic:set_highlight")
-static struct yetty_ycore_void_result
-    music_set_highlight(struct yetty_yclass_object *obj, int32_t element_id)
+static struct yetty_ycore_void_result music_set_highlight(struct yetty_yclass_object *obj,
+                                                          int32_t element_id)
 {
     struct yetty_yclass_void_ptr_result music_r = music_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, music_r, "ymusic set_highlight: from_obj");

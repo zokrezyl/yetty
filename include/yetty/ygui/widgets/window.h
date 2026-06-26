@@ -31,24 +31,20 @@ struct yetty_ygui_window_ptr_result {
     };
 };
 struct yetty_ygui_window_ptr_result yetty_ygui_window_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_window_to(struct yetty_ygui_window *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_window_to(struct yetty_ygui_window *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_window_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_yclass_object *yetty_ygui_window_body(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_yclass_object *obj,
-                                                           const char *title);
-struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_yclass_object *obj,
-                                                          struct yetty_yclass_object *menu);
-struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_yclass_object *obj,
-                                                              int closable);
+struct yetty_yclass_object_ptr_result yetty_ygui_window_body(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_window_set_title(struct yetty_yclass_object *obj, const char *title);
+struct yetty_ycore_void_result yetty_ygui_window_set_menu(struct yetty_yclass_object *obj, struct yetty_yclass_object *menu);
+struct yetty_ycore_void_result yetty_ygui_window_set_closable(struct yetty_yclass_object *obj, int closable);
 /* Chromeless: drop the title strip and shrink the top padding so the
  * body fills the frame. For docked/anchored panels (a status bar) the
  * titlebar is wasted space and the window isn't meant to be dragged. */
-struct yetty_ycore_void_result yetty_ygui_window_set_chromeless(struct yetty_yclass_object *obj,
-                                                                int chromeless);
+struct yetty_ycore_void_result yetty_ygui_window_set_chromeless(struct yetty_yclass_object *obj, int chromeless);
 
 #ifdef __cplusplus
 }

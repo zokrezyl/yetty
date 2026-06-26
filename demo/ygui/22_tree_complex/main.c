@@ -30,7 +30,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     err_ok(yetty_ygui_tree_node_set_label(a.value, "project/"));
     err_ok(yetty_ygui_tree_node_set_open(a.value, 1));
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(a.value);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(a.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "22_tree_complex: layout_get");
+        struct yetty_ygui_layout l = *layout_res.value;
         l.flex_grow = 1.0f;
         l.min_height = 240.0f;
         err_ok(yetty_ygui_widget_layout_set(a.value, &l));
@@ -44,7 +47,11 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         {
             struct yetty_yclass_object *w = b.value;
             {
-                struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+                struct yetty_ygui_layout_const_ptr_result layout_res =
+                    yetty_ygui_widget_layout_get(w);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res,
+                                    "22_tree_complex: layout_get");
+                struct yetty_ygui_layout l = *layout_res.value;
                 l.height = 120;
                 err_ok(yetty_ygui_widget_layout_set(w, &l));
             }
@@ -56,7 +63,11 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         {
             struct yetty_yclass_object *w = c.value;
             {
-                struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+                struct yetty_ygui_layout_const_ptr_result layout_res =
+                    yetty_ygui_widget_layout_get(w);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res,
+                                    "22_tree_complex: layout_get");
+                struct yetty_ygui_layout l = *layout_res.value;
                 l.height = 24;
                 err_ok(yetty_ygui_widget_layout_set(w, &l));
             }
@@ -69,7 +80,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_label_set_text(b.value, "README.md"));
         struct yetty_yclass_object *w = b.value;
         {
-            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+            struct yetty_ygui_layout_const_ptr_result layout_res =
+                yetty_ygui_widget_layout_get(w);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "22_tree_complex: layout_get");
+            struct yetty_ygui_layout l = *layout_res.value;
             l.height = 24;
             err_ok(yetty_ygui_widget_layout_set(w, &l));
         }

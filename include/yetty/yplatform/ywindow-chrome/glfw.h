@@ -33,21 +33,16 @@ struct yetty_yplatform_glfw_window_chrome_ptr_result {
         struct yetty_ycore_error error;
     };
 };
-struct yetty_yplatform_glfw_window_chrome_ptr_result yetty_yplatform_glfw_window_chrome_from(
-    struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yplatform_glfw_window_chrome_to(
-    struct yetty_yplatform_glfw_window_chrome *data);
+struct yetty_yplatform_glfw_window_chrome_ptr_result yetty_yplatform_glfw_window_chrome_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_window_chrome_to(struct yetty_yplatform_glfw_window_chrome *data);
 
-struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_window_chrome_create(
-    struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_window_chrome_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_yplatform_register(void);
 
 /* Bind the native window + main→render response pipe. Call once after create()
  * and the base window_chrome_configure(). Both borrowed. */
-struct yetty_ycore_void_result yetty_yplatform_glfw_window_chrome_attach(
-    struct yetty_yclass_object *obj, void *os_window,
-    struct yetty_ycore_xthread_event_pipe *input_pipe);
+struct yetty_ycore_void_result yetty_yplatform_glfw_window_chrome_attach(struct yetty_yclass_object *obj, void *os_window, struct yetty_ycore_xthread_event_pipe *input_pipe);
 
 #ifdef __cplusplus
 }

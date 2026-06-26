@@ -1484,8 +1484,8 @@ static struct yetty_ycore_void_result emit_component_labels(const struct emit_ge
  * after create(), before render(). */
 YETTY_ANNOTATE("virtual@ycircuit:circuit:configure")
 YETTY_ANNOTATE("local@ycircuit:configure")
-static struct yetty_ycore_void_result
-    circuit_configure(struct yetty_yclass_object *obj, float grid_px, uint32_t flags)
+static struct yetty_ycore_void_result circuit_configure(struct yetty_yclass_object *obj,
+                                                        float grid_px, uint32_t flags)
 {
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, circuit_r, "ycircuit configure: from_obj");
@@ -1499,8 +1499,8 @@ static struct yetty_ycore_void_result
  * model and clears any selection. */
 YETTY_ANNOTATE("virtual@ycircuit:circuit:parse")
 YETTY_ANNOTATE("local@ycircuit:parse")
-static struct yetty_ycore_void_result
-    circuit_parse(struct yetty_yclass_object *obj, const char *input, size_t len)
+static struct yetty_ycore_void_result circuit_parse(struct yetty_yclass_object *obj,
+                                                    const char *input, size_t len)
 {
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, circuit_r, "ycircuit parse: from_obj");
@@ -1531,9 +1531,10 @@ static struct yetty_ycore_void_result circuit_clear(struct yetty_yclass_object *
  * empty). Returns the new element id. */
 YETTY_ANNOTATE("virtual@ycircuit:circuit:add_component")
 YETTY_ANNOTATE("local@ycircuit:add_component")
-static struct yetty_ycore_int_result
-    circuit_add_component(struct yetty_yclass_object *obj, const char *kind, float x, float y,
-                          int32_t rotation_deg, const char *name, const char *value)
+static struct yetty_ycore_int_result circuit_add_component(struct yetty_yclass_object *obj,
+                                                           const char *kind, float x, float y,
+                                                           int32_t rotation_deg, const char *name,
+                                                           const char *value)
 {
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, circuit_r, "ycircuit add_component: from_obj");
@@ -1564,10 +1565,11 @@ static struct yetty_ycore_int_result
  * grows to fit the longest side. Returns the new element id. */
 YETTY_ANNOTATE("virtual@ycircuit:circuit:add_ic")
 YETTY_ANNOTATE("local@ycircuit:add_ic")
-static struct yetty_ycore_int_result
-    circuit_add_ic(struct yetty_yclass_object *obj, float x, float y, int32_t rotation_deg,
-                   const char *name, const char *value, const char *pins_left,
-                   const char *pins_right, const char *pins_top, const char *pins_bottom)
+static struct yetty_ycore_int_result circuit_add_ic(struct yetty_yclass_object *obj, float x,
+                                                    float y, int32_t rotation_deg, const char *name,
+                                                    const char *value, const char *pins_left,
+                                                    const char *pins_right, const char *pins_top,
+                                                    const char *pins_bottom)
 {
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, circuit_r, "ycircuit add_ic: from_obj");
@@ -1592,8 +1594,8 @@ static struct yetty_ycore_int_result
 /* add_wire: append one straight wire segment. Returns the new element id. */
 YETTY_ANNOTATE("virtual@ycircuit:circuit:add_wire")
 YETTY_ANNOTATE("local@ycircuit:add_wire")
-static struct yetty_ycore_int_result
-    circuit_add_wire(struct yetty_yclass_object *obj, float x0, float y0, float x1, float y1)
+static struct yetty_ycore_int_result circuit_add_wire(struct yetty_yclass_object *obj, float x0,
+                                                      float y0, float x1, float y1)
 {
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, circuit_r, "ycircuit add_wire: from_obj");
@@ -1612,8 +1614,8 @@ static struct yetty_ycore_int_result
 /* add_junction: append a connection dot. Returns the new element id. */
 YETTY_ANNOTATE("virtual@ycircuit:circuit:add_junction")
 YETTY_ANNOTATE("local@ycircuit:add_junction")
-static struct yetty_ycore_int_result
-    circuit_add_junction(struct yetty_yclass_object *obj, float x, float y)
+static struct yetty_ycore_int_result circuit_add_junction(struct yetty_yclass_object *obj, float x,
+                                                          float y)
 {
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, circuit_r, "ycircuit add_junction: from_obj");
@@ -1631,8 +1633,8 @@ static struct yetty_ycore_int_result
  * element id. */
 YETTY_ANNOTATE("virtual@ycircuit:circuit:add_label")
 YETTY_ANNOTATE("local@ycircuit:add_label")
-static struct yetty_ycore_int_result
-    circuit_add_label(struct yetty_yclass_object *obj, float x, float y, const char *text)
+static struct yetty_ycore_int_result circuit_add_label(struct yetty_yclass_object *obj, float x,
+                                                       float y, const char *text)
 {
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, circuit_r, "ycircuit add_label: from_obj");
@@ -1832,8 +1834,8 @@ static struct yetty_ydraw_drawable_list_result circuit_render(struct yetty_yclas
  * overlap the most recently added element wins (it draws on top). */
 YETTY_ANNOTATE("virtual@ycircuit:circuit:hit_test")
 YETTY_ANNOTATE("local@ycircuit:hit_test")
-static struct yetty_ycore_int_result
-    circuit_hit_test(struct yetty_yclass_object *obj, float x, float y)
+static struct yetty_ycore_int_result circuit_hit_test(struct yetty_yclass_object *obj, float x,
+                                                      float y)
 {
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, circuit_r, "ycircuit hit_test: from_obj");
@@ -1852,8 +1854,8 @@ static struct yetty_ycore_int_result
  * render. */
 YETTY_ANNOTATE("virtual@ycircuit:circuit:set_highlight")
 YETTY_ANNOTATE("local@ycircuit:set_highlight")
-static struct yetty_ycore_void_result
-    circuit_set_highlight(struct yetty_yclass_object *obj, int32_t element_id)
+static struct yetty_ycore_void_result circuit_set_highlight(struct yetty_yclass_object *obj,
+                                                            int32_t element_id)
 {
     struct yetty_yclass_void_ptr_result circuit_r = circuit_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, circuit_r, "ycircuit set_highlight: from_obj");

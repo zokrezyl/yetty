@@ -28,8 +28,19 @@ struct yetty_ycore_void_result yetty_ygui_widget_subscribe(struct yetty_yclass_o
     sub->type = type;
     sub->cb = cb;
     sub->userdata = userdata;
-    sub->next = yetty_ygui_widget_subscriptions(target);
-    yetty_ygui_widget_set_subscriptions(target, sub);
+    struct yetty_ygui_event_subscription_ptr_result head_res =
+        yetty_ygui_widget_subscriptions(target);
+    if (YETTY_IS_ERR(head_res)) {
+        free(sub);
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_subscribe: subscriptions", head_res);
+    }
+    sub->next = head_res.value;
+    struct yetty_ycore_void_result set_res = yetty_ygui_widget_set_subscriptions(target, sub);
+    if (YETTY_IS_ERR(set_res)) {
+        free(sub);
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_subscribe: set_subscriptions",
+                         set_res);
+    }
     return YETTY_OK_VOID();
 }
 
@@ -43,8 +54,10 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit(struct yetty_yclass_object
      * "subscribe to events on a target", so emit fires on the source
      * itself (i.e., subscriptions live on the emitter today; the
      * full target/source split lands when bubbling is added). */
-    for (struct yetty_ygui_event_subscription *s = yetty_ygui_widget_subscriptions(source); s;
-         s = s->next) {
+    struct yetty_ygui_event_subscription_ptr_result head_res =
+        yetty_ygui_widget_subscriptions(source);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, head_res, "yetty_ygui_widget_emit: subscriptions");
+    for (struct yetty_ygui_event_subscription *s = head_res.value; s; s = s->next) {
         if (s->type != event->type) {
             continue;
         }

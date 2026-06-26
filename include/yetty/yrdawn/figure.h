@@ -19,17 +19,16 @@ extern "C" {
 struct yetty_yfigure_figure;
 struct yetty_yfigure_registry;
 
-typedef struct yetty_ycore_void_result (*yetty_yrdawn_emit_osc_fn)(int, const void *, size_t,
-                                                                   void *);
+typedef struct yetty_ycore_void_result (*yetty_yrdawn_emit_osc_fn)(int, const void *, size_t, void *);
 typedef struct yetty_ycore_void_result (*yetty_yrdawn_request_render_fn)(void *);
 
 struct yetty_yrdawn_factory_args {
-    const struct yetty_context *context;
+    const struct yetty_context * context;
     yetty_yrdawn_emit_osc_fn emit_osc_fn;
-    void *emit_osc_user;
+    void * emit_osc_user;
     yetty_yrdawn_request_render_fn request_render_fn;
-    void *request_render_user;
-    struct yetty_yrdawn_factory_state *state;
+    void * request_render_user;
+    struct yetty_yrdawn_factory_state * state;
 };
 
 struct yetty_yclass_ptr_result yetty_yrdawn_figure_class_get(void);
@@ -47,20 +46,17 @@ struct yetty_yrdawn_figure_ptr_result {
     };
 };
 struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yrdawn_figure_to(struct yetty_yrdawn_figure *data);
+struct yetty_yclass_object_ptr_result yetty_yrdawn_figure_to(struct yetty_yrdawn_figure *data);
 
 struct yetty_yclass_object_ptr_result yetty_yrdawn_figure_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_yrdawn_register(void);
 
-struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_from_base(
-    struct yetty_yfigure_figure *base);
+struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_from_base(struct yetty_yfigure_figure *base);
 /* Upcast: object → its figure-base slice. Stable pointer. */
-struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_yrdawn_register_factory(
-    struct yetty_yfigure_registry *registry, struct yetty_yrdawn_factory_args *args);
-struct yetty_ycore_void_result yetty_yrdawn_factory_args_release(
-    struct yetty_yrdawn_factory_args *args);
+struct yetty_yfigure_figure_ptr_result yetty_yrdawn_figure_as_figure(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yrdawn_register_factory(struct yetty_yfigure_registry *registry, struct yetty_yrdawn_factory_args *args);
+struct yetty_ycore_void_result yetty_yrdawn_factory_args_release(struct yetty_yrdawn_factory_args *args);
 
 #ifdef __cplusplus
 }

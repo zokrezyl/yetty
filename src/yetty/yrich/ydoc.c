@@ -666,6 +666,11 @@ struct paragraph_render_pass {
     struct yetty_ycore_void_result status;
 };
 
+/* Bound to the fixed `paragraph_line_visitor` typedef signature, so it cannot
+ * return a Result. The Result-returning ydraw calls inside have nowhere to
+ * propagate to; their errors are absorbed into pass->status and surfaced at the
+ * paragraph_for_each_line caller. */
+YETTY_EXTERNAL_CALLBACK
 static int paragraph_render_line_visitor(const struct paragraph_line *line, size_t line_index,
                                          void *userdata)
 {
@@ -1256,19 +1261,17 @@ struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_add_paragraph(
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_yclass_object *yetty_yrich_ydoc_paragraph_at(struct yetty_yclass_object *obj,
-                                                          int32_t index)
+struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_paragraph_at(struct yetty_yclass_object *obj,
+                                                                    int32_t index)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, data_res, "ydoc_paragraph_at: data_get");
     struct yetty_yrich_ydoc *ydoc = data_res.value;
     if (index < 0 || (size_t)index >= ydoc->paragraph_count) {
-        return NULL;
+        /* Out-of-range is a successful "no such paragraph" query result. */
+        return YETTY_OK(yetty_yclass_object_ptr, NULL);
     }
-    return ydoc->paragraphs[index];
+    return YETTY_OK(yetty_yclass_object_ptr, ydoc->paragraphs[index]);
 }
 
 static struct yetty_ycore_void_result image_list_push(struct yetty_yrich_ydoc *ydoc,
@@ -1366,7 +1369,7 @@ struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_insert_image(struct yetty
  * edits (paragraph split / merge) apply directly.
  *=========================================================================*/
 
-static void ydoc_relayout(struct yetty_yrich_ydoc *ydoc)
+static struct yetty_ycore_void_result ydoc_relayout(struct yetty_yrich_ydoc *ydoc)
 {
     float content_width = ydoc->page_width - 2.0f * ydoc->margin;
     if (content_width < 8.0f) {
@@ -1376,10 +1379,7 @@ static void ydoc_relayout(struct yetty_yrich_ydoc *ydoc)
     for (size_t i = 0; i < ydoc->paragraph_count; i++) {
         struct yetty_yrich_paragraph_ptr_result paragraph_res =
             yetty_yrich_paragraph_from(ydoc->paragraphs[i]);
-        if (YETTY_IS_ERR(paragraph_res)) {
-            yetty_ycore_error_destroy(paragraph_res.error);
-            continue;
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, paragraph_res, "ydoc_relayout: paragraph");
         struct yetty_yrich_paragraph *paragraph = paragraph_res.value;
         paragraph->bounds.x = ydoc->margin;
         paragraph->bounds.w = content_width;
@@ -1387,6 +1387,7 @@ static void ydoc_relayout(struct yetty_yrich_ydoc *ydoc)
         paragraph_recompute_height(paragraph);
         y += paragraph->bounds.h;
     }
+    return YETTY_OK_VOID();
 }
 
 /* The paragraph holding the caret, resolved from the document selection. */
@@ -1411,33 +1412,38 @@ static int ydoc_alias_index_of(const struct yetty_yrich_ydoc *ydoc,
     return 0;
 }
 
-static int ydoc_active_paragraph_get(struct yetty_yclass_object *obj, struct yetty_yrich_ydoc *ydoc,
-                                     struct ydoc_active_paragraph *out_active)
+/* Resolves the caret-holding paragraph. The Result's value is the found flag
+ * (1 = active paragraph populated, 0 = no text selection / not found); a real
+ * downstream failure propagates as an error. */
+static struct yetty_ycore_int_result ydoc_active_paragraph_get(
+    struct yetty_yclass_object *obj, struct yetty_yrich_ydoc *ydoc,
+    struct ydoc_active_paragraph *out_active)
 {
-    struct yetty_yrich_selection *selection = yetty_yrich_document_selection(obj);
+    struct yetty_yrich_selection_ptr_result selection_res = yetty_yrich_document_selection(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, selection_res, "ydoc_active_paragraph_get: selection");
+    struct yetty_yrich_selection *selection = selection_res.value;
     if (!selection || selection->kind != YETTY_YRICH_SEL_TEXT) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
-    struct yetty_yclass_object *paragraph_obj =
+    struct yetty_yclass_object_ptr_result paragraph_obj_res =
         yetty_yrich_document_find(obj, selection->u.text.element_id);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, paragraph_obj_res, "ydoc_active_paragraph_get: find");
+    struct yetty_yclass_object *paragraph_obj = paragraph_obj_res.value;
     if (!paragraph_obj) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
     struct yetty_yrich_paragraph_ptr_result paragraph_res =
         yetty_yrich_paragraph_from(paragraph_obj);
-    if (YETTY_IS_ERR(paragraph_res)) {
-        yetty_ycore_error_destroy(paragraph_res.error);
-        return 0;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, paragraph_res, "ydoc_active_paragraph_get: data_get");
     out_active->paragraph_obj = paragraph_obj;
     out_active->paragraph = paragraph_res.value;
     out_active->id = selection->u.text.element_id;
     out_active->anchor = selection->u.text.start;
     out_active->caret = selection->u.text.end;
     if (!ydoc_alias_index_of(ydoc, paragraph_obj, &out_active->alias_index)) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
-    return 1;
+    return YETTY_OK(yetty_ycore_int, 1);
 }
 
 static int32_t clamp_caret(const struct yetty_yrich_paragraph *paragraph, int32_t index)
@@ -1458,20 +1464,22 @@ static struct yetty_ycore_void_result ydoc_set_caret(struct yetty_yclass_object 
                                                      struct yetty_yclass_object *paragraph_obj,
                                                      int32_t anchor, int32_t caret)
 {
-    struct yetty_yrich_selection *selection = yetty_yrich_document_selection(obj);
+    struct yetty_yrich_selection_ptr_result selection_res = yetty_yrich_document_selection(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, selection_res, "ydoc_set_caret: selection");
+    struct yetty_yrich_selection *selection = selection_res.value;
     if (selection && selection->kind == YETTY_YRICH_SEL_TEXT) {
-        struct yetty_yclass_object *previous_obj =
+        struct yetty_yclass_object_ptr_result previous_obj_res =
             yetty_yrich_document_find(obj, selection->u.text.element_id);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, previous_obj_res, "ydoc_set_caret: find");
+        struct yetty_yclass_object *previous_obj = previous_obj_res.value;
         if (previous_obj && previous_obj != paragraph_obj) {
             struct yetty_yrich_paragraph_ptr_result previous_res =
                 yetty_yrich_paragraph_from(previous_obj);
-            if (YETTY_IS_OK(previous_res)) {
-                previous_res.value->editing = 0;
-                previous_res.value->sel_start = previous_res.value->sel_end =
-                    previous_res.value->cursor_pos;
-            } else {
-                yetty_ycore_error_destroy(previous_res.error);
-            }
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, previous_res,
+                                "ydoc_set_caret: previous data_get");
+            previous_res.value->editing = 0;
+            previous_res.value->sel_start = previous_res.value->sel_end =
+                previous_res.value->cursor_pos;
         }
     }
 
@@ -1498,7 +1506,9 @@ static struct yetty_ycore_void_result ydoc_end_editing(struct yetty_yclass_objec
                                                        struct yetty_yrich_ydoc *ydoc)
 {
     struct ydoc_active_paragraph active;
-    if (ydoc_active_paragraph_get(obj, ydoc, &active)) {
+    struct yetty_ycore_int_result active_res = ydoc_active_paragraph_get(obj, ydoc, &active);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, active_res, "ydoc_end_editing: active paragraph");
+    if (active_res.value) {
         active.paragraph->editing = 0;
         active.paragraph->sel_start = active.paragraph->sel_end = active.paragraph->cursor_pos;
     }
@@ -1687,7 +1697,8 @@ static struct yetty_ycore_void_result ydoc_split_paragraph(struct yetty_yclass_o
     tail_paragraph->text_len = tail_len;
     paragraph_recompute_height(tail_paragraph);
 
-    ydoc_relayout(ydoc);
+    struct yetty_ycore_void_result relayout_res = ydoc_relayout(ydoc);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, relayout_res, "ydoc split: relayout");
     return ydoc_set_caret(obj, tail_obj, 0, 0);
 }
 
@@ -1723,7 +1734,8 @@ static struct yetty_ycore_void_result ydoc_merge_paragraphs(struct yetty_yclass_
         yetty_yrich_document_remove_element(obj, source_id_res.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, remove_res, "ydoc merge: remove source");
 
-    ydoc_relayout(ydoc);
+    struct yetty_ycore_void_result relayout_res = ydoc_relayout(ydoc);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, relayout_res, "ydoc merge: relayout");
     return ydoc_set_caret(obj, target_obj, join_position, join_position);
 }
 
@@ -1781,7 +1793,9 @@ static struct yetty_ycore_void_result ydoc_on_mouse_down(struct yetty_yclass_obj
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_on_mouse_down: data_get");
     struct yetty_yrich_ydoc *ydoc = data_res.value;
 
-    struct yetty_yclass_object *hit_obj = yetty_yrich_document_element_at(obj, x, y);
+    struct yetty_yclass_object_ptr_result hit_res = yetty_yrich_document_element_at(obj, x, y);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hit_res, "ydoc_on_mouse_down: element_at");
+    struct yetty_yclass_object *hit_obj = hit_res.value;
     if (!hit_obj) {
         return ydoc_end_editing(obj, ydoc);
     }
@@ -1791,10 +1805,11 @@ static struct yetty_ycore_void_result ydoc_on_mouse_down(struct yetty_yclass_obj
         yetty_ycore_error_destroy(paragraph_res.error);
         struct yetty_yrich_element_id_result id_res = yetty_yrich_element_id_value(hit_obj);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "ydoc_on_mouse_down: element id");
-        struct yetty_yrich_selection *selection = yetty_yrich_document_selection(obj);
-        if (selection) {
+        struct yetty_yrich_selection_ptr_result selection_res = yetty_yrich_document_selection(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, selection_res, "ydoc_on_mouse_down: selection");
+        if (selection_res.value) {
             struct yetty_ycore_void_result select_res =
-                yetty_yrich_selection_select_element(selection, id_res.value);
+                yetty_yrich_selection_select_element(selection_res.value, id_res.value);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, select_res, "ydoc_on_mouse_down: select");
         }
         return yetty_yrich_document_mark_dirty(obj);
@@ -1804,7 +1819,9 @@ static struct yetty_ycore_void_result ydoc_on_mouse_down(struct yetty_yclass_obj
     int32_t anchor = caret;
     if (mods & YETTY_YRICH_MOD_SHIFT) {
         struct ydoc_active_paragraph active;
-        if (ydoc_active_paragraph_get(obj, ydoc, &active) && active.paragraph_obj == hit_obj) {
+        struct yetty_ycore_int_result active_res = ydoc_active_paragraph_get(obj, ydoc, &active);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, active_res, "ydoc_on_mouse_down: active paragraph");
+        if (active_res.value && active.paragraph_obj == hit_obj) {
             anchor = active.anchor;
         }
     }
@@ -1820,7 +1837,10 @@ static struct yetty_ycore_void_result ydoc_on_mouse_drag(struct yetty_yclass_obj
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_on_mouse_drag: data_get");
     struct ydoc_active_paragraph active;
-    if (!ydoc_active_paragraph_get(obj, data_res.value, &active)) {
+    struct yetty_ycore_int_result active_res =
+        ydoc_active_paragraph_get(obj, data_res.value, &active);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, active_res, "ydoc_on_mouse_drag: active paragraph");
+    if (!active_res.value) {
         return YETTY_OK_VOID();
     }
     int32_t caret = paragraph_caret_from_point(active.paragraph, x, y);
@@ -1881,7 +1901,9 @@ static struct yetty_ycore_void_result ydoc_on_key_down(struct yetty_yclass_objec
     struct yetty_yrich_ydoc *ydoc = data_res.value;
 
     struct ydoc_active_paragraph active;
-    int have_active = ydoc_active_paragraph_get(obj, ydoc, &active);
+    struct yetty_ycore_int_result have_active_res = ydoc_active_paragraph_get(obj, ydoc, &active);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, have_active_res, "ydoc_on_key_down: active paragraph");
+    int have_active = have_active_res.value;
 
     if (mods & YETTY_YRICH_MOD_CTRL) {
         switch (key) {
@@ -1990,7 +2012,10 @@ static struct yetty_ycore_void_result ydoc_on_key_down(struct yetty_yclass_objec
             struct yetty_ycore_void_result delete_res = ydoc_delete_selection_or_range(
                 obj, &active, selection_lo, selection_hi - selection_lo);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, delete_res, "ydoc enter: collapse selection");
-            if (!ydoc_active_paragraph_get(obj, ydoc, &active)) {
+            struct yetty_ycore_int_result active_res =
+                ydoc_active_paragraph_get(obj, ydoc, &active);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, active_res, "ydoc enter: active paragraph");
+            if (!active_res.value) {
                 return YETTY_OK_VOID();
             }
         }
@@ -2016,7 +2041,10 @@ static struct yetty_ycore_void_result ydoc_on_text_input(struct yetty_yclass_obj
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_on_text_input: data_get");
     struct ydoc_active_paragraph active;
-    if (!ydoc_active_paragraph_get(obj, data_res.value, &active)) {
+    struct yetty_ycore_int_result active_res =
+        ydoc_active_paragraph_get(obj, data_res.value, &active);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, active_res, "ydoc: active paragraph");
+    if (!active_res.value) {
         return YETTY_OK_VOID();
     }
     int32_t selection_lo = active.anchor < active.caret ? active.anchor : active.caret;
@@ -2048,7 +2076,9 @@ static struct yetty_ycore_void_result ydoc_on_mouse_double_click(struct yetty_yc
     if (button != YETTY_YRICH_MOUSE_LEFT) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yclass_object *hit_obj = yetty_yrich_document_element_at(obj, x, y);
+    struct yetty_yclass_object_ptr_result hit_res = yetty_yrich_document_element_at(obj, x, y);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hit_res, "ydoc_on_mouse_double_click: element_at");
+    struct yetty_yclass_object *hit_obj = hit_res.value;
     if (!hit_obj) {
         return YETTY_OK_VOID();
     }
@@ -2071,24 +2101,25 @@ static struct yetty_ycore_void_result ydoc_on_mouse_double_click(struct yetty_yc
 /* Selected text as a fresh heap string (caller frees). NULL when the
  * selection is empty or not a text selection. */
 YETTY_ANNOTATE("expose")
-char *yetty_yrich_ydoc_selection_text(struct yetty_yclass_object *obj)
+struct yetty_ycore_char_ptr_result yetty_yrich_ydoc_selection_text(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_char_ptr, data_res, "ydoc_selection_text: data_get");
     struct ydoc_active_paragraph active;
-    if (!ydoc_active_paragraph_get(obj, data_res.value, &active)) {
-        return NULL;
+    struct yetty_ycore_int_result active_res =
+        ydoc_active_paragraph_get(obj, data_res.value, &active);
+    YETTY_RETURN_IF_ERR(yetty_ycore_char_ptr, active_res, "ydoc_selection_text: active paragraph");
+    if (!active_res.value) {
+        return YETTY_OK(yetty_ycore_char_ptr, NULL);
     }
     int32_t selection_lo = active.anchor < active.caret ? active.anchor : active.caret;
     int32_t selection_hi = active.anchor < active.caret ? active.caret : active.anchor;
     if (selection_lo >= selection_hi) {
-        return NULL;
+        return YETTY_OK(yetty_ycore_char_ptr, NULL);
     }
-    return dup_text_range(active.paragraph->text, (size_t)selection_lo,
-                          (size_t)(selection_hi - selection_lo));
+    return YETTY_OK(yetty_ycore_char_ptr,
+                    dup_text_range(active.paragraph->text, (size_t)selection_lo,
+                                   (size_t)(selection_hi - selection_lo)));
 }
 
 /*---------------------------------------------------------------------------
@@ -2130,8 +2161,10 @@ static struct yetty_ycore_void_result ydoc_apply_op(struct yetty_yclass_object *
 
     switch (op->type) {
     case YETTY_YRICH_OP_TEXT_INSERT: {
-        struct yetty_yclass_object *target_obj =
+        struct yetty_yclass_object_ptr_result target_res =
             yetty_yrich_document_find(obj, op->u.text_insert.id);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, target_res, "ydoc_apply_op: insert find");
+        struct yetty_yclass_object *target_obj = target_res.value;
         if (!target_obj) {
             return YETTY_ERR(yetty_ycore_void, "ydoc_apply_op: unknown insert target");
         }
@@ -2143,7 +2176,8 @@ static struct yetty_ycore_void_result ydoc_apply_op(struct yetty_yclass_object *
         struct yetty_ycore_void_result insert_res = paragraph_text_insert_at(
             paragraph_res.value, op->u.text_insert.position, text, text_len);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, insert_res, "ydoc_apply_op: insert");
-        ydoc_relayout(data_res.value);
+        struct yetty_ycore_void_result relayout_res = ydoc_relayout(data_res.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, relayout_res, "ydoc_apply_op: insert relayout");
         struct yetty_ycore_void_result caret_res =
             ydoc_set_caret(obj, target_obj, op->u.text_insert.position + (int32_t)text_len,
                            op->u.text_insert.position + (int32_t)text_len);
@@ -2151,8 +2185,10 @@ static struct yetty_ycore_void_result ydoc_apply_op(struct yetty_yclass_object *
         break;
     }
     case YETTY_YRICH_OP_TEXT_DELETE: {
-        struct yetty_yclass_object *target_obj =
+        struct yetty_yclass_object_ptr_result target_res =
             yetty_yrich_document_find(obj, op->u.text_delete.id);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, target_res, "ydoc_apply_op: delete find");
+        struct yetty_yclass_object *target_obj = target_res.value;
         if (!target_obj) {
             return YETTY_ERR(yetty_ycore_void, "ydoc_apply_op: unknown delete target");
         }
@@ -2162,7 +2198,8 @@ static struct yetty_ycore_void_result ydoc_apply_op(struct yetty_yclass_object *
         struct yetty_ycore_void_result delete_res = paragraph_text_delete_range(
             paragraph_res.value, op->u.text_delete.position, op->u.text_delete.length);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, delete_res, "ydoc_apply_op: delete");
-        ydoc_relayout(data_res.value);
+        struct yetty_ycore_void_result relayout_res = ydoc_relayout(data_res.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, relayout_res, "ydoc_apply_op: delete relayout");
         struct yetty_ycore_void_result caret_res =
             ydoc_set_caret(obj, target_obj, op->u.text_delete.position, op->u.text_delete.position);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, caret_res, "ydoc_apply_op: delete caret");
@@ -2183,7 +2220,8 @@ static struct yetty_ycore_void_result ydoc_render(struct yetty_yclass_object *ob
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_render: data_get");
-    ydoc_relayout(data_res.value);
+    struct yetty_ycore_void_result relayout_res = ydoc_relayout(data_res.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, relayout_res, "ydoc_render: relayout");
     return yetty_yrich_super_void(obj, yetty_yrich_ydoc_class_get().value,
                                   (yetty_yclass_method_id_t)yetty_yrich_document_render);
 }
@@ -2199,7 +2237,10 @@ static struct yetty_ycore_void_result ydoc_toggle_format_impl(struct yetty_yclas
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_toggle_format: data_get");
     struct ydoc_active_paragraph active;
-    if (!ydoc_active_paragraph_get(obj, data_res.value, &active)) {
+    struct yetty_ycore_int_result active_res =
+        ydoc_active_paragraph_get(obj, data_res.value, &active);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, active_res, "ydoc: active paragraph");
+    if (!active_res.value) {
         return YETTY_OK_VOID();
     }
     int32_t selection_lo = active.anchor < active.caret ? active.anchor : active.caret;
@@ -2229,7 +2270,10 @@ static struct yetty_ycore_void_result ydoc_set_text_color_impl(struct yetty_ycla
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_set_text_color: data_get");
     struct ydoc_active_paragraph active;
-    if (!ydoc_active_paragraph_get(obj, data_res.value, &active)) {
+    struct yetty_ycore_int_result active_res =
+        ydoc_active_paragraph_get(obj, data_res.value, &active);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, active_res, "ydoc: active paragraph");
+    if (!active_res.value) {
         return YETTY_OK_VOID();
     }
     int32_t selection_lo = active.anchor < active.caret ? active.anchor : active.caret;
@@ -2257,7 +2301,10 @@ static struct yetty_ycore_void_result ydoc_set_alignment_impl(struct yetty_yclas
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_set_alignment: data_get");
     struct ydoc_active_paragraph active;
-    if (!ydoc_active_paragraph_get(obj, data_res.value, &active)) {
+    struct yetty_ycore_int_result active_res =
+        ydoc_active_paragraph_get(obj, data_res.value, &active);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, active_res, "ydoc: active paragraph");
+    if (!active_res.value) {
         return YETTY_OK_VOID();
     }
     active.paragraph->halign = halign;
@@ -2272,7 +2319,10 @@ static struct yetty_ycore_void_result ydoc_set_heading_impl(struct yetty_yclass_
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_set_heading: data_get");
     struct ydoc_active_paragraph active;
-    if (!ydoc_active_paragraph_get(obj, data_res.value, &active)) {
+    struct yetty_ycore_int_result active_res =
+        ydoc_active_paragraph_get(obj, data_res.value, &active);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, active_res, "ydoc: active paragraph");
+    if (!active_res.value) {
         return YETTY_OK_VOID();
     }
     float font_size;
@@ -2297,7 +2347,8 @@ static struct yetty_ycore_void_result ydoc_set_heading_impl(struct yetty_yclass_
     } else {
         active.paragraph->style.format &= ~(uint32_t)YETTY_YRICH_FMT_BOLD;
     }
-    ydoc_relayout(data_res.value);
+    struct yetty_ycore_void_result relayout_res = ydoc_relayout(data_res.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, relayout_res, "ydoc_set_heading: relayout");
     return yetty_yrich_document_mark_dirty(obj);
 }
 
@@ -2308,7 +2359,10 @@ static struct yetty_ycore_void_result ydoc_change_font_size_impl(struct yetty_yc
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ydoc_change_font_size: data_get");
     struct ydoc_active_paragraph active;
-    if (!ydoc_active_paragraph_get(obj, data_res.value, &active)) {
+    struct yetty_ycore_int_result active_res =
+        ydoc_active_paragraph_get(obj, data_res.value, &active);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, active_res, "ydoc: active paragraph");
+    if (!active_res.value) {
         return YETTY_OK_VOID();
     }
     float font_size = active.paragraph->style.font_size + delta;
@@ -2320,7 +2374,8 @@ static struct yetty_ycore_void_result ydoc_change_font_size_impl(struct yetty_yc
     }
     active.paragraph->style.font_size = font_size;
     active.paragraph->line_height = font_size * 1.4f;
-    ydoc_relayout(data_res.value);
+    struct yetty_ycore_void_result relayout_res = ydoc_relayout(data_res.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, relayout_res, "ydoc_change_font_size: relayout");
     return yetty_yrich_document_mark_dirty(obj);
 }
 
@@ -2388,14 +2443,12 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_set_source_path(struct yetty_ycl
 }
 
 YETTY_ANNOTATE("expose")
-const char *yetty_yrich_ydoc_source_path(struct yetty_yclass_object *obj)
+struct yetty_ycore_const_char_ptr_result yetty_yrich_ydoc_source_path(
+    struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return NULL;
-    }
-    return data_res.value->source_path;
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, data_res, "ydoc_source_path: data_get");
+    return YETTY_OK(yetty_ycore_const_char_ptr, data_res.value->source_path);
 }
 
 /*---------------------------------------------------------------------------
@@ -2428,14 +2481,11 @@ struct yetty_ycore_size_result yetty_yrich_ydoc_paragraph_count(struct yetty_ycl
 }
 
 YETTY_ANNOTATE("expose")
-const char *yetty_yrich_paragraph_text(struct yetty_yclass_object *obj)
+struct yetty_ycore_const_char_ptr_result yetty_yrich_paragraph_text(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return "";
-    }
-    return data_res.value->text ? data_res.value->text : "";
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, data_res, "paragraph_text: data_get");
+    return YETTY_OK(yetty_ycore_const_char_ptr, data_res.value->text ? data_res.value->text : "");
 }
 
 YETTY_ANNOTATE("expose")

@@ -83,7 +83,9 @@ static struct yetty_ycore_void_result label_paint(struct yetty_yclass_object *yc
     if (!d->text || d->text[0] == '\0') {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "label_paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     /* Position the baseline a font-size below the top of the widget rect
      * — TEXT_DRAWABLE_LIST's y coord is the baseline (font ascender lifts above). */
     float x = r.min.x;

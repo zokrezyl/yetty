@@ -101,7 +101,9 @@ static struct yetty_ycore_void_result popup_menu_constructor(struct yetty_yclass
     d->title = NULL;
     d->modal = 0;
     /* popup_menus are absolutely positioned. */
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "popup_menu_constructor: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.absolute = 1;
     l.width = 0.0f;
     l.height = 0.0f;
@@ -233,7 +235,9 @@ static struct yetty_ycore_void_result popup_menu_paint(struct yetty_yclass_objec
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "popup_menu_paint: NULL ctx");
     }
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "popup_menu_paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
     if (w <= 0.0f || h <= 0.0f) {
@@ -279,7 +283,9 @@ static struct yetty_ycore_int_result popup_menu_on_press(struct yetty_yclass_obj
     if (!d->open) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "popup_menu_on_press: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     int idx = hit_item(d, y - r.min.y);
     if (idx >= 0 && idx < d->n_items && d->items[idx].label) {
         yetty_ygui_menu_item_cb cb = d->items[idx].cb;
@@ -305,7 +311,10 @@ static struct yetty_ycore_int_result popup_menu_on_press(struct yetty_yclass_obj
          * row count changed, so re-measure the height (pos / width keep
          * their open_at values). */
         if (is_drill && d->open) {
-            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+            struct yetty_ygui_layout_const_ptr_result layout_res =
+                yetty_ygui_widget_layout_get(obj);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, layout_res, "popup_menu_on_press: layout_get");
+            struct yetty_ygui_layout l = *layout_res.value;
             l.height = menu_total_h(d);
             struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);
             if (YETTY_IS_ERR(lr)) {
@@ -335,7 +344,9 @@ static struct yetty_ycore_int_result popup_menu_on_motion(struct yetty_yclass_ob
     if (!d->open) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "popup_menu_on_motion: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     int idx = hit_item(d, y - r.min.y);
     if (idx != d->hover_index) {
         d->hover_index = idx;
@@ -423,7 +434,9 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_open_at(struct yetty_yclass
     struct yetty_ygui_popup_menu *d = d_dr.value;
     d->open = 1;
     d->hover_index = -1;
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "popup_menu_open_at: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.absolute = 1;
     l.pos_x = x;
     l.pos_y = y;
@@ -448,7 +461,9 @@ struct yetty_ycore_void_result yetty_ygui_popup_menu_close(struct yetty_yclass_o
     }
     d->open = 0;
     d->hover_index = -1;
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "popup_menu_close: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.width = 0.0f;
     l.height = 0.0f;
     struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);

@@ -31,16 +31,14 @@ struct yetty_ygui_spinner_ptr_result {
     };
 };
 struct yetty_ygui_spinner_ptr_result yetty_ygui_spinner_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_spinner_to(struct yetty_ygui_spinner *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_spinner_to(struct yetty_ygui_spinner *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_spinner_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_spinner_set_value(struct yetty_yclass_object *obj,
-                                                            float v);
-struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_yclass_object *obj,
-                                                            float mn, float mx, float step);
+struct yetty_ycore_void_result yetty_ygui_spinner_set_value(struct yetty_yclass_object *obj, float v);
+struct yetty_ycore_void_result yetty_ygui_spinner_set_range(struct yetty_yclass_object *obj, float mn, float mx, float step);
 struct yetty_ycore_float_result yetty_ygui_spinner_get_value(const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus

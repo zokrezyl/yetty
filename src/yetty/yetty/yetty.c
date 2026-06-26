@@ -520,7 +520,13 @@ static struct yetty_ycore_int_result yetty_event_handler(
          * area sits between [tabbar_strip .. H - statusbar_h]; without
          * this the bottom row of terminal cells is drawn under the
          * yui statusbar. */
-        float bottom_inset = yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f;
+        float bottom_inset = 0.0f;
+        if (yetty->yui) {
+            struct yetty_ycore_float_result inset_res = yetty_yui_statusbar_height(yetty->yui);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, inset_res,
+                                "yetty_event_handler: statusbar height (workspace)");
+            bottom_inset = inset_res.value;
+        }
         float ws_height = (float)height - bottom_inset;
         if (ws_height < 0.0f) {
             ws_height = 0.0f;
@@ -630,10 +636,16 @@ static struct yetty_ycore_int_result yetty_event_handler(
              * root tile exists. */
             if (yetty->window_width > 0 && yetty->window_height > 0) {
                 {
+                    float status_inset = 0.0f;
+                    if (yetty->yui) {
+                        struct yetty_ycore_float_result inset_res =
+                            yetty_yui_statusbar_height(yetty->yui);
+                        YETTY_RETURN_IF_ERR(yetty_ycore_int, inset_res,
+                                            "yetty: statusbar height (tabbar resize)");
+                        status_inset = inset_res.value;
+                    }
                     struct yetty_ycore_void_result drop_r = yetty_yui_tabbar_model_resize(
-                        yetty->tabbar, yetty->window_width,
-                        yetty->window_height -
-                            (yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f),
+                        yetty->tabbar, yetty->window_width, yetty->window_height - status_inset,
                         yetty->window_height);
                     YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "yetty: tabbar resize");
                 }
@@ -701,10 +713,16 @@ static struct yetty_ycore_int_result yetty_event_handler(
             }
             if (yetty->window_width > 0 && yetty->window_height > 0) {
                 {
+                    float status_inset = 0.0f;
+                    if (yetty->yui) {
+                        struct yetty_ycore_float_result inset_res =
+                            yetty_yui_statusbar_height(yetty->yui);
+                        YETTY_RETURN_IF_ERR(yetty_ycore_int, inset_res,
+                                            "yetty: statusbar height (tabbar resize)");
+                        status_inset = inset_res.value;
+                    }
                     struct yetty_ycore_void_result drop_r = yetty_yui_tabbar_model_resize(
-                        yetty->tabbar, yetty->window_width,
-                        yetty->window_height -
-                            (yetty->yui ? yetty_yui_statusbar_height(yetty->yui) : 0.0f),
+                        yetty->tabbar, yetty->window_width, yetty->window_height - status_inset,
                         yetty->window_height);
                     YETTY_RETURN_IF_ERR(yetty_ycore_int, drop_r, "yetty: tabbar resize");
                 }
@@ -860,7 +878,9 @@ static struct yetty_ycore_int_result yetty_event_handler(
         float y = event->mouse.y;
         float tabbar_h = yetty_dp_to_px(&yetty->context.runtime->gpu.app_gpu_context,
                                         YETTY_YUI_TABBAR_HEIGHT_DP);
-        float status_h = yetty_yui_statusbar_height(yetty->yui);
+        struct yetty_ycore_float_result status_h_res = yetty_yui_statusbar_height(yetty->yui);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, status_h_res, "yetty_event_handler: statusbar height");
+        float status_h = status_h_res.value;
         if (y >= tabbar_h && y < yetty->window_height - status_h) {
             /* Focus the clicked pane — same logic the workspace's own
              * MOUSE_DOWN handler runs, but without forwarding the

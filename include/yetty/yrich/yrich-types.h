@@ -22,6 +22,14 @@ extern "C" {
 
 struct yetty_yclass_object;
 
+/* Pointer-result types for exposed getters whose Result crosses yrich TU
+ * boundaries (document base getters consumed by the concrete kinds). The
+ * pointee structs live in their own headers; only the pointer crosses here. */
+struct yetty_ydraw_drawable_list;
+struct yetty_yrich_selection;
+YETTY_YRESULT_DECLARE(yetty_yrich_drawable_list_ptr, struct yetty_ydraw_drawable_list *);
+YETTY_YRESULT_DECLARE(yetty_yrich_selection_ptr, struct yetty_yrich_selection *);
+
 /*=============================================================================
  * Element identity
  *===========================================================================*/
@@ -177,6 +185,8 @@ struct yetty_yrich_cell_addr {
     int32_t row;
     int32_t col;
 };
+
+YETTY_YRESULT_DECLARE(yetty_yrich_cell_addr, struct yetty_yrich_cell_addr);
 
 static inline bool yetty_yrich_cell_addr_eq(struct yetty_yrich_cell_addr a,
                                             struct yetty_yrich_cell_addr b)

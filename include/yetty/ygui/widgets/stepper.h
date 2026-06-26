@@ -31,16 +31,14 @@ struct yetty_ygui_stepper_ptr_result {
     };
 };
 struct yetty_ygui_stepper_ptr_result yetty_ygui_stepper_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_stepper_to(struct yetty_ygui_stepper *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_stepper_to(struct yetty_ygui_stepper *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_stepper_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_yclass_object *obj,
-                                                           const char *label);
-struct yetty_ycore_void_result yetty_ygui_stepper_set_current(struct yetty_yclass_object *obj,
-                                                              int i);
+struct yetty_ycore_void_result yetty_ygui_stepper_add_step(struct yetty_yclass_object *obj, const char *label);
+struct yetty_ycore_void_result yetty_ygui_stepper_set_current(struct yetty_yclass_object *obj, int i);
 
 #ifdef __cplusplus
 }

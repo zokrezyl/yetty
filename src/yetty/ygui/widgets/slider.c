@@ -112,7 +112,9 @@ static struct yetty_ycore_void_result slider_paint(struct yetty_yclass_object *y
     struct yetty_ygui_slider_ptr_result d_dr = yetty_ygui_slider_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "slider_paint: data_get");
     struct yetty_ygui_slider *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "slider_paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
     if (w <= 0.0f || h <= 0.0f) {
@@ -155,7 +157,9 @@ static struct yetty_ycore_int_result slider_on_press(struct yetty_yclass_object 
     struct yetty_ygui_slider_ptr_result d_dr = yetty_ygui_slider_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "slider_on_press: data_get");
     struct yetty_ygui_slider *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "slider_on_press: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x;
     if (w <= 0.0f) {
         return YETTY_OK(yetty_ycore_int, 1);
@@ -193,7 +197,9 @@ static struct yetty_ycore_int_result slider_on_motion(struct yetty_yclass_object
      * motion to whatever the pointer merely hovers (not just the capture
      * target), so without this guard the value would change on a plain
      * hover instead of a click-drag. */
-    struct yetty_ygui_framework *engine = yetty_ygui_widget_framework(obj);
+    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_widget_framework(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, framework_res, "slider_on_motion: framework");
+    struct yetty_ygui_framework *engine = framework_res.value;
     if (!engine || yetty_ygui_framework_pressed_widget(engine) != obj) {
         return YETTY_OK(yetty_ycore_int, 0);
     }

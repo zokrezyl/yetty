@@ -31,20 +31,16 @@ struct yetty_ygui_combobox_ptr_result {
     };
 };
 struct yetty_ygui_combobox_ptr_result yetty_ygui_combobox_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_combobox_to(struct yetty_ygui_combobox *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_combobox_to(struct yetty_ygui_combobox *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_combobox_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_combobox_set_text(struct yetty_yclass_object *obj,
-                                                            const char *t);
-struct yetty_ycore_void_result yetty_ygui_combobox_add_suggestion(struct yetty_yclass_object *obj,
-                                                                  const char *t);
-struct yetty_ycore_void_result yetty_ygui_combobox_set_menu(struct yetty_yclass_object *obj,
-                                                            struct yetty_yclass_object *menu);
-struct yetty_ycore_const_char_ptr_result yetty_ygui_combobox_get_text(
-    const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_combobox_set_text(struct yetty_yclass_object *obj, const char *t);
+struct yetty_ycore_void_result yetty_ygui_combobox_add_suggestion(struct yetty_yclass_object *obj, const char *t);
+struct yetty_ycore_void_result yetty_ygui_combobox_set_menu(struct yetty_yclass_object *obj, struct yetty_yclass_object *menu);
+struct yetty_ycore_const_char_ptr_result yetty_ygui_combobox_get_text(const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }

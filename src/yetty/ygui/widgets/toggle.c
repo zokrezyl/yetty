@@ -136,7 +136,9 @@ static struct yetty_ycore_void_result toggle_paint(struct yetty_yclass_object *y
     struct yetty_ygui_toggle_ptr_result d_dr = yetty_ygui_toggle_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "toggle_paint: data_get");
     struct yetty_ygui_toggle *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "toggle_paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float h = r.max.y - r.min.y;
     float pill_h = h - 4.0f;
     if (pill_h < 14.0f) {

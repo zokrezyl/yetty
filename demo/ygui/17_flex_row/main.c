@@ -25,7 +25,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 {
     (void)runner;
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(root);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(root);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "17_flex_row: layout_get");
+        struct yetty_ygui_layout l = *layout_res.value;
         l.direction = YETTY_YGUI_FLEX_ROW;
         l.gap = 8;
         err_ok(yetty_ygui_widget_layout_set(root, &l));
@@ -36,7 +39,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
             yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "label");
         err_ok(yetty_ygui_label_set_text(r.value, names[i]));
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(r.value);
+        struct yetty_ygui_layout_const_ptr_result layout_res2 =
+            yetty_ygui_widget_layout_get(r.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res2, "17_flex_row: layout_get");
+        struct yetty_ygui_layout l = *layout_res2.value;
         l.flex_grow = 1.0f;
         err_ok(yetty_ygui_widget_layout_set(r.value, &l));
     }

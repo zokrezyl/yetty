@@ -53,9 +53,8 @@ struct yetty_ywire_wire_statemachine;
 
 YETTY_ANNOTATE("virtual@yfigure:figure:render")
 YETTY_ANNOTATE("local@yfigure:render")
-static struct yetty_ycore_void_result
-    yetty_yfigure_figure_default_render(struct yetty_yclass_object *obj,
-                                        struct yetty_ydraw_target *target)
+static struct yetty_ycore_void_result yetty_yfigure_figure_default_render(
+    struct yetty_yclass_object *obj, struct yetty_ydraw_target *target)
 {
     (void)obj;
     (void)target;
@@ -67,8 +66,8 @@ static struct yetty_ycore_void_result
  * every concrete kind overrides this and frees via object_free. */
 YETTY_ANNOTATE("virtual@yfigure:figure:destroy")
 YETTY_ANNOTATE("local@yfigure:destroy")
-static struct yetty_ycore_void_result
-    yetty_yfigure_figure_default_destroy(struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result yetty_yfigure_figure_default_destroy(
+    struct yetty_yclass_object *obj)
 {
     (void)obj;
     return YETTY_OK_VOID();
@@ -80,9 +79,8 @@ static struct yetty_ycore_void_result
  * detected via yetty_yfigure_figure_implements). */
 YETTY_ANNOTATE("virtual@yfigure:figure:process_input")
 YETTY_ANNOTATE("local@yfigure:process_input")
-static struct yetty_ycore_void_result
-    yetty_yfigure_figure_default_process_input(struct yetty_yclass_object *obj,
-                                               struct yetty_ywire_wire_statemachine *statemachine)
+static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_input(
+    struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *statemachine)
 {
     (void)obj;
     (void)statemachine;
@@ -92,9 +90,8 @@ static struct yetty_ycore_void_result
 /* process_bytes: apply a buffered wire body. Base default rejects. */
 YETTY_ANNOTATE("virtual@yfigure:figure:process_bytes")
 YETTY_ANNOTATE("local@yfigure:process_bytes")
-static struct yetty_ycore_void_result
-    yetty_yfigure_figure_default_process_bytes(struct yetty_yclass_object *obj,
-                                               const uint8_t *bytes, size_t bytes_len)
+static struct yetty_ycore_void_result yetty_yfigure_figure_default_process_bytes(
+    struct yetty_yclass_object *obj, const uint8_t *bytes, size_t bytes_len)
 {
     (void)obj;
     (void)bytes;
@@ -106,8 +103,8 @@ static struct yetty_ycore_void_result
  * container falls back to destroy + mint for kinds that don't support it. */
 YETTY_ANNOTATE("virtual@yfigure:figure:reset_content")
 YETTY_ANNOTATE("local@yfigure:reset_content")
-static struct yetty_ycore_void_result
-    yetty_yfigure_figure_default_reset_content(struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result yetty_yfigure_figure_default_reset_content(
+    struct yetty_yclass_object *obj)
 {
     (void)obj;
     return YETTY_ERR(yetty_ycore_void, "yfigure: reset_content not implemented by this figure");
@@ -117,8 +114,8 @@ static struct yetty_ycore_void_result
  * string so the yetty_yfigure_dump wrapper emits its rect fallback. */
 YETTY_ANNOTATE("virtual@yfigure:figure:dump_state")
 YETTY_ANNOTATE("local@yfigure:dump_state")
-static struct yetty_ycore_char_ptr_result
-    yetty_yfigure_figure_default_dump_state(struct yetty_yclass_object *obj, int indent)
+static struct yetty_ycore_char_ptr_result yetty_yfigure_figure_default_dump_state(
+    struct yetty_yclass_object *obj, int indent)
 {
     (void)obj;
     (void)indent;
@@ -133,9 +130,8 @@ static struct yetty_ycore_char_ptr_result
  * content. */
 YETTY_ANNOTATE("virtual@yfigure:figure:set_scroll")
 YETTY_ANNOTATE("local@yfigure:set_scroll")
-static struct yetty_ycore_void_result
-    yetty_yfigure_figure_default_set_scroll(struct yetty_yclass_object *obj, float scroll_x,
-                                            float scroll_y)
+static struct yetty_ycore_void_result yetty_yfigure_figure_default_set_scroll(
+    struct yetty_yclass_object *obj, float scroll_x, float scroll_y)
 {
     (void)obj;
     (void)scroll_x;
@@ -148,9 +144,8 @@ static struct yetty_ycore_void_result
  * viewport). Base default rejects. Scrollable kinds override it. */
 YETTY_ANNOTATE("virtual@yfigure:figure:set_content_size")
 YETTY_ANNOTATE("local@yfigure:set_content_size")
-static struct yetty_ycore_void_result
-    yetty_yfigure_figure_default_set_content_size(struct yetty_yclass_object *obj, float content_w,
-                                                  float content_h)
+static struct yetty_ycore_void_result yetty_yfigure_figure_default_set_content_size(
+    struct yetty_yclass_object *obj, float content_w, float content_h)
 {
     (void)obj;
     (void)content_w;

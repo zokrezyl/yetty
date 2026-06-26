@@ -203,9 +203,10 @@ static uint32_t map_clamp_zoom(const struct yetty_ymap_map *map, int64_t zoom)
  * active provider's range; viewport to the engine's sanity bounds. */
 YETTY_ANNOTATE("virtual@ymap:map:configure")
 YETTY_ANNOTATE("local@ymap:configure")
-static struct yetty_ycore_void_result
-    map_configure(struct yetty_yclass_object *obj, double latitude, double longitude, uint32_t zoom,
-                  uint32_t width_px, uint32_t height_px)
+static struct yetty_ycore_void_result map_configure(struct yetty_yclass_object *obj,
+                                                    double latitude, double longitude,
+                                                    uint32_t zoom, uint32_t width_px,
+                                                    uint32_t height_px)
 {
     struct yetty_yclass_void_ptr_result map_r = map_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, map_r, "ymap configure: from_obj");
@@ -230,8 +231,8 @@ static struct yetty_ycore_void_result
  * clamps the current zoom into the new provider's range. */
 YETTY_ANNOTATE("virtual@ymap:map:set_provider")
 YETTY_ANNOTATE("local@ymap:set_provider")
-static struct yetty_ycore_void_result
-    map_set_provider(struct yetty_yclass_object *obj, const char *name)
+static struct yetty_ycore_void_result map_set_provider(struct yetty_yclass_object *obj,
+                                                       const char *name)
 {
     struct yetty_yclass_void_ptr_result map_r = map_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, map_r, "ymap set_provider: from_obj");
@@ -255,10 +256,9 @@ static struct yetty_ycore_void_result
  * frontend must display; pass the provider's required credit line. */
 YETTY_ANNOTATE("virtual@ymap:map:set_custom_provider")
 YETTY_ANNOTATE("local@ymap:set_custom_provider")
-static struct yetty_ycore_void_result
-    map_set_custom_provider(struct yetty_yclass_object *obj, const char *url_template,
-                            int is_vector, const char *file_extension, uint32_t max_zoom,
-                            const char *attribution)
+static struct yetty_ycore_void_result map_set_custom_provider(
+    struct yetty_yclass_object *obj, const char *url_template, int is_vector,
+    const char *file_extension, uint32_t max_zoom, const char *attribution)
 {
     struct yetty_yclass_void_ptr_result map_r = map_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, map_r, "ymap set_custom_provider: from_obj");
@@ -288,8 +288,8 @@ static struct yetty_ycore_void_result
 /* set_center / set_zoom / set_viewport: individual view setters. */
 YETTY_ANNOTATE("virtual@ymap:map:set_center")
 YETTY_ANNOTATE("local@ymap:set_center")
-static struct yetty_ycore_void_result
-    map_set_center(struct yetty_yclass_object *obj, double latitude, double longitude)
+static struct yetty_ycore_void_result map_set_center(struct yetty_yclass_object *obj,
+                                                     double latitude, double longitude)
 {
     struct yetty_yclass_void_ptr_result map_r = map_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, map_r, "ymap set_center: from_obj");
@@ -315,8 +315,8 @@ static struct yetty_ycore_void_result map_set_zoom(struct yetty_yclass_object *o
 
 YETTY_ANNOTATE("virtual@ymap:map:set_viewport")
 YETTY_ANNOTATE("local@ymap:set_viewport")
-static struct yetty_ycore_void_result
-    map_set_viewport(struct yetty_yclass_object *obj, uint32_t width_px, uint32_t height_px)
+static struct yetty_ycore_void_result map_set_viewport(struct yetty_yclass_object *obj,
+                                                       uint32_t width_px, uint32_t height_px)
 {
     struct yetty_yclass_void_ptr_result map_r = map_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, map_r, "ymap set_viewport: from_obj");
@@ -335,8 +335,8 @@ static struct yetty_ycore_void_result
  * west). Latitude clamps so the viewport stays on the Mercator square. */
 YETTY_ANNOTATE("virtual@ymap:map:pan_by_pixels")
 YETTY_ANNOTATE("local@ymap:pan_by_pixels")
-static struct yetty_ycore_void_result
-    map_pan_by_pixels(struct yetty_yclass_object *obj, double delta_x, double delta_y)
+static struct yetty_ycore_void_result map_pan_by_pixels(struct yetty_yclass_object *obj,
+                                                        double delta_x, double delta_y)
 {
     struct yetty_yclass_void_ptr_result map_r = map_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, map_r, "ymap pan_by_pixels: from_obj");
@@ -366,8 +366,8 @@ static struct yetty_ycore_void_result
  * Returns the (clamped) new zoom level. */
 YETTY_ANNOTATE("virtual@ymap:map:zoom_by_at")
 YETTY_ANNOTATE("local@ymap:zoom_by_at")
-static struct yetty_ycore_int_result
-    map_zoom_by_at(struct yetty_yclass_object *obj, int32_t step, double anchor_x, double anchor_y)
+static struct yetty_ycore_int_result map_zoom_by_at(struct yetty_yclass_object *obj, int32_t step,
+                                                    double anchor_x, double anchor_y)
 {
     struct yetty_yclass_void_ptr_result map_r = map_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, map_r, "ymap zoom_by_at: from_obj");

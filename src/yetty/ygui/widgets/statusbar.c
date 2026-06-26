@@ -45,7 +45,9 @@ static struct yetty_ycore_void_result statusbar_constructor(struct yetty_yclass_
     struct yetty_ygui_statusbar *d = d_dr.value;
     d->left = NULL;
     d->right = NULL;
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "statusbar_constructor: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     if (l.height < 0.0f) {
         l.height = 24.0f;
     }
@@ -77,7 +79,9 @@ static struct yetty_ycore_void_result statusbar_paint(struct yetty_yclass_object
     struct yetty_ygui_statusbar_ptr_result d_dr = yetty_ygui_statusbar_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "statusbar_paint: data_get");
     struct yetty_ygui_statusbar *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "statusbar_paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
     if (w <= 0.0f || h <= 0.0f) {

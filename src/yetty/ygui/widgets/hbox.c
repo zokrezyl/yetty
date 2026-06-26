@@ -30,7 +30,9 @@ static struct yetty_ycore_void_result hbox_constructor(struct yetty_yclass_objec
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
         obj, yetty_ygui_hbox_class_get().value, (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "hbox_constructor: super");
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "hbox_constructor: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.direction = YETTY_YGUI_FLEX_ROW;
     /* Conventional flexbox default — children fill the cross axis
      * (here = height) unless the app overrides. Without this every

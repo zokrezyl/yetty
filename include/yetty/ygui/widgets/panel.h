@@ -33,17 +33,14 @@ struct yetty_ygui_panel_ptr_result {
     };
 };
 struct yetty_ygui_panel_ptr_result yetty_ygui_panel_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_panel_to(struct yetty_ygui_panel *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_panel_to(struct yetty_ygui_panel *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_panel_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_yclass_object *obj,
-                                                       struct yetty_ycore_rgba color);
-struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_yclass_object *obj,
-                                                           struct yetty_ycore_rgba color,
-                                                           float width_px);
+struct yetty_ycore_void_result yetty_ygui_panel_set_bg(struct yetty_yclass_object *obj, struct yetty_ycore_rgba color);
+struct yetty_ycore_void_result yetty_ygui_panel_set_border(struct yetty_yclass_object *obj, struct yetty_ycore_rgba color, float width_px);
 
 #ifdef __cplusplus
 }

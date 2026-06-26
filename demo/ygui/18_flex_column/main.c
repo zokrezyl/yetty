@@ -30,7 +30,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
             yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "label");
         err_ok(yetty_ygui_label_set_text(r.value, names[i]));
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(r.value);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(r.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "18_flex_column: layout_get");
+        struct yetty_ygui_layout l = *layout_res.value;
         l.flex_grow = 1.0f;
         err_ok(yetty_ygui_widget_layout_set(r.value, &l));
     }

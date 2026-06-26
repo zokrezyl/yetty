@@ -431,10 +431,29 @@ struct yetty_yframework_ptr_result yetty_yframework_create(struct yetty_yclass_o
         return YETTY_ERR(yetty_yframework_ptr, "yframework_create: platform is NULL");
     }
 
-    const struct yetty_yplatform_gpu_context *gpu = yetty_yplatform_platform_gpu_context(platform);
+    /* Fetch all borrowed platform state up front (before allocating rt) so the
+     * obj→data downcast errors propagate cleanly without leaking rt. */
+    struct yetty_yplatform_gpu_context_const_ptr_result gpu_ctx_res =
+        yetty_yplatform_platform_gpu_context(platform);
+    YETTY_RETURN_IF_ERR(yetty_yframework_ptr, gpu_ctx_res,
+                        "yframework_create: platform GPU context");
+    const struct yetty_yplatform_gpu_context *gpu = gpu_ctx_res.value;
     if (!gpu) {
         return YETTY_ERR(yetty_yframework_ptr, "yframework_create: platform GPU context unset");
     }
+    struct yetty_yconfig_config_ptr_result config_res = yetty_yplatform_platform_config(platform);
+    YETTY_RETURN_IF_ERR(yetty_yframework_ptr, config_res, "yframework_create: platform config");
+    struct yetty_ycore_xthread_event_pipe_ptr_result input_pipe_res =
+        yetty_yplatform_platform_input_pipe(platform);
+    YETTY_RETURN_IF_ERR(yetty_yframework_ptr, input_pipe_res, "yframework_create: platform pipe");
+    struct yetty_yclass_object_ptr_result clipboard_res =
+        yetty_yplatform_platform_clipboard(platform);
+    YETTY_RETURN_IF_ERR(yetty_yframework_ptr, clipboard_res,
+                        "yframework_create: platform clipboard");
+    struct yetty_yclass_object_ptr_result window_chrome_res =
+        yetty_yplatform_platform_window_chrome(platform);
+    YETTY_RETURN_IF_ERR(yetty_yframework_ptr, window_chrome_res,
+                        "yframework_create: window chrome");
 
     struct yetty_yframework *rt = calloc(1, sizeof(struct yetty_yframework));
     if (!rt) {
@@ -448,11 +467,11 @@ struct yetty_yframework_ptr_result yetty_yframework_create(struct yetty_yclass_o
     }
 
     /* Wire the borrowed services and copy the platform GPU slice by value. */
-    rt->config = yetty_yplatform_platform_config(platform);
-    rt->platform_input_pipe = yetty_yplatform_platform_input_pipe(platform);
+    rt->config = config_res.value;
+    rt->platform_input_pipe = input_pipe_res.value;
     rt->output_pipe = NULL;
-    rt->clipboard = yetty_yplatform_platform_clipboard(platform);
-    rt->window_chrome = yetty_yplatform_platform_window_chrome(platform);
+    rt->clipboard = clipboard_res.value;
+    rt->window_chrome = window_chrome_res.value;
 
     rt->gpu.app_gpu_context = *gpu;
 

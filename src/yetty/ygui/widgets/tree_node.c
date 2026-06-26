@@ -37,15 +37,21 @@ struct YETTY_ANNOTATE("class@ygui:tree_node") YETTY_ANNOTATE("parent@ygui:vbox")
  * header-only when closed and header + children when open. */
 static struct yetty_ycore_void_result tn_fold_children(struct yetty_yclass_object *obj, int open)
 {
-    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(obj); c;
-         c = yetty_ygui_widget_next_sibling(c)) {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(c);
-        if (l.absolute) {
-            continue;
+    struct yetty_yclass_object_ptr_result child_res = yetty_ygui_widget_first_child(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res, "tn_fold_children: first_child");
+    for (struct yetty_yclass_object *child = child_res.value; child;) {
+        struct yetty_ygui_layout_const_ptr_result child_layout_res =
+            yetty_ygui_widget_layout_get(child);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, child_layout_res, "tn_fold_children: layout_get");
+        struct yetty_ygui_layout l = *child_layout_res.value;
+        if (!l.absolute) {
+            l.hidden = open ? 0 : 1;
+            struct yetty_ycore_void_result layout_result = yetty_ygui_widget_layout_set(child, &l);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_result, "tn_fold_children: layout_set");
         }
-        l.hidden = open ? 0 : 1;
-        struct yetty_ycore_void_result layout_result = yetty_ygui_widget_layout_set(c, &l);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_result, "tn_fold_children: layout_set");
+        struct yetty_yclass_object_ptr_result next_res = yetty_ygui_widget_next_sibling(child);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, next_res, "tn_fold_children: next_sibling");
+        child = next_res.value;
     }
     return YETTY_OK_VOID();
 }
@@ -65,7 +71,9 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     d->open = 1;
     d->on_toggle = NULL;
     d->on_toggle_ud = NULL;
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "tree_node ctor: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.padding_top = HEADER_H;
     l.padding_left = INDENT;
     l.gap = 2.0f;
@@ -94,7 +102,9 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass
     struct yetty_ygui_tree_node_ptr_result d_dr = yetty_ygui_tree_node_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_press: data_get");
     struct yetty_ygui_tree_node *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "on_press: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     if (y - r.min.y > HEADER_H) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
@@ -127,7 +137,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     struct yetty_ygui_tree_node_ptr_result d_dr = yetty_ygui_tree_node_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
     struct yetty_ygui_tree_node *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float fs = 13.0f;
     float ty = r.min.y + (HEADER_H + fs) * 0.5f - 3;
     struct yetty_ycore_void_result result_138 =

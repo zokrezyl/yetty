@@ -218,23 +218,19 @@ struct yetty_yrich_paragraph_ptr_result yetty_yrich_paragraph_from(struct yetty_
     return YETTY_OK(yetty_yrich_paragraph_ptr, (struct yetty_yrich_paragraph *)slice_r.value);
 }
 
-struct yetty_yclass_object *yetty_yrich_paragraph_to(struct yetty_yrich_paragraph *data)
+struct yetty_yclass_object_ptr_result yetty_yrich_paragraph_to(struct yetty_yrich_paragraph *data)
 {
     if (!data) {
-        return NULL;
+        return YETTY_OK(yetty_yclass_object_ptr, NULL);
     }
     struct yetty_yclass_ptr_result class_r = yetty_yrich_paragraph_class_get();
-    if (YETTY_IS_ERR(class_r)) {
-        yetty_ycore_error_destroy(class_r.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, class_r,
+                        "yetty_yrich_paragraph_to: class accessor");
     struct yetty_ycore_size_result offset_r =
         yetty_yclass_object_data_offset(class_r.value, class_r.value);
-    if (YETTY_IS_ERR(offset_r)) {
-        yetty_ycore_error_destroy(offset_r.error);
-        return NULL;
-    }
-    return (struct yetty_yclass_object *)((char *)data - offset_r.value);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, offset_r, "yetty_yrich_paragraph_to: data offset");
+    return YETTY_OK(yetty_yclass_object_ptr,
+                    (struct yetty_yclass_object *)((char *)data - offset_r.value));
 }
 
 YETTY_MAYBE_UNUSED
@@ -311,23 +307,21 @@ struct yetty_yrich_inline_image_ptr_result yetty_yrich_inline_image_from(
     return YETTY_OK(yetty_yrich_inline_image_ptr, (struct yetty_yrich_inline_image *)slice_r.value);
 }
 
-struct yetty_yclass_object *yetty_yrich_inline_image_to(struct yetty_yrich_inline_image *data)
+struct yetty_yclass_object_ptr_result yetty_yrich_inline_image_to(
+    struct yetty_yrich_inline_image *data)
 {
     if (!data) {
-        return NULL;
+        return YETTY_OK(yetty_yclass_object_ptr, NULL);
     }
     struct yetty_yclass_ptr_result class_r = yetty_yrich_inline_image_class_get();
-    if (YETTY_IS_ERR(class_r)) {
-        yetty_ycore_error_destroy(class_r.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, class_r,
+                        "yetty_yrich_inline_image_to: class accessor");
     struct yetty_ycore_size_result offset_r =
         yetty_yclass_object_data_offset(class_r.value, class_r.value);
-    if (YETTY_IS_ERR(offset_r)) {
-        yetty_ycore_error_destroy(offset_r.error);
-        return NULL;
-    }
-    return (struct yetty_yclass_object *)((char *)data - offset_r.value);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, offset_r,
+                        "yetty_yrich_inline_image_to: data offset");
+    return YETTY_OK(yetty_yclass_object_ptr,
+                    (struct yetty_yclass_object *)((char *)data - offset_r.value));
 }
 
 YETTY_MAYBE_UNUSED
@@ -468,23 +462,18 @@ struct yetty_yrich_ydoc_ptr_result yetty_yrich_ydoc_from(struct yetty_yclass_obj
     return YETTY_OK(yetty_yrich_ydoc_ptr, (struct yetty_yrich_ydoc *)slice_r.value);
 }
 
-struct yetty_yclass_object *yetty_yrich_ydoc_to(struct yetty_yrich_ydoc *data)
+struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_to(struct yetty_yrich_ydoc *data)
 {
     if (!data) {
-        return NULL;
+        return YETTY_OK(yetty_yclass_object_ptr, NULL);
     }
     struct yetty_yclass_ptr_result class_r = yetty_yrich_ydoc_class_get();
-    if (YETTY_IS_ERR(class_r)) {
-        yetty_ycore_error_destroy(class_r.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, class_r, "yetty_yrich_ydoc_to: class accessor");
     struct yetty_ycore_size_result offset_r =
         yetty_yclass_object_data_offset(class_r.value, class_r.value);
-    if (YETTY_IS_ERR(offset_r)) {
-        yetty_ycore_error_destroy(offset_r.error);
-        return NULL;
-    }
-    return (struct yetty_yclass_object *)((char *)data - offset_r.value);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, offset_r, "yetty_yrich_ydoc_to: data offset");
+    return YETTY_OK(yetty_yclass_object_ptr,
+                    (struct yetty_yclass_object *)((char *)data - offset_r.value));
 }
 
 struct yetty_ycore_void_result yetty_yrich_ydoc_toggle_format(struct yetty_yclass_object *obj,

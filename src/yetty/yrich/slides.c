@@ -41,8 +41,8 @@ struct yetty_yclass_object_ptr_result yetty_yrich_shape_create(struct yetty_ycla
 
 /* Exposed helpers defined below, used before their definitions. */
 struct yetty_yrich_slide_ptr_result yetty_yrich_slides_add_slide(struct yetty_yclass_object *obj);
-struct yetty_yrich_slide *yetty_yrich_slides_slide_at(struct yetty_yclass_object *obj,
-                                                      int32_t index);
+struct yetty_yrich_slide_ptr_result yetty_yrich_slides_slide_at(struct yetty_yclass_object *obj,
+                                                                int32_t index);
 struct yetty_ycore_void_result yetty_yrich_shape_set_text(struct yetty_yclass_object *obj,
                                                           const char *text, size_t len);
 
@@ -524,7 +524,9 @@ static struct yetty_ycore_void_result slides_render(struct yetty_yclass_object *
     struct yetty_yrich_slides_ptr_result data_res = yetty_yrich_slides_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "slides_render: data_get");
     struct yetty_yrich_slides *slides = data_res.value;
-    struct yetty_ydraw_drawable_list *drawable_list = yetty_yrich_document_buffer(obj);
+    struct yetty_yrich_drawable_list_ptr_result buffer_res = yetty_yrich_document_buffer(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, buffer_res, "slides_render: buffer");
+    struct yetty_ydraw_drawable_list *drawable_list = buffer_res.value;
     if (!drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "slides_render: NULL buffer");
     }
@@ -533,7 +535,10 @@ static struct yetty_ycore_void_result slides_render(struct yetty_yclass_object *
     yetty_ydraw_drawable_list_set_scene_bounds(drawable_list, 0.0f, 0.0f, slides->slide_width,
                                                slides->slide_height);
 
-    struct yetty_yrich_slide *slide = yetty_yrich_slides_slide_at(obj, slides->current_slide);
+    struct yetty_yrich_slide_ptr_result slide_res =
+        yetty_yrich_slides_slide_at(obj, slides->current_slide);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, slide_res, "slides_render: slide_at");
+    struct yetty_yrich_slide *slide = slide_res.value;
     if (!slide) {
         struct yetty_ycore_void_result clear_res = yetty_yrich_document_clear_dirty(obj);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, clear_res, "slides_render: clear_dirty");
@@ -557,9 +562,11 @@ static struct yetty_ycore_void_result slides_render(struct yetty_yclass_object *
         struct yetty_yclass_object *shape_obj = slide->shapes[i];
         struct yetty_yrich_element_id_result id_res = yetty_yrich_element_id_value(shape_obj);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "slides_render: shape id");
-        int selected = yetty_yrich_document_is_selected(obj, id_res.value);
+        struct yetty_ycore_int_result selected_res =
+            yetty_yrich_document_is_selected(obj, id_res.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, selected_res, "slides_render: is_selected");
         struct yetty_ycore_void_result render_res =
-            yetty_yrich_element_render(shape_obj, drawable_list, layer, selected);
+            yetty_yrich_element_render(shape_obj, drawable_list, layer, selected_res.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, render_res, "slides_render: shape failed");
         layer += 5; /* leave room for shape's selection layer */
     }
@@ -608,30 +615,25 @@ struct yetty_yrich_slide_ptr_result yetty_yrich_slides_add_slide(struct yetty_yc
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_yrich_slide *yetty_yrich_slides_slide_at(struct yetty_yclass_object *obj,
-                                                      int32_t index)
+struct yetty_yrich_slide_ptr_result yetty_yrich_slides_slide_at(struct yetty_yclass_object *obj,
+                                                                int32_t index)
 {
     struct yetty_yrich_slides_ptr_result data_res = yetty_yrich_slides_from(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yrich_slide_ptr, data_res, "slides_slide_at: data_get");
     struct yetty_yrich_slides *slides = data_res.value;
     if (index < 0 || (size_t)index >= slides->slide_count) {
-        return NULL;
+        /* Out-of-range is a successful "no such slide" query result. */
+        return YETTY_OK(yetty_yrich_slide_ptr, NULL);
     }
-    return slides->slides[index];
+    return YETTY_OK(yetty_yrich_slide_ptr, slides->slides[index]);
 }
 
 YETTY_ANNOTATE("expose")
-int32_t yetty_yrich_slides_current(struct yetty_yclass_object *obj)
+struct yetty_ycore_int_result yetty_yrich_slides_current(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_slides_ptr_result data_res = yetty_yrich_slides_from(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return 0;
-    }
-    return data_res.value->current_slide;
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_res, "slides_current: data_get");
+    return YETTY_OK(yetty_ycore_int, (int)data_res.value->current_slide);
 }
 
 /*===========================================================================
@@ -684,7 +686,10 @@ static struct yetty_yclass_object_ptr_result add_shape_to_current(struct yetty_y
     YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, data_res, "yrich slides add: data_get");
     struct yetty_yrich_slides *slides = data_res.value;
 
-    struct yetty_yrich_slide *slide = yetty_yrich_slides_slide_at(obj, slides->current_slide);
+    struct yetty_yrich_slide_ptr_result slide_at_res =
+        yetty_yrich_slides_slide_at(obj, slides->current_slide);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, slide_at_res, "yrich slides add: slide_at");
+    struct yetty_yrich_slide *slide = slide_at_res.value;
     if (!slide) {
         struct yetty_yrich_slide_ptr_result slide_res = yetty_yrich_slides_add_slide(obj);
         YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, slide_res,
@@ -772,11 +777,16 @@ struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_textbox(
 			 * element (and the shape behind it) is destroyed. */
             struct yetty_yrich_slides_ptr_result data_res = yetty_yrich_slides_from(obj);
             if (YETTY_IS_OK(data_res)) {
-                struct yetty_yrich_slide *slide =
+                struct yetty_yrich_slide_ptr_result slide_at_res =
                     yetty_yrich_slides_slide_at(obj, data_res.value->current_slide);
-                if (slide && slide->shape_count > 0 &&
-                    slide->shapes[slide->shape_count - 1] == shape_res.value) {
-                    slide->shape_count--;
+                if (YETTY_IS_OK(slide_at_res)) {
+                    struct yetty_yrich_slide *slide = slide_at_res.value;
+                    if (slide && slide->shape_count > 0 &&
+                        slide->shapes[slide->shape_count - 1] == shape_res.value) {
+                        slide->shape_count--;
+                    }
+                } else {
+                    yetty_ycore_error_destroy(slide_at_res.error);
                 }
             } else {
                 yetty_ycore_error_destroy(data_res.error);

@@ -28,7 +28,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         yetty_ygui_widget_add(root, yetty_ygui_panel_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "panel");
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(pr.value);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(pr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "10_panel_layout: layout_get");
+        struct yetty_ygui_layout l = *layout_res.value;
         l.flex_grow = 1.0f;
         l.padding_left = l.padding_right = 16;
         l.padding_top = l.padding_bottom = 16;
@@ -44,7 +47,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_label_set_text(lr.value, buf));
         struct yetty_yclass_object *w = lr.value;
         {
-            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+            struct yetty_ygui_layout_const_ptr_result layout_res2 =
+                yetty_ygui_widget_layout_get(w);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res2, "10_panel_layout: layout_get");
+            struct yetty_ygui_layout l = *layout_res2.value;
             l.height = 24;
             err_ok(yetty_ygui_widget_layout_set(w, &l));
         }

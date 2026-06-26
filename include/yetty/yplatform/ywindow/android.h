@@ -31,20 +31,15 @@ struct yetty_yplatform_android_window_ptr_result {
         struct yetty_ycore_error error;
     };
 };
-struct yetty_yplatform_android_window_ptr_result yetty_yplatform_android_window_from(
-    struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yplatform_android_window_to(
-    struct yetty_yplatform_android_window *data);
+struct yetty_yplatform_android_window_ptr_result yetty_yplatform_android_window_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yplatform_android_window_to(struct yetty_yplatform_android_window *data);
 
-struct yetty_yclass_object_ptr_result yetty_yplatform_android_window_create(
-    struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_yplatform_android_window_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_yplatform_register(void);
 
 /* Push framebuffer metrics from the NDK glue / resize callback. */
-struct yetty_ycore_void_result yetty_yplatform_android_window_set_metrics(
-    struct yetty_yclass_object *obj, int framebuffer_width, int framebuffer_height,
-    float content_scale);
+struct yetty_ycore_void_result yetty_yplatform_android_window_set_metrics(struct yetty_yclass_object *obj, int framebuffer_width, int framebuffer_height, float content_scale);
 
 #ifdef __cplusplus
 }

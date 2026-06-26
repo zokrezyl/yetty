@@ -32,7 +32,7 @@ struct yetty_ygui_yrich_view_ptr_result {
     };
 };
 struct yetty_ygui_yrich_view_ptr_result yetty_ygui_yrich_view_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_yrich_view_to(struct yetty_ygui_yrich_view *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_yrich_view_to(struct yetty_ygui_yrich_view *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_yrich_view_create(struct yetty_yclass_ctx *ctx);
 
@@ -41,23 +41,18 @@ struct yetty_ycore_void_result yetty_ygui_register(void);
 /*-----------------------------------------------------------------------------
  * Public API — model attachment + host-driven keyboard forwarding.
  *---------------------------------------------------------------------------*/
-struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_yclass_object *obj,
-                                                                  struct yetty_yclass_object *doc,
-                                                                  int own);
+struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_yclass_object *obj, struct yetty_yclass_object *doc, int own);
 /* Force a re-render at the next emit even when neither the rect nor the
  * document's own dirty flag changed — used after a host action (toolbar
  * button, programmatic edit) mutates the document. */
 struct yetty_ycore_void_result yetty_ygui_yrich_view_invalidate(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_yrich_view_document(const struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_yrich_view_content_size(
-    const struct yetty_yclass_object *obj, float *w, float *h);
+struct yetty_yclass_object_ptr_result yetty_ygui_yrich_view_document(const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_yrich_view_content_size(const struct yetty_yclass_object *obj, float *w, float *h);
 /* Re-fit the widget's authored size to the document's content extent so
  * the surrounding scrollarea tracks growth/shrink after edits. */
 struct yetty_ycore_void_result yetty_ygui_yrich_view_fit_content(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_yclass_object *obj,
-                                                              uint32_t key, uint32_t mods);
-struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_yclass_object *obj,
-                                                               const char *text, size_t len);
+struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_key(struct yetty_yclass_object *obj, uint32_t key, uint32_t mods);
+struct yetty_ycore_void_result yetty_ygui_yrich_view_feed_text(struct yetty_yclass_object *obj, const char *text, size_t len);
 
 #ifdef __cplusplus
 }

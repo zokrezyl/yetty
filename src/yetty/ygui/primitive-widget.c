@@ -65,9 +65,13 @@ static struct yetty_ycore_void_result primitive_emit_body(struct yetty_yclass_ob
     /* Optional background fill (set via yetty_ygui_widget_set_bg_color),
      * painted under the widget's own paint. Skipped when transparent so
      * widgets that never set a bg are unchanged. */
-    uint32_t bg = yetty_ygui_widget_bg(obj);
+    struct yetty_ycore_uint32_result bg_res = yetty_ygui_widget_bg(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, bg_res, "primitive_emit_body: bg");
+    uint32_t bg = bg_res.value;
     if (ctx && ctx->ygrid_drawable_list && (bg >> 24) != 0u) {
-        struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+        struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "primitive_emit_body: rect");
+        struct yetty_ycore_rectangle r = rect_res.value;
         float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
         if (w > 0.0f && h > 0.0f) {
             struct yetty_ysdf_box geom = {.center_x = r.min.x + w * 0.5f,

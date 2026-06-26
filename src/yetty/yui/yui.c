@@ -439,7 +439,9 @@ static struct yetty_ycore_void_result yui_build_view_dialog(struct yetty_yui *yu
         yetty_ygui_widget_set_position(dlg, 80.0f + (float)k * 12.0f, 60.0f));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(dlg, 0));
 
-    struct yetty_yclass_object *body = yetty_ygui_window_body(dlg);
+    struct yetty_yclass_object_ptr_result body_res = yetty_ygui_window_body(dlg);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, body_res, "build_view_dialog: window body");
+    struct yetty_yclass_object *body = body_res.value;
     if (!body) {
         return YETTY_OK_VOID();
     }
@@ -537,7 +539,9 @@ static struct yetty_ycore_void_result yui_build_gpu_dialog(struct yetty_yui *yui
     yetty_ycore_error_destroy_safe(
         yetty_ygui_widget_set_visible(gpu_dlg, getenv("YUI_DEBUG_OPEN_GPU_DIALOG") ? 1 : 0));
 
-    struct yetty_yclass_object *body = yetty_ygui_window_body(gpu_dlg);
+    struct yetty_yclass_object_ptr_result body_res = yetty_ygui_window_body(gpu_dlg);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, body_res, "build_gpu_dialog: window body");
+    struct yetty_yclass_object *body = body_res.value;
     if (!body) {
         return YETTY_OK_VOID();
     }
@@ -765,11 +769,18 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
         if (YETTY_IS_OK(rr)) {
             yui->root = rr.value;
-            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(yui->root);
-            l.direction = YETTY_YGUI_FLEX_COLUMN;
-            l.align = YETTY_YGUI_ALIGN_STRETCH;
-            l.gap = 0.0f;
-            yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(yui->root, &l));
+            struct yetty_ygui_layout_const_ptr_result root_layout_res =
+                yetty_ygui_widget_layout_get(yui->root);
+            if (YETTY_IS_OK(root_layout_res)) {
+                struct yetty_ygui_layout l = *root_layout_res.value;
+                l.direction = YETTY_YGUI_FLEX_COLUMN;
+                l.align = YETTY_YGUI_ALIGN_STRETCH;
+                l.gap = 0.0f;
+                yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(yui->root, &l));
+            } else {
+                ywarn("yui_create: root layout_get: %s", root_layout_res.error.msg);
+                yetty_ycore_error_destroy(root_layout_res.error);
+            }
             yetty_ycore_error_destroy_safe(yetty_ygui_framework_set_root(yui->engine, yui->root));
         } else {
             yetty_ycore_error_destroy(rr.error);
@@ -810,9 +821,16 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             ywarn("yui_create: spacer add: %s", spacer_r.error.msg);
             yetty_ycore_error_destroy(spacer_r.error);
         } else if (spacer_r.value) {
-            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(spacer_r.value);
-            l.flex_grow = 1.0f;
-            yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(spacer_r.value, &l));
+            struct yetty_ygui_layout_const_ptr_result spacer_layout_res =
+                yetty_ygui_widget_layout_get(spacer_r.value);
+            if (YETTY_IS_OK(spacer_layout_res)) {
+                struct yetty_ygui_layout l = *spacer_layout_res.value;
+                l.flex_grow = 1.0f;
+                yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(spacer_r.value, &l));
+            } else {
+                ywarn("yui_create: spacer layout_get: %s", spacer_layout_res.error.msg);
+                yetty_ycore_error_destroy(spacer_layout_res.error);
+            }
         }
 
         /* Statusbar — bottom strip. */
@@ -946,13 +964,19 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
     yetty_yui_config_dialog_destroy(yui->config_dialog);
     yui->config_dialog = NULL;
     if (yui->root_container_obj) {
-        struct yetty_yfigure_figure *rf =
+        struct yetty_yfigure_figure_ptr_result rf_res =
             yetty_yfigure_container_as_figure(yui->root_container_obj);
-        struct yetty_ycore_void_result r =
-            yetty_yfigure_destroy((struct yetty_yclass_object *)rf - 1);
-        if (!YETTY_IS_OK(r)) {
-            ywarn("yui_destroy: root_container destroy: %s", r.error.msg);
-            yetty_ycore_error_destroy(r.error);
+        if (YETTY_IS_OK(rf_res)) {
+            struct yetty_yfigure_figure *rf = rf_res.value;
+            struct yetty_ycore_void_result r =
+                yetty_yfigure_destroy((struct yetty_yclass_object *)rf - 1);
+            if (!YETTY_IS_OK(r)) {
+                ywarn("yui_destroy: root_container destroy: %s", r.error.msg);
+                yetty_ycore_error_destroy(r.error);
+            }
+        } else {
+            ywarn("yui_destroy: root_container as_figure: %s", rf_res.error.msg);
+            yetty_ycore_error_destroy(rf_res.error);
         }
         yui->root_container_obj = NULL;
     }
@@ -1433,8 +1457,10 @@ struct yetty_ycore_void_result yetty_yui_render(struct yetty_yui *yui,
     }
 
     {
-        struct yetty_yfigure_figure *rf =
+        struct yetty_yfigure_figure_ptr_result rf_res =
             yetty_yfigure_container_as_figure(yui->root_container_obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rf_res, "yui root_container as_figure");
+        struct yetty_yfigure_figure *rf = rf_res.value;
         struct yetty_ycore_void_result rr =
             yetty_yfigure_render((struct yetty_yclass_object *)rf - 1, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yui root_container render");
@@ -1905,7 +1931,12 @@ static struct yetty_ycore_void_result yui_gpu_info_load_into_textarea(struct yet
      * (Refresh on an open dialog); fall back to a width derived from the
      * fixed dialog geometry on the first open. */
     float fs = 13.0f;
-    struct yetty_ycore_rectangle tr = yetty_ygui_widget_rect(yui->gpu_info_textarea);
+    struct yetty_ycore_rectangle_result tr_res = yetty_ygui_widget_rect(yui->gpu_info_textarea);
+    if (YETTY_IS_ERR(tr_res)) {
+        free(text);
+        return YETTY_ERR(yetty_ycore_void, "gpu_info_load: textarea widget_rect", tr_res);
+    }
+    struct yetty_ycore_rectangle tr = tr_res.value;
     float avail = tr.max.x - tr.min.x;
     float max_w = avail > 16.0f ? avail - 16.0f : 500.0f;
     char *wrapped = text ? yui_wrap_text(yui, text, max_w, fs) : NULL;
@@ -2037,7 +2068,9 @@ static struct yetty_ycore_void_result yui_titlebar_build(struct yetty_yui *yui)
     }
     yui->titlebar = tb;
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(tb);
+        struct yetty_ygui_layout_const_ptr_result tb_layout_res = yetty_ygui_widget_layout_get(tb);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, tb_layout_res, "titlebar_build: hbox layout_get");
+        struct yetty_ygui_layout l = *tb_layout_res.value;
         l.direction = YETTY_YGUI_FLEX_ROW;
         l.align = YETTY_YGUI_ALIGN_CENTER;
         l.gap = 0.0f;
@@ -2056,7 +2089,11 @@ static struct yetty_ycore_void_result yui_titlebar_build(struct yetty_yui *yui)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tabbar_r, "titlebar_build: tabbar");
     yui->titlebar_tabbar = tabbar_r.value;
     if (yui->titlebar_tabbar) {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(yui->titlebar_tabbar);
+        struct yetty_ygui_layout_const_ptr_result tabbar_layout_res =
+            yetty_ygui_widget_layout_get(yui->titlebar_tabbar);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, tabbar_layout_res,
+                            "titlebar_build: tabbar layout_get");
+        struct yetty_ygui_layout l = *tabbar_layout_res.value;
         l.flex_grow = 1.0f;
         l.height = TITLEBAR_STRIP_H;
         /* Leave room on the right for the window controls the chrome overlays on
@@ -2094,7 +2131,9 @@ static struct yetty_ycore_void_result yui_titlebar_sync(struct yetty_yui *yui)
     size_t count = yetty_yui_tabbar_model_count(yui->tabbar_model);
     size_t active = yetty_yui_tabbar_model_active_index(yui->tabbar_model);
 
-    int wcount = yetty_ygui_tabbar_count(yui->titlebar_tabbar);
+    struct yetty_ycore_int_result wcount_res = yetty_ygui_tabbar_count(yui->titlebar_tabbar);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wcount_res, "titlebar_sync: tabbar_count");
+    int wcount = wcount_res.value;
     while ((size_t)wcount < count) {
         char label[16];
         snprintf(label, sizeof(label), "Tab %d", wcount + 1);
@@ -2158,7 +2197,9 @@ static struct yetty_ycore_void_result yui_titlebar_on_min(struct yetty_yclass_ob
 {
     (void)btn;
     struct yetty_yui *yui = userdata;
-    yetty_yui_tabbar_model_iconify(yui ? yui->tabbar_model : NULL);
+    struct yetty_ycore_void_result iconify_result =
+        yetty_yui_tabbar_model_iconify(yui ? yui->tabbar_model : NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, iconify_result, "yui: titlebar iconify");
     return YETTY_OK_VOID();
 }
 
@@ -2167,7 +2208,9 @@ static struct yetty_ycore_void_result yui_titlebar_on_max(struct yetty_yclass_ob
 {
     (void)btn;
     struct yetty_yui *yui = userdata;
-    yetty_yui_tabbar_model_toggle_maximize(yui ? yui->tabbar_model : NULL);
+    struct yetty_ycore_void_result toggle_result =
+        yetty_yui_tabbar_model_toggle_maximize(yui ? yui->tabbar_model : NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, toggle_result, "yui: titlebar toggle maximize");
     return YETTY_OK_VOID();
 }
 
@@ -2176,7 +2219,9 @@ static struct yetty_ycore_void_result yui_titlebar_on_close_window(struct yetty_
 {
     (void)btn;
     struct yetty_yui *yui = userdata;
-    yetty_yui_tabbar_model_close_window(yui ? yui->tabbar_model : NULL);
+    struct yetty_ycore_void_result close_result =
+        yetty_yui_tabbar_model_close_window(yui ? yui->tabbar_model : NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, close_result, "yui: titlebar close window");
     return YETTY_OK_VOID();
 }
 
@@ -2311,19 +2356,21 @@ struct yetty_ycore_void_result yetty_yui_set_status_right(struct yetty_yui *yui,
     return YETTY_OK_VOID();
 }
 
-float yetty_yui_statusbar_height(const struct yetty_yui *yui)
+struct yetty_ycore_float_result yetty_yui_statusbar_height(const struct yetty_yui *yui)
 {
     if (!yui || !yui->statusbar) {
-        return 0.0f;
+        return YETTY_OK(yetty_ycore_float, 0.0f);
     }
     /* The statusbar is a ygui chrome widget laid out in logical pixels;
      * its height feeds the terminal workspace layout, which works in
      * framebuffer pixels. Convert back up so the reserved strip matches
      * the statusbar's physical (receiver-scaled) render height. */
     float scale = yui->content_scale > 0.0f ? yui->content_scale : 1.0f;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(yui->statusbar);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(yui->statusbar);
+    YETTY_RETURN_IF_ERR(yetty_ycore_float, rect_res, "statusbar_height: widget_rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float h = (r.max.y - r.min.y) * scale;
-    return h > 0.0f ? h : 22.0f * scale;
+    return YETTY_OK(yetty_ycore_float, h > 0.0f ? h : 22.0f * scale);
 }
 
 struct yetty_ycore_const_char_ptr_result yetty_yui_get_field_text(const struct yetty_yui *yui,
@@ -2363,14 +2410,27 @@ struct yetty_ycore_int_result yetty_yui_is_active(const struct yetty_yui *yui)
         }
     }
     for (int k = 0; k < YETTY_YUI_VIEW_KIND_COUNT; k++) {
-        if (yui->dialogs[k] && yetty_ygui_widget_is_visible(yui->dialogs[k])) {
+        if (yui->dialogs[k]) {
+            struct yetty_ycore_int_result visible_res =
+                yetty_ygui_widget_is_visible(yui->dialogs[k]);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, visible_res, "is_active: dialog is_visible");
+            if (visible_res.value) {
+                return YETTY_OK(yetty_ycore_int, 1);
+            }
+        }
+    }
+    if (yui->gpu_info_dialog) {
+        struct yetty_ycore_int_result gpu_visible_res =
+            yetty_ygui_widget_is_visible(yui->gpu_info_dialog);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, gpu_visible_res, "is_active: gpu dialog is_visible");
+        if (gpu_visible_res.value) {
             return YETTY_OK(yetty_ycore_int, 1);
         }
     }
-    if (yui->gpu_info_dialog && yetty_ygui_widget_is_visible(yui->gpu_info_dialog)) {
-        return YETTY_OK(yetty_ycore_int, 1);
-    }
-    if (yetty_yui_config_dialog_is_visible(yui->config_dialog)) {
+    struct yetty_ycore_int_result config_visible_res =
+        yetty_yui_config_dialog_is_visible(yui->config_dialog);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, config_visible_res, "is_active: config_dialog is_visible");
+    if (config_visible_res.value) {
         return YETTY_OK(yetty_ycore_int, 1);
     }
     return YETTY_OK(yetty_ycore_int, 0);
@@ -2452,17 +2512,16 @@ static struct yetty_ycore_void_result yui_apply_cursor(struct yetty_yui *yui, fl
  * consume to the window chrome (drag / edge-resize / maximize / window
  * controls). Chrome works in raw framebuffer px, so the unscaled event passes
  * straight through. Returns 1 if chrome claimed it. */
-static int yui_chrome_fallback(struct yetty_yui *yui, const struct yetty_yui_event *event)
+static struct yetty_ycore_int_result yui_chrome_fallback(struct yetty_yui *yui,
+                                                         const struct yetty_yui_event *event)
 {
     if (!yui->chrome) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
-    struct yetty_ycore_int_result cr = yetty_ychrome_host_handle_event(yui->chrome, event);
-    int consumed = YETTY_IS_OK(cr) && cr.value;
-    if (YETTY_IS_ERR(cr)) {
-        yetty_ycore_error_destroy(cr.error);
-    }
-    return consumed;
+    struct yetty_ycore_int_result chrome_result =
+        yetty_ychrome_host_handle_event(yui->chrome, event);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, chrome_result, "yui_chrome_fallback: handle_event");
+    return YETTY_OK(yetty_ycore_int, chrome_result.value ? 1 : 0);
 }
 
 struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
@@ -2510,7 +2569,9 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
                           : YETTY_OK(yetty_ycore_int, 0);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, app_open_r, "yui: app_menu is_open");
         if (app_open_r.value) {
-            struct yetty_ycore_rectangle mr = yetty_ygui_widget_rect(yui->app_menu);
+            struct yetty_ycore_rectangle_result mr_res = yetty_ygui_widget_rect(yui->app_menu);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, mr_res, "on_event: app_menu widget_rect");
+            struct yetty_ycore_rectangle mr = mr_res.value;
             float mx = event->mouse.x / scale;
             float my = event->mouse.y / scale;
             int inside = mx >= mr.min.x && mx < mr.max.x && my >= mr.min.y && my < mr.max.y;
@@ -2539,7 +2600,9 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
         /* Client-first: the ygui engine didn't take it — give the window chrome
          * a shot (title-bar drag / edges / controls). If chrome claims it, stop;
          * otherwise it's a body click → fall through to the terminal. */
-        return YETTY_OK(yetty_ycore_int, yui_chrome_fallback(yui, event) ? 1 : 0);
+        struct yetty_ycore_int_result fallback_r = yui_chrome_fallback(yui, event);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, fallback_r, "on_event: chrome fallback (down)");
+        return YETTY_OK(yetty_ycore_int, fallback_r.value ? 1 : 0);
     }
     case YETTY_YCORE_MOUSE_UP: {
         struct yetty_ycore_int_result feed_r = yetty_ygui_framework_feed_mouse_button(
@@ -2554,11 +2617,17 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
         if (feed_r.value || active || has_pressed) {
             return YETTY_OK(yetty_ycore_int, 1);
         }
-        return YETTY_OK(yetty_ycore_int, yui_chrome_fallback(yui, event) ? 1 : 0);
+        struct yetty_ycore_int_result fallback_r = yui_chrome_fallback(yui, event);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, fallback_r, "on_event: chrome fallback (up)");
+        return YETTY_OK(yetty_ycore_int, fallback_r.value ? 1 : 0);
     }
-    case YETTY_YCORE_MOUSE_DOUBLE_CLICK:
+    case YETTY_YCORE_MOUSE_DOUBLE_CLICK: {
         /* ygui has no double-click here; it's the chrome's title-bar maximize. */
-        return YETTY_OK(yetty_ycore_int, yui_chrome_fallback(yui, event) ? 1 : 0);
+        struct yetty_ycore_int_result fallback_r = yui_chrome_fallback(yui, event);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, fallback_r,
+                            "on_event: chrome fallback (double-click)");
+        return YETTY_OK(yetty_ycore_int, fallback_r.value ? 1 : 0);
+    }
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG: {
         struct yetty_ycore_int_result feed_r = yetty_ygui_framework_feed_mouse_motion(
@@ -2572,7 +2641,8 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
         /* Chrome runs after apply_cursor so its resize-edge cursor wins at the
          * window margins; over the body it leaves the cursor alone. */
         if (!feed_r.value && !has_pressed) {
-            yui_chrome_fallback(yui, event);
+            struct yetty_ycore_int_result fallback_r = yui_chrome_fallback(yui, event);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, fallback_r, "on_event: chrome fallback (move)");
         }
         return YETTY_OK(yetty_ycore_int, active || has_pressed ? 1 : 0);
     }
@@ -2652,7 +2722,10 @@ struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t 
             yetty_ygui_framework_set_viewport(yui->engine, (float)surface_w / yui->content_scale,
                                               (float)surface_h / yui->content_scale));
     }
-    struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(yui->root_container_obj);
+    struct yetty_yfigure_figure_ptr_result rf_res =
+        yetty_yfigure_container_as_figure(yui->root_container_obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rf_res, "yui_resize: root_container as_figure");
+    struct yetty_yfigure_figure *rf = rf_res.value;
     {
         struct yetty_ycore_void_result drop_r =
             yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf)-1,

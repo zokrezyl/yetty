@@ -379,7 +379,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_set_pty_write
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -390,7 +390,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_set_clear_hook
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -401,7 +401,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_set_card_sub
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -434,14 +434,14 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_is_dirty
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_cursor
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -454,7 +454,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_scroll_origin
-    return_type: uint32_t
+    return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -531,7 +531,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_on_char
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -542,7 +542,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_on_key
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -579,7 +579,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_word_bounds
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -596,7 +596,7 @@ exposed:
  * that cell. Used for double-click word selection. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_dims
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -609,16 +609,17 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_line_cells
-    return_type: "const struct yetty_yvterm_text_cell *"
+    return_type: struct yetty_yvterm_text_cell_const_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: row
         type: uint32_t
-    doc: "/* The cell array for visible row `row` (length = cols). NULL if out of range. */"
+    doc: "/* The cell array for visible row `row` (length = cols). NULL value if out of
+ * range. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_line_dirty
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -627,7 +628,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_line_composites
-    return_type: "struct yetty_ydraw_composite *const *"
+    return_type: struct yetty_ydraw_composite_const_ptr_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -635,10 +636,11 @@ exposed:
         type: uint32_t
       - name: out_count
         type: "uint32_t *"
-    doc: "/* Composite array anchored on visible row `row`. Sets *out_count; may be NULL. */"
+    doc: "/* Composite array anchored on visible row `row`. Sets *out_count; value may be
+ * NULL. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_slot_composites
-    return_type: "struct yetty_ydraw_composite *const *"
+    return_type: struct yetty_ydraw_composite_const_ptr_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -652,7 +654,7 @@ exposed:
  * in lockstep (live AND scrolled-back). Sets *out_count; may be NULL. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_slot_primitive_count
-    return_type: uint32_t
+    return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -663,7 +665,7 @@ exposed:
  * addressing the composite + text passes use — so figures and text scroll together. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_slot_span
-    return_type: uint32_t
+    return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -676,7 +678,7 @@ exposed:
  * the renderer then treats it as a single-row anchor. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_slot_primitive_words
-    return_type: "const uint32_t *"
+    return_type: struct yetty_ycore_const_uint32_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -691,7 +693,7 @@ exposed:
  * range. The returned span aliases the line's arena — read it, do not retain it. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_selection
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -709,14 +711,14 @@ exposed:
  * reading-order stream). active=0 → no selection. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_clear_dirty
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
     doc: "/* Renderer has consumed the model; drop every dirty flag. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_slot_count
-    return_type: uint32_t
+    return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -725,7 +727,7 @@ exposed:
  * the visible-row accessors above (which resolve the ring). */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_slot_cells
-    return_type: "const struct yetty_yvterm_text_cell *"
+    return_type: struct yetty_yvterm_text_cell_const_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -734,7 +736,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_slot_dirty
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -773,7 +775,7 @@ exposed:
  * `context` is accepted now for that future font setup. */"
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_as_figure
-    return_type: "struct yetty_yfigure_figure *"
+    return_type: struct yetty_yfigure_figure_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -802,21 +804,21 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_cell_size
-    return_type: struct yetty_ycore_pixel_size
+    return_type: struct pixel_size_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_is_dirty
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_set_content_inset
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -831,7 +833,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_get_content_inset
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -846,7 +848,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_set_clear_hook
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -857,7 +859,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_cursor
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -870,7 +872,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_word_bounds
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -885,7 +887,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_scroll_origin
-    return_type: uint32_t
+    return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -950,7 +952,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_on_char
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -961,7 +963,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_on_key
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -998,7 +1000,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_get_live_anchor
-    return_type: uint32_t
+    return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1006,7 +1008,7 @@ exposed:
  * far. A wheel-up anchors one line below this and walks toward the floor. */"
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_get_scrollback_floor
-    return_type: uint32_t
+    return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1038,6 +1040,18 @@ exposed:
         type: float
     doc: null
 types:
+  - name: pixel_size_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: struct yetty_ycore_pixel_size
+          - name: error
+            type: struct yetty_ycore_error
   - name: vterm_uniforms
     kind: struct
     fields:
@@ -1097,6 +1111,18 @@ types:
             type: "struct yetty_yclass_object *"
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_ycore_const_uint32_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const uint32_t *"
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_ycore_error
     kind: struct
     fields:
@@ -1117,6 +1143,18 @@ types:
         type: uint32_t
       - name: cols
         type: uint32_t
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_ycore_pixel_size
     kind: struct
     fields:
@@ -1148,6 +1186,42 @@ types:
             type: int
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_ydraw_composite_const_ptr_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ydraw_composite *const *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_yfigure_figure_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yfigure_figure *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_yvterm_text_cell_const_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const struct yetty_yvterm_text_cell *"
+          - name: error
+            type: struct yetty_ycore_error
 local_types:
   yetty_yvterm_text_attr: src/yetty/yvterm/grid.c
   yetty_yvterm_text_cell: src/yetty/yvterm/grid.c
@@ -1155,6 +1229,8 @@ local_types:
   yetty_yvterm_line: src/yetty/yvterm/grid.c
   yetty_yvterm_grid: src/yetty/yvterm/grid.c
   yetty_yvterm_grid_ptr_result: src/yetty/yvterm/grid.c
+  yetty_yvterm_text_cell_const_ptr_result: src/yetty/yvterm/grid.c
+  yetty_ydraw_composite_const_ptr_ptr_result: src/yetty/yvterm/grid.c
   yetty_yvterm_reflow_source: src/yetty/yvterm/grid.c
   yetty_yvterm_reflow_logical: src/yetty/yvterm/grid.c
   vterm_uniforms: src/yetty/yvterm/vterm.c

@@ -39,7 +39,7 @@ struct yetty_ybrowser_app_ptr_result {
     };
 };
 struct yetty_ybrowser_app_ptr_result yetty_ybrowser_app_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ybrowser_app_to(struct yetty_ybrowser_app *data);
+struct yetty_yclass_object_ptr_result yetty_ybrowser_app_to(struct yetty_ybrowser_app *data);
 
 struct yetty_yclass_object_ptr_result yetty_ybrowser_app_create(struct yetty_yclass_ctx *ctx);
 

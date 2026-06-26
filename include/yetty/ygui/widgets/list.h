@@ -31,14 +31,13 @@ struct yetty_ygui_list_ptr_result {
     };
 };
 struct yetty_ygui_list_ptr_result yetty_ygui_list_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_list_to(struct yetty_ygui_list *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_list_to(struct yetty_ygui_list *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_list_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_list_add(struct yetty_yclass_object *obj,
-                                                   const char *label);
+struct yetty_ycore_void_result yetty_ygui_list_add(struct yetty_yclass_object *obj, const char *label);
 struct yetty_ycore_void_result yetty_ygui_list_set_selected(struct yetty_yclass_object *obj, int i);
 struct yetty_ycore_int_result yetty_ygui_list_get_selected(const struct yetty_yclass_object *obj);
 

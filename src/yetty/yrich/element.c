@@ -76,8 +76,8 @@ static struct yetty_ycore_void_result element_default_destroy(struct yetty_yclas
 /* element_bounds: write the axis-aligned bounding box into *out_bounds. */
 YETTY_ANNOTATE("virtual@yrich:element:element_bounds")
 YETTY_ANNOTATE("local@yrich:element_bounds")
-static struct yetty_ycore_void_result
-    element_default_bounds(struct yetty_yclass_object *obj, struct yetty_yrich_rect *out_bounds)
+static struct yetty_ycore_void_result element_default_bounds(struct yetty_yclass_object *obj,
+                                                             struct yetty_yrich_rect *out_bounds)
 {
     (void)obj;
     if (!out_bounds) {
@@ -101,10 +101,9 @@ static struct yetty_ycore_int_result element_default_hit_test(struct yetty_yclas
 /* element_render: emit ydraw primitives at the given base layer. */
 YETTY_ANNOTATE("virtual@yrich:element:element_render")
 YETTY_ANNOTATE("local@yrich:element_render")
-static struct yetty_ycore_void_result
-    element_default_render(struct yetty_yclass_object *obj,
-                           struct yetty_ydraw_drawable_list *drawable_list, uint32_t layer,
-                           int selected)
+static struct yetty_ycore_void_result element_default_render(
+    struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *drawable_list,
+    uint32_t layer, int selected)
 {
     (void)obj;
     (void)drawable_list;

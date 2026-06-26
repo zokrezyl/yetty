@@ -31,18 +31,15 @@ struct yetty_ygui_progress_ptr_result {
     };
 };
 struct yetty_ygui_progress_ptr_result yetty_ygui_progress_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_progress_to(struct yetty_ygui_progress *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_progress_to(struct yetty_ygui_progress *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_progress_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_yclass_object *obj,
-                                                             float value);
-struct yetty_ycore_float_result yetty_ygui_progress_get_value(
-    const struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_progress_set_accent(struct yetty_yclass_object *obj,
-                                                              uint32_t color);
+struct yetty_ycore_void_result yetty_ygui_progress_set_value(struct yetty_yclass_object *obj, float value);
+struct yetty_ycore_float_result yetty_ygui_progress_get_value(const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_progress_set_accent(struct yetty_yclass_object *obj, uint32_t color);
 
 #ifdef __cplusplus
 }

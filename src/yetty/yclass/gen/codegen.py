@@ -1798,22 +1798,17 @@ def emit_class_accessor(cls: dict) -> str:
         # subtract; `_to` would be ill-defined and is not emitted.
         if cls.get("type") != "mixin":
             parts.append(
-                f"\nstruct yetty_yclass_object *{qcls}_to({data} *data)\n"
+                f"\nstruct yetty_yclass_object_ptr_result {qcls}_to({data} *data)\n"
                 f"{{\n"
                 f"    if (!data)\n"
-                f"        return NULL;\n"
+                f"        return YETTY_OK(yetty_yclass_object_ptr, NULL);\n"
                 f"    struct yetty_yclass_ptr_result class_r = {accessor}();\n"
-                f"    if (YETTY_IS_ERR(class_r)) {{\n"
-                f"        yetty_ycore_error_destroy(class_r.error);\n"
-                f"        return NULL;\n"
-                f"    }}\n"
+                f'    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, class_r, "{qcls}_to: class accessor");\n'
                 f"    struct yetty_ycore_size_result offset_r =\n"
                 f"        yetty_yclass_object_data_offset(class_r.value, class_r.value);\n"
-                f"    if (YETTY_IS_ERR(offset_r)) {{\n"
-                f"        yetty_ycore_error_destroy(offset_r.error);\n"
-                f"        return NULL;\n"
-                f"    }}\n"
-                f"    return (struct yetty_yclass_object *)((char *)data - offset_r.value);\n"
+                f'    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, offset_r, "{qcls}_to: data offset");\n'
+                f"    return YETTY_OK(yetty_yclass_object_ptr,\n"
+                f"                    (struct yetty_yclass_object *)((char *)data - offset_r.value));\n"
                 f"}}\n"
             )
         for field in property_fields:
@@ -2042,7 +2037,7 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             # offset); see the matching guard in emit_class_accessor.
             if c.get("type") != "mixin":
                 lines.append(
-                    f"struct yetty_yclass_object *{q}_to({c['data']} *data);")
+                    f"struct yetty_yclass_object_ptr_result {q}_to({c['data']} *data);")
             for field in pfields:
                 base = f"{q}_{field['name']}"
                 if field.get("get"):
@@ -2172,7 +2167,11 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             type_block += fwd_decls + "\n"
         if typedef_defs:
             type_block += "\n".join(typedef_defs) + "\n\n"
-        full_defs = local_type_defs + header_type_texts
+        # Exposed type definitions (`header_type_texts`, e.g. a struct returned
+        # by value) must precede the by-value dependency defs (`local_type_defs`),
+        # because a generated `<type>_result` wrapper in the latter embeds such an
+        # exposed type by value and needs its complete definition first.
+        full_defs = header_type_texts + local_type_defs
         if full_defs:
             type_block += "\n".join(full_defs) + "\n\n"
 

@@ -209,14 +209,11 @@ struct yetty_ycore_void_result yetty_yrich_document_mark_dirty(struct yetty_ycla
 }
 
 YETTY_ANNOTATE("expose")
-int yetty_yrich_document_is_dirty(struct yetty_yclass_object *obj)
+struct yetty_ycore_int_result yetty_yrich_document_is_dirty(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return 0;
-    }
-    return data_res.value->dirty;
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_res, "document_is_dirty: data_get");
+    return YETTY_OK(yetty_ycore_int, data_res.value->dirty);
 }
 
 YETTY_ANNOTATE("expose")
@@ -243,14 +240,12 @@ struct yetty_ycore_void_result yetty_yrich_document_set_buffer(
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_ydraw_drawable_list *yetty_yrich_document_buffer(struct yetty_yclass_object *obj)
+struct yetty_yrich_drawable_list_ptr_result yetty_yrich_document_buffer(
+    struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return NULL;
-    }
-    return data_res.value->buffer;
+    YETTY_RETURN_IF_ERR(yetty_yrich_drawable_list_ptr, data_res, "document_buffer: data_get");
+    return YETTY_OK(yetty_yrich_drawable_list_ptr, data_res.value->buffer);
 }
 
 YETTY_ANNOTATE("expose")
@@ -264,14 +259,11 @@ struct yetty_ycore_void_result yetty_yrich_document_set_bg_color(struct yetty_yc
 }
 
 YETTY_ANNOTATE("expose")
-uint32_t yetty_yrich_document_bg_color(struct yetty_yclass_object *obj)
+struct yetty_ycore_uint32_result yetty_yrich_document_bg_color(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return 0;
-    }
-    return data_res.value->bg_color;
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, data_res, "document_bg_color: data_get");
+    return YETTY_OK(yetty_ycore_uint32, data_res.value->bg_color);
 }
 
 /*===========================================================================
@@ -435,53 +427,42 @@ struct yetty_ycore_void_result yetty_yrich_document_remove_element(struct yetty_
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_yclass_object *yetty_yrich_document_find(struct yetty_yclass_object *obj,
-                                                      yetty_yrich_element_id id)
+struct yetty_yclass_object_ptr_result yetty_yrich_document_find(struct yetty_yclass_object *obj,
+                                                                yetty_yrich_element_id id)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, data_res, "document_find: data_get");
     struct yetty_yrich_document *doc = data_res.value;
     for (size_t i = 0; i < doc->element_count; i++) {
         struct yetty_yrich_element_id_result id_res =
             yetty_yrich_element_id_value(doc->elements[i]);
-        if (YETTY_IS_ERR(id_res)) {
-            yetty_ycore_error_destroy(id_res.error);
-            continue;
-        }
+        YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, id_res, "document_find: element id");
         if (id_res.value == id) {
-            return doc->elements[i];
+            return YETTY_OK(yetty_yclass_object_ptr, doc->elements[i]);
         }
     }
-    return NULL;
+    /* Not found is a successful query result. */
+    return YETTY_OK(yetty_yclass_object_ptr, NULL);
 }
 
 /* Hit-test in reverse z-order (last drawn = topmost). */
 YETTY_ANNOTATE("expose")
-struct yetty_yclass_object *yetty_yrich_document_element_at(struct yetty_yclass_object *obj,
-                                                            float x, float y)
+struct yetty_yclass_object_ptr_result yetty_yrich_document_element_at(
+    struct yetty_yclass_object *obj, float x, float y)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, data_res, "document_element_at: data_get");
     struct yetty_yrich_document *doc = data_res.value;
     for (size_t i = doc->element_count; i > 0; i--) {
         struct yetty_yclass_object *element_obj = doc->elements[i - 1];
         struct yetty_ycore_int_result hit_res = yetty_yrich_element_hit_test(element_obj, x, y);
-        if (YETTY_IS_ERR(hit_res)) {
-            /* A failed hit-test on one element must not hide the rest. */
-            yetty_ycore_error_destroy(hit_res.error);
-            continue;
-        }
+        YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, hit_res, "document_element_at: hit_test");
         if (hit_res.value) {
-            return element_obj;
+            return YETTY_OK(yetty_yclass_object_ptr, element_obj);
         }
     }
-    return NULL;
+    /* No element under the point is a successful query result. */
+    return YETTY_OK(yetty_yclass_object_ptr, NULL);
 }
 
 /*===========================================================================
@@ -489,32 +470,28 @@ struct yetty_yclass_object *yetty_yrich_document_element_at(struct yetty_yclass_
  *=========================================================================*/
 
 YETTY_ANNOTATE("expose")
-struct yetty_yrich_selection *yetty_yrich_document_selection(struct yetty_yclass_object *obj)
+struct yetty_yrich_selection_ptr_result yetty_yrich_document_selection(
+    struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return NULL;
-    }
-    return &data_res.value->selection;
+    YETTY_RETURN_IF_ERR(yetty_yrich_selection_ptr, data_res, "document_selection: data_get");
+    return YETTY_OK(yetty_yrich_selection_ptr, &data_res.value->selection);
 }
 
 YETTY_ANNOTATE("expose")
-int yetty_yrich_document_is_selected(struct yetty_yclass_object *obj, yetty_yrich_element_id id)
+struct yetty_ycore_int_result yetty_yrich_document_is_selected(struct yetty_yclass_object *obj,
+                                                               yetty_yrich_element_id id)
 {
     struct yetty_yrich_document_ptr_result data_res = ddata(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return 0;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_res, "document_is_selected: data_get");
     const struct yetty_yrich_selection *selection = &data_res.value->selection;
     if (selection->kind == YETTY_YRICH_SEL_ELEMENTS) {
-        return yetty_yrich_selection_contains(selection, id) ? 1 : 0;
+        return YETTY_OK(yetty_ycore_int, yetty_yrich_selection_contains(selection, id) ? 1 : 0);
     }
     if (selection->kind == YETTY_YRICH_SEL_TEXT) {
-        return selection->u.text.element_id == id ? 1 : 0;
+        return YETTY_OK(yetty_ycore_int, selection->u.text.element_id == id ? 1 : 0);
     }
-    return 0;
+    return YETTY_OK(yetty_ycore_int, 0);
 }
 
 YETTY_ANNOTATE("expose")
@@ -574,9 +551,11 @@ static struct yetty_ycore_void_result document_default_render(struct yetty_yclas
         struct yetty_yclass_object *element_obj = doc->elements[i];
         struct yetty_yrich_element_id_result id_res = yetty_yrich_element_id_value(element_obj);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "document_render: element id");
-        int selected = yetty_yrich_document_is_selected(obj, id_res.value);
+        struct yetty_ycore_int_result selected_res =
+            yetty_yrich_document_is_selected(obj, id_res.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, selected_res, "document_render: is_selected");
         struct yetty_ycore_void_result render_res =
-            yetty_yrich_element_render(element_obj, doc->buffer, layer, selected);
+            yetty_yrich_element_render(element_obj, doc->buffer, layer, selected_res.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, render_res, "document_render: element failed");
         layer += 4; /* room for an element's selection / decoration / cursor layers */
     }
@@ -594,9 +573,9 @@ static struct yetty_ycore_void_result document_default_render(struct yetty_yclas
  * op to their own state and chain up for the base bookkeeping. */
 YETTY_ANNOTATE("virtual@yrich:document:document_apply_op")
 YETTY_ANNOTATE("local@yrich:document_apply_op")
-static struct yetty_ycore_void_result
-    document_default_apply_op(struct yetty_yclass_object *obj, struct yetty_yrich_operation *op,
-                              int local_flag)
+static struct yetty_ycore_void_result document_default_apply_op(struct yetty_yclass_object *obj,
+                                                                struct yetty_yrich_operation *op,
+                                                                int local_flag)
 {
     if (!op) {
         return YETTY_ERR(yetty_ycore_void, "document_apply_op: NULL op");
@@ -698,7 +677,9 @@ static struct yetty_ycore_void_result document_default_on_mouse_down(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "document_on_mouse_down: data_get");
     struct yetty_yrich_document *doc = data_res.value;
 
-    struct yetty_yclass_object *element_obj = yetty_yrich_document_element_at(obj, x, y);
+    struct yetty_yclass_object_ptr_result element_res = yetty_yrich_document_element_at(obj, x, y);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, element_res, "document_on_mouse_down: element_at");
+    struct yetty_yclass_object *element_obj = element_res.value;
     if (!element_obj) {
         return yetty_yrich_document_clear_selection(obj);
     }
@@ -755,7 +736,10 @@ static struct yetty_ycore_void_result document_default_on_mouse_double_click(
     if (button != YETTY_YRICH_MOUSE_LEFT) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yclass_object *element_obj = yetty_yrich_document_element_at(obj, x, y);
+    struct yetty_yclass_object_ptr_result element_res = yetty_yrich_document_element_at(obj, x, y);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, element_res,
+                        "document_on_mouse_double_click: element_at");
+    struct yetty_yclass_object *element_obj = element_res.value;
     if (!element_obj) {
         return YETTY_OK_VOID();
     }
@@ -799,8 +783,10 @@ static struct yetty_ycore_void_result document_default_on_text_input(
     if (doc->selection.kind != YETTY_YRICH_SEL_TEXT) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yclass_object *element_obj =
+    struct yetty_yclass_object_ptr_result element_res =
         yetty_yrich_document_find(obj, doc->selection.u.text.element_id);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, element_res, "document_on_text_input: find");
+    struct yetty_yclass_object *element_obj = element_res.value;
     if (!element_obj) {
         return YETTY_OK_VOID();
     }

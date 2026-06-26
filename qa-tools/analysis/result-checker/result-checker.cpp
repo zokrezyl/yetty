@@ -196,8 +196,13 @@ public:
 
 	bool VisitFunctionDecl(FunctionDecl *func)
 	{
-		/* Only check function definitions, not declarations */
-		if (!func->hasBody())
+		/* Only check the definition declaration, not forward
+		 * declarations. hasBody() is true even on a forward decl when
+		 * a later redeclaration carries the body, so it would visit the
+		 * forward decl too — and attributes written at the definition
+		 * (e.g. YETTY_EXTERNAL_CALLBACK on the line above the body) do
+		 * not live on the forward decl, producing false positives. */
+		if (!func->isThisDeclarationADefinition())
 			return true;
 
 		/* Skip functions in system headers or bundled third-party code —
@@ -222,9 +227,13 @@ public:
 		 * returning calls inside such a callback have nowhere to propagate
 		 * to; the annotation documents the boundary and silences the
 		 * checker. Use sparingly. */
-		for (const auto *attr : func->specific_attrs<AnnotateAttr>()) {
-			if (attr->getAnnotation() == "yetty_external_callback")
-				return true;
+		for (const FunctionDecl *redecl : func->redecls()) {
+			for (const auto *attr :
+			     redecl->specific_attrs<AnnotateAttr>()) {
+				if (attr->getAnnotation() ==
+				    "yetty_external_callback")
+					return true;
+			}
 		}
 
 		/* The rule: a function that can fail returns a Result type, and

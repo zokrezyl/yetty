@@ -81,23 +81,18 @@ struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_from(struct yetty_ycla
     return YETTY_OK(yetty_yrdawn_figure_ptr, (struct yetty_yrdawn_figure *)slice_r.value);
 }
 
-struct yetty_yclass_object *yetty_yrdawn_figure_to(struct yetty_yrdawn_figure *data)
+struct yetty_yclass_object_ptr_result yetty_yrdawn_figure_to(struct yetty_yrdawn_figure *data)
 {
     if (!data) {
-        return NULL;
+        return YETTY_OK(yetty_yclass_object_ptr, NULL);
     }
     struct yetty_yclass_ptr_result class_r = yetty_yrdawn_figure_class_get();
-    if (YETTY_IS_ERR(class_r)) {
-        yetty_ycore_error_destroy(class_r.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, class_r, "yetty_yrdawn_figure_to: class accessor");
     struct yetty_ycore_size_result offset_r =
         yetty_yclass_object_data_offset(class_r.value, class_r.value);
-    if (YETTY_IS_ERR(offset_r)) {
-        yetty_ycore_error_destroy(offset_r.error);
-        return NULL;
-    }
-    return (struct yetty_yclass_object *)((char *)data - offset_r.value);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, offset_r, "yetty_yrdawn_figure_to: data offset");
+    return YETTY_OK(yetty_yclass_object_ptr,
+                    (struct yetty_yclass_object *)((char *)data - offset_r.value));
 }
 
 struct yetty_yclass_object_ptr_result yetty_yrdawn_figure_create(struct yetty_yclass_ctx *ctx);

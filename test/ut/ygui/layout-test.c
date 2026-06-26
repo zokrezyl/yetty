@@ -48,17 +48,23 @@ static void test_hbox_two_children(void)
     assert(YETTY_IS_OK(rc2));
 
     /* Set widths via layout. */
-    struct yetty_ygui_layout l1 = *yetty_ygui_widget_layout_get(rc1.value);
+    struct yetty_ygui_layout_const_ptr_result layout1_res = yetty_ygui_widget_layout_get(rc1.value);
+    assert(YETTY_IS_OK(layout1_res));
+    struct yetty_ygui_layout l1 = *layout1_res.value;
     l1.width = 30.0f;
     l1.height = 20.0f;
     yetty_ygui_widget_layout_set(rc1.value, &l1);
 
-    struct yetty_ygui_layout l2 = *yetty_ygui_widget_layout_get(rc2.value);
+    struct yetty_ygui_layout_const_ptr_result layout2_res = yetty_ygui_widget_layout_get(rc2.value);
+    assert(YETTY_IS_OK(layout2_res));
+    struct yetty_ygui_layout l2 = *layout2_res.value;
     l2.width = 50.0f;
     l2.height = 20.0f;
     yetty_ygui_widget_layout_set(rc2.value, &l2);
 
-    struct yetty_ygui_layout lp = *yetty_ygui_widget_layout_get(root);
+    struct yetty_ygui_layout_const_ptr_result root_layout_res = yetty_ygui_widget_layout_get(root);
+    assert(YETTY_IS_OK(root_layout_res));
+    struct yetty_ygui_layout lp = *root_layout_res.value;
     lp.gap = 5.0f;
     yetty_ygui_widget_layout_set(root, &lp);
 
@@ -67,13 +73,21 @@ static void test_hbox_two_children(void)
 
     /* Children appear in insertion order (yetty_ygui_add appends at
      * tail). rc1 first, then rc2. */
-    struct yetty_yclass_object *first = yetty_ygui_widget_first_child(root);
-    struct yetty_yclass_object *second = yetty_ygui_widget_next_sibling(first);
+    struct yetty_yclass_object_ptr_result first_res = yetty_ygui_widget_first_child(root);
+    assert(YETTY_IS_OK(first_res));
+    struct yetty_yclass_object *first = first_res.value;
+    struct yetty_yclass_object_ptr_result second_res = yetty_ygui_widget_next_sibling(first);
+    assert(YETTY_IS_OK(second_res));
+    struct yetty_yclass_object *second = second_res.value;
     assert(first == rc1.value);
     assert(second == rc2.value);
 
-    struct yetty_ycore_rectangle r1 = yetty_ygui_widget_rect(first);
-    struct yetty_ycore_rectangle r2 = yetty_ygui_widget_rect(second);
+    struct yetty_ycore_rectangle_result r1_res = yetty_ygui_widget_rect(first);
+    assert(YETTY_IS_OK(r1_res));
+    struct yetty_ycore_rectangle r1 = r1_res.value;
+    struct yetty_ycore_rectangle_result r2_res = yetty_ygui_widget_rect(second);
+    assert(YETTY_IS_OK(r2_res));
+    struct yetty_ycore_rectangle r2 = r2_res.value;
     /* rc1 (width 30) at x=0, then gap=5, then rc2 (width 50) at x=35. */
     assert(approx_eq(r1.min.x, 0.0f));
     assert(approx_eq(r1.max.x, 30.0f));
@@ -96,18 +110,24 @@ static void test_vbox_flex_grow(void)
     struct yetty_yclass_object *c2 = yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value).value;
     struct yetty_yclass_object *c3 = yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value).value;
 
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(c1);
+    struct yetty_ygui_layout_const_ptr_result layout_c1_res = yetty_ygui_widget_layout_get(c1);
+    assert(YETTY_IS_OK(layout_c1_res));
+    struct yetty_ygui_layout l = *layout_c1_res.value;
     l.height = 0.0f;
     l.flex_grow = 1.0f;
     l.width = 100.0f;
     yetty_ygui_widget_layout_set(c1, &l);
 
-    struct yetty_ygui_layout l2 = *yetty_ygui_widget_layout_get(c2);
+    struct yetty_ygui_layout_const_ptr_result layout_c2_res = yetty_ygui_widget_layout_get(c2);
+    assert(YETTY_IS_OK(layout_c2_res));
+    struct yetty_ygui_layout l2 = *layout_c2_res.value;
     l2.height = 40.0f;
     l2.width = 100.0f;
     yetty_ygui_widget_layout_set(c2, &l2);
 
-    struct yetty_ygui_layout l3 = *yetty_ygui_widget_layout_get(c3);
+    struct yetty_ygui_layout_const_ptr_result layout_c3_res = yetty_ygui_widget_layout_get(c3);
+    assert(YETTY_IS_OK(layout_c3_res));
+    struct yetty_ygui_layout l3 = *layout_c3_res.value;
     l3.height = 60.0f;
     l3.width = 100.0f;
     yetty_ygui_widget_layout_set(c3, &l3);
@@ -115,9 +135,15 @@ static void test_vbox_flex_grow(void)
     struct yetty_ycore_void_result lr = yetty_ygui_layout_compute(root, rect(0, 0, 200, 200));
     assert(YETTY_IS_OK(lr));
 
-    struct yetty_ycore_rectangle rc1 = yetty_ygui_widget_rect(c1);
-    struct yetty_ycore_rectangle rc2 = yetty_ygui_widget_rect(c2);
-    struct yetty_ycore_rectangle rc3 = yetty_ygui_widget_rect(c3);
+    struct yetty_ycore_rectangle_result rc1_res = yetty_ygui_widget_rect(c1);
+    assert(YETTY_IS_OK(rc1_res));
+    struct yetty_ycore_rectangle rc1 = rc1_res.value;
+    struct yetty_ycore_rectangle_result rc2_res = yetty_ygui_widget_rect(c2);
+    assert(YETTY_IS_OK(rc2_res));
+    struct yetty_ycore_rectangle rc2 = rc2_res.value;
+    struct yetty_ycore_rectangle_result rc3_res = yetty_ygui_widget_rect(c3);
+    assert(YETTY_IS_OK(rc3_res));
+    struct yetty_ycore_rectangle rc3 = rc3_res.value;
 
     /* c1 absorbs the free space: 200 - (40 + 60) = 100. */
     assert(approx_eq(rc1.max.y - rc1.min.y, 100.0f));
@@ -136,7 +162,9 @@ static void test_padding(void)
     struct yetty_yclass_object *root = yetty_ygui_widget_new(yetty_ygui_hbox_class_get().value).value;
     struct yetty_yclass_object *c = yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value).value;
 
-    struct yetty_ygui_layout lp = *yetty_ygui_widget_layout_get(root);
+    struct yetty_ygui_layout_const_ptr_result root_layout_res = yetty_ygui_widget_layout_get(root);
+    assert(YETTY_IS_OK(root_layout_res));
+    struct yetty_ygui_layout lp = *root_layout_res.value;
     lp.padding_left = 10;
     lp.padding_top = 20;
     lp.padding_right = 30;
@@ -145,13 +173,17 @@ static void test_padding(void)
     lp.align = YETTY_YGUI_ALIGN_STRETCH;
     yetty_ygui_widget_layout_set(root, &lp);
 
-    struct yetty_ygui_layout lc = *yetty_ygui_widget_layout_get(c);
+    struct yetty_ygui_layout_const_ptr_result child_layout_res = yetty_ygui_widget_layout_get(c);
+    assert(YETTY_IS_OK(child_layout_res));
+    struct yetty_ygui_layout lc = *child_layout_res.value;
     lc.width = 50;
     yetty_ygui_widget_layout_set(c, &lc);
 
     yetty_ygui_layout_compute(root, rect(0, 0, 200, 200));
 
-    struct yetty_ycore_rectangle cr = yetty_ygui_widget_rect(c);
+    struct yetty_ycore_rectangle_result cr_res = yetty_ygui_widget_rect(c);
+    assert(YETTY_IS_OK(cr_res));
+    struct yetty_ycore_rectangle cr = cr_res.value;
     /* content origin: (10, 20). Child at (10, 20) width 50, height stretched
      * to content_h = 200 - 20 - 40 = 140. */
     assert(approx_eq(cr.min.x, 10.0f));

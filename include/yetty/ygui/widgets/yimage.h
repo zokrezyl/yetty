@@ -31,16 +31,14 @@ struct yetty_ygui_yimage_ptr_result {
     };
 };
 struct yetty_ygui_yimage_ptr_result yetty_ygui_yimage_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_yimage_to(struct yetty_ygui_yimage *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_yimage_to(struct yetty_ygui_yimage *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_yimage_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_yclass_object *obj,
-                                                           const uint8_t *bytes, size_t len);
-struct yetty_ycore_const_uint8_ptr_result yetty_ygui_yimage_bytes(
-    const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_yclass_object *obj, const uint8_t *bytes, size_t len);
+struct yetty_ycore_const_uint8_ptr_result yetty_ygui_yimage_bytes(const struct yetty_yclass_object *obj);
 struct yetty_ycore_size_result yetty_ygui_yimage_bytes_len(const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus

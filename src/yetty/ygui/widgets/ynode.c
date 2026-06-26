@@ -93,33 +93,36 @@ static const struct yetty_yclass *ynode_class(void)
     return yetty_ygui_ynode_class_get().value;
 }
 
-static struct yetty_ygui_ynode *ynode_data(struct yetty_yclass_object *node)
-{
-    return yetty_ygui_ynode_from(node).value;
-}
-
 /* The owning editor: a node's parent is its ynodes editor. Returns NULL
  * if the parent is missing or is not a ynodes instance (a node used
  * outside an editor — every interactive helper degrades to a no-op). */
 YETTY_EXTERNAL_CALLBACK
 static struct yetty_yclass_object *ynode_editor(struct yetty_yclass_object *node)
 {
-    struct yetty_yclass_object *parent = yetty_ygui_widget_parent(node);
+    struct yetty_yclass_object_ptr_result parent_res = yetty_ygui_widget_parent(node);
+    if (YETTY_IS_ERR(parent_res)) {
+        yetty_ycore_error_destroy(parent_res.error);
+        return NULL;
+    }
+    struct yetty_yclass_object *parent = parent_res.value;
     if (!parent) {
         return NULL;
     }
-    struct yetty_yclass_ptr_result cr = yetty_ygui_ynodes_class_get();
-    if (YETTY_IS_ERR(cr)) {
-        yetty_ycore_error_destroy(cr.error);
+    struct yetty_yclass_ptr_result class_res = yetty_ygui_ynodes_class_get();
+    if (YETTY_IS_ERR(class_res)) {
+        yetty_ycore_error_destroy(class_res.error);
         return NULL;
     }
-    return parent->klass == cr.value ? parent : NULL;
+    return parent->klass == class_res.value ? parent : NULL;
 }
 
-static float ynode_view_zoom(struct yetty_yclass_object *node)
+static struct yetty_ycore_float_result ynode_view_zoom(struct yetty_yclass_object *node)
 {
     struct yetty_yclass_object *editor = ynode_editor(node);
-    return editor ? yetty_ygui_ynodes_zoom(editor) : 1.0f;
+    if (!editor) {
+        return YETTY_OK(yetty_ycore_float, 1.0f);
+    }
+    return yetty_ygui_ynodes_zoom(editor);
 }
 
 /*-----------------------------------------------------------------------------
@@ -133,7 +136,9 @@ static struct yetty_ycore_void_result ynode_constructor(struct yetty_yclass_obje
         yetty_ygui_super_void(obj, ynode_class(), (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ynode_constructor: super");
 
-    struct yetty_ygui_ynode *d = ynode_data(obj);
+    struct yetty_ygui_ynode_ptr_result data_res = yetty_ygui_ynode_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ynode_constructor: downcast");
+    struct yetty_ygui_ynode *d = data_res.value;
     d->title = NULL;
     d->gx = d->gy = 0.0f;
     d->gw = 180.0f;
@@ -149,7 +154,9 @@ static struct yetty_ycore_void_result ynode_constructor(struct yetty_yclass_obje
 
     /* The editor positions the node absolutely; the vbox body lays out
      * child widgets below the title bar, inset from the pin gutters. */
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "ynode_constructor: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.absolute = 1;
     l.width = d->gw;
     l.height = d->gh;
@@ -175,7 +182,9 @@ YETTY_ANNOTATE("override@ygui:ynode:destructor")
 static struct yetty_ycore_void_result ynode_destructor(struct yetty_yclass_object *yclass_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_ynode *d = ynode_data(obj);
+    struct yetty_ygui_ynode_ptr_result data_res = yetty_ygui_ynode_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ynode_destructor: downcast");
+    struct yetty_ygui_ynode *d = data_res.value;
 
     /* Drop our links while the parent editor is still reachable (yetty_ygui_del
      * runs destructors before it detaches the object from its parent). */
@@ -205,7 +214,9 @@ static struct yetty_ycore_void_result ynode_apply_layout(struct yetty_yclass_obj
                                                          struct yetty_ygui_ynode *d, float pan_x,
                                                          float pan_y, float zoom)
 {
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(node);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "ynode_apply_layout: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.absolute = 1;
     l.pos_x = d->gx * zoom + pan_x;
     l.pos_y = d->gy * zoom + pan_y;
@@ -220,29 +231,40 @@ struct yetty_ycore_void_result yetty_ygui_ynode_reflow(struct yetty_yclass_objec
     if (!node) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_ynode_reflow: NULL node");
     }
-    struct yetty_ygui_ynode *d = ynode_data(node);
+    struct yetty_ygui_ynode_ptr_result data_res = yetty_ygui_ynode_from(node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "yetty_ygui_ynode_reflow: downcast");
+    struct yetty_ygui_ynode *d = data_res.value;
     float pan_x = 0.0f, pan_y = 0.0f, zoom = 1.0f;
     struct yetty_yclass_object *editor = ynode_editor(node);
     if (editor) {
-        yetty_ygui_ynodes_view(editor, &pan_x, &pan_y, &zoom);
+        struct yetty_ycore_void_result view_res =
+            yetty_ygui_ynodes_view(editor, &pan_x, &pan_y, &zoom);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, view_res, "yetty_ygui_ynode_reflow: view");
     }
     return ynode_apply_layout(node, d, pan_x, pan_y, zoom);
 }
 
 YETTY_ANNOTATE("expose")
-int yetty_ygui_ynode_pin_pos(const struct yetty_yclass_object *node, int output, int index,
-                             float *x, float *y)
+struct yetty_ycore_int_result yetty_ygui_ynode_pin_pos(const struct yetty_yclass_object *node,
+                                                       int output, int index, float *x, float *y)
 {
     if (!node) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
-    struct yetty_ygui_ynode *d = ynode_data((struct yetty_yclass_object *)node);
+    struct yetty_ygui_ynode_ptr_result data_res =
+        yetty_ygui_ynode_from((struct yetty_yclass_object *)node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_res, "yetty_ygui_ynode_pin_pos: downcast");
+    struct yetty_ygui_ynode *d = data_res.value;
     size_t count = output ? d->out_count : d->in_count;
     if (index < 0 || (size_t)index >= count) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(node);
-    float zoom = ynode_view_zoom((struct yetty_yclass_object *)node);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "yetty_ygui_ynode_pin_pos: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
+    struct yetty_ycore_float_result zoom_res = ynode_view_zoom((struct yetty_yclass_object *)node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, zoom_res, "yetty_ygui_ynode_pin_pos: zoom");
+    float zoom = zoom_res.value;
     float title_h = YNODE_TITLE_H * zoom;
     float body_min = r.min.y + title_h;
     float body_h = r.max.y - body_min;
@@ -255,24 +277,32 @@ int yetty_ygui_ynode_pin_pos(const struct yetty_yclass_object *node, int output,
     if (y) {
         *y = body_min + ((float)index + 0.5f) / (float)count * body_h;
     }
-    return 1;
+    return YETTY_OK(yetty_ycore_int, 1);
 }
 
 YETTY_ANNOTATE("expose")
-int yetty_ygui_ynode_pin_at(const struct yetty_yclass_object *node, float x, float y, int *output,
-                            int *index)
+struct yetty_ycore_int_result yetty_ygui_ynode_pin_at(const struct yetty_yclass_object *node,
+                                                      float x, float y, int *output, int *index)
 {
     if (!node) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
-    struct yetty_ygui_ynode *d = ynode_data((struct yetty_yclass_object *)node);
-    float zoom = ynode_view_zoom((struct yetty_yclass_object *)node);
+    struct yetty_ygui_ynode_ptr_result data_res =
+        yetty_ygui_ynode_from((struct yetty_yclass_object *)node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_res, "yetty_ygui_ynode_pin_at: downcast");
+    struct yetty_ygui_ynode *d = data_res.value;
+    struct yetty_ycore_float_result zoom_res = ynode_view_zoom((struct yetty_yclass_object *)node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, zoom_res, "yetty_ygui_ynode_pin_at: zoom");
+    float zoom = zoom_res.value;
     float hit = YNODE_PIN_R * zoom + YNODE_PIN_HIT_SLOP;
     for (int side = 0; side < 2; side++) {
         size_t count = side ? d->out_count : d->in_count;
         for (size_t i = 0; i < count; i++) {
             float px = 0.0f, py = 0.0f;
-            if (!yetty_ygui_ynode_pin_pos(node, side, (int)i, &px, &py)) {
+            struct yetty_ycore_int_result pin_pos_res =
+                yetty_ygui_ynode_pin_pos(node, side, (int)i, &px, &py);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, pin_pos_res, "yetty_ygui_ynode_pin_at: pin_pos");
+            if (!pin_pos_res.value) {
                 continue;
             }
             float dx = x - px, dy = y - py;
@@ -283,29 +313,34 @@ int yetty_ygui_ynode_pin_at(const struct yetty_yclass_object *node, float x, flo
                 if (index) {
                     *index = (int)i;
                 }
-                return 1;
+                return YETTY_OK(yetty_ycore_int, 1);
             }
         }
     }
-    return 0;
+    return YETTY_OK(yetty_ycore_int, 0);
 }
 
 /* Lower-corner resize-grip hit-test: 0 = bottom-right, 1 = bottom-left,
  * -1 = neither. */
-static int ynode_resize_grip_at(struct yetty_yclass_object *node, float x, float y)
+static struct yetty_ycore_int_result ynode_resize_grip_at(struct yetty_yclass_object *node, float x,
+                                                          float y)
 {
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(node);
-    float g = YNODE_RESIZE_GRIP * ynode_view_zoom(node);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "ynode_resize_grip_at: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
+    struct yetty_ycore_float_result zoom_res = ynode_view_zoom(node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, zoom_res, "ynode_resize_grip_at: zoom");
+    float g = YNODE_RESIZE_GRIP * zoom_res.value;
     if (y < r.max.y - g || y > r.max.y) {
-        return -1;
+        return YETTY_OK(yetty_ycore_int, -1);
     }
     if (x >= r.max.x - g && x <= r.max.x) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
     if (x >= r.min.x && x <= r.min.x + g) {
-        return 1;
+        return YETTY_OK(yetty_ycore_int, 1);
     }
-    return -1;
+    return YETTY_OK(yetty_ycore_int, -1);
 }
 
 /*-----------------------------------------------------------------------------
@@ -320,13 +355,19 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_object *yc
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "ynode_paint: NULL ctx");
     }
-    struct yetty_ygui_ynode *d = ynode_data(obj);
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ygui_ynode_ptr_result data_res = yetty_ygui_ynode_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "ynode_paint: downcast");
+    struct yetty_ygui_ynode *d = data_res.value;
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "ynode_paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    float zoom = ynode_view_zoom(obj);
+    struct yetty_ycore_float_result zoom_res = ynode_view_zoom(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, zoom_res, "ynode_paint: zoom");
+    float zoom = zoom_res.value;
     float corner = YNODE_CORNER * zoom;
     float title_h = YNODE_TITLE_H * zoom;
 
@@ -383,7 +424,10 @@ static struct yetty_ycore_void_result ynode_paint(struct yetty_yclass_object *yc
         struct ynode_pin *pins = side ? d->outputs : d->inputs;
         for (size_t i = 0; i < count; i++) {
             float px = 0.0f, py = 0.0f;
-            if (!yetty_ygui_ynode_pin_pos(obj, side, (int)i, &px, &py)) {
+            struct yetty_ycore_int_result pin_pos_res =
+                yetty_ygui_ynode_pin_pos(obj, side, (int)i, &px, &py);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, pin_pos_res, "ynode_paint: pin_pos");
+            if (!pin_pos_res.value) {
                 continue;
             }
             struct yetty_ycore_void_result result_385 =
@@ -426,7 +470,9 @@ static struct yetty_ycore_int_result ynode_on_press(struct yetty_yclass_object *
                                                     float y, int button)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_ynode *d = ynode_data(obj);
+    struct yetty_ygui_ynode_ptr_result data_res = yetty_ygui_ynode_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_res, "ynode_on_press: downcast");
+    struct yetty_ygui_ynode *d = data_res.value;
     struct yetty_yclass_object *editor = ynode_editor(obj);
 
     /* A press while the editor's context menu is open just dismisses it. */
@@ -451,7 +497,14 @@ static struct yetty_ycore_int_result ynode_on_press(struct yetty_yclass_object *
     }
 
     int side = 0, index = 0;
-    if (editor && yetty_ygui_ynode_pin_at(obj, x, y, &side, &index)) {
+    int pin_hit = 0;
+    if (editor) {
+        struct yetty_ycore_int_result pin_at_res =
+            yetty_ygui_ynode_pin_at(obj, x, y, &side, &index);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, pin_at_res, "ynode_on_press: pin_at");
+        pin_hit = pin_at_res.value;
+    }
+    if (pin_hit) {
         d->drag_mode = YNODE_DRAG_LINK;
         struct yetty_ycore_void_result br =
             yetty_ygui_ynodes_begin_link(editor, obj, index, side, x, y);
@@ -462,7 +515,9 @@ static struct yetty_ycore_int_result ynode_on_press(struct yetty_yclass_object *
     }
 
     /* Lower-corner grip → resize. */
-    int grip = ynode_resize_grip_at(obj, x, y);
+    struct yetty_ycore_int_result grip_res = ynode_resize_grip_at(obj, x, y);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, grip_res, "ynode_on_press: resize_grip_at");
+    int grip = grip_res.value;
     if (grip >= 0) {
         d->drag_mode = YNODE_DRAG_RESIZE;
         d->resize_corner = grip;
@@ -483,7 +538,9 @@ static struct yetty_ycore_int_result ynode_on_motion(struct yetty_yclass_object 
                                                      float x, float y)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_ynode *d = ynode_data(obj);
+    struct yetty_ygui_ynode_ptr_result data_res = yetty_ygui_ynode_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_res, "ynode_on_motion: downcast");
+    struct yetty_ygui_ynode *d = data_res.value;
     struct yetty_yclass_object *editor = ynode_editor(obj);
 
     if (d->drag_mode == YNODE_DRAG_LINK) {
@@ -497,7 +554,12 @@ static struct yetty_ycore_int_result ynode_on_motion(struct yetty_yclass_object 
     }
 
     if (d->drag_mode == YNODE_DRAG_RESIZE) {
-        float zoom = editor ? yetty_ygui_ynodes_zoom(editor) : 1.0f;
+        float zoom = 1.0f;
+        if (editor) {
+            struct yetty_ycore_float_result zoom_res = yetty_ygui_ynodes_zoom(editor);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, zoom_res, "ynode_on_motion: resize zoom");
+            zoom = zoom_res.value;
+        }
         if (zoom <= 0.0f) {
             zoom = 1.0f;
         }
@@ -538,7 +600,12 @@ static struct yetty_ycore_int_result ynode_on_motion(struct yetty_yclass_object 
     }
 
     if (d->drag_mode == YNODE_DRAG_MOVE) {
-        float zoom = editor ? yetty_ygui_ynodes_zoom(editor) : 1.0f;
+        float zoom = 1.0f;
+        if (editor) {
+            struct yetty_ycore_float_result zoom_res = yetty_ygui_ynodes_zoom(editor);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, zoom_res, "ynode_on_motion: move zoom");
+            zoom = zoom_res.value;
+        }
         if (zoom <= 0.0f) {
             zoom = 1.0f;
         }
@@ -569,7 +636,9 @@ static struct yetty_ycore_int_result ynode_on_release(struct yetty_yclass_object
 {
     (void)button;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_ynode *d = ynode_data(obj);
+    struct yetty_ygui_ynode_ptr_result data_res = yetty_ygui_ynode_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_res, "ynode_on_release: downcast");
+    struct yetty_ygui_ynode *d = data_res.value;
     struct yetty_yclass_object *editor = ynode_editor(obj);
 
     enum ynode_drag_mode mode = d->drag_mode;
@@ -594,7 +663,9 @@ struct yetty_ycore_void_result yetty_ygui_ynode_set_title(struct yetty_yclass_ob
     if (!node) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_ynode_set_title: NULL node");
     }
-    struct yetty_ygui_ynode *d = ynode_data(node);
+    struct yetty_ygui_ynode_ptr_result data_res = yetty_ygui_ynode_from(node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "yetty_ygui_ynode_set_title: downcast");
+    struct yetty_ygui_ynode *d = data_res.value;
     char *copy = NULL;
     if (title) {
         copy = strdup(title);
@@ -614,14 +685,17 @@ struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_pos(struct yetty_yclas
     if (!node) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_ynode_set_graph_pos: NULL node");
     }
-    struct yetty_ygui_ynode *d = ynode_data(node);
+    struct yetty_ygui_ynode_ptr_result data_res = yetty_ygui_ynode_from(node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "yetty_ygui_ynode_set_graph_pos: downcast");
+    struct yetty_ygui_ynode *d = data_res.value;
     d->gx = gx;
     d->gy = gy;
     return yetty_ygui_ynode_reflow(node);
 }
 
 YETTY_ANNOTATE("expose")
-void yetty_ygui_ynode_graph_pos(const struct yetty_yclass_object *node, float *gx, float *gy)
+struct yetty_ycore_void_result yetty_ygui_ynode_graph_pos(const struct yetty_yclass_object *node,
+                                                          float *gx, float *gy)
 {
     if (!node) {
         if (gx) {
@@ -630,15 +704,19 @@ void yetty_ygui_ynode_graph_pos(const struct yetty_yclass_object *node, float *g
         if (gy) {
             *gy = 0.0f;
         }
-        return;
+        return YETTY_OK_VOID();
     }
-    struct yetty_ygui_ynode *d = ynode_data((struct yetty_yclass_object *)node);
+    struct yetty_ygui_ynode_ptr_result data_res =
+        yetty_ygui_ynode_from((struct yetty_yclass_object *)node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "yetty_ygui_ynode_graph_pos: downcast");
+    struct yetty_ygui_ynode *d = data_res.value;
     if (gx) {
         *gx = d->gx;
     }
     if (gy) {
         *gy = d->gy;
     }
+    return YETTY_OK_VOID();
 }
 
 YETTY_ANNOTATE("expose")
@@ -648,14 +726,17 @@ struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_size(struct yetty_ycla
     if (!node) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_ynode_set_graph_size: NULL node");
     }
-    struct yetty_ygui_ynode *d = ynode_data(node);
+    struct yetty_ygui_ynode_ptr_result data_res = yetty_ygui_ynode_from(node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "yetty_ygui_ynode_set_graph_size: downcast");
+    struct yetty_ygui_ynode *d = data_res.value;
     d->gw = gw > 1.0f ? gw : 1.0f;
     d->gh = gh > 1.0f ? gh : 1.0f;
     return yetty_ygui_ynode_reflow(node);
 }
 
 YETTY_ANNOTATE("expose")
-void yetty_ygui_ynode_graph_size(const struct yetty_yclass_object *node, float *gw, float *gh)
+struct yetty_ycore_void_result yetty_ygui_ynode_graph_size(const struct yetty_yclass_object *node,
+                                                           float *gw, float *gh)
 {
     if (!node) {
         if (gw) {
@@ -664,15 +745,19 @@ void yetty_ygui_ynode_graph_size(const struct yetty_yclass_object *node, float *
         if (gh) {
             *gh = 0.0f;
         }
-        return;
+        return YETTY_OK_VOID();
     }
-    struct yetty_ygui_ynode *d = ynode_data((struct yetty_yclass_object *)node);
+    struct yetty_ygui_ynode_ptr_result data_res =
+        yetty_ygui_ynode_from((struct yetty_yclass_object *)node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "yetty_ygui_ynode_graph_size: downcast");
+    struct yetty_ygui_ynode *d = data_res.value;
     if (gw) {
         *gw = d->gw;
     }
     if (gh) {
         *gh = d->gh;
     }
+    return YETTY_OK_VOID();
 }
 
 static struct uint32_result ynode_add_pin(struct yetty_yclass_object *node, int output,
@@ -681,7 +766,9 @@ static struct uint32_result ynode_add_pin(struct yetty_yclass_object *node, int 
     if (!node) {
         return YETTY_ERR(uint32, "yetty_ygui_ynode_add_pin: NULL node");
     }
-    struct yetty_ygui_ynode *d = ynode_data(node);
+    struct yetty_ygui_ynode_ptr_result data_res = yetty_ygui_ynode_from(node);
+    YETTY_RETURN_IF_ERR(uint32, data_res, "yetty_ygui_ynode_add_pin: downcast");
+    struct yetty_ygui_ynode *d = data_res.value;
     struct ynode_pin **arr = output ? &d->outputs : &d->inputs;
     size_t *count = output ? &d->out_count : &d->in_count;
     size_t *cap = output ? &d->out_cap : &d->in_cap;
@@ -726,21 +813,27 @@ struct uint32_result yetty_ygui_ynode_add_output(struct yetty_yclass_object *nod
 }
 
 YETTY_ANNOTATE("expose")
-int yetty_ygui_ynode_input_count(const struct yetty_yclass_object *node)
+struct yetty_ycore_int_result yetty_ygui_ynode_input_count(const struct yetty_yclass_object *node)
 {
     if (!node) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
-    return (int)ynode_data((struct yetty_yclass_object *)node)->in_count;
+    struct yetty_ygui_ynode_ptr_result data_res =
+        yetty_ygui_ynode_from((struct yetty_yclass_object *)node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_res, "yetty_ygui_ynode_input_count: downcast");
+    return YETTY_OK(yetty_ycore_int, (int)data_res.value->in_count);
 }
 
 YETTY_ANNOTATE("expose")
-int yetty_ygui_ynode_output_count(const struct yetty_yclass_object *node)
+struct yetty_ycore_int_result yetty_ygui_ynode_output_count(const struct yetty_yclass_object *node)
 {
     if (!node) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
-    return (int)ynode_data((struct yetty_yclass_object *)node)->out_count;
+    struct yetty_ygui_ynode_ptr_result data_res =
+        yetty_ygui_ynode_from((struct yetty_yclass_object *)node);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_res, "yetty_ygui_ynode_output_count: downcast");
+    return YETTY_OK(yetty_ycore_int, (int)data_res.value->out_count);
 }
 
 #include "ynode.gen.c"

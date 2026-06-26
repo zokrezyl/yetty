@@ -20,7 +20,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     struct yetty_yclass_object_ptr_result zr =
         yetty_ygui_widget_add(root, yetty_ygui_yzoo_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "yzoo");
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(zr.value);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(zr.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "28_yzoo: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.flex_grow = 1.0f;
     l.min_height = 200.0f;
     return yetty_ygui_widget_layout_set(zr.value, &l);

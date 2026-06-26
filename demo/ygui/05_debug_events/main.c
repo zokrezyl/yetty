@@ -29,7 +29,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "label");
     err_ok(yetty_ygui_label_set_text(lr.value,
                                      "Press keys / click to exercise the event path. q to quit."));
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(lr.value);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(lr.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "05_debug_events: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.flex_grow = 1.0f;
     l.min_height = 32.0f;
     return yetty_ygui_widget_layout_set(lr.value, &l);

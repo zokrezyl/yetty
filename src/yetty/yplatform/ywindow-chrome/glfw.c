@@ -54,16 +54,14 @@ struct YETTY_ANNOTATE("class@yplatform:glfw_window_chrome") YETTY_ANNOTATE("plat
     int macos_saved_h;
 };
 
-static struct yetty_yplatform_glfw_window_chrome *glfw_window_chrome_data(
+static struct yetty_yplatform_glfw_window_chrome_ptr_result glfw_window_chrome_data(
     struct yetty_yclass_object *obj)
 {
     struct yetty_yplatform_glfw_window_chrome_ptr_result data =
         yetty_yplatform_glfw_window_chrome_from(obj);
-    if (!YETTY_IS_OK(data)) {
-        yetty_ycore_error_destroy(data.error);
-        return NULL;
-    }
-    return data.value;
+    YETTY_RETURN_IF_ERR(yetty_yplatform_glfw_window_chrome_ptr, data,
+                        "glfw_window_chrome_data: data_get");
+    return YETTY_OK(yetty_yplatform_glfw_window_chrome_ptr, data.value);
 }
 
 /* Bind the native window + main→render response pipe. Call once after create()
@@ -88,7 +86,9 @@ struct yetty_ycore_void_result yetty_yplatform_glfw_window_chrome_attach(
 YETTY_ANNOTATE("override@yplatform:glfw_window_chrome:window_chrome_destroy")
 static struct yetty_ycore_void_result glfw_window_chrome_destroy(struct yetty_yclass_object *obj)
 {
-    struct yetty_yplatform_glfw_window_chrome *chrome = glfw_window_chrome_data(obj);
+    struct yetty_yplatform_glfw_window_chrome_ptr_result chrome_res = glfw_window_chrome_data(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, chrome_res, "glfw_window_chrome_destroy: data_get");
+    struct yetty_yplatform_glfw_window_chrome *chrome = chrome_res.value;
     if (chrome) {
         for (size_t i = 0; i < sizeof(chrome->cursors) / sizeof(chrome->cursors[0]); i++) {
             if (chrome->cursors[i]) {
@@ -103,7 +103,9 @@ YETTY_ANNOTATE("override@yplatform:glfw_window_chrome:window_chrome_handle_event
 static struct yetty_ycore_void_result glfw_window_chrome_handle_event(
     struct yetty_yclass_object *obj, const struct yetty_yui_event *event)
 {
-    struct yetty_yplatform_glfw_window_chrome *chrome = glfw_window_chrome_data(obj);
+    struct yetty_yplatform_glfw_window_chrome_ptr_result chrome_res = glfw_window_chrome_data(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, chrome_res, "glfw_window_chrome_handle_event: data_get");
+    struct yetty_yplatform_glfw_window_chrome *chrome = chrome_res.value;
     if (!chrome || !chrome->window || !event) {
         return YETTY_OK_VOID();
     }

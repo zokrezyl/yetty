@@ -160,7 +160,10 @@ static struct yetty_ygui_framework *make_engine_with_yimage(struct yetty_platfor
 
     /* Give yimage an explicit width/height so the layout pass produces
      * a non-empty rect for emit_container to ship. */
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(img);
+    struct yetty_ygui_layout_const_ptr_result img_layout_res =
+        yetty_ygui_widget_layout_get(img);
+    CHECK(YETTY_IS_OK(img_layout_res), "img layout_get");
+    struct yetty_ygui_layout l = *img_layout_res.value;
     l.width = 100.0f;
     l.height = 100.0f;
     yetty_ygui_widget_layout_set(img, &l);
@@ -193,7 +196,9 @@ static void test_yimage_emit(void)
     uint32_t rec_id = read_u32_le(engine->figure_bodies.data + 4);
     CHECK(rec_len > 0, "figure record body non-empty");
     CHECK(engine->figure_bodies.size == 8 + (size_t)rec_len, "figure record framing");
-    CHECK(rec_id == yetty_ygui_widget_id(img), "figure record id");
+    struct yetty_ycore_uint32_result img_id_res = yetty_ygui_widget_id(img);
+    CHECK(YETTY_IS_OK(img_id_res), "img widget_id");
+    CHECK(rec_id == img_id_res.value, "figure record id");
 
     /* container_records should contain admin records for YGRID and
      * YIMAGE CREATE_CHILDs (the receiver IS the root container — no
@@ -300,7 +305,10 @@ static void test_incremental_figure_skip(void)
         yetty_ygui_widget_add(root, yetty_ygui_scrollarea_class_get().value);
     CHECK(YETTY_IS_OK(sr), "skip: add scrollarea");
     struct yetty_yclass_object *scroll = sr.value;
-    struct yetty_ygui_layout sl = *yetty_ygui_widget_layout_get(scroll);
+    struct yetty_ygui_layout_const_ptr_result scroll_layout_res =
+        yetty_ygui_widget_layout_get(scroll);
+    CHECK(YETTY_IS_OK(scroll_layout_res), "skip: scroll layout_get");
+    struct yetty_ygui_layout sl = *scroll_layout_res.value;
     sl.width = 200.0f;
     sl.height = 200.0f;
     CHECK(YETTY_IS_OK(yetty_ygui_widget_layout_set(scroll, &sl)), "skip: scroll layout");
@@ -310,7 +318,10 @@ static void test_incremental_figure_skip(void)
     CHECK(YETTY_IS_OK(lr), "skip: add label");
     struct yetty_yclass_object *label = lr.value;
     CHECK(YETTY_IS_OK(yetty_ygui_label_set_text(label, "page content")), "skip: label text");
-    struct yetty_ygui_layout ll = *yetty_ygui_widget_layout_get(label);
+    struct yetty_ygui_layout_const_ptr_result label_layout_res =
+        yetty_ygui_widget_layout_get(label);
+    CHECK(YETTY_IS_OK(label_layout_res), "skip: label layout_get");
+    struct yetty_ygui_layout ll = *label_layout_res.value;
     ll.width = 180.0f;
     ll.height = 22.0f;
     CHECK(YETTY_IS_OK(yetty_ygui_widget_layout_set(label, &ll)), "skip: label layout");

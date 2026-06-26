@@ -76,9 +76,13 @@ static struct yetty_ycore_void_result yimage_emit_container(struct yetty_yclass_
                                                             struct yetty_ygui_emit_ctx *ctx)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
-    return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_widget_id(obj), YETTY_YFIGURE_KIND_YIMAGE,
-                                        r.min.x, r.min.y, r.max.x, r.max.y,
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "yimage_emit_container: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
+    struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yimage_emit_container: id");
+    return yetty_ygui_emit_ensure_child(ctx, id_res.value, YETTY_YFIGURE_KIND_YIMAGE, r.min.x,
+                                        r.min.y, r.max.x, r.max.y,
                                         /*init_payload=*/NULL, /*init_payload_bytes=*/0);
 }
 
@@ -100,7 +104,9 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_objec
      * producer widgets share one renderer), so the body bytes must be
      * a ydraw drawable_list containing one yimage complex prim — NOT the
      * raw JPEG/PNG bytes. yetty_yimage_render builds that drawable_list. */
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "yimage_emit_body: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     struct yetty_yimage_render_config cfg = {
         /* Absolute widget rect — see yplot.c (producer figure is absolute in
          * the ygui chrome, content scaled by content_scale). */
@@ -164,7 +170,14 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_objec
             memcpy(combined, zbytes, zsize);
         }
         memcpy(combined + zsize, bytes, size);
-        er = yetty_ygui_emit_figure_body(ctx, yetty_ygui_widget_id(obj), combined, (uint32_t)total);
+        struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
+        if (YETTY_IS_ERR(id_res)) {
+            free(combined);
+            yetty_ydraw_drawable_list_destroy(zl);
+            yetty_ydraw_drawable_list_destroy(dl);
+            return YETTY_ERR(yetty_ycore_void, "yimage_emit_body: id", id_res);
+        }
+        er = yetty_ygui_emit_figure_body(ctx, id_res.value, combined, (uint32_t)total);
         free(combined);
         yetty_ydraw_drawable_list_destroy(zl);
     }

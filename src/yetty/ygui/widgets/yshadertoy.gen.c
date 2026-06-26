@@ -96,23 +96,19 @@ struct yetty_ygui_yshadertoy_ptr_result yetty_ygui_yshadertoy_from(struct yetty_
     return YETTY_OK(yetty_ygui_yshadertoy_ptr, (struct yetty_ygui_yshadertoy *)slice_r.value);
 }
 
-struct yetty_yclass_object *yetty_ygui_yshadertoy_to(struct yetty_ygui_yshadertoy *data)
+struct yetty_yclass_object_ptr_result yetty_ygui_yshadertoy_to(struct yetty_ygui_yshadertoy *data)
 {
     if (!data) {
-        return NULL;
+        return YETTY_OK(yetty_yclass_object_ptr, NULL);
     }
     struct yetty_yclass_ptr_result class_r = yetty_ygui_yshadertoy_class_get();
-    if (YETTY_IS_ERR(class_r)) {
-        yetty_ycore_error_destroy(class_r.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, class_r,
+                        "yetty_ygui_yshadertoy_to: class accessor");
     struct yetty_ycore_size_result offset_r =
         yetty_yclass_object_data_offset(class_r.value, class_r.value);
-    if (YETTY_IS_ERR(offset_r)) {
-        yetty_ycore_error_destroy(offset_r.error);
-        return NULL;
-    }
-    return (struct yetty_yclass_object *)((char *)data - offset_r.value);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, offset_r, "yetty_ygui_yshadertoy_to: data offset");
+    return YETTY_OK(yetty_yclass_object_ptr,
+                    (struct yetty_yclass_object *)((char *)data - offset_r.value));
 }
 
 struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object *obj);

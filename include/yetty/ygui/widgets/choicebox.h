@@ -31,16 +31,14 @@ struct yetty_ygui_choicebox_ptr_result {
     };
 };
 struct yetty_ygui_choicebox_ptr_result yetty_ygui_choicebox_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_choicebox_to(struct yetty_ygui_choicebox *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_choicebox_to(struct yetty_ygui_choicebox *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_choicebox_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_choicebox_add(struct yetty_yclass_object *obj,
-                                                        const char *label);
-struct yetty_ycore_int_result yetty_ygui_choicebox_is_selected(
-    const struct yetty_yclass_object *obj, int idx);
+struct yetty_ycore_void_result yetty_ygui_choicebox_add(struct yetty_yclass_object *obj, const char *label);
+struct yetty_ycore_int_result yetty_ygui_choicebox_is_selected(const struct yetty_yclass_object *obj, int idx);
 
 #ifdef __cplusplus
 }

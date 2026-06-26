@@ -33,7 +33,13 @@ static void set_grow(struct yetty_yclass_object *w, float grow)
     if (!w) {
         return;
     }
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(w);
+    if (YETTY_IS_ERR(layout_res)) {
+        yetty_ycore_error_destroy(layout_res.error);
+        return;
+    }
+    struct yetty_ygui_layout l = *layout_res.value;
     l.flex_grow = grow;
     err_ok(yetty_ygui_widget_layout_set(w, &l));
 }
@@ -78,19 +84,47 @@ static void finalize_section(struct yetty_yclass_object *sec)
     if (!sec) {
         return;
     }
-    const struct yetty_ygui_layout *sl = yetty_ygui_widget_layout_get(sec);
+    struct yetty_ygui_layout_const_ptr_result section_layout_res =
+        yetty_ygui_widget_layout_get(sec);
+    if (YETTY_IS_ERR(section_layout_res)) {
+        yetty_ycore_error_destroy(section_layout_res.error);
+        return;
+    }
+    const struct yetty_ygui_layout *sl = section_layout_res.value;
     float total = sl->padding_top + sl->padding_bottom;
     int n = 0;
-    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(sec); c;
-         c = yetty_ygui_widget_next_sibling(c)) {
-        const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
+    struct yetty_yclass_object_ptr_result child_res = yetty_ygui_widget_first_child(sec);
+    if (YETTY_IS_ERR(child_res)) {
+        yetty_ycore_error_destroy(child_res.error);
+        return;
+    }
+    for (struct yetty_yclass_object *c = child_res.value; c;) {
+        struct yetty_ygui_layout_const_ptr_result child_layout_res =
+            yetty_ygui_widget_layout_get(c);
+        if (YETTY_IS_ERR(child_layout_res)) {
+            yetty_ycore_error_destroy(child_layout_res.error);
+            return;
+        }
+        const struct yetty_ygui_layout *cl = child_layout_res.value;
         total += cl->height > 0.0f ? cl->height : 0.0f;
         n++;
+        struct yetty_yclass_object_ptr_result next_res = yetty_ygui_widget_next_sibling(c);
+        if (YETTY_IS_ERR(next_res)) {
+            yetty_ycore_error_destroy(next_res.error);
+            return;
+        }
+        c = next_res.value;
     }
     if (n > 1) {
         total += sl->gap * (float)(n - 1);
     }
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(sec);
+    struct yetty_ygui_layout_const_ptr_result final_layout_res =
+        yetty_ygui_widget_layout_get(sec);
+    if (YETTY_IS_ERR(final_layout_res)) {
+        yetty_ycore_error_destroy(final_layout_res.error);
+        return;
+    }
+    struct yetty_ygui_layout l = *final_layout_res.value;
     l.height = total;
     err_ok(yetty_ygui_widget_layout_set(sec, &l));
 }

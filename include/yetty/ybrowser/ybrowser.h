@@ -179,10 +179,11 @@ void yetty_ylexbor_set_async_image_fetch(struct yetty_ylexbor *r,
                                          void (*on_ready)(void *user), void *user);
 
 /* Submit every not-yet-fetched <img> in the laid-out document to the async
- * pool (parallel fetch + decode). Returns the number of jobs submitted this
- * call (0 if async isn't enabled or nothing is pending). Safe to call every
- * frame — already-cached / in-flight images are skipped. */
-int yetty_ylexbor_start_image_fetch(struct yetty_ylexbor *r);
+ * pool (parallel fetch + decode). On success the result value is the number of
+ * jobs submitted this call (0 if async isn't enabled or nothing is pending).
+ * Returns an error if submitting a job to the work pool fails. Safe to call
+ * every frame — already-cached / in-flight images are skipped. */
+struct yetty_ycore_int_result yetty_ylexbor_start_image_fetch(struct yetty_ylexbor *r);
 
 /* Number of async image fetch+decode jobs currently in flight (submitted but
  * not yet folded in). The host keeps its event loop ticking while this is > 0

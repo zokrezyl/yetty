@@ -275,14 +275,18 @@ static void tile_transfer_configure(CURL *easy_handle, struct osm_tile_transfer 
 }
 
 /* Completion of one transfer: success keeps the body in the request slot
- * and writes the cache back; failure logs and leaves the slot NULL. */
-static void tile_transfer_finish(CURL *easy_handle, CURLcode curl_result, const char *cache_root,
-                                 const char *cache_file_extension, uint32_t zoom)
+ * and writes the cache back; failure logs and leaves the slot NULL. A
+ * failed download is a normal per-tile outcome, not a hard error, so it
+ * returns OK after recording the empty slot. */
+static struct yetty_ycore_void_result tile_transfer_finish(CURL *easy_handle, CURLcode curl_result,
+                                                           const char *cache_root,
+                                                           const char *cache_file_extension,
+                                                           uint32_t zoom)
 {
     struct osm_tile_transfer *transfer = NULL;
     curl_easy_getinfo(easy_handle, CURLINFO_PRIVATE, &transfer);
     if (!transfer) {
-        return;
+        return YETTY_OK_VOID();
     }
     long http_status = 0;
     curl_easy_getinfo(easy_handle, CURLINFO_RESPONSE_CODE, &http_status);
@@ -296,7 +300,7 @@ static void tile_transfer_finish(CURL *easy_handle, CURLcode curl_result, const 
               transfer->request->tile_y, curl_easy_strerror(curl_result), http_status);
         free(transfer->body.data);
         transfer->body.data = NULL;
-        return;
+        return YETTY_OK_VOID();
     }
 
     transfer->request->bytes = transfer->body.data;
@@ -317,6 +321,7 @@ static void tile_transfer_finish(CURL *easy_handle, CURLcode curl_result, const 
         ywarn("ymap: cache write failed for %s: %s", cache_path, write_res.error.msg);
         yetty_ycore_error_destroy(write_res.error);
     }
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_ymap_tiles_fetch(
@@ -399,6 +404,11 @@ struct yetty_ycore_void_result yetty_ymap_tiles_fetch(
         transfer_count++;
     }
 
+    /* First error from any per-transfer completion. Held until after the
+     * handle/buffer cleanup tail so a failing completion still releases the
+     * curl-multi resources before the error surfaces. */
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
+    int have_err = 0;
     int still_running = 0;
     do {
         CURLMcode multi_result = curl_multi_perform(multi_handle, &still_running);
@@ -415,8 +425,17 @@ struct yetty_ycore_void_result yetty_ymap_tiles_fetch(
         CURLMsg *message;
         while ((message = curl_multi_info_read(multi_handle, &messages_left))) {
             if (message->msg == CURLMSG_DONE) {
-                tile_transfer_finish(message->easy_handle, message->data.result, cache_root,
-                                     cache_file_extension, zoom);
+                struct yetty_ycore_void_result finish_res =
+                    tile_transfer_finish(message->easy_handle, message->data.result, cache_root,
+                                         cache_file_extension, zoom);
+                if (YETTY_IS_ERR(finish_res)) {
+                    if (!have_err) {
+                        first_err = finish_res;
+                        have_err = 1;
+                    } else {
+                        yetty_ycore_error_destroy(finish_res.error);
+                    }
+                }
                 curl_multi_remove_handle(multi_handle, message->easy_handle);
             }
         }
@@ -431,5 +450,9 @@ struct yetty_ycore_void_result yetty_ymap_tiles_fetch(
     free(easy_handles);
     free(transfers);
     curl_multi_cleanup(multi_handle);
+    if (have_err) {
+        return YETTY_ERR(yetty_ycore_void, "ymap tiles_fetch: transfer completion failed",
+                         first_err);
+    }
     return YETTY_OK_VOID();
 }

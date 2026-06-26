@@ -139,7 +139,9 @@ struct yetty_ycore_void_result yetty_ygui_ydiagram_set_source(struct yetty_yclas
     float dh = yetty_ydraw_drawable_list_scene_max_y(br.value) -
                yetty_ydraw_drawable_list_scene_min_y(br.value);
     if (dw > 0.0f && dh > 0.0f) {
-        struct yetty_ygui_layout layout = *yetty_ygui_widget_layout_get(obj);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "ydiagram_set_source: layout_get");
+        struct yetty_ygui_layout layout = *layout_res.value;
         layout.width = dw;
         layout.height = dh;
         struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &layout);

@@ -20,6 +20,7 @@ WGPUSurface yetty_yplatform_create_surface(WGPUInstance instance, GLFWwindow *wi
 
 /* Own result wrapper + codegen accessor/downcast forward-decls. */
 YETTY_YRESULT_DECLARE(yetty_yplatform_glfw_window_ptr, struct yetty_yplatform_glfw_window *);
+YETTY_YRESULT_DECLARE(yetty_yplatform_glfw_window_handle_ptr, struct GLFWwindow *);
 struct yetty_yclass_ptr_result yetty_yplatform_glfw_window_class_get(void);
 struct yetty_yplatform_glfw_window_ptr_result yetty_yplatform_glfw_window_from(
     struct yetty_yclass_object *obj);
@@ -30,16 +31,16 @@ struct YETTY_ANNOTATE("class@yplatform:glfw_window") YETTY_ANNOTATE("platform@gl
     struct GLFWwindow *handle;
 };
 
-/* Recover the private GLFWwindow*. Returns NULL if unset or on a data-access
- * failure; the override callers treat NULL as "no window". */
-static GLFWwindow *glfw_window_handle(struct yetty_yclass_object *obj)
+/* Recover the private GLFWwindow*. Propagates the downcast error; the success
+ * value may still be NULL when the window has not been opened yet, which the
+ * override callers treat as "no window". */
+static struct yetty_yplatform_glfw_window_handle_ptr_result glfw_window_handle(
+    struct yetty_yclass_object *obj)
 {
     struct yetty_yplatform_glfw_window_ptr_result data = yetty_yplatform_glfw_window_from(obj);
-    if (!YETTY_IS_OK(data)) {
-        yetty_ycore_error_destroy(data.error);
-        return NULL;
-    }
-    return data.value->handle;
+    YETTY_RETURN_IF_ERR(yetty_yplatform_glfw_window_handle_ptr, data,
+                        "glfw_window_handle: data_get");
+    return YETTY_OK(yetty_yplatform_glfw_window_handle_ptr, data.value->handle);
 }
 
 /* Map the last GLFW error code to a static reason string. The description
@@ -106,7 +107,9 @@ YETTY_ANNOTATE("override@yplatform:glfw_window:window_get_size")
 static struct yetty_ycore_void_result glfw_window_get_size(struct yetty_yclass_object *obj,
                                                            int *width, int *height)
 {
-    GLFWwindow *window = glfw_window_handle(obj);
+    struct yetty_yplatform_glfw_window_handle_ptr_result handle = glfw_window_handle(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, handle, "window_get_size: handle_get");
+    GLFWwindow *window = handle.value;
     if (!window) {
         return YETTY_ERR(yetty_ycore_void, "window_get_size: no GLFW window");
     }
@@ -118,7 +121,9 @@ YETTY_ANNOTATE("override@yplatform:glfw_window:window_get_framebuffer_size")
 static struct yetty_ycore_void_result glfw_window_get_framebuffer_size(
     struct yetty_yclass_object *obj, int *width, int *height)
 {
-    GLFWwindow *window = glfw_window_handle(obj);
+    struct yetty_yplatform_glfw_window_handle_ptr_result handle = glfw_window_handle(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, handle, "window_get_framebuffer_size: handle_get");
+    GLFWwindow *window = handle.value;
     if (!window) {
         return YETTY_ERR(yetty_ycore_void, "window_get_framebuffer_size: no GLFW window");
     }
@@ -130,7 +135,9 @@ YETTY_ANNOTATE("override@yplatform:glfw_window:window_get_content_scale")
 static struct yetty_ycore_void_result glfw_window_get_content_scale(struct yetty_yclass_object *obj,
                                                                     float *xscale, float *yscale)
 {
-    GLFWwindow *window = glfw_window_handle(obj);
+    struct yetty_yplatform_glfw_window_handle_ptr_result handle = glfw_window_handle(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, handle, "window_get_content_scale: handle_get");
+    GLFWwindow *window = handle.value;
     if (!window) {
         return YETTY_ERR(yetty_ycore_void, "window_get_content_scale: no GLFW window");
     }
@@ -141,7 +148,9 @@ static struct yetty_ycore_void_result glfw_window_get_content_scale(struct yetty
 YETTY_ANNOTATE("override@yplatform:glfw_window:window_should_close")
 static struct yetty_ycore_int_result glfw_window_should_close(struct yetty_yclass_object *obj)
 {
-    GLFWwindow *window = glfw_window_handle(obj);
+    struct yetty_yplatform_glfw_window_handle_ptr_result handle = glfw_window_handle(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, handle, "window_should_close: handle_get");
+    GLFWwindow *window = handle.value;
     return YETTY_OK(yetty_ycore_int, window ? glfwWindowShouldClose(window) : 1);
 }
 
@@ -149,7 +158,9 @@ YETTY_ANNOTATE("override@yplatform:glfw_window:window_set_title")
 static struct yetty_ycore_void_result glfw_window_set_title(struct yetty_yclass_object *obj,
                                                             const char *title)
 {
-    GLFWwindow *window = glfw_window_handle(obj);
+    struct yetty_yplatform_glfw_window_handle_ptr_result handle = glfw_window_handle(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, handle, "window_set_title: handle_get");
+    GLFWwindow *window = handle.value;
     if (!window) {
         return YETTY_ERR(yetty_ycore_void, "window_set_title: no GLFW window");
     }
@@ -161,7 +172,9 @@ YETTY_ANNOTATE("override@yplatform:glfw_window:window_create_surface")
 static struct yetty_yclass_void_ptr_result glfw_window_create_surface(
     struct yetty_yclass_object *obj, void *instance)
 {
-    GLFWwindow *window = glfw_window_handle(obj);
+    struct yetty_yplatform_glfw_window_handle_ptr_result handle = glfw_window_handle(obj);
+    YETTY_RETURN_IF_ERR(yetty_yclass_void_ptr, handle, "window_create_surface: handle_get");
+    GLFWwindow *window = handle.value;
     if (!window) {
         return YETTY_ERR(yetty_yclass_void_ptr, "window_create_surface: no GLFW window");
     }
@@ -178,8 +191,11 @@ static struct yetty_yclass_void_ptr_result glfw_window_create_surface(
  * configure, and the X11 co-handle lookup all run on the same main thread that
  * created this window and legitimately need the native handle; everything that
  * crosses module / platform boundaries goes through the virtual methods above.
- * The glfw_platform forward-declares this and calls it directly. */
-void *yetty_yplatform_glfw_window_native_handle(struct yetty_yclass_object *obj)
+ * The glfw_platform forward-declares this and calls it directly. The success
+ * value may be NULL when the window has not been opened yet; the downcast error
+ * is propagated to the caller. */
+struct yetty_yplatform_glfw_window_handle_ptr_result yetty_yplatform_glfw_window_native_handle(
+    struct yetty_yclass_object *obj)
 {
     return glfw_window_handle(obj);
 }

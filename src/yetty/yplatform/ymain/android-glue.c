@@ -208,8 +208,8 @@ int yetty_yplatform_android_clipboard_set_text(const char *text, size_t len)
         jstring label = (*env)->NewStringUTF(env, "yetty");
         jobject clip = (*env)->CallStaticObjectMethod(env, clip_data_cls, new_plain, label, jtext);
         jclass mgr_cls = (*env)->GetObjectClass(env, clipboard);
-        jmethodID set_primary = (*env)->GetMethodID(env, mgr_cls, "setPrimaryClip",
-                                                    "(Landroid/content/ClipData;)V");
+        jmethodID set_primary =
+            (*env)->GetMethodID(env, mgr_cls, "setPrimaryClip", "(Landroid/content/ClipData;)V");
         (*env)->CallVoidMethod(env, clipboard, set_primary, clip);
         if ((*env)->ExceptionCheck(env)) {
             (*env)->ExceptionClear(env);
@@ -247,20 +247,20 @@ int yetty_yplatform_android_clipboard_request_paste(
         jobject clipboard = android_clipboard_service(env, activity);
         if (clipboard) {
             jclass mgr_cls = (*env)->GetObjectClass(env, clipboard);
-            jmethodID get_primary = (*env)->GetMethodID(env, mgr_cls, "getPrimaryClip",
-                                                        "()Landroid/content/ClipData;");
+            jmethodID get_primary =
+                (*env)->GetMethodID(env, mgr_cls, "getPrimaryClip", "()Landroid/content/ClipData;");
             jobject clip = (*env)->CallObjectMethod(env, clipboard, get_primary);
             if (clip) {
                 jclass clip_cls = (*env)->GetObjectClass(env, clip);
                 jmethodID item_count = (*env)->GetMethodID(env, clip_cls, "getItemCount", "()I");
                 if ((*env)->CallIntMethod(env, clip, item_count) > 0) {
-                    jmethodID item_at = (*env)->GetMethodID(
-                        env, clip_cls, "getItemAt", "(I)Landroid/content/ClipData$Item;");
+                    jmethodID item_at = (*env)->GetMethodID(env, clip_cls, "getItemAt",
+                                                            "(I)Landroid/content/ClipData$Item;");
                     jobject item = (*env)->CallObjectMethod(env, clip, item_at, 0);
                     jclass item_cls = (*env)->GetObjectClass(env, item);
-                    jmethodID coerce = (*env)->GetMethodID(
-                        env, item_cls, "coerceToText",
-                        "(Landroid/content/Context;)Ljava/lang/CharSequence;");
+                    jmethodID coerce =
+                        (*env)->GetMethodID(env, item_cls, "coerceToText",
+                                            "(Landroid/content/Context;)Ljava/lang/CharSequence;");
                     jobject seq = (*env)->CallObjectMethod(env, item, coerce, activity);
                     if (seq) {
                         jclass seq_cls = (*env)->GetObjectClass(env, seq);

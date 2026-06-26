@@ -72,8 +72,9 @@ static struct yetty_ycore_void_result terminal_apply_pane_geometry(
     struct yetty_yterminal_terminal *terminal, float pane_w, float pane_h);
 /* Selection helpers (defined below) — reached early by the reinject path,
  * which drives cell selection from a subscriber's bounced mouse events. */
-static void terminal_cell_from_local(const struct yetty_yterminal_terminal *terminal, float lx,
-                                     float ly, uint32_t *out_row, uint32_t *out_col);
+static struct yetty_ycore_void_result terminal_cell_from_local(
+    const struct yetty_yterminal_terminal *terminal, float lx, float ly, uint32_t *out_row,
+    uint32_t *out_col);
 static struct yetty_ycore_void_result terminal_push_selection(
     struct yetty_yterminal_terminal *terminal);
 static struct yetty_ycore_void_result terminal_copy_selection(
@@ -318,7 +319,14 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
             /* Ask the content grid whether anything went dirty this feed. Its
              * own figure dirty bit is never set — the real dirty bits live on
              * the text grid + ydraw canvas it owns, which is_dirty aggregates. */
-            int grid_dirty = yetty_yvterm_vterm_is_dirty(terminal->grid);
+            struct yetty_ycore_int_result grid_dirty_res =
+                yetty_yvterm_vterm_is_dirty(terminal->grid);
+            int grid_dirty = 0;
+            if (YETTY_IS_OK(grid_dirty_res)) {
+                grid_dirty = grid_dirty_res.value;
+            } else {
+                yetty_ycore_error_destroy(grid_dirty_res.error);
+            }
             ydebug("terminal_pty_pipe_read: after feed grid=%p dirty=%d", (void *)terminal->grid,
                    grid_dirty);
             if (grid_dirty) {
@@ -335,9 +343,15 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
          * frame coming over OSC 630000 lands silently and the screen stays
          * stale until something else triggers a render. */
         if (terminal->root_container_obj) {
-            struct yetty_yfigure_figure *rf =
+            /* External-callback boundary (this fn is YETTY_EXTERNAL_CALLBACK):
+             * the obj→figure downcast cannot propagate, so absorb here. */
+            struct yetty_yfigure_figure_ptr_result rf_res =
                 yetty_yfigure_container_as_figure(terminal->root_container_obj);
-            if (rf && yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rf)-1).value) {
+            if (YETTY_IS_ERR(rf_res)) {
+                yetty_ycore_error_destroy(rf_res.error);
+            } else if (rf_res.value && yetty_yfigure_figure_dirty_get(
+                                           (struct yetty_yclass_object *)(rf_res.value) - 1)
+                                           .value) {
                 terminal->context.yetty_context.event_loop->ops->request_render(
                     terminal->context.yetty_context.event_loop);
             }
@@ -608,12 +622,12 @@ static struct yetty_ycore_void_result terminal_emit_card_mouse_move(
  * (drag in progress), the captured figure always wins and coords are
  * reported as-if-projected into its local space. Otherwise the topmost
  * visible ymgui figure under the cursor wins. */
-static struct yetty_yfigure_hit terminal_resolve_figure_hit(
+static struct yetty_yfigure_hit_result terminal_resolve_figure_hit(
     struct yetty_yterminal_terminal *terminal, float lx, float ly, uint32_t captured_figure_id)
 {
     struct yetty_yfigure_hit hit = {0, 0, 0};
     if (!terminal->root_container_obj) {
-        return hit;
+        return YETTY_OK(yetty_yfigure_hit, hit);
     }
 
     if (captured_figure_id != 0) {
@@ -622,12 +636,15 @@ static struct yetty_yfigure_hit terminal_resolve_figure_hit(
          * Hit-test first — if cursor is still inside the captured figure,
          * use the natural local coords; otherwise fall back to the raw
          * pane coords tagged with the captured id. */
-        hit = yetty_yfigure_container_hit_test(terminal->root_container_obj, lx, ly);
+        struct yetty_yfigure_hit_result hit_res =
+            yetty_yfigure_container_hit_test(terminal->root_container_obj, lx, ly);
+        YETTY_RETURN_IF_ERR(yetty_yfigure_hit, hit_res, "resolve_figure_hit: hit_test");
+        hit = hit_res.value;
         if (hit.figure_id == captured_figure_id) {
-            return hit;
+            return YETTY_OK(yetty_yfigure_hit, hit);
         }
         struct yetty_yfigure_hit captured = {captured_figure_id, lx, ly};
-        return captured;
+        return YETTY_OK(yetty_yfigure_hit, captured);
     }
 
     return yetty_yfigure_container_hit_test(terminal->root_container_obj, lx, ly);
@@ -679,7 +696,8 @@ static struct yetty_ycore_int_result terminal_emit_figure_key(
  *---------------------------------------------------------------------*/
 
 /* Live anchor of the content grid (it maxes its own text + ydraw anchors). */
-static uint32_t terminal_live_anchor(struct yetty_yterminal_terminal *terminal)
+static struct yetty_ycore_uint32_result terminal_live_anchor(
+    struct yetty_yterminal_terminal *terminal)
 {
     return yetty_yvterm_vterm_get_live_anchor(terminal->grid);
 }
@@ -687,7 +705,8 @@ static uint32_t terminal_live_anchor(struct yetty_yterminal_terminal *terminal)
 /* Oldest absolute line index a scrollback view may scroll up to. Lines below
  * this have aged out of the grid's bounded history (scrollback/lines), so a
  * wheel-up clamps here instead of marching into blank evicted rows. */
-static uint32_t terminal_scrollback_floor(struct yetty_yterminal_terminal *terminal)
+static struct yetty_ycore_uint32_result terminal_scrollback_floor(
+    struct yetty_yterminal_terminal *terminal)
 {
     return yetty_yvterm_vterm_get_scrollback_floor(terminal->grid);
 }
@@ -713,7 +732,9 @@ static struct yetty_ycore_void_result terminal_push_view_top(
 static struct yetty_ycore_void_result terminal_scrollback_apply(
     struct yetty_yterminal_terminal *terminal, int lines)
 {
-    uint32_t live = terminal_live_anchor(terminal);
+    struct yetty_ycore_uint32_result live_res = terminal_live_anchor(terminal);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, live_res, "terminal_scrollback_apply: live anchor");
+    uint32_t live = live_res.value;
 
     if (!terminal->scrollback_active) {
         if (lines <= 0) {
@@ -735,7 +756,10 @@ static struct yetty_ycore_void_result terminal_scrollback_apply(
         /* Clamp to the oldest line still retained, not to 0 — once eviction
          * starts the floor rises above 0 and scrolling to 0 would show blank
          * aged-out rows. */
-        uint32_t floor = terminal_scrollback_floor(terminal);
+        struct yetty_ycore_uint32_result floor_res = terminal_scrollback_floor(terminal);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, floor_res,
+                            "terminal_scrollback_apply: scrollback floor");
+        uint32_t floor = floor_res.value;
         if (terminal->view_top_total_idx < floor ||
             (uint32_t)lines >= terminal->view_top_total_idx - floor) {
             terminal->view_top_total_idx = floor;
@@ -769,7 +793,9 @@ static struct yetty_ycore_void_result terminal_scrollback_exit(
         return YETTY_OK_VOID();
     }
     terminal->scrollback_active = 0;
-    terminal->view_top_total_idx = terminal_live_anchor(terminal);
+    struct yetty_ycore_uint32_result live_res = terminal_live_anchor(terminal);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, live_res, "terminal_scrollback_exit: live anchor");
+    terminal->view_top_total_idx = live_res.value;
     ydebug("scrollback: EXIT");
     struct yetty_ycore_void_result r = terminal_push_view_top(terminal);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_scrollback_exit: push_view_top failed");
@@ -818,7 +844,9 @@ static struct yetty_ycore_void_result terminal_reinject_apply(
         }
         uint32_t row = 0;
         uint32_t col = 0;
-        terminal_cell_from_local(terminal, msg->x, msg->y, &row, &col);
+        struct yetty_ycore_void_result cell_res =
+            terminal_cell_from_local(terminal, msg->x, msg->y, &row, &col);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "terminal_reinject_apply: cell from local");
         if (msg->pressed) {
             terminal->sel_anchor_row = row;
             terminal->sel_anchor_col = col;
@@ -859,7 +887,9 @@ static struct yetty_ycore_void_result terminal_reinject_apply(
         }
         uint32_t row = 0;
         uint32_t col = 0;
-        terminal_cell_from_local(terminal, msg->x, msg->y, &row, &col);
+        struct yetty_ycore_void_result cell_res =
+            terminal_cell_from_local(terminal, msg->x, msg->y, &row, &col);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "terminal_reinject_apply: drag cell");
         terminal->sel_head_row = row;
         terminal->sel_head_col = col;
         return terminal_push_selection(terminal);
@@ -952,7 +982,9 @@ static struct yetty_ycore_void_result terminal_content_inset_apply(
     float bottom = inset->bottom > 0.0f ? inset->bottom : 0.0f;
     float left = inset->left > 0.0f ? inset->left : 0.0f;
 
-    yetty_yvterm_vterm_set_content_inset(terminal->grid, top, right, bottom, left);
+    struct yetty_ycore_void_result inset_res =
+        yetty_yvterm_vterm_set_content_inset(terminal->grid, top, right, bottom, left);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, inset_res, "terminal_content_inset_apply: set inset");
     ydebug("terminal: content inset t=%.0f r=%.0f b=%.0f l=%.0f", top, right, bottom, left);
 
     /* Reflow at the last applied pane size; the grid figure picks the new
@@ -1040,8 +1072,12 @@ static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
      * separate ygrid, no rolling-row bookkeeping. Composites render via vterm's
      * rich pass; raw SDF / text records are stored on the line for the SDF pass. */
     uint32_t cur_row = 0, cur_col = 0, cur_vis = 0;
-    yetty_yvterm_vterm_cursor(terminal->grid, &cur_row, &cur_col, &cur_vis);
-    struct yetty_ycore_pixel_size text_cell = yetty_yvterm_vterm_cell_size(terminal->grid);
+    struct yetty_ycore_void_result cursor_res =
+        yetty_yvterm_vterm_cursor(terminal->grid, &cur_row, &cur_col, &cur_vis);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cursor_res, "terminal_ydraw_consume_bin: cursor");
+    struct pixel_size_result text_cell_res = yetty_yvterm_vterm_cell_size(terminal->grid);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, text_cell_res, "terminal_ydraw_consume_bin: cell size");
+    struct yetty_ycore_pixel_size text_cell = text_cell_res.value;
 
     struct yetty_ydraw_drawable_iterator iter = {0};
     struct yetty_ycore_void_result init_res =
@@ -1291,12 +1327,15 @@ static struct yetty_ycore_void_result terminal_push_selection(
  * "past EOL" — needed for "drag past the right edge selects to end of
  * line". row is clamped to [0, rows-1]; rows below the grid clamp to the
  * last row, matching how xterm extends selection downward. */
-static void terminal_cell_from_local(const struct yetty_yterminal_terminal *terminal, float lx,
-                                     float ly, uint32_t *out_row, uint32_t *out_col)
+static struct yetty_ycore_void_result terminal_cell_from_local(
+    const struct yetty_yterminal_terminal *terminal, float lx, float ly, uint32_t *out_row,
+    uint32_t *out_col)
 {
     float cell_w = 10.0f;
     float cell_h = 20.0f;
-    struct yetty_ycore_pixel_size cell = yetty_yvterm_vterm_cell_size(terminal->grid);
+    struct pixel_size_result cell_res = yetty_yvterm_vterm_cell_size(terminal->grid);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "terminal_cell_from_local: cell size");
+    struct yetty_ycore_pixel_size cell = cell_res.value;
     if (cell.width > 0.0f) {
         cell_w = cell.width;
     }
@@ -1319,6 +1358,7 @@ static void terminal_cell_from_local(const struct yetty_yterminal_terminal *term
     }
     *out_row = row;
     *out_col = col;
+    return YETTY_OK_VOID();
 }
 
 /* Collect the content layer's selection text (it concatenates its text grid +
@@ -1473,8 +1513,10 @@ static struct yetty_ycore_void_result terminal_render_frame(
         return YETTY_ERR(yetty_ycore_void, "terminal_render_frame: no root container to render");
     }
     {
-        struct yetty_yfigure_figure *rf =
+        struct yetty_yfigure_figure_ptr_result rf_res =
             yetty_yfigure_container_as_figure(terminal->root_container_obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rf_res, "terminal_render_frame: root as_figure");
+        struct yetty_yfigure_figure *rf = rf_res.value;
         struct yetty_ycore_void_result render_res =
             yetty_yfigure_render((struct yetty_yclass_object *)rf - 1, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, render_res,
@@ -1500,7 +1542,9 @@ static struct yetty_ycore_void_result terminal_read_pty(struct yetty_yterminal_t
     /* Same as the async pipe-read path: the content grid aggregates its
      * sub-renderers' dirty bits via is_dirty; its own figure dirty is never
      * set. */
-    if (yetty_yvterm_vterm_is_dirty(terminal->grid)) {
+    struct yetty_ycore_int_result dirty_res = yetty_yvterm_vterm_is_dirty(terminal->grid);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dirty_res, "terminal_read_pty: grid is_dirty");
+    if (dirty_res.value) {
         terminal->context.yetty_context.event_loop->ops->request_render(
             terminal->context.yetty_context.event_loop);
     }
@@ -1607,7 +1651,10 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, grid_res,
                         "terminal_create: grid figure create failed");
     terminal->grid = grid_res.value;
-    struct yetty_ycore_pixel_size content_cell = yetty_yvterm_vterm_cell_size(terminal->grid);
+    struct pixel_size_result content_cell_res = yetty_yvterm_vterm_cell_size(terminal->grid);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, content_cell_res,
+                        "terminal_create: content cell size");
+    struct yetty_ycore_pixel_size content_cell = content_cell_res.value;
     ydebug("terminal_create: content grid figure created");
 
     /* Register the grid's wire handlers: text grid as the default
@@ -1824,9 +1871,12 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * figure, instead of a bespoke pre-container pass. The container owns the
      * figure; the terminal borrows terminal->grid. */
     {
+        struct yetty_yfigure_figure_ptr_result grid_figure_res =
+            yetty_yvterm_vterm_as_figure(terminal->grid);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, grid_figure_res,
+                            "terminal_create: grid as figure failed");
         struct yetty_ycore_void_result add_res = yetty_yfigure_container_add_child(
-            terminal->root_container_obj, yetty_yvterm_vterm_as_figure(terminal->grid),
-            YETTY_YTERMINAL_GRID_FIGURE_ID);
+            terminal->root_container_obj, grid_figure_res.value, YETTY_YTERMINAL_GRID_FIGURE_ID);
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, add_res,
                             "terminal_create: add grid figure to root container failed");
         /* The content grid is the host's own structural figure, not part of the
@@ -1847,7 +1897,10 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * `reset`) the content grid wipes the text grid and ydraw canvas, but the
      * positioned compositor figures live in the root container, which it does
      * not own. Hook into the same clear path to wipe them too. */
-    yetty_yvterm_vterm_set_clear_hook(terminal->grid, terminal_clear_figures_callback, terminal);
+    struct yetty_ycore_void_result clear_hook_res = yetty_yvterm_vterm_set_clear_hook(
+        terminal->grid, terminal_clear_figures_callback, terminal);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, clear_hook_res,
+                        "terminal_create: set clear hook failed");
 
     /* Register the root container directly with the wire SM —
      * userdata is the container itself; no terminal-local wrapper. */
@@ -1977,17 +2030,27 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
      * registry next. */
     terminal->grid = NULL; /* container owns it; drop the borrowed handle */
     if (terminal->root_container_obj) {
-        struct yetty_yfigure_figure *rf =
+        struct yetty_yfigure_figure_ptr_result rf_res =
             yetty_yfigure_container_as_figure(terminal->root_container_obj);
-        struct yetty_ycore_void_result r =
-            yetty_yfigure_destroy((struct yetty_yclass_object *)rf - 1);
-        if (YETTY_IS_ERR(r)) {
-            yerror("terminal_destroy: root_container destroy failed: %s", r.error.msg);
+        if (YETTY_IS_ERR(rf_res)) {
+            yerror("terminal_destroy: root_container as_figure failed: %s", rf_res.error.msg);
             if (!have_err) {
-                first_err = r;
+                first_err = YETTY_ERR(yetty_ycore_void, "terminal_destroy: root as_figure", rf_res);
                 have_err = true;
             } else {
-                yetty_ycore_error_destroy(r.error);
+                yetty_ycore_error_destroy(rf_res.error);
+            }
+        } else {
+            struct yetty_ycore_void_result r =
+                yetty_yfigure_destroy((struct yetty_yclass_object *)rf_res.value - 1);
+            if (YETTY_IS_ERR(r)) {
+                yerror("terminal_destroy: root_container destroy failed: %s", r.error.msg);
+                if (!have_err) {
+                    first_err = r;
+                    have_err = true;
+                } else {
+                    yetty_ycore_error_destroy(r.error);
+                }
             }
         }
         terminal->root_container_obj = NULL;
@@ -2112,8 +2175,10 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
             .max = {.x = (float)grid_size.cols * cell_size.width,
                     .y = (float)grid_size.rows * cell_size.height},
         };
-        struct yetty_yfigure_figure *rf =
+        struct yetty_yfigure_figure_ptr_result rf_res =
             yetty_yfigure_container_as_figure(terminal->root_container_obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rf_res, "resize_grid: root as_figure");
+        struct yetty_yfigure_figure *rf = rf_res.value;
         {
             struct yetty_ycore_void_result drop_r =
                 yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf)-1, new_rect);
@@ -2151,10 +2216,14 @@ static struct yetty_ycore_void_result terminal_apply_pane_geometry(
     if (!terminal->grid || pane_w <= 0.0f || pane_h <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_pixel_size cell = yetty_yvterm_vterm_cell_size(terminal->grid);
+    struct pixel_size_result cell_res = yetty_yvterm_vterm_cell_size(terminal->grid);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "terminal_apply_pane_geometry: cell size");
+    struct yetty_ycore_pixel_size cell = cell_res.value;
     float inset_top = 0.0f, inset_right = 0.0f, inset_bottom = 0.0f, inset_left = 0.0f;
-    yetty_yvterm_vterm_get_content_inset(terminal->grid, &inset_top, &inset_right, &inset_bottom,
-                                         &inset_left);
+    struct yetty_ycore_void_result inset_res = yetty_yvterm_vterm_get_content_inset(
+        terminal->grid, &inset_top, &inset_right, &inset_bottom, &inset_left);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, inset_res,
+                        "terminal_apply_pane_geometry: get content inset");
 
     float cell_w_target = cell.width > 0 ? cell.width : 10.0f;
     float cell_h_target = cell.height > 0 ? cell.height : 20.0f;
@@ -2380,7 +2449,10 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 return YETTY_OK(yetty_ycore_int, 1);
             }
         }
-        if (yetty_yvterm_vterm_on_key(terminal->grid, event->key.key, event->key.mods)) {
+        struct yetty_ycore_int_result on_key_res =
+            yetty_yvterm_vterm_on_key(terminal->grid, event->key.key, event->key.mods);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, on_key_res, "terminal_view_on_event: on_key");
+        if (on_key_res.value) {
             return YETTY_OK(yetty_ycore_int, 1);
         }
         return YETTY_OK(yetty_ycore_int, 1);
@@ -2418,7 +2490,10 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 return YETTY_OK(yetty_ycore_int, 1);
             }
         }
-        if (yetty_yvterm_vterm_on_char(terminal->grid, event->chr.codepoint, event->chr.mods)) {
+        struct yetty_ycore_int_result on_char_res =
+            yetty_yvterm_vterm_on_char(terminal->grid, event->chr.codepoint, event->chr.mods);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, on_char_res, "terminal_view_on_event: on_char");
+        if (on_char_res.value) {
             return YETTY_OK(yetty_ycore_int, 1);
         }
         return YETTY_OK(yetty_ycore_int, 1);
@@ -2481,7 +2556,10 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         }
 
         if (terminal->grid) {
-            struct yetty_ycore_pixel_size cell = yetty_yvterm_vterm_cell_size(terminal->grid);
+            struct pixel_size_result cell_res = yetty_yvterm_vterm_cell_size(terminal->grid);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, cell_res,
+                                "terminal_view_on_event: zoom cell size");
+            struct yetty_ycore_pixel_size cell = cell_res.value;
             float cell_w_target = (cell.width > 0 ? cell.width : 10.0f) * factor;
             float cell_h_target = (cell.height > 0 ? cell.height : 20.0f) * factor;
             uint32_t new_cols = (uint32_t)(view_w / cell_w_target + 0.5f);
@@ -2630,7 +2708,10 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         if (sel_eligible) {
             if (event->type == YETTY_YCORE_MOUSE_DOWN) {
                 uint32_t r, c;
-                terminal_cell_from_local(terminal, lx_sel, ly_sel, &r, &c);
+                struct yetty_ycore_void_result cell_res =
+                    terminal_cell_from_local(terminal, lx_sel, ly_sel, &r, &c);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, cell_res,
+                                    "terminal_view_on_event: cell from local (down)");
 
                 /* Multi-click: a press within 0.4s of the previous one on the
                  * same cell escalates single → word (double) → line (triple),
@@ -2653,7 +2734,10 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                     /* Word select: snap the anchor/head to the word boundaries
                      * around the clicked cell. Not a drag — finalised here. */
                     uint32_t sc = c, ec = c;
-                    yetty_yvterm_vterm_word_bounds(terminal->grid, r, c, &sc, &ec);
+                    struct yetty_ycore_void_result wb_res =
+                        yetty_yvterm_vterm_word_bounds(terminal->grid, r, c, &sc, &ec);
+                    YETTY_RETURN_IF_ERR(yetty_ycore_int, wb_res,
+                                        "terminal_view_on_event: word bounds");
                     terminal->sel_anchor_row = r;
                     terminal->sel_anchor_col = sc;
                     terminal->sel_head_row = r;
@@ -2764,7 +2848,11 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             uint32_t focused = terminal->focused_figure_id;
             struct yetty_yfigure_hit hit;
             if (press) {
-                hit = terminal_resolve_figure_hit(terminal, event->mouse.x, event->mouse.y, 0);
+                struct yetty_yfigure_hit_result hit_res =
+                    terminal_resolve_figure_hit(terminal, event->mouse.x, event->mouse.y, 0);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, hit_res,
+                                    "terminal_view_on_event: resolve hit (press)");
+                hit = hit_res.value;
                 if (hit.figure_id != focused) {
                     if (focused != 0) {
                         struct yetty_ycore_void_result lr =
@@ -2781,8 +2869,11 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                     }
                 }
             } else {
-                hit =
+                struct yetty_yfigure_hit_result hit_res =
                     terminal_resolve_figure_hit(terminal, event->mouse.x, event->mouse.y, focused);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, hit_res,
+                                    "terminal_view_on_event: resolve hit (release)");
+                hit = hit_res.value;
             }
             if (hit.figure_id != 0) {
                 struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
@@ -2810,7 +2901,10 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             float lx_sel = event->mouse.x - view->bounds.x;
             float ly_sel = event->mouse.y - view->bounds.y;
             uint32_t r, c;
-            terminal_cell_from_local(terminal, lx_sel, ly_sel, &r, &c);
+            struct yetty_ycore_void_result cell_res =
+                terminal_cell_from_local(terminal, lx_sel, ly_sel, &r, &c);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, cell_res,
+                                "terminal_view_on_event: cell from local (drag)");
             if (r != terminal->sel_head_row || c != terminal->sel_head_col) {
                 terminal->sel_head_row = r;
                 terminal->sel_head_col = c;
@@ -2835,8 +2929,10 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
          * (not pane-local) for the same reason as the MOUSE_DOWN handler
          * above — figure rects carry viewport_offset already. */
         uint32_t captured = terminal->mouse_buttons_held ? terminal->focused_figure_id : 0u;
-        struct yetty_yfigure_hit hit =
+        struct yetty_yfigure_hit_result hit_res =
             terminal_resolve_figure_hit(terminal, event->mouse.x, event->mouse.y, captured);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, hit_res, "terminal_view_on_event: resolve hit (move)");
+        struct yetty_yfigure_hit hit = hit_res.value;
         if (hit.figure_id != 0) {
             struct yetty_ycore_void_result mr = terminal_emit_card_mouse_move(
                 terminal, hit.figure_id, hit.local_x, hit.local_y, terminal->mouse_buttons_held);
@@ -2865,8 +2961,11 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         int wheel_mods = event->mouse_scroll.mods;
         if (!terminal->scrollback_active && terminal->mouse_click_subscribed) {
             /* Window coords, same reason as MOUSE_DOWN. */
-            struct yetty_yfigure_hit hit = terminal_resolve_figure_hit(
+            struct yetty_yfigure_hit_result hit_res = terminal_resolve_figure_hit(
                 terminal, event->mouse_scroll.x, event->mouse_scroll.y, 0);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, hit_res,
+                                "terminal_view_on_event: resolve hit (scroll)");
+            struct yetty_yfigure_hit hit = hit_res.value;
             if (hit.figure_id != 0) {
                 struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
                     terminal, hit.figure_id, hit.local_x, hit.local_y, 0, 0, event->mouse_scroll.dy,

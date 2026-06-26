@@ -61,9 +61,9 @@ struct yetty_yplatform_platform_ptr_result yetty_yplatform_platform_from(
 
 YETTY_ANNOTATE("virtual@yplatform:platform:platform_init")
 YETTY_ANNOTATE("local@yplatform:platform_init")
-static struct yetty_ycore_void_result
-    platform_default_init(struct yetty_yclass_object *obj, struct yetty_yclass_object *app,
-                          int argc, char **argv)
+static struct yetty_ycore_void_result platform_default_init(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *app,
+                                                            int argc, char **argv)
 {
     (void)obj;
     (void)app;
@@ -74,9 +74,9 @@ static struct yetty_ycore_void_result
 
 YETTY_ANNOTATE("virtual@yplatform:platform:platform_run")
 YETTY_ANNOTATE("local@yplatform:platform_run")
-static struct yetty_ycore_void_result
-    platform_default_run(struct yetty_yclass_object *obj, struct yetty_yclass_object *app, int argc,
-                         char **argv)
+static struct yetty_ycore_void_result platform_default_run(struct yetty_yclass_object *obj,
+                                                           struct yetty_yclass_object *app,
+                                                           int argc, char **argv)
 {
     (void)obj;
     (void)app;
@@ -92,17 +92,24 @@ static struct yetty_ycore_void_result
  * forward-declares the handle types (no struct reproduction / redefinition).
  *=========================================================================*/
 
-/* Recover the base data slice from any platform (sub)class object. Returns NULL
- * on a wrong-class object; the getters below treat NULL as "unset". */
-static struct yetty_yplatform_platform *platform_data(struct yetty_yclass_object *obj)
+/* Recover the base data slice from any platform (sub)class object. Propagates the
+ * downcast error in a Result; the getters below absorb it (returning their
+ * raw-pointer NULL) because their public signatures are fixed by the generated
+ * API contract and cannot return a Result. */
+static struct yetty_yplatform_platform_ptr_result platform_data(struct yetty_yclass_object *obj)
 {
     struct yetty_yplatform_platform_ptr_result data = yetty_yplatform_platform_from(obj);
-    if (!YETTY_IS_OK(data)) {
-        yetty_ycore_error_destroy(data.error);
-        return NULL;
-    }
-    return data.value;
+    YETTY_RETURN_IF_ERR(yetty_yplatform_platform_ptr, data, "platform_data: data_get");
+    return YETTY_OK(yetty_yplatform_platform_ptr, data.value);
 }
+
+/* Result wrappers for the pointer-returning state getters below, so the
+ * obj→data downcast error propagates instead of being absorbed. Codegen
+ * reproduces these into the generated header for consumers. */
+YETTY_YRESULT_DECLARE(yetty_yplatform_gpu_context_const_ptr,
+                      const struct yetty_yplatform_gpu_context *);
+YETTY_YRESULT_DECLARE(yetty_yconfig_config_ptr, struct yetty_yconfig_config *);
+YETTY_YRESULT_DECLARE(yetty_ycore_xthread_event_pipe_ptr, struct yetty_ycore_xthread_event_pipe *);
 
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yplatform_platform_set_gpu_context(
@@ -132,40 +139,48 @@ struct yetty_ycore_void_result yetty_yplatform_platform_set_services(
 }
 
 YETTY_ANNOTATE("expose")
-const struct yetty_yplatform_gpu_context *yetty_yplatform_platform_gpu_context(
+struct yetty_yplatform_gpu_context_const_ptr_result yetty_yplatform_platform_gpu_context(
     struct yetty_yclass_object *obj)
 {
-    struct yetty_yplatform_platform *data = platform_data(obj);
-    return data ? &data->gpu : NULL;
+    struct yetty_yplatform_platform_ptr_result data = platform_data(obj);
+    YETTY_RETURN_IF_ERR(yetty_yplatform_gpu_context_const_ptr, data, "platform_gpu_context: data");
+    return YETTY_OK(yetty_yplatform_gpu_context_const_ptr, &data.value->gpu);
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_yconfig_config *yetty_yplatform_platform_config(struct yetty_yclass_object *obj)
-{
-    struct yetty_yplatform_platform *data = platform_data(obj);
-    return data ? data->config : NULL;
-}
-
-YETTY_ANNOTATE("expose")
-struct yetty_ycore_xthread_event_pipe *yetty_yplatform_platform_input_pipe(
+struct yetty_yconfig_config_ptr_result yetty_yplatform_platform_config(
     struct yetty_yclass_object *obj)
 {
-    struct yetty_yplatform_platform *data = platform_data(obj);
-    return data ? data->input_pipe : NULL;
+    struct yetty_yplatform_platform_ptr_result data = platform_data(obj);
+    YETTY_RETURN_IF_ERR(yetty_yconfig_config_ptr, data, "platform_config: data");
+    return YETTY_OK(yetty_yconfig_config_ptr, data.value->config);
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_yclass_object *yetty_yplatform_platform_clipboard(struct yetty_yclass_object *obj)
+struct yetty_ycore_xthread_event_pipe_ptr_result yetty_yplatform_platform_input_pipe(
+    struct yetty_yclass_object *obj)
 {
-    struct yetty_yplatform_platform *data = platform_data(obj);
-    return data ? data->clipboard : NULL;
+    struct yetty_yplatform_platform_ptr_result data = platform_data(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_xthread_event_pipe_ptr, data, "platform_input_pipe: data");
+    return YETTY_OK(yetty_ycore_xthread_event_pipe_ptr, data.value->input_pipe);
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_yclass_object *yetty_yplatform_platform_window_chrome(struct yetty_yclass_object *obj)
+struct yetty_yclass_object_ptr_result yetty_yplatform_platform_clipboard(
+    struct yetty_yclass_object *obj)
 {
-    struct yetty_yplatform_platform *data = platform_data(obj);
-    return data ? data->window_chrome : NULL;
+    struct yetty_yplatform_platform_ptr_result data = platform_data(obj);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, data, "platform_clipboard: data");
+    return YETTY_OK(yetty_yclass_object_ptr, data.value->clipboard);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_yclass_object_ptr_result yetty_yplatform_platform_window_chrome(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yplatform_platform_ptr_result data = platform_data(obj);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, data, "platform_window_chrome: data");
+    return YETTY_OK(yetty_yclass_object_ptr, data.value->window_chrome);
 }
 
 #include "platform.gen.c"

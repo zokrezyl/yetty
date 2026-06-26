@@ -175,23 +175,18 @@ struct yetty_yrich_shape_ptr_result yetty_yrich_shape_from(struct yetty_yclass_o
     return YETTY_OK(yetty_yrich_shape_ptr, (struct yetty_yrich_shape *)slice_r.value);
 }
 
-struct yetty_yclass_object *yetty_yrich_shape_to(struct yetty_yrich_shape *data)
+struct yetty_yclass_object_ptr_result yetty_yrich_shape_to(struct yetty_yrich_shape *data)
 {
     if (!data) {
-        return NULL;
+        return YETTY_OK(yetty_yclass_object_ptr, NULL);
     }
     struct yetty_yclass_ptr_result class_r = yetty_yrich_shape_class_get();
-    if (YETTY_IS_ERR(class_r)) {
-        yetty_ycore_error_destroy(class_r.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, class_r, "yetty_yrich_shape_to: class accessor");
     struct yetty_ycore_size_result offset_r =
         yetty_yclass_object_data_offset(class_r.value, class_r.value);
-    if (YETTY_IS_ERR(offset_r)) {
-        yetty_ycore_error_destroy(offset_r.error);
-        return NULL;
-    }
-    return (struct yetty_yclass_object *)((char *)data - offset_r.value);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, offset_r, "yetty_yrich_shape_to: data offset");
+    return YETTY_OK(yetty_yclass_object_ptr,
+                    (struct yetty_yclass_object *)((char *)data - offset_r.value));
 }
 
 struct uint32_result yetty_yrich_shape_fill_color_get(struct yetty_yclass_object *obj)
@@ -425,23 +420,18 @@ struct yetty_yrich_slides_ptr_result yetty_yrich_slides_from(struct yetty_yclass
     return YETTY_OK(yetty_yrich_slides_ptr, (struct yetty_yrich_slides *)slice_r.value);
 }
 
-struct yetty_yclass_object *yetty_yrich_slides_to(struct yetty_yrich_slides *data)
+struct yetty_yclass_object_ptr_result yetty_yrich_slides_to(struct yetty_yrich_slides *data)
 {
     if (!data) {
-        return NULL;
+        return YETTY_OK(yetty_yclass_object_ptr, NULL);
     }
     struct yetty_yclass_ptr_result class_r = yetty_yrich_slides_class_get();
-    if (YETTY_IS_ERR(class_r)) {
-        yetty_ycore_error_destroy(class_r.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, class_r, "yetty_yrich_slides_to: class accessor");
     struct yetty_ycore_size_result offset_r =
         yetty_yclass_object_data_offset(class_r.value, class_r.value);
-    if (YETTY_IS_ERR(offset_r)) {
-        yetty_ycore_error_destroy(offset_r.error);
-        return NULL;
-    }
-    return (struct yetty_yclass_object *)((char *)data - offset_r.value);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, offset_r, "yetty_yrich_slides_to: data offset");
+    return YETTY_OK(yetty_yclass_object_ptr,
+                    (struct yetty_yclass_object *)((char *)data - offset_r.value));
 }
 
 struct yetty_ycore_void_result yetty_yrich_slides_set_current(struct yetty_yclass_object *obj,

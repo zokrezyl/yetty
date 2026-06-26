@@ -69,10 +69,13 @@ static struct yetty_ycore_void_result emit_container(struct yetty_yclass_object 
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
-    return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_widget_id(obj),
-                                        YETTY_YFIGURE_KIND_YSHADERTOY, r.min.x, r.min.y, r.max.x,
-                                        r.max.y, NULL, 0);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "yshadertoy emit_container: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
+    struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yshadertoy emit_container: id");
+    return yetty_ygui_emit_ensure_child(ctx, id_res.value, YETTY_YFIGURE_KIND_YSHADERTOY, r.min.x,
+                                        r.min.y, r.max.x, r.max.y, NULL, 0);
 }
 
 YETTY_ANNOTATE("override@ygui:yshadertoy:widget_emit_body")
@@ -92,8 +95,10 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_object *ycla
     if (d->len > 0xFFFFFFFFu) {
         return YETTY_ERR(yetty_ycore_void, "yshadertoy_emit_body: shader text exceeds u32 length");
     }
-    struct yetty_ycore_void_result er = yetty_ygui_emit_figure_body(
-        ctx, yetty_ygui_widget_id(obj), (const uint8_t *)d->src, (uint32_t)d->len);
+    struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yshadertoy_emit_body: id");
+    struct yetty_ycore_void_result er =
+        yetty_ygui_emit_figure_body(ctx, id_res.value, (const uint8_t *)d->src, (uint32_t)d->len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "yshadertoy_emit_body: emit_figure_body");
     d->dirty = 0;
     return YETTY_OK_VOID();

@@ -576,9 +576,9 @@ static int button_hit(float x, float y)
  * 0 selects the default for each. Call after create(), before parse(). */
 YETTY_ANNOTATE("virtual@yflame:flame:configure")
 YETTY_ANNOTATE("local@yflame:configure")
-static struct yetty_ycore_void_result
-    flame_configure(struct yetty_yclass_object *obj, float width, float frame_height,
-                    float min_width, uint32_t flags)
+static struct yetty_ycore_void_result flame_configure(struct yetty_yclass_object *obj, float width,
+                                                      float frame_height, float min_width,
+                                                      uint32_t flags)
 {
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame configure: from_obj");
@@ -594,8 +594,8 @@ static struct yetty_ycore_void_result
  * to the root and clears any hover highlight. */
 YETTY_ANNOTATE("virtual@yflame:flame:parse")
 YETTY_ANNOTATE("local@yflame:parse")
-static struct yetty_ycore_void_result
-    flame_parse(struct yetty_yclass_object *obj, const char *input, size_t len)
+static struct yetty_ycore_void_result flame_parse(struct yetty_yclass_object *obj,
+                                                  const char *input, size_t len)
 {
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame parse: from_obj");
@@ -706,8 +706,8 @@ static struct yetty_ydraw_drawable_list_result flame_render(struct yetty_yclass_
  * layout, or -1 if none. */
 YETTY_ANNOTATE("virtual@yflame:flame:hit_test")
 YETTY_ANNOTATE("local@yflame:hit_test")
-static struct yetty_ycore_int_result
-    flame_hit_test(struct yetty_yclass_object *obj, float x, float y)
+static struct yetty_ycore_int_result flame_hit_test(struct yetty_yclass_object *obj, float x,
+                                                    float y)
 {
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, flame_r, "yflame hit_test: from_obj");
@@ -791,8 +791,8 @@ static struct yetty_ycore_void_result flame_reset(struct yetty_yclass_object *ob
 /* set_highlight: mark a node as hovered (-1 clears) for the next render. */
 YETTY_ANNOTATE("virtual@yflame:flame:set_highlight")
 YETTY_ANNOTATE("local@yflame:set_highlight")
-static struct yetty_ycore_void_result
-    flame_set_highlight(struct yetty_yclass_object *obj, int32_t node_id)
+static struct yetty_ycore_void_result flame_set_highlight(struct yetty_yclass_object *obj,
+                                                          int32_t node_id)
 {
     struct yetty_yclass_void_ptr_result flame_r = flame_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, flame_r, "yflame set_highlight: from_obj");

@@ -31,33 +31,27 @@ struct yetty_ygui_ynode_ptr_result {
     };
 };
 struct yetty_ygui_ynode_ptr_result yetty_ygui_ynode_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_ynode_to(struct yetty_ygui_ynode *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_ynode_to(struct yetty_ygui_ynode *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_ynode_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
 struct yetty_ycore_void_result yetty_ygui_ynode_reflow(struct yetty_yclass_object *node);
-int yetty_ygui_ynode_pin_pos(const struct yetty_yclass_object *node, int output, int index,
-                             float *x, float *y);
-int yetty_ygui_ynode_pin_at(const struct yetty_yclass_object *node, float x, float y, int *output,
-                            int *index);
+struct yetty_ycore_int_result yetty_ygui_ynode_pin_pos(const struct yetty_yclass_object *node, int output, int index, float *x, float *y);
+struct yetty_ycore_int_result yetty_ygui_ynode_pin_at(const struct yetty_yclass_object *node, float x, float y, int *output, int *index);
 /*-----------------------------------------------------------------------------
  * App-facing API.
  *---------------------------------------------------------------------------*/
-struct yetty_ycore_void_result yetty_ygui_ynode_set_title(struct yetty_yclass_object *node,
-                                                          const char *title);
-struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_pos(struct yetty_yclass_object *node,
-                                                              float gx, float gy);
-void yetty_ygui_ynode_graph_pos(const struct yetty_yclass_object *node, float *gx, float *gy);
-struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_size(struct yetty_yclass_object *node,
-                                                               float gw, float gh);
-void yetty_ygui_ynode_graph_size(const struct yetty_yclass_object *node, float *gw, float *gh);
+struct yetty_ycore_void_result yetty_ygui_ynode_set_title(struct yetty_yclass_object *node, const char *title);
+struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_pos(struct yetty_yclass_object *node, float gx, float gy);
+struct yetty_ycore_void_result yetty_ygui_ynode_graph_pos(const struct yetty_yclass_object *node, float *gx, float *gy);
+struct yetty_ycore_void_result yetty_ygui_ynode_set_graph_size(struct yetty_yclass_object *node, float gw, float gh);
+struct yetty_ycore_void_result yetty_ygui_ynode_graph_size(const struct yetty_yclass_object *node, float *gw, float *gh);
 struct uint32_result yetty_ygui_ynode_add_input(struct yetty_yclass_object *node, const char *name);
-struct uint32_result yetty_ygui_ynode_add_output(struct yetty_yclass_object *node,
-                                                 const char *name);
-int yetty_ygui_ynode_input_count(const struct yetty_yclass_object *node);
-int yetty_ygui_ynode_output_count(const struct yetty_yclass_object *node);
+struct uint32_result yetty_ygui_ynode_add_output(struct yetty_yclass_object *node, const char *name);
+struct yetty_ycore_int_result yetty_ygui_ynode_input_count(const struct yetty_yclass_object *node);
+struct yetty_ycore_int_result yetty_ygui_ynode_output_count(const struct yetty_yclass_object *node);
 
 #ifdef __cplusplus
 }

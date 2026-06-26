@@ -31,7 +31,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_label_set_text(lr.value, "Click any button"));
         struct yetty_yclass_object *w = lr.value;
         {
-            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+            struct yetty_ygui_layout_const_ptr_result layout_res =
+                yetty_ygui_widget_layout_get(w);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "01_button_test: layout_get");
+            struct yetty_ygui_layout l = *layout_res.value;
             l.height = 24;
             err_ok(yetty_ygui_widget_layout_set(w, &l));
         }
@@ -45,7 +48,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_button_set_label(br.value, buf));
         struct yetty_yclass_object *w = br.value;
         {
-            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+            struct yetty_ygui_layout_const_ptr_result layout_res2 =
+                yetty_ygui_widget_layout_get(w);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res2, "01_button_test: layout_get");
+            struct yetty_ygui_layout l = *layout_res2.value;
             l.height = 40;
             err_ok(yetty_ygui_widget_layout_set(w, &l));
         }

@@ -280,7 +280,14 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(win, 0));
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_floating(win, 1));
 
-    struct yetty_yclass_object *body = yetty_ygui_window_body(win);
+    struct yetty_yclass_object_ptr_result body_res = yetty_ygui_window_body(win);
+    if (YETTY_IS_ERR(body_res)) {
+        yetty_ycore_error_destroy(body_res.error);
+        free(dlg->bundles);
+        free(dlg);
+        return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: window body", body_res);
+    }
+    struct yetty_yclass_object *body = body_res.value;
     if (!body) {
         return YETTY_OK(yetty_yui_config_dialog_ptr, dlg);
     }
@@ -310,7 +317,16 @@ struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
     /* apply_css's flex shorthand doesn't carry the basis into a
      * width, so pin the left tree column at a fixed 220px (it
      * must not flex-grow or collapse onto the right pane). */
-    struct yetty_ygui_layout sl = *yetty_ygui_widget_layout_get(left_scroll);
+    struct yetty_ygui_layout_const_ptr_result left_scroll_layout_res =
+        yetty_ygui_widget_layout_get(left_scroll);
+    if (YETTY_IS_ERR(left_scroll_layout_res)) {
+        yetty_ycore_error_destroy(left_scroll_layout_res.error);
+        free(dlg->bundles);
+        free(dlg);
+        return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: left scroll layout_get",
+                         left_scroll_layout_res);
+    }
+    struct yetty_ygui_layout sl = *left_scroll_layout_res.value;
     sl.width = 220.0f;
     sl.flex_grow = 0.0f;
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(left_scroll, &sl));
@@ -407,10 +423,13 @@ struct yetty_ycore_void_result yetty_yui_config_dialog_hide(struct yetty_yui_con
     return YETTY_OK_VOID();
 }
 
-int yetty_yui_config_dialog_is_visible(const struct yetty_yui_config_dialog *dlg)
+struct yetty_ycore_int_result yetty_yui_config_dialog_is_visible(
+    const struct yetty_yui_config_dialog *dlg)
 {
     if (!dlg || !dlg->window) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
-    return yetty_ygui_widget_is_visible(dlg->window);
+    struct yetty_ycore_int_result visible_res = yetty_ygui_widget_is_visible(dlg->window);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, visible_res, "config_dialog_is_visible: is_visible");
+    return visible_res;
 }

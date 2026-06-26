@@ -109,7 +109,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrdawn/figure.c
     name: yetty_yrdawn_figure_as_figure
-    return_type: "struct yetty_yfigure_figure *"
+    return_type: struct yetty_yfigure_figure_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -166,6 +166,18 @@ types:
         fields:
           - name: value
             type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_yfigure_figure_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yfigure_figure *"
           - name: error
             type: struct yetty_ycore_error
   - name: yetty_yrdawn_figure_ptr_result

@@ -27,7 +27,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     struct yetty_yclass_object_ptr_result tr =
         yetty_ygui_widget_add(root, yetty_ygui_textarea_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "textarea");
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(tr.value);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(tr.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "34_textarea: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.flex_grow = 1.0f;
     l.min_height = 200.0f;
     err_ok(yetty_ygui_widget_layout_set(tr.value, &l));

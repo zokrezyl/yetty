@@ -76,7 +76,13 @@ static void set_size(struct yetty_yclass_object *o, float w, float h)
     if (!o) {
         return;
     }
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(o);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(o);
+    if (YETTY_IS_ERR(layout_res)) {
+        yetty_ycore_error_destroy(layout_res.error);
+        return;
+    }
+    struct yetty_ygui_layout l = *layout_res.value;
     if (w >= 0.0f) {
         l.width = w;
     }
@@ -91,7 +97,13 @@ static void set_grow(struct yetty_yclass_object *o, float grow)
     if (!o) {
         return;
     }
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(o);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(o);
+    if (YETTY_IS_ERR(layout_res)) {
+        yetty_ycore_error_destroy(layout_res.error);
+        return;
+    }
+    struct yetty_ygui_layout l = *layout_res.value;
     l.flex_grow = grow;
     err_ok(yetty_ygui_widget_layout_set(o, &l));
 }
@@ -101,7 +113,13 @@ static void set_gap(struct yetty_yclass_object *o, float gap)
     if (!o) {
         return;
     }
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(o);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(o);
+    if (YETTY_IS_ERR(layout_res)) {
+        yetty_ycore_error_destroy(layout_res.error);
+        return;
+    }
+    struct yetty_ygui_layout l = *layout_res.value;
     l.gap = gap;
     err_ok(yetty_ygui_widget_layout_set(o, &l));
 }
@@ -322,7 +340,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 {
     (void)runner;
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(root);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(root);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "37_scrollarea: layout_get");
+        struct yetty_ygui_layout l = *layout_res.value;
         l.direction = YETTY_YGUI_FLEX_COLUMN;
         l.gap = 8.0f;
         l.padding_left = l.padding_right = l.padding_top = l.padding_bottom = 10.0f;

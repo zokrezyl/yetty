@@ -31,18 +31,15 @@ struct yetty_ygui_checkbox_ptr_result {
     };
 };
 struct yetty_ygui_checkbox_ptr_result yetty_ygui_checkbox_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_checkbox_to(struct yetty_ygui_checkbox *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_checkbox_to(struct yetty_ygui_checkbox *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_checkbox_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_checkbox_set_label(struct yetty_yclass_object *obj,
-                                                             const char *label);
-struct yetty_ycore_void_result yetty_ygui_checkbox_set_checked(struct yetty_yclass_object *obj,
-                                                               int checked);
-struct yetty_ycore_int_result yetty_ygui_checkbox_get_checked(
-    const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_checkbox_set_label(struct yetty_yclass_object *obj, const char *label);
+struct yetty_ycore_void_result yetty_ygui_checkbox_set_checked(struct yetty_yclass_object *obj, int checked);
+struct yetty_ycore_int_result yetty_ygui_checkbox_get_checked(const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }

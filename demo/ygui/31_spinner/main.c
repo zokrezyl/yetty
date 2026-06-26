@@ -28,7 +28,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         yetty_ygui_widget_add(root, yetty_ygui_spinner_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "spinner");
     err_ok(yetty_ygui_spinner_set_value(sr.value, 42.0f));
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(sr.value);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(sr.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "31_spinner: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.height = 32;
     return yetty_ygui_widget_layout_set(sr.value, &l);
 }

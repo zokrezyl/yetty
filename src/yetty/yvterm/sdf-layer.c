@@ -1020,11 +1020,18 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
      * at a lower slot index than the FONT it references; installing all fonts up
      * front guarantees the glyph expansion in pass 2 always finds its font. */
     for (uint32_t slot = 0; slot < slot_count; ++slot) {
-        uint32_t prim_count = yetty_yvterm_grid_slot_primitive_count(grid_obj, slot);
+        struct yetty_ycore_uint32_result prim_count_res =
+            yetty_yvterm_grid_slot_primitive_count(grid_obj, slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, prim_count_res,
+                            "sdf-layer: slot primitive count (fonts)");
+        uint32_t prim_count = prim_count_res.value;
         for (uint32_t prim = 0; prim < prim_count; ++prim) {
             uint32_t word_count = 0;
-            const uint32_t *words =
+            struct yetty_ycore_const_uint32_ptr_result words_res =
                 yetty_yvterm_grid_slot_primitive_words(grid_obj, slot, prim, &word_count);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, words_res,
+                                "sdf-layer: slot primitive words (fonts)");
+            const uint32_t *words = words_res.value;
             if (!words || word_count == 0 || words[0] != YETTY_YDRAW_RESOURCE_FONT) {
                 continue;
             }
@@ -1058,7 +1065,10 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
      * rolling-row offset places it at that top, so the block draws top-down from
      * where its text sits while staying owned/evicted by its bottom line. */
     for (uint32_t slot = 0; slot < slot_count; ++slot) {
-        uint32_t prim_count = yetty_yvterm_grid_slot_primitive_count(grid_obj, slot);
+        struct yetty_ycore_uint32_result prim_count_res =
+            yetty_yvterm_grid_slot_primitive_count(grid_obj, slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, prim_count_res, "sdf-layer: slot primitive count");
+        uint32_t prim_count = prim_count_res.value;
         if (prim_count == 0) {
             continue;
         }
@@ -1070,12 +1080,16 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
         if (row >= fold_threshold) {
             row -= (int)slot_count; /* above the viewport — negative anchor */
         }
-        uint32_t span = yetty_yvterm_grid_slot_span(grid_obj, slot);
+        struct yetty_ycore_uint32_result span_res = yetty_yvterm_grid_slot_span(grid_obj, slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, span_res, "sdf-layer: slot span");
+        uint32_t span = span_res.value;
         layer->cur_rolling_row = row - (int)(span ? span - 1u : 0u);
         for (uint32_t prim = 0; prim < prim_count; ++prim) {
             uint32_t word_count = 0;
-            const uint32_t *words =
+            struct yetty_ycore_const_uint32_ptr_result words_res =
                 yetty_yvterm_grid_slot_primitive_words(grid_obj, slot, prim, &word_count);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, words_res, "sdf-layer: slot primitive words");
+            const uint32_t *words = words_res.value;
             if (!words || word_count == 0 || words[0] == YETTY_YDRAW_RESOURCE_FONT) {
                 continue; /* fonts already installed in pass 1 */
             }
