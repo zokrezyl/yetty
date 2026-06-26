@@ -43,6 +43,9 @@
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
+#if defined(YETTY_HAS_YMESH) && YETTY_HAS_YMESH
+#include <yetty/ymesh/ymesh-gen.h>
+#endif
 #include <yetty/yterminal/terminal.h>
 #include <yetty/yvterm/vterm.h>
 #include <yetty/yfigure/figure.h>
@@ -1728,8 +1731,8 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
         }
     }
 
-    /* Complex-prim factory — handles yplot/yimage/yvideo prims that
-     * arrive embedded in YPLOT/YIMAGE/... figure payloads. Each
+    /* Complex-prim factory — handles yplot/yimage/ymesh prims that
+     * arrive embedded in YPLOT/YIMAGE/YMESH/... figure payloads. Each
      * concrete factory (yplot_factory_create etc.) builds its own
      * pipeline lazily on the first create_instance call. */
     {
@@ -1760,6 +1763,18 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
                 yetty_yimage_factory_destroy(yimage_f);
             }
         }
+#if defined(YETTY_HAS_YMESH) && YETTY_HAS_YMESH
+        struct yetty_ydraw_concrete_factory *ymesh_f = yetty_ymesh_factory_create();
+        if (ymesh_f) {
+            ymesh_f->destroy = yetty_ymesh_factory_destroy;
+            struct yetty_ycore_void_result rr =
+                yetty_ydraw_composite_factory_register(terminal->composite_factory, ymesh_f);
+            if (YETTY_IS_ERR(rr)) {
+                yetty_ycore_error_destroy(rr.error);
+                yetty_ymesh_factory_destroy(ymesh_f);
+            }
+        }
+#endif
     }
 
     /* Drawable-list registry for ingesting inbound YDRAW_BIN record streams.

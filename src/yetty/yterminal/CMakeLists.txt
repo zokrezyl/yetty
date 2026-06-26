@@ -42,6 +42,15 @@ if(YETTY_ENABLE_FEATURE_YMGUI)
     target_link_libraries(yetty_yterminal yetty_ymgui)
 endif()
 
+# ymesh composite factory — terminal.c registers it with composite_factory so
+# inbound YDRAW_BIN ymesh records (type 0x80000005) decode + render. The GPU
+# factory symbol (yetty_ymesh_factory_create) only exists when both the ymesh
+# feature and WebGPU are enabled; gate the macro + link on exactly that.
+if(YETTY_ENABLE_FEATURE_YMESH AND YETTY_ENABLE_LIB_WEBGPU)
+    target_compile_definitions(yetty_yterminal PRIVATE YETTY_HAS_YMESH=1)
+    target_link_libraries(yetty_yterminal yetty_ymesh)
+endif()
+
 # Pane background fill shader.
 incbin_add_resources(yetty_yterminal
     background_layer_shader "${CMAKE_CURRENT_SOURCE_DIR}/background-layer.wgsl"
