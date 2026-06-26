@@ -51,10 +51,20 @@ static struct yetty_ycore_void_result yetty_app_run(struct yetty_yclass_object *
 {
     (void)obj;
 
-    struct yetty_yconfig_config *config = yetty_yplatform_platform_config(platform);
-    const struct yetty_yplatform_gpu_context *gpu = yetty_yplatform_platform_gpu_context(platform);
-    struct yetty_ycore_xthread_event_pipe *input_pipe =
+    struct yetty_yconfig_config_ptr_result config_res = yetty_yplatform_platform_config(platform);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, config_res, "yetty:app: platform config");
+    struct yetty_yconfig_config *config = config_res.value;
+
+    struct yetty_yplatform_gpu_context_const_ptr_result gpu_res =
+        yetty_yplatform_platform_gpu_context(platform);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gpu_res, "yetty:app: platform gpu context");
+    const struct yetty_yplatform_gpu_context *gpu = gpu_res.value;
+
+    struct yetty_ycore_xthread_event_pipe_ptr_result input_pipe_res =
         yetty_yplatform_platform_input_pipe(platform);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, input_pipe_res, "yetty:app: platform input pipe");
+    struct yetty_ycore_xthread_event_pipe *input_pipe = input_pipe_res.value;
+
     if (!config || !gpu || !input_pipe) {
         return YETTY_ERR(yetty_ycore_void, "yetty:app: platform state not populated");
     }

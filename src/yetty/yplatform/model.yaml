@@ -1003,35 +1003,35 @@ exposed:
     doc: null
   - source_file: src/yetty/yplatform/yplatform/platform.c
     name: yetty_yplatform_platform_gpu_context
-    return_type: "const struct yetty_yplatform_gpu_context *"
+    return_type: struct yetty_yplatform_gpu_context_const_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/yplatform/yplatform/platform.c
     name: yetty_yplatform_platform_config
-    return_type: "struct yetty_yconfig_config *"
+    return_type: struct yetty_yconfig_config_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/yplatform/yplatform/platform.c
     name: yetty_yplatform_platform_input_pipe
-    return_type: "struct yetty_ycore_xthread_event_pipe *"
+    return_type: struct yetty_ycore_xthread_event_pipe_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/yplatform/yplatform/platform.c
     name: yetty_yplatform_platform_clipboard
-    return_type: "struct yetty_yclass_object *"
+    return_type: struct yetty_yclass_object_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/yplatform/yplatform/platform.c
     name: yetty_yplatform_platform_window_chrome
-    return_type: "struct yetty_yclass_object *"
+    return_type: struct yetty_yclass_object_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1099,6 +1099,18 @@ types:
             type: "void *"
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_yconfig_config_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yconfig_config *"
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_ycore_error
     kind: struct
     fields:
@@ -1136,6 +1148,18 @@ types:
             type: int
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_ycore_xthread_event_pipe_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ycore_xthread_event_pipe *"
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_yplatform_gpu_context
     kind: struct
     fields:
@@ -1153,6 +1177,18 @@ types:
         type: "void *"
       - name: x11_window
         type: unsigned long
+  - name: yetty_yplatform_gpu_context_const_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const struct yetty_yplatform_gpu_context *"
+          - name: error
+            type: struct yetty_ycore_error
 local_types:
   yetty_yplatform_android_clipboard_ptr_result: src/yetty/yplatform/yclipboard/android.c
   yetty_yplatform_android_clipboard: src/yetty/yplatform/yclipboard/android.c
@@ -1166,6 +1202,7 @@ local_types:
   yetty_yplatform_webasm_clipboard: src/yetty/yplatform/yclipboard/webasm.c
   yetty_yplatform_android_platform_ptr_result: src/yetty/yplatform/yplatform/android.c
   yetty_yplatform_android_platform: src/yetty/yplatform/yplatform/android.c
+  yetty_yplatform_glfw_window_handle_ptr_result: src/yetty/yplatform/yplatform/glfw.c
   yetty_yplatform_glfw_platform_ptr_result: src/yetty/yplatform/yplatform/glfw.c
   yetty_yplatform_glfw_platform: src/yetty/yplatform/yplatform/glfw.c
   glfw_platform_worker_args: src/yetty/yplatform/yplatform/glfw.c
@@ -1173,6 +1210,9 @@ local_types:
   yetty_yplatform_ios_platform: src/yetty/yplatform/yplatform/ios-tvos.c
   yetty_yplatform_platform: src/yetty/yplatform/yplatform/platform.c
   yetty_yplatform_platform_ptr_result: src/yetty/yplatform/yplatform/platform.c
+  yetty_yplatform_gpu_context_const_ptr_result: src/yetty/yplatform/yplatform/platform.c
+  yetty_yconfig_config_ptr_result: src/yetty/yplatform/yplatform/platform.c
+  yetty_ycore_xthread_event_pipe_ptr_result: src/yetty/yplatform/yplatform/platform.c
   yetty_yplatform_webasm_platform_ptr_result: src/yetty/yplatform/yplatform/webasm.c
   yetty_yplatform_webasm_platform: src/yetty/yplatform/yplatform/webasm.c
   yetty_yplatform_glfw_window_chrome_ptr_result: src/yetty/yplatform/ywindow-chrome/glfw.c

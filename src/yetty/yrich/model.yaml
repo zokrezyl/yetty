@@ -1898,7 +1898,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrich/ydoc.c
     name: yetty_yrich_ydoc_source_path
-    return_type: "const char *"
+    return_type: struct yetty_ycore_const_char_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1926,7 +1926,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrich/ydoc.c
     name: yetty_yrich_paragraph_text
-    return_type: "const char *"
+    return_type: struct yetty_ycore_const_char_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"

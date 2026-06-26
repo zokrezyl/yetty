@@ -251,9 +251,15 @@ static struct yetty_ycore_void_result ymaze_app_run(struct yetty_yclass_object *
     YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "ymaze:app:run: app_from");
     struct yetty_ymaze_app *app = app_res.value;
 
-    const struct yetty_yplatform_gpu_context *gpu = yetty_yplatform_platform_gpu_context(platform);
-    struct yetty_ycore_xthread_event_pipe *input_pipe =
+    struct yetty_yplatform_gpu_context_const_ptr_result gpu_res =
+        yetty_yplatform_platform_gpu_context(platform);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gpu_res, "ymaze:app:run: gpu_context");
+    const struct yetty_yplatform_gpu_context *gpu = gpu_res.value;
+
+    struct yetty_ycore_xthread_event_pipe_ptr_result input_pipe_res =
         yetty_yplatform_platform_input_pipe(platform);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, input_pipe_res, "ymaze:app:run: input_pipe");
+    struct yetty_ycore_xthread_event_pipe *input_pipe = input_pipe_res.value;
     if (!gpu || !input_pipe) {
         return YETTY_ERR(yetty_ycore_void, "ymaze:app:run: platform state not populated");
     }

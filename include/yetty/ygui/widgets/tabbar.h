@@ -40,22 +40,14 @@ struct yetty_yclass_object_ptr_result yetty_ygui_tabbar_create(struct yetty_ycla
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_yclass_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_yclass_object *tabbar,
-                                                                const char *label);
-struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_yclass_object *tabbar,
-                                                            int index);
-struct yetty_ycore_void_result yetty_ygui_tabbar_set_label(struct yetty_yclass_object *tabbar,
-                                                           int index, const char *label);
+struct yetty_yclass_object_ptr_result yetty_ygui_tabbar_add_tab(struct yetty_yclass_object *tabbar, const char *label);
+struct yetty_ycore_void_result yetty_ygui_tabbar_remove_tab(struct yetty_yclass_object *tabbar, int index);
+struct yetty_ycore_void_result yetty_ygui_tabbar_set_label(struct yetty_yclass_object *tabbar, int index, const char *label);
 struct yetty_ycore_int_result yetty_ygui_tabbar_count(const struct yetty_yclass_object *tabbar);
 struct yetty_ycore_int_result yetty_ygui_tabbar_active(const struct yetty_yclass_object *tabbar);
-struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_yclass_object *tabbar,
-                                                            int index);
-struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_close(struct yetty_yclass_object *tabbar,
-                                                              yetty_ygui_tab_close_cb cb,
-                                                              void *userdata);
-struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_new_tab(struct yetty_yclass_object *tabbar,
-                                                                yetty_ygui_tab_new_cb cb,
-                                                                void *userdata);
+struct yetty_ycore_void_result yetty_ygui_tabbar_set_active(struct yetty_yclass_object *tabbar, int index);
+struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_close(struct yetty_yclass_object *tabbar, yetty_ygui_tab_close_cb cb, void *userdata);
+struct yetty_ycore_void_result yetty_ygui_tabbar_set_on_new_tab(struct yetty_yclass_object *tabbar, yetty_ygui_tab_new_cb cb, void *userdata);
 
 #ifdef __cplusplus
 }

@@ -2099,9 +2099,16 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "ybrowser:app:run: app_from");
     struct yetty_ybrowser_app *s = app_res.value;
 
-    const struct yetty_yplatform_gpu_context *gpu = yetty_yplatform_platform_gpu_context(platform);
-    struct yetty_ycore_xthread_event_pipe *input_pipe =
+    struct yetty_yplatform_gpu_context_const_ptr_result gpu_res =
+        yetty_yplatform_platform_gpu_context(platform);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gpu_res, "ybrowser:app:run: gpu_context");
+    const struct yetty_yplatform_gpu_context *gpu = gpu_res.value;
+
+    struct yetty_ycore_xthread_event_pipe_ptr_result input_pipe_res =
         yetty_yplatform_platform_input_pipe(platform);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, input_pipe_res, "ybrowser:app:run: input_pipe");
+    struct yetty_ycore_xthread_event_pipe *input_pipe = input_pipe_res.value;
+
     if (!gpu || !input_pipe) {
         return YETTY_ERR(yetty_ycore_void, "ybrowser:app:run: platform state not populated");
     }

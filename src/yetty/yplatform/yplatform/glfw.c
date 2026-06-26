@@ -140,20 +140,17 @@ static int glfw_platform_worker_trampoline(void *arg)
  * (WINDOW_* / SET_CURSOR, applied one event at a time). GLFW window-mutating and
  * clipboard calls must run on this thread; the render thread parks requests on
  * the pipes and wakes us with glfwPostEmptyEvent. */
-static void glfw_platform_event_loop(GLFWwindow *window, int *running,
-                                     struct yetty_yclass_object *clipboard,
-                                     struct yetty_ycore_xthread_event_pipe *chrome_output_pipe,
-                                     struct yetty_yclass_object *window_chrome)
+static struct yetty_ycore_void_result glfw_platform_event_loop(
+    GLFWwindow *window, int *running, struct yetty_yclass_object *clipboard,
+    struct yetty_ycore_xthread_event_pipe *chrome_output_pipe,
+    struct yetty_yclass_object *window_chrome)
 {
     while (*running && !glfwWindowShouldClose(window)) {
         glfwWaitEvents();
 
         if (clipboard) {
             struct yetty_ycore_void_result drain_res = yetty_yplatform_clipboard_drain(clipboard);
-            if (YETTY_IS_ERR(drain_res)) {
-                yerror("glfw_platform: clipboard drain failed: %s", drain_res.error.msg);
-                yetty_ycore_error_destroy(drain_res.error);
-            }
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, drain_res, "glfw_platform: clipboard drain");
         }
 
         if (window_chrome && chrome_output_pipe) {
@@ -161,21 +158,18 @@ static void glfw_platform_event_loop(GLFWwindow *window, int *running,
                 struct yetty_yui_event event;
                 struct yetty_ycore_size_result read_res =
                     chrome_output_pipe->ops->read(chrome_output_pipe, &event, sizeof(event));
-                if (YETTY_IS_ERR(read_res)) {
-                    yetty_ycore_error_destroy(read_res.error);
-                    break;
-                }
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, read_res, "glfw_platform: chrome bus read");
                 if (read_res.value == 0 || read_res.value != sizeof(event)) {
                     break;
                 }
                 struct yetty_ycore_void_result handle_res =
                     yetty_yplatform_window_chrome_handle_event(window_chrome, &event);
-                if (YETTY_IS_ERR(handle_res)) {
-                    yetty_ycore_error_destroy(handle_res.error);
-                }
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, handle_res,
+                                    "glfw_platform: chrome event handle");
             }
         }
     }
+    return YETTY_OK_VOID();
 }
 
 YETTY_ANNOTATE("override@yplatform:glfw_platform:platform_init")
@@ -468,10 +462,17 @@ static struct yetty_ycore_void_result glfw_platform_run(struct yetty_yclass_obje
         worker_args.result = 1;
     }
 
+    /* Stashes the first event-loop error across the mandatory worker join +
+     * bootstrap teardown below, then surfaced at the end with its cause chain. */
+    struct yetty_ycore_void_result loop_res = YETTY_OK_VOID();
     if (render_thread) {
         if (window) {
-            glfw_platform_event_loop(window, &running, clipboard, chrome_output_pipe,
-                                     window_chrome);
+            loop_res = glfw_platform_event_loop(window, &running, clipboard, chrome_output_pipe,
+                                                window_chrome);
+            if (YETTY_IS_ERR(loop_res)) {
+                /* Bailing early: signal the worker to stop so the join returns. */
+                running = 0;
+            }
         } else {
             while (running) {
                 yetty_yplatform_ytime_sleep_ms(100);
@@ -515,6 +516,9 @@ static struct yetty_ycore_void_result glfw_platform_run(struct yetty_yclass_obje
     }
     ydebug("glfw_platform: cleanup complete");
 
+    if (YETTY_IS_ERR(loop_res)) {
+        return YETTY_ERR(yetty_ycore_void, "glfw_platform: event loop failed", loop_res);
+    }
     if (worker_args.result != 0) {
         return YETTY_ERR(yetty_ycore_void, "glfw_platform: worker exited with error");
     }
