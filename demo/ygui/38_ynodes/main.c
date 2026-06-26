@@ -64,7 +64,13 @@ static void set_h(struct yetty_yclass_object *o, float h)
     if (!o) {
         return;
     }
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(o);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(o);
+    if (YETTY_IS_ERR(layout_res)) {
+        yetty_ycore_error_destroy(layout_res.error);
+        return;
+    }
+    struct yetty_ygui_layout l = *layout_res.value;
     l.height = h;
     err_ok(yetty_ygui_widget_layout_set(o, &l));
 }
@@ -114,7 +120,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         return YETTY_ERR(yetty_ycore_void, "38_ynodes: ynodes create failed");
     }
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(editor);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(editor);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "38_ynodes: layout_get");
+        struct yetty_ygui_layout l = *layout_res.value;
         l.flex_grow = 1.0f;
         err_ok(yetty_ygui_widget_layout_set(editor, &l));
     }

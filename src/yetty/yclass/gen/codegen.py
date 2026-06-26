@@ -2167,7 +2167,11 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
             type_block += fwd_decls + "\n"
         if typedef_defs:
             type_block += "\n".join(typedef_defs) + "\n\n"
-        full_defs = local_type_defs + header_type_texts
+        # Exposed type definitions (`header_type_texts`, e.g. a struct returned
+        # by value) must precede the by-value dependency defs (`local_type_defs`),
+        # because a generated `<type>_result` wrapper in the latter embeds such an
+        # exposed type by value and needs its complete definition first.
+        full_defs = header_type_texts + local_type_defs
         if full_defs:
             type_block += "\n".join(full_defs) + "\n\n"
 

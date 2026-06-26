@@ -2445,7 +2445,7 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_widget_rect
-    return_type: struct yetty_ycore_rectangle
+    return_type: struct yetty_ycore_rectangle_result
     args:
       - name: obj
         type: "const struct yetty_yclass_object *"
@@ -2461,7 +2461,7 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_widget_layout_get
-    return_type: "const struct yetty_ygui_layout *"
+    return_type: struct yetty_ygui_layout_const_ptr_result
     args:
       - name: obj
         type: "const struct yetty_yclass_object *"
@@ -2477,7 +2477,7 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_widget_is_visible
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "const struct yetty_yclass_object *"
@@ -2535,21 +2535,21 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_widget_is_floating
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "const struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_widget_figure_kind
-    return_type: uint32_t
+    return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "const struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_widget_figure_z
-    return_type: int32_t
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "const struct yetty_yclass_object *"
@@ -2565,7 +2565,7 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_widget_bg
-    return_type: uint32_t
+    return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "const struct yetty_yclass_object *"
@@ -2612,35 +2612,35 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_widget_parent
-    return_type: "struct yetty_yclass_object *"
+    return_type: struct yetty_yclass_object_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_widget_first_child
-    return_type: "struct yetty_yclass_object *"
+    return_type: struct yetty_yclass_object_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_widget_next_sibling
-    return_type: "struct yetty_yclass_object *"
+    return_type: struct yetty_yclass_object_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_widget_framework
-    return_type: "struct yetty_ygui_framework *"
+    return_type: struct yetty_ygui_framework_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_widget_id
-    return_type: uint32_t
+    return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "const struct yetty_yclass_object *"
@@ -2654,14 +2654,14 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_widget_is_dirty
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "const struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/ygui/widget.c
     name: yetty_ygui_widget_is_hovered
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "const struct yetty_yclass_object *"
@@ -2820,7 +2820,7 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widgets/collapsing_header.c
     name: yetty_ygui_collapsing_header_is_open
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "const struct yetty_yclass_object *"
@@ -2890,7 +2890,7 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widgets/datepicker.c
     name: yetty_ygui_datepicker_get_date
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "const struct yetty_yclass_object *"
@@ -2995,7 +2995,7 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widgets/filepicker.c
     name: yetty_ygui_filepicker_get_dir
-    return_type: "const char *"
+    return_type: struct yetty_ycore_const_char_ptr_result
     args:
       - name: obj
         type: "const struct yetty_yclass_object *"
@@ -3461,7 +3461,7 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widgets/tabbar.c
     name: yetty_ygui_tabbar_count
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: tabbar
         type: "const struct yetty_yclass_object *"
@@ -3671,7 +3671,7 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widgets/window.c
     name: yetty_ygui_window_body
-    return_type: "struct yetty_yclass_object *"
+    return_type: struct yetty_yclass_object_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -3804,7 +3804,7 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widgets/ynode.c
     name: yetty_ygui_ynode_pin_pos
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: node
         type: "const struct yetty_yclass_object *"
@@ -3819,7 +3819,7 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widgets/ynode.c
     name: yetty_ygui_ynode_pin_at
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: node
         type: "const struct yetty_yclass_object *"
@@ -3856,7 +3856,7 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widgets/ynode.c
     name: yetty_ygui_ynode_graph_pos
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: node
         type: "const struct yetty_yclass_object *"
@@ -3878,7 +3878,7 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widgets/ynode.c
     name: yetty_ygui_ynode_graph_size
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: node
         type: "const struct yetty_yclass_object *"
@@ -3907,21 +3907,21 @@ exposed:
     doc: null
   - source_file: src/yetty/ygui/widgets/ynode.c
     name: yetty_ygui_ynode_input_count
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: node
         type: "const struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/ygui/widgets/ynode.c
     name: yetty_ygui_ynode_output_count
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: node
         type: "const struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/ygui/widgets/ynodes.c
     name: yetty_ygui_ynodes_view
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: editor
         type: "const struct yetty_yclass_object *"
@@ -3936,7 +3936,7 @@ exposed:
  *---------------------------------------------------------------------------*/"
   - source_file: src/yetty/ygui/widgets/ynodes.c
     name: yetty_ygui_ynodes_zoom
-    return_type: float
+    return_type: struct yetty_ycore_float_result
     args:
       - name: editor
         type: "const struct yetty_yclass_object *"
@@ -4179,7 +4179,7 @@ exposed:
  * button, programmatic edit) mutates the document. */"
   - source_file: src/yetty/ygui/widgets/yrich_view.c
     name: yetty_ygui_yrich_view_document
-    return_type: "struct yetty_yclass_object *"
+    return_type: struct yetty_yclass_object_ptr_result
     args:
       - name: obj
         type: "const struct yetty_yclass_object *"
@@ -4359,6 +4359,18 @@ types:
         type: struct yetty_ycore_pixel_coord
       - name: max
         type: struct yetty_ycore_pixel_coord
+  - name: yetty_ycore_rectangle_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: struct yetty_ycore_rectangle
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_ycore_rgba
     kind: struct
     fields:
@@ -4435,6 +4447,18 @@ types:
         value: 2
       - name: YETTY_YGUI_JUSTIFY_SPACE_BETWEEN
         value: 3
+  - name: yetty_ygui_framework_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ygui_framework *"
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_ygui_layout
     kind: struct
     fields:
@@ -4478,6 +4502,18 @@ types:
         type: float
       - name: hidden
         type: int
+  - name: yetty_ygui_layout_const_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const struct yetty_ygui_layout *"
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_ygui_yplot_config
     kind: struct
     fields:
@@ -4515,6 +4551,7 @@ local_types:
   yetty_ygui_layout: src/yetty/ygui/widget.c
   yetty_ygui_widget: src/yetty/ygui/widget.c
   yetty_ygui_widget_ptr_result: src/yetty/ygui/widget.c
+  yetty_ygui_layout_const_ptr_result: src/yetty/ygui/widget.c
   yetty_ygui_breadcrumbs_ptr_result: src/yetty/ygui/widgets/breadcrumbs.c
   yetty_ygui_breadcrumbs: src/yetty/ygui/widgets/breadcrumbs.c
   yetty_ygui_button_ptr_result: src/yetty/ygui/widgets/button.c

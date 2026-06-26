@@ -18,7 +18,6 @@ extern "C" {
 
 struct yetty_ycore_rectangle;
 struct yetty_ygui_emit_ctx;
-struct yetty_ygui_framework;
 
 enum yetty_ygui_flex_direction {
     YETTY_YGUI_FLEX_ROW = 0,
@@ -57,6 +56,13 @@ struct yetty_ygui_layout {
     float pos_x;
     float pos_y;
     int hidden;
+};
+struct yetty_ygui_layout_const_ptr_result {
+    int ok;
+    union {
+        const struct yetty_ygui_layout *value;
+        struct yetty_ycore_error error;
+    };
 };
 
 struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void);
@@ -125,13 +131,14 @@ struct yetty_ycore_void_result yetty_ygui_layout_compute(struct yetty_yclass_obj
 struct yetty_ygui_layout yetty_ygui_layout_default(void);
 struct yetty_ycore_void_result yetty_ygui_widget_set_rect(struct yetty_yclass_object *obj,
                                                           struct yetty_ycore_rectangle rect);
-struct yetty_ycore_rectangle yetty_ygui_widget_rect(const struct yetty_yclass_object *obj);
+struct yetty_ycore_rectangle_result yetty_ygui_widget_rect(const struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_widget_layout_set(struct yetty_yclass_object *obj,
                                                             const struct yetty_ygui_layout *layout);
-const struct yetty_ygui_layout *yetty_ygui_widget_layout_get(const struct yetty_yclass_object *obj);
+struct yetty_ygui_layout_const_ptr_result yetty_ygui_widget_layout_get(
+    const struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_widget_set_visible(struct yetty_yclass_object *obj,
                                                              int visible);
-int yetty_ygui_widget_is_visible(const struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_ygui_widget_is_visible(const struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_widget_set_size(struct yetty_yclass_object *obj, float w,
                                                           float h);
 struct yetty_ycore_void_result yetty_ygui_widget_set_position(struct yetty_yclass_object *obj,
@@ -142,12 +149,13 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_figure_z(struct yetty_yclas
                                                               int32_t z);
 struct yetty_ycore_void_result yetty_ygui_widget_set_floating(struct yetty_yclass_object *obj,
                                                               int floating);
-int yetty_ygui_widget_is_floating(const struct yetty_yclass_object *obj);
-uint32_t yetty_ygui_widget_figure_kind(const struct yetty_yclass_object *obj);
-int32_t yetty_ygui_widget_figure_z(const struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_ygui_widget_is_floating(const struct yetty_yclass_object *obj);
+struct yetty_ycore_uint32_result yetty_ygui_widget_figure_kind(
+    const struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_ygui_widget_figure_z(const struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_widget_set_bg_color(struct yetty_yclass_object *obj,
                                                               uint32_t color);
-uint32_t yetty_ygui_widget_bg(const struct yetty_yclass_object *obj);
+struct yetty_ycore_uint32_result yetty_ygui_widget_bg(const struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_widget_apply_css(struct yetty_yclass_object *obj,
                                                            const char *css);
 struct yetty_ycore_void_result yetty_ygui_super_void(struct yetty_yclass_object *obj,
@@ -158,14 +166,16 @@ struct yetty_ycore_int_result yetty_ygui_super_int(struct yetty_yclass_object *o
                                                    yetty_yclass_method_id_t method_id);
 const struct yetty_yclass *yetty_ygui_class_expect(struct yetty_yclass_ptr_result class_result,
                                                    const char *name);
-struct yetty_yclass_object *yetty_ygui_widget_parent(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_widget_first_child(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_widget_next_sibling(struct yetty_yclass_object *obj);
-struct yetty_ygui_framework *yetty_ygui_widget_framework(struct yetty_yclass_object *obj);
-uint32_t yetty_ygui_widget_id(const struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_ygui_widget_parent(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_ygui_widget_first_child(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_ygui_widget_next_sibling(
+    struct yetty_yclass_object *obj);
+struct yetty_ygui_framework_ptr_result yetty_ygui_widget_framework(struct yetty_yclass_object *obj);
+struct yetty_ycore_uint32_result yetty_ygui_widget_id(const struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_widget_set_dirty(struct yetty_yclass_object *obj);
-int yetty_ygui_widget_is_dirty(const struct yetty_yclass_object *obj);
-int yetty_ygui_widget_is_hovered(const struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_ygui_widget_is_dirty(const struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_ygui_widget_is_hovered(const struct yetty_yclass_object *obj);
 /* Create a parentless (root / top-level) widget of `cls`. */
 struct yetty_yclass_object_ptr_result yetty_ygui_widget_new(const struct yetty_yclass *cls);
 /* Create a widget of `cls` and add it as the last child of `parent`. */

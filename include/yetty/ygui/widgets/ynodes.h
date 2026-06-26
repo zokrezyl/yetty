@@ -46,9 +46,9 @@ struct yetty_ycore_void_result yetty_ygui_register(void);
 /*-----------------------------------------------------------------------------
  * View.
  *---------------------------------------------------------------------------*/
-void yetty_ygui_ynodes_view(const struct yetty_yclass_object *editor, float *pan_x, float *pan_y,
-                            float *zoom);
-float yetty_ygui_ynodes_zoom(const struct yetty_yclass_object *editor);
+struct yetty_ycore_void_result yetty_ygui_ynodes_view(const struct yetty_yclass_object *editor,
+                                                      float *pan_x, float *pan_y, float *zoom);
+struct yetty_ycore_float_result yetty_ygui_ynodes_zoom(const struct yetty_yclass_object *editor);
 struct yetty_ycore_void_result yetty_ygui_ynodes_reflow(struct yetty_yclass_object *editor);
 struct yetty_ycore_void_result yetty_ygui_ynodes_set_view(struct yetty_yclass_object *editor,
                                                           float pan_x, float pan_y, float zoom);

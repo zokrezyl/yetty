@@ -17,8 +17,6 @@
 extern "C" {
 #endif
 
-struct yetty_yrich_cell_addr;
-
 struct yetty_yclass_ptr_result yetty_yrich_cell_class_get(void);
 struct yetty_yclass_ptr_result yetty_yrich_spreadsheet_class_get(void);
 
@@ -80,7 +78,7 @@ struct yetty_ycore_void_result yetty_yrich_register(void);
 
 struct yetty_ycore_void_result yetty_yrich_cell_set_text(struct yetty_yclass_object *obj,
                                                          const char *text, size_t len);
-const char *yetty_yrich_cell_text(struct yetty_yclass_object *obj);
+struct yetty_ycore_const_char_ptr_result yetty_yrich_cell_text(struct yetty_yclass_object *obj);
 struct yetty_ycore_float_result yetty_yrich_spreadsheet_row_height(struct yetty_yclass_object *obj,
                                                                    int32_t row);
 struct yetty_ycore_float_result yetty_yrich_spreadsheet_col_width(struct yetty_yclass_object *obj,
@@ -89,14 +87,14 @@ struct yetty_ycore_float_result yetty_yrich_spreadsheet_row_y(struct yetty_yclas
                                                               int32_t row);
 struct yetty_ycore_float_result yetty_yrich_spreadsheet_col_x(struct yetty_yclass_object *obj,
                                                               int32_t col);
-struct yetty_yclass_object *yetty_yrich_spreadsheet_cell_at(struct yetty_yclass_object *obj,
-                                                            int32_t row, int32_t col);
+struct yetty_yclass_object_ptr_result yetty_yrich_spreadsheet_cell_at(
+    struct yetty_yclass_object *obj, int32_t row, int32_t col);
 struct yetty_yclass_object_ptr_result yetty_yrich_spreadsheet_ensure_cell(
     struct yetty_yclass_object *obj, int32_t row, int32_t col);
-const char *yetty_yrich_spreadsheet_cell_value(struct yetty_yclass_object *obj, int32_t row,
-                                               int32_t col);
-struct yetty_yrich_cell_addr yetty_yrich_spreadsheet_cell_addr_at(struct yetty_yclass_object *obj,
-                                                                  float x, float y);
+struct yetty_ycore_const_char_ptr_result yetty_yrich_spreadsheet_cell_value(
+    struct yetty_yclass_object *obj, int32_t row, int32_t col);
+struct yetty_yrich_cell_addr_result yetty_yrich_spreadsheet_cell_addr_at(
+    struct yetty_yclass_object *obj, float x, float y);
 
 #ifdef __cplusplus
 }

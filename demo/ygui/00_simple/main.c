@@ -29,7 +29,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tbr, "tabbar");
     struct yetty_yclass_object *w = tbr.value;
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(w);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "00_simple: layout_get");
+        struct yetty_ygui_layout l = *layout_res.value;
         l.height = 36;
         l.gap = 4;
         err_ok(yetty_ygui_widget_layout_set(w, &l));
@@ -41,7 +44,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         yetty_ygui_widget_add(root, yetty_ygui_yplot_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "yplot");
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(pr.value);
+        struct yetty_ygui_layout_const_ptr_result layout_res2 =
+            yetty_ygui_widget_layout_get(pr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res2, "00_simple: layout_get");
+        struct yetty_ygui_layout l = *layout_res2.value;
         l.flex_grow = 1.0f;
         l.min_height = 240.0f;
         err_ok(yetty_ygui_widget_layout_set(pr.value, &l));

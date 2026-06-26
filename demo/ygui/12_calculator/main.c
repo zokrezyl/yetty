@@ -31,7 +31,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         struct yetty_yclass_object_ptr_result rr =
             yetty_ygui_widget_add(root, yetty_ygui_hbox_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "row");
-        struct yetty_ygui_layout rl = *yetty_ygui_widget_layout_get(rr.value);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(rr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "12_calculator: layout_get");
+        struct yetty_ygui_layout rl = *layout_res.value;
         rl.gap = 4;
         rl.height = 48;
         err_ok(yetty_ygui_widget_layout_set(rr.value, &rl));
@@ -40,7 +43,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
                 yetty_ygui_widget_add(rr.value, yetty_ygui_button_class_get().value);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "key");
             err_ok(yetty_ygui_button_set_label(br.value, keys[row * 4 + col]));
-            struct yetty_ygui_layout bl = *yetty_ygui_widget_layout_get(br.value);
+            struct yetty_ygui_layout_const_ptr_result layout_res2 =
+                yetty_ygui_widget_layout_get(br.value);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res2, "12_calculator: layout_get");
+            struct yetty_ygui_layout bl = *layout_res2.value;
             bl.flex_grow = 1.0f;
             err_ok(yetty_ygui_widget_layout_set(br.value, &bl));
         }

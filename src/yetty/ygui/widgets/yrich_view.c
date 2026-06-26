@@ -245,8 +245,13 @@ static struct yetty_ycore_void_result yrich_view_emit_body(struct yetty_yclass_o
     struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
-    if (d->doc &&
-        (w != d->rendered_w || h != d->rendered_h || yetty_yrich_document_is_dirty(d->doc))) {
+    int doc_dirty = 0;
+    if (d->doc) {
+        struct yetty_ycore_int_result doc_dirty_res = yetty_yrich_document_is_dirty(d->doc);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_dirty_res, "yrich_view_emit_body: doc dirty");
+        doc_dirty = doc_dirty_res.value;
+    }
+    if (d->doc && (w != d->rendered_w || h != d->rendered_h || doc_dirty)) {
         struct yetty_ycore_void_result rr = yrich_view_render(obj, w, h);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yrich_view_emit_body: render");
     }

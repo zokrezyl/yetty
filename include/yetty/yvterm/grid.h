@@ -25,20 +25,6 @@ typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_pty_write_fn)(const char *, size_t,
                                                                          void *);
 
-struct yetty_ydraw_composite_const_ptr_ptr_result {
-    int ok;
-    union {
-        struct yetty_ydraw_composite *const *value;
-        struct yetty_ycore_error error;
-    };
-};
-struct yetty_yvterm_text_cell_const_ptr_result {
-    int ok;
-    union {
-        const struct yetty_yvterm_text_cell *value;
-        struct yetty_ycore_error error;
-    };
-};
 enum yetty_yvterm_text_attr {
     YETTY_YVTERM_ATTR_BOLD = 1,
     YETTY_YVTERM_ATTR_UNDERLINE = 2,
@@ -61,6 +47,20 @@ struct yetty_yvterm_text_cell {
     uint16_t attrs;
     uint8_t width;
     uint8_t flags;
+};
+struct yetty_ydraw_composite_const_ptr_ptr_result {
+    int ok;
+    union {
+        struct yetty_ydraw_composite *const *value;
+        struct yetty_ycore_error error;
+    };
+};
+struct yetty_yvterm_text_cell_const_ptr_result {
+    int ok;
+    union {
+        const struct yetty_yvterm_text_cell *value;
+        struct yetty_ycore_error error;
+    };
 };
 
 /* The unified terminal grid — the yclass data block. visible row N maps to:

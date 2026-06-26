@@ -17,8 +17,6 @@
 extern "C" {
 #endif
 
-struct yetty_yrich_slide;
-
 /* Shape kinds — exposed in the generated slides.h. */
 enum yetty_yrich_shape_kind {
     YETTY_YRICH_SHAPE_RECTANGLE = 0,
@@ -109,9 +107,9 @@ struct yetty_ycore_void_result yetty_yrich_shape_set_image_source(struct yetty_y
 struct yetty_ycore_void_result yetty_yrich_slides_set_slide_size(struct yetty_yclass_object *obj,
                                                                  float width, float height);
 struct yetty_yrich_slide_ptr_result yetty_yrich_slides_add_slide(struct yetty_yclass_object *obj);
-struct yetty_yrich_slide *yetty_yrich_slides_slide_at(struct yetty_yclass_object *obj,
-                                                      int32_t index);
-int32_t yetty_yrich_slides_current(struct yetty_yclass_object *obj);
+struct yetty_yrich_slide_ptr_result yetty_yrich_slides_slide_at(struct yetty_yclass_object *obj,
+                                                                int32_t index);
+struct yetty_ycore_int_result yetty_yrich_slides_current(struct yetty_yclass_object *obj);
 struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_rectangle(
     struct yetty_yclass_object *obj, float x, float y, float width, float height);
 struct yetty_yclass_object_ptr_result yetty_yrich_slides_add_ellipse(

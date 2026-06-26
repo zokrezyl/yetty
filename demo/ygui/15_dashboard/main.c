@@ -31,7 +31,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_label_set_text(r.value, "Dashboard"));
         struct yetty_yclass_object *w = r.value;
         {
-            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+            struct yetty_ygui_layout_const_ptr_result layout_res =
+                yetty_ygui_widget_layout_get(w);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "15_dashboard: layout_get");
+            struct yetty_ygui_layout l = *layout_res.value;
             l.height = 32;
             err_ok(yetty_ygui_widget_layout_set(w, &l));
         }
@@ -40,7 +43,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         yetty_ygui_widget_add(root, yetty_ygui_panel_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, bp, "body");
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(bp.value);
+        struct yetty_ygui_layout_const_ptr_result layout_res2 =
+            yetty_ygui_widget_layout_get(bp.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res2, "15_dashboard: layout_get");
+        struct yetty_ygui_layout l = *layout_res2.value;
         l.flex_grow = 1.0f;
         err_ok(yetty_ygui_widget_layout_set(bp.value, &l));
     }
@@ -51,7 +57,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_statusbar_set_left(r.value, "Ready"));
         struct yetty_yclass_object *w = r.value;
         {
-            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+            struct yetty_ygui_layout_const_ptr_result layout_res3 =
+                yetty_ygui_widget_layout_get(w);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res3, "15_dashboard: layout_get");
+            struct yetty_ygui_layout l = *layout_res3.value;
             l.height = 24;
             err_ok(yetty_ygui_widget_layout_set(w, &l));
         }

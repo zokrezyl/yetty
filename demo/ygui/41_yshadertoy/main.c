@@ -60,7 +60,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         yetty_ygui_widget_add(root, yetty_ygui_vbox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, vr, "vbox");
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(vr.value);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(vr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "41_yshadertoy: layout_get");
+        struct yetty_ygui_layout l = *layout_res.value;
         l.flex_grow = 1.0f;
         l.gap = 6.0f;
         struct yetty_ycore_void_result r = yetty_ygui_widget_layout_set(vr.value, &l);
@@ -72,7 +75,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         yetty_ygui_widget_add(vr.value, yetty_ygui_tabbar_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "tabbar");
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(tr.value);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(tr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "41_yshadertoy: layout_get");
+        struct yetty_ygui_layout l = *layout_res.value;
         l.height = 34.0f;
         struct yetty_ycore_void_result r = yetty_ygui_widget_layout_set(tr.value, &l);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "tabbar layout");
@@ -88,7 +94,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         yetty_ygui_widget_add(vr.value, yetty_ygui_yshadertoy_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yshadertoy");
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(sr.value);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(sr.value);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "41_yshadertoy: layout_get");
+        struct yetty_ygui_layout l = *layout_res.value;
         l.flex_grow = 1.0f;
         l.min_height = 300.0f;
         struct yetty_ycore_void_result r = yetty_ygui_widget_layout_set(sr.value, &l);

@@ -115,14 +115,14 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_set_margin(struct yetty_yclass_o
                                                            float margin);
 struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_add_paragraph(
     struct yetty_yclass_object *obj, const char *text, size_t text_len);
-struct yetty_yclass_object *yetty_yrich_ydoc_paragraph_at(struct yetty_yclass_object *obj,
-                                                          int32_t index);
+struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_paragraph_at(struct yetty_yclass_object *obj,
+                                                                    int32_t index);
 struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_insert_image(struct yetty_yclass_object *obj,
                                                                     int32_t paragraph_index,
                                                                     float width, float height);
 /* Selected text as a fresh heap string (caller frees). NULL when the
  * selection is empty or not a text selection. */
-char *yetty_yrich_ydoc_selection_text(struct yetty_yclass_object *obj);
+struct yetty_ycore_char_ptr_result yetty_yrich_ydoc_selection_text(struct yetty_yclass_object *obj);
 /* Drop every element and start over with one empty paragraph (File > New).
  * The undo history is cleared — its ops reference dead elements. */
 struct yetty_ycore_void_result yetty_yrich_ydoc_clear(struct yetty_yclass_object *obj);

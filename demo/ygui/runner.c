@@ -235,7 +235,13 @@ static void runner_pty_resize_cb(void *userdata, uint32_t cols, uint32_t rows, u
         return;
     }
     struct yetty_ycore_rectangle rr = {.min = {0, 0}, .max = {(float)pixel_w, (float)pixel_h}};
-    struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(r->root_container);
+    struct yetty_yfigure_figure_ptr_result figure_res =
+        yetty_yfigure_container_as_figure(r->root_container);
+    if (YETTY_IS_ERR(figure_res)) {
+        yetty_ycore_error_destroy(figure_res.error);
+        return;
+    }
+    struct yetty_yfigure_figure *rf = figure_res.value;
     yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf)-1, rr);
     yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
 }
@@ -374,13 +380,19 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
             yetty_ycore_error_destroy(cl.error);
         }
         if (r->root_container) {
-            struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(r->root_container);
-            struct yetty_ycore_void_result rr =
-                yetty_yfigure_render((struct yetty_yclass_object *)rf - 1, r->render_target);
-            if (YETTY_IS_ERR(rr)) {
-                yetty_ycore_error_destroy(rr.error);
+            struct yetty_yfigure_figure_ptr_result figure_res =
+                yetty_yfigure_container_as_figure(r->root_container);
+            if (YETTY_IS_ERR(figure_res)) {
+                yetty_ycore_error_destroy(figure_res.error);
+            } else {
+                struct yetty_yfigure_figure *rf = figure_res.value;
+                struct yetty_ycore_void_result rr =
+                    yetty_yfigure_render((struct yetty_yclass_object *)rf - 1, r->render_target);
+                if (YETTY_IS_ERR(rr)) {
+                    yetty_ycore_error_destroy(rr.error);
+                }
+                yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 0);
             }
-            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 0);
         }
         struct yetty_ycore_void_result pp = r->render_target->ops->present(r->render_target);
         if (YETTY_IS_ERR(pp)) {
@@ -708,7 +720,10 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
             yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "demo_runner: root add");
         r->root = rr.value;
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(r->root);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(r->root);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "demo_runner: root layout_get");
+        struct yetty_ygui_layout l = *layout_res.value;
         l.align = YETTY_YGUI_ALIGN_STRETCH;
         struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(r->root, &l);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "demo_runner: root layout");
@@ -725,7 +740,10 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
         body = br.value;
         /* Panel defaults to ROW direction; flip to COLUMN so demos can
          * stack widgets top-to-bottom without first reshaping the root. */
-        struct yetty_ygui_layout bl = *yetty_ygui_widget_layout_get(body);
+        struct yetty_ygui_layout_const_ptr_result body_layout_res =
+            yetty_ygui_widget_layout_get(body);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, body_layout_res, "demo_runner: body layout_get");
+        struct yetty_ygui_layout bl = *body_layout_res.value;
         bl.direction = YETTY_YGUI_FLEX_COLUMN;
         bl.align = YETTY_YGUI_ALIGN_STRETCH;
         bl.flex_grow = 1.0f;
@@ -878,11 +896,17 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
         r->has_pty_pair = 0;
     }
     if (r->root_container) {
-        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(r->root_container);
-        struct yetty_ycore_void_result dr =
-            yetty_yfigure_destroy((struct yetty_yclass_object *)rf - 1);
-        if (YETTY_IS_ERR(dr)) {
-            yetty_ycore_error_destroy(dr.error);
+        struct yetty_yfigure_figure_ptr_result figure_res =
+            yetty_yfigure_container_as_figure(r->root_container);
+        if (YETTY_IS_ERR(figure_res)) {
+            yetty_ycore_error_destroy(figure_res.error);
+        } else {
+            struct yetty_yfigure_figure *rf = figure_res.value;
+            struct yetty_ycore_void_result dr =
+                yetty_yfigure_destroy((struct yetty_yclass_object *)rf - 1);
+            if (YETTY_IS_ERR(dr)) {
+                yetty_ycore_error_destroy(dr.error);
+            }
         }
         r->root_container = NULL;
     }
@@ -1377,7 +1401,15 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
             return 1;
         }
         r.root = rr.value;
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(r.root);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(r.root);
+        if (YETTY_IS_ERR(layout_res)) {
+            yetty_ycore_error_print(stderr, "demo_runner client: root layout_get",
+                                    layout_res.error);
+            yetty_ycore_error_destroy(layout_res.error);
+            return 1;
+        }
+        struct yetty_ygui_layout l = *layout_res.value;
         l.align = YETTY_YGUI_ALIGN_STRETCH;
         struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(r.root, &l);
         if (YETTY_IS_ERR(lr)) {
@@ -1403,7 +1435,15 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
             return 1;
         }
         body = br.value;
-        struct yetty_ygui_layout bl = *yetty_ygui_widget_layout_get(body);
+        struct yetty_ygui_layout_const_ptr_result body_layout_res =
+            yetty_ygui_widget_layout_get(body);
+        if (YETTY_IS_ERR(body_layout_res)) {
+            yetty_ycore_error_print(stderr, "demo_runner client: body layout_get",
+                                    body_layout_res.error);
+            yetty_ycore_error_destroy(body_layout_res.error);
+            return 1;
+        }
+        struct yetty_ygui_layout bl = *body_layout_res.value;
         bl.direction = YETTY_YGUI_FLEX_COLUMN;
         bl.align = YETTY_YGUI_ALIGN_STRETCH;
         bl.flex_grow = 1.0f;

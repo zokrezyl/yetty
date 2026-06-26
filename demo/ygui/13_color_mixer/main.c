@@ -33,7 +33,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         {
             struct yetty_yclass_object *w = lr.value;
             {
-                struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+                struct yetty_ygui_layout_const_ptr_result layout_res =
+                    yetty_ygui_widget_layout_get(w);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "13_color_mixer: layout_get");
+                struct yetty_ygui_layout l = *layout_res.value;
                 l.height = 20;
                 err_ok(yetty_ygui_widget_layout_set(w, &l));
             }
@@ -45,7 +48,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         {
             struct yetty_yclass_object *w = sr.value;
             {
-                struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+                struct yetty_ygui_layout_const_ptr_result layout_res2 =
+                    yetty_ygui_widget_layout_get(w);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res2, "13_color_mixer: layout_get");
+                struct yetty_ygui_layout l = *layout_res2.value;
                 l.height = 28;
                 err_ok(yetty_ygui_widget_layout_set(w, &l));
             }

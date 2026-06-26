@@ -289,7 +289,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tbr, "tabbar");
     struct yetty_yclass_object *tabbar = tbr.value;
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(tabbar);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(tabbar);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "26_ybrowser: layout_get");
+        struct yetty_ygui_layout l = *layout_res.value;
         l.height = 36;
         l.gap = 4;
         err_ok(yetty_ygui_widget_layout_set(tabbar, &l));
@@ -308,7 +311,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "ybrowser");
     struct yetty_yclass_object *browser = br.value;
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(browser);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(browser);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "26_ybrowser: layout_get");
+        struct yetty_ygui_layout l = *layout_res.value;
         l.flex_grow = 1.0f;
         l.min_height = 240.0f;
         err_ok(yetty_ygui_widget_layout_set(browser, &l));

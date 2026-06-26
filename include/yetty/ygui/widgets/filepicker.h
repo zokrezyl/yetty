@@ -39,7 +39,8 @@ struct yetty_ycore_void_result yetty_ygui_register(void);
 
 struct yetty_ycore_void_result yetty_ygui_filepicker_set_dir(struct yetty_yclass_object *obj,
                                                              const char *path);
-const char *yetty_ygui_filepicker_get_dir(const struct yetty_yclass_object *obj);
+struct yetty_ycore_const_char_ptr_result yetty_ygui_filepicker_get_dir(
+    const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }

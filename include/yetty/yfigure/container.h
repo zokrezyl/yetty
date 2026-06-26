@@ -40,6 +40,13 @@ struct yetty_yfigure_hit {
     float local_x;
     float local_y;
 };
+struct yetty_yfigure_hit_result {
+    int ok;
+    union {
+        struct yetty_yfigure_hit value;
+        struct yetty_ycore_error error;
+    };
+};
 
 struct yetty_yclass_ptr_result yetty_yfigure_container_class_get(void);
 
@@ -102,14 +109,14 @@ struct yetty_ycore_void_result yetty_yfigure_container_clear_all(struct yetty_yc
  * meaningful on the side that hosts the actual container instance.
  * That side knows its `context` and `registry` from local C state;
  * neither pointer is meaningful across a wire. */
-void yetty_yfigure_container_set_registry(struct yetty_yclass_object *obj,
-                                          struct yetty_yfigure_registry *registry);
-void yetty_yfigure_container_set_context(struct yetty_yclass_object *obj,
-                                         const struct yetty_context *context);
+struct yetty_ycore_void_result yetty_yfigure_container_set_registry(
+    struct yetty_yclass_object *obj, struct yetty_yfigure_registry *registry);
+struct yetty_ycore_void_result yetty_yfigure_container_set_context(
+    struct yetty_yclass_object *obj, const struct yetty_context *context);
 struct yetty_ycore_void_result yetty_yfigure_container_set_rect(struct yetty_yclass_object *obj,
                                                                 struct yetty_ycore_rectangle rect);
-void yetty_yfigure_container_set_viewport_offset(struct yetty_yclass_object *obj, float offset_x,
-                                                 float offset_y);
+struct yetty_ycore_void_result yetty_yfigure_container_set_viewport_offset(
+    struct yetty_yclass_object *obj, float offset_x, float offset_y);
 struct yetty_ycore_void_result yetty_yfigure_container_consume_envelope(
     struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *sm);
 /* Coroutine entry registered on the input pipe — its signature is fixed by
@@ -120,11 +127,12 @@ struct yetty_ycore_void_result yetty_yfigure_container_process_input(
     void *userdata, struct yetty_ywire_wire_statemachine *sm);
 struct yetty_ycore_void_result yetty_yfigure_container_process_records(
     struct yetty_yclass_object *obj, const uint8_t *bytes, size_t bytes_len);
-struct yetty_yfigure_figure *yetty_yfigure_container_as_figure(struct yetty_yclass_object *obj);
+struct yetty_yfigure_figure_ptr_result yetty_yfigure_container_as_figure(
+    struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yfigure_container_add_child(struct yetty_yclass_object *obj,
                                                                  struct yetty_yfigure_figure *child,
                                                                  uint32_t id);
-struct yetty_yfigure_figure *yetty_yfigure_container_find_child_by_id(
+struct yetty_yfigure_figure_ptr_result yetty_yfigure_container_find_child_by_id(
     struct yetty_yclass_object *obj, uint32_t id);
 struct yetty_ycore_void_result yetty_yfigure_container_remove_child_by_id(
     struct yetty_yclass_object *obj, uint32_t id);
@@ -137,8 +145,8 @@ struct yetty_ycore_void_result yetty_yfigure_container_protect_child(
     struct yetty_yclass_object *obj, uint32_t id);
 struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id(
     struct yetty_yclass_object *obj, uint32_t id);
-struct yetty_yfigure_hit yetty_yfigure_container_hit_test(struct yetty_yclass_object *obj, float x,
-                                                          float y);
+struct yetty_yfigure_hit_result yetty_yfigure_container_hit_test(struct yetty_yclass_object *obj,
+                                                                 float x, float y);
 
 #ifdef __cplusplus
 }

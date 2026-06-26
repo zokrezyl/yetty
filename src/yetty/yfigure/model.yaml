@@ -366,7 +366,7 @@ exposed:
  * error, stashing the first to surface at the end. */"
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_set_registry
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -379,7 +379,7 @@ exposed:
  * neither pointer is meaningful across a wire. */"
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_set_context
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -397,7 +397,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_set_viewport_offset
-    return_type: void
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -440,7 +440,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_as_figure
-    return_type: "struct yetty_yfigure_figure *"
+    return_type: struct yetty_yfigure_figure_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -458,7 +458,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_find_child_by_id
-    return_type: "struct yetty_yfigure_figure *"
+    return_type: struct yetty_yfigure_figure_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -498,7 +498,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_hit_test
-    return_type: struct yetty_yfigure_hit
+    return_type: struct yetty_yfigure_hit_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -580,6 +580,18 @@ types:
             type: int
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_yfigure_figure_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yfigure_figure *"
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_yfigure_hit
     kind: struct
     fields:
@@ -589,8 +601,21 @@ types:
         type: float
       - name: local_y
         type: float
+  - name: yetty_yfigure_hit_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: struct yetty_yfigure_hit
+          - name: error
+            type: struct yetty_ycore_error
 local_types:
   yetty_yfigure_hit: src/yetty/yfigure/container.c
+  yetty_yfigure_hit_result: src/yetty/yfigure/container.c
   child_entry: src/yetty/yfigure/container.c
   yetty_yfigure_container: src/yetty/yfigure/container.c
   yetty_yfigure_container_ptr_result: src/yetty/yfigure/container.c

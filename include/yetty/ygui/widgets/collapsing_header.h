@@ -44,7 +44,8 @@ struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_title(
     struct yetty_yclass_object *obj, const char *title);
 struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_open(
     struct yetty_yclass_object *obj, int open);
-int yetty_ygui_collapsing_header_is_open(const struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_ygui_collapsing_header_is_open(
+    const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }

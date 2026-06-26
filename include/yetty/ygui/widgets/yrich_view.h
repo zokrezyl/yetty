@@ -48,7 +48,8 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_set_document(struct yetty_y
  * document's own dirty flag changed — used after a host action (toolbar
  * button, programmatic edit) mutates the document. */
 struct yetty_ycore_void_result yetty_ygui_yrich_view_invalidate(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_yrich_view_document(const struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_ygui_yrich_view_document(
+    const struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_yrich_view_content_size(
     const struct yetty_yclass_object *obj, float *w, float *h);
 /* Re-fit the widget's authored size to the document's content extent so

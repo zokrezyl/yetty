@@ -2076,7 +2076,9 @@ static struct yetty_ycore_void_result ydoc_on_mouse_double_click(struct yetty_yc
     if (button != YETTY_YRICH_MOUSE_LEFT) {
         return YETTY_OK_VOID();
     }
-    struct yetty_yclass_object *hit_obj = yetty_yrich_document_element_at(obj, x, y);
+    struct yetty_yclass_object_ptr_result hit_res = yetty_yrich_document_element_at(obj, x, y);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hit_res, "ydoc_on_mouse_double_click: element_at");
+    struct yetty_yclass_object *hit_obj = hit_res.value;
     if (!hit_obj) {
         return YETTY_OK_VOID();
     }
@@ -2099,24 +2101,25 @@ static struct yetty_ycore_void_result ydoc_on_mouse_double_click(struct yetty_yc
 /* Selected text as a fresh heap string (caller frees). NULL when the
  * selection is empty or not a text selection. */
 YETTY_ANNOTATE("expose")
-char *yetty_yrich_ydoc_selection_text(struct yetty_yclass_object *obj)
+struct yetty_ycore_char_ptr_result yetty_yrich_ydoc_selection_text(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_char_ptr, data_res, "ydoc_selection_text: data_get");
     struct ydoc_active_paragraph active;
-    if (!ydoc_active_paragraph_get(obj, data_res.value, &active)) {
-        return NULL;
+    struct yetty_ycore_int_result active_res =
+        ydoc_active_paragraph_get(obj, data_res.value, &active);
+    YETTY_RETURN_IF_ERR(yetty_ycore_char_ptr, active_res, "ydoc_selection_text: active paragraph");
+    if (!active_res.value) {
+        return YETTY_OK(yetty_ycore_char_ptr, NULL);
     }
     int32_t selection_lo = active.anchor < active.caret ? active.anchor : active.caret;
     int32_t selection_hi = active.anchor < active.caret ? active.caret : active.anchor;
     if (selection_lo >= selection_hi) {
-        return NULL;
+        return YETTY_OK(yetty_ycore_char_ptr, NULL);
     }
-    return dup_text_range(active.paragraph->text, (size_t)selection_lo,
-                          (size_t)(selection_hi - selection_lo));
+    return YETTY_OK(yetty_ycore_char_ptr,
+                    dup_text_range(active.paragraph->text, (size_t)selection_lo,
+                                   (size_t)(selection_hi - selection_lo)));
 }
 
 /*---------------------------------------------------------------------------

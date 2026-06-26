@@ -39,8 +39,9 @@ struct yetty_ycore_void_result yetty_ygui_register(void);
 
 struct yetty_ycore_void_result yetty_ygui_datepicker_set_date(struct yetty_yclass_object *obj,
                                                               int year, int month_0_based, int day);
-void yetty_ygui_datepicker_get_date(const struct yetty_yclass_object *obj, int *year,
-                                    int *month_0_based, int *day);
+struct yetty_ycore_void_result yetty_ygui_datepicker_get_date(const struct yetty_yclass_object *obj,
+                                                              int *year, int *month_0_based,
+                                                              int *day);
 
 #ifdef __cplusplus
 }

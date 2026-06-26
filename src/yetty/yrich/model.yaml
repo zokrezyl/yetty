@@ -1345,7 +1345,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrich/document.c
     name: yetty_yrich_document_is_dirty
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1368,7 +1368,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrich/document.c
     name: yetty_yrich_document_buffer
-    return_type: "struct yetty_ydraw_drawable_list *"
+    return_type: struct yetty_yrich_drawable_list_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1384,7 +1384,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrich/document.c
     name: yetty_yrich_document_bg_color
-    return_type: uint32_t
+    return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1448,7 +1448,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrich/document.c
     name: yetty_yrich_document_find
-    return_type: "struct yetty_yclass_object *"
+    return_type: struct yetty_yclass_object_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1457,7 +1457,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrich/document.c
     name: yetty_yrich_document_element_at
-    return_type: "struct yetty_yclass_object *"
+    return_type: struct yetty_yclass_object_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1468,14 +1468,14 @@ exposed:
     doc: "/* Hit-test in reverse z-order (last drawn = topmost). */"
   - source_file: src/yetty/yrich/document.c
     name: yetty_yrich_document_selection
-    return_type: "struct yetty_yrich_selection *"
+    return_type: struct yetty_yrich_selection_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/yrich/document.c
     name: yetty_yrich_document_is_selected
-    return_type: int
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1590,7 +1590,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrich/slides.c
     name: yetty_yrich_slides_slide_at
-    return_type: "struct yetty_yrich_slide *"
+    return_type: struct yetty_yrich_slide_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1599,7 +1599,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrich/slides.c
     name: yetty_yrich_slides_current
-    return_type: int32_t
+    return_type: struct yetty_ycore_int_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1696,7 +1696,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrich/spreadsheet.c
     name: yetty_yrich_cell_text
-    return_type: "const char *"
+    return_type: struct yetty_ycore_const_char_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1739,7 +1739,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrich/spreadsheet.c
     name: yetty_yrich_spreadsheet_cell_at
-    return_type: "struct yetty_yclass_object *"
+    return_type: struct yetty_yclass_object_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1761,7 +1761,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrich/spreadsheet.c
     name: yetty_yrich_spreadsheet_cell_value
-    return_type: "const char *"
+    return_type: struct yetty_ycore_const_char_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1772,7 +1772,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrich/spreadsheet.c
     name: yetty_yrich_spreadsheet_cell_addr_at
-    return_type: struct yetty_yrich_cell_addr
+    return_type: struct yetty_yrich_cell_addr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1851,7 +1851,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrich/ydoc.c
     name: yetty_yrich_ydoc_paragraph_at
-    return_type: "struct yetty_yclass_object *"
+    return_type: struct yetty_yclass_object_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -1873,7 +1873,7 @@ exposed:
     doc: null
   - source_file: src/yetty/yrich/ydoc.c
     name: yetty_yrich_ydoc_selection_text
-    return_type: "char *"
+    return_type: struct yetty_ycore_char_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
@@ -2046,6 +2046,30 @@ types:
         type: size_t
       - name: size
         type: size_t
+  - name: yetty_ycore_char_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "char *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_const_char_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "const char *"
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_ycore_error
     kind: struct
     fields:
@@ -2153,6 +2177,18 @@ types:
         type: int32_t
       - name: col
         type: int32_t
+  - name: yetty_yrich_cell_addr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: struct yetty_yrich_cell_addr
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_yrich_cell_range
     kind: struct
     fields:
@@ -2160,6 +2196,18 @@ types:
         type: struct yetty_yrich_cell_addr
       - name: end
         type: struct yetty_yrich_cell_addr
+  - name: yetty_yrich_drawable_list_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_ydraw_drawable_list *"
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_yrich_element_id_result
     kind: result
     fields:
@@ -2253,6 +2301,18 @@ types:
         type: size_t
       - name: capacity
         type: size_t
+  - name: yetty_yrich_selection_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yrich_selection *"
+          - name: error
+            type: struct yetty_ycore_error
   - name: yetty_yrich_selection_text
     kind: struct
     fields:

@@ -31,7 +31,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_label_set_text(r.value, "A label above a button"));
         struct yetty_yclass_object *w = r.value;
         {
-            struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(w);
+            struct yetty_ygui_layout_const_ptr_result layout_res =
+                yetty_ygui_widget_layout_get(w);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "07_label_and_button: layout_get");
+            struct yetty_ygui_layout l = *layout_res.value;
             l.height = 24;
             err_ok(yetty_ygui_widget_layout_set(w, &l));
         }
@@ -40,7 +43,10 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         yetty_ygui_widget_add(root, yetty_ygui_button_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "button");
     err_ok(yetty_ygui_button_set_label(br.value, "OK"));
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(br.value);
+    struct yetty_ygui_layout_const_ptr_result layout_res2 =
+        yetty_ygui_widget_layout_get(br.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res2, "07_label_and_button: layout_get");
+    struct yetty_ygui_layout l = *layout_res2.value;
     l.height = 32;
     return yetty_ygui_widget_layout_set(br.value, &l);
 }

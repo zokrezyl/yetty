@@ -21,7 +21,6 @@ extern "C" {
 struct yetty_ydraw_drawable_list;
 struct yetty_yrich_command;
 struct yetty_yrich_operation;
-struct yetty_yrich_selection;
 
 struct yetty_yclass_ptr_result yetty_yrich_document_class_get(void);
 
@@ -106,14 +105,15 @@ struct yetty_ycore_void_result yetty_yrich_super_void(struct yetty_yclass_object
                                                       const struct yetty_yclass *self_class,
                                                       yetty_yclass_method_id_t method_id);
 struct yetty_ycore_void_result yetty_yrich_document_mark_dirty(struct yetty_yclass_object *obj);
-int yetty_yrich_document_is_dirty(struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_yrich_document_is_dirty(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yrich_document_clear_dirty(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yrich_document_set_buffer(
     struct yetty_yclass_object *obj, struct yetty_ydraw_drawable_list *drawable_list);
-struct yetty_ydraw_drawable_list *yetty_yrich_document_buffer(struct yetty_yclass_object *obj);
+struct yetty_yrich_drawable_list_ptr_result yetty_yrich_document_buffer(
+    struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yrich_document_set_bg_color(struct yetty_yclass_object *obj,
                                                                  uint32_t color);
-uint32_t yetty_yrich_document_bg_color(struct yetty_yclass_object *obj);
+struct yetty_ycore_uint32_result yetty_yrich_document_bg_color(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yrich_document_set_dirty_cb(struct yetty_yclass_object *obj,
                                                                  yetty_yrich_dirty_cb callback,
                                                                  void *userdata);
@@ -130,13 +130,15 @@ struct yetty_ycore_void_result yetty_yrich_document_add_element(
     struct yetty_yclass_object *obj, struct yetty_yclass_object *element_obj);
 struct yetty_ycore_void_result yetty_yrich_document_remove_element(struct yetty_yclass_object *obj,
                                                                    yetty_yrich_element_id id);
-struct yetty_yclass_object *yetty_yrich_document_find(struct yetty_yclass_object *obj,
-                                                      yetty_yrich_element_id id);
+struct yetty_yclass_object_ptr_result yetty_yrich_document_find(struct yetty_yclass_object *obj,
+                                                                yetty_yrich_element_id id);
 /* Hit-test in reverse z-order (last drawn = topmost). */
-struct yetty_yclass_object *yetty_yrich_document_element_at(struct yetty_yclass_object *obj,
-                                                            float x, float y);
-struct yetty_yrich_selection *yetty_yrich_document_selection(struct yetty_yclass_object *obj);
-int yetty_yrich_document_is_selected(struct yetty_yclass_object *obj, yetty_yrich_element_id id);
+struct yetty_yclass_object_ptr_result yetty_yrich_document_element_at(
+    struct yetty_yclass_object *obj, float x, float y);
+struct yetty_yrich_selection_ptr_result yetty_yrich_document_selection(
+    struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_yrich_document_is_selected(struct yetty_yclass_object *obj,
+                                                               yetty_yrich_element_id id);
 struct yetty_ycore_void_result yetty_yrich_document_clear_selection(
     struct yetty_yclass_object *obj);
 /* Drop the undo/redo stacks — used after destructive resets (File > New)
