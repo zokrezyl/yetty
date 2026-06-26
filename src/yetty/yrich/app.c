@@ -106,7 +106,9 @@ static struct yetty_ycore_void_result build_editor(struct yetty_yrich_app *app)
         yetty_ygui_class_expect(yetty_ygui_vbox_class_get(), "yetty_ygui_vbox_class_get"));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rootr, "build_editor: root add");
     app->win = rootr.value;
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(app->win);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(app->win);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "build_editor: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.align = YETTY_YGUI_ALIGN_STRETCH;
     destroy_safe(yetty_ygui_widget_layout_set(app->win, &l));
     struct yetty_ycore_void_result sr = yetty_ygui_framework_set_root(app->ygui, app->win);
@@ -253,8 +255,13 @@ static struct yetty_ycore_void_result handle_clipboard_chord(struct yetty_yrich_
                                                              int glfw_key)
 {
     struct yetty_yclass_object *clipboard = app->yrt->clipboard;
-    struct yetty_yclass_object *doc =
-        app->editor_view ? yetty_ygui_yrich_view_document(app->editor_view) : NULL;
+    struct yetty_yclass_object *doc = NULL;
+    if (app->editor_view) {
+        struct yetty_yclass_object_ptr_result doc_res =
+            yetty_ygui_yrich_view_document(app->editor_view);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "handle_clipboard_chord: document");
+        doc = doc_res.value;
+    }
     if (!doc) {
         return YETTY_OK_VOID();
     }
@@ -266,7 +273,9 @@ static struct yetty_ycore_void_result handle_clipboard_chord(struct yetty_yrich_
         }
         return YETTY_OK_VOID();
     }
-    char *selection_text = yetty_yrich_ydoc_selection_text(doc);
+    struct yetty_ycore_char_ptr_result selection_res = yetty_yrich_ydoc_selection_text(doc);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, selection_res, "handle_clipboard_chord: selection_text");
+    char *selection_text = selection_res.value;
     if (!selection_text) {
         return YETTY_OK_VOID();
     }
@@ -322,7 +331,10 @@ static struct yetty_ycore_void_result handle_event(struct yetty_yrich_app *app,
         struct yetty_yrender_viewport vp = {.x = 0, .y = 0, .w = (float)w, .h = (float)h};
         struct yetty_ycore_void_result resize_r = app->target->ops->resize(app->target, vp);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, resize_r, "yrich: target resize");
-        struct yetty_yfigure_figure *rf = yetty_yfigure_container_as_figure(app->root_obj);
+        struct yetty_yfigure_figure_ptr_result rf_res =
+            yetty_yfigure_container_as_figure(app->root_obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rf_res, "yrich: container_as_figure");
+        struct yetty_yfigure_figure *rf = rf_res.value;
         struct yetty_ycore_void_result rect_r = yetty_yfigure_figure_rect_set(
             (struct yetty_yclass_object *)(rf)-1, (struct yetty_ycore_rectangle){
                                                       .min = {.x = 0.0f, .y = 0.0f},
@@ -582,7 +594,10 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
         if (gpu->instance) {
             wgpuInstanceProcessEvents(gpu->instance);
         }
-        struct yetty_yfigure_figure *rrf = yetty_yfigure_container_as_figure(app->root_obj);
+        struct yetty_yfigure_figure_ptr_result rrf_res =
+            yetty_yfigure_container_as_figure(app->root_obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rrf_res, "yrich worker: container_as_figure");
+        struct yetty_yfigure_figure *rrf = rrf_res.value;
         if (!(needs_render || had_events ||
               yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rrf)-1).value)) {
             continue;
@@ -613,8 +628,14 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
 
     /* Teardown — container first so pending GPU work flushes. */
     {
-        struct yetty_yfigure_figure *rrf = yetty_yfigure_container_as_figure(app->root_obj);
-        destroy_safe(yetty_yfigure_destroy((struct yetty_yclass_object *)rrf - 1));
+        struct yetty_yfigure_figure_ptr_result rrf_res =
+            yetty_yfigure_container_as_figure(app->root_obj);
+        if (YETTY_IS_ERR(rrf_res)) {
+            yetty_ycore_error_destroy(rrf_res.error);
+        } else {
+            struct yetty_yfigure_figure *rrf = rrf_res.value;
+            destroy_safe(yetty_yfigure_destroy((struct yetty_yclass_object *)rrf - 1));
+        }
     }
     app->root_obj = NULL;
     if (app->registry) {

@@ -616,23 +616,24 @@ static struct yetty_ycore_void_result on_next_click(struct yetty_yclass_object *
     return YETTY_OK_VOID();
 }
 
-static void build_widgets(struct yetty_yaudio_app *app, const struct yetty_yplatform_gpu_context *gpu)
+static struct yetty_ycore_void_result
+build_widgets(struct yetty_yaudio_app *app, const struct yetty_yplatform_gpu_context *gpu)
 {
     struct yetty_ygui_framework *engine = yetty_yui_engine(app->yui);
     if (!engine) {
-        yerror("yaudio: yui engine is NULL — yui allocation failed");
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yaudio: yui engine is NULL — yui allocation failed");
     }
     struct yetty_yclass_object *root = yetty_ygui_framework_root(engine);
     if (!root) {
-        yerror("yaudio: yui engine has no root");
-        return;
+        return YETTY_ERR(yetty_ycore_void, "yaudio: yui engine has no root");
     }
 
     float W = (float)gpu->surface_width;
     float H = (float)gpu->surface_height;
     float top = 36.0f; /* room for yui's tabbar */
-    float sb_h = yetty_yui_statusbar_height(app->yui);
+    struct yetty_ycore_float_result sb_h_res = yetty_yui_statusbar_height(app->yui);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sb_h_res, "yaudio: statusbar_height");
+    float sb_h = sb_h_res.value;
     float btn_strip_h = 48.0f;
     float plots_h = H - top - btn_strip_h - sb_h - 16.0f;
     float plots_w = W - 32.0f;
@@ -802,6 +803,7 @@ static void build_widgets(struct yetty_yaudio_app *app, const struct yetty_yplat
     yetty_yui_set_status_left(app->yui, status);
 
     update_status_label(app);
+    return YETTY_OK_VOID();
 }
 
 /* ----------------------------------------------------------------------- */
@@ -984,7 +986,9 @@ static struct yetty_ycore_int_result yaudio_event_handler(
         return YETTY_OK(yetty_ycore_int, 1);
     case YETTY_YCORE_MOUSE_DOWN:
         if (ev->mouse.button == 0 && app->plots_vbox && app->wav) {
-            struct yetty_ycore_rectangle box = yetty_ygui_widget_rect(app->plots_vbox);
+            struct yetty_ycore_rectangle_result box_res = yetty_ygui_widget_rect(app->plots_vbox);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, box_res, "yaudio: plots_vbox rect");
+            struct yetty_ycore_rectangle box = box_res.value;
             if (ev->mouse.x >= box.min.x && ev->mouse.x <= box.max.x && ev->mouse.y >= box.min.y &&
                 ev->mouse.y <= box.max.y && box.max.x > box.min.x) {
                 app->dragging = 1;
@@ -1088,7 +1092,13 @@ static void yaudio_load_done(void *ctx)
     struct yetty_yaudio_app *app = ctx;
 
     if (app->load_state == YAUDIO_LOAD_OK) {
-        build_widgets(app, app->gpu);
+        struct yetty_ycore_void_result build_res = build_widgets(app, app->gpu);
+        if (YETTY_IS_ERR(build_res)) {
+            yerror("yaudio: build_widgets failed: %s",
+                   build_res.error.msg ? build_res.error.msg : "(no message)");
+            yetty_ycore_error_destroy(build_res.error);
+            yetty_yui_set_status_left(app->yui, "Failed to build UI");
+        }
         app->ui_built = 1;
         if (app->load_bar) {
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(app->load_bar, 0));

@@ -1095,37 +1095,48 @@ struct yetty_ycore_void_result yetty_yui_tabbar_model_close_at(struct yetty_yui_
     return YETTY_OK_VOID();
 }
 
-void yetty_yui_tabbar_model_iconify(struct yetty_yui_tabbar_model *bar)
+struct yetty_ycore_void_result yetty_yui_tabbar_model_iconify(struct yetty_yui_tabbar_model *bar)
 {
     if (!bar || !bar->yetty_ctx) {
-        return;
+        return YETTY_OK_VOID();
     }
     struct yetty_yclass_object *wm = bar->yetty_ctx->runtime->window_chrome;
     if (wm) {
-        wm_absorb(yetty_yplatform_window_chrome_iconify(wm));
+        struct yetty_ycore_void_result iconify_result = yetty_yplatform_window_chrome_iconify(wm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, iconify_result, "tabbar_iconify: window chrome");
     }
+    return YETTY_OK_VOID();
 }
 
-void yetty_yui_tabbar_model_toggle_maximize(struct yetty_yui_tabbar_model *bar)
+struct yetty_ycore_void_result yetty_yui_tabbar_model_toggle_maximize(
+    struct yetty_yui_tabbar_model *bar)
 {
     if (!bar || !bar->yetty_ctx) {
-        return;
+        return YETTY_OK_VOID();
     }
     struct yetty_yclass_object *wm = bar->yetty_ctx->runtime->window_chrome;
     if (wm) {
-        wm_absorb(yetty_yplatform_window_chrome_toggle_maximize(wm));
+        struct yetty_ycore_void_result toggle_result =
+            yetty_yplatform_window_chrome_toggle_maximize(wm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, toggle_result,
+                            "tabbar_toggle_maximize: window chrome");
     }
+    return YETTY_OK_VOID();
 }
 
-void yetty_yui_tabbar_model_close_window(struct yetty_yui_tabbar_model *bar)
+struct yetty_ycore_void_result yetty_yui_tabbar_model_close_window(
+    struct yetty_yui_tabbar_model *bar)
 {
     if (!bar || !bar->yetty_ctx) {
-        return;
+        return YETTY_OK_VOID();
     }
     struct yetty_yclass_object *wm = bar->yetty_ctx->runtime->window_chrome;
     if (wm) {
-        wm_absorb(yetty_yplatform_window_chrome_request_close(wm));
+        struct yetty_ycore_void_result close_result =
+            yetty_yplatform_window_chrome_request_close(wm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, close_result, "tabbar_close_window: window chrome");
     }
+    return YETTY_OK_VOID();
 }
 
 void yetty_yui_tabbar_model_set_v_menu_callback(struct yetty_yui_tabbar_model *bar,

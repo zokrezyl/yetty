@@ -81,8 +81,12 @@ void yetty_yplatform_teardown_window_callbacks(GLFWwindow *window);
 
 /* Internal platform-glue accessor (ywindow/glfw.c): the private GLFWwindow*. Not
  * part of the public window API — only the platform layer that owns the OS loop
- * may reach it (event-loop callbacks, window_chrome, x11 co-handles). */
-void *yetty_yplatform_glfw_window_native_handle(struct yetty_yclass_object *obj);
+ * may reach it (event-loop callbacks, window_chrome, x11 co-handles). Returns a
+ * Result so the downcast error is propagated; the value may be NULL when the
+ * window has not been opened. */
+YETTY_YRESULT_DECLARE(yetty_yplatform_glfw_window_handle_ptr, struct GLFWwindow *);
+struct yetty_yplatform_glfw_window_handle_ptr_result yetty_yplatform_glfw_window_native_handle(
+    struct yetty_yclass_object *obj);
 
 /* Own result wrapper + codegen accessor/downcast forward-decls. */
 YETTY_YRESULT_DECLARE(yetty_yplatform_glfw_platform_ptr, struct yetty_yplatform_glfw_platform *);
@@ -251,7 +255,17 @@ static struct yetty_ycore_void_result glfw_platform_run(struct yetty_yclass_obje
             glfwTerminate();
             return YETTY_ERR(yetty_ycore_void, "glfw_platform: window open failed", open_res);
         }
-        window = yetty_yplatform_glfw_window_native_handle(window_obj);
+        struct yetty_yplatform_glfw_window_handle_ptr_result native_handle_res =
+            yetty_yplatform_glfw_window_native_handle(window_obj);
+        if (YETTY_IS_ERR(native_handle_res)) {
+            (void)yetty_yplatform_window_destroy(window_obj);
+            (void)yetty_yclass_object_free(window_obj);
+            config->ops->destroy(config);
+            glfwTerminate();
+            return YETTY_ERR(yetty_ycore_void, "glfw_platform: window native handle failed",
+                             native_handle_res);
+        }
+        window = native_handle_res.value;
         ydebug("glfw_platform: window created");
     }
 

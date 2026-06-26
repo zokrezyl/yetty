@@ -343,9 +343,15 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
          * frame coming over OSC 630000 lands silently and the screen stays
          * stale until something else triggers a render. */
         if (terminal->root_container_obj) {
-            struct yetty_yfigure_figure *rf =
+            /* External-callback boundary (this fn is YETTY_EXTERNAL_CALLBACK):
+             * the obj→figure downcast cannot propagate, so absorb here. */
+            struct yetty_yfigure_figure_ptr_result rf_res =
                 yetty_yfigure_container_as_figure(terminal->root_container_obj);
-            if (rf && yetty_yfigure_figure_dirty_get((struct yetty_yclass_object *)(rf)-1).value) {
+            if (YETTY_IS_ERR(rf_res)) {
+                yetty_ycore_error_destroy(rf_res.error);
+            } else if (rf_res.value && yetty_yfigure_figure_dirty_get(
+                                           (struct yetty_yclass_object *)(rf_res.value) - 1)
+                                           .value) {
                 terminal->context.yetty_context.event_loop->ops->request_render(
                     terminal->context.yetty_context.event_loop);
             }
@@ -616,12 +622,12 @@ static struct yetty_ycore_void_result terminal_emit_card_mouse_move(
  * (drag in progress), the captured figure always wins and coords are
  * reported as-if-projected into its local space. Otherwise the topmost
  * visible ymgui figure under the cursor wins. */
-static struct yetty_yfigure_hit terminal_resolve_figure_hit(
+static struct yetty_yfigure_hit_result terminal_resolve_figure_hit(
     struct yetty_yterminal_terminal *terminal, float lx, float ly, uint32_t captured_figure_id)
 {
     struct yetty_yfigure_hit hit = {0, 0, 0};
     if (!terminal->root_container_obj) {
-        return hit;
+        return YETTY_OK(yetty_yfigure_hit, hit);
     }
 
     if (captured_figure_id != 0) {
@@ -630,12 +636,15 @@ static struct yetty_yfigure_hit terminal_resolve_figure_hit(
          * Hit-test first — if cursor is still inside the captured figure,
          * use the natural local coords; otherwise fall back to the raw
          * pane coords tagged with the captured id. */
-        hit = yetty_yfigure_container_hit_test(terminal->root_container_obj, lx, ly);
+        struct yetty_yfigure_hit_result hit_res =
+            yetty_yfigure_container_hit_test(terminal->root_container_obj, lx, ly);
+        YETTY_RETURN_IF_ERR(yetty_yfigure_hit, hit_res, "resolve_figure_hit: hit_test");
+        hit = hit_res.value;
         if (hit.figure_id == captured_figure_id) {
-            return hit;
+            return YETTY_OK(yetty_yfigure_hit, hit);
         }
         struct yetty_yfigure_hit captured = {captured_figure_id, lx, ly};
-        return captured;
+        return YETTY_OK(yetty_yfigure_hit, captured);
     }
 
     return yetty_yfigure_container_hit_test(terminal->root_container_obj, lx, ly);
@@ -1504,8 +1513,10 @@ static struct yetty_ycore_void_result terminal_render_frame(
         return YETTY_ERR(yetty_ycore_void, "terminal_render_frame: no root container to render");
     }
     {
-        struct yetty_yfigure_figure *rf =
+        struct yetty_yfigure_figure_ptr_result rf_res =
             yetty_yfigure_container_as_figure(terminal->root_container_obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rf_res, "terminal_render_frame: root as_figure");
+        struct yetty_yfigure_figure *rf = rf_res.value;
         struct yetty_ycore_void_result render_res =
             yetty_yfigure_render((struct yetty_yclass_object *)rf - 1, target);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, render_res,
@@ -2019,17 +2030,27 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
      * registry next. */
     terminal->grid = NULL; /* container owns it; drop the borrowed handle */
     if (terminal->root_container_obj) {
-        struct yetty_yfigure_figure *rf =
+        struct yetty_yfigure_figure_ptr_result rf_res =
             yetty_yfigure_container_as_figure(terminal->root_container_obj);
-        struct yetty_ycore_void_result r =
-            yetty_yfigure_destroy((struct yetty_yclass_object *)rf - 1);
-        if (YETTY_IS_ERR(r)) {
-            yerror("terminal_destroy: root_container destroy failed: %s", r.error.msg);
+        if (YETTY_IS_ERR(rf_res)) {
+            yerror("terminal_destroy: root_container as_figure failed: %s", rf_res.error.msg);
             if (!have_err) {
-                first_err = r;
+                first_err = YETTY_ERR(yetty_ycore_void, "terminal_destroy: root as_figure", rf_res);
                 have_err = true;
             } else {
-                yetty_ycore_error_destroy(r.error);
+                yetty_ycore_error_destroy(rf_res.error);
+            }
+        } else {
+            struct yetty_ycore_void_result r =
+                yetty_yfigure_destroy((struct yetty_yclass_object *)rf_res.value - 1);
+            if (YETTY_IS_ERR(r)) {
+                yerror("terminal_destroy: root_container destroy failed: %s", r.error.msg);
+                if (!have_err) {
+                    first_err = r;
+                    have_err = true;
+                } else {
+                    yetty_ycore_error_destroy(r.error);
+                }
             }
         }
         terminal->root_container_obj = NULL;
@@ -2154,8 +2175,10 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
             .max = {.x = (float)grid_size.cols * cell_size.width,
                     .y = (float)grid_size.rows * cell_size.height},
         };
-        struct yetty_yfigure_figure *rf =
+        struct yetty_yfigure_figure_ptr_result rf_res =
             yetty_yfigure_container_as_figure(terminal->root_container_obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rf_res, "resize_grid: root as_figure");
+        struct yetty_yfigure_figure *rf = rf_res.value;
         {
             struct yetty_ycore_void_result drop_r =
                 yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf)-1, new_rect);
@@ -2825,7 +2848,11 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             uint32_t focused = terminal->focused_figure_id;
             struct yetty_yfigure_hit hit;
             if (press) {
-                hit = terminal_resolve_figure_hit(terminal, event->mouse.x, event->mouse.y, 0);
+                struct yetty_yfigure_hit_result hit_res =
+                    terminal_resolve_figure_hit(terminal, event->mouse.x, event->mouse.y, 0);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, hit_res,
+                                    "terminal_view_on_event: resolve hit (press)");
+                hit = hit_res.value;
                 if (hit.figure_id != focused) {
                     if (focused != 0) {
                         struct yetty_ycore_void_result lr =
@@ -2842,8 +2869,11 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                     }
                 }
             } else {
-                hit =
+                struct yetty_yfigure_hit_result hit_res =
                     terminal_resolve_figure_hit(terminal, event->mouse.x, event->mouse.y, focused);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, hit_res,
+                                    "terminal_view_on_event: resolve hit (release)");
+                hit = hit_res.value;
             }
             if (hit.figure_id != 0) {
                 struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
@@ -2899,8 +2929,10 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
          * (not pane-local) for the same reason as the MOUSE_DOWN handler
          * above — figure rects carry viewport_offset already. */
         uint32_t captured = terminal->mouse_buttons_held ? terminal->focused_figure_id : 0u;
-        struct yetty_yfigure_hit hit =
+        struct yetty_yfigure_hit_result hit_res =
             terminal_resolve_figure_hit(terminal, event->mouse.x, event->mouse.y, captured);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, hit_res, "terminal_view_on_event: resolve hit (move)");
+        struct yetty_yfigure_hit hit = hit_res.value;
         if (hit.figure_id != 0) {
             struct yetty_ycore_void_result mr = terminal_emit_card_mouse_move(
                 terminal, hit.figure_id, hit.local_x, hit.local_y, terminal->mouse_buttons_held);
@@ -2929,8 +2961,11 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         int wheel_mods = event->mouse_scroll.mods;
         if (!terminal->scrollback_active && terminal->mouse_click_subscribed) {
             /* Window coords, same reason as MOUSE_DOWN. */
-            struct yetty_yfigure_hit hit = terminal_resolve_figure_hit(
+            struct yetty_yfigure_hit_result hit_res = terminal_resolve_figure_hit(
                 terminal, event->mouse_scroll.x, event->mouse_scroll.y, 0);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, hit_res,
+                                "terminal_view_on_event: resolve hit (scroll)");
+            struct yetty_yfigure_hit hit = hit_res.value;
             if (hit.figure_id != 0) {
                 struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
                     terminal, hit.figure_id, hit.local_x, hit.local_y, 0, 0, event->mouse_scroll.dy,

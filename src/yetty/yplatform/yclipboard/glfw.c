@@ -49,15 +49,13 @@ struct YETTY_ANNOTATE("class@yplatform:glfw_clipboard") YETTY_ANNOTATE("platform
     struct yetty_ycore_xthread_event_pipe *input_pipe;  /* main → render paste responses */
 };
 
-static struct yetty_yplatform_glfw_clipboard *glfw_clipboard_data(struct yetty_yclass_object *obj)
+static struct yetty_yplatform_glfw_clipboard_ptr_result glfw_clipboard_data(
+    struct yetty_yclass_object *obj)
 {
     struct yetty_yplatform_glfw_clipboard_ptr_result data =
         yetty_yplatform_glfw_clipboard_from(obj);
-    if (!YETTY_IS_OK(data)) {
-        yetty_ycore_error_destroy(data.error);
-        return NULL;
-    }
-    return data.value;
+    YETTY_RETURN_IF_ERR(yetty_yplatform_glfw_clipboard_ptr, data, "glfw_clipboard_data: data_get");
+    return YETTY_OK(yetty_yplatform_glfw_clipboard_ptr, data.value);
 }
 
 /* Write `len` bytes of `text` to the X11/Wayland PRIMARY selection by piping
@@ -171,7 +169,9 @@ YETTY_ANNOTATE("override@yplatform:glfw_clipboard:clipboard_set_text")
 static struct yetty_ycore_void_result glfw_clipboard_set_text(struct yetty_yclass_object *obj,
                                                               const char *text, size_t len)
 {
-    struct yetty_yplatform_glfw_clipboard *data = glfw_clipboard_data(obj);
+    struct yetty_yplatform_glfw_clipboard_ptr_result data_res = glfw_clipboard_data(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "clipboard_set_text: data_get");
+    struct yetty_yplatform_glfw_clipboard *data = data_res.value;
     if (!data || !data->output_pipe) {
         return YETTY_ERR(yetty_ycore_void, "clipboard_set_text: not configured");
     }
@@ -204,7 +204,9 @@ static struct yetty_ycore_void_result glfw_clipboard_set_text(struct yetty_yclas
 YETTY_ANNOTATE("override@yplatform:glfw_clipboard:clipboard_request_paste")
 static struct yetty_ycore_void_result glfw_clipboard_request_paste(struct yetty_yclass_object *obj)
 {
-    struct yetty_yplatform_glfw_clipboard *data = glfw_clipboard_data(obj);
+    struct yetty_yplatform_glfw_clipboard_ptr_result data_res = glfw_clipboard_data(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "clipboard_request_paste: data_get");
+    struct yetty_yplatform_glfw_clipboard *data = data_res.value;
     if (!data || !data->output_pipe) {
         return YETTY_ERR(yetty_ycore_void, "clipboard_request_paste: not configured");
     }
@@ -225,7 +227,9 @@ static struct yetty_ycore_void_result glfw_clipboard_request_paste(struct yetty_
 YETTY_ANNOTATE("override@yplatform:glfw_clipboard:clipboard_drain")
 static struct yetty_ycore_void_result glfw_clipboard_drain(struct yetty_yclass_object *obj)
 {
-    struct yetty_yplatform_glfw_clipboard *data = glfw_clipboard_data(obj);
+    struct yetty_yplatform_glfw_clipboard_ptr_result data_res = glfw_clipboard_data(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_res, "clipboard_drain: data_get");
+    struct yetty_yplatform_glfw_clipboard *data = data_res.value;
     if (!data || !data->output_pipe || !data->input_pipe) {
         return YETTY_ERR(yetty_ycore_void, "clipboard_drain: not configured");
     }

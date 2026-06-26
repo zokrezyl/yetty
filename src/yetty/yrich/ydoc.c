@@ -2443,14 +2443,12 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_set_source_path(struct yetty_ycl
 }
 
 YETTY_ANNOTATE("expose")
-const char *yetty_yrich_ydoc_source_path(struct yetty_yclass_object *obj)
+struct yetty_ycore_const_char_ptr_result yetty_yrich_ydoc_source_path(
+    struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_ydoc_ptr_result data_res = yetty_yrich_ydoc_from(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return NULL;
-    }
-    return data_res.value->source_path;
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, data_res, "ydoc_source_path: data_get");
+    return YETTY_OK(yetty_ycore_const_char_ptr, data_res.value->source_path);
 }
 
 /*---------------------------------------------------------------------------
@@ -2483,14 +2481,11 @@ struct yetty_ycore_size_result yetty_yrich_ydoc_paragraph_count(struct yetty_ycl
 }
 
 YETTY_ANNOTATE("expose")
-const char *yetty_yrich_paragraph_text(struct yetty_yclass_object *obj)
+struct yetty_ycore_const_char_ptr_result yetty_yrich_paragraph_text(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_paragraph_ptr_result data_res = yetty_yrich_paragraph_from(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return "";
-    }
-    return data_res.value->text ? data_res.value->text : "";
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, data_res, "paragraph_text: data_get");
+    return YETTY_OK(yetty_ycore_const_char_ptr, data_res.value->text ? data_res.value->text : "");
 }
 
 YETTY_ANNOTATE("expose")

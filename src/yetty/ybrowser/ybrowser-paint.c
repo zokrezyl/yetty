@@ -627,7 +627,10 @@ static void img_job_run(void *ctx)
 }
 
 /* LOOP THREAD. Fold the result into the cache (if still valid) and notify the
- * host; handle deferred engine teardown. */
+ * host; handle deferred engine teardown. Signature is dictated by the work
+ * pool's `done` callback (void (*)(void *)), so any inner Result has nowhere
+ * to propagate to — absorb at this boundary. */
+YETTY_EXTERNAL_CALLBACK
 static void img_job_done(void *ctx)
 {
     struct ylexbor_img_job *job = ctx;
@@ -665,7 +668,11 @@ static void img_job_done(void *ctx)
     }
 
     if (r->destroy_pending && r->img_jobs_in_flight == 0) {
-        (void)_yetty_ylexbor_destroy_now(r);
+        struct yetty_ycore_void_result destroy_res = _yetty_ylexbor_destroy_now(r);
+        if (YETTY_IS_ERR(destroy_res)) {
+            ydebug("img_job_done: deferred destroy failed: %s", destroy_res.error.msg);
+            yetty_ycore_error_destroy(destroy_res.error);
+        }
     }
 }
 
@@ -686,10 +693,10 @@ int yetty_ylexbor_images_in_flight(const struct yetty_ylexbor *r)
     return r ? r->img_jobs_in_flight : 0;
 }
 
-int yetty_ylexbor_start_image_fetch(struct yetty_ylexbor *r)
+struct yetty_ycore_int_result yetty_ylexbor_start_image_fetch(struct yetty_ylexbor *r)
 {
     if (r == NULL || r->img_pool == NULL) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
     int submitted = 0;
     for (uint32_t i = 0; i < r->boxes.size; i++) {
@@ -754,15 +761,16 @@ int yetty_ylexbor_start_image_fetch(struct yetty_ylexbor *r)
             .done = img_job_done,
             .ctx = job,
         };
-        struct yetty_ycore_void_result sr = yetty_yplatform_yworkpool_submit(r->img_pool, wj);
-        if (YETTY_IS_ERR(sr)) {
-            yetty_ycore_error_destroy(sr.error);
+        struct yetty_ycore_void_result submit_res =
+            yetty_yplatform_yworkpool_submit(r->img_pool, wj);
+        if (YETTY_IS_ERR(submit_res)) {
             free(job->base_url);
             free(job->url);
             free(job);
             e->loading = 0;
             e->failed = 1;
-            continue;
+            return YETTY_ERR(yetty_ycore_int, "yetty_ylexbor_start_image_fetch: submit job",
+                             submit_res);
         }
         r->img_jobs_in_flight++;
         submitted++;
@@ -771,7 +779,7 @@ int yetty_ylexbor_start_image_fetch(struct yetty_ylexbor *r)
         yetty_ylexbor_prof("    img fetch: +%d submitted, %d in flight", submitted,
                            r->img_jobs_in_flight);
     }
-    return submitted;
+    return YETTY_OK(yetty_ycore_int, submitted);
 }
 
 /* Pick the best URL out of an `<img>`'s flock of source-ish attributes.

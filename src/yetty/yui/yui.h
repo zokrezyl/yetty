@@ -180,7 +180,7 @@ struct yetty_ycore_void_result yetty_yui_set_status_right(struct yetty_yui *yui,
  * don't render under the bar. Mirrors the tabbar's own
  * YETTY_YUI_TABBAR_HEIGHT_DP — yui carves out the bottom strip the way
  * the tabbar carves out the top. */
-float yetty_yui_statusbar_height(const struct yetty_yui *yui);
+struct yetty_ycore_float_result yetty_yui_statusbar_height(const struct yetty_yui *yui);
 
 /* Subscribe to "Connect" presses in any view's config dialog. The
  * registered callback is called from the ygui widget tree at click

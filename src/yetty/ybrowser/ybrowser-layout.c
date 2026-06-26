@@ -41,8 +41,10 @@ static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx
                                            float origin_y, float content_w, int text_align);
 static struct float_result layout_absolute_child(struct yetty_ylexbor *r, uint32_t cidx, float cb_x,
                                                  float cb_y, float cb_w, float cb_h);
-static void flex_layout_absolute_children(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
-                                          float origin_y, float content_w, float container_h);
+static struct yetty_ycore_void_result flex_layout_absolute_children(struct yetty_ylexbor *r,
+                                                                    uint32_t idx, float origin_x,
+                                                                    float origin_y, float content_w,
+                                                                    float container_h);
 static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
                                        float origin_y, float content_w);
 static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_idx, int *budget);
@@ -551,10 +553,11 @@ static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx
 
 /* Place a flex container's absolutely-positioned / fixed children once the
  * container's own size is known. Absolute resolves against the container's
- * padding box (the relative-positioned card), fixed against the viewport.
- * Best-effort: an error on one overlay does not abort the layout. */
-static void flex_layout_absolute_children(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
-                                          float origin_y, float content_w, float container_h)
+ * padding box (the relative-positioned card), fixed against the viewport. */
+static struct yetty_ycore_void_result flex_layout_absolute_children(struct yetty_ylexbor *r,
+                                                                    uint32_t idx, float origin_x,
+                                                                    float origin_y, float content_w,
+                                                                    float container_h)
 {
     struct yetty_ylexbor_box *self = &r->boxes.data[idx];
     float cb_x = origin_x + self->border_left;
@@ -575,11 +578,11 @@ static void flex_layout_absolute_children(struct yetty_ylexbor *r, uint32_t idx,
                 ? layout_absolute_child(r, child_idx, 0.0f, 0.0f, (float)r->viewport_w,
                                         (float)r->viewport_h)
                 : layout_absolute_child(r, child_idx, cb_x, cb_y, cb_w, cb_h);
-        if (YETTY_IS_ERR(placement_res)) {
-            yetty_ycore_error_destroy(placement_res.error);
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, placement_res,
+                            "flex_layout_absolute_children: layout_absolute_child");
         self = &r->boxes.data[idx];
     }
+    return YETTY_OK_VOID();
 }
 
 static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
@@ -621,7 +624,9 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
     }
     if (n_children == 0) {
         /* Still place any out-of-flow children before bailing. */
-        flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, pad_top + pad_bottom);
+        struct yetty_ycore_void_result abs_res = flex_layout_absolute_children(
+            r, idx, origin_x, origin_y, content_w, pad_top + pad_bottom);
+        YETTY_RETURN_IF_ERR(float, abs_res, "layout_flex: place out-of-flow (empty)");
         return YETTY_OK(float, pad_top + pad_bottom);
     }
 
@@ -841,7 +846,9 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
             first_in_line = false;
         }
         float container_h = (line_top + line_h) - origin_y + pad_bottom;
-        flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, container_h);
+        struct yetty_ycore_void_result abs_res =
+            flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, container_h);
+        YETTY_RETURN_IF_ERR(float, abs_res, "layout_flex(wrap): place out-of-flow");
         return YETTY_OK(float, container_h);
     }
 
@@ -1070,7 +1077,9 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
     /* Out-of-flow pass: place absolute / fixed children (e.g. the inset:0
      * click overlays Google News stacks over each card) against this flex
      * container now that its size is known. */
-    flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, container_h);
+    struct yetty_ycore_void_result abs_res =
+        flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, container_h);
+    YETTY_RETURN_IF_ERR(float, abs_res, "layout_flex: place out-of-flow");
     return YETTY_OK(float, container_h);
 }
 
@@ -1919,7 +1928,9 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         float named_h =
             (band_h > 0.0f ? (row_top + band_h) : content_origin_y) - origin_y + pad_bottom;
         self = &r->boxes.data[idx];
-        flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, named_h);
+        struct yetty_ycore_void_result abs_res =
+            flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, named_h);
+        YETTY_RETURN_IF_ERR(float, abs_res, "layout_grid(named): place out-of-flow");
         return YETTY_OK(float, named_h);
     }
 
@@ -1995,7 +2006,9 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
 
     float block_height = (placed_any ? (row_y + row_h) : content_origin_y) - origin_y + pad_bottom;
     self = &r->boxes.data[idx];
-    flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, block_height);
+    struct yetty_ycore_void_result abs_res =
+        flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, block_height);
+    YETTY_RETURN_IF_ERR(float, abs_res, "layout_grid: place out-of-flow");
     return YETTY_OK(float, block_height);
 }
 

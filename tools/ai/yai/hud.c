@@ -244,14 +244,17 @@ static void terminal_pixels(float *width_px, float *height_px)
 
 /* Current window rect in viewport pixels (authored layout state — drag
  * updates pos, yai-side resize updates size). */
-static void window_rect(const struct yai_hud *hud, float *min_x, float *min_y, float *width,
-                        float *height)
+static struct yetty_ycore_void_result window_rect(const struct yai_hud *hud, float *min_x,
+                                                  float *min_y, float *width, float *height)
 {
-    const struct yetty_ygui_layout *layout = yetty_ygui_widget_layout_get(hud->window);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(hud->window);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "window_rect: layout");
+    const struct yetty_ygui_layout *layout = layout_res.value;
     *min_x = layout->pos_x;
     *min_y = layout->pos_y;
     *width = layout->width;
     *height = layout->height;
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_yclass_object_ptr_result hud_add(struct yetty_yclass_object *parent,
@@ -324,7 +327,8 @@ static struct yetty_ycore_void_result hud_apply_viewport(struct yai_hud *hud)
     float min_y = 0.0f;
     float width = 0.0f;
     float height = 0.0f;
-    window_rect(hud, &min_x, &min_y, &width, &height);
+    struct yetty_ycore_void_result rect_res = window_rect(hud, &min_x, &min_y, &width, &height);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "hud_apply_viewport: window_rect");
 
     float target_x = min_x;
     float target_y = min_y;
@@ -399,7 +403,9 @@ static struct yetty_ycore_void_result hud_build(struct yai_hud *hud)
     float window_min_y = 0.0f;
     float window_width = 0.0f;
     float window_height = 0.0f;
-    window_rect(hud, &window_min_x, &window_min_y, &window_width, &window_height);
+    struct yetty_ycore_void_result window_rect_res =
+        window_rect(hud, &window_min_x, &window_min_y, &window_width, &window_height);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, window_rect_res, "hud_build: window_rect");
     ydebug("yai hud: viewport %.0fx%.0f (estimate) window (%.0f,%.0f)+%.0fx%.0f",
            hud->viewport_width, hud->viewport_height, window_min_x, window_min_y, window_width,
            window_height);
@@ -458,7 +464,9 @@ struct yai_hud_ptr_result yai_hud_create(int hud_on, int hud_float)
 static struct yetty_ycore_void_result hud_build_body(struct yai_hud *hud)
 {
     const struct yai_hud_format *format = hud->format;
-    struct yetty_yclass_object *body = yetty_ygui_window_body(hud->window);
+    struct yetty_yclass_object_ptr_result body_res = yetty_ygui_window_body(hud->window);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, body_res, "hud_build_body: window_body");
+    struct yetty_yclass_object *body = body_res.value;
     if (!body) {
         return YETTY_ERR(yetty_ycore_void, "hud_build_body: window has no body");
     }
@@ -738,7 +746,9 @@ struct yetty_ycore_void_result yai_hud_toggle_config(struct yai_hud *hud,
 
     /* Sync the tab strip to the requested titles (the tabbar persists
      * across opens; the page set can change when the engine changes). */
-    int have_tabs = yetty_ygui_tabbar_count(hud->config_tabbar);
+    struct yetty_ycore_int_result tab_count_res = yetty_ygui_tabbar_count(hud->config_tabbar);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, tab_count_res, "yai_hud_toggle_config: tabbar_count");
+    int have_tabs = tab_count_res.value;
     while (have_tabs > tab_count) {
         struct yetty_ycore_void_result rm =
             yetty_ygui_tabbar_remove_tab(hud->config_tabbar, have_tabs - 1);
@@ -1064,14 +1074,16 @@ struct yetty_ycore_void_result yai_hud_viewport_changed(struct yai_hud *hud)
  * Client-side input
  *---------------------------------------------------------------------------*/
 
-static int point_in_window(const struct yai_hud *hud, float x, float y)
+static struct yetty_ycore_int_result point_in_window(const struct yai_hud *hud, float x, float y)
 {
     float min_x = 0.0f;
     float min_y = 0.0f;
     float width = 0.0f;
     float height = 0.0f;
-    window_rect(hud, &min_x, &min_y, &width, &height);
-    return x >= min_x && x <= min_x + width && y >= min_y && y <= min_y + height;
+    struct yetty_ycore_void_result rect_res = window_rect(hud, &min_x, &min_y, &width, &height);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "point_in_window: window_rect");
+    int inside = x >= min_x && x <= min_x + width && y >= min_y && y <= min_y + height;
+    return YETTY_OK(yetty_ycore_int, inside);
 }
 
 /* Inside the config dialog's rect while it is open. */
@@ -1086,7 +1098,9 @@ static struct yetty_ycore_int_result point_in_config_dialog(const struct yai_hud
     if (!open_res.value) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    const struct yetty_ygui_layout *layout = yetty_ygui_widget_layout_get(hud->config_dialog);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(hud->config_dialog);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, layout_res, "point_in_config_dialog: layout_get");
+    const struct yetty_ygui_layout *layout = layout_res.value;
     int inside = x >= layout->pos_x && x <= layout->pos_x + layout->width && y >= layout->pos_y &&
                  y <= layout->pos_y + layout->height;
     return YETTY_OK(yetty_ycore_int, inside);
@@ -1105,7 +1119,10 @@ static struct yetty_ycore_int_result point_in_config_close(const struct yai_hud 
     if (!open_res.value) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    const struct yetty_ygui_layout *layout = yetty_ygui_widget_layout_get(hud->config_dialog);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(hud->config_dialog);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, layout_res, "point_in_config_close: layout_get");
+    const struct yetty_ygui_layout *layout = layout_res.value;
     int inside = x >= layout->pos_x + layout->width - YAI_HUD_CONFIG_CLOSE_W &&
                  x <= layout->pos_x + layout->width && y >= layout->pos_y &&
                  y <= layout->pos_y + YAI_HUD_CONFIG_TITLE_H;
@@ -1125,21 +1142,26 @@ static struct yetty_ycore_int_result point_in_config_titlebar(const struct yai_h
     if (!open_res.value) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    const struct yetty_ygui_layout *layout = yetty_ygui_widget_layout_get(hud->config_dialog);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(hud->config_dialog);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, layout_res, "point_in_config_titlebar: layout_get");
+    const struct yetty_ygui_layout *layout = layout_res.value;
     int inside = x >= layout->pos_x && x <= layout->pos_x + layout->width && y >= layout->pos_y &&
                  y <= layout->pos_y + YAI_HUD_CONFIG_TITLE_H;
     return YETTY_OK(yetty_ycore_int, inside);
 }
 
-static int point_in_grip(const struct yai_hud *hud, float x, float y)
+static struct yetty_ycore_int_result point_in_grip(const struct yai_hud *hud, float x, float y)
 {
     float min_x = 0.0f;
     float min_y = 0.0f;
     float width = 0.0f;
     float height = 0.0f;
-    window_rect(hud, &min_x, &min_y, &width, &height);
-    return x >= min_x + width - YAI_HUD_GRIP_HIT && x <= min_x + width &&
-           y >= min_y + height - YAI_HUD_GRIP_HIT && y <= min_y + height;
+    struct yetty_ycore_void_result rect_res = window_rect(hud, &min_x, &min_y, &width, &height);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "point_in_grip: window_rect");
+    int inside = x >= min_x + width - YAI_HUD_GRIP_HIT && x <= min_x + width &&
+                 y >= min_y + height - YAI_HUD_GRIP_HIT && y <= min_y + height;
+    return YETTY_OK(yetty_ycore_int, inside);
 }
 
 struct yetty_ycore_int_result yai_hud_mouse_button(struct yai_hud *hud, float x, float y,
@@ -1148,18 +1170,24 @@ struct yetty_ycore_int_result yai_hud_mouse_button(struct yai_hud *hud, float x,
     if (!hud) {
         return YETTY_ERR(yetty_ycore_int, "yai_hud_mouse_button: NULL hud");
     }
-    if (pressed && button == 0 && !hud->docked && point_in_grip(hud, x, y)) {
-        /* Corner grip: start the yai-side resize drag; the framework
-         * never sees this press. (Disabled when docked — the bar's
-         * size is fixed.) */
-        float min_x = 0.0f;
-        float min_y = 0.0f;
-        window_rect(hud, &min_x, &min_y, &hud->resize_start_width, &hud->resize_start_height);
-        hud->resizing = 1;
-        hud->user_touched = 1;
-        hud->resize_cursor_x = x;
-        hud->resize_cursor_y = y;
-        return YETTY_OK(yetty_ycore_int, 1);
+    if (pressed && button == 0 && !hud->docked) {
+        struct yetty_ycore_int_result grip_res = point_in_grip(hud, x, y);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, grip_res, "yai_hud_mouse_button: grip hit");
+        if (grip_res.value) {
+            /* Corner grip: start the yai-side resize drag; the framework
+             * never sees this press. (Disabled when docked — the bar's
+             * size is fixed.) */
+            float min_x = 0.0f;
+            float min_y = 0.0f;
+            struct yetty_ycore_void_result rect_res = window_rect(
+                hud, &min_x, &min_y, &hud->resize_start_width, &hud->resize_start_height);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "yai_hud_mouse_button: grip rect");
+            hud->resizing = 1;
+            hud->user_touched = 1;
+            hud->resize_cursor_x = x;
+            hud->resize_cursor_y = y;
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
     }
     if (!pressed && hud->resizing) {
         hud->resizing = 0;
@@ -1182,8 +1210,10 @@ struct yetty_ycore_int_result yai_hud_mouse_button(struct yai_hud *hud, float x,
         struct yetty_ycore_int_result titlebar_res = point_in_config_titlebar(hud, x, y);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, titlebar_res, "yai_hud_mouse_button: titlebar hit");
         if (titlebar_res.value) {
-            const struct yetty_ygui_layout *layout =
+            struct yetty_ygui_layout_const_ptr_result layout_res =
                 yetty_ygui_widget_layout_get(hud->config_dialog);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, layout_res, "yai_hud_mouse_button: titlebar layout");
+            const struct yetty_ygui_layout *layout = layout_res.value;
             hud->config_dragging = 1;
             hud->config_drag_pos_x = layout->pos_x;
             hud->config_drag_pos_y = layout->pos_y;
@@ -1196,7 +1226,9 @@ struct yetty_ycore_int_result yai_hud_mouse_button(struct yai_hud *hud, float x,
         hud->config_dragging = 0;
         return YETTY_OK(yetty_ycore_int, 1);
     }
-    int inside = point_in_window(hud, x, y);
+    struct yetty_ycore_int_result inside_res = point_in_window(hud, x, y);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, inside_res, "yai_hud_mouse_button: point_in_window");
+    int inside = inside_res.value;
     if (!inside) {
         struct yetty_ycore_int_result dialog_hit_res = point_in_config_dialog(hud, x, y);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, dialog_hit_res, "yai_hud_mouse_button: dialog hit");
@@ -1243,7 +1275,10 @@ struct yetty_ycore_void_result yai_hud_mouse_motion(struct yai_hud *hud, float x
         float new_x = hud->config_drag_pos_x + (x - hud->config_drag_cursor_x);
         float new_y = hud->config_drag_pos_y + (y - hud->config_drag_cursor_y);
         /* Keep the titlebar reachable: clamp into the viewport. */
-        const struct yetty_ygui_layout *layout = yetty_ygui_widget_layout_get(hud->config_dialog);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(hud->config_dialog);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "yai_hud_mouse_motion: dialog layout");
+        const struct yetty_ygui_layout *layout = layout_res.value;
         if (new_x > hud->viewport_width - 48.0f) {
             new_x = hud->viewport_width - 48.0f;
         }
@@ -1284,7 +1319,9 @@ struct yetty_ycore_int_result yai_hud_contains_point(struct yai_hud *hud, float 
     if (!hud) {
         return YETTY_ERR(yetty_ycore_int, "yai_hud_contains_point: NULL hud");
     }
-    if (point_in_window(hud, x, y)) {
+    struct yetty_ycore_int_result inside_res = point_in_window(hud, x, y);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, inside_res, "yai_hud_contains_point: point_in_window");
+    if (inside_res.value) {
         return YETTY_OK(yetty_ycore_int, 1);
     }
     struct yetty_ycore_int_result dialog_hit_res = point_in_config_dialog(hud, x, y);

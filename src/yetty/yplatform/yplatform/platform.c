@@ -92,16 +92,15 @@ static struct yetty_ycore_void_result platform_default_run(struct yetty_yclass_o
  * forward-declares the handle types (no struct reproduction / redefinition).
  *=========================================================================*/
 
-/* Recover the base data slice from any platform (sub)class object. Returns NULL
- * on a wrong-class object; the getters below treat NULL as "unset". */
-static struct yetty_yplatform_platform *platform_data(struct yetty_yclass_object *obj)
+/* Recover the base data slice from any platform (sub)class object. Propagates the
+ * downcast error in a Result; the getters below absorb it (returning their
+ * raw-pointer NULL) because their public signatures are fixed by the generated
+ * API contract and cannot return a Result. */
+static struct yetty_yplatform_platform_ptr_result platform_data(struct yetty_yclass_object *obj)
 {
     struct yetty_yplatform_platform_ptr_result data = yetty_yplatform_platform_from(obj);
-    if (!YETTY_IS_OK(data)) {
-        yetty_ycore_error_destroy(data.error);
-        return NULL;
-    }
-    return data.value;
+    YETTY_RETURN_IF_ERR(yetty_yplatform_platform_ptr, data, "platform_data: data_get");
+    return YETTY_OK(yetty_yplatform_platform_ptr, data.value);
 }
 
 YETTY_ANNOTATE("expose")
@@ -135,23 +134,35 @@ YETTY_ANNOTATE("expose")
 const struct yetty_yplatform_gpu_context *yetty_yplatform_platform_gpu_context(
     struct yetty_yclass_object *obj)
 {
-    struct yetty_yplatform_platform *data = platform_data(obj);
-    return data ? &data->gpu : NULL;
+    struct yetty_yplatform_platform_ptr_result data = platform_data(obj);
+    if (!YETTY_IS_OK(data)) {
+        yetty_ycore_error_destroy(data.error);
+        return NULL;
+    }
+    return &data.value->gpu;
 }
 
 YETTY_ANNOTATE("expose")
 struct yetty_yconfig_config *yetty_yplatform_platform_config(struct yetty_yclass_object *obj)
 {
-    struct yetty_yplatform_platform *data = platform_data(obj);
-    return data ? data->config : NULL;
+    struct yetty_yplatform_platform_ptr_result data = platform_data(obj);
+    if (!YETTY_IS_OK(data)) {
+        yetty_ycore_error_destroy(data.error);
+        return NULL;
+    }
+    return data.value->config;
 }
 
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_xthread_event_pipe *yetty_yplatform_platform_input_pipe(
     struct yetty_yclass_object *obj)
 {
-    struct yetty_yplatform_platform *data = platform_data(obj);
-    return data ? data->input_pipe : NULL;
+    struct yetty_yplatform_platform_ptr_result data = platform_data(obj);
+    if (!YETTY_IS_OK(data)) {
+        yetty_ycore_error_destroy(data.error);
+        return NULL;
+    }
+    return data.value->input_pipe;
 }
 
 YETTY_ANNOTATE("expose")

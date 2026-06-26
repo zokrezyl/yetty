@@ -156,9 +156,11 @@ struct yetty_ycore_void_result yetty_yui_tabbar_model_close_at(struct yetty_yui_
 /* Window-control wrappers — yui's ygui titlebar buttons (_, □, ✕)
  * trampoline through here so the click path doesn't have to know about
  * the platform window manager. NULL-safe; no-op when no wm is bound. */
-void yetty_yui_tabbar_model_iconify(struct yetty_yui_tabbar_model *bar);
-void yetty_yui_tabbar_model_toggle_maximize(struct yetty_yui_tabbar_model *bar);
-void yetty_yui_tabbar_model_close_window(struct yetty_yui_tabbar_model *bar);
+struct yetty_ycore_void_result yetty_yui_tabbar_model_iconify(struct yetty_yui_tabbar_model *bar);
+struct yetty_ycore_void_result yetty_yui_tabbar_model_toggle_maximize(
+    struct yetty_yui_tabbar_model *bar);
+struct yetty_ycore_void_result yetty_yui_tabbar_model_close_window(
+    struct yetty_yui_tabbar_model *bar);
 
 /* Callback invoked when the v-button on the tabbar is clicked. The
  * tabbar reports the on-screen anchor (the lower-left corner of the

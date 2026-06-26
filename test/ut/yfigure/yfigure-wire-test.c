@@ -273,8 +273,15 @@ static void feed(struct yetty_yclass_object *root, const struct yetty_ydraw_draw
 
 static char *dump_root(struct yetty_yclass_object *root)
 {
+    struct yetty_yfigure_figure_ptr_result as_figure_result =
+        yetty_yfigure_container_as_figure(root);
+    if (YETTY_IS_ERR(as_figure_result)) {
+        fprintf(stderr, "container_as_figure failed: %s\n", as_figure_result.error.msg);
+        yetty_ycore_error_destroy(as_figure_result.error);
+        exit(3);
+    }
     struct yetty_ycore_char_ptr_result dump_result =
-        yetty_yfigure_dump(yetty_yfigure_container_as_figure(root), 0);
+        yetty_yfigure_dump(as_figure_result.value, 0);
     if (YETTY_IS_ERR(dump_result)) {
         fprintf(stderr, "yfigure_dump failed: %s\n", dump_result.error.msg);
         yetty_ycore_error_destroy(dump_result.error);

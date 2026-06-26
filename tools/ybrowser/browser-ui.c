@@ -1060,7 +1060,10 @@ static int pump_active(struct app *a)
              * libcurl's HTTP/2 connection pool) and stream in via on_img_ready.
              * Nothing blocks the loop; already-loading/cached images are
              * skipped, so calling it each pump is cheap and idempotent. */
-            (void)yetty_ylexbor_start_image_fetch(t->engine);
+            struct yetty_ycore_int_result fetch_res = yetty_ylexbor_start_image_fetch(t->engine);
+            if (YETTY_IS_ERR(fetch_res)) {
+                yetty_ycore_error_destroy(fetch_res.error);
+            }
             /* Coalesce the resulting repaints: render at most once per window
              * while images keep landing, instead of once per image. */
             if (a->img_dirty) {

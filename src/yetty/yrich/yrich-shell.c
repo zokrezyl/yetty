@@ -159,7 +159,9 @@ static struct yetty_ycore_void_result act_undo(struct yetty_yclass_object *targe
     (void)target;
     (void)event;
     struct yetty_yclass_object *view = userdata;
-    struct yetty_yclass_object *doc = yetty_ygui_yrich_view_document(view);
+    struct yetty_yclass_object_ptr_result doc_res = yetty_ygui_yrich_view_document(view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "act_undo: document");
+    struct yetty_yclass_object *doc = doc_res.value;
     if (doc) {
         struct yetty_ycore_void_result r = yetty_yrich_document_undo(doc);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "act_undo");
@@ -173,7 +175,9 @@ static struct yetty_ycore_void_result act_redo(struct yetty_yclass_object *targe
     (void)target;
     (void)event;
     struct yetty_yclass_object *view = userdata;
-    struct yetty_yclass_object *doc = yetty_ygui_yrich_view_document(view);
+    struct yetty_yclass_object_ptr_result doc_res = yetty_ygui_yrich_view_document(view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "act_redo: document");
+    struct yetty_yclass_object *doc = doc_res.value;
     if (doc) {
         struct yetty_ycore_void_result r = yetty_yrich_document_redo(doc);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "act_redo");
@@ -188,7 +192,9 @@ static struct yetty_ycore_void_result act_add_paragraph(struct yetty_yclass_obje
     (void)target;
     (void)event;
     struct yetty_yclass_object *view = userdata;
-    struct yetty_yclass_object *doc = yetty_ygui_yrich_view_document(view);
+    struct yetty_yclass_object_ptr_result doc_res = yetty_ygui_yrich_view_document(view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "act_add_paragraph: document");
+    struct yetty_yclass_object *doc = doc_res.value;
     if (doc) {
         const char *text = "New paragraph";
         struct yetty_yclass_object_ptr_result pr =
@@ -205,7 +211,9 @@ static struct yetty_ycore_void_result act_slide_prev(struct yetty_yclass_object 
     (void)target;
     (void)event;
     struct yetty_yclass_object *view = userdata;
-    struct yetty_yclass_object *doc = yetty_ygui_yrich_view_document(view);
+    struct yetty_yclass_object_ptr_result doc_res = yetty_ygui_yrich_view_document(view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "act_slide_prev: document");
+    struct yetty_yclass_object *doc = doc_res.value;
     if (doc) {
         struct yetty_ycore_void_result r = yetty_yrich_slides_prev(doc);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "act_slide_prev");
@@ -220,7 +228,9 @@ static struct yetty_ycore_void_result act_slide_next(struct yetty_yclass_object 
     (void)target;
     (void)event;
     struct yetty_yclass_object *view = userdata;
-    struct yetty_yclass_object *doc = yetty_ygui_yrich_view_document(view);
+    struct yetty_yclass_object_ptr_result doc_res = yetty_ygui_yrich_view_document(view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "act_slide_next: document");
+    struct yetty_yclass_object *doc = doc_res.value;
     if (doc) {
         struct yetty_ycore_void_result r = yetty_yrich_slides_next(doc);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "act_slide_next");
@@ -235,7 +245,9 @@ static struct yetty_ycore_void_result act_slide_add(struct yetty_yclass_object *
     (void)target;
     (void)event;
     struct yetty_yclass_object *view = userdata;
-    struct yetty_yclass_object *doc = yetty_ygui_yrich_view_document(view);
+    struct yetty_yclass_object_ptr_result doc_res = yetty_ygui_yrich_view_document(view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "act_slide_add: document");
+    struct yetty_yclass_object *doc = doc_res.value;
     if (doc) {
         struct yetty_yrich_slide_ptr_result slide_res = yetty_yrich_slides_add_slide(doc);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, slide_res, "act_slide_add");
@@ -251,7 +263,9 @@ static struct yetty_ycore_void_result act_slide_add(struct yetty_yclass_object *
 static struct yetty_ycore_void_result ydoc_format_apply(struct yetty_yclass_object *view,
                                                         uint32_t format_flag)
 {
-    struct yetty_yclass_object *doc = yetty_ygui_yrich_view_document(view);
+    struct yetty_yclass_object_ptr_result doc_res = yetty_ygui_yrich_view_document(view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "ydoc_format_apply: document");
+    struct yetty_yclass_object *doc = doc_res.value;
     if (doc) {
         struct yetty_ycore_void_result toggle_res =
             yetty_yrich_ydoc_toggle_format(doc, format_flag);
@@ -263,7 +277,9 @@ static struct yetty_ycore_void_result ydoc_format_apply(struct yetty_yclass_obje
 static struct yetty_ycore_void_result ydoc_font_size_apply(struct yetty_yclass_object *view,
                                                            float delta)
 {
-    struct yetty_yclass_object *doc = yetty_ygui_yrich_view_document(view);
+    struct yetty_yclass_object_ptr_result doc_res = yetty_ygui_yrich_view_document(view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "ydoc_font_size_apply: document");
+    struct yetty_yclass_object *doc = doc_res.value;
     if (doc) {
         struct yetty_ycore_void_result size_res = yetty_yrich_ydoc_change_font_size(doc, delta);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, size_res, "ydoc_font_size_apply");
@@ -313,7 +329,9 @@ static struct yetty_ycore_void_result menu_file_new(struct yetty_yclass_object *
     (void)menu;
     (void)item_index;
     struct yetty_yclass_object *view = userdata;
-    struct yetty_yclass_object *doc = yetty_ygui_yrich_view_document(view);
+    struct yetty_yclass_object_ptr_result doc_res = yetty_ygui_yrich_view_document(view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "menu_file_new: document");
+    struct yetty_yclass_object *doc = doc_res.value;
     if (doc) {
         struct yetty_ycore_void_result clear_res = yetty_yrich_ydoc_clear(doc);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, clear_res, "menu_file_new");
@@ -327,11 +345,15 @@ static struct yetty_ycore_void_result menu_file_save(struct yetty_yclass_object 
     (void)menu;
     (void)item_index;
     struct yetty_yclass_object *view = userdata;
-    struct yetty_yclass_object *doc = yetty_ygui_yrich_view_document(view);
+    struct yetty_yclass_object_ptr_result doc_res = yetty_ygui_yrich_view_document(view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "menu_file_save: document");
+    struct yetty_yclass_object *doc = doc_res.value;
     if (!doc) {
         return YETTY_OK_VOID();
     }
-    const char *path = yetty_yrich_ydoc_source_path(doc);
+    struct yetty_ycore_const_char_ptr_result path_res = yetty_yrich_ydoc_source_path(doc);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, path_res, "menu_file_save: source path");
+    const char *path = path_res.value;
     if (!path) {
         path = "untitled.ydoc.yaml";
     }
@@ -344,7 +366,9 @@ static struct yetty_ycore_void_result menu_edit_undo(struct yetty_yclass_object 
     (void)menu;
     (void)item_index;
     struct yetty_yclass_object *view = userdata;
-    struct yetty_yclass_object *doc = yetty_ygui_yrich_view_document(view);
+    struct yetty_yclass_object_ptr_result doc_res = yetty_ygui_yrich_view_document(view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "menu_edit_undo: document");
+    struct yetty_yclass_object *doc = doc_res.value;
     if (doc) {
         struct yetty_ycore_void_result undo_res = yetty_yrich_document_undo(doc);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, undo_res, "menu_edit_undo");
@@ -358,7 +382,9 @@ static struct yetty_ycore_void_result menu_edit_redo(struct yetty_yclass_object 
     (void)menu;
     (void)item_index;
     struct yetty_yclass_object *view = userdata;
-    struct yetty_yclass_object *doc = yetty_ygui_yrich_view_document(view);
+    struct yetty_yclass_object_ptr_result doc_res = yetty_ygui_yrich_view_document(view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "menu_edit_redo: document");
+    struct yetty_yclass_object *doc = doc_res.value;
     if (doc) {
         struct yetty_ycore_void_result redo_res = yetty_yrich_document_redo(doc);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, redo_res, "menu_edit_redo");
@@ -399,7 +425,9 @@ static struct yetty_ycore_void_result menu_format_smaller(struct yetty_yclass_ob
 static struct yetty_ycore_void_result ydoc_alignment_apply(struct yetty_yclass_object *view,
                                                            uint32_t halign)
 {
-    struct yetty_yclass_object *doc = yetty_ygui_yrich_view_document(view);
+    struct yetty_yclass_object_ptr_result doc_res = yetty_ygui_yrich_view_document(view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "ydoc_alignment_apply: document");
+    struct yetty_yclass_object *doc = doc_res.value;
     if (doc) {
         struct yetty_ycore_void_result align_res = yetty_yrich_ydoc_set_alignment(doc, halign);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, align_res, "ydoc_alignment_apply");
@@ -410,7 +438,9 @@ static struct yetty_ycore_void_result ydoc_alignment_apply(struct yetty_yclass_o
 static struct yetty_ycore_void_result ydoc_heading_apply(struct yetty_yclass_object *view,
                                                          uint32_t level)
 {
-    struct yetty_yclass_object *doc = yetty_ygui_yrich_view_document(view);
+    struct yetty_yclass_object_ptr_result doc_res = yetty_ygui_yrich_view_document(view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "ydoc_heading_apply: document");
+    struct yetty_yclass_object *doc = doc_res.value;
     if (doc) {
         struct yetty_ycore_void_result heading_res = yetty_yrich_ydoc_set_heading(doc, level);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, heading_res, "ydoc_heading_apply");
@@ -421,7 +451,9 @@ static struct yetty_ycore_void_result ydoc_heading_apply(struct yetty_yclass_obj
 static struct yetty_ycore_void_result ydoc_color_apply(struct yetty_yclass_object *view,
                                                        uint32_t color)
 {
-    struct yetty_yclass_object *doc = yetty_ygui_yrich_view_document(view);
+    struct yetty_yclass_object_ptr_result doc_res = yetty_ygui_yrich_view_document(view);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, doc_res, "ydoc_color_apply: document");
+    struct yetty_yclass_object *doc = doc_res.value;
     if (doc) {
         struct yetty_ycore_void_result color_res = yetty_yrich_ydoc_set_text_color(doc, color);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, color_res, "ydoc_color_apply");

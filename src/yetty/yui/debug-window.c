@@ -80,7 +80,10 @@ struct yetty_yui_debug_window {
 
 /* Right-edge grip: the splitter reports the cursor's offset from the
  * bar's centre; apply it to the window width and let the per-frame grip
- * sync re-pin the bar to the new edge. */
+ * sync re-pin the bar to the new edge. Bound to the splitter's
+ * void-returning change callback, so inner Result errors are absorbed
+ * here at the callback boundary. */
+YETTY_EXTERNAL_CALLBACK
 static void debug_window_on_grip_right(struct yetty_yclass_object *widget, float delta,
                                        void *userdata)
 {
@@ -89,7 +92,12 @@ static void debug_window_on_grip_right(struct yetty_yclass_object *widget, float
     if (!dw || !dw->window) {
         return;
     }
-    const struct yetty_ygui_layout *layout = yetty_ygui_widget_layout_get(dw->window);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(dw->window);
+    if (YETTY_IS_ERR(layout_res)) {
+        yetty_ycore_error_destroy(layout_res.error);
+        return;
+    }
+    const struct yetty_ygui_layout *layout = layout_res.value;
     float new_width = layout->width + delta;
     if (new_width < DEBUG_WIN_MIN_W) {
         new_width = DEBUG_WIN_MIN_W;
@@ -101,7 +109,10 @@ static void debug_window_on_grip_right(struct yetty_yclass_object *widget, float
         yetty_ygui_widget_set_size(dw->window, new_width, layout->height));
 }
 
-/* Bottom-edge grip — same model, applied to the height. */
+/* Bottom-edge grip — same model, applied to the height. Bound to the
+ * splitter's void-returning change callback, so inner Result errors are
+ * absorbed here at the callback boundary. */
+YETTY_EXTERNAL_CALLBACK
 static void debug_window_on_grip_bottom(struct yetty_yclass_object *widget, float delta,
                                         void *userdata)
 {
@@ -110,7 +121,12 @@ static void debug_window_on_grip_bottom(struct yetty_yclass_object *widget, floa
     if (!dw || !dw->window) {
         return;
     }
-    const struct yetty_ygui_layout *layout = yetty_ygui_widget_layout_get(dw->window);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(dw->window);
+    if (YETTY_IS_ERR(layout_res)) {
+        yetty_ycore_error_destroy(layout_res.error);
+        return;
+    }
+    const struct yetty_ygui_layout *layout = layout_res.value;
     float new_height = layout->height + delta;
     if (new_height < DEBUG_WIN_MIN_H) {
         new_height = DEBUG_WIN_MIN_H;
@@ -125,19 +141,24 @@ static void debug_window_on_grip_bottom(struct yetty_yclass_object *widget, floa
 /* Apply visibility/position/size to a grip only on change — this runs
  * every frame and an unconditional setter would mark the engine dirty
  * each time, forcing a re-emit per frame even when idle. */
-static void debug_window_pin_grip(struct yetty_yclass_object *grip, int visible, float x, float y,
-                                  float w, float h)
+static struct yetty_ycore_void_result debug_window_pin_grip(struct yetty_yclass_object *grip,
+                                                            int visible, float x, float y, float w,
+                                                            float h)
 {
     if (!grip) {
-        return;
+        return YETTY_OK_VOID();
     }
-    if (yetty_ygui_widget_is_visible(grip) != visible) {
+    struct yetty_ycore_int_result visible_res = yetty_ygui_widget_is_visible(grip);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, visible_res, "pin_grip: is_visible");
+    if (visible_res.value != visible) {
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(grip, visible));
     }
     if (!visible) {
-        return;
+        return YETTY_OK_VOID();
     }
-    const struct yetty_ygui_layout *grip_layout = yetty_ygui_widget_layout_get(grip);
+    struct yetty_ygui_layout_const_ptr_result grip_layout_res = yetty_ygui_widget_layout_get(grip);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grip_layout_res, "pin_grip: layout_get");
+    const struct yetty_ygui_layout *grip_layout = grip_layout_res.value;
     int changed = 0;
     if (grip_layout->pos_x != x || grip_layout->pos_y != y) {
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_position(grip, x, y));
@@ -148,31 +169,42 @@ static void debug_window_pin_grip(struct yetty_yclass_object *grip, int visible,
         changed = 1;
     }
     if (changed) {
-        struct yetty_ycore_rectangle rect = yetty_ygui_widget_rect(grip);
+        struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(grip);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "pin_grip: widget_rect");
+        struct yetty_ycore_rectangle rect = rect_res.value;
         ydebug("debug_window: grip pinned pos=(%.1f,%.1f) size=(%.1f,%.1f) "
                "rect=(%.1f,%.1f)-(%.1f,%.1f)",
                (double)x, (double)y, (double)w, (double)h, (double)rect.min.x, (double)rect.min.y,
                (double)rect.max.x, (double)rect.max.y);
     }
+    return YETTY_OK_VOID();
 }
 
 /* Pin the grips to the window's current rect: the right grip runs down
  * the outside of the right edge, the bottom grip runs along the outside
  * of the bottom edge and covers the corner. Mirrors the window's
  * visibility so hidden windows don't leave stray hit-targets. */
-static void debug_window_sync_grips(struct yetty_yui_debug_window *dw)
+static struct yetty_ycore_void_result debug_window_sync_grips(struct yetty_yui_debug_window *dw)
 {
     if (!dw || !dw->window) {
-        return;
+        return YETTY_OK_VOID();
     }
-    const struct yetty_ygui_layout *layout = yetty_ygui_widget_layout_get(dw->window);
-    int visible =
-        yetty_ygui_widget_is_visible(dw->window) && layout->width > 0.0f && layout->height > 0.0f;
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(dw->window);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "sync_grips: layout_get");
+    const struct yetty_ygui_layout *layout = layout_res.value;
+    struct yetty_ycore_int_result visible_res = yetty_ygui_widget_is_visible(dw->window);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, visible_res, "sync_grips: is_visible");
+    int visible = visible_res.value && layout->width > 0.0f && layout->height > 0.0f;
     const float thickness = DEBUG_WIN_GRIP_THICKNESS;
-    debug_window_pin_grip(dw->grip_right, visible, layout->pos_x + layout->width, layout->pos_y,
-                          thickness, layout->height);
-    debug_window_pin_grip(dw->grip_bottom, visible, layout->pos_x, layout->pos_y + layout->height,
-                          layout->width + thickness, thickness);
+    struct yetty_ycore_void_result pin_right_res =
+        debug_window_pin_grip(dw->grip_right, visible, layout->pos_x + layout->width, layout->pos_y,
+                              thickness, layout->height);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, pin_right_res, "sync_grips: pin right");
+    struct yetty_ycore_void_result pin_bottom_res =
+        debug_window_pin_grip(dw->grip_bottom, visible, layout->pos_x,
+                              layout->pos_y + layout->height, layout->width + thickness, thickness);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, pin_bottom_res, "sync_grips: pin bottom");
+    return YETTY_OK_VOID();
 }
 
 /* ygui CLOSE-event trampoline — forwards to the owner's close callback. */
@@ -271,7 +303,13 @@ struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
         }
     }
 
-    struct yetty_yclass_object *body = yetty_ygui_window_body(dw->window);
+    struct yetty_yclass_object_ptr_result body_res = yetty_ygui_window_body(dw->window);
+    if (YETTY_IS_ERR(body_res)) {
+        yetty_ycore_error_destroy(body_res.error);
+        free(dw);
+        return YETTY_ERR(yetty_yui_debug_window_ptr, "debug_window_create: window body", body_res);
+    }
+    struct yetty_yclass_object *body = body_res.value;
     if (body) {
         struct yetty_yclass_object **slots[3] = {&dw->label_1s, &dw->label_10s, &dw->label_60s};
         for (int i = 0; i < 3; i++) {
@@ -336,7 +374,8 @@ struct yetty_ycore_void_result yetty_yui_debug_window_layout(struct yetty_yui_de
      * reconcile must not fight them. The grips ARE re-pinned every frame,
      * tracking whatever the window's current rect is. */
     if (dw->placed) {
-        debug_window_sync_grips(dw);
+        struct yetty_ycore_void_result sync_res = debug_window_sync_grips(dw);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sync_res, "debug_window_layout: sync grips (placed)");
         return YETTY_OK_VOID();
     }
 
@@ -351,7 +390,9 @@ struct yetty_ycore_void_result yetty_yui_debug_window_layout(struct yetty_yui_de
     if (w < 1.0f || h < 1.0f) {
         /* Pane has no usable area yet — try again next frame. */
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(dw->window, 0));
-        debug_window_sync_grips(dw);
+        struct yetty_ycore_void_result sync_res = debug_window_sync_grips(dw);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sync_res,
+                            "debug_window_layout: sync grips (no area)");
         return YETTY_OK_VOID();
     }
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_visible(dw->window, 1));
@@ -360,7 +401,8 @@ struct yetty_ycore_void_result yetty_yui_debug_window_layout(struct yetty_yui_de
     float y = pane_y + DEBUG_WIN_INSET;
     yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_position(dw->window, x, y));
     dw->placed = 1;
-    debug_window_sync_grips(dw);
+    struct yetty_ycore_void_result sync_res = debug_window_sync_grips(dw);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sync_res, "debug_window_layout: sync grips (placed now)");
     return YETTY_OK_VOID();
 }
 

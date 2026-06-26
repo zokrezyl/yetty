@@ -781,19 +781,30 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_save_yaml_file(struct yetty_ycla
              emit_event(&emitter, &event);
     }
     for (size_t i = 0; ok && i < count_res.value; i++) {
-        struct yetty_yclass_object *paragraph_obj =
+        struct yetty_yclass_object_ptr_result paragraph_res =
             yetty_yrich_ydoc_paragraph_at(doc_obj, (int32_t)i);
+        if (YETTY_IS_ERR(paragraph_res)) {
+            yetty_ycore_error_destroy(paragraph_res.error);
+            ok = 0;
+            break;
+        }
+        struct yetty_yclass_object *paragraph_obj = paragraph_res.value;
         if (!paragraph_obj) {
             ok = 0;
             break;
         }
+        struct yetty_ycore_const_char_ptr_result text_res =
+            yetty_yrich_paragraph_text(paragraph_obj);
         struct yetty_ycore_size_result text_len_res = yetty_yrich_paragraph_text_len(paragraph_obj);
         struct yetty_ycore_float_result font_size_res =
             yetty_yrich_paragraph_font_size(paragraph_obj);
         struct yetty_ycore_uint32_result color_res = yetty_yrich_paragraph_color(paragraph_obj);
         struct yetty_ycore_uint32_result format_res = yetty_yrich_paragraph_format(paragraph_obj);
-        if (YETTY_IS_ERR(text_len_res) || YETTY_IS_ERR(font_size_res) || YETTY_IS_ERR(color_res) ||
-            YETTY_IS_ERR(format_res)) {
+        if (YETTY_IS_ERR(text_res) || YETTY_IS_ERR(text_len_res) || YETTY_IS_ERR(font_size_res) ||
+            YETTY_IS_ERR(color_res) || YETTY_IS_ERR(format_res)) {
+            if (YETTY_IS_ERR(text_res)) {
+                yetty_ycore_error_destroy(text_res.error);
+            }
             if (YETTY_IS_ERR(text_len_res)) {
                 yetty_ycore_error_destroy(text_len_res.error);
             }
@@ -811,8 +822,7 @@ struct yetty_ycore_void_result yetty_yrich_ydoc_save_yaml_file(struct yetty_ycla
         }
         ok = ok && emit_mapping_start(&emitter);
         ok = ok && emit_plain_scalar(&emitter, "text") &&
-             emit_quoted_scalar(&emitter, yetty_yrich_paragraph_text(paragraph_obj),
-                                text_len_res.value);
+             emit_quoted_scalar(&emitter, text_res.value, text_len_res.value);
         ok = ok && emit_key_float(&emitter, "fontSize", font_size_res.value);
         ok = ok && emit_key_color(&emitter, "color", color_res.value);
         ok = ok && emit_key_uint(&emitter, "format", format_res.value);

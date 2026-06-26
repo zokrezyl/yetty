@@ -46,7 +46,8 @@ struct yetty_ycore_void_result yetty_yui_config_dialog_hide(struct yetty_yui_con
 
 /* True iff the dialog window is currently visible. Used by yui's
  * is_active to capture pointer events while the dialog is open. */
-int yetty_yui_config_dialog_is_visible(const struct yetty_yui_config_dialog *dlg);
+struct yetty_ycore_int_result yetty_yui_config_dialog_is_visible(
+    const struct yetty_yui_config_dialog *dlg);
 
 #ifdef __cplusplus
 }

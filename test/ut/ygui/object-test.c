@@ -166,7 +166,9 @@ static void test_instance_alloc_and_dispatch(void)
     struct yetty_yclass_object *obj = r.value;
 
     /* Base widget class data slice should be present and zero-initialised. */
-    struct yetty_ycore_rectangle rect = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    assert(YETTY_IS_OK(rect_res));
+    struct yetty_ycore_rectangle rect = rect_res.value;
     assert(rect.min.x == 0 && rect.max.x == 0);
 
     /* Dispatch on_press → probe_a override. */
@@ -198,7 +200,9 @@ static void test_subclass_dispatch_and_super(void)
      * ctor initialised the layout struct. */
     struct probe_b_data *bd = yetty_yclass_object_data(obj, probe_b_class_get()).value;
     assert(bd->ctor_marker == 0xCAFE);
-    const struct yetty_ygui_layout *lay = yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result lay_res = yetty_ygui_widget_layout_get(obj);
+    assert(YETTY_IS_OK(lay_res));
+    const struct yetty_ygui_layout *lay = lay_res.value;
     assert(lay != NULL);
     assert(lay->direction == YETTY_YGUI_FLEX_ROW);
 

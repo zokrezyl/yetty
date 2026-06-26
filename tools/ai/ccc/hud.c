@@ -180,7 +180,9 @@ static struct yetty_yclass_object_ptr_result hud_add_label(struct ccc_hud *hud,
                                                          const char *initial_text,
                                                          struct yetty_ycore_rgba color)
 {
-    struct yetty_yclass_object *body = yetty_ygui_window_body(hud->window);
+    struct yetty_yclass_object_ptr_result body_res = yetty_ygui_window_body(hud->window);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, body_res, "hud_add_label: window_body");
+    struct yetty_yclass_object *body = body_res.value;
     if (!body) {
         return YETTY_ERR(yetty_yclass_object_ptr, "hud_add_label: window has no body");
     }
