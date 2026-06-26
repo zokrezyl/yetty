@@ -680,19 +680,46 @@ def generate_c_source(schema, uniforms, buffers, textures):
         instance_resources_wiring = ''
 
     # Record-bounds validation, emitted at the very top of create_instance
-    # (before any allocation, so a rejection is a plain early return). Each
-    # texture's pixel region (tex_w*tex_h*bpp) is bounded against the bytes the
-    # wire record actually carries. Without this, an attacker-supplied
-    # dimension drives the binder to upload heap past buffer_data into a GPU
-    # texture (out-of-bounds read / infoleak). All arithmetic is 64-bit so a
-    # crafted dimension or preceding-buffer length cannot wrap the check.
+    # (before any allocation, so a rejection is a plain early return). Two
+    # independent checks guard the binder against uploading heap past
+    # buffer_data (out-of-bounds read / GPU infoleak):
+    #
+    #   1. Every declared buffer's length word (payload[uwc+k]) is
+    #      attacker-controlled and drives a GPU upload of that many words. The
+    #      record must actually carry the sum of all buffer payloads.
+    #   2. Each texture whose pixels are diverted from a buffer reads
+    #      tex_w*tex_h*bpp bytes (which need NOT equal the diverted buffer's
+    #      declared length), so its pixel region is bounded separately.
+    #
+    # All arithmetic is 64-bit so a crafted length/dimension cannot wrap.
+    min_header_words = 2 + buffer_data_offset
+
+    def buffer_validate_block():
+        if not buffers:
+            return ''
+        sum_lines = '\n'.join(
+            f'        buffer_words += payload[{uniforms_word_count + k}];'
+            for k in range(buffer_len_fields))
+        return f'''    /* Bounds-check declared buffer payloads against the wire record. */
+    {{
+        const uint32_t *payload = (const uint32_t *)buffer_data + 2;
+        if (size < (size_t){min_header_words}u * sizeof(uint32_t))
+            return YETTY_ERR(yetty_ydraw_composite_ptr,
+                             "{name}: record too small for buffer header");
+        uint64_t buffer_words = 0;
+{sum_lines}
+        uint64_t record_words = (uint64_t)(2u + {buffer_data_offset}u) + buffer_words;
+        if (record_words * sizeof(uint32_t) > (uint64_t)size)
+            return YETTY_ERR(yetty_ydraw_composite_ptr,
+                             "{name}: buffers exceed record");
+    }}'''
+
     def texture_validate_block(t):
         if t['pixels_buffer'] is None:
             return ''
         buf_idx = next(i for i, b in enumerate(buffers) if b['name'] == t['pixels_buffer'])
         sum_expr = ''.join(
             f' + payload[{uniforms_word_count + k}]' for k in range(buf_idx))
-        min_header_words = 2 + buffer_data_offset
         return f'''    /* Bounds-check texture '{t["name"]}' pixels against the wire record. */
     {{
         const uint32_t *payload = (const uint32_t *)buffer_data + 2;
@@ -713,10 +740,12 @@ def generate_c_source(schema, uniforms, buffers, textures):
                              "{name}: texture pixels exceed record");
     }}'''
 
-    texture_record_validation = '\n'.join(
-        block for block in (texture_validate_block(t) for t in textures) if block)
-    if texture_record_validation:
-        texture_record_validation = '\n' + texture_record_validation + '\n'
+    record_validation = '\n'.join(
+        block for block in
+        ([buffer_validate_block()] + [texture_validate_block(t) for t in textures])
+        if block)
+    if record_validation:
+        record_validation = '\n' + record_validation + '\n'
 
     # ------------------------------------------------------------------
     # Hook surface — see hooks_enabled() docstring. When opted in, the
@@ -1074,7 +1103,7 @@ static struct yetty_ydraw_composite_ptr_result
 {{
     if (!buffer_data || size < sizeof(struct yetty_ydraw_composite_record))
         return YETTY_ERR(yetty_ydraw_composite_ptr, "invalid buffer data");
-{texture_record_validation}
+{record_validation}
     struct yetty_{name}_factory *factory = yetty_{name}_factory_from_base(self);
     if (!factory->pipeline)
         return YETTY_ERR(yetty_ydraw_composite_ptr,
