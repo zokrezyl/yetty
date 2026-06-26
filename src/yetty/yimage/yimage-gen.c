@@ -389,6 +389,20 @@ static struct yetty_ydraw_composite_ptr_result yimage_create_instance(
         return YETTY_ERR(yetty_ydraw_composite_ptr, "invalid buffer data");
     }
 
+    /* Bounds-check declared buffer payloads against the wire record. */
+    {
+        const uint32_t *payload = (const uint32_t *)buffer_data + 2;
+        if (size < (size_t)9u * sizeof(uint32_t)) {
+            return YETTY_ERR(yetty_ydraw_composite_ptr,
+                             "yimage: record too small for buffer header");
+        }
+        uint64_t buffer_words = 0;
+        buffer_words += payload[6];
+        uint64_t record_words = (uint64_t)(2u + 7u) + buffer_words;
+        if (record_words * sizeof(uint32_t) > (uint64_t)size) {
+            return YETTY_ERR(yetty_ydraw_composite_ptr, "yimage: buffers exceed record");
+        }
+    }
     /* Bounds-check texture 'image' pixels against the wire record. */
     {
         const uint32_t *payload = (const uint32_t *)buffer_data + 2;

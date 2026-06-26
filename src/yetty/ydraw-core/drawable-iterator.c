@@ -459,7 +459,10 @@ struct yetty_ycore_size_result yetty_ydraw_drawable_command_parse(
         uint32_t payload_size;
         memcpy(&id, bytes + 4, sizeof(id));
         memcpy(&payload_size, bytes + 8, sizeof(payload_size));
-        uint32_t total = 12u + payload_size;
+        /* 64-bit: 12u + payload_size wraps a uint32 total when payload_size is
+         * near UINT32_MAX, which would slip past the `bytes_len < total` check
+         * and hand the consumer a payload pointer + size that reads OOB. */
+        uint64_t total = 12ull + payload_size;
         if (bytes_len < total) {
             return YETTY_ERR(yetty_ycore_size, "command_parse: UPDATE body truncated");
         }
@@ -479,7 +482,9 @@ struct yetty_ycore_size_result yetty_ydraw_drawable_command_parse(
         }
         uint32_t payload_size;
         memcpy(&payload_size, bytes + 8, sizeof(payload_size));
-        uint32_t total = 12u + payload_size;
+        /* 64-bit: see the UPDATE branch — guards the same 12u + payload_size
+         * wrap that would defeat the bytes_len bound. */
+        uint64_t total = 12ull + payload_size;
         if (bytes_len < total) {
             return YETTY_ERR(yetty_ycore_size, "command_parse: GROUP body truncated");
         }
