@@ -46,6 +46,16 @@
 #define DRAWABLE_ITER_ENVELOPE_HEADER_BYTES 24u
 #define DRAWABLE_ITER_ENVELOPE_MAGIC 0x31425059u /* 'YPB1' little-endian */
 
+/* Hard upper bound on a single record's in-memory stride. The whole record
+ * is buffered in `scratch` before any drawable-list parser runs, so this
+ * caps per-record memory and — crucially — keeps the size in a range that
+ * survives the uint32 `total_size` field without truncation. The wire size
+ * is computed in 64-bit (ops->size returns size_t; UPDATE/GROUP add to a
+ * 32-bit payload_size) and validated against this cap BEFORE narrowing, so
+ * a malicious in-band length can no longer wrap/truncate `total_size` into a
+ * value smaller than the bytes a downstream parser will dereference. */
+#define DRAWABLE_ITER_MAX_RECORD_BYTES (256u * 1024u * 1024u)
+
 struct yetty_ycore_void_result yetty_ydraw_drawable_iterator_init(
     struct yetty_ydraw_drawable_iterator *iter,
     struct yetty_ywire_wire_statemachine *wire_statemachine,
@@ -264,7 +274,16 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
             }
             uint32_t payload_size;
             memcpy(&payload_size, iter->scratch + 8, sizeof(payload_size));
-            iter->total_size = 12u + payload_size;
+            /* Compute the stride in 64-bit: 12u + payload_size wraps a uint32
+             * total_size when payload_size is near UINT32_MAX, which would make
+             * Phase B treat a giant record as already-complete and hand the
+             * downstream consumer a payload pointer + size that reads OOB. */
+            uint64_t record_bytes = 12ull + payload_size;
+            if (record_bytes > DRAWABLE_ITER_MAX_RECORD_BYTES) {
+                return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
+                                 "drawable_iter: update record exceeds max size");
+            }
+            iter->total_size = (uint32_t)record_bytes;
         } else if (drawable_type == YETTY_YDRAW_CMD_GROUP) {
             /* GROUP: HAS_ID layout (type | id | payload_size | payload).
              * Size is determined by the wire bytes — no ops->size needed.
@@ -288,7 +307,13 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
             }
             uint32_t payload_size;
             memcpy(&payload_size, iter->scratch + 8, sizeof(payload_size));
-            iter->total_size = 12u + payload_size;
+            /* 64-bit stride: see the UPDATE branch — guards the same wrap. */
+            uint64_t record_bytes = 12ull + payload_size;
+            if (record_bytes > DRAWABLE_ITER_MAX_RECORD_BYTES) {
+                return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
+                                 "drawable_iter: group record exceeds max size");
+            }
+            iter->total_size = (uint32_t)record_bytes;
         } else {
             /* ADD: pull the 8-byte drawable-list entry header, then ask ops->size
              * for the full stride. */
@@ -324,6 +349,21 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
             if (size_res.value == 0) {
                 return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
                                  "drawable_iter: ops returned size 0");
+            }
+            /* ops->size returns a 64-bit size_t built from an in-band
+             * payload_size (e.g. font_resource_size = 8 + payload_size). An
+             * attacker-supplied payload_size of ~UINT32_MAX yields a value
+             * that, narrowed to the uint32 `total_size`, truncates BELOW the
+             * header bytes already pulled — Phase B then skips the body fill
+             * and the record is treated as complete, after which the parser
+             * re-reads the full in-band length and dereferences far past
+             * `scratch`. Validate the full 64-bit size before narrowing:
+             * it must cover at least the entry header and stay within the
+             * per-record cap. */
+            if (size_res.value < DRAWABLE_ITER_HEADER_BYTES ||
+                size_res.value > DRAWABLE_ITER_MAX_RECORD_BYTES) {
+                return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
+                                 "drawable_iter: record size out of range");
             }
             iter->total_size = (uint32_t)size_res.value;
         }

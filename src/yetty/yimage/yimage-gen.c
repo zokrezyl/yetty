@@ -389,6 +389,26 @@ static struct yetty_ydraw_composite_ptr_result yimage_create_instance(
         return YETTY_ERR(yetty_ydraw_composite_ptr, "invalid buffer data");
     }
 
+    /* Bounds-check texture 'image' pixels against the wire record. */
+    {
+        const uint32_t *payload = (const uint32_t *)buffer_data + 2;
+        if (size < (size_t)9u * sizeof(uint32_t)) {
+            return YETTY_ERR(yetty_ydraw_composite_ptr,
+                             "yimage: record too small for texture header");
+        }
+        uint32_t tex_w = payload[4];
+        uint32_t tex_h = payload[5];
+        if (tex_w > 32768u || tex_h > 32768u) {
+            return YETTY_ERR(yetty_ydraw_composite_ptr, "yimage: texture dimensions out of range");
+        }
+        uint64_t pixels_word_off = (uint64_t)7u;
+        uint64_t pixels_byte_off = (2ull + pixels_word_off) * sizeof(uint32_t);
+        uint64_t tex_need = (uint64_t)tex_w * (uint64_t)tex_h * 4u;
+        if (pixels_byte_off > (uint64_t)size || tex_need > (uint64_t)size - pixels_byte_off) {
+            return YETTY_ERR(yetty_ydraw_composite_ptr, "yimage: texture pixels exceed record");
+        }
+    }
+
     struct yetty_yimage_factory *factory = yetty_yimage_factory_from_base(self);
     if (!factory->pipeline) {
         return YETTY_ERR(yetty_ydraw_composite_ptr, "yimage factory pipeline not compiled");

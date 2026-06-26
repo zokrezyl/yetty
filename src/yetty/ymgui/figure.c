@@ -566,6 +566,15 @@ static struct yetty_ycore_void_result handle_tex_payload(struct yetty_yclass_obj
     }
     const uint8_t *pixels = bytes + sizeof(*th);
     size_t pixel_bytes = (size_t)th->width * (size_t)th->height;
+    /* `pixels` points into this record's buffer, which holds exactly
+     * bytes_len - sizeof(*th) pixel bytes. set_atlas's own size guard is a
+     * tautology on this path (it is handed pixel_bytes == width*height), so
+     * the bound must be enforced here: reject a header whose declared
+     * width*height exceeds the bytes actually delivered, else the R8 atlas
+     * upload reads out of bounds past the record tail. */
+    if (pixel_bytes > bytes_len - sizeof(*th)) {
+        return YETTY_ERR(yetty_ycore_void, "ymgui_figure: tex pixels exceed payload");
+    }
     return yetty_ymgui_figure_set_atlas(obj, pixels, pixel_bytes, th->width, th->height);
 }
 
