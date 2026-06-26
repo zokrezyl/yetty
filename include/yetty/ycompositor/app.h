@@ -31,7 +31,7 @@ struct yetty_ycompositor_app_ptr_result {
     };
 };
 struct yetty_ycompositor_app_ptr_result yetty_ycompositor_app_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ycompositor_app_to(struct yetty_ycompositor_app *data);
+struct yetty_yclass_object_ptr_result yetty_ycompositor_app_to(struct yetty_ycompositor_app *data);
 
 struct yetty_yclass_object_ptr_result yetty_ycompositor_app_create(struct yetty_yclass_ctx *ctx);
 

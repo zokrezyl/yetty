@@ -195,6 +195,14 @@ struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
  * its own generated header); grid.h publishes the identical declaration. */
 YETTY_YRESULT_DECLARE(yetty_yvterm_grid_ptr, struct yetty_yvterm_grid *);
 
+/* Result wrappers for the borrowed-pointer renderer accessors. Declared here
+ * for the same reason as the grid handle above (this TU has no generated header
+ * of its own); codegen reproduces the identical declarations into grid.h when
+ * the exposed accessors that return them are emitted. Each returned pointer
+ * borrows the grid's own backing — read it, do not free it. */
+YETTY_YRESULT_DECLARE(yetty_yvterm_text_cell_const_ptr, const struct yetty_yvterm_text_cell *);
+YETTY_YRESULT_DECLARE(yetty_ydraw_composite_const_ptr_ptr, struct yetty_ydraw_composite *const *);
+
 /* Defined in the appended grid.gen.c. */
 struct yetty_yclass_ptr_result yetty_yvterm_grid_class_get(void);
 struct yetty_yvterm_grid_ptr_result yetty_yvterm_grid_from(struct yetty_yclass_object *obj);
@@ -977,15 +985,16 @@ static void take_line_rich(struct yetty_yvterm_line *dst, struct yetty_yvterm_li
  * concatenated (descriptor offsets rebased), the descriptor and composite arrays
  * grown. Each category transfers all-or-nothing: anything that can't grow is left
  * on the source for the old-ring teardown, never leaked or double-owned. */
-static void merge_line_rich(struct yetty_yvterm_line *dst, struct yetty_yvterm_line *src)
+static struct yetty_ycore_void_result merge_line_rich(struct yetty_yvterm_line *dst,
+                                                      struct yetty_yvterm_line *src)
 {
     if (!src->composite_count && !src->primitive_count && !src->arena_count) {
-        return;
+        return YETTY_OK_VOID();
     }
     if (!dst->composites && !dst->primitives && !dst->arena) {
         take_line_rich(dst, src);
         dst->dirty = 1;
-        return;
+        return YETTY_OK_VOID();
     }
 
     /* Primitives reference the arena by offset, so move them together: grow both
@@ -994,52 +1003,42 @@ static void merge_line_rich(struct yetty_yvterm_line *dst, struct yetty_yvterm_l
     if (src->primitive_count || src->arena_count) {
         struct yetty_ycore_void_result arena_res =
             ensure_arena(dst, dst->arena_count + src->arena_count);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, arena_res, "yvterm merge_line_rich: grow arena");
         struct yetty_ycore_void_result prim_res =
             ensure_primitives(dst, dst->primitive_count + src->primitive_count);
-        if (YETTY_IS_OK(arena_res) && YETTY_IS_OK(prim_res)) {
-            uint32_t arena_base = dst->arena_count;
-            if (src->arena_count) {
-                memcpy(dst->arena + dst->arena_count, src->arena,
-                       (size_t)src->arena_count * sizeof(uint32_t));
-                dst->arena_count += src->arena_count;
-            }
-            for (uint32_t i = 0; i < src->primitive_count; ++i) {
-                dst->primitives[dst->primitive_count] = src->primitives[i];
-                dst->primitives[dst->primitive_count].arena_offset += arena_base;
-                dst->primitive_count++;
-            }
-            free(src->primitives);
-            free(src->arena);
-            src->primitives = NULL;
-            src->primitive_count = 0;
-            src->primitive_capacity = 0;
-            src->arena = NULL;
-            src->arena_count = 0;
-            src->arena_capacity = 0;
-        } else {
-            if (YETTY_IS_ERR(arena_res)) {
-                yetty_ycore_error_destroy(arena_res.error);
-            }
-            if (YETTY_IS_ERR(prim_res)) {
-                yetty_ycore_error_destroy(prim_res.error);
-            }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, prim_res, "yvterm merge_line_rich: grow primitives");
+        uint32_t arena_base = dst->arena_count;
+        if (src->arena_count) {
+            memcpy(dst->arena + dst->arena_count, src->arena,
+                   (size_t)src->arena_count * sizeof(uint32_t));
+            dst->arena_count += src->arena_count;
         }
+        for (uint32_t i = 0; i < src->primitive_count; ++i) {
+            dst->primitives[dst->primitive_count] = src->primitives[i];
+            dst->primitives[dst->primitive_count].arena_offset += arena_base;
+            dst->primitive_count++;
+        }
+        free(src->primitives);
+        free(src->arena);
+        src->primitives = NULL;
+        src->primitive_count = 0;
+        src->primitive_capacity = 0;
+        src->arena = NULL;
+        src->arena_count = 0;
+        src->arena_capacity = 0;
     }
 
     if (src->composite_count) {
         struct yetty_ycore_void_result comp_res =
             ensure_composites(dst, dst->composite_count + src->composite_count);
-        if (YETTY_IS_OK(comp_res)) {
-            for (uint32_t i = 0; i < src->composite_count; ++i) {
-                dst->composites[dst->composite_count++] = src->composites[i];
-            }
-            free(src->composites);
-            src->composites = NULL;
-            src->composite_count = 0;
-            src->composite_capacity = 0;
-        } else {
-            yetty_ycore_error_destroy(comp_res.error);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, comp_res, "yvterm merge_line_rich: grow composites");
+        for (uint32_t i = 0; i < src->composite_count; ++i) {
+            dst->composites[dst->composite_count++] = src->composites[i];
         }
+        free(src->composites);
+        src->composites = NULL;
+        src->composite_count = 0;
+        src->composite_capacity = 0;
     }
 
     /* Two blocks folded onto one row: keep the taller span so the merged
@@ -1050,6 +1049,7 @@ static void merge_line_rich(struct yetty_yvterm_line *dst, struct yetty_yvterm_l
     src->rich_span_rows = 0;
 
     dst->dirty = 1;
+    return YETTY_OK_VOID();
 }
 
 /* Alt-screen resize: full-screen apps own their redraw and have neither
@@ -1253,7 +1253,14 @@ static struct yetty_ycore_void_result grid_resize_reflow(struct yetty_yvterm_gri
                                      new_line_count, &slot)) {
                 continue;
             }
-            merge_line_rich(&tmp.lines[slot], src_line);
+            struct yetty_ycore_void_result merge_res = merge_line_rich(&tmp.lines[slot], src_line);
+            if (YETTY_IS_ERR(merge_res)) {
+                grid_free_lines(&tmp);
+                free(src);
+                free(logical);
+                return YETTY_ERR(yetty_ycore_void, "yvterm: grid_resize_reflow merge rich",
+                                 merge_res);
+            }
         }
     }
 
@@ -1339,42 +1346,39 @@ struct yetty_ycore_void_result yetty_yvterm_grid_dispose(struct yetty_yclass_obj
 }
 
 YETTY_ANNOTATE("expose")
-void yetty_yvterm_grid_set_pty_write(struct yetty_yclass_object *obj,
-                                     yetty_yvterm_grid_pty_write_fn fn, void *userdata)
+struct yetty_ycore_void_result yetty_yvterm_grid_set_pty_write(struct yetty_yclass_object *obj,
+                                                               yetty_yvterm_grid_pty_write_fn fn,
+                                                               void *userdata)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_pty_write: from_obj");
     grid_res.value->pty_write_fn = fn;
     grid_res.value->pty_write_userdata = userdata;
+    return YETTY_OK_VOID();
 }
 
 YETTY_ANNOTATE("expose")
-void yetty_yvterm_grid_set_clear_hook(struct yetty_yclass_object *obj,
-                                      yetty_yvterm_grid_clear_hook_fn fn, void *userdata)
+struct yetty_ycore_void_result yetty_yvterm_grid_set_clear_hook(struct yetty_yclass_object *obj,
+                                                                yetty_yvterm_grid_clear_hook_fn fn,
+                                                                void *userdata)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_clear_hook: from_obj");
     grid_res.value->clear_hook_fn = fn;
     grid_res.value->clear_hook_userdata = userdata;
+    return YETTY_OK_VOID();
 }
 
 YETTY_ANNOTATE("expose")
-void yetty_yvterm_grid_set_card_sub(struct yetty_yclass_object *obj,
-                                    yetty_yvterm_grid_card_sub_fn fn, void *userdata)
+struct yetty_ycore_void_result yetty_yvterm_grid_set_card_sub(struct yetty_yclass_object *obj,
+                                                              yetty_yvterm_grid_card_sub_fn fn,
+                                                              void *userdata)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_set_card_sub: from_obj");
     grid_res.value->card_sub_fn = fn;
     grid_res.value->card_sub_userdata = userdata;
+    return YETTY_OK_VOID();
 }
 
 /*===========================================================================
@@ -1415,50 +1419,42 @@ struct yetty_ycore_void_result yetty_yvterm_grid_resize(struct yetty_yclass_obje
 }
 
 YETTY_ANNOTATE("expose")
-int yetty_yvterm_grid_is_dirty(struct yetty_yclass_object *obj)
+struct yetty_ycore_int_result yetty_yvterm_grid_is_dirty(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return 0;
-    }
-    return grid_res.value->has_dirty;
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, grid_res, "yvterm grid_is_dirty: from_obj");
+    return YETTY_OK(yetty_ycore_int, grid_res.value->has_dirty);
 }
 
 YETTY_ANNOTATE("expose")
-void yetty_yvterm_grid_cursor(struct yetty_yclass_object *obj, uint32_t *out_row, uint32_t *out_col,
-                              uint32_t *out_visible)
+struct yetty_ycore_void_result yetty_yvterm_grid_cursor(struct yetty_yclass_object *obj,
+                                                        uint32_t *out_row, uint32_t *out_col,
+                                                        uint32_t *out_visible)
 {
-    struct yetty_yvterm_grid *grid = NULL;
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_OK(grid_res)) {
-        grid = grid_res.value;
-    } else {
-        yetty_ycore_error_destroy(grid_res.error);
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_cursor: from_obj");
+    struct yetty_yvterm_grid *grid = grid_res.value;
     if (out_row) {
-        *out_row = grid ? grid->cursor_row : 0u;
+        *out_row = grid->cursor_row;
     }
     if (out_col) {
-        *out_col = grid ? grid->cursor_col : 0u;
+        *out_col = grid->cursor_col;
     }
     if (out_visible) {
-        *out_visible = grid ? grid->cursor_visible : 0u;
+        *out_visible = grid->cursor_visible;
     }
+    return YETTY_OK_VOID();
 }
 
 /* Absolute row at the top of the screen (rows scrolled off so far). The cursor's
  * absolute output row is this + the visible cursor row — used to place anchored
  * rich content on the rolling-row scroll. */
 YETTY_ANNOTATE("expose")
-uint32_t yetty_yvterm_grid_scroll_origin(struct yetty_yclass_object *obj)
+struct yetty_ycore_uint32_result yetty_yvterm_grid_scroll_origin(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return 0u;
-    }
-    return grid_res.value->total_scrolled;
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, grid_res, "yvterm grid_scroll_origin: from_obj");
+    return YETTY_OK(yetty_ycore_uint32, grid_res.value->total_scrolled);
 }
 
 /*===========================================================================
@@ -1555,7 +1551,8 @@ struct yetty_ycore_void_result yetty_yvterm_grid_relocate_rich_to_bottom(
         struct yetty_yvterm_line *top = line_at_signed(grid, top_row);
         /* bottom is freshly blanked by the reserve scroll, so this steals the
          * top line's whole rich backing onto it (no copy). */
-        merge_line_rich(bottom, top);
+        struct yetty_ycore_void_result merge_res = merge_line_rich(bottom, top);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, merge_res, "yvterm relocate_rich: merge");
     }
     /* Stamp the span AFTER the move: merge_line_rich carries the (zero) source
      * span, so set the real height last. */
@@ -1688,33 +1685,27 @@ struct yetty_ycore_void_result yetty_yvterm_grid_register_wire(
 }
 
 YETTY_ANNOTATE("expose")
-int yetty_yvterm_grid_on_char(struct yetty_yclass_object *obj, uint32_t codepoint, int mods)
+struct yetty_ycore_int_result yetty_yvterm_grid_on_char(struct yetty_yclass_object *obj,
+                                                        uint32_t codepoint, int mods)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return 0;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, grid_res, "yvterm grid_on_char: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
     if (codepoint == 0) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
     vterm_keyboard_unichar(grid->vterm, codepoint, grid_map_mods(mods));
-    struct yetty_ycore_void_result fr = grid_flush_output(grid);
-    if (YETTY_IS_ERR(fr)) {
-        yetty_ycore_error_destroy(fr.error);
-    }
-    return 1;
+    struct yetty_ycore_void_result flush_res = grid_flush_output(grid);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, flush_res, "yvterm grid_on_char: flush output");
+    return YETTY_OK(yetty_ycore_int, 1);
 }
 
 YETTY_ANNOTATE("expose")
-int yetty_yvterm_grid_on_key(struct yetty_yclass_object *obj, int key, int mods)
+struct yetty_ycore_int_result yetty_yvterm_grid_on_key(struct yetty_yclass_object *obj, int key,
+                                                       int mods)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return 0;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, grid_res, "yvterm grid_on_key: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
     VTermKey vk = VTERM_KEY_NONE;
     switch (key) {
@@ -1761,14 +1752,12 @@ int yetty_yvterm_grid_on_key(struct yetty_yclass_object *obj, int key, int mods)
         vk = VTERM_KEY_END;
         break;
     default:
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
     vterm_keyboard_key(grid->vterm, vk, grid_map_mods(mods));
-    struct yetty_ycore_void_result fr = grid_flush_output(grid);
-    if (YETTY_IS_ERR(fr)) {
-        yetty_ycore_error_destroy(fr.error);
-    }
-    return 1;
+    struct yetty_ycore_void_result flush_res = grid_flush_output(grid);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, flush_res, "yvterm grid_on_key: flush output");
+    return YETTY_OK(yetty_ycore_int, 1);
 }
 
 YETTY_ANNOTATE("expose")
@@ -1854,24 +1843,22 @@ static int grid_is_word_char(uint32_t cp)
  * word chars covering the clicked cell. A click on a non-word cell selects just
  * that cell. Used for double-click word selection. */
 YETTY_ANNOTATE("expose")
-void yetty_yvterm_grid_word_bounds(struct yetty_yclass_object *obj, uint32_t row, uint32_t col,
-                                   uint32_t *out_start_col, uint32_t *out_end_col)
+struct yetty_ycore_void_result yetty_yvterm_grid_word_bounds(struct yetty_yclass_object *obj,
+                                                             uint32_t row, uint32_t col,
+                                                             uint32_t *out_start_col,
+                                                             uint32_t *out_end_col)
 {
     uint32_t start = col, end = col;
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-    } else {
-        struct yetty_yvterm_grid *grid = grid_res.value;
-        if (row < grid->visible_rows && col < grid->cols &&
-            grid_is_word_char(cell_at(grid, row, col)->codepoint)) {
-            while (start > 0 && grid_is_word_char(cell_at(grid, row, start - 1)->codepoint)) {
-                --start;
-            }
-            while (end + 1u < grid->cols &&
-                   grid_is_word_char(cell_at(grid, row, end + 1)->codepoint)) {
-                ++end;
-            }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_word_bounds: from_obj");
+    struct yetty_yvterm_grid *grid = grid_res.value;
+    if (row < grid->visible_rows && col < grid->cols &&
+        grid_is_word_char(cell_at(grid, row, col)->codepoint)) {
+        while (start > 0 && grid_is_word_char(cell_at(grid, row, start - 1)->codepoint)) {
+            --start;
+        }
+        while (end + 1u < grid->cols && grid_is_word_char(cell_at(grid, row, end + 1)->codepoint)) {
+            ++end;
         }
     }
     if (out_start_col) {
@@ -1880,6 +1867,7 @@ void yetty_yvterm_grid_word_bounds(struct yetty_yclass_object *obj, uint32_t row
     if (out_end_col) {
         *out_end_col = end;
     }
+    return YETTY_OK_VOID();
 }
 
 /*===========================================================================
@@ -1889,81 +1877,75 @@ void yetty_yvterm_grid_word_bounds(struct yetty_yclass_object *obj, uint32_t row
  *=========================================================================*/
 
 YETTY_ANNOTATE("expose")
-void yetty_yvterm_grid_dims(struct yetty_yclass_object *obj, uint32_t *out_cols, uint32_t *out_rows,
-                            uint32_t *out_base)
+struct yetty_ycore_void_result yetty_yvterm_grid_dims(struct yetty_yclass_object *obj,
+                                                      uint32_t *out_cols, uint32_t *out_rows,
+                                                      uint32_t *out_base)
 {
-    struct yetty_yvterm_grid *grid = NULL;
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_OK(grid_res)) {
-        grid = grid_res.value;
-    } else {
-        yetty_ycore_error_destroy(grid_res.error);
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_dims: from_obj");
+    struct yetty_yvterm_grid *grid = grid_res.value;
     if (out_cols) {
-        *out_cols = grid ? grid->cols : 0u;
+        *out_cols = grid->cols;
     }
     if (out_rows) {
-        *out_rows = grid ? grid->visible_rows : 0u;
+        *out_rows = grid->visible_rows;
     }
     if (out_base) {
-        *out_base = grid ? grid->base : 0u;
+        *out_base = grid->base;
     }
+    return YETTY_OK_VOID();
 }
 
-/* The cell array for visible row `row` (length = cols). NULL if out of range. */
+/* The cell array for visible row `row` (length = cols). NULL value if out of
+ * range. */
 YETTY_ANNOTATE("expose")
-const struct yetty_yvterm_text_cell *yetty_yvterm_grid_line_cells(struct yetty_yclass_object *obj,
-                                                                  uint32_t row)
+struct yetty_yvterm_text_cell_const_ptr_result yetty_yvterm_grid_line_cells(
+    struct yetty_yclass_object *obj, uint32_t row)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yvterm_text_cell_const_ptr, grid_res,
+                        "yvterm grid_line_cells: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
     if (row >= grid->visible_rows) {
-        return NULL;
+        return YETTY_OK(yetty_yvterm_text_cell_const_ptr, NULL);
     }
-    return line_at(grid, row)->text_cells;
+    return YETTY_OK(yetty_yvterm_text_cell_const_ptr, line_at(grid, row)->text_cells);
 }
 
 YETTY_ANNOTATE("expose")
-int yetty_yvterm_grid_line_dirty(struct yetty_yclass_object *obj, uint32_t row)
+struct yetty_ycore_int_result yetty_yvterm_grid_line_dirty(struct yetty_yclass_object *obj,
+                                                           uint32_t row)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return 0;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, grid_res, "yvterm grid_line_dirty: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
     if (row >= grid->visible_rows) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
-    return line_at(grid, row)->dirty;
+    return YETTY_OK(yetty_ycore_int, line_at(grid, row)->dirty);
 }
 
-/* Composite array anchored on visible row `row`. Sets *out_count; may be NULL. */
+/* Composite array anchored on visible row `row`. Sets *out_count; value may be
+ * NULL. */
 YETTY_ANNOTATE("expose")
-struct yetty_ydraw_composite *const *yetty_yvterm_grid_line_composites(
+struct yetty_ydraw_composite_const_ptr_ptr_result yetty_yvterm_grid_line_composites(
     struct yetty_yclass_object *obj, uint32_t row, uint32_t *out_count)
 {
     if (out_count) {
         *out_count = 0;
     }
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ydraw_composite_const_ptr_ptr, grid_res,
+                        "yvterm grid_line_composites: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
     if (row >= grid->visible_rows) {
-        return NULL;
+        return YETTY_OK(yetty_ydraw_composite_const_ptr_ptr, NULL);
     }
     struct yetty_yvterm_line *line = line_at(grid, row);
     if (out_count) {
         *out_count = line->composite_count;
     }
-    return line->composites;
+    return YETTY_OK(yetty_ydraw_composite_const_ptr_ptr, line->composites);
 }
 
 /* Composite array on RAW ring slot `slot` (0..slot_count). Distinct from the
@@ -1971,44 +1953,40 @@ struct yetty_ydraw_composite *const *yetty_yvterm_grid_line_composites(
  * slot via root_row, so the composite pass must read by the SAME slot to scroll
  * in lockstep (live AND scrolled-back). Sets *out_count; may be NULL. */
 YETTY_ANNOTATE("expose")
-struct yetty_ydraw_composite *const *yetty_yvterm_grid_slot_composites(
+struct yetty_ydraw_composite_const_ptr_ptr_result yetty_yvterm_grid_slot_composites(
     struct yetty_yclass_object *obj, uint32_t slot, uint32_t *out_count)
 {
     if (out_count) {
         *out_count = 0;
     }
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ydraw_composite_const_ptr_ptr, grid_res,
+                        "yvterm grid_slot_composites: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
     if (slot >= grid->line_count) {
-        return NULL;
+        return YETTY_OK(yetty_ydraw_composite_const_ptr_ptr, NULL);
     }
     struct yetty_yvterm_line *line = &grid->lines[slot];
     if (out_count) {
         *out_count = line->composite_count;
     }
-    return line->composites;
+    return YETTY_OK(yetty_ydraw_composite_const_ptr_ptr, line->composites);
 }
 
 /* Number of raw drawable records (SDF / glyph / TEXT_DRAWABLE_LIST / FONT) stored
  * on RAW ring slot `slot`. The SDF render pass walks these by slot — same raw-slot
  * addressing the composite + text passes use — so figures and text scroll together. */
 YETTY_ANNOTATE("expose")
-uint32_t yetty_yvterm_grid_slot_primitive_count(struct yetty_yclass_object *obj, uint32_t slot)
+struct yetty_ycore_uint32_result yetty_yvterm_grid_slot_primitive_count(
+    struct yetty_yclass_object *obj, uint32_t slot)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return 0u;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, grid_res, "yvterm grid_slot_primitive_count: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
     if (slot >= grid->line_count) {
-        return 0u;
+        return YETTY_OK(yetty_ycore_uint32, 0u);
     }
-    return grid->lines[slot].primitive_count;
+    return YETTY_OK(yetty_ycore_uint32, grid->lines[slot].primitive_count);
 }
 
 /* Row-span of the rich-content block whose BOTTOM line is RAW ring slot `slot`.
@@ -2017,141 +1995,124 @@ uint32_t yetty_yvterm_grid_slot_primitive_count(struct yetty_yclass_object *obj,
  * evicted) by its bottom line. 0 means the slot carries no relocated block —
  * the renderer then treats it as a single-row anchor. */
 YETTY_ANNOTATE("expose")
-uint32_t yetty_yvterm_grid_slot_span(struct yetty_yclass_object *obj, uint32_t slot)
+struct yetty_ycore_uint32_result yetty_yvterm_grid_slot_span(struct yetty_yclass_object *obj,
+                                                             uint32_t slot)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return 0u;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, grid_res, "yvterm grid_slot_span: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
     if (slot >= grid->line_count) {
-        return 0u;
+        return YETTY_OK(yetty_ycore_uint32, 0u);
     }
-    return grid->lines[slot].rich_span_rows;
+    return YETTY_OK(yetty_ycore_uint32, grid->lines[slot].rich_span_rows);
 }
 
 /* Words of primitive `index` on RAW ring slot `slot`. *out_word_count is set to the
  * record's u32 length. Returns NULL (and *out_word_count 0) if slot/index are out of
  * range. The returned span aliases the line's arena — read it, do not retain it. */
 YETTY_ANNOTATE("expose")
-const uint32_t *yetty_yvterm_grid_slot_primitive_words(struct yetty_yclass_object *obj,
-                                                       uint32_t slot, uint32_t index,
-                                                       uint32_t *out_word_count)
+struct yetty_ycore_const_uint32_ptr_result yetty_yvterm_grid_slot_primitive_words(
+    struct yetty_yclass_object *obj, uint32_t slot, uint32_t index, uint32_t *out_word_count)
 {
     if (out_word_count) {
         *out_word_count = 0u;
     }
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_uint32_ptr, grid_res,
+                        "yvterm grid_slot_primitive_words: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
     if (slot >= grid->line_count) {
-        return NULL;
+        return YETTY_OK(yetty_ycore_const_uint32_ptr, NULL);
     }
     struct yetty_yvterm_line *line = &grid->lines[slot];
     if (index >= line->primitive_count) {
-        return NULL;
+        return YETTY_OK(yetty_ycore_const_uint32_ptr, NULL);
     }
     struct yetty_yvterm_primitive *prim = &line->primitives[index];
     if (out_word_count) {
         *out_word_count = prim->word_count;
     }
-    return line->arena + prim->arena_offset;
+    return YETTY_OK(yetty_ycore_const_uint32_ptr, line->arena + prim->arena_offset);
 }
 
 /* Current selection rectangle (raw anchor/head; the renderer normalises to a
  * reading-order stream). active=0 → no selection. */
 YETTY_ANNOTATE("expose")
-void yetty_yvterm_grid_selection(struct yetty_yclass_object *obj, int *out_active,
-                                 uint32_t *out_anchor_row, uint32_t *out_anchor_col,
-                                 uint32_t *out_head_row, uint32_t *out_head_col)
+struct yetty_ycore_void_result yetty_yvterm_grid_selection(
+    struct yetty_yclass_object *obj, int *out_active, uint32_t *out_anchor_row,
+    uint32_t *out_anchor_col, uint32_t *out_head_row, uint32_t *out_head_col)
 {
-    struct yetty_yvterm_grid *grid = NULL;
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_OK(grid_res)) {
-        grid = grid_res.value;
-    } else {
-        yetty_ycore_error_destroy(grid_res.error);
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_selection: from_obj");
+    struct yetty_yvterm_grid *grid = grid_res.value;
     if (out_active) {
-        *out_active = grid ? grid->selection_active : 0;
+        *out_active = grid->selection_active;
     }
     if (out_anchor_row) {
-        *out_anchor_row = grid ? grid->selection_anchor_row : 0u;
+        *out_anchor_row = grid->selection_anchor_row;
     }
     if (out_anchor_col) {
-        *out_anchor_col = grid ? grid->selection_anchor_col : 0u;
+        *out_anchor_col = grid->selection_anchor_col;
     }
     if (out_head_row) {
-        *out_head_row = grid ? grid->selection_head_row : 0u;
+        *out_head_row = grid->selection_head_row;
     }
     if (out_head_col) {
-        *out_head_col = grid ? grid->selection_head_col : 0u;
+        *out_head_col = grid->selection_head_col;
     }
+    return YETTY_OK_VOID();
 }
 
 /* Renderer has consumed the model; drop every dirty flag. */
 YETTY_ANNOTATE("expose")
-void yetty_yvterm_grid_clear_dirty(struct yetty_yclass_object *obj)
+struct yetty_ycore_void_result yetty_yvterm_grid_clear_dirty(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_clear_dirty: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
     for (uint32_t i = 0; i < grid->line_count; ++i) {
         grid->lines[i].dirty = 0;
     }
     grid->has_dirty = 0;
+    return YETTY_OK_VOID();
 }
 
 /* Raw ring-slot accessors (slot in [0, line_count)) for the text upload, which
  * is slot-indexed so the shader's root_row=base gives O(1) scroll. Distinct from
  * the visible-row accessors above (which resolve the ring). */
 YETTY_ANNOTATE("expose")
-uint32_t yetty_yvterm_grid_slot_count(struct yetty_yclass_object *obj)
+struct yetty_ycore_uint32_result yetty_yvterm_grid_slot_count(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return 0;
-    }
-    return grid_res.value->line_count;
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, grid_res, "yvterm grid_slot_count: from_obj");
+    return YETTY_OK(yetty_ycore_uint32, grid_res.value->line_count);
 }
 
 YETTY_ANNOTATE("expose")
-const struct yetty_yvterm_text_cell *yetty_yvterm_grid_slot_cells(struct yetty_yclass_object *obj,
-                                                                  uint32_t slot)
+struct yetty_yvterm_text_cell_const_ptr_result yetty_yvterm_grid_slot_cells(
+    struct yetty_yclass_object *obj, uint32_t slot)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yvterm_text_cell_const_ptr, grid_res,
+                        "yvterm grid_slot_cells: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
     if (slot >= grid->line_count) {
-        return NULL;
+        return YETTY_OK(yetty_yvterm_text_cell_const_ptr, NULL);
     }
-    return grid->lines[slot].text_cells;
+    return YETTY_OK(yetty_yvterm_text_cell_const_ptr, grid->lines[slot].text_cells);
 }
 
 YETTY_ANNOTATE("expose")
-int yetty_yvterm_grid_slot_dirty(struct yetty_yclass_object *obj, uint32_t slot)
+struct yetty_ycore_int_result yetty_yvterm_grid_slot_dirty(struct yetty_yclass_object *obj,
+                                                           uint32_t slot)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
-    if (YETTY_IS_ERR(grid_res)) {
-        yetty_ycore_error_destroy(grid_res.error);
-        return 0;
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, grid_res, "yvterm grid_slot_dirty: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
     if (slot >= grid->line_count) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
-    return grid->lines[slot].dirty;
+    return YETTY_OK(yetty_ycore_int, grid->lines[slot].dirty);
 }
 
 #include "grid.gen.c"

@@ -34,7 +34,7 @@ struct yetty_ymap_map_ptr_result {
     };
 };
 struct yetty_ymap_map_ptr_result yetty_ymap_map_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ymap_map_to(struct yetty_ymap_map *data);
+struct yetty_yclass_object_ptr_result yetty_ymap_map_to(struct yetty_ymap_map *data);
 
 /* configure: set the whole view in one call. zoom is clamped to the
  * active provider's range; viewport to the engine's sanity bounds. */

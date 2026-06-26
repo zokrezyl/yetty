@@ -35,7 +35,7 @@ struct yetty_yplatform_window_chrome_ptr_result {
 };
 struct yetty_yplatform_window_chrome_ptr_result yetty_yplatform_window_chrome_from(
     struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yplatform_window_chrome_to(
+struct yetty_yclass_object_ptr_result yetty_yplatform_window_chrome_to(
     struct yetty_yplatform_window_chrome *data);
 
 struct yetty_ycore_void_result yetty_yplatform_window_chrome_destroy(

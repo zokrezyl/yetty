@@ -82,7 +82,9 @@ static struct yetty_ycore_void_result tooltip_paint(struct yetty_yclass_object *
     if (!td->text || td->text[0] == '\0') {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "tooltip_paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float font_size = 12.0f;
     struct yetty_ycore_buffer text_buf = {
         .data = (uint8_t *)td->text,

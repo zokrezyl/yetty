@@ -19,12 +19,13 @@
 
 /* Error-path teardown is best-effort — absorb a failed destroy so the
  * original error is the one that surfaces. */
-static void music_destroy_best_effort(struct yetty_yclass_object *music)
+static struct yetty_ycore_void_result music_destroy_best_effort(struct yetty_yclass_object *music)
 {
     struct yetty_ycore_void_result destroy_res = yetty_ymusic_destroy(music);
     if (YETTY_IS_ERR(destroy_res)) {
         yetty_ycore_error_destroy(destroy_res.error);
     }
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ydraw_drawable_list_result yetty_ycat_handler_music(

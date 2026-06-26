@@ -34,7 +34,9 @@ static struct yetty_ycore_void_result menubar_constructor(struct yetty_yclass_ob
         yetty_ygui_super_void(obj, yetty_ygui_menubar_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "menubar_constructor: super");
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "menubar_constructor: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.height = 30.0f;
     l.gap = 2.0f;
     return yetty_ygui_widget_layout_set(obj, &l);
@@ -48,7 +50,9 @@ static struct yetty_ycore_void_result on_trigger_click(struct yetty_yclass_objec
     if (!menu) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "on_trigger_click: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     return yetty_ygui_popup_menu_toggle_at(menu, r.min.x, r.max.y + 2.0f);
 }
 
@@ -67,7 +71,9 @@ struct yetty_ycore_void_result yetty_ygui_menubar_add(struct yetty_yclass_object
     struct yetty_ycore_void_result lr = yetty_ygui_button_set_label(btn, label);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "menubar_add: set_label");
     {
-        struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(btn);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(btn);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "menubar_add: layout_get");
+        struct yetty_ygui_layout l = *layout_res.value;
         l.width = 80.0f;
         struct yetty_ycore_void_result wr = yetty_ygui_widget_layout_set(btn, &l);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "menubar_add: btn layout");

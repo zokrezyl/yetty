@@ -38,7 +38,7 @@ struct yetty_yrich_document_ptr_result {
     };
 };
 struct yetty_yrich_document_ptr_result yetty_yrich_document_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yrich_document_to(struct yetty_yrich_document *data);
+struct yetty_yclass_object_ptr_result yetty_yrich_document_to(struct yetty_yrich_document *data);
 
 struct yetty_ycore_void_result yetty_yrich_constructor(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yrich_document_destroy(struct yetty_yclass_object *obj);

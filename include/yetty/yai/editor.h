@@ -36,7 +36,7 @@ struct yetty_yai_editor_ptr_result {
     };
 };
 struct yetty_yai_editor_ptr_result yetty_yai_editor_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yai_editor_to(struct yetty_yai_editor *data);
+struct yetty_yclass_object_ptr_result yetty_yai_editor_to(struct yetty_yai_editor *data);
 
 struct yetty_ycore_int_result yetty_yai_feed_byte(struct yetty_yclass_object *obj,
                                                   struct yai_app *app, int byte);

@@ -41,7 +41,7 @@ struct yetty_ymusic_music_ptr_result {
     };
 };
 struct yetty_ymusic_music_ptr_result yetty_ymusic_music_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ymusic_music_to(struct yetty_ymusic_music *data);
+struct yetty_yclass_object_ptr_result yetty_ymusic_music_to(struct yetty_ymusic_music *data);
 
 /* configure: set system width, staff-space (line gap) in px and render flags.
  * 0 selects the default for each. Call after create(), before render(). */

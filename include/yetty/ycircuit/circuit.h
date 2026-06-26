@@ -42,7 +42,8 @@ struct yetty_ycircuit_circuit_ptr_result {
 };
 struct yetty_ycircuit_circuit_ptr_result yetty_ycircuit_circuit_from(
     struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ycircuit_circuit_to(struct yetty_ycircuit_circuit *data);
+struct yetty_yclass_object_ptr_result yetty_ycircuit_circuit_to(
+    struct yetty_ycircuit_circuit *data);
 
 /* configure: set the grid pitch in px and render flags. 0 selects the
  * default. A `grid` directive in the parsed document takes precedence. Call

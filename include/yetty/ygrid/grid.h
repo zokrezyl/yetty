@@ -31,7 +31,7 @@ struct yetty_ygrid_grid_ptr_result {
     };
 };
 struct yetty_ygrid_grid_ptr_result yetty_ygrid_grid_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygrid_grid_to(struct yetty_ygrid_grid *data);
+struct yetty_yclass_object_ptr_result yetty_ygrid_grid_to(struct yetty_ygrid_grid *data);
 
 struct yetty_ycore_void_result yetty_ygrid_add_record(struct yetty_yclass_object *obj,
                                                       struct yetty_ycore_buffer record);

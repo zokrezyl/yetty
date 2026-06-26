@@ -153,7 +153,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
      * the scene bounds and can start slightly negative) would otherwise be
      * offset from the widget rect. Buffers authored from (0,0) — ymarkdown,
      * ypdf — have scene_min == 0, so this is a no-op for them. */
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "ydraw_embed paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float dx = r.min.x - yetty_ydraw_drawable_list_scene_min_x(d->buf);
     float dy = r.min.y - yetty_ydraw_drawable_list_scene_min_y(d->buf);
     const uint8_t *src = (const uint8_t *)yetty_ydraw_drawable_list_data(d->buf);

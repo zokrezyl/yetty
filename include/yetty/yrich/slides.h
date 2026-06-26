@@ -45,7 +45,7 @@ struct yetty_yrich_shape_ptr_result {
     };
 };
 struct yetty_yrich_shape_ptr_result yetty_yrich_shape_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yrich_shape_to(struct yetty_yrich_shape *data);
+struct yetty_yclass_object_ptr_result yetty_yrich_shape_to(struct yetty_yrich_shape *data);
 struct uint32_result yetty_yrich_shape_fill_color_get(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yrich_shape_fill_color_set(struct yetty_yclass_object *obj,
                                                                 uint32_t value);
@@ -81,7 +81,7 @@ struct yetty_yrich_slides_ptr_result {
     };
 };
 struct yetty_yrich_slides_ptr_result yetty_yrich_slides_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yrich_slides_to(struct yetty_yrich_slides *data);
+struct yetty_yclass_object_ptr_result yetty_yrich_slides_to(struct yetty_yrich_slides *data);
 
 struct yetty_ycore_void_result yetty_yrich_slides_set_current(struct yetty_yclass_object *obj,
                                                               int32_t index);

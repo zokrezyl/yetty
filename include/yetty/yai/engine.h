@@ -38,7 +38,7 @@ struct yetty_yai_engine_ptr_result {
     };
 };
 struct yetty_yai_engine_ptr_result yetty_yai_engine_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yai_engine_to(struct yetty_yai_engine *data);
+struct yetty_yclass_object_ptr_result yetty_yai_engine_to(struct yetty_yai_engine *data);
 
 /* Engines without a permission protocol simply have nothing to answer
  * — a no-op default, NOT an error: main.c calls this unconditionally

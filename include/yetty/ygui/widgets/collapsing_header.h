@@ -32,7 +32,7 @@ struct yetty_ygui_collapsing_header_ptr_result {
 };
 struct yetty_ygui_collapsing_header_ptr_result yetty_ygui_collapsing_header_from(
     struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_collapsing_header_to(
+struct yetty_yclass_object_ptr_result yetty_ygui_collapsing_header_to(
     struct yetty_ygui_collapsing_header *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_collapsing_header_create(

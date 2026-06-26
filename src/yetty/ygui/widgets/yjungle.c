@@ -77,7 +77,9 @@ static struct yetty_ycore_void_result yjungle_emit_body(struct yetty_yclass_obje
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yjungle_emit_body: data_get");
     struct yetty_ygui_yjungle *d = d_dr.value;
 
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "yjungle_emit_body: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
     if (d->jungle && w > 0.0f && h > 0.0f) {

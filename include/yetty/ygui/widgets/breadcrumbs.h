@@ -32,7 +32,8 @@ struct yetty_ygui_breadcrumbs_ptr_result {
 };
 struct yetty_ygui_breadcrumbs_ptr_result yetty_ygui_breadcrumbs_from(
     struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_breadcrumbs_to(struct yetty_ygui_breadcrumbs *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_breadcrumbs_to(
+    struct yetty_ygui_breadcrumbs *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_breadcrumbs_create(struct yetty_yclass_ctx *ctx);
 

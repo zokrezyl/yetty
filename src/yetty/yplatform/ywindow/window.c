@@ -54,8 +54,8 @@ struct yetty_yplatform_window_ptr_result yetty_yplatform_window_from(
 
 YETTY_ANNOTATE("virtual@yplatform:window:window_open")
 YETTY_ANNOTATE("local@yplatform:window_open")
-static struct yetty_ycore_void_result
-    window_default_open(struct yetty_yclass_object *obj, int width, int height, const char *title)
+static struct yetty_ycore_void_result window_default_open(struct yetty_yclass_object *obj,
+                                                          int width, int height, const char *title)
 {
     (void)obj;
     (void)width;
@@ -80,8 +80,8 @@ static struct yetty_ycore_void_result window_default_destroy(struct yetty_yclass
  * private to the subclass. */
 YETTY_ANNOTATE("virtual@yplatform:window:window_create_surface")
 YETTY_ANNOTATE("local@yplatform:window_create_surface")
-static struct yetty_yclass_void_ptr_result
-    window_default_create_surface(struct yetty_yclass_object *obj, void *instance)
+static struct yetty_yclass_void_ptr_result window_default_create_surface(
+    struct yetty_yclass_object *obj, void *instance)
 {
     (void)obj;
     (void)instance;
@@ -91,8 +91,8 @@ static struct yetty_yclass_void_ptr_result
 
 YETTY_ANNOTATE("virtual@yplatform:window:window_get_size")
 YETTY_ANNOTATE("local@yplatform:window_get_size")
-static struct yetty_ycore_void_result
-    window_default_get_size(struct yetty_yclass_object *obj, int *width, int *height)
+static struct yetty_ycore_void_result window_default_get_size(struct yetty_yclass_object *obj,
+                                                              int *width, int *height)
 {
     (void)obj;
     (void)width;
@@ -102,8 +102,8 @@ static struct yetty_ycore_void_result
 
 YETTY_ANNOTATE("virtual@yplatform:window:window_get_framebuffer_size")
 YETTY_ANNOTATE("local@yplatform:window_get_framebuffer_size")
-static struct yetty_ycore_void_result
-    window_default_get_framebuffer_size(struct yetty_yclass_object *obj, int *width, int *height)
+static struct yetty_ycore_void_result window_default_get_framebuffer_size(
+    struct yetty_yclass_object *obj, int *width, int *height)
 {
     (void)obj;
     (void)width;
@@ -114,8 +114,8 @@ static struct yetty_ycore_void_result
 
 YETTY_ANNOTATE("virtual@yplatform:window:window_get_content_scale")
 YETTY_ANNOTATE("local@yplatform:window_get_content_scale")
-static struct yetty_ycore_void_result
-    window_default_get_content_scale(struct yetty_yclass_object *obj, float *xscale, float *yscale)
+static struct yetty_ycore_void_result window_default_get_content_scale(
+    struct yetty_yclass_object *obj, float *xscale, float *yscale)
 {
     (void)obj;
     (void)xscale;
@@ -134,8 +134,8 @@ static struct yetty_ycore_int_result window_default_should_close(struct yetty_yc
 
 YETTY_ANNOTATE("virtual@yplatform:window:window_set_title")
 YETTY_ANNOTATE("local@yplatform:window_set_title")
-static struct yetty_ycore_void_result
-    window_default_set_title(struct yetty_yclass_object *obj, const char *title)
+static struct yetty_ycore_void_result window_default_set_title(struct yetty_yclass_object *obj,
+                                                               const char *title)
 {
     (void)obj;
     (void)title;

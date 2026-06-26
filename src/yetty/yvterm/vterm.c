@@ -211,20 +211,6 @@ YETTY_YRESULT_DECLARE(yetty_yvterm_vterm_ptr, struct yetty_yvterm_vterm *);
 struct yetty_yclass_ptr_result yetty_yvterm_vterm_class_get(void);
 struct yetty_yvterm_vterm_ptr_result yetty_yvterm_vterm_from(struct yetty_yclass_object *obj);
 
-/* Resolve obj → body, absorbing the error into NULL for void/scalar getters. */
-static struct yetty_yvterm_vterm *vterm_body_or_null(struct yetty_yclass_object *obj)
-{
-    if (!obj) {
-        return NULL;
-    }
-    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
-    if (YETTY_IS_ERR(vterm_res)) {
-        yetty_ycore_error_destroy(vterm_res.error);
-        return NULL;
-    }
-    return vterm_res.value;
-}
-
 /*===========================================================================
  * GPU text renderer — ported from poc/yvterm-new. Resolves each cell's glyph
  * against the active MSDF font, packs the 16-byte/cell layout the text shader
@@ -555,11 +541,15 @@ static struct yetty_ycore_void_result vterm_create_pipeline(struct yetty_yvterm_
 static struct yetty_ycore_void_result vterm_create_cell_buffer(struct yetty_yvterm_vterm *vterm)
 {
     uint32_t cols = 0, rows = 0;
-    yetty_yvterm_grid_dims(vterm->grid_obj, &cols, &rows, NULL);
+    struct yetty_ycore_void_result dims_res =
+        yetty_yvterm_grid_dims(vterm->grid_obj, &cols, &rows, NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dims_res, "vterm_create_cell_buffer: grid dims");
     /* The buffer is ring-slot-indexed and must cover the FULL ring (visible +
      * scrollback), not just the visible rows, so retained history stays
      * resident for the scrolled-back view. */
-    uint32_t ring_rows = yetty_yvterm_grid_slot_count(vterm->grid_obj);
+    struct yetty_ycore_uint32_result slot_count_res = yetty_yvterm_grid_slot_count(vterm->grid_obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_count_res, "vterm_create_cell_buffer: slot count");
+    uint32_t ring_rows = slot_count_res.value;
     if (ring_rows < rows) {
         ring_rows = rows;
     }
@@ -731,19 +721,22 @@ static struct yetty_ycore_void_result vterm_ensure_bind_group(struct yetty_yvter
     return YETTY_OK_VOID();
 }
 
-/* Best-effort GPU setup. On failure leaves gpu_ready=0 so the figure still
- * exists (blank pane) rather than failing terminal creation. */
-static void vterm_gpu_init(struct yetty_yvterm_vterm *vterm, const struct yetty_context *context)
+/* Best-effort GPU setup. On a soft failure (missing device, font/pipeline/SDF
+ * init failure) it leaves gpu_ready=0 and returns OK so the figure still exists
+ * (blank pane) rather than failing terminal creation — the inner errors are
+ * logged and consumed here by design, not propagated. */
+static struct yetty_ycore_void_result vterm_gpu_init(struct yetty_yvterm_vterm *vterm,
+                                                     const struct yetty_context *context)
 {
     if (!context || !context->runtime) {
-        return;
+        return YETTY_OK_VOID();
     }
     struct yetty_yframework *runtime = context->runtime;
     vterm->device = runtime->gpu.device;
     vterm->queue = runtime->gpu.queue;
     vterm->target_format = runtime->gpu.surface_format;
     if (!vterm->device || !vterm->queue) {
-        return;
+        return YETTY_OK_VOID();
     }
 
     struct yetty_yconfig_config *config = runtime->config;
@@ -771,7 +764,7 @@ static void vterm_gpu_init(struct yetty_yvterm_vterm *vterm, const struct yetty_
     if (YETTY_IS_ERR(font_res)) {
         ywarn("vterm: font create failed (%s): %s", cdb_path, font_res.error.msg);
         yetty_ycore_error_destroy(font_res.error);
-        return;
+        return YETTY_OK_VOID();
     }
     vterm->font = font_res.value;
     struct yetty_ycore_void_result latin = vterm->font->ops->load_basic_latin(vterm->font);
@@ -787,17 +780,17 @@ static void vterm_gpu_init(struct yetty_yvterm_vterm *vterm, const struct yetty_
     if (YETTY_IS_ERR(pr)) {
         ywarn("vterm: pipeline init failed: %s", pr.error.msg);
         yetty_ycore_error_destroy(pr.error);
-        return;
+        return YETTY_OK_VOID();
     }
     struct yetty_ycore_void_result cbr = vterm_create_cell_buffer(vterm);
     if (YETTY_IS_ERR(cbr)) {
         yetty_ycore_error_destroy(cbr.error);
-        return;
+        return YETTY_OK_VOID();
     }
     struct yetty_ycore_void_result ufr = vterm_upload_font(vterm);
     if (YETTY_IS_ERR(ufr)) {
         yetty_ycore_error_destroy(ufr.error);
-        return;
+        return YETTY_OK_VOID();
     }
     vterm->uniforms.cell_size[0] = vterm->cell_size.width;
     vterm->uniforms.cell_size[1] = vterm->cell_size.height;
@@ -814,6 +807,7 @@ static void vterm_gpu_init(struct yetty_yvterm_vterm *vterm, const struct yetty_
     }
 
     vterm->gpu_ready = 1;
+    return YETTY_OK_VOID();
 }
 
 static void vterm_gpu_destroy(struct yetty_yvterm_vterm *vterm)
@@ -886,17 +880,22 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     }
     struct yetty_yclass_object *grid = vterm->grid_obj;
     uint32_t cols = 0, rows = 0, base = 0;
-    yetty_yvterm_grid_dims(grid, &cols, &rows, &base);
+    struct yetty_ycore_void_result dims_res = yetty_yvterm_grid_dims(grid, &cols, &rows, &base);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, dims_res, "vterm_render: grid dims");
     if (cols == 0 || rows == 0) {
         return YETTY_OK_VOID();
     }
-    uint32_t slot_count = yetty_yvterm_grid_slot_count(grid);
+    struct yetty_ycore_uint32_result slot_count_res = yetty_yvterm_grid_slot_count(grid);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_count_res, "vterm_render: slot count");
+    uint32_t slot_count = slot_count_res.value;
     /* The model may have been resized since the cell buffer was sized. The buffer
      * covers the full ring (visible + scrollback), so compare against that. */
     if (vterm->cell_buffer_cells != slot_count * cols) {
         struct yetty_ycore_void_result br = vterm_create_cell_buffer(vterm);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "vterm_render: resize cell buffer");
-        slot_count = yetty_yvterm_grid_slot_count(grid);
+        struct yetty_ycore_uint32_result reread_res = yetty_yvterm_grid_slot_count(grid);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, reread_res, "vterm_render: reread slot count");
+        slot_count = reread_res.value;
     }
     struct yetty_ycore_void_result rsr = vterm_ensure_row_scratch(vterm, cols);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rsr, "vterm_render: row scratch");
@@ -906,10 +905,15 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
      * top slot as root_row. */
     size_t row_bytes = (size_t)cols * YVTERM_WORDS_PER_CELL * sizeof(uint32_t);
     for (uint32_t slot = 0; slot < slot_count; ++slot) {
-        if (!yetty_yvterm_grid_slot_dirty(grid, slot)) {
+        struct yetty_ycore_int_result slot_dirty_res = yetty_yvterm_grid_slot_dirty(grid, slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_dirty_res, "vterm_render: slot dirty");
+        if (!slot_dirty_res.value) {
             continue;
         }
-        const struct yetty_yvterm_text_cell *cells = yetty_yvterm_grid_slot_cells(grid, slot);
+        struct yetty_yvterm_text_cell_const_ptr_result cells_res =
+            yetty_yvterm_grid_slot_cells(grid, slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cells_res, "vterm_render: slot cells");
+        const struct yetty_yvterm_text_cell *cells = cells_res.value;
         if (!cells) {
             continue;
         }
@@ -924,7 +928,9 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     }
 
     uint32_t cursor_row = 0, cursor_col = 0, cursor_visible = 0;
-    yetty_yvterm_grid_cursor(grid, &cursor_row, &cursor_col, &cursor_visible);
+    struct yetty_ycore_void_result cursor_res =
+        yetty_yvterm_grid_cursor(grid, &cursor_row, &cursor_col, &cursor_visible);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cursor_res, "vterm_render: grid cursor");
     vterm->uniforms.grid_size[0] = (float)cols;
     vterm->uniforms.grid_size[1] = (float)rows;
     vterm->uniforms.cell_size[0] = vterm->cell_size.width;
@@ -936,7 +942,9 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
      * over the ring so the retained history slots are addressed. */
     uint32_t root_row = base;
     if (vterm->view_top_active) {
-        uint32_t live_top = yetty_yvterm_grid_scroll_origin(grid);
+        struct yetty_ycore_uint32_result live_top_res = yetty_yvterm_grid_scroll_origin(grid);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, live_top_res, "vterm_render: scroll origin");
+        uint32_t live_top = live_top_res.value;
         if (vterm->view_top_total_idx < live_top) {
             uint32_t back = live_top - vterm->view_top_total_idx;
             if (slot_count > 0) {
@@ -955,7 +963,9 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
      * shader's start<=end stream test is simple. */
     int sel_active = 0;
     uint32_t sa_row = 0, sa_col = 0, sh_row = 0, sh_col = 0;
-    yetty_yvterm_grid_selection(grid, &sel_active, &sa_row, &sa_col, &sh_row, &sh_col);
+    struct yetty_ycore_void_result sel_res =
+        yetty_yvterm_grid_selection(grid, &sel_active, &sa_row, &sa_col, &sh_row, &sh_col);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sel_res, "vterm_render: grid selection");
     if (sel_active && (sa_row > sh_row || (sa_row == sh_row && sa_col > sh_col))) {
         uint32_t tr = sa_row, tc = sa_col;
         sa_row = sh_row;
@@ -1092,14 +1102,18 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
         } else {
             comp_slot = (uint32_t)row;
         }
-        struct yetty_ydraw_composite *const *comps =
+        struct yetty_ydraw_composite_const_ptr_ptr_result comps_res =
             yetty_yvterm_grid_slot_composites(grid, comp_slot, &comp_count);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, comps_res, "vterm_render: slot composites");
+        struct yetty_ydraw_composite *const *comps = comps_res.value;
         if (!comps || comp_count == 0) {
             continue;
         }
         /* This row is the block's BOTTOM line; recover its top so the figure
          * still draws top-down from where its text sits. span 0 → single row. */
-        uint32_t span = yetty_yvterm_grid_slot_span(grid, comp_slot);
+        struct yetty_ycore_uint32_result span_res = yetty_yvterm_grid_slot_span(grid, comp_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, span_res, "vterm_render: slot span");
+        uint32_t span = span_res.value;
         int top_row = row - (int)(span ? span - 1u : 0u);
         float anchor_y = (float)top_row * vterm->cell_size.height;
         float comp_x = rect.min.x + (0.0f - vz_center_x - vz_off_x) * zoom + vz_center_x;
@@ -1149,7 +1163,8 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
 
     /* Uploaded — clear model dirty now that the renderer has consumed the text
      * plane, the anchored composites, and the SDF/glyph records. */
-    yetty_yvterm_grid_clear_dirty(grid);
+    struct yetty_ycore_void_result clear_dirty_res = yetty_yvterm_grid_clear_dirty(grid);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, clear_dirty_res, "vterm_render: clear dirty");
     vterm->view_dirty = 0;
     return YETTY_OK_VOID();
 }
@@ -1257,15 +1272,35 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
     vterm->grid_obj = grid_res.value;
     /* The grid produces keyboard/query output; hand it the PTY hook. The
      * terminal's pty_write_fn matches the grid's pty_write signature. */
-    yetty_yvterm_grid_set_pty_write(vterm->grid_obj, (yetty_yvterm_grid_pty_write_fn)pty_write_fn,
-                                    pty_write_userdata);
+    struct yetty_ycore_void_result set_pty_res = yetty_yvterm_grid_set_pty_write(
+        vterm->grid_obj, (yetty_yvterm_grid_pty_write_fn)pty_write_fn, pty_write_userdata);
     /* Route DEC ?1500/?1501 (CARDCLICK/CARDMOVE) subscription changes from the
      * model straight to the terminal's mouse-subscription callback — same
      * (click, move, userdata) signature, so register it directly. Without this,
      * hosted clients (ygreeter, …) that enable pixel-precise input forwarding
      * never receive forwarded mouse/resize events. */
-    yetty_yvterm_grid_set_card_sub(vterm->grid_obj, (yetty_yvterm_grid_card_sub_fn)mouse_sub_fn,
-                                   mouse_sub_userdata);
+    struct yetty_ycore_void_result set_card_res = YETTY_OK_VOID();
+    if (YETTY_IS_OK(set_pty_res)) {
+        set_card_res = yetty_yvterm_grid_set_card_sub(
+            vterm->grid_obj, (yetty_yvterm_grid_card_sub_fn)mouse_sub_fn, mouse_sub_userdata);
+    }
+    if (YETTY_IS_ERR(set_pty_res) || YETTY_IS_ERR(set_card_res)) {
+        struct yetty_ycore_void_result grid_dispose_res =
+            yetty_yvterm_grid_dispose(vterm->grid_obj);
+        if (YETTY_IS_ERR(grid_dispose_res)) {
+            yetty_ycore_error_destroy(grid_dispose_res.error);
+        }
+        struct yetty_ycore_void_result free_res = yetty_yclass_object_free(obj);
+        if (YETTY_IS_ERR(free_res)) {
+            yetty_ycore_error_destroy(free_res.error);
+        }
+        if (YETTY_IS_ERR(set_pty_res)) {
+            return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_pty_write",
+                             set_pty_res);
+        }
+        return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: set_card_sub",
+                         set_card_res);
+    }
     vterm->grid_size = (struct yetty_ycore_grid_size){.cols = cols, .rows = rows};
     vterm->cell_size = (struct yetty_ycore_pixel_size){.width = 9.0f, .height = 18.0f};
     vterm->request_render_fn = request_render_fn;
@@ -1275,8 +1310,23 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
     vterm->visual_zoom_scale = 1.0f;
 
     /* Best-effort: builds the pipeline/font and overrides cell_size with the
-     * font's real metrics. On failure the figure still exists (blank pane). */
-    vterm_gpu_init(vterm, context);
+     * font's real metrics. Soft GPU failures are consumed inside and reported as
+     * OK (the figure still exists as a blank pane); only an unexpected hard error
+     * would surface here. */
+    struct yetty_ycore_void_result gpu_init_res = vterm_gpu_init(vterm, context);
+    if (YETTY_IS_ERR(gpu_init_res)) {
+        vterm_gpu_destroy(vterm);
+        struct yetty_ycore_void_result grid_dispose_res =
+            yetty_yvterm_grid_dispose(vterm->grid_obj);
+        if (YETTY_IS_ERR(grid_dispose_res)) {
+            yetty_ycore_error_destroy(grid_dispose_res.error);
+        }
+        struct yetty_ycore_void_result free_res = yetty_yclass_object_free(obj);
+        if (YETTY_IS_ERR(free_res)) {
+            yetty_ycore_error_destroy(free_res.error);
+        }
+        return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: gpu_init", gpu_init_res);
+    }
 
     struct yetty_ycore_rectangle rect = {
         .min = {.x = 0.0f, .y = 0.0f},
@@ -1318,29 +1368,19 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
 
 /* Upcast to the figure base (first slice in the object). */
 YETTY_ANNOTATE("expose")
-struct yetty_yfigure_figure *yetty_yvterm_vterm_as_figure(struct yetty_yclass_object *obj)
+struct yetty_yfigure_figure_ptr_result yetty_yvterm_vterm_as_figure(struct yetty_yclass_object *obj)
 {
-    if (!obj) {
-        return NULL;
-    }
-    struct yetty_yfigure_figure_ptr_result figure_res = yetty_yfigure_figure_from(obj);
-    if (YETTY_IS_ERR(figure_res)) {
-        yetty_ycore_error_destroy(figure_res.error);
-        return NULL;
-    }
-    return figure_res.value;
+    return yetty_yfigure_figure_from(obj);
 }
 
 YETTY_ANNOTATE("expose")
 YETTY_ANNOTATE("expose")
-struct yetty_ycore_void_result
-    yetty_yvterm_vterm_feed(struct yetty_yclass_object *obj, const char *bytes, size_t len)
+struct yetty_ycore_void_result yetty_yvterm_vterm_feed(struct yetty_yclass_object *obj,
+                                                       const char *bytes, size_t len)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm vterm_feed: bad obj");
-    }
-    return yetty_yvterm_grid_feed(vterm->grid_obj, bytes, len);
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_feed: from_obj");
+    return yetty_yvterm_grid_feed(vterm_res.value->grid_obj, bytes, len);
 }
 
 YETTY_ANNOTATE("expose")
@@ -1348,10 +1388,9 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_resize(struct yetty_yclass_obj
                                                          struct yetty_ycore_grid_size grid_size,
                                                          struct yetty_ycore_pixel_size cell_size)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm vterm_resize: bad obj");
-    }
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_resize: from_obj");
+    struct yetty_yvterm_vterm *vterm = vterm_res.value;
     if (grid_size.cols == 0 || grid_size.rows == 0) {
         return YETTY_ERR(yetty_ycore_void, "yvterm vterm_resize: invalid dimensions");
     }
@@ -1390,112 +1429,103 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_resize(struct yetty_yclass_obj
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_ycore_pixel_size yetty_yvterm_vterm_cell_size(struct yetty_yclass_object *obj)
+struct pixel_size_result yetty_yvterm_vterm_cell_size(struct yetty_yclass_object *obj)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return (struct yetty_ycore_pixel_size){0};
-    }
-    return vterm->cell_size;
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(pixel_size, vterm_res, "yvterm vterm_cell_size: from_obj");
+    return YETTY_OK(pixel_size, vterm_res.value->cell_size);
 }
 
 YETTY_ANNOTATE("expose")
-int yetty_yvterm_vterm_is_dirty(struct yetty_yclass_object *obj)
+struct yetty_ycore_int_result yetty_yvterm_vterm_is_dirty(struct yetty_yclass_object *obj)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return 0;
-    }
-    return vterm->view_dirty || yetty_yvterm_grid_is_dirty(vterm->grid_obj);
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, vterm_res, "yvterm vterm_is_dirty: from_obj");
+    struct yetty_yvterm_vterm *vterm = vterm_res.value;
+    struct yetty_ycore_int_result grid_dirty_res = yetty_yvterm_grid_is_dirty(vterm->grid_obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, grid_dirty_res, "yvterm vterm_is_dirty: grid is_dirty");
+    return YETTY_OK(yetty_ycore_int, vterm->view_dirty || grid_dirty_res.value);
 }
 
 YETTY_ANNOTATE("expose")
-void yetty_yvterm_vterm_set_content_inset(struct yetty_yclass_object *obj, float top, float right,
-                                          float bottom, float left)
+struct yetty_ycore_void_result yetty_yvterm_vterm_set_content_inset(struct yetty_yclass_object *obj,
+                                                                    float top, float right,
+                                                                    float bottom, float left)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return;
-    }
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_set_content_inset: from_obj");
+    struct yetty_yvterm_vterm *vterm = vterm_res.value;
     vterm->content_inset_top = top;
     vterm->content_inset_right = right;
     vterm->content_inset_bottom = bottom;
     vterm->content_inset_left = left;
+    return YETTY_OK_VOID();
 }
 
 YETTY_ANNOTATE("expose")
-void yetty_yvterm_vterm_get_content_inset(struct yetty_yclass_object *obj, float *out_top,
-                                          float *out_right, float *out_bottom, float *out_left)
+struct yetty_ycore_void_result yetty_yvterm_vterm_get_content_inset(struct yetty_yclass_object *obj,
+                                                                    float *out_top,
+                                                                    float *out_right,
+                                                                    float *out_bottom,
+                                                                    float *out_left)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_get_content_inset: from_obj");
+    struct yetty_yvterm_vterm *vterm = vterm_res.value;
     if (out_top) {
-        *out_top = vterm ? vterm->content_inset_top : 0.0f;
+        *out_top = vterm->content_inset_top;
     }
     if (out_right) {
-        *out_right = vterm ? vterm->content_inset_right : 0.0f;
+        *out_right = vterm->content_inset_right;
     }
     if (out_bottom) {
-        *out_bottom = vterm ? vterm->content_inset_bottom : 0.0f;
+        *out_bottom = vterm->content_inset_bottom;
     }
     if (out_left) {
-        *out_left = vterm ? vterm->content_inset_left : 0.0f;
+        *out_left = vterm->content_inset_left;
     }
+    return YETTY_OK_VOID();
 }
 
 YETTY_ANNOTATE("expose")
-void yetty_yvterm_vterm_set_clear_hook(struct yetty_yclass_object *obj,
-                                       yetty_yvterm_clear_hook_fn fn, void *userdata)
+struct yetty_ycore_void_result yetty_yvterm_vterm_set_clear_hook(struct yetty_yclass_object *obj,
+                                                                 yetty_yvterm_clear_hook_fn fn,
+                                                                 void *userdata)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return;
-    }
-    yetty_yvterm_grid_set_clear_hook(vterm->grid_obj, (yetty_yvterm_grid_clear_hook_fn)fn,
-                                     userdata);
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_set_clear_hook: from_obj");
+    return yetty_yvterm_grid_set_clear_hook(vterm_res.value->grid_obj,
+                                            (yetty_yvterm_grid_clear_hook_fn)fn, userdata);
 }
 
 YETTY_ANNOTATE("expose")
-void yetty_yvterm_vterm_cursor(struct yetty_yclass_object *obj, uint32_t *out_row,
-                               uint32_t *out_col, uint32_t *out_visible)
+struct yetty_ycore_void_result yetty_yvterm_vterm_cursor(struct yetty_yclass_object *obj,
+                                                         uint32_t *out_row, uint32_t *out_col,
+                                                         uint32_t *out_visible)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        if (out_row) {
-            *out_row = 0u;
-        }
-        if (out_col) {
-            *out_col = 0u;
-        }
-        if (out_visible) {
-            *out_visible = 0u;
-        }
-        return;
-    }
-    yetty_yvterm_grid_cursor(vterm->grid_obj, out_row, out_col, out_visible);
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_cursor: from_obj");
+    return yetty_yvterm_grid_cursor(vterm_res.value->grid_obj, out_row, out_col, out_visible);
 }
 
 YETTY_ANNOTATE("expose")
-void yetty_yvterm_vterm_word_bounds(struct yetty_yclass_object *obj, uint32_t row, uint32_t col,
-                                    uint32_t *out_start_col, uint32_t *out_end_col)
+struct yetty_ycore_void_result yetty_yvterm_vterm_word_bounds(struct yetty_yclass_object *obj,
+                                                              uint32_t row, uint32_t col,
+                                                              uint32_t *out_start_col,
+                                                              uint32_t *out_end_col)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        if (out_start_col) {
-            *out_start_col = col;
-        }
-        if (out_end_col) {
-            *out_end_col = col;
-        }
-        return;
-    }
-    yetty_yvterm_grid_word_bounds(vterm->grid_obj, row, col, out_start_col, out_end_col);
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_word_bounds: from_obj");
+    return yetty_yvterm_grid_word_bounds(vterm_res.value->grid_obj, row, col, out_start_col,
+                                         out_end_col);
 }
 
 YETTY_ANNOTATE("expose")
-uint32_t yetty_yvterm_vterm_scroll_origin(struct yetty_yclass_object *obj)
+struct yetty_ycore_uint32_result yetty_yvterm_vterm_scroll_origin(struct yetty_yclass_object *obj)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    return vterm ? yetty_yvterm_grid_scroll_origin(vterm->grid_obj) : 0u;
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm vterm_scroll_origin: from_obj");
+    return yetty_yvterm_grid_scroll_origin(vterm_res.value->grid_obj);
 }
 
 /*===========================================================================
@@ -1506,54 +1536,44 @@ YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_append_primitive(
     struct yetty_yclass_object *obj, uint32_t row, const uint32_t *words, uint32_t word_count)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return YETTY_ERR(yetty_ycore_uint32, "yvterm append_primitive: bad obj");
-    }
-    return yetty_yvterm_grid_append_primitive(vterm->grid_obj, row, words, word_count);
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm append_primitive: from_obj");
+    return yetty_yvterm_grid_append_primitive(vterm_res.value->grid_obj, row, words, word_count);
 }
 
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_attach_composite(
     struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_composite *composite)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return YETTY_ERR(yetty_ycore_uint32, "yvterm attach_composite: bad obj");
-    }
-    return yetty_yvterm_grid_attach_composite(vterm->grid_obj, row, composite);
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm attach_composite: from_obj");
+    return yetty_yvterm_grid_attach_composite(vterm_res.value->grid_obj, row, composite);
 }
 
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_relocate_rich_to_bottom(
     struct yetty_yclass_object *obj, uint32_t span_rows)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm relocate_rich: bad obj");
-    }
-    return yetty_yvterm_grid_relocate_rich_to_bottom(vterm->grid_obj, span_rows);
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm relocate_rich: from_obj");
+    return yetty_yvterm_grid_relocate_rich_to_bottom(vterm_res.value->grid_obj, span_rows);
 }
 
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_clear_rich_line(struct yetty_yclass_object *obj,
                                                                   uint32_t row)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm clear_rich_line: bad obj");
-    }
-    return yetty_yvterm_grid_clear_rich_line(vterm->grid_obj, row);
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm clear_rich_line: from_obj");
+    return yetty_yvterm_grid_clear_rich_line(vterm_res.value->grid_obj, row);
 }
 
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_clear_rich_all(struct yetty_yclass_object *obj)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm clear_rich_all: bad obj");
-    }
-    return yetty_yvterm_grid_clear_rich_all(vterm->grid_obj);
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm clear_rich_all: from_obj");
+    return yetty_yvterm_grid_clear_rich_all(vterm_res.value->grid_obj);
 }
 
 /*===========================================================================
@@ -1565,25 +1585,27 @@ YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_register_wire(
     struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *sm)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm register_wire: bad obj");
-    }
-    return yetty_yvterm_grid_register_wire(vterm->grid_obj, sm);
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm register_wire: from_obj");
+    return yetty_yvterm_grid_register_wire(vterm_res.value->grid_obj, sm);
 }
 
 YETTY_ANNOTATE("expose")
-int yetty_yvterm_vterm_on_char(struct yetty_yclass_object *obj, uint32_t codepoint, int mods)
+struct yetty_ycore_int_result yetty_yvterm_vterm_on_char(struct yetty_yclass_object *obj,
+                                                         uint32_t codepoint, int mods)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    return vterm ? yetty_yvterm_grid_on_char(vterm->grid_obj, codepoint, mods) : 0;
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, vterm_res, "yvterm vterm_on_char: from_obj");
+    return yetty_yvterm_grid_on_char(vterm_res.value->grid_obj, codepoint, mods);
 }
 
 YETTY_ANNOTATE("expose")
-int yetty_yvterm_vterm_on_key(struct yetty_yclass_object *obj, int key, int mods)
+struct yetty_ycore_int_result yetty_yvterm_vterm_on_key(struct yetty_yclass_object *obj, int key,
+                                                        int mods)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    return vterm ? yetty_yvterm_grid_on_key(vterm->grid_obj, key, mods) : 0;
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, vterm_res, "yvterm vterm_on_key: from_obj");
+    return yetty_yvterm_grid_on_key(vterm_res.value->grid_obj, key, mods);
 }
 
 YETTY_ANNOTATE("expose")
@@ -1593,23 +1615,19 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_selection(struct yetty_ycl
                                                                 uint32_t head_row,
                                                                 uint32_t head_col)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm set_selection: bad obj");
-    }
-    return yetty_yvterm_grid_set_selection(vterm->grid_obj, active, anchor_row, anchor_col,
-                                           head_row, head_col);
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm set_selection: from_obj");
+    return yetty_yvterm_grid_set_selection(vterm_res.value->grid_obj, active, anchor_row,
+                                           anchor_col, head_row, head_col);
 }
 
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_get_selection_text(
     struct yetty_yclass_object *obj, struct yetty_ycore_buffer *out)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm get_selection_text: bad obj");
-    }
-    return yetty_yvterm_grid_get_selection_text(vterm->grid_obj, out);
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm get_selection_text: from_obj");
+    return yetty_yvterm_grid_get_selection_text(vterm_res.value->grid_obj, out);
 }
 
 /* Scrollback is not yet backed by a history ring; the live screen is all there
@@ -1617,11 +1635,13 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_get_selection_text(
 /* Absolute index of the line at the live screen top: everything scrolled off so
  * far. A wheel-up anchors one line below this and walks toward the floor. */
 YETTY_ANNOTATE("expose")
-uint32_t yetty_yvterm_vterm_get_live_anchor(struct yetty_yclass_object *obj)
+struct yetty_ycore_uint32_result yetty_yvterm_vterm_get_live_anchor(struct yetty_yclass_object *obj)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm || !vterm->grid_obj) {
-        return 0u;
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm vterm_get_live_anchor: from_obj");
+    struct yetty_yvterm_vterm *vterm = vterm_res.value;
+    if (!vterm->grid_obj) {
+        return YETTY_OK(yetty_ycore_uint32, 0u);
     }
     return yetty_yvterm_grid_scroll_origin(vterm->grid_obj);
 }
@@ -1630,18 +1650,30 @@ uint32_t yetty_yvterm_vterm_get_live_anchor(struct yetty_yclass_object *obj)
  * this have been evicted, so a wheel-up clamps here. The ring keeps
  * (slot_count - visible_rows) history lines. */
 YETTY_ANNOTATE("expose")
-uint32_t yetty_yvterm_vterm_get_scrollback_floor(struct yetty_yclass_object *obj)
+struct yetty_ycore_uint32_result yetty_yvterm_vterm_get_scrollback_floor(
+    struct yetty_yclass_object *obj)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm || !vterm->grid_obj) {
-        return 0u;
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res,
+                        "yvterm vterm_get_scrollback_floor: from_obj");
+    struct yetty_yvterm_vterm *vterm = vterm_res.value;
+    if (!vterm->grid_obj) {
+        return YETTY_OK(yetty_ycore_uint32, 0u);
     }
-    uint32_t live = yetty_yvterm_grid_scroll_origin(vterm->grid_obj);
+    struct yetty_ycore_uint32_result live_res = yetty_yvterm_grid_scroll_origin(vterm->grid_obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, live_res,
+                        "yvterm vterm_get_scrollback_floor: scroll origin");
+    uint32_t live = live_res.value;
     uint32_t cols = 0, rows = 0;
-    yetty_yvterm_grid_dims(vterm->grid_obj, &cols, &rows, NULL);
-    uint32_t ring = yetty_yvterm_grid_slot_count(vterm->grid_obj);
+    struct yetty_ycore_void_result dims_res =
+        yetty_yvterm_grid_dims(vterm->grid_obj, &cols, &rows, NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, dims_res, "yvterm vterm_get_scrollback_floor: dims");
+    struct yetty_ycore_uint32_result ring_res = yetty_yvterm_grid_slot_count(vterm->grid_obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, ring_res,
+                        "yvterm vterm_get_scrollback_floor: slot count");
+    uint32_t ring = ring_res.value;
     uint32_t history_cap = ring > rows ? ring - rows : 0u;
-    return live > history_cap ? live - history_cap : 0u;
+    return YETTY_OK(yetty_ycore_uint32, live > history_cap ? live - history_cap : 0u);
 }
 
 YETTY_ANNOTATE("expose")
@@ -1649,10 +1681,9 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_view_top(struct yetty_ycla
                                                                int active,
                                                                uint32_t view_top_total_idx)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm set_view_top: bad obj");
-    }
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm set_view_top: from_obj");
+    struct yetty_yvterm_vterm *vterm = vterm_res.value;
     vterm->view_top_active = active;
     vterm->view_top_total_idx = view_top_total_idx;
     vterm->view_dirty = 1;
@@ -1668,10 +1699,9 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_visual_zoom(struct yetty_y
                                                                   float scale, float offset_x,
                                                                   float offset_y)
 {
-    struct yetty_yvterm_vterm *vterm = vterm_body_or_null(obj);
-    if (!vterm) {
-        return YETTY_ERR(yetty_ycore_void, "yvterm set_visual_zoom: bad obj");
-    }
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm set_visual_zoom: from_obj");
+    struct yetty_yvterm_vterm *vterm = vterm_res.value;
     vterm->visual_zoom_scale = scale;
     vterm->visual_zoom_offset_x = offset_x;
     vterm->visual_zoom_offset_y = offset_y;

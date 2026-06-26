@@ -33,7 +33,7 @@ struct yetty_ygui_panel_ptr_result {
     };
 };
 struct yetty_ygui_panel_ptr_result yetty_ygui_panel_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_panel_to(struct yetty_ygui_panel *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_panel_to(struct yetty_ygui_panel *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_panel_create(struct yetty_yclass_ctx *ctx);
 

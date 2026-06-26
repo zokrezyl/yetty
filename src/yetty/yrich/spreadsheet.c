@@ -315,14 +315,11 @@ struct yetty_ycore_void_result yetty_yrich_cell_set_text(struct yetty_yclass_obj
 }
 
 YETTY_ANNOTATE("expose")
-const char *yetty_yrich_cell_text(struct yetty_yclass_object *obj)
+struct yetty_ycore_const_char_ptr_result yetty_yrich_cell_text(struct yetty_yclass_object *obj)
 {
     struct yetty_yrich_cell_ptr_result data_res = yetty_yrich_cell_from(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return "";
-    }
-    return data_res.value->text ? data_res.value->text : "";
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, data_res, "cell_text: data_get");
+    return YETTY_OK(yetty_ycore_const_char_ptr, data_res.value->text ? data_res.value->text : "");
 }
 
 /*===========================================================================
@@ -563,7 +560,8 @@ static struct yetty_ycore_void_result set_col_override(struct yetty_yrich_spread
     return YETTY_OK_VOID();
 }
 
-static void recalculate_cell_bounds(struct yetty_yrich_spreadsheet *sheet);
+static struct yetty_ycore_void_result recalculate_cell_bounds(
+    struct yetty_yrich_spreadsheet *sheet);
 
 YETTY_ANNOTATE("virtual@yrich:spreadsheet:spreadsheet_set_row_height")
 static struct yetty_ycore_void_result spreadsheet_set_row_height(struct yetty_yclass_object *obj,
@@ -574,7 +572,8 @@ static struct yetty_ycore_void_result spreadsheet_set_row_height(struct yetty_yc
     struct yetty_ycore_void_result override_res = set_row_override(data_res.value, row, height);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, override_res, "spreadsheet_set_row_height failed");
     invalidate_cache(data_res.value);
-    recalculate_cell_bounds(data_res.value);
+    struct yetty_ycore_void_result recalc_res = recalculate_cell_bounds(data_res.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, recalc_res, "spreadsheet_set_row_height: recalc");
     return yetty_yrich_document_mark_dirty(obj);
 }
 
@@ -587,7 +586,8 @@ static struct yetty_ycore_void_result spreadsheet_set_col_width(struct yetty_ycl
     struct yetty_ycore_void_result override_res = set_col_override(data_res.value, col, width);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, override_res, "spreadsheet_set_col_width failed");
     invalidate_cache(data_res.value);
-    recalculate_cell_bounds(data_res.value);
+    struct yetty_ycore_void_result recalc_res = recalculate_cell_bounds(data_res.value);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, recalc_res, "spreadsheet_set_col_width: recalc");
     return yetty_yrich_document_mark_dirty(obj);
 }
 
@@ -647,16 +647,13 @@ struct yetty_ycore_float_result yetty_yrich_spreadsheet_col_x(struct yetty_yclas
     return YETTY_OK(yetty_ycore_float, sheet->col_x_cache[col]);
 }
 
-static void recalculate_cell_bounds(struct yetty_yrich_spreadsheet *sheet)
+static struct yetty_ycore_void_result recalculate_cell_bounds(struct yetty_yrich_spreadsheet *sheet)
 {
     for (size_t i = 0; i < sheet->cell_count; i++) {
         struct yetty_yrich_cell_addr addr = sheet->cells[i].addr;
         struct yetty_yrich_cell_ptr_result cell_res =
             yetty_yrich_cell_from(sheet->cells[i].cell_obj);
-        if (YETTY_IS_ERR(cell_res)) {
-            yetty_ycore_error_destroy(cell_res.error);
-            continue;
-        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, cell_res, "recalculate_cell_bounds: cell_get");
         struct yetty_yrich_cell *cell = cell_res.value;
         rebuild_cache(sheet);
         cell->bounds.x =
@@ -670,6 +667,7 @@ static void recalculate_cell_bounds(struct yetty_yrich_spreadsheet *sheet)
         cell->bounds.w = col_width_of(sheet, addr.col);
         cell->bounds.h = row_height_of(sheet, addr.row);
     }
+    return YETTY_OK_VOID();
 }
 
 /*===========================================================================
@@ -677,22 +675,20 @@ static void recalculate_cell_bounds(struct yetty_yrich_spreadsheet *sheet)
  *=========================================================================*/
 
 YETTY_ANNOTATE("expose")
-struct yetty_yclass_object *yetty_yrich_spreadsheet_cell_at(struct yetty_yclass_object *obj,
-                                                            int32_t row, int32_t col)
+struct yetty_yclass_object_ptr_result yetty_yrich_spreadsheet_cell_at(
+    struct yetty_yclass_object *obj, int32_t row, int32_t col)
 {
     struct yetty_yrich_spreadsheet_ptr_result data_res = yetty_yrich_spreadsheet_from(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return NULL;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, data_res, "spreadsheet_cell_at: data_get");
     struct yetty_yrich_spreadsheet *sheet = data_res.value;
     struct yetty_yrich_cell_addr addr = {row, col};
     for (size_t i = 0; i < sheet->cell_count; i++) {
         if (yetty_yrich_cell_addr_eq(sheet->cells[i].addr, addr)) {
-            return sheet->cells[i].cell_obj;
+            return YETTY_OK(yetty_yclass_object_ptr, sheet->cells[i].cell_obj);
         }
     }
-    return NULL;
+    /* No cell at that address is a successful "empty" query result. */
+    return YETTY_OK(yetty_yclass_object_ptr, NULL);
 }
 
 static struct yetty_ycore_void_result register_cell_entry(struct yetty_yrich_spreadsheet *sheet,
@@ -720,9 +716,11 @@ struct yetty_yclass_object_ptr_result yetty_yrich_spreadsheet_ensure_cell(
     YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, data_res, "ensure_cell: data_get");
     struct yetty_yrich_spreadsheet *sheet = data_res.value;
 
-    struct yetty_yclass_object *existing = yetty_yrich_spreadsheet_cell_at(obj, row, col);
-    if (existing) {
-        return YETTY_OK(yetty_yclass_object_ptr, existing);
+    struct yetty_yclass_object_ptr_result existing_res =
+        yetty_yrich_spreadsheet_cell_at(obj, row, col);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, existing_res, "ensure_cell: cell_at");
+    if (existing_res.value) {
+        return YETTY_OK(yetty_yclass_object_ptr, existing_res.value);
     }
 
     struct yetty_yclass_object_ptr_result create_res = yetty_yrich_cell_create(NULL);
@@ -799,27 +797,29 @@ static struct yetty_ycore_void_result spreadsheet_set_cell_value(struct yetty_yc
 }
 
 YETTY_ANNOTATE("expose")
-const char *yetty_yrich_spreadsheet_cell_value(struct yetty_yclass_object *obj, int32_t row,
-                                               int32_t col)
+struct yetty_ycore_const_char_ptr_result yetty_yrich_spreadsheet_cell_value(
+    struct yetty_yclass_object *obj, int32_t row, int32_t col)
 {
-    struct yetty_yclass_object *cell_obj = yetty_yrich_spreadsheet_cell_at(obj, row, col);
-    return cell_obj ? yetty_yrich_cell_text(cell_obj) : "";
+    struct yetty_yclass_object_ptr_result cell_res = yetty_yrich_spreadsheet_cell_at(obj, row, col);
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, cell_res, "spreadsheet_cell_value: cell_at");
+    if (!cell_res.value) {
+        return YETTY_OK(yetty_ycore_const_char_ptr, "");
+    }
+    return yetty_yrich_cell_text(cell_res.value);
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_yrich_cell_addr yetty_yrich_spreadsheet_cell_addr_at(struct yetty_yclass_object *obj,
-                                                                  float x, float y)
+struct yetty_yrich_cell_addr_result yetty_yrich_spreadsheet_cell_addr_at(
+    struct yetty_yclass_object *obj, float x, float y)
 {
     struct yetty_yrich_cell_addr addr = {0, 0};
     struct yetty_yrich_spreadsheet_ptr_result data_res = yetty_yrich_spreadsheet_from(obj);
-    if (YETTY_IS_ERR(data_res)) {
-        yetty_ycore_error_destroy(data_res.error);
-        return addr;
-    }
+    YETTY_RETURN_IF_ERR(yetty_yrich_cell_addr, data_res, "spreadsheet_cell_addr_at: data_get");
     struct yetty_yrich_spreadsheet *sheet = data_res.value;
     rebuild_cache(sheet);
     if (!sheet->col_x_cache || !sheet->row_y_cache) {
-        return addr;
+        /* Empty grid: origin cell is a valid result. */
+        return YETTY_OK(yetty_yrich_cell_addr, addr);
     }
 
     for (int32_t col = 0; col < sheet->col_count; col++) {
@@ -836,7 +836,7 @@ struct yetty_yrich_cell_addr yetty_yrich_spreadsheet_cell_addr_at(struct yetty_y
         }
         addr.row = row;
     }
-    return addr;
+    return YETTY_OK(yetty_yrich_cell_addr, addr);
 }
 
 #include "spreadsheet.gen.c"

@@ -34,7 +34,7 @@ struct yetty_ygui_tabbar_ptr_result {
     };
 };
 struct yetty_ygui_tabbar_ptr_result yetty_ygui_tabbar_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_tabbar_to(struct yetty_ygui_tabbar *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_tabbar_to(struct yetty_ygui_tabbar *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_tabbar_create(struct yetty_yclass_ctx *ctx);
 

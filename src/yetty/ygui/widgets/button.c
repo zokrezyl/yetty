@@ -118,7 +118,9 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_object *y
     struct yetty_ygui_button_ptr_result d_dr = yetty_ygui_button_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "button_paint: data_get");
     struct yetty_ygui_button *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "button_paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
     if (w <= 0.0f || h <= 0.0f) {
@@ -131,7 +133,9 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_object *y
     } else {
         yetty_ycore_error_destroy(pressed_r.error);
     }
-    int hovered = yetty_ygui_widget_is_hovered(obj);
+    struct yetty_ycore_int_result hovered_res = yetty_ygui_widget_is_hovered(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hovered_res, "button_paint: is_hovered");
+    int hovered = hovered_res.value;
 
     /* Window-control mode: paint a flat caption cell with an SDF icon (no
      * rounded gradient surface, no text label), matching ychrome's controls so
@@ -242,8 +246,9 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_object *y
         /* Pull body font size from the engine theme so style.ygui.font-size
          * in user config reaches the button. Belt-and-braces fallback if
          * theme is somehow NULL (engine owns it post-create). */
-        const struct yetty_ygui_theme *theme =
-            yetty_ygui_framework_theme(yetty_ygui_widget_framework(obj));
+        struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_widget_framework(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res, "button_paint: framework");
+        const struct yetty_ygui_theme *theme = yetty_ygui_framework_theme(framework_res.value);
         float font_size = theme && theme->font_size > 0.0f ? theme->font_size : 14.0f;
         float x = r.min.x + 12.0f;
         float y = r.min.y + press_offset + (h + font_size) * 0.5f - 2.0f;

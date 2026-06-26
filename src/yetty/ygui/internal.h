@@ -77,6 +77,11 @@ struct yetty_ygui_event_subscription {
     struct yetty_ygui_event_subscription *next;
 };
 
+/* Result wrapper for the subscription-list head getter below. Module-private:
+ * the getter is declared only here (not in the generated widget.h), so the
+ * matching result type lives here too. */
+YETTY_YRESULT_DECLARE(yetty_ygui_event_subscription_ptr, struct yetty_ygui_event_subscription *);
+
 struct yetty_ygui_framework;
 
 /* Framework-internal mutators of the widget base data slice (struct
@@ -97,7 +102,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_hovered(struct yetty_yclass
                                                              int hovered);
 struct yetty_ycore_void_result yetty_ygui_widget_set_dirty_flag(struct yetty_yclass_object *obj,
                                                                 int dirty);
-struct yetty_ygui_event_subscription *yetty_ygui_widget_subscriptions(
+struct yetty_ygui_event_subscription_ptr_result yetty_ygui_widget_subscriptions(
     struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_widget_set_subscriptions(
     struct yetty_yclass_object *obj, struct yetty_ygui_event_subscription *subscriptions);
@@ -261,7 +266,8 @@ struct yetty_ycore_void_result yetty_ygui_wire_append_record(struct yetty_ycore_
  * pass to slide a scrolling container's in-flow children. Internal. */
 struct yetty_ycore_void_result yetty_ygui_widget_scroll_main_set(struct yetty_yclass_object *obj,
                                                                  float offset);
-float yetty_ygui_widget_scroll_main_get(const struct yetty_yclass_object *obj);
+struct yetty_ycore_float_result yetty_ygui_widget_scroll_main_get(
+    const struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus
 }

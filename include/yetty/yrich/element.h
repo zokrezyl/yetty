@@ -35,7 +35,7 @@ struct yetty_yrich_element_ptr_result {
     };
 };
 struct yetty_yrich_element_ptr_result yetty_yrich_element_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yrich_element_to(struct yetty_yrich_element *data);
+struct yetty_yclass_object_ptr_result yetty_yrich_element_to(struct yetty_yrich_element *data);
 
 /* element_destroy: free element-specific state, then the object. The base
  * owns no heap state, so the default just frees the object; concrete kinds

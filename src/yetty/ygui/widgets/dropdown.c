@@ -78,7 +78,9 @@ static struct yetty_ycore_void_result on_click_open(struct yetty_yclass_object *
     if (!d->menu) {
         return YETTY_OK_VOID();
     }
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "on_click_open: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     return yetty_ygui_popup_menu_toggle_at(d->menu, r.min.x, r.max.y + 2.0f);
 }
 
@@ -160,7 +162,9 @@ static struct yetty_ycore_void_result dropdown_paint(struct yetty_yclass_object 
     struct yetty_ygui_dropdown_ptr_result d_dr = yetty_ygui_dropdown_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "dropdown_paint: data_get");
     struct yetty_ygui_dropdown *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "dropdown_paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
     if (w <= 0.0f || h <= 0.0f) {

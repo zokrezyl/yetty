@@ -112,15 +112,22 @@ static struct yetty_ycore_void_result ch_chevron(struct yetty_ygui_emit_ctx *ctx
 static struct yetty_ycore_void_result ch_set_children_hidden(struct yetty_yclass_object *obj,
                                                              int hidden)
 {
-    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(obj); c;
-         c = yetty_ygui_widget_next_sibling(c)) {
-        struct yetty_ygui_layout cl = *yetty_ygui_widget_layout_get(c);
-        if (cl.hidden == hidden) {
-            continue;
+    struct yetty_yclass_object_ptr_result child_res = yetty_ygui_widget_first_child(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res, "ch_set_children_hidden: first_child");
+    for (struct yetty_yclass_object *child = child_res.value; child;) {
+        struct yetty_ygui_layout_const_ptr_result child_layout_res =
+            yetty_ygui_widget_layout_get(child);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, child_layout_res,
+                            "ch_set_children_hidden: layout_get");
+        struct yetty_ygui_layout cl = *child_layout_res.value;
+        if (cl.hidden != hidden) {
+            cl.hidden = hidden;
+            struct yetty_ycore_void_result set_res = yetty_ygui_widget_layout_set(child, &cl);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_res, "collapsing_header: child hidden");
         }
-        cl.hidden = hidden;
-        struct yetty_ycore_void_result r = yetty_ygui_widget_layout_set(c, &cl);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "collapsing_header: child hidden");
+        struct yetty_yclass_object_ptr_result next_res = yetty_ygui_widget_next_sibling(child);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, next_res, "ch_set_children_hidden: next_sibling");
+        child = next_res.value;
     }
     return YETTY_OK_VOID();
 }
@@ -129,7 +136,9 @@ static struct yetty_ycore_void_result ch_set_children_hidden(struct yetty_yclass
 static struct yetty_ycore_void_result ch_apply_open(struct yetty_yclass_object *obj,
                                                     struct yetty_ygui_collapsing_header *d)
 {
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "ch_apply_open: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     if (d->open) {
         if (d->open_height > 0.0f) {
             l.height = d->open_height;
@@ -158,7 +167,9 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     d->title = NULL;
     d->open = 1;
     d->open_height = -1.0f;
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "collapsing_header ctor: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.padding_top = HEADER_H + 4.0f;
     l.padding_bottom = 4.0f;
     l.padding_left = 8.0f;
@@ -188,7 +199,9 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass
     struct yetty_ygui_collapsing_header_ptr_result d_dr = yetty_ygui_collapsing_header_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_press: data_get");
     struct yetty_ygui_collapsing_header *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "on_press: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     /* Only the header strip toggles; a press below it belongs to a child. */
     if (y - r.min.y > HEADER_H) {
         return YETTY_OK(yetty_ycore_int, 0);
@@ -212,7 +225,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     struct yetty_ygui_collapsing_header_ptr_result d_dr = yetty_ygui_collapsing_header_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
     struct yetty_ygui_collapsing_header *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
     if (w <= 0.0f) {
@@ -246,7 +261,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     }
 
     /* Accent outline over the strip while hovered. */
-    if (yetty_ygui_widget_is_hovered(obj)) {
+    struct yetty_ycore_int_result hovered_res = yetty_ygui_widget_is_hovered(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, hovered_res, "paint: is_hovered");
+    if (hovered_res.value) {
         struct yetty_ycore_void_result result_247 =
             ch_rounded(ctx, r.min.x, r.min.y, w, HEADER_H, 0u, CH_HOVER, 1.5f, CH_RADIUS);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, result_247, "ch: hover");
@@ -292,15 +309,17 @@ struct yetty_ycore_void_result yetty_ygui_collapsing_header_set_open(
 }
 
 YETTY_ANNOTATE("expose")
-int yetty_ygui_collapsing_header_is_open(const struct yetty_yclass_object *obj)
+struct yetty_ycore_int_result yetty_ygui_collapsing_header_is_open(
+    const struct yetty_yclass_object *obj)
 {
     if (!obj) {
-        return 0;
+        return YETTY_ERR(yetty_ycore_int, "yetty_ygui_collapsing_header_is_open: NULL obj");
     }
-    return ((struct yetty_ygui_collapsing_header *)yetty_ygui_collapsing_header_from(
-                (struct yetty_yclass_object *)obj)
-                .value)
-        ->open;
+    struct yetty_ygui_collapsing_header_ptr_result data_res =
+        yetty_ygui_collapsing_header_from((struct yetty_yclass_object *)obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, data_res,
+                        "yetty_ygui_collapsing_header_is_open: data_get");
+    return YETTY_OK(yetty_ycore_int, data_res.value->open);
 }
 
 #include "collapsing_header.gen.c"

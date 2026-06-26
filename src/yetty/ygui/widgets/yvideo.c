@@ -56,9 +56,13 @@ static struct yetty_ycore_void_result emit_container(struct yetty_yclass_object 
                                                      struct yetty_ygui_emit_ctx *ctx)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
-    return yetty_ygui_emit_ensure_child(ctx, yetty_ygui_widget_id(obj), YETTY_YFIGURE_KIND_YVIDEO,
-                                        r.min.x, r.min.y, r.max.x, r.max.y, NULL, 0);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "yvideo emit_container: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
+    struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yvideo emit_container: id");
+    return yetty_ygui_emit_ensure_child(ctx, id_res.value, YETTY_YFIGURE_KIND_YVIDEO, r.min.x,
+                                        r.min.y, r.max.x, r.max.y, NULL, 0);
 }
 
 YETTY_ANNOTATE("override@ygui:yvideo:widget_emit_body")
@@ -76,7 +80,9 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_object *ycla
      * YETTY_YFIGURE_KIND_YVIDEO), so the body must be a drawable_list holding
      * one yvideo complex prim — NOT raw MP4 bytes. yvideo-mp4 does the
      * demux + render in one shot. */
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "yvideo_emit_body: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     struct yetty_yvideo_render_config cfg = {
         /* Absolute widget rect — see yplot.c (producer figure is absolute in
          * the ygui chrome, content scaled by content_scale). */
@@ -135,7 +141,14 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_object *ycla
             memcpy(combined, zbytes, zsize);
         }
         memcpy(combined + zsize, bytes, size);
-        er = yetty_ygui_emit_figure_body(ctx, yetty_ygui_widget_id(obj), combined, (uint32_t)total);
+        struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
+        if (YETTY_IS_ERR(id_res)) {
+            free(combined);
+            yetty_ydraw_drawable_list_destroy(zl);
+            yetty_ydraw_drawable_list_destroy(dl);
+            return YETTY_ERR(yetty_ycore_void, "yvideo_emit_body: id", id_res);
+        }
+        er = yetty_ygui_emit_figure_body(ctx, id_res.value, combined, (uint32_t)total);
         free(combined);
         yetty_ydraw_drawable_list_destroy(zl);
     }

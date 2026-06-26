@@ -35,7 +35,7 @@ struct yetty_yplatform_ios_clipboard_ptr_result {
 };
 struct yetty_yplatform_ios_clipboard_ptr_result yetty_yplatform_ios_clipboard_from(
     struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yplatform_ios_clipboard_to(
+struct yetty_yclass_object_ptr_result yetty_yplatform_ios_clipboard_to(
     struct yetty_yplatform_ios_clipboard *data);
 
 struct yetty_yclass_object_ptr_result yetty_yplatform_ios_clipboard_create(

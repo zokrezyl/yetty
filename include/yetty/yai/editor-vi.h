@@ -31,7 +31,7 @@ struct yetty_yai_vi_ptr_result {
     };
 };
 struct yetty_yai_vi_ptr_result yetty_yai_vi_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yai_vi_to(struct yetty_yai_vi *data);
+struct yetty_yclass_object_ptr_result yetty_yai_vi_to(struct yetty_yai_vi *data);
 
 struct yetty_yclass_object_ptr_result yetty_yai_vi_create(struct yetty_yclass_ctx *ctx);
 

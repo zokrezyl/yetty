@@ -74,7 +74,7 @@ struct yetty_ygui_widget_ptr_result {
     };
 };
 struct yetty_ygui_widget_ptr_result yetty_ygui_widget_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_widget_to(struct yetty_ygui_widget *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_widget_to(struct yetty_ygui_widget *data);
 
 struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_object *obj, float x,
                                                          float y, int button);

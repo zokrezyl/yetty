@@ -32,7 +32,7 @@ struct yetty_yplatform_webasm_platform_ptr_result {
 };
 struct yetty_yplatform_webasm_platform_ptr_result yetty_yplatform_webasm_platform_from(
     struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yplatform_webasm_platform_to(
+struct yetty_yclass_object_ptr_result yetty_yplatform_webasm_platform_to(
     struct yetty_yplatform_webasm_platform *data);
 
 struct yetty_yclass_object_ptr_result yetty_yplatform_webasm_platform_create(

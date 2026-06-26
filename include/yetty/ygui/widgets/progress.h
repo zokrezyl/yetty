@@ -31,7 +31,7 @@ struct yetty_ygui_progress_ptr_result {
     };
 };
 struct yetty_ygui_progress_ptr_result yetty_ygui_progress_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_progress_to(struct yetty_ygui_progress *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_progress_to(struct yetty_ygui_progress *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_progress_create(struct yetty_yclass_ctx *ctx);
 

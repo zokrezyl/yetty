@@ -121,7 +121,9 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
         yetty_ygui_super_void(obj, yetty_ygui_scrollarea_class_get().value,
                               (yetty_yclass_method_id_t)yetty_ygui_constructor);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "scrollarea: super");
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "scrollarea: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.padding_right = SCROLLBAR_W + 4.0f;
     l.padding_left = 4.0f;
     l.padding_top = 4.0f;
@@ -150,7 +152,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, class_result.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
     struct yetty_ygui_scrollarea *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "scrollarea paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {
         return YETTY_OK_VOID();
@@ -158,22 +162,33 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
 
     /* Content height = sum of in-flow children heights + gaps. Children are
      * laid out in this figure's local space; heights are offset-invariant. */
-    const struct yetty_ygui_layout *l = yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "scrollarea paint: layout_get");
+    const struct yetty_ygui_layout *l = layout_res.value;
     float viewport_h = h - l->padding_top - l->padding_bottom;
     if (viewport_h < 0.0f) {
         viewport_h = 0.0f;
     }
     float content_h = 0.0f;
     int n = 0;
-    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(obj); c;
-         c = yetty_ygui_widget_next_sibling(c)) {
-        const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
-        if (cl->hidden || cl->absolute) {
-            continue;
+    struct yetty_yclass_object_ptr_result child_res = yetty_ygui_widget_first_child(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res, "scrollarea paint: first_child");
+    for (struct yetty_yclass_object *c = child_res.value; c;) {
+        struct yetty_ygui_layout_const_ptr_result child_layout_res =
+            yetty_ygui_widget_layout_get(c);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, child_layout_res,
+                            "scrollarea paint: child layout_get");
+        const struct yetty_ygui_layout *cl = child_layout_res.value;
+        if (!cl->hidden && !cl->absolute) {
+            struct yetty_ycore_rectangle_result child_rect_res = yetty_ygui_widget_rect(c);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, child_rect_res, "scrollarea paint: child rect");
+            struct yetty_ycore_rectangle cr = child_rect_res.value;
+            content_h += cr.max.y - cr.min.y;
+            n++;
         }
-        struct yetty_ycore_rectangle cr = yetty_ygui_widget_rect(c);
-        content_h += cr.max.y - cr.min.y;
-        n++;
+        struct yetty_yclass_object_ptr_result next_res = yetty_ygui_widget_next_sibling(c);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, next_res, "scrollarea paint: next_sibling");
+        c = next_res.value;
     }
     if (n > 1) {
         content_h += l->gap * (float)(n - 1);

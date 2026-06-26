@@ -31,7 +31,7 @@ struct yetty_yapp_app_ptr_result {
     };
 };
 struct yetty_yapp_app_ptr_result yetty_yapp_app_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yapp_app_to(struct yetty_yapp_app *data);
+struct yetty_yclass_object_ptr_result yetty_yapp_app_to(struct yetty_yapp_app *data);
 
 struct yetty_ycore_void_result yetty_yapp_init(struct yetty_yclass_object *app,
                                                struct yetty_yclass_object *platform);

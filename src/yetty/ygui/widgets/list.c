@@ -72,7 +72,9 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass
     struct yetty_ygui_list_ptr_result d_dr = yetty_ygui_list_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_press: data_get");
     struct yetty_ygui_list *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "on_press: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     int idx = (int)((y - r.min.y) / ROW_H);
     if (idx < 0 || idx >= d->n) {
         return YETTY_OK(yetty_ycore_int, 0);
@@ -101,7 +103,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     struct yetty_ygui_list_ptr_result d_dr = yetty_ygui_list_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
     struct yetty_ygui_list *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {
         return YETTY_OK_VOID();

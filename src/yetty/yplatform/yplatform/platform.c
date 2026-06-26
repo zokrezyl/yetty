@@ -61,9 +61,9 @@ struct yetty_yplatform_platform_ptr_result yetty_yplatform_platform_from(
 
 YETTY_ANNOTATE("virtual@yplatform:platform:platform_init")
 YETTY_ANNOTATE("local@yplatform:platform_init")
-static struct yetty_ycore_void_result
-    platform_default_init(struct yetty_yclass_object *obj, struct yetty_yclass_object *app,
-                          int argc, char **argv)
+static struct yetty_ycore_void_result platform_default_init(struct yetty_yclass_object *obj,
+                                                            struct yetty_yclass_object *app,
+                                                            int argc, char **argv)
 {
     (void)obj;
     (void)app;
@@ -74,9 +74,9 @@ static struct yetty_ycore_void_result
 
 YETTY_ANNOTATE("virtual@yplatform:platform:platform_run")
 YETTY_ANNOTATE("local@yplatform:platform_run")
-static struct yetty_ycore_void_result
-    platform_default_run(struct yetty_yclass_object *obj, struct yetty_yclass_object *app, int argc,
-                         char **argv)
+static struct yetty_ycore_void_result platform_default_run(struct yetty_yclass_object *obj,
+                                                           struct yetty_yclass_object *app,
+                                                           int argc, char **argv)
 {
     (void)obj;
     (void)app;

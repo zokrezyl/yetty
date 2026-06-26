@@ -51,8 +51,8 @@ struct yetty_yplatform_clipboard_ptr_result yetty_yplatform_clipboard_from(
 
 YETTY_ANNOTATE("virtual@yplatform:clipboard:clipboard_set_text")
 YETTY_ANNOTATE("local@yplatform:clipboard_set_text")
-static struct yetty_ycore_void_result
-    clipboard_default_set_text(struct yetty_yclass_object *obj, const char *text, size_t len)
+static struct yetty_ycore_void_result clipboard_default_set_text(struct yetty_yclass_object *obj,
+                                                                 const char *text, size_t len)
 {
     (void)obj;
     (void)text;
@@ -63,8 +63,8 @@ static struct yetty_ycore_void_result
 
 YETTY_ANNOTATE("virtual@yplatform:clipboard:clipboard_request_paste")
 YETTY_ANNOTATE("local@yplatform:clipboard_request_paste")
-static struct yetty_ycore_void_result
-    clipboard_default_request_paste(struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result clipboard_default_request_paste(
+    struct yetty_yclass_object *obj)
 {
     (void)obj;
     return YETTY_ERR(yetty_ycore_void,

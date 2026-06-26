@@ -1408,7 +1408,14 @@ static struct yetty_ycore_void_result parse_slide(struct yaml_parser_s *p,
             if (index < 0) {
                 return YETTY_ERR(yetty_ycore_void, "yrich yaml: slide 'shapes' before 'index'");
             }
-            while (yetty_yrich_slides_slide_at(slides_obj, index) == NULL) {
+            for (;;) {
+                struct yetty_yrich_slide_ptr_result slide_at_res =
+                    yetty_yrich_slides_slide_at(slides_obj, index);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, slide_at_res,
+                                    "yrich yaml: slide lookup failed");
+                if (slide_at_res.value != NULL) {
+                    break;
+                }
                 struct yetty_yrich_slide_ptr_result slide_res =
                     yetty_yrich_slides_add_slide(slides_obj);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, slide_res, "yrich yaml: slide create failed");
@@ -1416,7 +1423,11 @@ static struct yetty_ycore_void_result parse_slide(struct yaml_parser_s *p,
             struct yetty_ycore_void_result current_res =
                 yetty_yrich_slides_set_current(slides_obj, index);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, current_res, "yrich yaml: set_current failed");
-            struct yetty_yrich_slide *current = yetty_yrich_slides_slide_at(slides_obj, index);
+            struct yetty_yrich_slide_ptr_result current_at_res =
+                yetty_yrich_slides_slide_at(slides_obj, index);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, current_at_res,
+                                "yrich yaml: slide lookup failed");
+            struct yetty_yrich_slide *current = current_at_res.value;
             if (current && have_bg) {
                 current->bg_color = bg;
             }

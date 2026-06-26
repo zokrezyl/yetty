@@ -33,7 +33,7 @@ struct yetty_yview_view_ptr_result {
     };
 };
 struct yetty_yview_view_ptr_result yetty_yview_view_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yview_view_to(struct yetty_yview_view *data);
+struct yetty_yclass_object_ptr_result yetty_yview_view_to(struct yetty_yview_view *data);
 
 /* configure: set the output fd, figure id/kind, opaque background, and rect.
  * Call once after create(), before set_content(). */

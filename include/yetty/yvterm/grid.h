@@ -25,6 +25,20 @@ typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *
 typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_pty_write_fn)(const char *, size_t,
                                                                          void *);
 
+struct yetty_ydraw_composite_const_ptr_ptr_result {
+    int ok;
+    union {
+        struct yetty_ydraw_composite *const *value;
+        struct yetty_ycore_error error;
+    };
+};
+struct yetty_yvterm_text_cell_const_ptr_result {
+    int ok;
+    union {
+        const struct yetty_yvterm_text_cell *value;
+        struct yetty_ycore_error error;
+    };
+};
 enum yetty_yvterm_text_attr {
     YETTY_YVTERM_ATTR_BOLD = 1,
     YETTY_YVTERM_ATTR_UNDERLINE = 2,
@@ -69,7 +83,7 @@ struct yetty_yvterm_grid_ptr_result {
     };
 };
 struct yetty_yvterm_grid_ptr_result yetty_yvterm_grid_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yvterm_grid_to(struct yetty_yvterm_grid *data);
+struct yetty_yclass_object_ptr_result yetty_yvterm_grid_to(struct yetty_yvterm_grid *data);
 
 struct yetty_yclass_object_ptr_result yetty_yvterm_grid_create(struct yetty_yclass_ctx *ctx);
 
@@ -77,23 +91,27 @@ struct yetty_ycore_void_result yetty_yvterm_register(void);
 
 struct yetty_yclass_object_ptr_result yetty_yvterm_grid_make(uint32_t cols, uint32_t rows);
 struct yetty_ycore_void_result yetty_yvterm_grid_dispose(struct yetty_yclass_object *obj);
-void yetty_yvterm_grid_set_pty_write(struct yetty_yclass_object *obj,
-                                     yetty_yvterm_grid_pty_write_fn fn, void *userdata);
-void yetty_yvterm_grid_set_clear_hook(struct yetty_yclass_object *obj,
-                                      yetty_yvterm_grid_clear_hook_fn fn, void *userdata);
-void yetty_yvterm_grid_set_card_sub(struct yetty_yclass_object *obj,
-                                    yetty_yvterm_grid_card_sub_fn fn, void *userdata);
+struct yetty_ycore_void_result yetty_yvterm_grid_set_pty_write(struct yetty_yclass_object *obj,
+                                                               yetty_yvterm_grid_pty_write_fn fn,
+                                                               void *userdata);
+struct yetty_ycore_void_result yetty_yvterm_grid_set_clear_hook(struct yetty_yclass_object *obj,
+                                                                yetty_yvterm_grid_clear_hook_fn fn,
+                                                                void *userdata);
+struct yetty_ycore_void_result yetty_yvterm_grid_set_card_sub(struct yetty_yclass_object *obj,
+                                                              yetty_yvterm_grid_card_sub_fn fn,
+                                                              void *userdata);
 struct yetty_ycore_void_result yetty_yvterm_grid_feed(struct yetty_yclass_object *obj,
                                                       const char *bytes, size_t len);
 struct yetty_ycore_void_result yetty_yvterm_grid_resize(struct yetty_yclass_object *obj,
                                                         uint32_t cols, uint32_t rows);
-int yetty_yvterm_grid_is_dirty(struct yetty_yclass_object *obj);
-void yetty_yvterm_grid_cursor(struct yetty_yclass_object *obj, uint32_t *out_row, uint32_t *out_col,
-                              uint32_t *out_visible);
+struct yetty_ycore_int_result yetty_yvterm_grid_is_dirty(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yvterm_grid_cursor(struct yetty_yclass_object *obj,
+                                                        uint32_t *out_row, uint32_t *out_col,
+                                                        uint32_t *out_visible);
 /* Absolute row at the top of the screen (rows scrolled off so far). The cursor's
  * absolute output row is this + the visible cursor row — used to place anchored
  * rich content on the rolling-row scroll. */
-uint32_t yetty_yvterm_grid_scroll_origin(struct yetty_yclass_object *obj);
+struct yetty_ycore_uint32_result yetty_yvterm_grid_scroll_origin(struct yetty_yclass_object *obj);
 struct yetty_ycore_uint32_result yetty_yvterm_grid_append_primitive(struct yetty_yclass_object *obj,
                                                                     uint32_t row,
                                                                     const uint32_t *words,
@@ -118,8 +136,10 @@ struct yetty_ycore_void_result yetty_yvterm_grid_clear_rich_line(struct yetty_yc
 struct yetty_ycore_void_result yetty_yvterm_grid_clear_rich_all(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yvterm_grid_register_wire(
     struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *sm);
-int yetty_yvterm_grid_on_char(struct yetty_yclass_object *obj, uint32_t codepoint, int mods);
-int yetty_yvterm_grid_on_key(struct yetty_yclass_object *obj, int key, int mods);
+struct yetty_ycore_int_result yetty_yvterm_grid_on_char(struct yetty_yclass_object *obj,
+                                                        uint32_t codepoint, int mods);
+struct yetty_ycore_int_result yetty_yvterm_grid_on_key(struct yetty_yclass_object *obj, int key,
+                                                       int mods);
 struct yetty_ycore_void_result yetty_yvterm_grid_set_selection(struct yetty_yclass_object *obj,
                                                                int active, uint32_t anchor_row,
                                                                uint32_t anchor_col,
@@ -130,53 +150,61 @@ struct yetty_ycore_void_result yetty_yvterm_grid_get_selection_text(struct yetty
 /* Word boundaries around (row, col): the inclusive [start_col, end_col] run of
  * word chars covering the clicked cell. A click on a non-word cell selects just
  * that cell. Used for double-click word selection. */
-void yetty_yvterm_grid_word_bounds(struct yetty_yclass_object *obj, uint32_t row, uint32_t col,
-                                   uint32_t *out_start_col, uint32_t *out_end_col);
-void yetty_yvterm_grid_dims(struct yetty_yclass_object *obj, uint32_t *out_cols, uint32_t *out_rows,
-                            uint32_t *out_base);
-/* The cell array for visible row `row` (length = cols). NULL if out of range. */
-const struct yetty_yvterm_text_cell *yetty_yvterm_grid_line_cells(struct yetty_yclass_object *obj,
-                                                                  uint32_t row);
-int yetty_yvterm_grid_line_dirty(struct yetty_yclass_object *obj, uint32_t row);
-/* Composite array anchored on visible row `row`. Sets *out_count; may be NULL. */
-struct yetty_ydraw_composite *const *yetty_yvterm_grid_line_composites(
+struct yetty_ycore_void_result yetty_yvterm_grid_word_bounds(struct yetty_yclass_object *obj,
+                                                             uint32_t row, uint32_t col,
+                                                             uint32_t *out_start_col,
+                                                             uint32_t *out_end_col);
+struct yetty_ycore_void_result yetty_yvterm_grid_dims(struct yetty_yclass_object *obj,
+                                                      uint32_t *out_cols, uint32_t *out_rows,
+                                                      uint32_t *out_base);
+/* The cell array for visible row `row` (length = cols). NULL value if out of
+ * range. */
+struct yetty_yvterm_text_cell_const_ptr_result yetty_yvterm_grid_line_cells(
+    struct yetty_yclass_object *obj, uint32_t row);
+struct yetty_ycore_int_result yetty_yvterm_grid_line_dirty(struct yetty_yclass_object *obj,
+                                                           uint32_t row);
+/* Composite array anchored on visible row `row`. Sets *out_count; value may be
+ * NULL. */
+struct yetty_ydraw_composite_const_ptr_ptr_result yetty_yvterm_grid_line_composites(
     struct yetty_yclass_object *obj, uint32_t row, uint32_t *out_count);
 /* Composite array on RAW ring slot `slot` (0..slot_count). Distinct from the
  * visible-row accessor above: the text upload + shader address the ring by raw
  * slot via root_row, so the composite pass must read by the SAME slot to scroll
  * in lockstep (live AND scrolled-back). Sets *out_count; may be NULL. */
-struct yetty_ydraw_composite *const *yetty_yvterm_grid_slot_composites(
+struct yetty_ydraw_composite_const_ptr_ptr_result yetty_yvterm_grid_slot_composites(
     struct yetty_yclass_object *obj, uint32_t slot, uint32_t *out_count);
 /* Number of raw drawable records (SDF / glyph / TEXT_DRAWABLE_LIST / FONT) stored
  * on RAW ring slot `slot`. The SDF render pass walks these by slot — same raw-slot
  * addressing the composite + text passes use — so figures and text scroll together. */
-uint32_t yetty_yvterm_grid_slot_primitive_count(struct yetty_yclass_object *obj, uint32_t slot);
+struct yetty_ycore_uint32_result yetty_yvterm_grid_slot_primitive_count(
+    struct yetty_yclass_object *obj, uint32_t slot);
 /* Row-span of the rich-content block whose BOTTOM line is RAW ring slot `slot`.
  * The renderer recovers the block's top row as (slot's row − (span − 1)) so the
  * figure draws top-down from where its text sits, while the block is owned (and
  * evicted) by its bottom line. 0 means the slot carries no relocated block —
  * the renderer then treats it as a single-row anchor. */
-uint32_t yetty_yvterm_grid_slot_span(struct yetty_yclass_object *obj, uint32_t slot);
+struct yetty_ycore_uint32_result yetty_yvterm_grid_slot_span(struct yetty_yclass_object *obj,
+                                                             uint32_t slot);
 /* Words of primitive `index` on RAW ring slot `slot`. *out_word_count is set to the
  * record's u32 length. Returns NULL (and *out_word_count 0) if slot/index are out of
  * range. The returned span aliases the line's arena — read it, do not retain it. */
-const uint32_t *yetty_yvterm_grid_slot_primitive_words(struct yetty_yclass_object *obj,
-                                                       uint32_t slot, uint32_t index,
-                                                       uint32_t *out_word_count);
+struct yetty_ycore_const_uint32_ptr_result yetty_yvterm_grid_slot_primitive_words(
+    struct yetty_yclass_object *obj, uint32_t slot, uint32_t index, uint32_t *out_word_count);
 /* Current selection rectangle (raw anchor/head; the renderer normalises to a
  * reading-order stream). active=0 → no selection. */
-void yetty_yvterm_grid_selection(struct yetty_yclass_object *obj, int *out_active,
-                                 uint32_t *out_anchor_row, uint32_t *out_anchor_col,
-                                 uint32_t *out_head_row, uint32_t *out_head_col);
+struct yetty_ycore_void_result yetty_yvterm_grid_selection(
+    struct yetty_yclass_object *obj, int *out_active, uint32_t *out_anchor_row,
+    uint32_t *out_anchor_col, uint32_t *out_head_row, uint32_t *out_head_col);
 /* Renderer has consumed the model; drop every dirty flag. */
-void yetty_yvterm_grid_clear_dirty(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yvterm_grid_clear_dirty(struct yetty_yclass_object *obj);
 /* Raw ring-slot accessors (slot in [0, line_count)) for the text upload, which
  * is slot-indexed so the shader's root_row=base gives O(1) scroll. Distinct from
  * the visible-row accessors above (which resolve the ring). */
-uint32_t yetty_yvterm_grid_slot_count(struct yetty_yclass_object *obj);
-const struct yetty_yvterm_text_cell *yetty_yvterm_grid_slot_cells(struct yetty_yclass_object *obj,
-                                                                  uint32_t slot);
-int yetty_yvterm_grid_slot_dirty(struct yetty_yclass_object *obj, uint32_t slot);
+struct yetty_ycore_uint32_result yetty_yvterm_grid_slot_count(struct yetty_yclass_object *obj);
+struct yetty_yvterm_text_cell_const_ptr_result yetty_yvterm_grid_slot_cells(
+    struct yetty_yclass_object *obj, uint32_t slot);
+struct yetty_ycore_int_result yetty_yvterm_grid_slot_dirty(struct yetty_yclass_object *obj,
+                                                           uint32_t slot);
 
 #ifdef __cplusplus
 }

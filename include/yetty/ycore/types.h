@@ -132,6 +132,7 @@ YETTY_YRESULT_DECLARE(float, float);
 YETTY_YRESULT_DECLARE(pixel_size, struct yetty_ycore_pixel_size);
 YETTY_YRESULT_DECLARE(pixel_coord, struct yetty_ycore_pixel_coord);
 YETTY_YRESULT_DECLARE(rectangle, struct yetty_ycore_rectangle);
+YETTY_YRESULT_DECLARE(yetty_ycore_rectangle, struct yetty_ycore_rectangle);
 
 #ifdef __cplusplus
 }

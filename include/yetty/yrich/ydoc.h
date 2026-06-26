@@ -34,7 +34,7 @@ struct yetty_yrich_paragraph_ptr_result {
     };
 };
 struct yetty_yrich_paragraph_ptr_result yetty_yrich_paragraph_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yrich_paragraph_to(struct yetty_yrich_paragraph *data);
+struct yetty_yclass_object_ptr_result yetty_yrich_paragraph_to(struct yetty_yrich_paragraph *data);
 
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
@@ -50,7 +50,8 @@ struct yetty_yrich_inline_image_ptr_result {
 };
 struct yetty_yrich_inline_image_ptr_result yetty_yrich_inline_image_from(
     struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yrich_inline_image_to(struct yetty_yrich_inline_image *data);
+struct yetty_yclass_object_ptr_result yetty_yrich_inline_image_to(
+    struct yetty_yrich_inline_image *data);
 
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
@@ -65,7 +66,7 @@ struct yetty_yrich_ydoc_ptr_result {
     };
 };
 struct yetty_yrich_ydoc_ptr_result yetty_yrich_ydoc_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yrich_ydoc_to(struct yetty_yrich_ydoc *data);
+struct yetty_yclass_object_ptr_result yetty_yrich_ydoc_to(struct yetty_yrich_ydoc *data);
 
 struct yetty_ycore_void_result yetty_yrich_ydoc_toggle_format(struct yetty_yclass_object *obj,
                                                               uint32_t format_flag);

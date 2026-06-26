@@ -201,9 +201,10 @@ static int chrome_event_xy(const struct yetty_yui_event *event, float *out_x, fl
  * once after create(), before feeding events. window_chrome is borrowed. */
 YETTY_ANNOTATE("virtual@ychrome:chrome:configure")
 YETTY_ANNOTATE("local@ychrome:configure")
-static struct yetty_ycore_void_result
-    chrome_configure(struct yetty_yclass_object *obj, struct yetty_yclass_object *window_chrome,
-                     float caption_height, float edge_size, uint32_t flags)
+static struct yetty_ycore_void_result chrome_configure(struct yetty_yclass_object *obj,
+                                                       struct yetty_yclass_object *window_chrome,
+                                                       float caption_height, float edge_size,
+                                                       uint32_t flags)
 {
     /* window_chrome may be NULL: the in-terminal / client case has no OS
      * window to drive. Chrome still renders its caption and tracks hover so the
@@ -223,8 +224,8 @@ static struct yetty_ycore_void_result
  * resize. */
 YETTY_ANNOTATE("virtual@ychrome:chrome:set_size")
 YETTY_ANNOTATE("local@ychrome:set_size")
-static struct yetty_ycore_void_result
-    chrome_set_size(struct yetty_yclass_object *obj, float width, float height)
+static struct yetty_ycore_void_result chrome_set_size(struct yetty_yclass_object *obj, float width,
+                                                      float height)
 {
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "chrome set_size: object");
@@ -263,8 +264,8 @@ static void chrome_edges_at(const struct yetty_ychrome_chrome *chrome, float x, 
 
 YETTY_ANNOTATE("virtual@ychrome:chrome:edge_cursor_at")
 YETTY_ANNOTATE("local@ychrome:edge_cursor_at")
-static struct yetty_ycore_int_result
-    chrome_edge_cursor_at(struct yetty_yclass_object *obj, float x, float y)
+static struct yetty_ycore_int_result chrome_edge_cursor_at(struct yetty_yclass_object *obj, float x,
+                                                           float y)
 {
     struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, data_r, "chrome edge_cursor_at: object");
@@ -401,8 +402,8 @@ static struct yetty_ydraw_drawable_list_result chrome_render(struct yetty_yclass
  * after your own controls (buttons, tabs) had their chance. */
 YETTY_ANNOTATE("virtual@ychrome:chrome:handle_event")
 YETTY_ANNOTATE("local@ychrome:handle_event")
-static struct yetty_ycore_int_result
-    chrome_handle_event(struct yetty_yclass_object *obj, const struct yetty_yui_event *event)
+static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_object *obj,
+                                                         const struct yetty_yui_event *event)
 {
     if (!event) {
         return YETTY_OK(yetty_ycore_int, 0);

@@ -934,9 +934,13 @@ struct yetty_yrdawn_figure_ptr_result yetty_yrdawn_figure_from_base(
 
 /* Upcast: object → its figure-base slice. Stable pointer. */
 YETTY_ANNOTATE("expose")
-struct yetty_yfigure_figure *yetty_yrdawn_figure_as_figure(struct yetty_yclass_object *obj)
+struct yetty_yfigure_figure_ptr_result yetty_yrdawn_figure_as_figure(
+    struct yetty_yclass_object *obj)
 {
-    return yetty_yfigure_figure_from(obj).value;
+    struct yetty_yfigure_figure_ptr_result figure_r = yetty_yfigure_figure_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, figure_r,
+                        "yetty_yrdawn_figure_as_figure: figure_from");
+    return YETTY_OK(yetty_yfigure_figure_ptr, figure_r.value);
 }
 
 static struct yetty_yfigure_figure_ptr_result yrdawn_factory(struct yetty_ycore_rectangle rect,

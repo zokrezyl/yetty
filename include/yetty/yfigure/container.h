@@ -57,7 +57,8 @@ struct yetty_yfigure_container_ptr_result {
 };
 struct yetty_yfigure_container_ptr_result yetty_yfigure_container_from(
     struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yfigure_container_to(struct yetty_yfigure_container *data);
+struct yetty_yclass_object_ptr_result yetty_yfigure_container_to(
+    struct yetty_yfigure_container *data);
 
 /* yclass instance layout: yclass_object header at offset 0, user data
  * (the `struct yetty_yfigure_container` body) immediately after. Cast

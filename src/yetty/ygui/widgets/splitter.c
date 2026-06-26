@@ -57,20 +57,25 @@ static struct yetty_yclass_ptr_result splitter_class(void)
 /* Effective axis: 1 = row-bar (horizontal resize), 0 = column-bar
  * (vertical resize). Honours an explicit override, else derives from the
  * parent's flex direction. */
-static int splitter_axis_row(struct yetty_yclass_object *obj, const struct yetty_ygui_splitter *d)
+static struct yetty_ycore_int_result splitter_axis_row(struct yetty_yclass_object *obj,
+                                                       const struct yetty_ygui_splitter *d)
 {
     if (d->axis_plus1 == 1) {
-        return 0;
+        return YETTY_OK(yetty_ycore_int, 0);
     }
     if (d->axis_plus1 == 2) {
-        return 1;
+        return YETTY_OK(yetty_ycore_int, 1);
     }
-    struct yetty_yclass_object *parent = yetty_ygui_widget_parent(obj);
+    struct yetty_yclass_object_ptr_result parent_res = yetty_ygui_widget_parent(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, parent_res, "splitter_axis_row: parent");
+    struct yetty_yclass_object *parent = parent_res.value;
     if (parent) {
-        const struct yetty_ygui_layout *pl = yetty_ygui_widget_layout_get(parent);
-        return pl->direction == YETTY_YGUI_FLEX_ROW ? 1 : 0;
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(parent);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, layout_res, "splitter_axis_row: layout_get");
+        const struct yetty_ygui_layout *pl = layout_res.value;
+        return YETTY_OK(yetty_ycore_int, pl->direction == YETTY_YGUI_FLEX_ROW ? 1 : 0);
     }
-    return 1;
+    return YETTY_OK(yetty_ycore_int, 1);
 }
 
 YETTY_ANNOTATE("override@ygui:splitter:widget_paint")
@@ -81,7 +86,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "splitter paint: NULL ctx");
     }
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "splitter paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {
         return YETTY_OK_VOID();
@@ -100,22 +107,31 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
 }
 
 /* The immediately preceding in-flow sibling (skips absolute / hidden). */
-static struct yetty_yclass_object *splitter_prev_sibling(struct yetty_yclass_object *obj)
+static struct yetty_yclass_object_ptr_result splitter_prev_sibling(struct yetty_yclass_object *obj)
 {
-    struct yetty_yclass_object *parent = yetty_ygui_widget_parent(obj);
+    struct yetty_yclass_object_ptr_result parent_res = yetty_ygui_widget_parent(obj);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, parent_res, "splitter_prev_sibling: parent");
+    struct yetty_yclass_object *parent = parent_res.value;
     if (!parent) {
-        return NULL;
+        return YETTY_OK(yetty_yclass_object_ptr, NULL);
     }
     struct yetty_yclass_object *prev = NULL;
-    for (struct yetty_yclass_object *c = yetty_ygui_widget_first_child(parent); c && c != obj;
-         c = yetty_ygui_widget_next_sibling(c)) {
-        const struct yetty_ygui_layout *cl = yetty_ygui_widget_layout_get(c);
-        if (cl->absolute || cl->hidden) {
-            continue;
+    struct yetty_yclass_object_ptr_result child_res = yetty_ygui_widget_first_child(parent);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, child_res, "splitter_prev_sibling: first_child");
+    for (struct yetty_yclass_object *c = child_res.value; c && c != obj;) {
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(c);
+        YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, layout_res,
+                            "splitter_prev_sibling: layout_get");
+        const struct yetty_ygui_layout *cl = layout_res.value;
+        if (!cl->absolute && !cl->hidden) {
+            prev = c;
         }
-        prev = c;
+        struct yetty_yclass_object_ptr_result next_res = yetty_ygui_widget_next_sibling(c);
+        YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, next_res,
+                            "splitter_prev_sibling: next_sibling");
+        c = next_res.value;
     }
-    return prev;
+    return YETTY_OK(yetty_yclass_object_ptr, prev);
 }
 
 YETTY_ANNOTATE("override@ygui:splitter:widget_on_press")
@@ -147,7 +163,9 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_object *yclas
      * the divider (no button held) would drag the panes. The framework
      * captures the pointer on a consumed press, so pressed_obj == this
      * splitter exactly during a real drag. */
-    struct yetty_ygui_framework *eng = yetty_ygui_widget_framework(obj);
+    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_widget_framework(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, framework_res, "on_motion: framework");
+    struct yetty_ygui_framework *eng = framework_res.value;
     if (!eng || eng->pressed_obj != obj) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
@@ -155,8 +173,12 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_object *yclas
     /* External-drive mode — report the cursor's offset from this bar's
      * centre along the resize axis and let the host reposition us. */
     if (sd->change_cb) {
-        int row = splitter_axis_row(obj, sd);
-        struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+        struct yetty_ycore_int_result axis_res = splitter_axis_row(obj, sd);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, axis_res, "on_motion: axis_row");
+        int row = axis_res.value;
+        struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "on_motion: rect");
+        struct yetty_ycore_rectangle r = rect_res.value;
         float cx = (r.min.x + r.max.x) * 0.5f;
         float cy = (r.min.y + r.max.y) * 0.5f;
         float delta = row ? (x - cx) : (y - cy);
@@ -168,15 +190,28 @@ static struct yetty_ycore_int_result on_motion(struct yetty_yclass_object *yclas
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
-    struct yetty_yclass_object *parent = yetty_ygui_widget_parent(obj);
-    struct yetty_yclass_object *prev = splitter_prev_sibling(obj);
+    struct yetty_yclass_object_ptr_result parent_res = yetty_ygui_widget_parent(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, parent_res, "on_motion: parent");
+    struct yetty_yclass_object *parent = parent_res.value;
+    struct yetty_yclass_object_ptr_result prev_res = splitter_prev_sibling(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, prev_res, "on_motion: prev_sibling");
+    struct yetty_yclass_object *prev = prev_res.value;
     if (!parent || !prev) {
         return YETTY_OK(yetty_ycore_int, 1);
     }
-    const struct yetty_ygui_layout *pl = yetty_ygui_widget_layout_get(parent);
-    struct yetty_ycore_rectangle prect = yetty_ygui_widget_rect(prev);
-    struct yetty_ycore_rectangle parect = yetty_ygui_widget_rect(parent);
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(prev);
+    struct yetty_ygui_layout_const_ptr_result parent_layout_res =
+        yetty_ygui_widget_layout_get(parent);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, parent_layout_res, "on_motion: parent layout_get");
+    const struct yetty_ygui_layout *pl = parent_layout_res.value;
+    struct yetty_ycore_rectangle_result prect_res = yetty_ygui_widget_rect(prev);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, prect_res, "on_motion: prev rect");
+    struct yetty_ycore_rectangle prect = prect_res.value;
+    struct yetty_ycore_rectangle_result parect_res = yetty_ygui_widget_rect(parent);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, parect_res, "on_motion: parent rect");
+    struct yetty_ycore_rectangle parect = parect_res.value;
+    struct yetty_ygui_layout_const_ptr_result prev_layout_res = yetty_ygui_widget_layout_get(prev);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, prev_layout_res, "on_motion: prev layout_get");
+    struct yetty_ygui_layout l = *prev_layout_res.value;
 
     if (pl->direction == YETTY_YGUI_FLEX_COLUMN) {
         float nh = y - prect.min.y;

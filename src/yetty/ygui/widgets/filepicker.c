@@ -187,7 +187,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     struct yetty_ygui_filepicker_ptr_result d_dr = yetty_ygui_filepicker_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
     struct yetty_ygui_filepicker *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0.0f || h <= 0.0f) {
         return YETTY_OK_VOID();
@@ -276,14 +278,18 @@ static struct yetty_ycore_int_result fp_on_motion(struct yetty_yclass_object *yc
 {
     (void)x;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_framework *eng = yetty_ygui_widget_framework(obj);
+    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_widget_framework(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, framework_res, "fp_on_motion: framework");
+    struct yetty_ygui_framework *eng = framework_res.value;
     if (!eng || eng->pressed_obj != obj) {
         return YETTY_OK(yetty_ycore_int, 0); /* only while we're the drag target */
     }
     struct yetty_ygui_filepicker_ptr_result d_dr = yetty_ygui_filepicker_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "fp_on_motion: data_get");
     struct yetty_ygui_filepicker *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "fp_on_motion: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float list_h = (r.max.y - r.min.y) - FP_HEADER_H - 4.0f;
     int visible = (int)(list_h / FP_ROW_H);
     if (visible < 1) {
@@ -325,7 +331,9 @@ static struct yetty_ycore_int_result fp_on_scroll(struct yetty_yclass_object *yc
     struct yetty_ygui_filepicker_ptr_result d_dr = yetty_ygui_filepicker_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "fp_on_scroll: data_get");
     struct yetty_ygui_filepicker *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "fp_on_scroll: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float list_h = (r.max.y - r.min.y) - FP_HEADER_H - 4.0f;
     int visible = (int)(list_h / FP_ROW_H);
     if (visible < 1) {
@@ -361,7 +369,9 @@ static struct yetty_ycore_int_result on_press(struct yetty_yclass_object *yclass
     struct yetty_ygui_filepicker_ptr_result d_dr = yetty_ygui_filepicker_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "on_press: data_get");
     struct yetty_ygui_filepicker *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "on_press: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float ly = y - r.min.y;
     if (ly < FP_HEADER_H + 2.0f) {
         return YETTY_OK(yetty_ycore_int, 0);
@@ -495,15 +505,17 @@ struct yetty_ycore_void_result yetty_ygui_filepicker_set_dir(struct yetty_yclass
 }
 
 YETTY_ANNOTATE("expose")
-const char *yetty_ygui_filepicker_get_dir(const struct yetty_yclass_object *obj)
+struct yetty_ycore_const_char_ptr_result yetty_ygui_filepicker_get_dir(
+    const struct yetty_yclass_object *obj)
 {
     if (!obj) {
-        return NULL;
+        return YETTY_ERR(yetty_ycore_const_char_ptr, "yetty_ygui_filepicker_get_dir: NULL");
     }
-    return ((struct yetty_ygui_filepicker *)yetty_ygui_filepicker_from(
-                (struct yetty_yclass_object *)obj)
-                .value)
-        ->cwd;
+    struct yetty_ygui_filepicker_ptr_result d_dr =
+        yetty_ygui_filepicker_from((struct yetty_yclass_object *)obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_const_char_ptr, d_dr,
+                        "yetty_ygui_filepicker_get_dir: data_get");
+    return YETTY_OK(yetty_ycore_const_char_ptr, d_dr.value->cwd);
 }
 
 #include "filepicker.gen.c"

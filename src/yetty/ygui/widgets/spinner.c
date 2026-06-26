@@ -69,7 +69,9 @@ static struct yetty_ycore_int_result spinner_on_press(struct yetty_yclass_object
     struct yetty_ygui_spinner_ptr_result d_dr = yetty_ygui_spinner_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, d_dr, "spinner_on_press: data_get");
     struct yetty_ygui_spinner *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, rect_res, "spinner_on_press: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x;
     float third = w / 3.0f;
     float lx = x - r.min.x;
@@ -145,7 +147,9 @@ static struct yetty_ycore_void_result spinner_paint(struct yetty_yclass_object *
     struct yetty_ygui_spinner_ptr_result d_dr = yetty_ygui_spinner_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "spinner_paint: data_get");
     struct yetty_ygui_spinner *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "spinner_paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x, h = r.max.y - r.min.y;
     if (w <= 0 || h <= 0) {
         return YETTY_OK_VOID();

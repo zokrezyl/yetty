@@ -44,7 +44,7 @@ struct yetty_ygui_yplot_ptr_result {
     };
 };
 struct yetty_ygui_yplot_ptr_result yetty_ygui_yplot_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_ygui_yplot_to(struct yetty_ygui_yplot *data);
+struct yetty_yclass_object_ptr_result yetty_ygui_yplot_to(struct yetty_ygui_yplot *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_yplot_create(struct yetty_yclass_ctx *ctx);
 

@@ -57,7 +57,9 @@ static struct yetty_ycore_void_result dialog_constructor(struct yetty_yclass_obj
     d->title = NULL;
     d->open = 0;
     d->closable = 0;
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "dialog_constructor: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.absolute = 1;
     l.width = 0.0f;
     l.height = 0.0f;
@@ -133,7 +135,9 @@ static struct yetty_ycore_void_result dialog_paint(struct yetty_yclass_object *y
     if (!ctx || !ctx->ygrid_drawable_list) {
         return YETTY_ERR(yetty_ycore_void, "dialog_paint: NULL ctx");
     }
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "dialog_paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
     if (w <= 0.0f || h <= 0.0f) {
@@ -217,7 +221,9 @@ struct yetty_ycore_void_result yetty_ygui_dialog_open_at(struct yetty_yclass_obj
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_dialog_open_at: data_get");
     struct yetty_ygui_dialog *d = d_dr.value;
     d->open = 1;
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "dialog_open_at: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.absolute = 1;
     l.pos_x = x;
     l.pos_y = y;
@@ -241,7 +247,9 @@ struct yetty_ycore_void_result yetty_ygui_dialog_close(struct yetty_yclass_objec
         return YETTY_OK_VOID();
     }
     d->open = 0;
-    struct yetty_ygui_layout l = *yetty_ygui_widget_layout_get(obj);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "dialog_close: layout_get");
+    struct yetty_ygui_layout l = *layout_res.value;
     l.width = 0.0f;
     l.height = 0.0f;
     struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(obj, &l);

@@ -162,9 +162,12 @@ static void yrich_view_retint_text(struct yetty_ydraw_drawable_list *buf, uint32
 
 /* Theme text / page colours, falling back to the brand defaults when the
  * widget is not yet attached to an engine. */
-static void yrich_view_theme_colors(struct yetty_yclass_object *obj, uint32_t *text, uint32_t *page)
+static struct yetty_ycore_void_result yrich_view_theme_colors(struct yetty_yclass_object *obj,
+                                                              uint32_t *text, uint32_t *page)
 {
-    struct yetty_ygui_framework *engine = yetty_ygui_widget_framework(obj);
+    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_widget_framework(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res, "yrich_view_theme_colors: framework");
+    struct yetty_ygui_framework *engine = framework_res.value;
     if (engine) {
         struct yetty_ygui_theme *theme = yetty_ygui_framework_theme(engine);
         if (theme) {
@@ -172,6 +175,7 @@ static void yrich_view_theme_colors(struct yetty_yclass_object *obj, uint32_t *t
             *page = theme->bg_secondary;
         }
     }
+    return YETTY_OK_VOID();
 }
 
 static struct yetty_ycore_void_result yrich_view_render(struct yetty_yclass_object *obj, float w,
@@ -210,9 +214,13 @@ static struct yetty_ycore_void_result yrich_view_render(struct yetty_yclass_obje
      * give the surface a themed page background. */
     uint32_t text_color = YRICH_VIEW_FALLBACK_TEXT;
     uint32_t page_color = YRICH_VIEW_FALLBACK_PAGE;
-    yrich_view_theme_colors(obj, &text_color, &page_color);
+    struct yetty_ycore_void_result theme_res =
+        yrich_view_theme_colors(obj, &text_color, &page_color);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, theme_res, "yrich_view_render: theme colors");
     yrich_view_retint_text(br.value, text_color);
-    if (yetty_ygui_widget_bg(obj) != page_color) {
+    struct yetty_ycore_uint32_result bg_res = yetty_ygui_widget_bg(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, bg_res, "yrich_view_render: bg");
+    if (bg_res.value != page_color) {
         struct yetty_ycore_void_result bgr = yetty_ygui_widget_set_bg_color(obj, page_color);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, bgr, "yrich_view_render: page bg");
     }
@@ -232,7 +240,9 @@ static struct yetty_ycore_void_result yrich_view_emit_body(struct yetty_yclass_o
     struct yetty_yclass_void_ptr_result d_dr = yetty_yclass_object_data(obj, yrich_view_class());
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yrich_view_emit_body: data_get");
     struct yetty_ygui_yrich_view *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "yrich_view_emit_body: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
     if (d->doc &&
@@ -258,11 +268,15 @@ static struct yetty_ycore_void_result yrich_view_emit_body(struct yetty_yclass_o
 }
 
 /* Map an absolute viewport point to document content coords. */
-static void to_doc_coords(struct yetty_yclass_object *obj, float x, float y, float *dx, float *dy)
+static struct yetty_ycore_void_result to_doc_coords(struct yetty_yclass_object *obj, float x,
+                                                    float y, float *dx, float *dy)
 {
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "to_doc_coords: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     *dx = x - r.min.x;
     *dy = y - r.min.y;
+    return YETTY_OK_VOID();
 }
 
 YETTY_ANNOTATE("override@ygui:yrich_view:widget_on_press")
@@ -277,7 +291,8 @@ static struct yetty_ycore_int_result yrich_view_on_press(struct yetty_yclass_obj
         return YETTY_OK(yetty_ycore_int, 0);
     }
     float dx, dy;
-    to_doc_coords(obj, x, y, &dx, &dy);
+    struct yetty_ycore_void_result coords_res = to_doc_coords(obj, x, y, &dx, &dy);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, coords_res, "yrich_view_on_press: coords");
     struct yetty_ycore_void_result down_res =
         yetty_yrich_document_on_mouse_down(d->doc, dx, dy, (uint32_t)button, 0u);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, down_res, "yrich_view_on_press: mouse_down");
@@ -299,7 +314,8 @@ static struct yetty_ycore_int_result yrich_view_on_release(struct yetty_yclass_o
         return YETTY_OK(yetty_ycore_int, 0);
     }
     float dx, dy;
-    to_doc_coords(obj, x, y, &dx, &dy);
+    struct yetty_ycore_void_result coords_res = to_doc_coords(obj, x, y, &dx, &dy);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, coords_res, "yrich_view_on_release: coords");
     struct yetty_ycore_void_result up_res =
         yetty_yrich_document_on_mouse_up(d->doc, dx, dy, (uint32_t)button, 0u);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, up_res, "yrich_view_on_release: mouse_up");
@@ -321,7 +337,8 @@ static struct yetty_ycore_int_result yrich_view_on_motion(struct yetty_yclass_ob
         return YETTY_OK(yetty_ycore_int, 0);
     }
     float dx, dy;
-    to_doc_coords(obj, x, y, &dx, &dy);
+    struct yetty_ycore_void_result coords_res = to_doc_coords(obj, x, y, &dx, &dy);
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, coords_res, "yrich_view_on_motion: coords");
     struct yetty_ycore_void_result drag_res =
         yetty_yrich_document_on_mouse_drag(d->doc, dx, dy, 0, 0u);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, drag_res, "yrich_view_on_motion: mouse_drag");
@@ -382,14 +399,17 @@ struct yetty_ycore_void_result yetty_ygui_yrich_view_invalidate(struct yetty_ycl
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_yclass_object *yetty_ygui_yrich_view_document(const struct yetty_yclass_object *obj)
+struct yetty_yclass_object_ptr_result yetty_ygui_yrich_view_document(
+    const struct yetty_yclass_object *obj)
 {
     if (!obj) {
-        return NULL;
+        return YETTY_ERR(yetty_yclass_object_ptr, "yrich_view_document: NULL obj");
     }
-    struct yetty_ygui_yrich_view *d =
-        yetty_yclass_object_data((struct yetty_yclass_object *)obj, yrich_view_class()).value;
-    return d->doc;
+    struct yetty_yclass_void_ptr_result d_dr =
+        yetty_yclass_object_data((struct yetty_yclass_object *)obj, yrich_view_class());
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, d_dr, "yetty_ygui_yrich_view_document: data_get");
+    struct yetty_ygui_yrich_view *d = d_dr.value;
+    return YETTY_OK(yetty_yclass_object_ptr, d->doc);
 }
 
 YETTY_ANNOTATE("expose")

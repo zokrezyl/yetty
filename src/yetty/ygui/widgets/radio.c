@@ -81,7 +81,9 @@ static struct yetty_ycore_void_result paint(struct yetty_yclass_object *yclass_o
     struct yetty_ygui_radio_ptr_result d_dr = yetty_ygui_radio_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "paint: data_get");
     struct yetty_ygui_radio *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "radio paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float h = r.max.y - r.min.y;
     float cy = r.min.y + h * 0.5f;
     float radius = (h - 6.0f) * 0.5f;

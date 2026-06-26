@@ -67,7 +67,9 @@ static struct yetty_ycore_void_result on_click_focus(struct yetty_yclass_object 
             yetty_ycore_error_destroy(pp_r.error);
         }
     }
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "on_click_focus: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float rel = px - (r.min.x + TEXTINPUT_TEXT_PAD);
     long idx = (long)((rel / TEXTINPUT_CHAR_W) + 0.5f);
     if (idx < 0) {
@@ -159,7 +161,9 @@ static struct yetty_ycore_void_result textinput_paint(struct yetty_yclass_object
     struct yetty_ygui_textinput_ptr_result d_dr = yetty_ygui_textinput_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "textinput_paint: data_get");
     struct yetty_ygui_textinput *d = d_dr.value;
-    struct yetty_ycore_rectangle r = yetty_ygui_widget_rect(obj);
+    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "textinput_paint: rect");
+    struct yetty_ycore_rectangle r = rect_res.value;
     float w = r.max.x - r.min.x;
     float h = r.max.y - r.min.y;
     if (w <= 0.0f || h <= 0.0f) {

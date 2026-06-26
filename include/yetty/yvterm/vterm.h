@@ -22,7 +22,6 @@ struct yetty_ycore_buffer;
 struct yetty_ycore_grid_size;
 struct yetty_ycore_pixel_size;
 struct yetty_ydraw_composite;
-struct yetty_yfigure_figure;
 struct yetty_ywire_wire_statemachine;
 
 typedef struct yetty_ycore_void_result (*yetty_yvterm_clear_hook_fn)(void *);
@@ -42,7 +41,7 @@ struct yetty_yvterm_vterm_ptr_result {
     };
 };
 struct yetty_yvterm_vterm_ptr_result yetty_yvterm_vterm_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yvterm_vterm_to(struct yetty_yvterm_vterm *data);
+struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_to(struct yetty_yvterm_vterm *data);
 
 struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_create(struct yetty_yclass_ctx *ctx);
 
@@ -62,25 +61,34 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
     yetty_yterminal_request_render_fn request_render_fn, void *request_render_userdata,
     yetty_yterminal_mouse_sub_fn mouse_sub_fn, void *mouse_sub_userdata);
 /* Upcast to the figure base (first slice in the object). */
-struct yetty_yfigure_figure *yetty_yvterm_vterm_as_figure(struct yetty_yclass_object *obj);
+struct yetty_yfigure_figure_ptr_result yetty_yvterm_vterm_as_figure(
+    struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yvterm_vterm_feed(struct yetty_yclass_object *obj,
                                                        const char *bytes, size_t len);
 struct yetty_ycore_void_result yetty_yvterm_vterm_resize(struct yetty_yclass_object *obj,
                                                          struct yetty_ycore_grid_size grid_size,
                                                          struct yetty_ycore_pixel_size cell_size);
-struct yetty_ycore_pixel_size yetty_yvterm_vterm_cell_size(struct yetty_yclass_object *obj);
-int yetty_yvterm_vterm_is_dirty(struct yetty_yclass_object *obj);
-void yetty_yvterm_vterm_set_content_inset(struct yetty_yclass_object *obj, float top, float right,
-                                          float bottom, float left);
-void yetty_yvterm_vterm_get_content_inset(struct yetty_yclass_object *obj, float *out_top,
-                                          float *out_right, float *out_bottom, float *out_left);
-void yetty_yvterm_vterm_set_clear_hook(struct yetty_yclass_object *obj,
-                                       yetty_yvterm_clear_hook_fn fn, void *userdata);
-void yetty_yvterm_vterm_cursor(struct yetty_yclass_object *obj, uint32_t *out_row,
-                               uint32_t *out_col, uint32_t *out_visible);
-void yetty_yvterm_vterm_word_bounds(struct yetty_yclass_object *obj, uint32_t row, uint32_t col,
-                                    uint32_t *out_start_col, uint32_t *out_end_col);
-uint32_t yetty_yvterm_vterm_scroll_origin(struct yetty_yclass_object *obj);
+struct pixel_size_result yetty_yvterm_vterm_cell_size(struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_yvterm_vterm_is_dirty(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_yvterm_vterm_set_content_inset(struct yetty_yclass_object *obj,
+                                                                    float top, float right,
+                                                                    float bottom, float left);
+struct yetty_ycore_void_result yetty_yvterm_vterm_get_content_inset(struct yetty_yclass_object *obj,
+                                                                    float *out_top,
+                                                                    float *out_right,
+                                                                    float *out_bottom,
+                                                                    float *out_left);
+struct yetty_ycore_void_result yetty_yvterm_vterm_set_clear_hook(struct yetty_yclass_object *obj,
+                                                                 yetty_yvterm_clear_hook_fn fn,
+                                                                 void *userdata);
+struct yetty_ycore_void_result yetty_yvterm_vterm_cursor(struct yetty_yclass_object *obj,
+                                                         uint32_t *out_row, uint32_t *out_col,
+                                                         uint32_t *out_visible);
+struct yetty_ycore_void_result yetty_yvterm_vterm_word_bounds(struct yetty_yclass_object *obj,
+                                                              uint32_t row, uint32_t col,
+                                                              uint32_t *out_start_col,
+                                                              uint32_t *out_end_col);
+struct yetty_ycore_uint32_result yetty_yvterm_vterm_scroll_origin(struct yetty_yclass_object *obj);
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_append_primitive(
     struct yetty_yclass_object *obj, uint32_t row, const uint32_t *words, uint32_t word_count);
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_attach_composite(
@@ -92,8 +100,10 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_clear_rich_line(struct yetty_y
 struct yetty_ycore_void_result yetty_yvterm_vterm_clear_rich_all(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yvterm_vterm_register_wire(
     struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *sm);
-int yetty_yvterm_vterm_on_char(struct yetty_yclass_object *obj, uint32_t codepoint, int mods);
-int yetty_yvterm_vterm_on_key(struct yetty_yclass_object *obj, int key, int mods);
+struct yetty_ycore_int_result yetty_yvterm_vterm_on_char(struct yetty_yclass_object *obj,
+                                                         uint32_t codepoint, int mods);
+struct yetty_ycore_int_result yetty_yvterm_vterm_on_key(struct yetty_yclass_object *obj, int key,
+                                                        int mods);
 struct yetty_ycore_void_result yetty_yvterm_vterm_set_selection(struct yetty_yclass_object *obj,
                                                                 int active, uint32_t anchor_row,
                                                                 uint32_t anchor_col,
@@ -103,11 +113,13 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_get_selection_text(
     struct yetty_yclass_object *obj, struct yetty_ycore_buffer *out);
 /* Absolute index of the line at the live screen top: everything scrolled off so
  * far. A wheel-up anchors one line below this and walks toward the floor. */
-uint32_t yetty_yvterm_vterm_get_live_anchor(struct yetty_yclass_object *obj);
+struct yetty_ycore_uint32_result yetty_yvterm_vterm_get_live_anchor(
+    struct yetty_yclass_object *obj);
 /* Oldest absolute line index still retained in the scrollback ring. Lines below
  * this have been evicted, so a wheel-up clamps here. The ring keeps
  * (slot_count - visible_rows) history lines. */
-uint32_t yetty_yvterm_vterm_get_scrollback_floor(struct yetty_yclass_object *obj);
+struct yetty_ycore_uint32_result yetty_yvterm_vterm_get_scrollback_floor(
+    struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yvterm_vterm_set_view_top(struct yetty_yclass_object *obj,
                                                                int active,
                                                                uint32_t view_top_total_idx);

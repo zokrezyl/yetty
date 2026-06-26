@@ -35,7 +35,7 @@ struct yetty_yrich_cell_ptr_result {
     };
 };
 struct yetty_yrich_cell_ptr_result yetty_yrich_cell_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yrich_cell_to(struct yetty_yrich_cell *data);
+struct yetty_yclass_object_ptr_result yetty_yrich_cell_to(struct yetty_yrich_cell *data);
 
 /* Data-block handle — opaque outside the owning .c. The struct
  * stays private; only its pointer crosses here, in a Result so a
@@ -51,7 +51,8 @@ struct yetty_yrich_spreadsheet_ptr_result {
 };
 struct yetty_yrich_spreadsheet_ptr_result yetty_yrich_spreadsheet_from(
     struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yrich_spreadsheet_to(struct yetty_yrich_spreadsheet *data);
+struct yetty_yclass_object_ptr_result yetty_yrich_spreadsheet_to(
+    struct yetty_yrich_spreadsheet *data);
 
 struct yetty_ycore_void_result yetty_yrich_spreadsheet_set_grid_size(
     struct yetty_yclass_object *obj, int32_t rows, int32_t cols);

@@ -43,7 +43,7 @@ struct yetty_yflame_flame_ptr_result {
     };
 };
 struct yetty_yflame_flame_ptr_result yetty_yflame_flame_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object *yetty_yflame_flame_to(struct yetty_yflame_flame *data);
+struct yetty_yclass_object_ptr_result yetty_yflame_flame_to(struct yetty_yflame_flame *data);
 
 /* configure: set graph width, row height, min visible box width, and flags.
  * 0 selects the default for each. Call after create(), before parse(). */
