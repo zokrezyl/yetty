@@ -247,7 +247,8 @@ static void terminal_pixels(float *width_px, float *height_px)
 static struct yetty_ycore_void_result window_rect(const struct yai_hud *hud, float *min_x,
                                                   float *min_y, float *width, float *height)
 {
-    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(hud->window);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(hud->window);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "window_rect: layout");
     const struct yetty_ygui_layout *layout = layout_res.value;
     *min_x = layout->pos_x;
@@ -1098,7 +1099,8 @@ static struct yetty_ycore_int_result point_in_config_dialog(const struct yai_hud
     if (!open_res.value) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(hud->config_dialog);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(hud->config_dialog);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, layout_res, "point_in_config_dialog: layout_get");
     const struct yetty_ygui_layout *layout = layout_res.value;
     int inside = x >= layout->pos_x && x <= layout->pos_x + layout->width && y >= layout->pos_y &&
@@ -1212,7 +1214,8 @@ struct yetty_ycore_int_result yai_hud_mouse_button(struct yai_hud *hud, float x,
         if (titlebar_res.value) {
             struct yetty_ygui_layout_const_ptr_result layout_res =
                 yetty_ygui_widget_layout_get(hud->config_dialog);
-            YETTY_RETURN_IF_ERR(yetty_ycore_int, layout_res, "yai_hud_mouse_button: titlebar layout");
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, layout_res,
+                                "yai_hud_mouse_button: titlebar layout");
             const struct yetty_ygui_layout *layout = layout_res.value;
             hud->config_dragging = 1;
             hud->config_drag_pos_x = layout->pos_x;

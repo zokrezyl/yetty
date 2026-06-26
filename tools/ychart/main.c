@@ -132,8 +132,7 @@ static struct yetty_yfont_font *open_default_font(const char *cdb_override,
     struct yetty_font_font_result fr =
         yetty_yfont_msdf_font_create(cdb_path, sh_path, "ychart_default");
     if (YETTY_IS_ERR(fr)) {
-        fprintf(stderr, "ychart: msdf font create failed: %s\n",
-                fr.error.msg ? fr.error.msg : "?");
+        fprintf(stderr, "ychart: msdf font create failed: %s\n", fr.error.msg ? fr.error.msg : "?");
         return NULL;
     }
     return fr.value;

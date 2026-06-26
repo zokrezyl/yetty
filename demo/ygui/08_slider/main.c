@@ -28,8 +28,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         yetty_ygui_widget_add(root, yetty_ygui_slider_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "slider");
     err_ok(yetty_ygui_slider_set_value(sr.value, 0.25f));
-    struct yetty_ygui_layout_const_ptr_result layout_res =
-        yetty_ygui_widget_layout_get(sr.value);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(sr.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "08_slider: layout_get");
     struct yetty_ygui_layout l = *layout_res.value;
     l.height = 32;

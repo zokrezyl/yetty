@@ -4,6 +4,7 @@
 #include <yetty/yfigure/registry.h>
 
 #include <stdlib.h>
+#include <string.h>
 
 #include <ut/uthash.h>
 
@@ -20,6 +21,26 @@ struct kind_entry {
 struct yetty_yfigure_registry {
     struct kind_entry *kinds;
 };
+
+uint32_t yetty_yfigure_kind_token_n(const char *name, size_t name_len)
+{
+    /* FNV-1a, 32-bit. A name maps to a stable token both producer and
+     * receiver compute independently — no shared enum, no negotiation. */
+    uint32_t hash = 2166136261u;
+    for (size_t i = 0; i < name_len; i++) {
+        hash ^= (uint32_t)(uint8_t)name[i];
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+uint32_t yetty_yfigure_kind_token(const char *name)
+{
+    if (!name) {
+        return 0;
+    }
+    return yetty_yfigure_kind_token_n(name, strlen(name));
+}
 
 struct yetty_yfigure_registry_ptr_result yetty_yfigure_registry_create(void)
 {

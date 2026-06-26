@@ -808,8 +808,8 @@ static int yai_config_emit_hud_format(yaml_emitter_t *emitter, const struct yai_
     /* part_count 0 means the format is a single scalar held in hud_format. */
     int count = config->hud_format_part_count > 0 ? config->hud_format_part_count : 1;
     for (int index = 0; index < count; index++) {
-        const char *part =
-            config->hud_format_part_count > 0 ? config->hud_format_parts[index] : config->hud_format;
+        const char *part = config->hud_format_part_count > 0 ? config->hud_format_parts[index]
+                                                             : config->hud_format;
         if (!yai_config_emit_quoted_value(emitter, part)) {
             return 0;
         }
@@ -4316,8 +4316,7 @@ int main(int argc, char **argv)
      * "text" mode skips creation and falls through to the text status bar. */
     int want_ygui_hud =
         yai_effective_hud_on(app) && strcmp(yai_effective_hud_mode(app), "yetty") == 0;
-    struct yai_hud_ptr_result hud_res =
-        yai_hud_create(want_ygui_hud, yai_effective_hud_float(app));
+    struct yai_hud_ptr_result hud_res = yai_hud_create(want_ygui_hud, yai_effective_hud_float(app));
     if (YETTY_IS_ERR(hud_res)) {
         yai_report_error(app, "hud create",
                          (struct yetty_ycore_void_result){.ok = 0, .error = hud_res.error});

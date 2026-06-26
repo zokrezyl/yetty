@@ -29,8 +29,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tbr, "tabbar");
     struct yetty_yclass_object *w = tbr.value;
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res =
-            yetty_ygui_widget_layout_get(w);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(w);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "00_simple: layout_get");
         struct yetty_ygui_layout l = *layout_res.value;
         l.height = 36;

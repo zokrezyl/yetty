@@ -214,9 +214,9 @@ static void zone_draw_ticker(const struct yai_renderer *renderer, int columns)
     }
     size_t tail_len = 0;
     int clipped = 0;
-    const char *tail = clip_tail(renderer->stream_buf + line_start,
-                                 renderer->stream_len - line_start, columns - 2, &tail_len,
-                                 &clipped);
+    const char *tail =
+        clip_tail(renderer->stream_buf + line_start, renderer->stream_len - line_start, columns - 2,
+                  &tail_len, &clipped);
     const char *style = (renderer->stream_kind == YAI_STREAM_THINKING) ? YAI_DIM : "";
     printf("%s%s%.*s" YAI_RESET, style, clipped ? "…" : "", (int)tail_len, tail);
 }
@@ -1025,8 +1025,7 @@ static struct yetty_ycore_int_result run_render_tool(const char *kind, const cha
     } else {
         snprintf(tool_path, sizeof(tool_path), "ycat");
     }
-    char *const argv[] = {tool_path,    "-w",         columns_text, "-c",
-                          (char *)kind, (char *)path, NULL};
+    char *const argv[] = {tool_path, "-w", columns_text, "-c", (char *)kind, (char *)path, NULL};
 
     int pipe_fds[2];
     if (pipe(pipe_fds) != 0) {
@@ -1309,7 +1308,8 @@ static struct yetty_ycore_int_result try_render_figure(const char *raw, const ch
     if (!decoded) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    struct yetty_ycore_void_result emit_res = write_figure_envelope(decoded, decoded_len, tool_name);
+    struct yetty_ycore_void_result emit_res =
+        write_figure_envelope(decoded, decoded_len, tool_name);
     free(decoded);
     if (YETTY_IS_ERR(emit_res)) {
         return YETTY_ERR(yetty_ycore_int, "try_render_figure: emit", emit_res);

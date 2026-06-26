@@ -20,6 +20,16 @@ size_t yetty_yfigure_add_child_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_remove_child_by_id_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_raise_child_by_id_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_process_records_skel(const void *, size_t, void *, size_t);
+size_t yetty_yfigure_create_child_skel(const void *, size_t, void *, size_t);
+size_t yetty_yfigure_delete_child_skel(const void *, size_t, void *, size_t);
+size_t yetty_yfigure_set_child_rect_skel(const void *, size_t, void *, size_t);
+size_t yetty_yfigure_set_rect_skel(const void *, size_t, void *, size_t);
+size_t yetty_yfigure_set_child_z_skel(const void *, size_t, void *, size_t);
+size_t yetty_yfigure_set_child_hidden_skel(const void *, size_t, void *, size_t);
+size_t yetty_yfigure_set_child_scroll_skel(const void *, size_t, void *, size_t);
+size_t yetty_yfigure_set_child_content_size_skel(const void *, size_t, void *, size_t);
+size_t yetty_yfigure_apply_child_body_skel(const void *, size_t, void *, size_t);
+size_t yetty_yfigure_clear_all_skel(const void *, size_t, void *, size_t);
 struct yetty_ycore_void_result yetty_yfigure_register(void);
 
 /* ---- yfigure: class name -> accessor (lazy) ---------------------- */
@@ -49,6 +59,16 @@ static const struct yetty_yfigure_skel_row yetty_yfigure_skel_rows[] = {
     {"yetty_yfigure_remove_child_by_id", yetty_yfigure_remove_child_by_id_skel},
     {"yetty_yfigure_raise_child_by_id", yetty_yfigure_raise_child_by_id_skel},
     {"yetty_yfigure_process_records", yetty_yfigure_process_records_skel},
+    {"yetty_yfigure_create_child", yetty_yfigure_create_child_skel},
+    {"yetty_yfigure_delete_child", yetty_yfigure_delete_child_skel},
+    {"yetty_yfigure_set_child_rect", yetty_yfigure_set_child_rect_skel},
+    {"yetty_yfigure_set_rect", yetty_yfigure_set_rect_skel},
+    {"yetty_yfigure_set_child_z", yetty_yfigure_set_child_z_skel},
+    {"yetty_yfigure_set_child_hidden", yetty_yfigure_set_child_hidden_skel},
+    {"yetty_yfigure_set_child_scroll", yetty_yfigure_set_child_scroll_skel},
+    {"yetty_yfigure_set_child_content_size", yetty_yfigure_set_child_content_size_skel},
+    {"yetty_yfigure_apply_child_body", yetty_yfigure_apply_child_body_skel},
+    {"yetty_yfigure_clear_all", yetty_yfigure_clear_all_skel},
 };
 
 /* Signature dictated by the skel-lookup hook contract; a miss is absorbed

@@ -30,14 +30,17 @@ struct yetty_ygui_breadcrumbs_ptr_result {
         struct yetty_ycore_error error;
     };
 };
-struct yetty_ygui_breadcrumbs_ptr_result yetty_ygui_breadcrumbs_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_ygui_breadcrumbs_to(struct yetty_ygui_breadcrumbs *data);
+struct yetty_ygui_breadcrumbs_ptr_result yetty_ygui_breadcrumbs_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_ygui_breadcrumbs_to(
+    struct yetty_ygui_breadcrumbs *data);
 
 struct yetty_yclass_object_ptr_result yetty_ygui_breadcrumbs_create(struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_breadcrumbs_add(struct yetty_yclass_object *obj, const char *text);
+struct yetty_ycore_void_result yetty_ygui_breadcrumbs_add(struct yetty_yclass_object *obj,
+                                                          const char *text);
 struct yetty_ycore_void_result yetty_ygui_breadcrumbs_clear(struct yetty_yclass_object *obj);
 
 #ifdef __cplusplus

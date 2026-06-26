@@ -318,9 +318,9 @@ int main(int argc, char **argv)
             fprintf(stderr, "yfspy: %s\n", err);
             return 1;
         }
-        word_count = yetty_yfsvm_program_serialize(&program.program, stack_words,
-                                                   (uint32_t)(sizeof(stack_words) /
-                                                              sizeof(stack_words[0])));
+        word_count =
+            yetty_yfsvm_program_serialize(&program.program, stack_words,
+                                          (uint32_t)(sizeof(stack_words) / sizeof(stack_words[0])));
         if (word_count == 0) {
             fprintf(stderr, "yfspy: bytecode serialize failed\n");
             return 1;

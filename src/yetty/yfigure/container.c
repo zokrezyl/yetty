@@ -596,6 +596,364 @@ struct yetty_ycore_void_result yetty_yfigure_container_clear_all(struct yetty_yc
     return YETTY_OK_VOID();
 }
 
+/*===========================================================================
+ * Typed container ops — the canonical implementation of every figure-tree
+ * mutation. The yclass method slots (create_child, set_child_rect, …) call
+ * these directly with typed args; the same call serves local and RPC. Rects
+ * are passed in pane-local space and re-origined here by the container's
+ * viewport offset, exactly as the wire path did.
+ *=========================================================================*/
+
+/* Mint or refresh a child of `kind_key` at pane-local `rect_local`. `kind_key`
+ * is the registry token (yetty_yfigure_kind_token of the kind name). Reuses an
+ * existing same-kind child's GPU state via reset_content when possible, else
+ * mints a fresh figure (swapping in place on an existing id of a different
+ * kind). `init` is the kind-specific init payload (may be empty). */
+static struct yetty_ycore_void_result container_do_create_child(
+    struct yetty_yclass_object *obj, uint32_t kind_key, uint32_t child_id,
+    struct yetty_ycore_rectangle rect_local, const uint8_t *init, size_t init_len)
+{
+    struct yetty_yfigure_container_ptr_result container_r = yetty_yfigure_container_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, container_r, "container create_child: from_obj");
+    struct yetty_yfigure_container *container = container_r.value;
+    if (!container->registry) {
+        return YETTY_ERR(yetty_ycore_void, "container create_child: no registry");
+    }
+    struct yetty_ycore_rectangle rect = {
+        .min = {.x = rect_local.min.x + container->viewport_offset_x,
+                .y = rect_local.min.y + container->viewport_offset_y},
+        .max = {.x = rect_local.max.x + container->viewport_offset_x,
+                .y = rect_local.max.y + container->viewport_offset_y},
+    };
+    /* Fast path: existing id of the same kind that supports reset_content.
+     * Reuse the figure (and its cached binder / pipeline / textures), just
+     * refresh its content. Without this the receiver destroys + remints on
+     * every create, dropping the binder cache and forcing a full pipeline
+     * rebuild on the next render — visible as ~100 ms hover lag. */
+    struct child_entry *existing;
+    HASH_FIND_INT(container->children, &child_id, existing);
+    int existing_can_reset = 0;
+    if (existing && existing->kind == kind_key) {
+        struct yetty_ycore_int_result reset_impl_r = figure_implements(
+            existing->figure, (yetty_yclass_method_id_t)yetty_yfigure_reset_content);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, reset_impl_r,
+                            "container create_child: reset_content support");
+        existing_can_reset = reset_impl_r.value;
+    }
+    if (existing_can_reset) {
+        struct yetty_ycore_void_result rc =
+            yetty_yfigure_reset_content(((struct yetty_yclass_object *)(existing->figure) - 1));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rc, "container create_child: reset_content");
+        {
+            struct yetty_ycore_void_result set_r = yetty_yfigure_figure_rect_set(
+                (struct yetty_yclass_object *)(existing->figure) - 1, rect);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+        }
+        if (init_len > 0) {
+            struct yetty_ycore_int_result process_bytes_impl_r = figure_implements(
+                existing->figure, (yetty_yclass_method_id_t)yetty_yfigure_process_bytes);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, process_bytes_impl_r,
+                                "container create_child: process_bytes support");
+            if (!process_bytes_impl_r.value) {
+                return YETTY_ERR(yetty_ycore_void,
+                                 "container create_child: no process_bytes for non-empty init");
+            }
+            struct yetty_ycore_void_result pr = yetty_yfigure_process_bytes(
+                ((struct yetty_yclass_object *)(existing->figure) - 1), init, init_len);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "container create_child: child re-init");
+        }
+        {
+            struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(
+                (struct yetty_yclass_object *)(existing->figure) - 1, 1);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+        }
+        {
+            struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+        }
+        return YETTY_OK_VOID();
+    }
+
+    struct yetty_yfigure_figure_ptr_result fr =
+        yetty_yfigure_registry_mint(container->registry, kind_key, rect, container->context);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "container create_child: registry mint");
+    struct yetty_yfigure_figure *child = fr.value;
+    /* Existing id but different kind (or kind has no reset_content): in-place
+     * swap the figure pointer. The hash entry stays put, so z-order is
+     * preserved, but the old figure's GPU resources are released. Slow
+     * fallback — kind changes on the same id are rare. */
+    if (existing) {
+        {
+            struct yetty_ycore_void_result set_r = yetty_yfigure_figure_z_set(
+                (struct yetty_yclass_object *)(child)-1,
+                yetty_yfigure_figure_z_get((struct yetty_yclass_object *)(existing->figure) - 1)
+                    .value);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+        }
+        struct yetty_ycore_void_result dr = figure_dispatch_destroy(existing->figure);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
+        existing->figure = child;
+        existing->kind = kind_key;
+        container->z_order_dirty = 1;
+        {
+            struct yetty_ycore_void_result set_r =
+                yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(child)-1, 1);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+        }
+    } else {
+        struct yetty_ycore_void_result ar = yetty_yfigure_container_add_child(obj, child, child_id);
+        if (YETTY_IS_ERR(ar)) {
+            struct yetty_ycore_void_result dr = figure_dispatch_destroy(child);
+            if (YETTY_IS_ERR(dr)) {
+                yetty_ycore_error_destroy(dr.error);
+            }
+            return YETTY_ERR(yetty_ycore_void, "container create_child: add_child", ar);
+        }
+        struct child_entry *fresh;
+        HASH_FIND_INT(container->children, &child_id, fresh);
+        if (fresh) {
+            fresh->kind = kind_key;
+        }
+    }
+    if (init_len > 0) {
+        struct yetty_ycore_int_result process_bytes_impl_r =
+            figure_implements(child, (yetty_yclass_method_id_t)yetty_yfigure_process_bytes);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, process_bytes_impl_r,
+                            "container create_child: process_bytes support");
+        if (!process_bytes_impl_r.value) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "container create_child: child has no process_bytes but init > 0");
+        }
+        struct yetty_ycore_void_result pr =
+            yetty_yfigure_process_bytes(((struct yetty_yclass_object *)(child)-1), init, init_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "container create_child: child init");
+    }
+    {
+        struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Drop a single child by id, marking the container dirty. */
+static struct yetty_ycore_void_result container_do_delete_child(struct yetty_yclass_object *obj,
+                                                                uint32_t child_id)
+{
+    struct yetty_ycore_void_result r = yetty_yfigure_container_remove_child_by_id(obj, child_id);
+    {
+        struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+    }
+    return r;
+}
+
+/* Move a child to pane-local `rect_local` without rebuilding it. */
+static struct yetty_ycore_void_result container_do_set_child_rect(
+    struct yetty_yclass_object *obj, uint32_t child_id, struct yetty_ycore_rectangle rect_local)
+{
+    struct yetty_yfigure_container_ptr_result container_r = yetty_yfigure_container_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, container_r, "container set_child_rect: from_obj");
+    struct yetty_yfigure_container *container = container_r.value;
+    struct yetty_yfigure_figure_ptr_result child_res =
+        yetty_yfigure_container_find_child_by_id(obj, child_id);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res, "container set_child_rect: find_child");
+    struct yetty_yfigure_figure *child = child_res.value;
+    if (!child) {
+        ydebug("container set_child_rect: id=%u not bound", child_id);
+        return YETTY_OK_VOID();
+    }
+    {
+        struct yetty_ycore_void_result set_r = yetty_yfigure_figure_rect_set(
+            (struct yetty_yclass_object *)(child)-1,
+            (struct yetty_ycore_rectangle){
+                .min = {.x = rect_local.min.x + container->viewport_offset_x,
+                        .y = rect_local.min.y + container->viewport_offset_y},
+                .max = {.x = rect_local.max.x + container->viewport_offset_x,
+                        .y = rect_local.max.y + container->viewport_offset_y},
+            });
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: child rect set");
+    }
+    {
+        struct yetty_ycore_void_result set_r =
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(child)-1, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Set the container's OWN rect (absolute pane-root space; no viewport offset). */
+static struct yetty_ycore_void_result container_do_set_container_rect(
+    struct yetty_yclass_object *obj, struct yetty_ycore_rectangle rect)
+{
+    {
+        struct yetty_ycore_void_result set_r = yetty_yfigure_figure_rect_set(obj, rect);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: base rect set");
+    }
+    {
+        struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Set a child's stacking order; re-sorts on change. */
+static struct yetty_ycore_void_result container_do_set_child_z(struct yetty_yclass_object *obj,
+                                                               uint32_t child_id, int32_t z)
+{
+    struct yetty_yfigure_container_ptr_result container_r = yetty_yfigure_container_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, container_r, "container set_child_z: from_obj");
+    struct yetty_yfigure_container *container = container_r.value;
+    struct yetty_yfigure_figure_ptr_result child_res =
+        yetty_yfigure_container_find_child_by_id(obj, child_id);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res, "container set_child_z: find_child");
+    struct yetty_yfigure_figure *child = child_res.value;
+    if (!child) {
+        ydebug("container set_child_z: id=%u not bound", child_id);
+        return YETTY_OK_VOID();
+    }
+    if (yetty_yfigure_figure_z_get((struct yetty_yclass_object *)(child)-1).value != z) {
+        {
+            struct yetty_ycore_void_result set_r =
+                yetty_yfigure_figure_z_set((struct yetty_yclass_object *)(child)-1, z);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+        }
+        container->z_order_dirty = 1;
+        {
+            struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Show/hide a child without destroying it. */
+static struct yetty_ycore_void_result container_do_set_child_hidden(struct yetty_yclass_object *obj,
+                                                                    uint32_t child_id,
+                                                                    uint32_t hidden)
+{
+    struct yetty_yfigure_figure_ptr_result child_res =
+        yetty_yfigure_container_find_child_by_id(obj, child_id);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res, "container set_child_hidden: find_child");
+    struct yetty_yfigure_figure *child = child_res.value;
+    if (!child) {
+        ydebug("container set_child_hidden: id=%u not bound", child_id);
+        return YETTY_OK_VOID();
+    }
+    int want = hidden ? 1 : 0;
+    if (yetty_yfigure_figure_hidden_get((struct yetty_yclass_object *)(child)-1).value != want) {
+        {
+            struct yetty_ycore_void_result set_r =
+                yetty_yfigure_figure_hidden_set((struct yetty_yclass_object *)(child)-1, want);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+        }
+        {
+            struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Drive a scrollable child's scroll offset (ignored by non-scrollable kinds). */
+static struct yetty_ycore_void_result container_do_set_child_scroll(struct yetty_yclass_object *obj,
+                                                                    uint32_t child_id,
+                                                                    float scroll_x, float scroll_y)
+{
+    struct yetty_yfigure_figure_ptr_result child_res =
+        yetty_yfigure_container_find_child_by_id(obj, child_id);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res, "container set_child_scroll: find_child");
+    struct yetty_yfigure_figure *child = child_res.value;
+    if (!child) {
+        ydebug("container set_child_scroll: id=%u not bound", child_id);
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_int_result set_scroll_impl_r =
+        figure_implements(child, (yetty_yclass_method_id_t)yetty_yfigure_set_scroll);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_scroll_impl_r,
+                        "container set_child_scroll: set_scroll support");
+    if (!set_scroll_impl_r.value) {
+        ydebug("container set_child_scroll: id=%u not scrollable", child_id);
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result sr =
+        yetty_yfigure_set_scroll(((struct yetty_yclass_object *)(child)-1), scroll_x, scroll_y);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "container set_child_scroll: set_scroll");
+    {
+        struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Declare a scrollable child's content extent (ignored by non-scrollable kinds). */
+static struct yetty_ycore_void_result container_do_set_child_content_size(
+    struct yetty_yclass_object *obj, uint32_t child_id, float content_w, float content_h)
+{
+    struct yetty_yfigure_figure_ptr_result child_res =
+        yetty_yfigure_container_find_child_by_id(obj, child_id);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res,
+                        "container set_child_content_size: find_child");
+    struct yetty_yfigure_figure *child = child_res.value;
+    if (!child) {
+        ydebug("container set_child_content_size: id=%u not bound", child_id);
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_int_result set_content_size_impl_r =
+        figure_implements(child, (yetty_yclass_method_id_t)yetty_yfigure_set_content_size);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_content_size_impl_r,
+                        "container set_child_content_size: set_content_size support");
+    if (!set_content_size_impl_r.value) {
+        ydebug("container set_child_content_size: id=%u not scrollable", child_id);
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result sr = yetty_yfigure_set_content_size(
+        ((struct yetty_yclass_object *)(child)-1), content_w, content_h);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "container set_child_content_size: set_content_size");
+    {
+        struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Hand a wire body to the addressed child's process_bytes (the id!=0 record
+ * route the envelope used). No-op when the id is unbound or the child has no
+ * process_bytes. */
+static struct yetty_ycore_void_result container_do_apply_child_body(struct yetty_yclass_object *obj,
+                                                                    uint32_t child_id,
+                                                                    const uint8_t *body,
+                                                                    size_t body_len)
+{
+    struct yetty_yfigure_figure_ptr_result child_res =
+        yetty_yfigure_container_find_child_by_id(obj, child_id);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res, "container apply_child_body: find_child");
+    struct yetty_yfigure_figure *child = child_res.value;
+    if (!child) {
+        ydebug("container apply_child_body: id=%u not bound, skipping %zu", child_id, body_len);
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_int_result process_bytes_impl_r =
+        figure_implements(child, (yetty_yclass_method_id_t)yetty_yfigure_process_bytes);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, process_bytes_impl_r,
+                        "container apply_child_body: process_bytes support");
+    if (!process_bytes_impl_r.value) {
+        ydebug("container apply_child_body: id=%u no process_bytes, skipping %zu", child_id,
+               body_len);
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result cr =
+        yetty_yfigure_process_bytes(((struct yetty_yclass_object *)(child)-1), body, body_len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "container apply_child_body: child");
+    {
+        struct yetty_ycore_void_result set_r =
+            yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(child)-1, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+    }
+    return YETTY_OK_VOID();
+}
+
 /* Admin sub-cmd dispatcher (byte-buffer source). Reads the first u32
  * as the admin op and dispatches with the remaining bytes as body. */
 static struct yetty_ycore_void_result handle_admin_bytes(struct yetty_yclass_object *obj,
@@ -1700,6 +2058,87 @@ static struct yetty_ycore_void_result yetty_yfigure_container_process_records_im
     struct yetty_yclass_object *obj, struct yetty_ycore_buffer bytes)
 {
     return yetty_yfigure_container_process_records(obj, bytes.data, bytes.size);
+}
+
+/*---------------------------------------------------------------------------
+ * Typed figure-tree mutation slots — the yclass replacement for the admin
+ * record stream. Each is wire-marshallable (primitives + rectangle + buffer)
+ * so the same callsite dispatches locally (ctx.session == NULL) or over RPC.
+ * The producer (ygui) calls the generated stubs (yetty_yfigure_create_child,
+ * …) instead of building admin records. The bodies delegate to the typed
+ * container_do_* helpers above.
+ *-------------------------------------------------------------------------*/
+
+YETTY_ANNOTATE("virtual@yfigure:container:create_child")
+static struct yetty_ycore_void_result yetty_yfigure_container_create_child_impl(
+    struct yetty_yclass_object *obj, struct yetty_ycore_buffer name, uint32_t id,
+    struct yetty_ycore_rectangle rect, struct yetty_ycore_buffer init)
+{
+    uint32_t kind_key = yetty_yfigure_kind_token_n((const char *)name.data, name.size);
+    return container_do_create_child(obj, kind_key, id, rect, init.data, init.size);
+}
+
+YETTY_ANNOTATE("virtual@yfigure:container:delete_child")
+static struct yetty_ycore_void_result yetty_yfigure_container_delete_child_impl(
+    struct yetty_yclass_object *obj, uint32_t id)
+{
+    return container_do_delete_child(obj, id);
+}
+
+YETTY_ANNOTATE("virtual@yfigure:container:set_child_rect")
+static struct yetty_ycore_void_result yetty_yfigure_container_set_child_rect_impl(
+    struct yetty_yclass_object *obj, uint32_t id, struct yetty_ycore_rectangle rect)
+{
+    return container_do_set_child_rect(obj, id, rect);
+}
+
+YETTY_ANNOTATE("virtual@yfigure:container:set_rect")
+static struct yetty_ycore_void_result yetty_yfigure_container_set_rect_impl(
+    struct yetty_yclass_object *obj, struct yetty_ycore_rectangle rect)
+{
+    return container_do_set_container_rect(obj, rect);
+}
+
+YETTY_ANNOTATE("virtual@yfigure:container:set_child_z")
+static struct yetty_ycore_void_result yetty_yfigure_container_set_child_z_impl(
+    struct yetty_yclass_object *obj, uint32_t id, int32_t z)
+{
+    return container_do_set_child_z(obj, id, z);
+}
+
+YETTY_ANNOTATE("virtual@yfigure:container:set_child_hidden")
+static struct yetty_ycore_void_result yetty_yfigure_container_set_child_hidden_impl(
+    struct yetty_yclass_object *obj, uint32_t id, uint32_t hidden)
+{
+    return container_do_set_child_hidden(obj, id, hidden);
+}
+
+YETTY_ANNOTATE("virtual@yfigure:container:set_child_scroll")
+static struct yetty_ycore_void_result yetty_yfigure_container_set_child_scroll_impl(
+    struct yetty_yclass_object *obj, uint32_t id, float scroll_x, float scroll_y)
+{
+    return container_do_set_child_scroll(obj, id, scroll_x, scroll_y);
+}
+
+YETTY_ANNOTATE("virtual@yfigure:container:set_child_content_size")
+static struct yetty_ycore_void_result yetty_yfigure_container_set_child_content_size_impl(
+    struct yetty_yclass_object *obj, uint32_t id, float content_w, float content_h)
+{
+    return container_do_set_child_content_size(obj, id, content_w, content_h);
+}
+
+YETTY_ANNOTATE("virtual@yfigure:container:apply_child_body")
+static struct yetty_ycore_void_result yetty_yfigure_container_apply_child_body_impl(
+    struct yetty_yclass_object *obj, uint32_t id, struct yetty_ycore_buffer body)
+{
+    return container_do_apply_child_body(obj, id, body.data, body.size);
+}
+
+YETTY_ANNOTATE("virtual@yfigure:container:clear_all")
+static struct yetty_ycore_void_result yetty_yfigure_container_clear_all_slot(
+    struct yetty_yclass_object *obj)
+{
+    return yetty_yfigure_container_clear_all(obj);
 }
 
 YETTY_ANNOTATE("override@yfigure:container:process_input")

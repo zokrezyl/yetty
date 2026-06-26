@@ -573,8 +573,8 @@ int main(int argc, char **argv)
             }
             int kind = 0, weight = 0, italic = 0, underline = 0;
             char snippet[40] = {0};
-            (void)yetty_ylexbor_test_box_info_at(yl, bi, &kind, &weight, &italic, &underline, snippet,
-                                                 (int)sizeof(snippet));
+            (void)yetty_ylexbor_test_box_info_at(yl, bi, &kind, &weight, &italic, &underline,
+                                                 snippet, (int)sizeof(snippet));
             char data_test[64] = {0};
             (void)yetty_ylexbor_test_box_data_test_at(yl, bi, data_test, (int)sizeof(data_test));
             printf("%d\t%s\t%s\t%.1f\t%.1f\t%.1f\t%.1f\tw=%d\ti=%d\tu=%d\t%s\n", kind,

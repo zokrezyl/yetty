@@ -25,8 +25,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 {
     (void)runner;
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res =
-            yetty_ygui_widget_layout_get(root);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "32_splitter: layout_get");
         struct yetty_ygui_layout l = *layout_res.value;
         l.direction = YETTY_YGUI_FLEX_ROW;

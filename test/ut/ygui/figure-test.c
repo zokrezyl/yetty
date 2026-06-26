@@ -160,8 +160,7 @@ static struct yetty_ygui_framework *make_engine_with_yimage(struct yetty_platfor
 
     /* Give yimage an explicit width/height so the layout pass produces
      * a non-empty rect for emit_container to ship. */
-    struct yetty_ygui_layout_const_ptr_result img_layout_res =
-        yetty_ygui_widget_layout_get(img);
+    struct yetty_ygui_layout_const_ptr_result img_layout_res = yetty_ygui_widget_layout_get(img);
     CHECK(YETTY_IS_OK(img_layout_res), "img layout_get");
     struct yetty_ygui_layout l = *img_layout_res.value;
     l.width = 100.0f;

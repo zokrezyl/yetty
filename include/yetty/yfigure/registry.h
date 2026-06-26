@@ -31,6 +31,18 @@ struct yetty_yfigure_registry;
 
 YETTY_YRESULT_DECLARE(yetty_yfigure_registry_ptr, struct yetty_yfigure_registry *);
 
+/* Map a figure-kind name to its registry token. The token is the key the
+ * registry stores factories under and the value carried (derived from the
+ * self-describing name) on a CREATE_CHILD; there is no central enum of kinds.
+ * A figure-kind module registers under yetty_yfigure_kind_token("<name>") and
+ * the producer mints by sending the same "<name>" — both sides agree purely on
+ * the string, so adding a kind touches no shared header. Pure function (FNV-1a
+ * over the name bytes); never fails. */
+uint32_t yetty_yfigure_kind_token(const char *name);
+
+/* Same, for a non-NUL-terminated name span (e.g. a wire buffer). */
+uint32_t yetty_yfigure_kind_token_n(const char *name, size_t name_len);
+
 /* Factory signature. The registry passes the rect the wire told us to
  * use, the host context (for GPU access), and the per-kind user pointer
  * supplied at register time. The factory mints a freshly-allocated

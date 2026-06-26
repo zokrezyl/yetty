@@ -69,8 +69,8 @@ struct yai_proxy {
     atomic_int stop;
 
     pthread_mutex_t status_mutex;
-    char status[4096];  /* latest decoded quota detail (one field per line) */
-    char summary[96];   /* HUD #{quota}: "35% (10:20pm) · 74% (Jun 21, 11:00am)" */
+    char status[4096]; /* latest decoded quota detail (one field per line) */
+    char summary[96];  /* HUD #{quota}: "35% (10:20pm) · 74% (Jun 21, 11:00am)" */
     /* Decomposed quota for the granular HUD variables (guarded by status_mutex). */
     int quota_valid;
     int quota_session_pct;
@@ -96,8 +96,8 @@ struct yai_proxy_conn {
     atomic_int done;
 
     /* Per-request response-relay state (reset before each upstream call). */
-    int status_code;     /* upstream HTTP status of the current response */
-    char *resp_headers;  /* rewritten response header block being assembled */
+    int status_code;    /* upstream HTTP status of the current response */
+    char *resp_headers; /* rewritten response header block being assembled */
     size_t resp_len;
     size_t resp_cap;
     int headers_flushed; /* rewritten headers already written to the client */
@@ -271,8 +271,8 @@ static void conversation_log_response_body(struct yai_proxy_conn *conn, const ch
     }
     pthread_mutex_lock(&proxy->conversation_mutex);
     conversation_log_prefix(conn, "response_body");
-    fprintf(proxy->conversation_file, ",\"status\":%d,\"bytes\":%zu,\"data\":",
-            conn->status_code, len);
+    fprintf(proxy->conversation_file, ",\"status\":%d,\"bytes\":%zu,\"data\":", conn->status_code,
+            len);
     conversation_write_json_string(proxy->conversation_file, bytes, len);
     fputs("}\n", proxy->conversation_file);
     fflush(proxy->conversation_file);
@@ -342,8 +342,8 @@ static size_t header_callback(char *buffer, size_t size, size_t count, void *use
      * informational/early lines (guarded inside on status_code < 200). */
     conversation_log_response_header(conn, buffer, len);
 
-    int is_blank = (len == 2 && buffer[0] == '\r' && buffer[1] == '\n') ||
-                   (len == 1 && buffer[0] == '\n');
+    int is_blank =
+        (len == 2 && buffer[0] == '\r' && buffer[1] == '\n') || (len == 1 && buffer[0] == '\n');
     if (is_blank) {
         /* End of a header block. Ignore 1xx informational blocks; for the
          * real response, append our own framing and flush to the client. */

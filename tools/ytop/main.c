@@ -308,8 +308,8 @@ static uint32_t core_accent(int core)
 /* Add `cls` under `parent`, position + size it absolutely, return it
  * (or NULL). Absolute placement mirrors ytop's hand-laid-out UI. */
 static struct yetty_yclass_object *ytop_place(struct app_state *s,
-                                            struct yetty_yclass_ptr_result cls_r, float x, float y,
-                                            float w, float h)
+                                              struct yetty_yclass_ptr_result cls_r, float x,
+                                              float y, float w, float h)
 {
     if (YETTY_IS_ERR(cls_r)) {
         yetty_ycore_error_destroy(cls_r.error);

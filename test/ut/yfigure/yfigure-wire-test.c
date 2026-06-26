@@ -86,14 +86,12 @@ static struct test_leaf *test_leaf_from_obj(struct yetty_yclass_object *obj)
 /* test_leaf is a yclass figure (manually registered — test TUs aren't run
  * through codegen). Each slot impl takes the yclass object; the typed body
  * sits at obj + 1, base is its first member. */
-static struct yetty_ycore_void_result test_leaf_destroy(
-                                                        struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result test_leaf_destroy(struct yetty_yclass_object *obj)
 {
     return yetty_yclass_object_free(obj);
 }
 
-static struct yetty_ycore_void_result test_leaf_render(
-                                                       struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result test_leaf_render(struct yetty_yclass_object *obj,
                                                        struct yetty_ydraw_target *target)
 {
     (void)obj;
@@ -101,8 +99,7 @@ static struct yetty_ycore_void_result test_leaf_render(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result test_leaf_process_bytes(
-                                                              struct yetty_yclass_object *obj,
+static struct yetty_ycore_void_result test_leaf_process_bytes(struct yetty_yclass_object *obj,
                                                               const uint8_t *bytes,
                                                               size_t bytes_len)
 {
@@ -113,8 +110,7 @@ static struct yetty_ycore_void_result test_leaf_process_bytes(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result test_leaf_reset_content(
-                                                              struct yetty_yclass_object *obj)
+static struct yetty_ycore_void_result test_leaf_reset_content(struct yetty_yclass_object *obj)
 {
     struct test_leaf *l = test_leaf_from_obj(obj);
     l->bytes_seen = 0;
@@ -122,8 +118,7 @@ static struct yetty_ycore_void_result test_leaf_reset_content(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_char_ptr_result test_leaf_dump(
-                                                         struct yetty_yclass_object *obj,
+static struct yetty_ycore_char_ptr_result test_leaf_dump(struct yetty_yclass_object *obj,
                                                          int indent)
 {
     const struct test_leaf *l = test_leaf_from_obj(obj);
@@ -189,8 +184,9 @@ static struct yetty_yclass_ptr_result test_leaf_class_get(void)
     return r;
 }
 
-static struct yetty_yfigure_figure_ptr_result test_leaf_factory(
-    struct yetty_ycore_rectangle rect, const struct yetty_context *ctx, void *user)
+static struct yetty_yfigure_figure_ptr_result test_leaf_factory(struct yetty_ycore_rectangle rect,
+                                                                const struct yetty_context *ctx,
+                                                                void *user)
 {
     (void)user;
     struct yetty_yclass_ptr_result cls_r = test_leaf_class_get();
@@ -280,8 +276,7 @@ static char *dump_root(struct yetty_yclass_object *root)
         yetty_ycore_error_destroy(as_figure_result.error);
         exit(3);
     }
-    struct yetty_ycore_char_ptr_result dump_result =
-        yetty_yfigure_dump(as_figure_result.value, 0);
+    struct yetty_ycore_char_ptr_result dump_result = yetty_yfigure_dump(as_figure_result.value, 0);
     if (YETTY_IS_ERR(dump_result)) {
         fprintf(stderr, "yfigure_dump failed: %s\n", dump_result.error.msg);
         yetty_ycore_error_destroy(dump_result.error);

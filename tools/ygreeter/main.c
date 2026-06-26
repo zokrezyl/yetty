@@ -147,10 +147,9 @@ enum tab_kind {
 #define TAB_COUNT 17
 
 static const char *SCENE_LABELS[TAB_COUNT] = {
-    "Welcome",  "Plots",    "Images",       "Code",        "Video",
-    "Elements", "Markdown", "HTML/Browser", "Diagrams",    "YMaze",
-    "YZoo",     "YJungle",  "Shadertoy",    "Node Editor", "PDF",
-    "Circuit",  "Music"};
+    "Welcome",   "Plots",        "Images",   "Code",    "Video", "Elements",
+    "Markdown",  "HTML/Browser", "Diagrams", "YMaze",   "YZoo",  "YJungle",
+    "Shadertoy", "Node Editor",  "PDF",      "Circuit", "Music"};
 
 /* Top-level tabs. A tab with a single scene shows it directly; a tab with
  * several shows a sub-tabbar (same widget the Shadertoy gallery uses) that
@@ -164,11 +163,13 @@ struct top_tab {
 static const struct top_tab TOP_TABS[] = {
     {"Welcome", 1, {0}},
     {"Plots", 1, {1}},
-    {"Media", 2, {2, 4}},               /* Images, Video */
-    {"Rich content", 7, {6, 3, 14, 7, 8, 15, 16}}, /* Markdown, Code, PDF, HTML/Browser, Diagrams, Circuit, Music */
-    {"YGUI Widgets", 1, {5}},           /* former Elements */
-    {"Shadertoy", 1, {12}},             /* own tab — it already carries a gallery sub-tabbar */
-    {"Ymazing", 4, {9, 10, 11, 13}},    /* YMaze, YZoo, YJungle, Node Editor */
+    {"Media", 2, {2, 4}}, /* Images, Video */
+    {"Rich content",
+     7,
+     {6, 3, 14, 7, 8, 15, 16}}, /* Markdown, Code, PDF, HTML/Browser, Diagrams, Circuit, Music */
+    {"YGUI Widgets", 1, {5}},   /* former Elements */
+    {"Shadertoy", 1, {12}},     /* own tab — it already carries a gallery sub-tabbar */
+    {"Ymazing", 4, {9, 10, 11, 13}}, /* YMaze, YZoo, YJungle, Node Editor */
 };
 
 #define TOP_TAB_COUNT ((int)(sizeof(TOP_TABS) / sizeof(TOP_TABS[0])))
@@ -515,8 +516,9 @@ static const struct nav_entry plot_nav_entries[] = {
     /* Heatmap: concentric ripples radiating from the origin. */
     {"Heatmap: ripples", "field = sin(3 * sqrt(x*x + y*y))", -6.0f, 6.0f, -6.0f, 6.0f},
     /* Dynamic f(t): a wave packet travelling left→right as time advances. */
-    {"Traveling wave f(t)", "wave = sin(x - 2*time) * exp(-((x - 4*time - 6)^2)/8); "
-                            "@wave.color = #74C5A5",
+    {"Traveling wave f(t)",
+     "wave = sin(x - 2*time) * exp(-((x - 4*time - 6)^2)/8); "
+     "@wave.color = #74C5A5",
      0.0f, 12.566f, -1.2f, 1.2f},
     /* Dynamic f(t): amplitude- and phase-modulated standing wave. */
     {"Pulsing sine f(t)", "f = sin(x) * cos(time); @f.color = #6BA892", -6.28318f, 6.28318f, -1.5f,
@@ -1062,7 +1064,7 @@ static void el_set_grow(struct yetty_yclass_object *w, float grow)
 /* Add `cls` under `parent` and author its height. Returns NULL on
  * allocation failure (the showcase simply skips that widget). */
 static struct yetty_yclass_object *el_w(struct yetty_yclass_object *parent,
-                                      const struct yetty_yclass *cls, float h)
+                                        const struct yetty_yclass *cls, float h)
 {
     struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_add(parent, cls);
     if (YETTY_IS_ERR(r)) {
@@ -1096,7 +1098,8 @@ static void el_finalize_section(struct yetty_yclass_object *sec)
     if (!sec) {
         return;
     }
-    struct yetty_ygui_layout_const_ptr_result section_layout_res = yetty_ygui_widget_layout_get(sec);
+    struct yetty_ygui_layout_const_ptr_result section_layout_res =
+        yetty_ygui_widget_layout_get(sec);
     if (YETTY_IS_ERR(section_layout_res)) {
         yetty_ycore_error_destroy(section_layout_res.error);
         return;
@@ -1110,7 +1113,8 @@ static void el_finalize_section(struct yetty_yclass_object *sec)
         return;
     }
     for (struct yetty_yclass_object *c = first_child_res.value; c;) {
-        struct yetty_ygui_layout_const_ptr_result child_layout_res = yetty_ygui_widget_layout_get(c);
+        struct yetty_ygui_layout_const_ptr_result child_layout_res =
+            yetty_ygui_widget_layout_get(c);
         if (YETTY_IS_ERR(child_layout_res)) {
             yetty_ycore_error_destroy(child_layout_res.error);
             return;
@@ -1153,10 +1157,12 @@ static struct yetty_ycore_void_result el_open_dialog(struct yetty_yclass_object 
 
 static struct yetty_ycore_void_result el_open_menu(struct yetty_yclass_object *obj, void *ud)
 {
-    struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect((struct yetty_yclass_object *)obj);
+    struct yetty_ycore_rectangle_result rect_res =
+        yetty_ygui_widget_rect((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "el_open_menu: widget_rect");
     struct yetty_ycore_rectangle r = rect_res.value;
-    return yetty_ygui_popup_menu_toggle_at((struct yetty_yclass_object *)ud, r.min.x, r.max.y + 2.0f);
+    return yetty_ygui_popup_menu_toggle_at((struct yetty_yclass_object *)ud, r.min.x,
+                                           r.max.y + 2.0f);
 }
 
 static struct yetty_ycore_void_result build_elements_content(struct app *app,
@@ -1171,7 +1177,8 @@ static struct yetty_ycore_void_result build_elements_content(struct app *app,
         struct yetty_yclass_object *btn = el_w(sec, yetty_ygui_button_class_get().value, 32);
         yetty_ycore_error_destroy_safe(yetty_ygui_button_set_label(btn, "Button"));
 
-        struct yetty_yclass_object *ti = el_w(sec, yetty_ygui_textinput_class_get().value, EL_ROW_H);
+        struct yetty_yclass_object *ti =
+            el_w(sec, yetty_ygui_textinput_class_get().value, EL_ROW_H);
         yetty_ycore_error_destroy_safe(yetty_ygui_textinput_set_placeholder(ti, "type here…"));
 
         struct yetty_yclass_object *sl = el_w(sec, yetty_ygui_slider_class_get().value, EL_ROW_H);
@@ -1263,7 +1270,8 @@ static struct yetty_ycore_void_result build_elements_content(struct app *app,
         yetty_ycore_error_destroy_safe(yetty_ygui_table_add_row(tbl, row2, 4));
         yetty_ycore_error_destroy_safe(yetty_ygui_table_add_row(tbl, row3, 4));
 
-        struct yetty_yclass_object *crumbs = el_w(sec, yetty_ygui_breadcrumbs_class_get().value, 24);
+        struct yetty_yclass_object *crumbs =
+            el_w(sec, yetty_ygui_breadcrumbs_class_get().value, 24);
         yetty_ycore_error_destroy_safe(yetty_ygui_breadcrumbs_add(crumbs, "Home"));
         yetty_ycore_error_destroy_safe(yetty_ygui_breadcrumbs_add(crumbs, "Projects"));
         yetty_ycore_error_destroy_safe(yetty_ygui_breadcrumbs_add(crumbs, "yetty"));
@@ -1272,7 +1280,8 @@ static struct yetty_ycore_void_result build_elements_content(struct app *app,
         /* Closable chip / tag row. */
         struct yetty_yclass_object *chip_row = el_w(sec, yetty_ygui_hbox_class_get().value, 24);
         if (chip_row) {
-            struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(chip_row);
+            struct yetty_ygui_layout_const_ptr_result layout_res =
+                yetty_ygui_widget_layout_get(chip_row);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "elements: chip_row layout_get");
             struct yetty_ygui_layout l = *layout_res.value;
             l.gap = 6.0f;
@@ -1339,7 +1348,8 @@ static struct yetty_ycore_void_result build_elements_content(struct app *app,
         /* [left panel | splitter | right panel] — drag the splitter. */
         struct yetty_yclass_object *row = el_w(sec, yetty_ygui_hbox_class_get().value, 80);
         if (row) {
-            struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(row);
+            struct yetty_ygui_layout_const_ptr_result layout_res =
+                yetty_ygui_widget_layout_get(row);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "elements: row layout_get");
             struct yetty_ygui_layout l = *layout_res.value;
             l.gap = 0.0f;
@@ -1997,112 +2007,106 @@ static struct yetty_ycore_void_result build_circuit_content(struct app *app,
         const char *title;
         const char *src;
     } sections[] = {
-        {"Resistive voltage divider",
-         "circuit Voltage divider\n"
-         "battery   2  7  r270  V1  9V\n"
-         "wire 2 4  8 4\n"
-         "resistor  8  7  v     R1  10k\n"
-         "dot 8 10\n"
-         "wire 8 10  11 10\n"
-         "label 11.5 10.3 Vout\n"
-         "resistor  8 13  v     R2  4.7k\n"
-         "wire 2 10  2 16  8 16\n"
-         "gnd 5 16\n"
-         "dot 5 16\n"},
-        {"RC low-pass filter",
-         "circuit RC low-pass filter\n"
-         "acsource  2  8  v  AC1\n"
-         "label 3 2.3 Vin\n"
-         "wire 2 5  2 3  5 3\n"
-         "resistor  8  3  h  R1  1k\n"
-         "wire 11 3  14 3\n"
-         "dot 14 3\n"
-         "capacitor 14  6  v  C1  100n\n"
-         "wire 14 3  17 3\n"
-         "label 17.5 3.3 Vout\n"
-         "wire 2 11  2 12  14 12\n"
-         "wire 14 9  14 12\n"
-         "gnd 8 12\n"
-         "dot 8 12\n"},
-        {"Half-wave rectifier",
-         "circuit Half-wave rectifier\n"
-         "acsource  2  8  v  AC1  50Hz\n"
-         "wire 2 5  2 3  5 3\n"
-         "diode     8  3  h  D1  1N4007\n"
-         "wire 11 3  17 3\n"
-         "dot 14 3\n"
-         "capacitor 14  6  v  C1  470u\n"
-         "resistor  17  6  v  R1  2.2k\n"
-         "label 18 2.4 Vdc\n"
-         "wire 2 11  2 12  17 12\n"
-         "wire 14 9  14 12\n"
-         "dot 14 12\n"
-         "wire 17 9  17 12\n"
-         "gnd 8 12\n"
-         "dot 8 12\n"},
-        {"Common-emitter amplifier",
-         "circuit Common-emitter amplifier\n"
-         "vcc 10 0\n"
-         "wire 4 0  16 0\n"
-         "dot 10 0\n"
-         "resistor  4  3  v  R1  47k\n"
-         "resistor  4  9  v  R2  10k\n"
-         "dot 4 6\n"
-         "wire 4 6  8 6  8 9  12 9\n"
-         "label 9 8.3 Vin\n"
-         "resistor 16  3  v  RC  2.2k\n"
-         "npn      15  9  h  Q1  BC547\n"
-         "dot 16 6\n"
-         "wire 16 6  19 6\n"
-         "label 19.5 6.3 Vout\n"
-         "resistor 16 15  v  RE  1k\n"
-         "wire 4 12  4 18  16 18\n"
-         "gnd 10 18\n"
-         "dot 10 18\n"},
-        {"Inverting op-amp",
-         "circuit Inverting amplifier\n"
-         "label 1 4.3 Vin\n"
-         "wire 1.5 5  3 5\n"
-         "resistor 6 5 h R1 10k\n"
-         "wire 9 5  11 5\n"
-         "dot 10 5\n"
-         "wire 10 5  10 1  11 1\n"
-         "resistor 14 1 h R2 100k\n"
-         "wire 17 1  18 1  18 6\n"
-         "dot 18 6\n"
-         "opamp 14 6 h U1\n"
-         "wire 11 7  10 7  10 9\n"
-         "gnd 10 9\n"
-         "wire 17 6  21 6\n"
-         "label 21.5 6.3 Vout\n"},
-        {"NE555 astable blinker",
-         "circuit 555 astable blinker\n"
-         "ic 14 8 h U1 NE555 l:GND,TRIG,OUT,RESET r:VCC,DIS,THR,CV\n"
-         "wire 8 2  25 2\n"
-         "vcc 13 2\n"
-         "dot 13 2\n"
-         "wire 4 21  25 21\n"
-         "gnd 14 21\n"
-         "dot 14 21\n"
-         "wire 17.8 5.6  22 5.6  22 2\n"
-         "dot 22 2\n"
-         "wire 10.2 10.4  8 10.4  8 2\n"
-         "wire 10.2 5.6  6 5.6  6 21\n"
-         "dot 6 21\n"
-         "resistor 25 5 v R1 10k\n"
-         "wire 17.8 7.2  21 7.2  21 8  25 8\n"
-         "dot 25 8\n"
-         "resistor 25 11 v R2 47k\n"
-         "wire 17.8 8.8  23 8.8  23 14\n"
-         "wire 10.2 7.2  9 7.2  9 12.5  23 12.5  23 14\n"
-         "dot 23 14\n"
-         "wire 23 14  25 14\n"
-         "dot 25 14\n"
-         "wire 25 14  25 15\n"
-         "capacitor 25 18 v C1 10u\n"
-         "wire 10.2 8.8  4 8.8  4 9\n"
-         "resistor 4 12 v R3 330\n"
-         "led 4 18 r90 D1 red\n"},
+        {"Resistive voltage divider", "circuit Voltage divider\n"
+                                      "battery   2  7  r270  V1  9V\n"
+                                      "wire 2 4  8 4\n"
+                                      "resistor  8  7  v     R1  10k\n"
+                                      "dot 8 10\n"
+                                      "wire 8 10  11 10\n"
+                                      "label 11.5 10.3 Vout\n"
+                                      "resistor  8 13  v     R2  4.7k\n"
+                                      "wire 2 10  2 16  8 16\n"
+                                      "gnd 5 16\n"
+                                      "dot 5 16\n"},
+        {"RC low-pass filter", "circuit RC low-pass filter\n"
+                               "acsource  2  8  v  AC1\n"
+                               "label 3 2.3 Vin\n"
+                               "wire 2 5  2 3  5 3\n"
+                               "resistor  8  3  h  R1  1k\n"
+                               "wire 11 3  14 3\n"
+                               "dot 14 3\n"
+                               "capacitor 14  6  v  C1  100n\n"
+                               "wire 14 3  17 3\n"
+                               "label 17.5 3.3 Vout\n"
+                               "wire 2 11  2 12  14 12\n"
+                               "wire 14 9  14 12\n"
+                               "gnd 8 12\n"
+                               "dot 8 12\n"},
+        {"Half-wave rectifier", "circuit Half-wave rectifier\n"
+                                "acsource  2  8  v  AC1  50Hz\n"
+                                "wire 2 5  2 3  5 3\n"
+                                "diode     8  3  h  D1  1N4007\n"
+                                "wire 11 3  17 3\n"
+                                "dot 14 3\n"
+                                "capacitor 14  6  v  C1  470u\n"
+                                "resistor  17  6  v  R1  2.2k\n"
+                                "label 18 2.4 Vdc\n"
+                                "wire 2 11  2 12  17 12\n"
+                                "wire 14 9  14 12\n"
+                                "dot 14 12\n"
+                                "wire 17 9  17 12\n"
+                                "gnd 8 12\n"
+                                "dot 8 12\n"},
+        {"Common-emitter amplifier", "circuit Common-emitter amplifier\n"
+                                     "vcc 10 0\n"
+                                     "wire 4 0  16 0\n"
+                                     "dot 10 0\n"
+                                     "resistor  4  3  v  R1  47k\n"
+                                     "resistor  4  9  v  R2  10k\n"
+                                     "dot 4 6\n"
+                                     "wire 4 6  8 6  8 9  12 9\n"
+                                     "label 9 8.3 Vin\n"
+                                     "resistor 16  3  v  RC  2.2k\n"
+                                     "npn      15  9  h  Q1  BC547\n"
+                                     "dot 16 6\n"
+                                     "wire 16 6  19 6\n"
+                                     "label 19.5 6.3 Vout\n"
+                                     "resistor 16 15  v  RE  1k\n"
+                                     "wire 4 12  4 18  16 18\n"
+                                     "gnd 10 18\n"
+                                     "dot 10 18\n"},
+        {"Inverting op-amp", "circuit Inverting amplifier\n"
+                             "label 1 4.3 Vin\n"
+                             "wire 1.5 5  3 5\n"
+                             "resistor 6 5 h R1 10k\n"
+                             "wire 9 5  11 5\n"
+                             "dot 10 5\n"
+                             "wire 10 5  10 1  11 1\n"
+                             "resistor 14 1 h R2 100k\n"
+                             "wire 17 1  18 1  18 6\n"
+                             "dot 18 6\n"
+                             "opamp 14 6 h U1\n"
+                             "wire 11 7  10 7  10 9\n"
+                             "gnd 10 9\n"
+                             "wire 17 6  21 6\n"
+                             "label 21.5 6.3 Vout\n"},
+        {"NE555 astable blinker", "circuit 555 astable blinker\n"
+                                  "ic 14 8 h U1 NE555 l:GND,TRIG,OUT,RESET r:VCC,DIS,THR,CV\n"
+                                  "wire 8 2  25 2\n"
+                                  "vcc 13 2\n"
+                                  "dot 13 2\n"
+                                  "wire 4 21  25 21\n"
+                                  "gnd 14 21\n"
+                                  "dot 14 21\n"
+                                  "wire 17.8 5.6  22 5.6  22 2\n"
+                                  "dot 22 2\n"
+                                  "wire 10.2 10.4  8 10.4  8 2\n"
+                                  "wire 10.2 5.6  6 5.6  6 21\n"
+                                  "dot 6 21\n"
+                                  "resistor 25 5 v R1 10k\n"
+                                  "wire 17.8 7.2  21 7.2  21 8  25 8\n"
+                                  "dot 25 8\n"
+                                  "resistor 25 11 v R2 47k\n"
+                                  "wire 17.8 8.8  23 8.8  23 14\n"
+                                  "wire 10.2 7.2  9 7.2  9 12.5  23 12.5  23 14\n"
+                                  "dot 23 14\n"
+                                  "wire 23 14  25 14\n"
+                                  "dot 25 14\n"
+                                  "wire 25 14  25 15\n"
+                                  "capacitor 25 18 v C1 10u\n"
+                                  "wire 10.2 8.8  4 8.8  4 9\n"
+                                  "resistor 4 12 v R3 330\n"
+                                  "led 4 18 r90 D1 red\n"},
     };
     for (size_t i = 0; i < sizeof(sections) / sizeof(sections[0]); i++) {
         struct yetty_yclass_object *sec = el_section(root, sections[i].title);
@@ -2150,7 +2154,8 @@ static void music_add(struct yetty_yclass_object *sec, const char *score)
         return;
     }
     struct yetty_yclass_object *music = mr.value;
-    yetty_ycore_error_destroy_safe(yetty_ymusic_configure(music, YGREETER_MUSIC_WIDTH, YGREETER_MUSIC_STAFF, YETTY_YMUSIC_FLAG_NONE));
+    yetty_ycore_error_destroy_safe(yetty_ymusic_configure(
+        music, YGREETER_MUSIC_WIDTH, YGREETER_MUSIC_STAFF, YETTY_YMUSIC_FLAG_NONE));
     yetty_ycore_error_destroy_safe(yetty_ymusic_parse(music, score, strlen(score)));
     struct yetty_ydraw_drawable_list_result lr = yetty_ymusic_render(music);
     yetty_ycore_error_destroy_safe(yetty_ymusic_destroy(music));
@@ -2201,18 +2206,16 @@ static struct yetty_ycore_void_result build_music_content(struct app *app,
          "}\n"},
         /* Two-octave C-major scale up and down — the plainest staff, no
          * accidentals, eighth-note runs that inherit their duration. */
-        {"C major scale (treble)",
-         "\\relative c' {\n"
-         "  \\clef treble \\key c \\major \\time 4/4\n"
-         "  c8 d e f g a b c | c b a g f e d c |\n"
-         "}\n"},
+        {"C major scale (treble)", "\\relative c' {\n"
+                                   "  \\clef treble \\key c \\major \\time 4/4\n"
+                                   "  c8 d e f g a b c | c b a g f e d c |\n"
+                                   "}\n"},
         /* Bass clef — a descending line; exercises the second clef glyph and
          * ledger-free notes below the treble range. */
-        {"Bass clef — descending line",
-         "\\relative c {\n"
-         "  \\clef bass \\key c \\major \\time 4/4\n"
-         "  c4 b a g | f e d c | g g c2 |\n"
-         "}\n"},
+        {"Bass clef — descending line", "\\relative c {\n"
+                                        "  \\clef bass \\key c \\major \\time 4/4\n"
+                                        "  c4 b a g | f e d c | g g c2 |\n"
+                                        "}\n"},
         /* A flat key in compound time — B-flat major (two flats) in 6/8,
          * arpeggiated, to show the key-signature accidentals and a non-4/4
          * meter. */
@@ -2223,25 +2226,22 @@ static struct yetty_ycore_void_result build_music_content(struct app *app,
          "}\n"},
         /* Stacked pitches — triads and a seventh built as chords inside angle
          * brackets, then held as half notes. */
-        {"Chords & triads",
-         "\\relative c' {\n"
-         "  \\clef treble \\key c \\major \\time 4/4\n"
-         "  <c e g>4 <d f a> <e g b> <f a c> | <g b d f>2 <c, e g>2 |\n"
-         "}\n"},
+        {"Chords & triads", "\\relative c' {\n"
+                            "  \\clef treble \\key c \\major \\time 4/4\n"
+                            "  <c e g>4 <d f a> <e g b> <f a c> | <g b d f>2 <c, e g>2 |\n"
+                            "}\n"},
         /* Every accidental the engraver draws — single sharp/flat, double
          * sharp (isis) and double flat (eses), against the natural key. */
-        {"Accidentals — sharps, flats, doubles",
-         "\\relative c' {\n"
-         "  \\clef treble \\time 4/4\n"
-         "  cis4 des e f | fis ges aisis beses | c1 |\n"
-         "}\n"},
+        {"Accidentals — sharps, flats, doubles", "\\relative c' {\n"
+                                                 "  \\clef treble \\time 4/4\n"
+                                                 "  cis4 des e f | fis ges aisis beses | c1 |\n"
+                                                 "}\n"},
         /* The rhythmic vocabulary — whole through sixteenth, a dotted figure
          * and a rest, so every note-head/flag/dot/rest glyph appears. */
-        {"Rhythms & rests",
-         "\\relative c' {\n"
-         "  \\clef treble \\key c \\major \\time 4/4\n"
-         "  c1 | c2 c2 | c4 c c c | c8 c c c c c c c | r4 c8. c16 c4 r4 |\n"
-         "}\n"},
+        {"Rhythms & rests", "\\relative c' {\n"
+                            "  \\clef treble \\key c \\major \\time 4/4\n"
+                            "  c1 | c2 c2 | c4 c c c | c8 c c c c c c c | r4 c8. c16 c4 r4 |\n"
+                            "}\n"},
     };
     for (size_t i = 0; i < sizeof(sections) / sizeof(sections[0]); i++) {
         struct yetty_yclass_object *sec = el_section(root, sections[i].title);
@@ -2256,8 +2256,8 @@ static struct yetty_ycore_void_result build_music_content(struct app *app,
  * editor filling the body, three nodes holding ordinary widgets, two
  * pre-wired links, and a palette the node context menu can insert.
  *===========================================================================*/
-static struct yetty_yclass_object *yng_make_node(struct yetty_yclass_object *editor, float gx, float gy,
-                                               float gw, float gh, const char *title)
+static struct yetty_yclass_object *yng_make_node(struct yetty_yclass_object *editor, float gx,
+                                                 float gy, float gw, float gh, const char *title)
 {
     struct yetty_yclass_object_ptr_result nr = yetty_ygui_ynodes_add_node(editor, gx, gy);
     if (YETTY_IS_ERR(nr)) {
@@ -2288,7 +2288,7 @@ static void yng_u32(struct uint32_result r)
 
 /* Add a child widget of `cls` to `node` and set its row height. */
 static struct yetty_yclass_object *yng_child(struct yetty_yclass_object *node,
-                                           struct yetty_yclass_ptr_result cls, float h)
+                                             struct yetty_yclass_ptr_result cls, float h)
 {
     if (YETTY_IS_ERR(cls)) {
         yetty_ycore_error_destroy(cls.error);
@@ -2331,7 +2331,8 @@ static struct yetty_ycore_void_result build_ynodes_content(struct app *app,
     struct yetty_yclass_object *editor = er.value;
     {
         struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(editor);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "build_ynodes_content: editor layout_get");
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res,
+                            "build_ynodes_content: editor layout_get");
         struct yetty_ygui_layout l = *layout_res.value;
         l.flex_grow = 1.0f;
         l.min_height = 200.0f;
@@ -2413,7 +2414,8 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
     app->scene_parent = parent;
     app->cur_scene = tab_index;
     while (1) {
-        struct yetty_yclass_object_ptr_result first_child_res = yetty_ygui_widget_first_child(parent);
+        struct yetty_yclass_object_ptr_result first_child_res =
+            yetty_ygui_widget_first_child(parent);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, first_child_res, "build_scene_body: first_child");
         struct yetty_yclass_object *c = first_child_res.value;
         if (!c) {
@@ -2469,7 +2471,8 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
         yetty_ygui_widget_add(parent, yetty_ygui_hbox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "rebuild: hbox");
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(hr.value);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(hr.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "rebuild: hbox layout_get");
         struct yetty_ygui_layout l = *layout_res.value;
         l.flex_grow = 1.0f;
@@ -2483,7 +2486,8 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
             yetty_ygui_widget_add(hr.value, yetty_ygui_vbox_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, nr, "rebuild: nav vbox");
         {
-            struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(nr.value);
+            struct yetty_ygui_layout_const_ptr_result layout_res =
+                yetty_ygui_widget_layout_get(nr.value);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "rebuild: nav vbox layout_get");
             struct yetty_ygui_layout l = *layout_res.value;
             l.width = 220.0f;
@@ -2498,7 +2502,8 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
             yetty_ycore_error_destroy_safe(
                 yetty_ygui_button_set_label(br.value, tab_entry_label(app, tab_index, i)));
             {
-                struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(br.value);
+                struct yetty_ygui_layout_const_ptr_result layout_res =
+                    yetty_ygui_widget_layout_get(br.value);
                 YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "rebuild: nav button layout_get");
                 struct yetty_ygui_layout l = *layout_res.value;
                 l.height = 28.0f;
@@ -2577,7 +2582,8 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
             yetty_ygui_widget_add(hr.value, yetty_ygui_vbox_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, vr, "rebuild: shadertoy vbox");
         {
-            struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(vr.value);
+            struct yetty_ygui_layout_const_ptr_result layout_res =
+                yetty_ygui_widget_layout_get(vr.value);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "rebuild: shadertoy vbox layout_get");
             struct yetty_ygui_layout l = *layout_res.value;
             l.flex_grow = 1.0f;
@@ -2588,8 +2594,10 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
             yetty_ygui_widget_add(vr.value, yetty_ygui_tabbar_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, str, "rebuild: shadertoy sub-tabbar");
         {
-            struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(str.value);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "rebuild: shadertoy sub-tabbar layout_get");
+            struct yetty_ygui_layout_const_ptr_result layout_res =
+                yetty_ygui_widget_layout_get(str.value);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res,
+                                "rebuild: shadertoy sub-tabbar layout_get");
             struct yetty_ygui_layout l = *layout_res.value;
             l.height = 32.0f;
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_layout_set(str.value, &l));
@@ -2605,7 +2613,8 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
             yetty_ygui_widget_add(vr.value, yetty_ygui_yshadertoy_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, zr, "rebuild: yshadertoy");
         {
-            struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(zr.value);
+            struct yetty_ygui_layout_const_ptr_result layout_res =
+                yetty_ygui_widget_layout_get(zr.value);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "rebuild: yshadertoy layout_get");
             struct yetty_ygui_layout l = *layout_res.value;
             l.flex_grow = 1.0f;
@@ -2626,7 +2635,8 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
             yetty_ygui_widget_add(hr.value, yetty_ygui_vbox_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, vr, "rebuild: ynodes vbox");
         {
-            struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(vr.value);
+            struct yetty_ygui_layout_const_ptr_result layout_res =
+                yetty_ygui_widget_layout_get(vr.value);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "rebuild: ynodes vbox layout_get");
             struct yetty_ygui_layout l = *layout_res.value;
             l.flex_grow = 1.0f;
@@ -2674,7 +2684,8 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
     }
     }
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(content);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(content);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "rebuild: content layout_get");
         struct yetty_ygui_layout l = *layout_res.value;
         l.flex_grow = 1.0f;
@@ -2687,8 +2698,7 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
     switch (t->kind) {
     case TAB_KIND_PLOTS: {
         const struct nav_entry *e = &plot_nav_entries[t->active_entry];
-        yetty_ycore_error_destroy_safe(
-            load_plot_entry((struct yetty_yclass_object *)content, e));
+        yetty_ycore_error_destroy_safe(load_plot_entry((struct yetty_yclass_object *)content, e));
         break;
     }
     case TAB_KIND_IMAGES: {
@@ -2742,11 +2752,11 @@ static struct yetty_ycore_void_result build_scene_body(struct app *app,
     default: {
         if (tab_index == 0) {
             const struct welcome_nav *e = &welcome_nav_entries[t->active_entry];
-            yetty_ycore_error_destroy_safe(write_welcome_spans((struct yetty_yclass_object *)content, e->spans, e->n_spans));
-        } else {
             yetty_ycore_error_destroy_safe(
-                write_code_snippet((struct yetty_yclass_object *)content,
-                                   code_nav_entries[t->active_entry].payload));
+                write_welcome_spans((struct yetty_yclass_object *)content, e->spans, e->n_spans));
+        } else {
+            yetty_ycore_error_destroy_safe(write_code_snippet(
+                (struct yetty_yclass_object *)content, code_nav_entries[t->active_entry].payload));
         }
         break;
     }
@@ -2809,7 +2819,8 @@ static struct yetty_ycore_void_result rebuild_top(struct app *app, int top_index
         yetty_ygui_widget_add(app->body_panel, yetty_ygui_vbox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, vr, "rebuild_top: group vbox");
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(vr.value);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(vr.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "rebuild_top: group vbox layout_get");
         struct yetty_ygui_layout l = *layout_res.value;
         l.flex_grow = 1.0f;
@@ -2820,7 +2831,8 @@ static struct yetty_ycore_void_result rebuild_top(struct app *app, int top_index
         yetty_ygui_widget_add(vr.value, yetty_ygui_tabbar_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, str, "rebuild_top: sub-tabbar");
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(str.value);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(str.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "rebuild_top: sub-tabbar layout_get");
         struct yetty_ygui_layout l = *layout_res.value;
         l.height = 30.0f;
@@ -2837,7 +2849,8 @@ static struct yetty_ycore_void_result rebuild_top(struct app *app, int top_index
         yetty_ygui_widget_add(vr.value, yetty_ygui_vbox_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, sb, "rebuild_top: subbody");
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(sb.value);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(sb.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "rebuild_top: subbody layout_get");
         struct yetty_ygui_layout l = *layout_res.value;
         l.flex_grow = 1.0f;
@@ -2920,7 +2933,8 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
 
     struct yetty_yclass_object *content = app->root;
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(content);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(content);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "build_ui: root layout_get");
         struct yetty_ygui_layout l = *layout_res.value;
         l.align = YETTY_YGUI_ALIGN_STRETCH;
@@ -2934,7 +2948,8 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tbr, "build_ui: tabbar add");
     app->tabbar = tbr.value;
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(app->tabbar);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(app->tabbar);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "build_ui: tabbar layout_get");
         struct yetty_ygui_layout l = *layout_res.value;
         l.height = 36;
@@ -2949,7 +2964,8 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
         struct yetty_yclass_object_ptr_result hr =
             yetty_ygui_tabbar_add_tab(app->tabbar, TOP_TABS[i].label);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hr, "build_ui: tabbar_add_tab");
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(hr.value);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(hr.value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "build_ui: header layout_get");
         struct yetty_ygui_layout l = *layout_res.value;
         l.width = 130;
@@ -2962,7 +2978,8 @@ static struct yetty_ycore_void_result build_ui(struct app *app)
     YETTY_RETURN_IF_ERR(yetty_ycore_void, bpr, "build_ui: body panel add");
     app->body_panel = bpr.value;
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(app->body_panel);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(app->body_panel);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "build_ui: body panel layout_get");
         struct yetty_ygui_layout l = *layout_res.value;
         l.flex_grow = 1;
@@ -4513,8 +4530,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
     }
 
     /* Kick first frame. */
-    yetty_yevent_post_async(input_pipe,
-                            &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
+    yetty_yevent_post_async(input_pipe, &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
     struct yetty_ycore_void_result run_res =
         app->yframework->event_loop->ops->start(app->yframework->event_loop);
@@ -4836,8 +4852,8 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
     struct yetty_ycore_void_result populate =
         yetty_yplatform_platform_set_gpu_context(targs->platform, &gpu);
     if (YETTY_IS_OK(populate)) {
-        populate = yetty_yplatform_platform_set_services(targs->platform, state->config, state->pipe,
-                                                         NULL, NULL);
+        populate = yetty_yplatform_platform_set_services(targs->platform, state->config,
+                                                         state->pipe, NULL, NULL);
     }
     if (YETTY_IS_ERR(populate)) {
         LOGE("ygreeter: platform populate failed: %s",
@@ -4934,7 +4950,8 @@ static int run_standalone_mode(int argc, char **argv)
         return 1;
     }
 
-    struct yetty_yclass_object_ptr_result platform_res = yetty_yplatform_default_platform_create(NULL);
+    struct yetty_yclass_object_ptr_result platform_res =
+        yetty_yplatform_default_platform_create(NULL);
     if (YETTY_IS_ERR(platform_res)) {
         yetty_ycore_error_print(stderr, "ygreeter: platform create", platform_res.error);
         yetty_ycore_error_destroy(platform_res.error);

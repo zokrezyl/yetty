@@ -141,8 +141,7 @@ static void rerender(struct map_ui *ui)
 
     /* Tile providers require their attribution visible on the map. */
     {
-        struct yetty_ycore_const_char_ptr_result attribution_res =
-            yetty_ymap_attribution(ui->map);
+        struct yetty_ycore_const_char_ptr_result attribution_res = yetty_ymap_attribution(ui->map);
         const char *attribution =
             YETTY_IS_OK(attribution_res) ? attribution_res.value : "(C) tile provider";
         if (YETTY_IS_ERR(attribution_res)) {
@@ -162,8 +161,7 @@ static void rerender(struct map_ui *ui)
         }
     }
 
-    struct yetty_ycore_void_result content_res =
-        yetty_yview_set_content(ui->view, map_res.value);
+    struct yetty_ycore_void_result content_res = yetty_yview_set_content(ui->view, map_res.value);
     if (YETTY_IS_ERR(content_res)) {
         ywarn("ymap interactive: set_content failed: %s", content_res.error.msg);
         yetty_ycore_error_destroy(content_res.error);
@@ -282,7 +280,7 @@ static void on_raw(void *user, const char *bytes, size_t count)
 }
 
 int ymap_interactive_run(struct yetty_yclass_object *map_object, uint32_t width_px,
-                                uint32_t height_px)
+                         uint32_t height_px)
 {
     if (!yetty_yplatform_tty_stdin_is_tty() || !yetty_yplatform_tty_stdout_is_tty()) {
         fprintf(stderr, "ymap: --interactive needs a terminal (run inside yetty)\n");
@@ -321,7 +319,8 @@ int ymap_interactive_run(struct yetty_yclass_object *map_object, uint32_t width_
     };
 
     {
-        struct yetty_ycore_void_result cfg_res = yetty_yview_configure(ui.view, YMAP_STDOUT_FD, YMAP_GETPID(), /*kind=*/0u, YMAP_BG_COLOR, 0.0f, 0.0f,
+        struct yetty_ycore_void_result cfg_res = yetty_yview_configure(
+            ui.view, YMAP_STDOUT_FD, YMAP_GETPID(), /*kind=*/0u, YMAP_BG_COLOR, 0.0f, 0.0f,
             (float)ui.width_px, (float)ui.height_px);
         if (YETTY_IS_ERR(cfg_res)) {
             fprintf(stderr, "ymap: view configure failed: %s\n", cfg_res.error.msg);
@@ -370,8 +369,8 @@ int ymap_interactive_run(struct yetty_yclass_object *map_object, uint32_t width_
     ui.last_render_sec = yetty_yplatform_ytime_monotonic_sec();
 
     char buf[8192];
-    double drag_interval = vector_mode ? YMAP_DRAG_RENDER_INTERVAL_VECTOR
-                                       : YMAP_DRAG_RENDER_INTERVAL_RASTER;
+    double drag_interval =
+        vector_mode ? YMAP_DRAG_RENDER_INTERVAL_VECTOR : YMAP_DRAG_RENDER_INTERVAL_RASTER;
     while (!g_signal_quit && !ui.want_quit) {
         int ready = yetty_yplatform_tty_stdin_wait(50);
         if (ready < 0) {

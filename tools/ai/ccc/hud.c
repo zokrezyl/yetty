@@ -151,7 +151,8 @@ static void terminal_pixels(float *width_px, float *height_px)
 static void window_rect(const struct ccc_hud *hud, float *min_x, float *min_y, float *width,
                         float *height)
 {
-    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(hud->window);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(hud->window);
     if (YETTY_IS_ERR(layout_res)) {
         yetty_ycore_error_destroy(layout_res.error);
         *min_x = *min_y = *width = *height = 0.0f;
@@ -165,7 +166,7 @@ static void window_rect(const struct ccc_hud *hud, float *min_x, float *min_y, f
 }
 
 static struct yetty_yclass_object_ptr_result hud_add(struct yetty_yclass_object *parent,
-                                                   struct yetty_yclass_ptr_result class_result)
+                                                     struct yetty_yclass_ptr_result class_result)
 {
     if (YETTY_IS_ERR(class_result)) {
         return YETTY_ERR(yetty_yclass_object_ptr, "hud_add: class_get failed", class_result);
@@ -177,8 +178,8 @@ static struct yetty_yclass_object_ptr_result hud_add(struct yetty_yclass_object 
 }
 
 static struct yetty_yclass_object_ptr_result hud_add_label(struct ccc_hud *hud,
-                                                         const char *initial_text,
-                                                         struct yetty_ycore_rgba color)
+                                                           const char *initial_text,
+                                                           struct yetty_ycore_rgba color)
 {
     struct yetty_yclass_object_ptr_result body_res = yetty_ygui_window_body(hud->window);
     YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, body_res, "hud_add_label: window_body");

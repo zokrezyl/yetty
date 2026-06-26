@@ -56,12 +56,12 @@
 #define YAI_DEFAULT_HUD_PART_0 "#[fg=accent_bright]#{state}#[fg=primary] #{title}"
 #define YAI_DEFAULT_HUD_PART_1 "#[align=center,fg=accent_bright]#{quota}"
 #define YAI_DEFAULT_HUD_PART_2 "#[align=right,fg=primary]#{engine} · #{model}"
-#define YAI_DEFAULT_HUD_PART_3                                                                     \
-    "\n#[fg=secondary]#{turn}#[align=right,fg=accent]#{stats}"
+#define YAI_DEFAULT_HUD_PART_3 "\n#[fg=secondary]#{turn}#[align=right,fg=accent]#{stats}"
 #define YAI_DEFAULT_HUD_PART_4                                                                     \
-    "\n#[fg=muted]#{session}#[align=right,fg=secondary]cache #{cache} · $#{cost} · #{turns} turn(s)"
+    "\n#[fg=muted]#{session}#[align=right,fg=secondary]cache #{cache} · $#{cost} · #{turns} "    \
+    "turn(s)"
 #define YAI_DEFAULT_HUD_FORMAT                                                                     \
-    YAI_DEFAULT_HUD_PART_0 YAI_DEFAULT_HUD_PART_1 YAI_DEFAULT_HUD_PART_2 YAI_DEFAULT_HUD_PART_3     \
+    YAI_DEFAULT_HUD_PART_0 YAI_DEFAULT_HUD_PART_1 YAI_DEFAULT_HUD_PART_2 YAI_DEFAULT_HUD_PART_3    \
         YAI_DEFAULT_HUD_PART_4
 
 /* Largest single HUD-format piece and how many a format may hold. */
@@ -517,8 +517,8 @@ void yai_usage_proxy_summary(struct yai_app *app, char *out, size_t out_size);
  * ratelimit headers. */
 struct yai_quota {
     int valid;
-    int session_pct; /* 5h utilization, 0..100 */
-    int week_pct;    /* 7d utilization, 0..100 */
+    int session_pct;         /* 5h utilization, 0..100 */
+    int week_pct;            /* 7d utilization, 0..100 */
     long long session_reset; /* epoch seconds; 0 = unknown */
     long long week_reset;    /* epoch seconds; 0 = unknown */
 };

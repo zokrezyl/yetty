@@ -88,8 +88,7 @@ int main(int argc, char **argv)
         if (YETTY_IS_ERR(seed_res)) {
             yetty_ycore_error_print(stderr, "ydoc: seed demo", seed_res.error);
             yetty_ycore_error_destroy(seed_res.error);
-            struct yetty_ycore_void_result destroy_res =
-                yetty_yrich_document_destroy(doc_obj);
+            struct yetty_ycore_void_result destroy_res = yetty_yrich_document_destroy(doc_obj);
             if (YETTY_IS_ERR(destroy_res)) {
                 yetty_ycore_error_destroy(destroy_res.error);
             }

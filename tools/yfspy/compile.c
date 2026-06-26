@@ -43,10 +43,10 @@ struct codegen {
     PyArena *arena;
 
     /* current function */
-    uint32_t func_start;             /* prog->code index where the function began */
+    uint32_t func_start; /* prog->code index where the function began */
     const char *local_names[YFSVM_MAX_REGISTERS];
-    uint8_t local_count;             /* named locals occupy r1..r_local_count */
-    uint8_t first_temp;              /* 1 + local_count */
+    uint8_t local_count; /* named locals occupy r1..r_local_count */
+    uint8_t first_temp;  /* 1 + local_count */
     uint8_t temp_used[YFSVM_MAX_REGISTERS];
 
     int label_pos[YFSPY_MAX_LABELS]; /* function-relative position, -1 until placed */
@@ -222,7 +222,8 @@ static void cg_place(struct codegen *cg, int label)
     cg->label_pos[label] = (int)(cg->prog->code_count - cg->func_start);
 }
 
-static void cg_emit_branch(struct codegen *cg, YfsvmOpcode op, int label, uint8_t src1, uint8_t src2)
+static void cg_emit_branch(struct codegen *cg, YfsvmOpcode op, int label, uint8_t src1,
+                           uint8_t src2)
 {
     if (cg->had_error) {
         return;
@@ -252,8 +253,8 @@ static void cg_resolve_fixups(struct codegen *cg)
         }
         uint32_t word = cg->prog->code[cg->fixups[i].code_index];
         cg->prog->code[cg->fixups[i].code_index] =
-            yfsvm_encode(yfsvm_decode_opcode(word), yfsvm_decode_dst(word),
-                         yfsvm_decode_src1(word), yfsvm_decode_src2(word), (uint16_t)pos);
+            yfsvm_encode(yfsvm_decode_opcode(word), yfsvm_decode_dst(word), yfsvm_decode_src1(word),
+                         yfsvm_decode_src2(word), (uint16_t)pos);
     }
 }
 
@@ -267,24 +268,42 @@ struct func_entry {
 static YfsvmOpcode lookup_func1(const char *name)
 {
     static const struct func_entry table[] = {
-        {"sin", YETTY_YFSVM_OP_SIN},        {"cos", YETTY_YFSVM_OP_COS},
-        {"tan", YETTY_YFSVM_OP_TAN},        {"asin", YETTY_YFSVM_OP_ASIN},
-        {"acos", YETTY_YFSVM_OP_ACOS},      {"atan", YETTY_YFSVM_OP_ATAN},
-        {"sinh", YETTY_YFSVM_OP_SINH},      {"cosh", YETTY_YFSVM_OP_COSH},
-        {"tanh", YETTY_YFSVM_OP_TANH},      {"asinh", YETTY_YFSVM_OP_ASINH},
-        {"acosh", YETTY_YFSVM_OP_ACOSH},    {"atanh", YETTY_YFSVM_OP_ATANH},
-        {"sinc", YETTY_YFSVM_OP_SINC},      {"exp", YETTY_YFSVM_OP_EXP},
-        {"exp2", YETTY_YFSVM_OP_EXP2},      {"log", YETTY_YFSVM_OP_LOG},
-        {"ln", YETTY_YFSVM_OP_LOG},         {"log2", YETTY_YFSVM_OP_LOG2},
-        {"sqrt", YETTY_YFSVM_OP_SQRT},      {"rsqrt", YETTY_YFSVM_OP_RSQRT},
-        {"inverseSqrt", YETTY_YFSVM_OP_RSQRT}, {"abs", YETTY_YFSVM_OP_ABS},
-        {"floor", YETTY_YFSVM_OP_FLOOR},    {"ceil", YETTY_YFSVM_OP_CEIL},
-        {"round", YETTY_YFSVM_OP_ROUND},    {"trunc", YETTY_YFSVM_OP_TRUNC},
-        {"fract", YETTY_YFSVM_OP_FRACT},    {"frac", YETTY_YFSVM_OP_FRACT},
-        {"sign", YETTY_YFSVM_OP_SIGN},      {"saturate", YETTY_YFSVM_OP_CLAMP01},
-        {"radians", YETTY_YFSVM_OP_RADIANS}, {"degrees", YETTY_YFSVM_OP_DEGREES},
-        {"erf", YETTY_YFSVM_OP_ERF},        {"erfc", YETTY_YFSVM_OP_ERFC},
-        {"rand", YETTY_YFSVM_OP_RAND},      {"noise", YETTY_YFSVM_OP_NOISE},
+        {"sin", YETTY_YFSVM_OP_SIN},
+        {"cos", YETTY_YFSVM_OP_COS},
+        {"tan", YETTY_YFSVM_OP_TAN},
+        {"asin", YETTY_YFSVM_OP_ASIN},
+        {"acos", YETTY_YFSVM_OP_ACOS},
+        {"atan", YETTY_YFSVM_OP_ATAN},
+        {"sinh", YETTY_YFSVM_OP_SINH},
+        {"cosh", YETTY_YFSVM_OP_COSH},
+        {"tanh", YETTY_YFSVM_OP_TANH},
+        {"asinh", YETTY_YFSVM_OP_ASINH},
+        {"acosh", YETTY_YFSVM_OP_ACOSH},
+        {"atanh", YETTY_YFSVM_OP_ATANH},
+        {"sinc", YETTY_YFSVM_OP_SINC},
+        {"exp", YETTY_YFSVM_OP_EXP},
+        {"exp2", YETTY_YFSVM_OP_EXP2},
+        {"log", YETTY_YFSVM_OP_LOG},
+        {"ln", YETTY_YFSVM_OP_LOG},
+        {"log2", YETTY_YFSVM_OP_LOG2},
+        {"sqrt", YETTY_YFSVM_OP_SQRT},
+        {"rsqrt", YETTY_YFSVM_OP_RSQRT},
+        {"inverseSqrt", YETTY_YFSVM_OP_RSQRT},
+        {"abs", YETTY_YFSVM_OP_ABS},
+        {"floor", YETTY_YFSVM_OP_FLOOR},
+        {"ceil", YETTY_YFSVM_OP_CEIL},
+        {"round", YETTY_YFSVM_OP_ROUND},
+        {"trunc", YETTY_YFSVM_OP_TRUNC},
+        {"fract", YETTY_YFSVM_OP_FRACT},
+        {"frac", YETTY_YFSVM_OP_FRACT},
+        {"sign", YETTY_YFSVM_OP_SIGN},
+        {"saturate", YETTY_YFSVM_OP_CLAMP01},
+        {"radians", YETTY_YFSVM_OP_RADIANS},
+        {"degrees", YETTY_YFSVM_OP_DEGREES},
+        {"erf", YETTY_YFSVM_OP_ERF},
+        {"erfc", YETTY_YFSVM_OP_ERFC},
+        {"rand", YETTY_YFSVM_OP_RAND},
+        {"noise", YETTY_YFSVM_OP_NOISE},
         {NULL, 0},
     };
     for (const struct func_entry *entry = table; entry->name; entry++) {
@@ -298,13 +317,13 @@ static YfsvmOpcode lookup_func1(const char *name)
 static YfsvmOpcode lookup_func2(const char *name)
 {
     static const struct func_entry table[] = {
-        {"pow", YETTY_YFSVM_OP_POW},     {"atan2", YETTY_YFSVM_OP_ATAN2},
-        {"min", YETTY_YFSVM_OP_MIN},     {"max", YETTY_YFSVM_OP_MAX},
-        {"mod", YETTY_YFSVM_OP_MOD},     {"fmod", YETTY_YFSVM_OP_MOD},
-        {"step", YETTY_YFSVM_OP_STEP},   {"lt", YETTY_YFSVM_OP_LT},
-        {"gt", YETTY_YFSVM_OP_GT},       {"le", YETTY_YFSVM_OP_LE},
-        {"ge", YETTY_YFSVM_OP_GE},       {"eq", YETTY_YFSVM_OP_EQ},
-        {"ne", YETTY_YFSVM_OP_NE},       {"rand2", YETTY_YFSVM_OP_RAND2},
+        {"pow", YETTY_YFSVM_OP_POW},       {"atan2", YETTY_YFSVM_OP_ATAN2},
+        {"min", YETTY_YFSVM_OP_MIN},       {"max", YETTY_YFSVM_OP_MAX},
+        {"mod", YETTY_YFSVM_OP_MOD},       {"fmod", YETTY_YFSVM_OP_MOD},
+        {"step", YETTY_YFSVM_OP_STEP},     {"lt", YETTY_YFSVM_OP_LT},
+        {"gt", YETTY_YFSVM_OP_GT},         {"le", YETTY_YFSVM_OP_LE},
+        {"ge", YETTY_YFSVM_OP_GE},         {"eq", YETTY_YFSVM_OP_EQ},
+        {"ne", YETTY_YFSVM_OP_NE},         {"rand2", YETTY_YFSVM_OP_RAND2},
         {"noise2", YETTY_YFSVM_OP_NOISE2}, {NULL, 0},
     };
     for (const struct func_entry *entry = table; entry->name; entry++) {
@@ -740,10 +759,9 @@ static uint8_t compile_macro(struct codegen *cg, const char *name, asdl_expr_seq
 static int is_macro_name(const char *name)
 {
     static const char *const macros[] = {
-        "safe_div",      "safe_log",      "safe_sqrt", "length2", "dist2",
-        "remap",         "remap01",       "polar_radius", "polar_angle",
-        "fbm2",          "ridge2",        "domain_warp_x", "domain_warp_y",
-        "checker",       "stripe",        NULL,
+        "safe_div",      "safe_log",     "safe_sqrt",   "length2", "dist2",  "remap",
+        "remap01",       "polar_radius", "polar_angle", "fbm2",    "ridge2", "domain_warp_x",
+        "domain_warp_y", "checker",      "stripe",      NULL,
     };
     for (const char *const *macro = macros; *macro; macro++) {
         if (strcmp(name, *macro) == 0) {
@@ -1243,8 +1261,7 @@ static void add_local(struct codegen *cg, const char *name)
         return;
     }
     if (cg->local_count + 1 >= YFSVM_MAX_REGISTERS) {
-        cg_errorf(cg, cg->cur_line, "too many local variables (max %u)",
-                  YFSVM_MAX_REGISTERS - 1);
+        cg_errorf(cg, cg->cur_line, "too many local variables (max %u)", YFSVM_MAX_REGISTERS - 1);
         return;
     }
     cg->local_names[cg->local_count++] = name;

@@ -1404,7 +1404,8 @@ static void handle_input_line(struct ccc_app *app, const char *line, size_t len)
         if (app->queue_len < CCC_QUEUE_MAX) {
             char *copy = strndup(line, len);
             if (!copy) {
-                report_error(app, "queue", YETTY_ERR(yetty_ycore_void, "handle_input_line: strndup"));
+                report_error(app, "queue",
+                             YETTY_ERR(yetty_ycore_void, "handle_input_line: strndup"));
                 return;
             }
             app->queue[app->queue_len++] = copy;
@@ -1553,8 +1554,7 @@ static void editor_handle_csi(struct ccc_app *app, char final_byte, int paramete
         return;
     case '~':
         if (parameter == 3) { /* delete: the codepoint under the cursor */
-            editor_delete_range(app, app->stdin_cursor,
-                                editor_next_char(app, app->stdin_cursor));
+            editor_delete_range(app, app->stdin_cursor, editor_next_char(app, app->stdin_cursor));
             editor_edited(app);
         } else if (parameter == 1 || parameter == 7) { /* home variants */
             app->stdin_cursor = 0;

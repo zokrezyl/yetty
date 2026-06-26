@@ -119,7 +119,8 @@ struct demo_runner {
  * yclass: the only hand-written file is this annotated runner.c; runner.gen.c is
  * #included at the foot.
  */
-struct [[clang::annotate("class@demoygui:app")]] [[clang::annotate("parent@yapp:app")]] yetty_demoygui_app {
+struct [[clang::annotate("class@demoygui:app")]] [[clang::annotate("parent@yapp:app")]]
+yetty_demoygui_app {
     struct demo_runner runner;
 };
 
@@ -443,7 +444,8 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
         }
         /* Keep chrome's edge bands + the caption figure tracking the window. */
         if (r->enable_chrome && r->chrome) {
-            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(r->chrome, (float)ev->resize.width, (float)ev->resize.height);
+            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(
+                r->chrome, (float)ev->resize.width, (float)ev->resize.height);
             if (YETTY_IS_ERR(csz)) {
                 yetty_ycore_error_destroy(csz.error);
             }
@@ -785,12 +787,14 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
         struct yetty_yclass_object_ptr_result cor = yetty_ychrome_chrome_create(NULL);
         if (YETTY_IS_OK(cor)) {
             r->chrome = cor.value;
-            struct yetty_ycore_void_result ccfg = yetty_ychrome_configure(r->chrome, r->yframework->window_chrome, DEMO_CHROME_CAPTION_H,
+            struct yetty_ycore_void_result ccfg = yetty_ychrome_configure(
+                r->chrome, r->yframework->window_chrome, DEMO_CHROME_CAPTION_H,
                 /*edge_size=*/8.0f, YETTY_YCHROME_FLAG_ALL);
             if (YETTY_IS_ERR(ccfg)) {
                 yetty_ycore_error_destroy(ccfg.error);
             }
-            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(r->chrome, (float)gpu->surface_width, (float)gpu->surface_height);
+            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(
+                r->chrome, (float)gpu->surface_width, (float)gpu->surface_height);
             if (YETTY_IS_ERR(csz)) {
                 yetty_ycore_error_destroy(csz.error);
             }
@@ -856,8 +860,7 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
         }
     }
 
-    yetty_yevent_post_async(input_pipe,
-                            &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
+    yetty_yevent_post_async(input_pipe, &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
     struct yetty_ycore_void_result run_res =
         r->yframework->event_loop->ops->start(r->yframework->event_loop);
@@ -1408,8 +1411,7 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
             return 1;
         }
         r.root = rr.value;
-        struct yetty_ygui_layout_const_ptr_result layout_res =
-            yetty_ygui_widget_layout_get(r.root);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(r.root);
         if (YETTY_IS_ERR(layout_res)) {
             yetty_ycore_error_print(stderr, "demo_runner client: root layout_get",
                                     layout_res.error);

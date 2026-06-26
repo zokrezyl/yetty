@@ -85,6 +85,146 @@ methods:
     doc: null
     local: false
     return_payload_type: null
+  - slot: create_child
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: struct yetty_ycore_buffer
+      - name: id
+        type: uint32_t
+      - name: rect
+        type: struct yetty_ycore_rectangle
+      - name: init
+        type: struct yetty_ycore_buffer
+    doc: null
+    local: false
+    return_payload_type: null
+  - slot: delete_child
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+    doc: null
+    local: false
+    return_payload_type: null
+  - slot: set_child_rect
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+      - name: rect
+        type: struct yetty_ycore_rectangle
+    doc: null
+    local: false
+    return_payload_type: null
+  - slot: set_rect
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rect
+        type: struct yetty_ycore_rectangle
+    doc: null
+    local: false
+    return_payload_type: null
+  - slot: set_child_z
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+      - name: z
+        type: int32_t
+    doc: null
+    local: false
+    return_payload_type: null
+  - slot: set_child_hidden
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+      - name: hidden
+        type: uint32_t
+    doc: null
+    local: false
+    return_payload_type: null
+  - slot: set_child_scroll
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+      - name: scroll_x
+        type: float
+      - name: scroll_y
+        type: float
+    doc: null
+    local: false
+    return_payload_type: null
+  - slot: set_child_content_size
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+      - name: content_w
+        type: float
+      - name: content_h
+        type: float
+    doc: null
+    local: false
+    return_payload_type: null
+  - slot: apply_child_body
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+      - name: body
+        type: struct yetty_ycore_buffer
+    doc: null
+    local: false
+    return_payload_type: null
+  - slot: clear_all
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: false
+    return_payload_type: null
   - slot: process_input
     domain: yfigure
     owning_class: figure
@@ -235,6 +375,36 @@ classes:
       - slot: process_records
         slot_domain: yfigure
         impl: yetty_yfigure_container_process_records_impl
+      - slot: create_child
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_create_child_impl
+      - slot: delete_child
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_delete_child_impl
+      - slot: set_child_rect
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_set_child_rect_impl
+      - slot: set_rect
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_set_rect_impl
+      - slot: set_child_z
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_set_child_z_impl
+      - slot: set_child_hidden
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_set_child_hidden_impl
+      - slot: set_child_scroll
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_set_child_scroll_impl
+      - slot: set_child_content_size
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_set_child_content_size_impl
+      - slot: apply_child_body
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_apply_child_body_impl
+      - slot: clear_all
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_clear_all_slot
       - slot: process_input
         slot_domain: yfigure
         impl: container_process_input_slot

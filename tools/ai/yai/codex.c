@@ -16,8 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct YETTY_ANNOTATE("class@yai:codex") YETTY_ANNOTATE("parent@yai:turn_engine")
-yetty_yai_codex {
+struct YETTY_ANNOTATE("class@yai:codex") YETTY_ANNOTATE("parent@yai:turn_engine") yetty_yai_codex {
     /* The class@ annotation needs a struct to sit on; codex keeps no
      * engine-private state (the thread id lives in app->session_id,
      * the per-turn lifecycle state in the app's turn fields). */
@@ -170,9 +169,8 @@ static struct yetty_ycore_void_result codex_render_item(struct yai_app *app, yyj
             struct yetty_ycore_void_result begin_res = yai_event_dispatch(app, &begin);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, begin_res, "codex_render_item: begin");
 
-            struct yai_event delta = {
-                .kind = YAI_EVENT_TEXT_DELTA,
-                .text = {.text = text, .len = yyjson_get_len(text_value)}};
+            struct yai_event delta = {.kind = YAI_EVENT_TEXT_DELTA,
+                                      .text = {.text = text, .len = yyjson_get_len(text_value)}};
             struct yetty_ycore_void_result delta_res = yai_event_dispatch(app, &delta);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, delta_res, "codex_render_item: text");
         }

@@ -39,8 +39,7 @@ struct probe_a_data {
 
 static const struct yetty_yclass *probe_a_class_get(void);
 
-static struct yetty_ycore_int_result probe_a_on_press(
-                                                      struct yetty_yclass_object *_yc_obj, float x,
+static struct yetty_ycore_int_result probe_a_on_press(struct yetty_yclass_object *_yc_obj, float x,
                                                       float y, int button)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;
@@ -89,8 +88,7 @@ struct probe_b_data {
 
 static const struct yetty_yclass *probe_b_class_get(void);
 
-static struct yetty_ycore_void_result probe_b_constructor(
-                                                          struct yetty_yclass_object *_yc_obj)
+static struct yetty_ycore_void_result probe_b_constructor(struct yetty_yclass_object *_yc_obj)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;
     struct yetty_ycore_void_result sr = yetty_ygui_super_void(
@@ -103,8 +101,7 @@ static struct yetty_ycore_void_result probe_b_constructor(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_int_result probe_b_on_motion(
-                                                       struct yetty_yclass_object *_yc_obj, float x,
+static struct yetty_ycore_int_result probe_b_on_motion(struct yetty_yclass_object *_yc_obj, float x,
                                                        float y)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;

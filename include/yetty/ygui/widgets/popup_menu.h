@@ -16,7 +16,8 @@
 extern "C" {
 #endif
 
-typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_object *, int, void *);
+typedef struct yetty_ycore_void_result (*yetty_ygui_menu_item_cb)(struct yetty_yclass_object *, int,
+                                                                  void *);
 
 struct yetty_yclass_ptr_result yetty_ygui_popup_menu_class_get(void);
 
@@ -39,21 +40,34 @@ struct yetty_yclass_object_ptr_result yetty_ygui_popup_menu_create(struct yetty_
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_popup_menu_add_item(struct yetty_yclass_object *obj, const char *label, yetty_ygui_menu_item_cb cb, void *userdata);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_add_item(struct yetty_yclass_object *obj,
+                                                              const char *label,
+                                                              yetty_ygui_menu_item_cb cb,
+                                                              void *userdata);
 struct yetty_ycore_void_result yetty_ygui_popup_menu_add_separator(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_popup_menu_open_at(struct yetty_yclass_object *obj, float x, float y);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_open_at(struct yetty_yclass_object *obj,
+                                                             float x, float y);
 struct yetty_ycore_void_result yetty_ygui_popup_menu_close(struct yetty_yclass_object *obj);
 struct yetty_ycore_int_result yetty_ygui_popup_menu_is_open(const struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_popup_menu_toggle_at(struct yetty_yclass_object *obj, float x, float y);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_toggle_at(struct yetty_yclass_object *obj,
+                                                               float x, float y);
 /* Drill-down menu support. The menu has no separate submenu objects —
  * the host rebuilds the item list in place
  * (clear → set_title → set_back → add_drill_item…), so a "drill item" is
  * just a normal item whose callback repopulates the menu. */
 struct yetty_ycore_void_result yetty_ygui_popup_menu_clear(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_popup_menu_set_title(struct yetty_yclass_object *obj, const char *title);
-struct yetty_ycore_void_result yetty_ygui_popup_menu_set_back(struct yetty_yclass_object *obj, const char *label, yetty_ygui_menu_item_cb cb, void *userdata);
-struct yetty_ycore_void_result yetty_ygui_popup_menu_add_drill_item(struct yetty_yclass_object *obj, const char *label, yetty_ygui_menu_item_cb cb, void *userdata);
-struct yetty_ycore_void_result yetty_ygui_popup_menu_set_modal(struct yetty_yclass_object *obj, int modal);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_set_title(struct yetty_yclass_object *obj,
+                                                               const char *title);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_set_back(struct yetty_yclass_object *obj,
+                                                              const char *label,
+                                                              yetty_ygui_menu_item_cb cb,
+                                                              void *userdata);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_add_drill_item(struct yetty_yclass_object *obj,
+                                                                    const char *label,
+                                                                    yetty_ygui_menu_item_cb cb,
+                                                                    void *userdata);
+struct yetty_ycore_void_result yetty_ygui_popup_menu_set_modal(struct yetty_yclass_object *obj,
+                                                               int modal);
 
 #ifdef __cplusplus
 }

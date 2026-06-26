@@ -5,7 +5,7 @@
 #define POC_YANIMAL_CAT_H
 
 #include "class.h"
-#include "methods.gen.h"  /* every public method stub in this module */
+#include "methods.gen.h" /* every public method stub in this module */
 #include "yanimal/animal.h"
 #include "yanimal/pet.h"
 

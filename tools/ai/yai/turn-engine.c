@@ -24,7 +24,7 @@
 #include <stdio.h>
 
 struct YETTY_ANNOTATE("class@yai:turn_engine") YETTY_ANNOTATE("parent@yai:engine")
-yetty_yai_turn_engine {
+    yetty_yai_turn_engine {
     /* The class@ annotation needs a struct to sit on; the per-turn
      * lifecycle state (open-handle count, failure flag) lives in
      * struct yai_app where main.c can see it. */

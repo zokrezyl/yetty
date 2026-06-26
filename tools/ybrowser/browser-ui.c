@@ -172,7 +172,7 @@ struct app {
     struct yetty_yclass_object *scroll;  /* scrollarea */
     struct yetty_yclass_object *page;    /* ydraw_embed (HTML/SVG) — shared */
     struct yetty_yclass_object *image;   /* yimage widget (raster) — shared */
-    int showing_image;                 /* which content widget is visible */
+    int showing_image;                   /* which content widget is visible */
 
     /* `--no-ui`: hide the tab strip + toolbar so only the page content is
 	 * rendered (the whole window is the page). Useful for clean recordings /
@@ -1168,8 +1168,9 @@ static void on_raw(void *user, const char *bytes, size_t n)
 /* ===========================================================================
  * UI construction + render pipeline.
  * ===========================================================================*/
-static struct yetty_yclass_object *add_nav_button(struct yetty_yclass_object *parent, const char *label,
-                                                float w, yetty_ygui_click_cb cb, void *ud)
+static struct yetty_yclass_object *add_nav_button(struct yetty_yclass_object *parent,
+                                                  const char *label, float w,
+                                                  yetty_ygui_click_cb cb, void *ud)
 {
     struct yetty_yclass_object_ptr_result r =
         yetty_ygui_widget_add(parent, yetty_ygui_button_class_get().value);
@@ -1215,7 +1216,8 @@ static int build_ui(struct app *a)
     }
     a->tabbar = tr.value;
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(a->tabbar);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(a->tabbar);
         if (YETTY_IS_ERR(layout_res)) {
             yetty_ycore_error_destroy(layout_res.error);
             return -1;
@@ -1238,7 +1240,8 @@ static int build_ui(struct app *a)
 	 * stays created so tab bookkeeping elsewhere keeps working; it just takes
 	 * no space and never paints. */
     if (a->no_ui) {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(a->tabbar);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(a->tabbar);
         if (YETTY_IS_ERR(layout_res)) {
             yetty_ycore_error_destroy(layout_res.error);
             return -1;
@@ -1258,7 +1261,8 @@ static int build_ui(struct app *a)
     }
     struct yetty_yclass_object *toolbar = br.value;
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(toolbar);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(toolbar);
         if (YETTY_IS_ERR(layout_res)) {
             yetty_ycore_error_destroy(layout_res.error);
             return -1;
@@ -1276,7 +1280,8 @@ static int build_ui(struct app *a)
 
     /* --no-ui: collapse + hide the address/nav toolbar too. */
     if (a->no_ui) {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(toolbar);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(toolbar);
         if (YETTY_IS_ERR(layout_res)) {
             yetty_ycore_error_destroy(layout_res.error);
             return -1;
@@ -1302,7 +1307,8 @@ static int build_ui(struct app *a)
     a->address = ar.value;
     err_ok(yetty_ygui_textinput_set_placeholder(a->address, "Type a URL and press Enter"));
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(a->address);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(a->address);
         if (YETTY_IS_ERR(layout_res)) {
             yetty_ycore_error_destroy(layout_res.error);
             return -1;
@@ -1321,7 +1327,8 @@ static int build_ui(struct app *a)
     }
     a->scroll = sr.value;
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(a->scroll);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(a->scroll);
         if (YETTY_IS_ERR(layout_res)) {
             yetty_ycore_error_destroy(layout_res.error);
             return -1;
@@ -1769,8 +1776,7 @@ struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_
 static void *sa_prefetch_main(void *arg)
 {
     struct yetty_ybrowser_app *s = arg;
-    s->prefetch_data =
-        ybrowser_slurp_file(s->prefetch_url, &s->prefetch_len, &s->prefetch_eff);
+    s->prefetch_data = ybrowser_slurp_file(s->prefetch_url, &s->prefetch_len, &s->prefetch_eff);
     return NULL;
 }
 
@@ -2309,8 +2315,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         yetty_yevent_register_default_listeners(s->yframework->event_loop, &s->listener);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rel, "ybrowser standalone: register_listeners");
 
-    yetty_yevent_post_async(input_pipe,
-                            &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
+    yetty_yevent_post_async(input_pipe, &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
     struct yetty_ycore_void_result run_res =
         s->yframework->event_loop->ops->start(s->yframework->event_loop);

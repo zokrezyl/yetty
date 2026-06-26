@@ -28,8 +28,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         yetty_ygui_widget_add(root, yetty_ygui_button_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "button");
     err_ok(yetty_ygui_button_set_label(br.value, "Hello"));
-    struct yetty_ygui_layout_const_ptr_result layout_res =
-        yetty_ygui_widget_layout_get(br.value);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(br.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "06_hello_button: layout_get");
     struct yetty_ygui_layout l = *layout_res.value;
     l.width = 200;

@@ -21,8 +21,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     struct yetty_yclass_object_ptr_result mr =
         yetty_ygui_widget_add(root, yetty_ygui_ymaze_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, mr, "ymaze");
-    struct yetty_ygui_layout_const_ptr_result layout_res =
-        yetty_ygui_widget_layout_get(mr.value);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(mr.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "40_ymaze: layout_get");
     struct yetty_ygui_layout l = *layout_res.value;
     l.flex_grow = 1.0f;

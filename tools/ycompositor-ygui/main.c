@@ -87,7 +87,8 @@ static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result
     }
 }
 
-struct YETTY_ANNOTATE("class@ycompositorygui:app") YETTY_ANNOTATE("parent@yapp:app") yetty_ycompositorygui_app {
+struct YETTY_ANNOTATE("class@ycompositorygui:app") YETTY_ANNOTATE("parent@yapp:app")
+    yetty_ycompositorygui_app {
     int quit;
     struct yetty_context ctx;
     struct yetty_yframework *yrt;
@@ -168,7 +169,7 @@ struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_
  * matter much. */
 /* Add `cls` under `parent`, returning the new object or NULL. */
 static struct yetty_yclass_object *cy_add(struct yetty_yclass_object *parent,
-                                        struct yetty_yclass_ptr_result cls_r)
+                                          struct yetty_yclass_ptr_result cls_r)
 {
     if (YETTY_IS_ERR(cls_r)) {
         yetty_ycore_error_destroy(cls_r.error);
@@ -462,7 +463,8 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
             struct yetty_yfigure_figure_ptr_result figure_res =
                 yetty_yfigure_container_as_figure(app->root);
             if (YETTY_IS_ERR(figure_res)) {
-                yerror("ycompositor-ygui[osc]: container as_figure failed: %s", figure_res.error.msg);
+                yerror("ycompositor-ygui[osc]: container as_figure failed: %s",
+                       figure_res.error.msg);
                 yetty_ycore_error_destroy(figure_res.error);
             } else if (figure_res.value) {
                 yetty_ycore_error_destroy_safe(yetty_yfigure_figure_dirty_set(app->root, 1));
@@ -934,8 +936,7 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
         if (gpu->instance) {
             wgpuInstanceProcessEvents(gpu->instance);
         }
-        if (!(needs_render || had_events ||
-              yetty_yfigure_figure_dirty_get(app->root).value)) {
+        if (!(needs_render || had_events || yetty_yfigure_figure_dirty_get(app->root).value)) {
             continue;
         }
 
