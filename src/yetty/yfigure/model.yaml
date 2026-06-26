@@ -92,8 +92,8 @@ methods:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-      - name: name
-        type: struct yetty_ycore_buffer
+      - name: kind_token
+        type: uint32_t
       - name: id
         type: uint32_t
       - name: rect

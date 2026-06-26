@@ -24,6 +24,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yface/yface.h>
+#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/yplatform/io.h>
 #include <yetty/yplatform/time.h>
@@ -421,7 +422,7 @@ static struct yetty_ycore_void_result emit_create_child(struct yetty_yrdawn_clie
     p += 4;
     memcpy(p, &figure_id, 4);
     p += 4;
-    uint32_t kind = YETTY_YFIGURE_KIND_YRDAWN;
+    uint32_t kind = yetty_yfigure_kind_token("yrdawn");
     memcpy(p, &kind, 4);
     p += 4;
     float rect_floats[4] = {min_x, min_y, max_x, max_y};

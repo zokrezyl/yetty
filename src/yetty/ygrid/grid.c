@@ -3057,7 +3057,7 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory_for_kind(
 struct yetty_ycore_void_result yetty_ygrid_register_factory(
     struct yetty_yfigure_registry *registry, const struct yetty_ygrid_factory_args *args)
 {
-    return yetty_yfigure_registry_register(registry, YETTY_YFIGURE_KIND_YGRID,
+    return yetty_yfigure_registry_register(registry, yetty_yfigure_kind_token("ygrid"),
                                            ygrid_factory_absolute, (void *)args);
 }
 

@@ -29,6 +29,7 @@
 #include <yetty/yterminal/client-input.h>
 #include <yetty/yface/yface.h>
 #include <yetty/ycore/types.h>
+#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/yterminal/dcs-codes.h>
 
@@ -217,7 +218,7 @@ static bool emit_admin_create_child_ymgui(uint32_t child_id,
 {
     uint8_t body[8 + 4 + 4 + 16 + 4]; /* admin_op + child_id + kind + rect[4] + init_size */
     uint32_t admin_op = YETTY_YFIGURE_ADMIN_CREATE_CHILD;
-    uint32_t kind = YETTY_YFIGURE_KIND_YMGUI;
+    uint32_t kind = yetty_yfigure_kind_token("ymgui");
     uint32_t init_size = 0;
     float r[4] = {x0, y0, x1, y1};
     size_t off = 0;

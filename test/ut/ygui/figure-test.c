@@ -21,6 +21,7 @@
 
 #include <yetty/ygui/ygui.h>
 #include <yetty/yplatform/pty.h>
+#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 
 /* Direct access to engine internals for assertions. */
@@ -205,7 +206,10 @@ static void test_yimage_emit(void)
      * figure_kind=0 so its default emit_container is a no-op. */
     const uint8_t *cr = engine->container_records.data;
     size_t cr_size = engine->container_records.size;
-    int seen_kinds[10] = {0};
+    uint32_t ygrid_token = yetty_yfigure_kind_token("ygrid");
+    uint32_t yimage_token = yetty_yfigure_kind_token("yimage");
+    int ygrid_count = 0;
+    int yimage_count = 0;
     size_t off = 0;
     int saw_yimage = 0;
     while (off + 12 <= cr_size) {
@@ -215,10 +219,12 @@ static void test_yimage_emit(void)
         CHECK(id == 0, "admin record id == 0");
         if (admin_op == YETTY_YFIGURE_ADMIN_CREATE_CHILD) {
             uint32_t kind = read_u32_le(cr + off + 12 + 4);
-            if (kind < 10) {
-                seen_kinds[kind]++;
+            if (kind == ygrid_token) {
+                ygrid_count++;
+            } else if (kind == yimage_token) {
+                yimage_count++;
             }
-            if (kind == YETTY_YFIGURE_KIND_YIMAGE) {
+            if (kind == yimage_token) {
                 /* framework_emit runs layout_compute first which
                  * overrides any set_rect — so we just check the rect
                  * is non-empty rather than a specific value. */
@@ -234,8 +240,8 @@ static void test_yimage_emit(void)
         off += 8 + len;
     }
     CHECK(saw_yimage, "saw_yimage CREATE_CHILD");
-    CHECK(seen_kinds[YETTY_YFIGURE_KIND_YGRID] == 1, "ygrid CREATE_CHILD count");
-    CHECK(seen_kinds[YETTY_YFIGURE_KIND_YIMAGE] == 1, "yimage CREATE_CHILD count");
+    CHECK(ygrid_count == 1, "ygrid CREATE_CHILD count");
+    CHECK(yimage_count == 1, "yimage CREATE_CHILD count");
 
     /* Second emit: ygrid already exists (the engine sends
      * SET_CHILD_RECT instead of CREATE_CHILD). */
@@ -250,7 +256,7 @@ static void test_yimage_emit(void)
         uint32_t admin_op = read_u32_le(cr + off + 8);
         if (admin_op == YETTY_YFIGURE_ADMIN_CREATE_CHILD) {
             uint32_t kind = read_u32_le(cr + off + 12 + 4);
-            if (kind == YETTY_YFIGURE_KIND_YGRID) {
+            if (kind == ygrid_token) {
                 ygrid_creates++;
             }
         }

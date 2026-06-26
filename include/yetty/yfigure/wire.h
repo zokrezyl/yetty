@@ -101,34 +101,11 @@ enum yetty_yfigure_wire_admin_op {
     YETTY_YFIGURE_ADMIN_SET_CHILD_CONTENT_SIZE = 9,
 };
 
-/* Figure-kind codes — registered with yetty_yfigure_registry by each
- * figure-kind module's _register_factory call. Reserved range 0..0xFFFF
- * for built-in kinds; user kinds start at 0x10000.
- *
- * YPLOT/YIMAGE/YVIDEO/YZOO/YJUNGLE are sibling figure kinds emitted by
- * ygui's complex producer widgets — they live alongside the widget's
- * own chrome ygrid in the parent container rather than being inlined
- * into it. The receiver still renders them via the ygrid factory today
- * (their payload is an SDF/glyph prim stream), but the distinct kind
- * code keeps the wire semantically labelled and leaves room for
- * kind-specific renderers later. */
-enum yetty_yfigure_wire_kind {
-    YETTY_YFIGURE_KIND_CONTAINER = 1,
-    YETTY_YFIGURE_KIND_YGRID = 2,
-    YETTY_YFIGURE_KIND_YMGUI = 3,
-    YETTY_YFIGURE_KIND_YRDAWN = 4,
-    YETTY_YFIGURE_KIND_YPLOT = 5,
-    YETTY_YFIGURE_KIND_YIMAGE = 6,
-    YETTY_YFIGURE_KIND_YVIDEO = 7,
-    YETTY_YFIGURE_KIND_YZOO = 8,
-    YETTY_YFIGURE_KIND_YJUNGLE = 9,
-
-    /* Standalone Shadertoy-style shader figure. Unlike the producer
-     * kinds above (which reuse the ygrid factory over an SDF/glyph prim
-     * stream), this has its own factory + renderer in src/yetty/yshadertoy.
-     * Its CREATE_CHILD init payload is the raw WGSL shader text. */
-    YETTY_YFIGURE_KIND_YSHADERTOY = 10,
-};
+/* Figure kinds are NOT a central enum. Each figure-kind module registers its
+ * factory under yetty_yfigure_kind_token("<name>") (a hash of the kind name)
+ * and the producer mints by sending the same token in a CREATE_CHILD record's
+ * `kind` field. Adding a kind touches no shared header — see
+ * <yetty/yfigure/registry.h>. */
 
 #ifdef __cplusplus
 }

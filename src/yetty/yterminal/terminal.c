@@ -1850,13 +1850,12 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
          * wire — see yfigure/wire.h. The composite factory in figure_args
          * lets each ygrid render yplot/yimage/etc. instances embedded in
          * the prim stream. */
-        static const uint32_t producer_kinds[] = {
-            YETTY_YFIGURE_KIND_YPLOT, YETTY_YFIGURE_KIND_YIMAGE,  YETTY_YFIGURE_KIND_YVIDEO,
-            YETTY_YFIGURE_KIND_YZOO,  YETTY_YFIGURE_KIND_YJUNGLE,
-        };
-        for (size_t i = 0; i < sizeof(producer_kinds) / sizeof(producer_kinds[0]); i++) {
+        static const char *const producer_kind_names[] = {"yplot", "yimage", "yvideo", "yzoo",
+                                                          "yjungle"};
+        for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); i++) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
-                terminal->figure_registry, producer_kinds[i], &terminal->figure_args);
+                terminal->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
+                &terminal->figure_args);
             YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, kr,
                                 "terminal_create: ygrid register_factory_for_kind");
         }

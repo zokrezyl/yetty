@@ -14,6 +14,7 @@ struct yetty_yclass_ptr_result yetty_ygui_yvideo_class_get(void);
 struct yetty_ygui_yvideo_ptr_result yetty_ygui_yvideo_from(struct yetty_yclass_object *obj);
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/yvideo/yvideo-mp4.h>
 #include <stdlib.h>
@@ -61,8 +62,8 @@ static struct yetty_ycore_void_result emit_container(struct yetty_yclass_object 
     struct yetty_ycore_rectangle r = rect_res.value;
     struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yvideo emit_container: id");
-    return yetty_ygui_emit_ensure_child(ctx, id_res.value, YETTY_YFIGURE_KIND_YVIDEO, r.min.x,
-                                        r.min.y, r.max.x, r.max.y, NULL, 0);
+    return yetty_ygui_emit_ensure_child(ctx, id_res.value, yetty_yfigure_kind_token("yvideo"),
+                                        r.min.x, r.min.y, r.max.x, r.max.y, NULL, 0);
 }
 
 YETTY_ANNOTATE("override@ygui:yvideo:widget_emit_body")

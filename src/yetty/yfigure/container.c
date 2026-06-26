@@ -2071,11 +2071,10 @@ static struct yetty_ycore_void_result yetty_yfigure_container_process_records_im
 
 YETTY_ANNOTATE("virtual@yfigure:container:create_child")
 static struct yetty_ycore_void_result yetty_yfigure_container_create_child_impl(
-    struct yetty_yclass_object *obj, struct yetty_ycore_buffer name, uint32_t id,
+    struct yetty_yclass_object *obj, uint32_t kind_token, uint32_t id,
     struct yetty_ycore_rectangle rect, struct yetty_ycore_buffer init)
 {
-    uint32_t kind_key = yetty_yfigure_kind_token_n((const char *)name.data, name.size);
-    return container_do_create_child(obj, kind_key, id, rect, init.data, init.size);
+    return container_do_create_child(obj, kind_token, id, rect, init.data, init.size);
 }
 
 YETTY_ANNOTATE("virtual@yfigure:container:delete_child")

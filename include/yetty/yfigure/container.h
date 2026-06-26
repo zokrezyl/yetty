@@ -81,8 +81,7 @@ struct yetty_ycore_void_result yetty_yfigure_raise_child_by_id(struct yetty_ycla
 struct yetty_ycore_void_result yetty_yfigure_process_records(struct yetty_yclass_object *obj,
                                                              struct yetty_ycore_buffer bytes);
 struct yetty_ycore_void_result yetty_yfigure_create_child(struct yetty_yclass_object *obj,
-                                                          struct yetty_ycore_buffer name,
-                                                          uint32_t id,
+                                                          uint32_t kind_token, uint32_t id,
                                                           struct yetty_ycore_rectangle rect,
                                                           struct yetty_ycore_buffer init);
 struct yetty_ycore_void_result yetty_yfigure_delete_child(struct yetty_yclass_object *obj,
@@ -119,7 +118,7 @@ typedef struct yetty_ycore_void_result (*yetty_yfigure_raise_child_by_id_fn)(
 typedef struct yetty_ycore_void_result (*yetty_yfigure_process_records_fn)(
     struct yetty_yclass_object *, struct yetty_ycore_buffer);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_create_child_fn)(
-    struct yetty_yclass_object *, struct yetty_ycore_buffer, uint32_t, struct yetty_ycore_rectangle,
+    struct yetty_yclass_object *, uint32_t, uint32_t, struct yetty_ycore_rectangle,
     struct yetty_ycore_buffer);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_delete_child_fn)(
     struct yetty_yclass_object *, uint32_t);

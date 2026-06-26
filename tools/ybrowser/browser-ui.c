@@ -2196,10 +2196,11 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         struct yetty_ycore_void_result rf =
             yetty_ygrid_register_factory(s->figure_registry, &s->figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "ybrowser standalone: ygrid_register_factory");
-        const uint32_t producer_kinds[] = {YETTY_YFIGURE_KIND_YPLOT, YETTY_YFIGURE_KIND_YIMAGE};
-        for (size_t i = 0; i < sizeof(producer_kinds) / sizeof(producer_kinds[0]); ++i) {
+        const char *const producer_kind_names[] = {"yplot", "yimage"};
+        for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); ++i) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
-                s->figure_registry, producer_kinds[i], &s->figure_args);
+                s->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
+                &s->figure_args);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, kr,
                                 "ybrowser standalone: register_factory_for_kind");
         }

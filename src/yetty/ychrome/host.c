@@ -25,6 +25,7 @@
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/producer.h>
+#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #ifdef YETTY_YCHROME_HAS_LOCAL
 /* ygrid is GPU-backed (composites through a pipeline). Only the LOCAL sink —
@@ -182,7 +183,7 @@ static struct yetty_ycore_void_result host_wire_emit(struct yetty_ychrome_host *
                                                      const uint8_t *body, uint32_t body_len)
 {
     struct yetty_ycore_void_result create_result = yetty_yfigure_producer_create_child(
-        host->producer, id, YETTY_YFIGURE_KIND_YGRID, rect, body, body_len);
+        host->producer, id, yetty_yfigure_kind_token("ygrid"), rect, body, body_len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, create_result, "chrome host wire: create_child");
     struct yetty_ycore_void_result z_result =
         yetty_yfigure_producer_set_child_z(host->producer, id, z);

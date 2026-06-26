@@ -566,6 +566,77 @@ static void test_stale_delete_is_noop(void)
     yetty_yfigure_registry_destroy(reg);
 }
 
+/*===========================================================================
+ * Test: the typed yclass container slots (create_child / set_child_rect /
+ * apply_child_body / delete_child) called DIRECTLY — the in-process path ygui
+ * now uses (local dispatch, ctx.session == NULL) instead of the opaque
+ * process_records envelope. Exercises the same figure-tree mutations end to
+ * end through the generated stubs.
+ *===========================================================================*/
+static void test_typed_slots(void)
+{
+    fprintf(stderr, "\n[test_typed_slots]\n");
+    g_tests++;
+    struct yetty_yfigure_registry *reg = make_registry();
+    struct yetty_yclass_object *root = make_root(reg);
+
+    /* create_child: mint a TEST_LEAF at id 1. */
+    struct yetty_ycore_rectangle rect = {{10, 20}, {110, 80}};
+    struct yetty_ycore_buffer empty_init = {0};
+    struct yetty_ycore_void_result cr =
+        yetty_yfigure_create_child(root, TEST_LEAF_KIND, 1u, rect, empty_init);
+    if (YETTY_IS_ERR(cr)) {
+        FAIL("create_child: %s", cr.error.msg);
+        yetty_ycore_error_destroy(cr.error);
+    }
+    /* set_child_rect: move it. */
+    struct yetty_ycore_rectangle moved = {{5, 5}, {55, 55}};
+    struct yetty_ycore_void_result sr = yetty_yfigure_set_child_rect(root, 1u, moved);
+    if (YETTY_IS_ERR(sr)) {
+        FAIL("set_child_rect: %s", sr.error.msg);
+        yetty_ycore_error_destroy(sr.error);
+    }
+    /* apply_child_body: forward 3 bytes to the child's process_bytes. */
+    struct yetty_ycore_buffer body = {.data = (uint8_t *)"abc", .capacity = 0, .size = 3};
+    struct yetty_ycore_void_result ar = yetty_yfigure_apply_child_body(root, 1u, body);
+    if (YETTY_IS_ERR(ar)) {
+        FAIL("apply_child_body: %s", ar.error.msg);
+        yetty_ycore_error_destroy(ar.error);
+    }
+
+    char *dump = dump_root(root);
+    const char *expected = "kind: container\n"
+                           "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
+                           "dirty: 1\n"
+                           "viewport_offset: [0.0, 0.0]\n"
+                           "children:\n"
+                           "  '1':\n"
+                           "    kind: test_leaf\n"
+                           "    rect: [5.0, 5.0, 55.0, 55.0]\n"
+                           "    bytes_seen: 3\n"
+                           "    call_count: 1\n";
+    ASSERT_STR_EQ("typed_slots_after_mutations", dump, expected);
+    free(dump);
+
+    /* delete_child: drop it. */
+    struct yetty_ycore_void_result dr = yetty_yfigure_delete_child(root, 1u);
+    if (YETTY_IS_ERR(dr)) {
+        FAIL("delete_child: %s", dr.error.msg);
+        yetty_ycore_error_destroy(dr.error);
+    }
+    char *dump2 = dump_root(root);
+    const char *expected2 = "kind: container\n"
+                            "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
+                            "dirty: 1\n"
+                            "viewport_offset: [0.0, 0.0]\n"
+                            "children: {}\n";
+    ASSERT_STR_EQ("typed_slots_after_delete", dump2, expected2);
+    free(dump2);
+
+    yetty_yfigure_destroy(root);
+    yetty_yfigure_registry_destroy(reg);
+}
+
 int main(void)
 {
     test_empty_container();
@@ -576,6 +647,7 @@ int main(void)
     test_routed_to_child();
     test_clear_all();
     test_stale_delete_is_noop();
+    test_typed_slots();
 
     fprintf(stderr, "\nyfigure wire test: %d tests, %d failure%s\n", g_tests, g_failures,
             g_failures == 1 ? "" : "s");

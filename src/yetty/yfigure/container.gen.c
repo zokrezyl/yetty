@@ -31,8 +31,7 @@ struct yetty_ycore_void_result yetty_yfigure_raise_child_by_id(struct yetty_ycla
 struct yetty_ycore_void_result yetty_yfigure_process_records(struct yetty_yclass_object *obj,
                                                              struct yetty_ycore_buffer bytes);
 struct yetty_ycore_void_result yetty_yfigure_create_child(struct yetty_yclass_object *obj,
-                                                          struct yetty_ycore_buffer name,
-                                                          uint32_t id,
+                                                          uint32_t kind_token, uint32_t id,
                                                           struct yetty_ycore_rectangle rect,
                                                           struct yetty_ycore_buffer init);
 struct yetty_ycore_void_result yetty_yfigure_delete_child(struct yetty_yclass_object *obj,
@@ -77,7 +76,7 @@ typedef struct yetty_ycore_void_result (*yetty_yfigure_raise_child_by_id_fn)(
 typedef struct yetty_ycore_void_result (*yetty_yfigure_process_records_fn)(
     struct yetty_yclass_object *, struct yetty_ycore_buffer);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_create_child_fn)(
-    struct yetty_yclass_object *, struct yetty_ycore_buffer, uint32_t, struct yetty_ycore_rectangle,
+    struct yetty_yclass_object *, uint32_t, uint32_t, struct yetty_ycore_rectangle,
     struct yetty_ycore_buffer);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_delete_child_fn)(
     struct yetty_yclass_object *, uint32_t);
@@ -655,8 +654,7 @@ struct yetty_ycore_void_result yetty_yfigure_process_records(struct yetty_yclass
 }
 
 struct yetty_ycore_void_result yetty_yfigure_create_child(struct yetty_yclass_object *obj,
-                                                          struct yetty_ycore_buffer name,
-                                                          uint32_t id,
+                                                          uint32_t kind_token, uint32_t id,
                                                           struct yetty_ycore_rectangle rect,
                                                           struct yetty_ycore_buffer init)
 {
@@ -687,24 +685,22 @@ struct yetty_ycore_void_result yetty_yfigure_create_child(struct yetty_yclass_ob
 #pragma pack(push, 1)
         struct {
             uint64_t obj_handle;
-            uint32_t name_len;
+            uint32_t kind_token;
             uint32_t id;
             struct yetty_ycore_rectangle rect;
             uint32_t init_len;
         } wire_args = {
             container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)
                 ->handle,
-            (uint32_t)name.size, id, rect, (uint32_t)init.size};
+            kind_token, id, rect, (uint32_t)init.size};
 #pragma pack(pop)
-        size_t body_total = sizeof(wire_args) + (size_t)name.size + (size_t)init.size;
+        size_t body_total = sizeof(wire_args) + (size_t)init.size;
         uint8_t *body_buf = (uint8_t *)malloc(body_total ? body_total : 1);
         if (!body_buf) {
             return YETTY_ERR(yetty_ycore_void, "yetty_yfigure_create_child: body buf oom");
         }
         memcpy(body_buf, &wire_args, sizeof(wire_args));
         size_t body_offset = sizeof(wire_args);
-        memcpy(body_buf + body_offset, name.data, name.size);
-        body_offset += name.size;
         memcpy(body_buf + body_offset, init.data, init.size);
         body_offset += init.size;
         uint8_t *resp_buf = NULL;
@@ -738,7 +734,8 @@ struct yetty_ycore_void_result yetty_yfigure_create_child(struct yetty_yclass_ob
             yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                             "yetty_yfigure_create_child: dispatch_lookup failed");
-        return ((yetty_yfigure_create_child_fn)dispatch_impl_r.value)(obj, name, id, rect, init);
+        return ((yetty_yfigure_create_child_fn)dispatch_impl_r.value)(obj, kind_token, id, rect,
+                                                                      init);
     }
 }
 
@@ -1740,7 +1737,7 @@ size_t yetty_yfigure_create_child_skel(const void *body, size_t body_len, void *
 #pragma pack(push, 1)
     struct {
         uint64_t obj_handle;
-        uint32_t name_len;
+        uint32_t kind_token;
         uint32_t id;
         struct yetty_ycore_rectangle rect;
         uint32_t init_len;
@@ -1750,16 +1747,10 @@ size_t yetty_yfigure_create_child_skel(const void *body, size_t body_len, void *
         return 0;
     }
     memcpy(&wire_args, body, sizeof(wire_args));
-    if (body_len != sizeof(wire_args) + (size_t)wire_args.name_len + (size_t)wire_args.init_len) {
+    if (body_len != sizeof(wire_args) + (size_t)wire_args.init_len) {
         return 0;
     }
     size_t body_offset = sizeof(wire_args);
-    struct yetty_ycore_buffer name_buf = {
-        .data = (uint8_t *)((const uint8_t *)body + body_offset),
-        .size = (size_t)wire_args.name_len,
-        .capacity = (size_t)wire_args.name_len,
-    };
-    body_offset += (size_t)wire_args.name_len;
     struct yetty_ycore_buffer init_buf = {
         .data = (uint8_t *)((const uint8_t *)body + body_offset),
         .size = (size_t)wire_args.init_len,
@@ -1782,8 +1773,8 @@ size_t yetty_yfigure_create_child_skel(const void *body, size_t body_len, void *
         return 1 + err_bytes;
     }
     struct yetty_ycore_void_result call_r =
-        yetty_yfigure_create_child((struct yetty_yclass_object *)obj_resolve_r.value, name_buf,
-                                   wire_args.id, wire_args.rect, init_buf);
+        yetty_yfigure_create_child((struct yetty_yclass_object *)obj_resolve_r.value,
+                                   wire_args.kind_token, wire_args.id, wire_args.rect, init_buf);
     if (resp_max < 1) {
         return 0;
     }

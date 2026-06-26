@@ -29,6 +29,7 @@
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yface/yface.h>
 #include <yetty/yfigure/container.h>
+#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygui/theme.h>
 #include <yetty/yplatform/pty.h>
@@ -904,7 +905,26 @@ struct yetty_ycore_void_result yetty_ygui_emit_create_child(
     struct yetty_ygui_emit_ctx *ctx, uint32_t child_id, uint32_t kind, float min_x, float min_y,
     float max_x, float max_y, const uint8_t *init_payload, uint32_t init_payload_bytes)
 {
-    if (!ctx || !ctx->container_records) {
+    if (!ctx) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_create_child: NULL ctx");
+    }
+    /* Wired container: call the typed yclass stub directly (in-process local
+     * dispatch, or RPC when the container proxy carries a session). `kind` is
+     * the registry token (yetty_yfigure_kind_token of the kind name). */
+    if (ctx->framework && ctx->framework->container_obj) {
+        struct yetty_ycore_rectangle rect = {
+            .min = {.x = min_x, .y = min_y},
+            .max = {.x = max_x, .y = max_y},
+        };
+        struct yetty_ycore_buffer init_buf = {
+            .data = (uint8_t *)init_payload,
+            .capacity = 0,
+            .size = init_payload_bytes,
+        };
+        return yetty_yfigure_create_child(ctx->framework->container_obj, kind, child_id, rect,
+                                          init_buf);
+    }
+    if (!ctx->container_records) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_create_child: NULL ctx");
     }
     /* Body layout:
@@ -963,7 +983,13 @@ fail:
 struct yetty_ycore_void_result yetty_ygui_emit_delete_child(struct yetty_ygui_emit_ctx *ctx,
                                                             uint32_t child_id)
 {
-    if (!ctx || !ctx->container_records) {
+    if (!ctx) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_delete_child: NULL ctx");
+    }
+    if (ctx->framework && ctx->framework->container_obj) {
+        return yetty_yfigure_delete_child(ctx->framework->container_obj, child_id);
+    }
+    if (!ctx->container_records) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_delete_child: NULL ctx");
     }
     struct yetty_ycore_buffer tmp = {0};
@@ -984,13 +1010,24 @@ struct yetty_ycore_void_result yetty_ygui_emit_figure_body(struct yetty_ygui_emi
                                                            const uint8_t *payload,
                                                            uint32_t payload_len)
 {
-    if (!ctx || !ctx->figure_bodies) {
+    if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_figure_body: NULL ctx");
     }
     if (figure_id == 0) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_figure_body: figure_id is 0");
     }
     ydebug("emit_figure_body id=%u size=%u", figure_id, payload_len);
+    if (ctx->framework && ctx->framework->container_obj) {
+        struct yetty_ycore_buffer body = {
+            .data = (uint8_t *)payload,
+            .capacity = 0,
+            .size = payload_len,
+        };
+        return yetty_yfigure_apply_child_body(ctx->framework->container_obj, figure_id, body);
+    }
+    if (!ctx->figure_bodies) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_figure_body: NULL ctx");
+    }
     return yetty_ygui_wire_append_record(ctx->figure_bodies, figure_id, payload, payload_len);
 }
 
@@ -998,7 +1035,17 @@ struct yetty_ycore_void_result yetty_ygui_emit_set_child_rect(struct yetty_ygui_
                                                               uint32_t child_id, float min_x,
                                                               float min_y, float max_x, float max_y)
 {
-    if (!ctx || !ctx->container_records) {
+    if (!ctx) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_rect: NULL ctx");
+    }
+    if (ctx->framework && ctx->framework->container_obj) {
+        struct yetty_ycore_rectangle rect = {
+            .min = {.x = min_x, .y = min_y},
+            .max = {.x = max_x, .y = max_y},
+        };
+        return yetty_yfigure_set_child_rect(ctx->framework->container_obj, child_id, rect);
+    }
+    if (!ctx->container_records) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_rect: NULL ctx");
     }
     struct yetty_ycore_buffer tmp = {0};
@@ -1050,7 +1097,13 @@ int32_t yetty_ygui_framework_next_raise_z(struct yetty_ygui_framework *framework
 struct yetty_ycore_void_result yetty_ygui_emit_set_child_z(struct yetty_ygui_emit_ctx *ctx,
                                                            uint32_t child_id, int32_t z)
 {
-    if (!ctx || !ctx->container_records) {
+    if (!ctx) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_z: NULL ctx");
+    }
+    if (ctx->framework && ctx->framework->container_obj) {
+        return yetty_yfigure_set_child_z(ctx->framework->container_obj, child_id, z);
+    }
+    if (!ctx->container_records) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_z: NULL ctx");
     }
     struct yetty_ycore_buffer tmp = {0};
@@ -1078,7 +1131,14 @@ fail:
 struct yetty_ycore_void_result yetty_ygui_emit_set_child_hidden(struct yetty_ygui_emit_ctx *ctx,
                                                                 uint32_t child_id, int hidden)
 {
-    if (!ctx || !ctx->container_records) {
+    if (!ctx) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_hidden: NULL ctx");
+    }
+    if (ctx->framework && ctx->framework->container_obj) {
+        return yetty_yfigure_set_child_hidden(ctx->framework->container_obj, child_id,
+                                              hidden ? 1u : 0u);
+    }
+    if (!ctx->container_records) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_hidden: NULL ctx");
     }
     struct yetty_ycore_buffer tmp = {0};
@@ -1478,8 +1538,8 @@ struct yetty_ycore_void_result yetty_ygui_framework_ensure_chrome(
 {
     if (!framework->ygrid_created) {
         struct yetty_ycore_void_result r = yetty_ygui_emit_create_child(
-            ctx, framework->ygrid_id, YETTY_YFIGURE_KIND_YGRID, 0.0f, 0.0f, framework->viewport_w,
-            framework->viewport_h, NULL, 0);
+            ctx, framework->ygrid_id, yetty_yfigure_kind_token("ygrid"), 0.0f, 0.0f,
+            framework->viewport_w, framework->viewport_h, NULL, 0);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, r,
                             "yetty_ygui_framework_ensure_chrome: ygrid CREATE_CHILD");
         /* Staged — framework->ygrid_created flips only after flush succeeds. */
@@ -1516,7 +1576,33 @@ static struct yetty_ycore_void_result flush_pending_deletes(struct yetty_ygui_fr
 
 struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_framework *framework)
 {
-    /* Compose envelope body:
+    /* Wired container: every figure-tree mutation (create/rect/z/hidden/delete)
+     * and every figure body was already applied inline during the emit walk via
+     * the typed yclass stubs. The only stream left is the shared chrome ygrid's
+     * accumulated drawable_list, which is serialized once here and handed to the
+     * ygrid child through apply_child_body. */
+    if (framework->container_obj) {
+        if (framework->ygrid_drawable_list) {
+            size_t dl_size = yetty_ydraw_drawable_list_size(framework->ygrid_drawable_list);
+            if (dl_size > 0) {
+                const void *dl_data =
+                    yetty_ydraw_drawable_list_data(framework->ygrid_drawable_list);
+                struct yetty_ycore_buffer body = {
+                    .data = (uint8_t *)dl_data,
+                    .capacity = 0,
+                    .size = dl_size,
+                };
+                struct yetty_ycore_void_result br = yetty_yfigure_apply_child_body(
+                    framework->container_obj, framework->ygrid_id, body);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, br,
+                                    "yetty_ygui_framework_flush: ygrid apply_child_body");
+            }
+        }
+        return YETTY_OK_VOID();
+    }
+
+    /* Unwired (remote-without-session) fallback: compose the legacy envelope
+     * body and ship it as a yface DCS payload over the output pty.
      *   - container_records (already record-framed as admin records id=0)
      *   - one record { ygrid_body bytes, id=ygrid_id }
      *   - figure_bodies (already record-framed by widgets at append time)
@@ -1556,28 +1642,6 @@ struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_fram
     if (envelope.size == 0) {
         /* Nothing to ship this tick. */
         yetty_ycore_buffer_destroy(&envelope);
-        return YETTY_OK_VOID();
-    }
-
-    /* If a receiver-side container is wired in, ship the envelope by
-     * calling the yfigure `process_records` slot directly. yclass
-     * dispatches it locally (in-process: impl runs straight away,
-     * zero copy) or via yrpc (when ctx.session is set: stub marshals
-     * the buffer over the session's transport). Either way, the
-     * receiver-side container's `process_records` does exactly what
-     * the consume_envelope coroutine would have done after PTY decode
-     * — same record format, no yface framing in between. */
-    if (framework->container_obj) {
-        struct yetty_ycore_buffer view = {
-            .data = envelope.data,
-            .capacity = envelope.capacity,
-            .size = envelope.size,
-        };
-        struct yetty_ycore_void_result pr =
-            yetty_yfigure_process_records(framework->container_obj, view);
-        yetty_ycore_buffer_destroy(&envelope);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, pr,
-                            "yetty_ygui_framework_flush: process_records slot");
         return YETTY_OK_VOID();
     }
 

@@ -739,7 +739,7 @@ struct yetty_ycore_void_result yetty_yshadertoy_register_factory(
     if (!registry) {
         return YETTY_ERR(yetty_ycore_void, "yetty_yshadertoy_register_factory: NULL registry");
     }
-    return yetty_yfigure_registry_register(registry, YETTY_YFIGURE_KIND_YSHADERTOY,
+    return yetty_yfigure_registry_register(registry, yetty_yfigure_kind_token("yshadertoy"),
                                            yshadertoy_factory, NULL);
 }
 

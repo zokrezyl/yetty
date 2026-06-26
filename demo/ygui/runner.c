@@ -658,13 +658,11 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
         struct yetty_ycore_void_result rf =
             yetty_ygrid_register_factory(r->figure_registry, &r->figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "demo_runner: ygrid_register_factory");
-        const uint32_t producer_kinds[] = {
-            YETTY_YFIGURE_KIND_YPLOT,
-            YETTY_YFIGURE_KIND_YIMAGE,
-        };
-        for (size_t i = 0; i < sizeof(producer_kinds) / sizeof(producer_kinds[0]); ++i) {
+        const char *const producer_kind_names[] = {"yplot", "yimage"};
+        for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); ++i) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
-                r->figure_registry, producer_kinds[i], &r->figure_args);
+                r->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
+                &r->figure_args);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, kr,
                                 "demo_runner: ygrid_register_factory_for_kind");
         }

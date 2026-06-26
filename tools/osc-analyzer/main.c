@@ -63,6 +63,7 @@
 #include <yetty/ydraw-core/font-resource.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/yface/yface.h>
+#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/yplatform/ycoroutine.h>
@@ -173,28 +174,16 @@ static const char *admin_op_name(uint32_t op)
 
 static const char *figure_kind_name(uint32_t kind)
 {
-    switch (kind) {
-    case YETTY_YFIGURE_KIND_CONTAINER:
-        return "CONTAINER";
-    case YETTY_YFIGURE_KIND_YGRID:
-        return "YGRID";
-    case YETTY_YFIGURE_KIND_YMGUI:
-        return "YMGUI";
-    case YETTY_YFIGURE_KIND_YRDAWN:
-        return "YRDAWN";
-    case YETTY_YFIGURE_KIND_YPLOT:
-        return "YPLOT";
-    case YETTY_YFIGURE_KIND_YIMAGE:
-        return "YIMAGE";
-    case YETTY_YFIGURE_KIND_YVIDEO:
-        return "YVIDEO";
-    case YETTY_YFIGURE_KIND_YZOO:
-        return "YZOO";
-    case YETTY_YFIGURE_KIND_YJUNGLE:
-        return "YJUNGLE";
-    default:
-        return "UNKNOWN_KIND";
+    /* Kinds are registry tokens (hash of the kind name), not a central enum, so
+     * match against the tokens of the known built-in names. */
+    static const char *const names[] = {"container", "ygrid",  "ymgui", "yrdawn",     "yplot",
+                                        "yimage",    "yvideo", "yzoo",  "yjungle",    "yshadertoy"};
+    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); ++i) {
+        if (kind == yetty_yfigure_kind_token(names[i])) {
+            return names[i];
+        }
     }
+    return "UNKNOWN_KIND";
 }
 
 static const char *ymgui_sub_op_name(uint32_t op)
@@ -826,7 +815,7 @@ static void walk_admin_payload(const uint8_t *body, size_t blen, int depth)
              * YGRID, that's a CMD_GROUP/CMD_DELETE/SDF stream. */
             ind(depth + 1);
             out("init payload (figure body):\n");
-            if (kind == YETTY_YFIGURE_KIND_YGRID) {
+            if (kind == yetty_yfigure_kind_token("ygrid")) {
                 walk_ygrid_body(tail + 28, init_n, depth + 2);
             } else {
                 walk_records(tail + 28, init_n, depth + 2);

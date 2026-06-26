@@ -32,6 +32,7 @@
 
 #include <yetty/yface/yface.h>
 #include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/yplot/yplot.h>
 #include <yetty/ysdf/types.gen.h>
@@ -41,8 +42,8 @@
 #include <string.h>
 
 /* Default figure kind when configure() is passed 0: a text/SDF grid, the only
- * scrollable kind. */
-#define YVIEW_DEFAULT_KIND ((uint32_t)YETTY_YFIGURE_KIND_YGRID)
+ * scrollable kind. Resolved through the registry token (no central kind enum). */
+#define YVIEW_DEFAULT_KIND (yetty_yfigure_kind_token("ygrid"))
 
 struct YETTY_ANNOTATE("class@yview:view") yetty_yview_view {
     int fd;

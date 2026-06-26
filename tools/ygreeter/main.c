@@ -4362,14 +4362,11 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
         struct yetty_ycore_void_result rf =
             yetty_ygrid_register_factory(app->figure_registry, &app->figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "standalone: ygrid_register_factory");
-        static const uint32_t producer_kinds[] = {
-            YETTY_YFIGURE_KIND_YPLOT,
-            YETTY_YFIGURE_KIND_YIMAGE,
-            YETTY_YFIGURE_KIND_YVIDEO,
-        };
-        for (size_t i = 0; i < sizeof(producer_kinds) / sizeof(producer_kinds[0]); ++i) {
+        static const char *const producer_kind_names[] = {"yplot", "yimage", "yvideo"};
+        for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); ++i) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
-                app->figure_registry, producer_kinds[i], &app->figure_args);
+                app->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
+                &app->figure_args);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, kr,
                                 "standalone: ygrid_register_factory_for_kind");
         }

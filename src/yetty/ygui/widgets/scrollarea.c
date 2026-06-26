@@ -24,6 +24,7 @@ YETTY_YRESULT_DECLARE(yetty_ygui_scrollarea_ptr, struct yetty_ygui_scrollarea *)
 struct yetty_yclass_ptr_result yetty_ygui_scrollarea_class_get(void);
 struct yetty_ygui_scrollarea_ptr_result yetty_ygui_scrollarea_from(struct yetty_yclass_object *obj);
 #include "paint-helpers.h"
+#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygui/mixins/draggable.h>
 #include <yetty/ygui/widgets/vbox.h>
@@ -134,7 +135,7 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     /* Become our own ygrid figure: dedicated grid at our rect → GPU scissor
      * clips the content, and the subtree lays out in local coords. */
     struct yetty_ycore_void_result fr =
-        yetty_ygui_widget_make_figure(obj, YETTY_YFIGURE_KIND_YGRID, 0);
+        yetty_ygui_widget_make_figure(obj, yetty_yfigure_kind_token("ygrid"), 0);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "scrollarea: make_figure");
     return yetty_ygui_draggable_on_drag_set(obj, scrollarea_on_drag, NULL);
 }

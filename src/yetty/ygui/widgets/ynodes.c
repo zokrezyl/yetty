@@ -39,6 +39,7 @@ typedef struct yetty_ycore_void_result (*yetty_ygui_ynodes_link_cb)(
     struct yetty_yclass_object *to, int in_idx, void *userdata);
 #include "paint-helpers.h"
 
+#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ygui/widgets/popup_menu.h>
@@ -164,7 +165,7 @@ static struct yetty_ycore_void_result ynodes_constructor(struct yetty_yclass_obj
 
     /* Own YGRID figure → GPU scissor clips nodes/links to our rect. */
     struct yetty_ycore_void_result fr =
-        yetty_ygui_widget_make_figure(obj, YETTY_YFIGURE_KIND_YGRID, 0);
+        yetty_ygui_widget_make_figure(obj, yetty_yfigure_kind_token("ygrid"), 0);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "ynodes_constructor: make_figure");
     return yetty_ygui_widget_set_dirty(obj);
 }
