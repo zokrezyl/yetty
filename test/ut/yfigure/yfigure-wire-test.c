@@ -27,6 +27,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <pthread.h>
+#include <sys/socket.h>
+
+#include <yetty/yclass/rpc.h>
+#include <yetty/yclass/transport-fd.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfigure/figure.h>
@@ -637,6 +642,172 @@ static void test_typed_slots(void)
     yetty_yfigure_registry_destroy(reg);
 }
 
+/*===========================================================================
+ * Test: the typed container slots over a REAL yclass RPC session (fd-transport
+ * socketpair), proving the same callsite that dispatches locally also marshals
+ * remote. Single process, two threads: a server thread runs
+ * yetty_yclass_rpc_server_run over one socketpair end against a real container
+ * (with a registry); the main thread is the client — it calls the generated
+ * stubs through a proxy wrapping the server-side handle. The remote calls must
+ * mutate the server container, and the result must be byte-identical to doing
+ * the same sequence locally (same expected dump as test_typed_slots).
+ *
+ * Exercises end to end: RPC_OP_GET_CLASS (translate_class), RPC_OP_RESOLVE_SLOT
+ * (the first call on each slot, via ensure_remote_id), and RPC_OP_CALL with
+ * scalar + rectangle + buffer args.
+ *===========================================================================*/
+
+struct rpc_server_arg {
+    struct yetty_yclass_transport *transport;
+};
+
+static void *rpc_server_thread(void *arg)
+{
+    struct rpc_server_arg *server_arg = (struct rpc_server_arg *)arg;
+    struct yetty_ycore_void_result run_r = yetty_yclass_rpc_server_run(server_arg->transport);
+    /* Clean disconnect (client closed its end) returns OK; absorb any error at
+     * this thread boundary since there's nowhere to propagate it. */
+    if (YETTY_IS_ERR(run_r)) {
+        yetty_ycore_error_destroy(run_r.error);
+    }
+    return NULL;
+}
+
+static void test_remote_typed_slots(void)
+{
+    fprintf(stderr, "\n[test_remote_typed_slots]\n");
+    g_tests++;
+
+    /* Server-side yclass registration: skel lookup (CALL dispatch) + handle
+     * table init. The container's slots register lazily via make_root's
+     * container_create → class accessor. */
+    struct yetty_ycore_void_result init_r = yetty_yclass_rpc_init();
+    if (YETTY_IS_ERR(init_r)) {
+        FAIL("rpc_init: %s", init_r.error.msg);
+        yetty_ycore_error_destroy(init_r.error);
+        return;
+    }
+    struct yetty_ycore_void_result reg_r = yetty_yfigure_register();
+    if (YETTY_IS_ERR(reg_r)) {
+        FAIL("yfigure_register: %s", reg_r.error.msg);
+        yetty_ycore_error_destroy(reg_r.error);
+        return;
+    }
+
+    /* Server-side real container with a registry that knows TEST_LEAF_KIND. */
+    struct yetty_yfigure_registry *reg = make_registry();
+    struct yetty_yclass_object *server_container = make_root(reg);
+    struct yetty_yclass_handle_result handle_r = yetty_yclass_rpc_register_object(server_container);
+    if (YETTY_IS_ERR(handle_r)) {
+        FAIL("register_object: %s", handle_r.error.msg);
+        yetty_ycore_error_destroy(handle_r.error);
+        return;
+    }
+    uint64_t handle = handle_r.value;
+
+    int fds[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
+        FAIL("socketpair");
+        return;
+    }
+
+    struct yetty_yclass_transport_ptr_result server_transport_r =
+        yetty_yclass_transport_fd_create(fds[1]);
+    if (YETTY_IS_ERR(server_transport_r)) {
+        FAIL("server transport: %s", server_transport_r.error.msg);
+        yetty_ycore_error_destroy(server_transport_r.error);
+        return;
+    }
+    struct rpc_server_arg server_arg = {.transport = server_transport_r.value};
+    pthread_t server_th;
+    pthread_create(&server_th, NULL, rpc_server_thread, &server_arg);
+
+    struct yetty_yclass_transport_ptr_result client_transport_r =
+        yetty_yclass_transport_fd_create(fds[0]);
+    if (YETTY_IS_ERR(client_transport_r)) {
+        FAIL("client transport: %s", client_transport_r.error.msg);
+        yetty_ycore_error_destroy(client_transport_r.error);
+        return;
+    }
+    struct yetty_yclass_rpc_session_ptr_result session_r =
+        yetty_yclass_rpc_session_create(client_transport_r.value);
+    if (YETTY_IS_ERR(session_r)) {
+        FAIL("session_create: %s", session_r.error.msg);
+        yetty_ycore_error_destroy(session_r.error);
+        return;
+    }
+    struct yetty_yclass_rpc_session *session = session_r.value;
+
+    /* GET_CLASS round-trip (batched slot translation). Degraded-but-OK on
+     * failure — the per-slot RESOLVE_SLOT fallback still resolves on demand. */
+    struct yetty_ycore_void_result translate_r =
+        yetty_yclass_rpc_session_translate_class(session, "yetty_yfigure_container");
+    if (YETTY_IS_ERR(translate_r)) {
+        yetty_ycore_error_destroy(translate_r.error);
+    }
+
+    /* Client proxy wrapping the known server handle. */
+    struct yetty_yclass_proxy proxy = {0};
+    proxy.header.session = session;
+    proxy.handle = handle;
+    struct yetty_yclass_object *cobj = &proxy.header;
+
+    /* Remote typed-slot calls — marshal over the socketpair, dispatch on the
+     * server-side container. */
+    struct yetty_ycore_rectangle rect = {{10, 20}, {110, 80}};
+    struct yetty_ycore_buffer empty_init = {0};
+    struct yetty_ycore_void_result cr =
+        yetty_yfigure_create_child(cobj, TEST_LEAF_KIND, 1u, rect, empty_init);
+    if (YETTY_IS_ERR(cr)) {
+        FAIL("remote create_child: %s", cr.error.msg);
+        yetty_ycore_error_destroy(cr.error);
+    }
+    struct yetty_ycore_rectangle moved = {{5, 5}, {55, 55}};
+    struct yetty_ycore_void_result sr = yetty_yfigure_set_child_rect(cobj, 1u, moved);
+    if (YETTY_IS_ERR(sr)) {
+        FAIL("remote set_child_rect: %s", sr.error.msg);
+        yetty_ycore_error_destroy(sr.error);
+    }
+    struct yetty_ycore_buffer body = {.data = (uint8_t *)"abc", .capacity = 0, .size = 3};
+    struct yetty_ycore_void_result ar = yetty_yfigure_apply_child_body(cobj, 1u, body);
+    if (YETTY_IS_ERR(ar)) {
+        FAIL("remote apply_child_body: %s", ar.error.msg);
+        yetty_ycore_error_destroy(ar.error);
+    }
+
+    /* Disconnect the client → the server's recv returns 0 → server loop exits. */
+    struct yetty_ycore_void_result session_destroy_r = yetty_yclass_rpc_session_destroy(session);
+    if (YETTY_IS_ERR(session_destroy_r)) {
+        yetty_ycore_error_destroy(session_destroy_r.error);
+    }
+    pthread_join(server_th, NULL);
+    struct yetty_ycore_void_result server_transport_destroy_r =
+        server_arg.transport->ops->destroy(server_arg.transport);
+    if (YETTY_IS_ERR(server_transport_destroy_r)) {
+        yetty_ycore_error_destroy(server_transport_destroy_r.error);
+    }
+
+    /* The remote calls must have mutated the server container, and the result
+     * must match doing the same sequence locally (identical to test_typed_slots
+     * after mutations). */
+    char *dump = dump_root(server_container);
+    const char *expected = "kind: container\n"
+                           "rect: [0.0, 0.0, 1000.0, 1000.0]\n"
+                           "dirty: 1\n"
+                           "viewport_offset: [0.0, 0.0]\n"
+                           "children:\n"
+                           "  '1':\n"
+                           "    kind: test_leaf\n"
+                           "    rect: [5.0, 5.0, 55.0, 55.0]\n"
+                           "    bytes_seen: 3\n"
+                           "    call_count: 1\n";
+    ASSERT_STR_EQ("remote_typed_slots == local", dump, expected);
+    free(dump);
+
+    yetty_yfigure_destroy(server_container);
+    yetty_yfigure_registry_destroy(reg);
+}
+
 int main(void)
 {
     test_empty_container();
@@ -648,6 +819,7 @@ int main(void)
     test_clear_all();
     test_stale_delete_is_noop();
     test_typed_slots();
+    test_remote_typed_slots();
 
     fprintf(stderr, "\nyfigure wire test: %d tests, %d failure%s\n", g_tests, g_failures,
             g_failures == 1 ? "" : "s");
