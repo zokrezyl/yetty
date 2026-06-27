@@ -1602,7 +1602,10 @@ struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_fram
     }
 
     /* Unwired (remote-without-session) fallback: compose the legacy envelope
-     * body and ship it as a yface DCS payload over the output pty.
+     * body and ship it as a yface DCS payload over the output pty. Retained as
+     * the compatibility path for out-of-process producers still on the
+     * YCOMPOSITOR_BIN record wire; deleted once they migrate to yclass RPC over
+     * YETTY_DCS_YCLASS_RPC (tracked in #377).
      *   - container_records (already record-framed as admin records id=0)
      *   - one record { ygrid_body bytes, id=ygrid_id }
      *   - figure_bodies (already record-framed by widgets at append time)
