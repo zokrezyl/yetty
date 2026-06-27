@@ -1,8 +1,9 @@
 /*
  * yvideo — emit a yvideo OSC envelope stream for a raw H.264 Annex-B
- * file. Inside a yetty terminal the OSC envelopes route to the ydraw
- * scene-canvas layer, which decodes via openh264 and renders frames as
- * they arrive. Outside a yetty terminal the bytes are still printed
+ * file. Inside a yetty terminal the OSC envelopes ride the ydraw
+ * (YDRAW_BIN) record path, which mints a yvideo composite and decodes it
+ * via openh264, rendering frames as they arrive. Outside a yetty terminal
+ * the bytes are still printed
  * (mostly garbage on a vt100), so typical usage is:
  *
  *   yetty -e 'yvideo path/to/clip.h264'
@@ -596,7 +597,7 @@ static struct yetty_ycore_void_result emit_scene_bin(const struct yetty_ydraw_dr
     };
     struct yetty_ycore_buffer envelope = {0};
     struct yetty_ycore_void_result r = yetty_yface_emit(
-        YETTY_DCS_YCOMPOSITOR_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
+        YETTY_DCS_YDRAW_BIN, /*compressed=*/1, &meta, sizeof(meta), raw, raw_size, &envelope);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_buffer_destroy(&envelope);
         return YETTY_ERR(yetty_ycore_void, "yface_emit failed", r);
@@ -705,23 +706,17 @@ static struct yetty_ycore_void_result emit_init(const struct yvideo_opts *o, con
     }
     struct yetty_ydraw_drawable_list *dl = dlr.value;
 
-    struct yetty_ydraw_id_result gr =
-        yetty_ydraw_drawable_list_begin_group(dl, (uint32_t)o->stream_id);
-    if (YETTY_IS_ERR(gr)) {
-        yetty_ydraw_drawable_list_destroy(dl);
-        free(prim_bytes);
-        return YETTY_ERR(yetty_ycore_void, "yvideo: begin_group", gr);
-    }
+    /* Attach the yvideo prim at top level (no GROUP wrapper). The YDRAW_BIN
+     * receiver (terminal_ydraw_consume_bin) iterates records and mints a
+     * composite for any record whose type is in the composite range
+     * (0x80000000+), via the terminal's composite factory — the same path
+     * yplot / yimage / ymesh / yshadertoy take. It does not descend into
+     * CMD_GROUP records, so the prim must sit at the top level to be seen. */
     struct yetty_ydraw_id_result ar = yetty_ydraw_drawable_list_add_prim(dl, prim_bytes, prim_size);
     free(prim_bytes);
     if (YETTY_IS_ERR(ar)) {
         yetty_ydraw_drawable_list_destroy(dl);
         return YETTY_ERR(yetty_ycore_void, "yvideo: add_prim", ar);
-    }
-    struct yetty_ycore_void_result er = yetty_ydraw_drawable_list_end_group(dl, (uint32_t)gr.value);
-    if (YETTY_IS_ERR(er)) {
-        yetty_ydraw_drawable_list_destroy(dl);
-        return YETTY_ERR(yetty_ycore_void, "yvideo: end_group", er);
     }
 
     struct yetty_ycore_void_result em = emit_scene_bin(dl);

@@ -43,8 +43,12 @@
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yimage/yimage-gen.h>
+#include <yetty/yshadertoy/prim.h>
 #if defined(YETTY_HAS_YMESH) && YETTY_HAS_YMESH
 #include <yetty/ymesh/ymesh-gen.h>
+#endif
+#if defined(YETTY_HAS_YVIDEO) && YETTY_HAS_YVIDEO
+#include <yetty/yvideo/yvideo-gen.h>
 #endif
 #include <yetty/yterminal/terminal.h>
 #include <yetty/yvterm/vterm.h>
@@ -1731,8 +1735,8 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
         }
     }
 
-    /* Complex-prim factory — handles yplot/yimage/ymesh prims that
-     * arrive embedded in YPLOT/YIMAGE/YMESH/... figure payloads. Each
+    /* Complex-prim factory — handles yplot/yimage/yshadertoy/ymesh/yvideo
+     * prims that arrive embedded in inbound YDRAW_BIN figure payloads. Each
      * concrete factory (yplot_factory_create etc.) builds its own
      * pipeline lazily on the first create_instance call. */
     {
@@ -1763,6 +1767,16 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
                 yetty_yimage_factory_destroy(yimage_f);
             }
         }
+        struct yetty_ydraw_concrete_factory *yshadertoy_f = yetty_yshadertoy_prim_factory_create();
+        if (yshadertoy_f) {
+            yshadertoy_f->destroy = yetty_yshadertoy_prim_factory_destroy;
+            struct yetty_ycore_void_result rr =
+                yetty_ydraw_composite_factory_register(terminal->composite_factory, yshadertoy_f);
+            if (YETTY_IS_ERR(rr)) {
+                yetty_ycore_error_destroy(rr.error);
+                yetty_yshadertoy_prim_factory_destroy(yshadertoy_f);
+            }
+        }
 #if defined(YETTY_HAS_YMESH) && YETTY_HAS_YMESH
         struct yetty_ydraw_concrete_factory *ymesh_f = yetty_ymesh_factory_create();
         if (ymesh_f) {
@@ -1772,6 +1786,18 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
             if (YETTY_IS_ERR(rr)) {
                 yetty_ycore_error_destroy(rr.error);
                 yetty_ymesh_factory_destroy(ymesh_f);
+            }
+        }
+#endif
+#if defined(YETTY_HAS_YVIDEO) && YETTY_HAS_YVIDEO
+        struct yetty_ydraw_concrete_factory *yvideo_f = yetty_yvideo_factory_create();
+        if (yvideo_f) {
+            yvideo_f->destroy = yetty_yvideo_factory_destroy;
+            struct yetty_ycore_void_result rr =
+                yetty_ydraw_composite_factory_register(terminal->composite_factory, yvideo_f);
+            if (YETTY_IS_ERR(rr)) {
+                yetty_ycore_error_destroy(rr.error);
+                yetty_yvideo_factory_destroy(yvideo_f);
             }
         }
 #endif
