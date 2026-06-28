@@ -71,6 +71,7 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths
     fill_search_path(p->cache_dir_buf,  sizeof(p->cache_dir_buf),  NSCachesDirectory);
     fill_search_path(p->config_dir_buf, sizeof(p->config_dir_buf), YETTY_PERSIST_SEARCH_PATH);
     fill_search_path(p->data_dir_buf,   sizeof(p->data_dir_buf),   YETTY_PERSIST_SEARCH_PATH);
+    fill_search_path(p->state_dir_buf,  sizeof(p->state_dir_buf),  YETTY_PERSIST_SEARCH_PATH);
 
     /* runtime is a synonym for cache on iOS/tvOS — no XDG concept. */
     snprintf(p->runtime_dir_buf, sizeof(p->runtime_dir_buf), "%s", p->cache_dir_buf);

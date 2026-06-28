@@ -138,8 +138,15 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_raster(
     char default_cache_root[1024];
     const char *cache_root = config->cache_dir;
     if (!cache_root) {
-        snprintf(default_cache_root, sizeof(default_cache_root), "%s/osm-tiles",
-                 yetty_yplatform_get_cache_dir());
+        struct yetty_yplatform_paths_ptr_result paths_res =
+            yetty_yplatform_paths_get_platform_paths();
+        const char *cache_dir = YETTY_IS_OK(paths_res) ? paths_res.value->cache_dir_buf : "";
+        snprintf(default_cache_root, sizeof(default_cache_root), "%s/osm-tiles", cache_dir);
+        if (YETTY_IS_OK(paths_res)) {
+            yetty_yplatform_paths_destroy(paths_res.value);
+        } else {
+            yetty_ycore_error_destroy(paths_res.error);
+        }
         cache_root = default_cache_root;
     }
 

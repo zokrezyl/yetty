@@ -26,6 +26,7 @@
 
 #include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
+#include <yetty/yplatform/paths.h>
 
 #include <stdint.h>
 #include <stdio.h>
@@ -149,6 +150,11 @@ struct yai_engine_config {
  * sub-structs, keyed by app->engine_name, and may override the defaults. */
 struct yai_config {
     /* defaults */
+    /* Persisted default engine ("claude" | "codex" | "gemini"). This is what
+     * yai_config_save writes; the ACTIVE engine for the session is
+     * app->engine_name, which --engine overrides without touching this field
+     * (a CLI override is a per-invocation choice, not a config change). */
+    char engine[16];
     char edit_mode[8];     /* "emacs" | "vi" */
     int fold_lines;        /* folded-output line budget */
     int show_thinking;     /* 1 = show the model's thinking blocks */
@@ -242,7 +248,12 @@ struct yai_app {
     int termios_saved;
 
     FILE *transcript_file;
-    char transcript_path[256];
+    char transcript_path[PATH_MAX];
+    /* The always-present per-session file tag (random hex minted at
+     * startup, even on --resume). Both the transcript and the proxy
+     * capture key their filenames off this single value so they stay in
+     * lockstep: transcript-<tag>.jsonl / proxy-<tag>.jsonl. */
+    char transcript_tag[48];
     /* THE conversation id: claude session uuid / codex thread id — the
      * resume token of its CLI. Claude mints it client-side (we pass
      * --session-id); codex mints it server-side (empty until
@@ -412,6 +423,13 @@ struct yai_app {
 void yai_report_error(struct yai_app *app, const char *context,
                       struct yetty_ycore_void_result result);
 
+/* Build the directory that holds this session's diagnostics (transcript,
+ * proxy capture, child stderr): <state_dir>/yai/transcripts, where
+ * state_dir is the platform XDG_STATE_HOME equivalent. Single source of
+ * the subdir layout, shared by main.c and proxy.c. Returns 0 on success,
+ * -1 if the path would not fit. Does NOT create the directory. */
+int yai_transcript_dir(char *out, size_t out_size);
+
 /* Update the activity surfaces together: the animated shader glyph on
  * the pinned prompt row and the HUD activity state (yai_set_state). */
 struct yetty_ycore_void_result yai_set_activity(struct yai_app *app, const char *glyph_name,
@@ -484,6 +502,10 @@ int yai_control_client_main(const char *host, int port, const char *method, cons
  * latest one-line quota summary into `out` (empty until the first call). */
 struct yetty_ycore_void_result yai_usage_proxy_start(struct yai_app *app);
 void yai_usage_proxy_stop(struct yai_app *app);
+/* Bound TCP port of the running usage proxy, or 0 if it is not running. codex.c
+ * uses it to build its -c chatgpt_base_url spawn override (struct yai_proxy is
+ * opaque outside proxy.c). */
+int yai_usage_proxy_port(const struct yai_app *app);
 void yai_usage_proxy_status(struct yai_app *app, char *out, size_t out_size);
 /* Compact one-line quota for the status bar, e.g. "quota 5h 26% · 7d 55%"
  * (empty until the first API call is captured). */
@@ -504,6 +526,19 @@ struct yai_quota {
 /* Copy the latest decomposed quota into `out` (out->valid = 0 when none yet,
  * or when there is no proxy — codex / gemini). */
 void yai_usage_proxy_quota(struct yai_app *app, struct yai_quota *out);
+
+/* Read codex's plan rate-limits from its rollout file (proxy-independent — the
+ * codex model call never reaches the proxy). Fills `out` and returns 1 on
+ * success, 0 if no session/rollout/rate-limits yet. See codex-quota.c. */
+int yai_codex_quota_read(const struct yai_app *app, struct yai_quota *out);
+
+/* The active engine's quota, dispatched by source: codex reads its rollout file,
+ * everyone else reads the proxy. `out->valid` is 0 when none is available. */
+void yai_quota_get(struct yai_app *app, struct yai_quota *out);
+
+/* The active engine's compact one-line quota summary for #{quota} (e.g.
+ * "65% (3:40pm) · 13% (Jul 2, 7:06pm)"), empty until quota is available. */
+void yai_quota_summary(struct yai_app *app, char *out, size_t out_size);
 
 /* uv callbacks shared by the engines' child spawns. Signatures are
  * dictated by libuv (YETTY_EXTERNAL_CALLBACK) — inner Results are

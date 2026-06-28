@@ -47,6 +47,7 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths
     fill_xdg(p->cache_dir_buf, sizeof(p->cache_dir_buf), "XDG_CACHE_HOME", ".cache");
     fill_xdg(p->data_dir_buf, sizeof(p->data_dir_buf), "XDG_DATA_HOME", ".local/share");
     fill_xdg(p->config_dir_buf, sizeof(p->config_dir_buf), "XDG_CONFIG_HOME", ".config");
+    fill_xdg(p->state_dir_buf, sizeof(p->state_dir_buf), "XDG_STATE_HOME", ".local/state");
 
     /* runtime_dir has a uid-suffixed fallback (per XDG spec). */
     const char *xdg_runtime = getenv("XDG_RUNTIME_DIR");

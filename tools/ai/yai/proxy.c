@@ -1,15 +1,20 @@
 /*
  * proxy.c — yai's usage proxy.
  *
- * A localhost HTTP/1.1 forwarder that yai puts in front of the engine's
- * Anthropic traffic. yai sets ANTHROPIC_BASE_URL=http://127.0.0.1:<port> for
- * the spawned child; the child's plain-HTTP requests land here, get replayed
- * to the real HTTPS upstream (https://api.anthropic.com, or whatever
- * ANTHROPIC_BASE_URL held before we overrode it) via libcurl, and the
- * response is streamed straight back. While relaying, the proxy captures the
- * `anthropic-ratelimit-*` response headers — the live quota signal — and
- * writes a one-line summary to ~/.claude/usage-status.md and into app state
- * so /usage and the HUD can show it without scraping a TUI.
+ * A localhost HTTP/1.1 forwarder that yai puts in front of the active engine's
+ * API traffic. The child is pointed at us via the engine's base-URL knob
+ * (claude: ANTHROPIC_BASE_URL; gemini: GOOGLE_GEMINI_BASE_URL; codex: a
+ * `-c chatgpt_base_url=...` spawn override, since it has no env var — see
+ * yai_proxy_route_for and codex.c). The child's plain-HTTP requests land here,
+ * get replayed to the real HTTPS upstream for that engine via libcurl, and the
+ * response is streamed straight back. The forwarder is engine-agnostic — it
+ * relays whatever path/headers (auth included) arrive to one upstream host.
+ * Every request/response is mirrored to the JSONL conversation transcript
+ * (proxy-<tag>.jsonl) for all engines. For claude it additionally parses the
+ * `anthropic-ratelimit-*` response headers — the live quota signal — and writes
+ * a one-line summary to ~/.claude/usage-status.md and into app state so /usage
+ * and the HUD can show it without scraping a TUI. (codex/gemini quota parsing
+ * is not wired yet; their traffic is still captured to the transcript.)
  *
  * It does NOT ride yai's libuv loop: a dedicated accept thread plus one
  * worker thread per kept-alive client connection keep all blocking socket +
@@ -20,6 +25,7 @@
 #include "picohttpparser/picohttpparser.h"
 
 #include <yetty/ycore/result.h>
+#include <yetty/yplatform/fs.h>
 
 #include <curl/curl.h>
 
@@ -74,7 +80,7 @@ struct yai_proxy {
 
     pthread_mutex_t conversation_mutex;
     FILE *conversation_file;
-    char conversation_path[256];
+    char conversation_path[PATH_MAX];
     unsigned long next_request_id;
 
     pthread_mutex_t conns_mutex;
@@ -289,25 +295,16 @@ static void conversation_log_response_end(struct yai_proxy_conn *conn, CURLcode 
 
 static void conversation_path_init(struct yai_proxy *proxy)
 {
-    if (mkdir("tmp", 0777) != 0 && errno != EEXIST) {
+    char dir[PATH_MAX];
+    if (yai_transcript_dir(dir, sizeof(dir)) != 0) {
+        proxy->conversation_path[0] = '\0';
         return;
     }
-    if (mkdir("tmp/transcript", 0777) != 0 && errno != EEXIST) {
-        return;
-    }
-    const char *name = strrchr(proxy->app->transcript_path, '/');
-    name = name ? name + 1 : proxy->app->transcript_path;
-    if (!name[0]) {
-        name = "session.jsonl";
-    }
-    char stem[160];
-    snprintf(stem, sizeof(stem), "%s", name);
-    char *suffix = strstr(stem, ".jsonl");
-    if (suffix) {
-        *suffix = '\0';
-    }
+    yetty_yplatform_mkdir_p(dir);
+    /* proxy-<tag>.jsonl, parallel to the transcript's transcript-<tag>.jsonl
+     * and keyed off the same session tag so the pair stays in lockstep. */
     int written = snprintf(proxy->conversation_path, sizeof(proxy->conversation_path),
-                           "tmp/transcript/%s-proxy.jsonl", stem);
+                           "%s/proxy-%s.jsonl", dir, proxy->app->transcript_tag);
     if (written < 0 || (size_t)written >= sizeof(proxy->conversation_path)) {
         proxy->conversation_path[0] = '\0';
     }
@@ -944,6 +941,43 @@ static void *proxy_accept_main(void *arg)
     return NULL;
 }
 
+/* Per-engine proxy routing. The forwarder itself is generic (it relays
+ * whatever path/headers arrive to a single upstream host); only three things
+ * differ by engine:
+ *   env_var          — the base-URL env var that points the child at us. NULL
+ *                      for codex, whose ChatGPT (OAuth) backend is redirected
+ *                      with a `-c chatgpt_base_url=...` spawn override instead
+ *                      (see codex.c) because it has no base-URL env var.
+ *   default_upstream — where we forward when the child had no prior override.
+ *   write_status_file — claude alone writes ~/.claude/usage-status.md. */
+struct yai_proxy_route {
+    const char *env_var;
+    const char *default_upstream;
+    int write_status_file;
+};
+
+static struct yai_proxy_route yai_proxy_route_for(const char *engine_name)
+{
+    if (strcmp(engine_name, "codex") == 0) {
+        /* ChatGPT-plan (OAuth) backend: chatgpt.com/backend-api/codex/responses.
+         * codex.c overrides chatgpt_base_url to http://127.0.0.1:<port>/backend-api/,
+         * so requests arrive as /backend-api/... and forward to this host. */
+        return (struct yai_proxy_route){NULL, "https://chatgpt.com", 0};
+    }
+    if (strcmp(engine_name, "gemini") == 0) {
+        return (struct yai_proxy_route){"GOOGLE_GEMINI_BASE_URL",
+                                        "https://generativelanguage.googleapis.com", 0};
+    }
+    return (struct yai_proxy_route){"ANTHROPIC_BASE_URL", "https://api.anthropic.com", 1};
+}
+
+/* The bound port of the running usage proxy, or 0 if none. Lets codex.c (which
+ * cannot see the opaque struct yai_proxy) build its base-URL spawn override. */
+int yai_usage_proxy_port(const struct yai_app *app)
+{
+    return app->usage_proxy ? app->usage_proxy->port : 0;
+}
+
 struct yetty_ycore_void_result yai_usage_proxy_start(struct yai_app *app)
 {
     if (app->usage_proxy) {
@@ -969,18 +1003,22 @@ struct yetty_ycore_void_result yai_usage_proxy_start(struct yai_app *app)
         proxy->conversation_file = fopen(proxy->conversation_path, "w");
     }
 
-    /* Upstream = the ANTHROPIC_BASE_URL the child would otherwise have used,
-     * before we redirect it at ourselves. */
-    const char *existing = getenv("ANTHROPIC_BASE_URL");
+    /* Upstream = the base URL the child would otherwise have used, before we
+     * redirect it at ourselves (per-engine env, else the engine's default). */
+    struct yai_proxy_route route = yai_proxy_route_for(app->engine_name);
+    const char *existing = route.env_var ? getenv(route.env_var) : NULL;
     snprintf(proxy->upstream, sizeof(proxy->upstream), "%s",
-             (existing && existing[0]) ? existing : "https://api.anthropic.com");
+             (existing && existing[0]) ? existing : route.default_upstream);
     size_t upstream_len = strlen(proxy->upstream);
     while (upstream_len > 0 && proxy->upstream[upstream_len - 1] == '/') {
         proxy->upstream[--upstream_len] = '\0';
     }
-    const char *home = getenv("HOME");
-    if (home && home[0]) {
-        snprintf(proxy->status_path, sizeof(proxy->status_path), "%s/.claude/usage-status.md", home);
+    if (route.write_status_file) {
+        const char *home = getenv("HOME");
+        if (home && home[0]) {
+            snprintf(proxy->status_path, sizeof(proxy->status_path), "%s/.claude/usage-status.md",
+                     home);
+        }
     }
 
     int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -1043,10 +1081,15 @@ struct yetty_ycore_void_result yai_usage_proxy_start(struct yai_app *app)
     }
     proxy->accept_started = 1;
 
-    /* Point the child at us. Whatever the child read before is now `upstream`. */
+    /* Point the child at us. Whatever the child read before is now `upstream`.
+     * Engines with a base-URL env var are redirected here; codex has none, so
+     * it is redirected by a -c chatgpt_base_url spawn override in codex.c that
+     * reads proxy->port via yai_usage_proxy_port(). */
     char base_url[64];
     snprintf(base_url, sizeof(base_url), "http://127.0.0.1:%d", proxy->port);
-    setenv("ANTHROPIC_BASE_URL", base_url, 1);
+    if (route.env_var) {
+        setenv(route.env_var, base_url, 1);
+    }
 
     app->usage_proxy = proxy;
     return YETTY_OK_VOID();

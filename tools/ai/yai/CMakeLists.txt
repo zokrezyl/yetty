@@ -28,6 +28,7 @@ add_executable(yai
     turn-engine.c
     claude.c
     codex.c
+    codex-quota.c
     gemini.c
     editor.c
     editor-emacs.c

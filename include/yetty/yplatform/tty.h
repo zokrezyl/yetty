@@ -29,7 +29,8 @@ extern "C" {
  *     is a no-op (returns ok with value=0).
  *
  * The log file path is "<runtime_dir>/<basename>-<pid>.log" where
- * runtime_dir comes from yetty_yplatform_get_runtime_dir().
+ * runtime_dir comes from the platform paths struct
+ * (yetty_yplatform_paths_get_platform_paths).
  *
  * Idempotent: calling this more than once is safe — the second call
  * sees stderr already pointing at a regular file and returns value=0.

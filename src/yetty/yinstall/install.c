@@ -130,15 +130,16 @@ static void format_size(uint64_t bytes, char *buf, size_t buf_size)
     }
 }
 
-static const char *resolve_root(enum yetty_yinstall_destination destination)
+static const char *resolve_root(enum yetty_yinstall_destination destination,
+                                const struct yetty_yplatform_paths *paths)
 {
     switch (destination) {
     case YETTY_YINSTALL_DEST_BIN:
-        return yetty_yplatform_get_bin_dir();
+        return paths->bin_dir_buf;
     case YETTY_YINSTALL_DEST_DATA:
-        return yetty_yplatform_get_data_dir();
+        return paths->data_dir_buf;
     case YETTY_YINSTALL_DEST_CONFIG:
-        return yetty_yplatform_get_config_dir();
+        return paths->config_dir_buf;
     }
     return "";
 }
@@ -299,7 +300,7 @@ static void install_asset(const char *name, const uint8_t *data, size_t size, in
 /* Install one component and print its log line. */
 static struct yetty_ycore_void_result install_component(
     const struct yetty_yinstall_component *comp, const struct yetty_yinstall_options *options,
-    uint64_t *total_bytes, size_t *total_files)
+    const struct yetty_yplatform_paths *paths, uint64_t *total_bytes, size_t *total_files)
 {
     struct component_install_ctx ctx = {0};
     ctx.component = comp;
@@ -307,7 +308,7 @@ static struct yetty_ycore_void_result install_component(
     ctx.verbose = options->verbose;
     ctx.result = YETTY_OK_VOID();
 
-    const char *root = resolve_root(comp->destination);
+    const char *root = resolve_root(comp->destination, paths);
     if (!root || !*root) {
         return YETTY_ERR(yetty_ycore_void, "could not resolve a destination directory");
     }
@@ -362,16 +363,16 @@ static struct yetty_ycore_void_result install_component(
 /* Version marker                                                     */
 /* ------------------------------------------------------------------ */
 
-static void marker_path(char *out, size_t out_size)
+static void marker_path(char *out, size_t out_size, const struct yetty_yplatform_paths *paths)
 {
-    snprintf(out, out_size, "%s/.yinstall/version", yetty_yplatform_get_data_dir());
+    snprintf(out, out_size, "%s/.yinstall/version", paths->data_dir_buf);
 }
 
-static void write_marker(const char *version)
+static void write_marker(const char *version, const struct yetty_yplatform_paths *paths)
 {
     char path[PATH_MAX];
     char dir[PATH_MAX];
-    marker_path(path, sizeof(path));
+    marker_path(path, sizeof(path), paths);
     if (yetty_yplatform_path_dirname(path, dir, sizeof(dir)) == 0) {
         yetty_yplatform_mkdir_p(dir);
     }
@@ -397,6 +398,14 @@ struct yetty_ycore_void_result yetty_yinstall_run(const struct yetty_yinstall_op
     printf("yetty installer \xc2\xb7 version %s\n\n", version);
     printf("Installing to this machine:\n\n");
 
+    /* Resolve the platform dirs once for this run (standalone tool, no config
+     * in scope) and thread the struct through; release it before returning. */
+    struct yetty_yplatform_paths_ptr_result paths_res = yetty_yplatform_paths_get_platform_paths();
+    if (YETTY_IS_ERR(paths_res)) {
+        return YETTY_ERR(yetty_ycore_void, "yinstall: resolve platform paths failed", paths_res);
+    }
+    struct yetty_yplatform_paths *paths = paths_res.value;
+
     size_t component_count = 0;
     const struct yetty_yinstall_component *components = yinstall_components(&component_count);
 
@@ -404,14 +413,15 @@ struct yetty_ycore_void_result yetty_yinstall_run(const struct yetty_yinstall_op
     size_t total_files = 0;
     for (size_t index = 0; index < component_count; index++) {
         struct yetty_ycore_void_result result =
-            install_component(&components[index], options, &total_bytes, &total_files);
+            install_component(&components[index], options, paths, &total_bytes, &total_files);
         if (YETTY_IS_ERR(result)) {
             printf("\n  %s: install failed.\n", components[index].name);
+            yetty_yplatform_paths_destroy(paths);
             return YETTY_ERR(yetty_ycore_void, "component install failed", result);
         }
     }
 
-    write_marker(version);
+    write_marker(version, paths);
 
     char total_str[32];
     format_size(total_bytes, total_str, sizeof(total_str));
@@ -422,11 +432,12 @@ struct yetty_ycore_void_result yetty_yinstall_run(const struct yetty_yinstall_op
         printf("Installed %zu components \xc2\xb7 %s written.\n", component_count, total_str);
     }
 
-    const char *bin_dir = yetty_yplatform_get_bin_dir();
+    const char *bin_dir = paths->bin_dir_buf;
     printf("yetty is ready -- run:  %s/yetty\n", bin_dir);
     if (!dir_on_path(bin_dir)) {
         printf("\nNote: %s is not on your PATH. Add it to run `yetty` directly.\n", bin_dir);
     }
 
+    yetty_yplatform_paths_destroy(paths);
     return YETTY_OK_VOID();
 }

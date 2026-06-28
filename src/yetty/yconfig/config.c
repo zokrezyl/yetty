@@ -37,6 +37,8 @@ struct config_impl {
     char runtime_dir[512];
     char bin_dir[512];
     char config_dir[512];
+    char cache_dir[512];
+    char data_dir[512];
 };
 
 /* Sub-config view - lightweight wrapper pointing to a sub-node */
@@ -914,6 +916,24 @@ static void store_platform_paths(struct config_impl *impl, const struct yetty_yc
             node_set_value(parent, key, paths->config_dir);
         }
     }
+
+    if (paths->cache_dir) {
+        strncpy(impl->cache_dir, paths->cache_dir, sizeof(impl->cache_dir) - 1);
+        char key[MAX_KEY_LEN];
+        struct config_node *parent = navigate_or_create(impl->root, "paths/cache", key);
+        if (parent) {
+            node_set_value(parent, key, paths->cache_dir);
+        }
+    }
+
+    if (paths->data_dir) {
+        strncpy(impl->data_dir, paths->data_dir, sizeof(impl->data_dir) - 1);
+        char key[MAX_KEY_LEN];
+        struct config_node *parent = navigate_or_create(impl->root, "paths/data", key);
+        if (parent) {
+            node_set_value(parent, key, paths->data_dir);
+        }
+    }
 }
 
 /* Try to find and load config file */
@@ -1545,6 +1565,8 @@ struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[])
         .runtime_dir = platform_paths->runtime_dir_buf,
         .bin_dir = platform_paths->bin_dir_buf,
         .config_dir = platform_paths->config_dir_buf,
+        .cache_dir = platform_paths->cache_dir_buf,
+        .data_dir = platform_paths->data_dir_buf,
     };
 
     /* Export the directories as YETTY_* env vars before loading config files so
@@ -1555,6 +1577,7 @@ struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[])
     setenv("YETTY_DATA_DIR", platform_paths->data_dir_buf, 1);
     setenv("YETTY_CONFIG_DIR", platform_paths->config_dir_buf, 1);
     setenv("YETTY_BIN_DIR", platform_paths->bin_dir_buf, 1);
+    setenv("YETTY_CACHE_DIR", platform_paths->cache_dir_buf, 1);
 
     try_load_config_file(impl, argc, argv, &paths);
     store_platform_paths(impl, &paths);

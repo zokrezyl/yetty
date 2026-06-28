@@ -613,8 +613,8 @@ struct yetty_yplatform_pty_ptr_result yetty_yplatform_tinyemu_pty_create(
      * <data_dir>/yemu/. If the cfg does not exist yet, emit it with
      * absolute paths so tinyemu's get_file_path() resolves them as-is. */
     {
-        const char *config_dir = yetty_yplatform_get_config_dir();
-        const char *data_dir = yetty_yplatform_get_data_dir();
+        const char *config_dir = config->ops->get_string(config, "paths/config", "");
+        const char *data_dir = config->ops->get_string(config, "paths/data", "");
         char cfg_dir[512];
         char cfg_path[512];
         int cfg_ready = 1;

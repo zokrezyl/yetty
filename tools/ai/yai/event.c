@@ -67,7 +67,7 @@ static struct yetty_ycore_void_result dispatch_usage(struct yai_app *app,
     app->last_turn.has_cost = usage->has_cost;
     app->last_turn.valid = 1;
     char quota_summary[96];
-    yai_usage_proxy_summary(app, quota_summary, sizeof(quota_summary));
+    yai_quota_summary(app, quota_summary, sizeof(quota_summary));
     if (quota_summary[0]) {
         snprintf(app->quota_text, sizeof(app->quota_text), "%s", quota_summary);
     }

@@ -34,12 +34,6 @@
 #include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/ytrace/ytrace.h>
 
-/* Path helpers (yplatform/paths/android.c). */
-const char *yetty_yplatform_get_cache_dir(void);
-const char *yetty_yplatform_get_runtime_dir(void);
-const char *yetty_yplatform_get_data_dir(void);
-const char *yetty_yplatform_get_config_dir(void);
-
 /* WebGPU surface from the live ANativeWindow (webgpu-surface/android.c). */
 WGPUSurface yetty_yplatform_create_surface_from_window(WGPUInstance instance,
                                                        ANativeWindow *window);
@@ -93,10 +87,8 @@ void yetty_android_program_init(struct yetty_yplatform_app_state *state)
     }
     LOGI("Initializing yetty (android)...");
 
-    yetty_yplatform_android_mkdir_p(yetty_yplatform_get_cache_dir());
-    yetty_yplatform_android_mkdir_p(yetty_yplatform_get_runtime_dir());
-    yetty_yplatform_android_mkdir_p(yetty_yplatform_get_data_dir());
-    yetty_yplatform_android_mkdir_p(yetty_yplatform_get_config_dir());
+    /* yconfig_create below resolves the platform paths once and creates every
+     * writable dir (cache/data/runtime/config/...), so no explicit mkdir here. */
 
     /* No shell command line on Android — synthesize one. Default to --qemu
      * (external qemu-system-riscv64 from nativeLibraryDir), same as before. */

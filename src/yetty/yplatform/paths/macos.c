@@ -7,6 +7,8 @@
  *   cache_dir  → ~/Library/Caches/yetty
  *   data_dir   → ~/Library/Application Support/yetty
  *   config_dir → ~/Library/Application Support/yetty (same as data)
+ *   state_dir  → ~/Library/Application Support/yetty (same as data; macOS has
+ *                no separate state location)
  *   runtime_dir → /tmp/yetty-<uid>
  *   assets_dir → next to the executable, "../Resources/assets" inside
  *                a .app bundle, else $YETTY_ASSETS_DIR or ./assets
@@ -41,10 +43,13 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths
                  home);
         snprintf(p->config_dir_buf, sizeof(p->config_dir_buf),
                  "%s/Library/Application Support/yetty", home);
+        snprintf(p->state_dir_buf, sizeof(p->state_dir_buf), "%s/Library/Application Support/yetty",
+                 home);
     } else {
         snprintf(p->cache_dir_buf, sizeof(p->cache_dir_buf), "/tmp/yetty");
         snprintf(p->data_dir_buf, sizeof(p->data_dir_buf), "/tmp/yetty");
         snprintf(p->config_dir_buf, sizeof(p->config_dir_buf), "/tmp/yetty");
+        snprintf(p->state_dir_buf, sizeof(p->state_dir_buf), "/tmp/yetty");
     }
 
     snprintf(p->runtime_dir_buf, sizeof(p->runtime_dir_buf), "/tmp/yetty-%d", (int)getuid());

@@ -38,6 +38,10 @@ extern "C" {
  *   config_dir  — XDG_CONFIG_HOME-equivalent: user-editable config files
  *                  (qemu/qemu.cfg, temu/root-riscv64.cfg). Linux:
  *                  $XDG_CONFIG_HOME/yetty.
+ *   state_dir   — XDG_STATE_HOME-equivalent: persistent per-session state
+ *                  that is not portable user data — logs, history, conversation
+ *                  transcripts. Linux: $XDG_STATE_HOME/yetty, falls back to
+ *                  $HOME/.local/state/yetty.
  *   assets_dir  — read-only bundled assets (shaders, fonts) shipped
  *                  alongside the executable. Resolved from the exec
  *                  path; honoured by $YETTY_ASSETS_DIR override.
@@ -60,6 +64,7 @@ struct yetty_yplatform_paths {
     char data_dir_buf[PATH_MAX];
     char runtime_dir_buf[PATH_MAX];
     char config_dir_buf[PATH_MAX];
+    char state_dir_buf[PATH_MAX];
     char assets_dir_buf[PATH_MAX];
     char bin_dir_buf[PATH_MAX];
     char shaders_dir_buf[PATH_MAX];
@@ -96,25 +101,6 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_create(void);
  * rest of the ycore-result family — never actually fails.
  */
 struct yetty_ycore_void_result yetty_yplatform_paths_destroy(struct yetty_yplatform_paths *paths);
-
-/*
- * Convenience getters. Each returns a pointer into a process-wide
- * singleton; the singleton is lazily created on first call and lives
- * for the lifetime of the process — never destroyed, never reallocated.
- * Safe to call from any thread (read-only after first init); first
- * caller wins on the rare init race. Returns "" on internal failure
- * (OOM during the very first init) rather than NULL so callers can
- * pass the result straight into snprintf("%s/...").
- *
- * New code that needs *all* paths or wants explicit ownership should
- * call yetty_yplatform_paths_get_platform_paths directly.
- */
-const char *yetty_yplatform_get_cache_dir(void);
-const char *yetty_yplatform_get_data_dir(void);
-const char *yetty_yplatform_get_runtime_dir(void);
-const char *yetty_yplatform_get_config_dir(void);
-const char *yetty_yplatform_get_assets_dir(void);
-const char *yetty_yplatform_get_bin_dir(void);
 
 #ifdef __cplusplus
 }

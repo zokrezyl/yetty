@@ -487,8 +487,14 @@ static struct yetty_ydraw_drawable_list_result map_render(struct yetty_yclass_ob
     const char *provider_name =
         map->custom_url_template ? "custom" : (map->provider ? map->provider->name : "osm");
     char cache_dir[1024];
-    snprintf(cache_dir, sizeof(cache_dir), "%s/ymap/%s", yetty_yplatform_get_cache_dir(),
-             provider_name);
+    struct yetty_yplatform_paths_ptr_result paths_res = yetty_yplatform_paths_get_platform_paths();
+    const char *base_cache = YETTY_IS_OK(paths_res) ? paths_res.value->cache_dir_buf : "";
+    snprintf(cache_dir, sizeof(cache_dir), "%s/ymap/%s", base_cache, provider_name);
+    if (YETTY_IS_OK(paths_res)) {
+        yetty_yplatform_paths_destroy(paths_res.value);
+    } else {
+        yetty_ycore_error_destroy(paths_res.error);
+    }
 
     struct yetty_ymap_config engine_config = {
         .latitude = map->latitude,

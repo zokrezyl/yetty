@@ -294,6 +294,8 @@ struct YETTY_ANNOTATE("class@ygrid:grid") YETTY_ANNOTATE("parent@yfigure:figure"
     struct yetty_yfont_cache *font_cache;
     struct yetty_ymsdf_generator *msdf_generator;
     char shaders_dir[512];
+    char cache_dir[512];
+    char data_dir[512];
     int32_t wire_font_slot[YETTY_YRENDER_RS_MAX_CHILDREN];
     uint32_t next_font_slot;
 
@@ -1278,7 +1280,7 @@ static struct yetty_ycore_void_result ygrid_install_wire_font(
         return YETTY_OK_VOID(); /* already installed this envelope */
     }
 
-    const char *cache_dir = yetty_yplatform_get_cache_dir();
+    const char *cache_dir = g->cache_dir;
     if (!cache_dir || !*cache_dir) {
         return YETTY_ERR(yetty_ycore_void, "ygrid wire font: no cache dir");
     }
@@ -1303,7 +1305,7 @@ static struct yetty_ycore_void_result ygrid_install_wire_font(
         }
         memcpy(cache_key, fv->name, fv->name_len);
         cache_key[fv->name_len] = '\0';
-        const char *data_dir = yetty_yplatform_get_data_dir();
+        const char *data_dir = g->data_dir;
         if (!data_dir || !*data_dir) {
             return YETTY_OK_VOID();
         }
@@ -2853,9 +2855,13 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         /* Font cache + MSDF generator for wire-shipped fonts (custom figure
          * fonts). Best-effort: if the cache can't be created, wire fonts are
          * dropped but SDF prims still render. */
-        const char *shaders_dir = context->runtime->config->ops->get_string(
-            context->runtime->config, "paths/shaders", "");
+        struct yetty_yconfig_config *config = context->runtime->config;
+        const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
         snprintf(g->shaders_dir, sizeof(g->shaders_dir), "%s", shaders_dir ? shaders_dir : "");
+        const char *cache_dir = config->ops->get_string(config, "paths/cache", "");
+        snprintf(g->cache_dir, sizeof(g->cache_dir), "%s", cache_dir ? cache_dir : "");
+        const char *data_dir = config->ops->get_string(config, "paths/data", "");
+        snprintf(g->data_dir, sizeof(g->data_dir), "%s", data_dir ? data_dir : "");
         g->msdf_generator = context->runtime->gpu.msdf_generator;
         struct yetty_yfont_cache_ptr_result font_cache_r = yetty_yfont_cache_create(g->shaders_dir);
         if (YETTY_IS_OK(font_cache_r)) {

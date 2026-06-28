@@ -69,7 +69,6 @@ endif()
 add_library(yetty_yplatform_core STATIC
     getopt.c
     paths/create.c
-    paths/singleton.c
     # Base (platform-independent) window-chrome yclass: the render→main producer
     # slots + dispatch stubs. Lives here so any module that drives the window
     # chrome (ychrome, yui's tabbar) links the stubs regardless of whether the

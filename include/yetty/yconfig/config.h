@@ -21,6 +21,8 @@ struct yetty_yconfig_paths {
     const char *runtime_dir;
     const char *bin_dir;
     const char *config_dir;
+    const char *cache_dir;
+    const char *data_dir;
 };
 
 /* Result type */
