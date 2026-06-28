@@ -697,21 +697,25 @@ def generate_c_source(schema, uniforms, buffers, textures):
     def buffer_validate_block():
         if not buffers:
             return ''
-        sum_lines = '\n'.join(
-            f'        buffer_words += payload[{uniforms_word_count + k}];'
-            for k in range(buffer_len_fields))
-        return f'''    /* Bounds-check declared buffer payloads against the wire record. */
+        # Bound the record against its own declared payload_size rather than a
+        # sum of per-buffer length words at fixed offsets. The fixed-offset sum
+        # is wrong for composites whose buffers are NOT contiguous: yplot
+        # interleaves a variable-length bytecode payload between its
+        # buffer-length words, so word[uniforms+1] is a bytecode instruction,
+        # not a length — the old check read garbage and falsely rejected every
+        # valid yplot record ("buffers exceed record"). payload_size (header
+        # word[1]) is the authoritative byte count following the 8-byte header
+        # and is written by every composite serializer, so this is correct for
+        # all layouts (fixed or variable).
+        return f'''    /* Bounds-check the wire record against its declared payload_size. */
     {{
-        const uint32_t *payload = (const uint32_t *)buffer_data + 2;
-        if (size < (size_t){min_header_words}u * sizeof(uint32_t))
+        if (size < 2u * sizeof(uint32_t))
             return YETTY_ERR(yetty_ydraw_composite_ptr,
-                             "{name}: record too small for buffer header");
-        uint64_t buffer_words = 0;
-{sum_lines}
-        uint64_t record_words = (uint64_t)(2u + {buffer_data_offset}u) + buffer_words;
-        if (record_words * sizeof(uint32_t) > (uint64_t)size)
+                             "{name}: record too small for header");
+        uint64_t declared_payload = (uint64_t)((const uint32_t *)buffer_data)[1];
+        if (2u * sizeof(uint32_t) + declared_payload > (uint64_t)size)
             return YETTY_ERR(yetty_ydraw_composite_ptr,
-                             "{name}: buffers exceed record");
+                             "{name}: payload exceeds wire record");
     }}'''
 
     def texture_validate_block(t):

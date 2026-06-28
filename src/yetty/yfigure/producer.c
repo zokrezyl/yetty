@@ -35,6 +35,19 @@ struct yetty_yfigure_producer_session_ptr_result yetty_yfigure_producer_attach(i
     YETTY_RETURN_IF_ERR(yetty_yfigure_producer_session_ptr, register_result,
                         "yfigure_producer_attach: yfigure_register");
 
+    /* register() only installs the lazy accessor/skel lookups; the domain's
+     * method slots are not entered into the slot table until a class is built.
+     * A producer drives a REMOTE proxy and never instantiates a container, so
+     * without forcing the accessor here every typed stub's method_slot_get
+     * fails "domain not registered" — and translate_class below would have no
+     * local slots to map the server's reply onto (so it would cache nothing,
+     * forcing a mid-stream RESOLVE_SLOT that fights the tool's event loop).
+     * Building the container class registers it and its figure parent, i.e.
+     * every yetty_yfigure slot the typed stubs use. */
+    struct yetty_yclass_ptr_result class_result = yetty_yfigure_container_class_get();
+    YETTY_RETURN_IF_ERR(yetty_yfigure_producer_session_ptr, class_result,
+                        "yfigure_producer_attach: container_class_get");
+
     struct yetty_yclass_transport_ptr_result transport_result = yetty_yclass_transport_dcs_create(
         read_fd, write_fd, YETTY_DCS_YCLASS_RPC, compressed ? 1 : 0);
     YETTY_RETURN_IF_ERR(yetty_yfigure_producer_session_ptr, transport_result,

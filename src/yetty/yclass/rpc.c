@@ -11,7 +11,18 @@
 #include <string.h>
 
 #define MAX_OBJECTS 256
-#define BUF_MAX 65536
+/* Max wire body for one RPC frame. Figure bodies are whole drawable-list /
+ * composite payloads shipped one-way (a yplot/yimage figure is multi-MB:
+ * 800x800 RGBA alone is ~2.5 MB), so this must comfortably exceed 64 KB or
+ * rpc_write_request rejects them. The two static scratch buffers in
+ * rpc_server_run are sized from this — they are BSS (demand-paged), and the
+ * production receiver is the DCS server, which reads the body straight from
+ * the wire statemachine rather than into a fixed buffer. */
+#define BUF_MAX (16u * 1024u * 1024u)
+/* GET_CLASS responses are small (a class's method name->id table), and the
+ * translate_class parser reads them into a STACK buffer — so this must stay
+ * modest regardless of BUF_MAX, or raising BUF_MAX overflows the stack. */
+#define GET_CLASS_RESP_MAX 65536u
 
 /* -------- server (process-global) state ---------------------------- */
 
@@ -815,7 +826,7 @@ struct yetty_ycore_void_result yetty_yclass_rpc_session_translate_class(
         return YETTY_OK_VOID();
     }
 
-    uint8_t buf[BUF_MAX];
+    uint8_t buf[GET_CLASS_RESP_MAX];
     size_t name_len = strlen(class_name);
     struct yetty_ycore_size_result rr = yetty_yclass_rpc_call(
         s, YETTY_YCLASS_RPC_OP_GET_CLASS, 0, class_name, name_len, buf, sizeof(buf));

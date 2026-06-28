@@ -179,7 +179,6 @@ struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_fr
         yetty_ydraw_drawable_list_destroy(framework->ygrid_drawable_list);
         framework->ygrid_drawable_list = NULL;
     }
-    yetty_ycore_buffer_destroy(&framework->figure_bodies);
     if (framework->theme) {
         yetty_ygui_theme_destroy(framework->theme);
         framework->theme = NULL;
@@ -876,35 +875,6 @@ uint32_t yetty_ygui_framework_ygrid_id(const struct yetty_ygui_framework *framew
 }
 
 /*===========================================================================
- * Wire record helpers.
- *=========================================================================*/
-
-static struct yetty_ycore_void_result write_u32_le(struct yetty_ycore_buffer *dst, uint32_t v)
-{
-    uint8_t bytes[4] = {(uint8_t)(v & 0xff), (uint8_t)((v >> 8) & 0xff),
-                        (uint8_t)((v >> 16) & 0xff), (uint8_t)((v >> 24) & 0xff)};
-    return yetty_ycore_buffer_write(dst, bytes, sizeof(bytes));
-}
-
-struct yetty_ycore_void_result yetty_ygui_wire_append_record(struct yetty_ycore_buffer *dst,
-                                                             uint32_t id, const uint8_t *payload,
-                                                             uint32_t payload_len)
-{
-    /* Record header: u32 length | u32 id. `length` is payload bytes,
-     * not including the 8-byte header itself. */
-    struct yetty_ycore_void_result r;
-    r = write_u32_le(dst, payload_len);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_wire_append_record: write length");
-    r = write_u32_le(dst, id);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_wire_append_record: write id");
-    if (payload_len > 0 && payload) {
-        r = yetty_ycore_buffer_write(dst, payload, payload_len);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_wire_append_record: write payload");
-    }
-    return YETTY_OK_VOID();
-}
-
-/*===========================================================================
  * Emit-side helpers used by widget emit_container implementations.
  *=========================================================================*/
 
@@ -957,19 +927,16 @@ struct yetty_ycore_void_result yetty_ygui_emit_figure_body(struct yetty_ygui_emi
     if (figure_id == 0) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_figure_body: figure_id is 0");
     }
+    if (!ctx->framework || !ctx->framework->container_obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_figure_body: no container");
+    }
     ydebug("emit_figure_body id=%u size=%u", figure_id, payload_len);
-    if (ctx->framework && ctx->framework->container_obj) {
-        struct yetty_ycore_buffer body = {
-            .data = (uint8_t *)payload,
-            .capacity = 0,
-            .size = payload_len,
-        };
-        return yetty_yfigure_apply_child_body(ctx->framework->container_obj, figure_id, body);
-    }
-    if (!ctx->figure_bodies) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_figure_body: NULL ctx");
-    }
-    return yetty_ygui_wire_append_record(ctx->figure_bodies, figure_id, payload, payload_len);
+    struct yetty_ycore_buffer body = {
+        .data = (uint8_t *)payload,
+        .capacity = 0,
+        .size = payload_len,
+    };
+    return yetty_yfigure_apply_child_body(ctx->framework->container_obj, figure_id, body);
 }
 
 struct yetty_ycore_void_result yetty_ygui_emit_set_child_rect(struct yetty_ygui_emit_ctx *ctx,
@@ -1488,8 +1455,6 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_frame
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: NULL framework");
     }
 
-    yetty_ycore_buffer_clear(&framework->figure_bodies);
-
     /* Per-emit ydraw drawable_list — created lazily on first emit, reused
      * across frames. clear() rewinds the primitives byte cursor without
      * freeing the allocation. */
@@ -1517,9 +1482,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_frame
 
     struct yetty_ygui_emit_ctx ctx = {
         .framework = framework,
-        .container_records = NULL,
         .ygrid_drawable_list = framework->ygrid_drawable_list,
-        .figure_bodies = &framework->figure_bodies,
         .current_figure_id = 0,
         .staged_mints = NULL,
         .staged_mint_count = 0,

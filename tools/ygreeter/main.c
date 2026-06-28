@@ -3652,7 +3652,8 @@ static void client_pickup_winsz(struct client_state *cs)
         struct yetty_ycore_void_result chrome_sync_result =
             client_chrome_sync(cs, (float)ws.ws_xpixel, (float)ws.ws_ypixel);
         if (YETTY_IS_ERR(chrome_sync_result)) {
-            ywarn("ygreeter client: chrome sync (winsz) failed: %s", chrome_sync_result.error.msg);
+            yetty_ycore_error_print(stderr, "ygreeter client: chrome sync (winsz)",
+                                    chrome_sync_result.error);
             yetty_ycore_error_destroy(chrome_sync_result.error);
         }
 #endif
@@ -3755,6 +3756,18 @@ static int run_client_mode(void)
         if (YETTY_IS_OK(session_result)) {
             cs.chrome_session = session_result.value;
             cs.chrome_container = yetty_yfigure_producer_session_container(cs.chrome_session);
+            /* Drive the ygui widget tree into the SAME host root container over
+             * the SAME session as the chrome — one attach, one stdin reader.
+             * Without this the client framework has no container and
+             * framework_emit fails with "no container", so the greeter's
+             * widgets never render inside yetty. */
+            struct yetty_ycore_void_result set_container_result =
+                yetty_ygui_framework_set_container_obj(app.engine, cs.chrome_container);
+            if (YETTY_IS_ERR(set_container_result)) {
+                yetty_ycore_error_print(stderr, "ygreeter client: set_container_obj",
+                                        set_container_result.error);
+                yetty_ycore_error_destroy(set_container_result.error);
+            }
         } else {
             ywarn("ygreeter client: chrome attach failed: %s", session_result.error.msg);
             yetty_ycore_error_destroy(session_result.error);
@@ -3849,12 +3862,11 @@ static int run_client_mode(void)
             yetty_ycore_void_chain(teardown_result, yetty_ychrome_host_destroy(cs.chrome_host));
         cs.chrome_host = NULL;
     }
-    if (cs.chrome_session) {
-        teardown_result = yetty_ycore_void_chain(
-            teardown_result, yetty_yfigure_producer_detach(cs.chrome_session));
-        cs.chrome_session = NULL;
-        cs.chrome_container = NULL;
-    }
+    /* Detaching cs.chrome_session is DEFERRED to the very end of teardown: the
+     * ygui framework was wired to this same session's root-container proxy
+     * (set_container_obj), so framework_clear / framework_destroy below still
+     * use it. Detaching here would free the proxy out from under them, skipping
+     * the widget-figure clear and leaking every figure on the host pane. */
 #endif
 
     /* Undo client_enable_mouse_forwarding before we exit. The DEC private
@@ -3903,6 +3915,18 @@ static int run_client_mode(void)
     }
     teardown_result =
         yetty_ycore_void_chain(teardown_result, yetty_ygui_framework_destroy(app.engine));
+#ifdef YETTY_YGREETER_HAS_CHROME
+    /* Every figure clear (chrome delete_child + framework clear_all) has now
+     * been emitted onto the host, and the framework is torn down — so it is
+     * finally safe to detach the shared RPC session, which frees the root-
+     * container proxy and destroys the transport. Must be the LAST use of it. */
+    if (cs.chrome_session) {
+        teardown_result = yetty_ycore_void_chain(
+            teardown_result, yetty_yfigure_producer_detach(cs.chrome_session));
+        cs.chrome_session = NULL;
+        cs.chrome_container = NULL;
+    }
+#endif
     uv_loop_close(&cs.loop);
     ygreeter_tty_restore();
 

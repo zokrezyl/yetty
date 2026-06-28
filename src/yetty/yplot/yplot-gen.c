@@ -421,19 +421,30 @@ static struct yetty_ydraw_composite_ptr_result yplot_create_instance(
         return YETTY_ERR(yetty_ydraw_composite_ptr, "invalid buffer data");
     }
 
-    /* Bounds-check declared buffer payloads against the wire record. */
+    /* Bounds-check the wire record against its declared payload_size.
+     *
+     * The generic per-buffer offset sum (payload[18] + payload[19]) is WRONG
+     * for yplot: its buffers are not contiguous — a variable-length bytecode
+     * payload sits between the buffer-length words — so payload[18] is
+     * bytecode_len and payload[19] is the first bytecode instruction, not two
+     * buffer lengths. That misread inflated record_words and falsely rejected
+     * every valid record ("buffers exceed record"), so no yplot ever rendered.
+     * payload_size (header word[1], written by yetty_yplot_uniforms_serialize)
+     * is the authoritative count of bytes after the 8-byte header, which is
+     * correct regardless of internal layout.
+     *
+     * NOTE: applied by hand. The committed yplot-gen.c has diverged from
+     * ydraw-gen/generate.py (the generator does not emit the yplot-time
+     * integration that lives in this file), so regenerating would drop that
+     * feature; the matching fix is also in generate.py for when the two are
+     * reconciled. */
     {
-        const uint32_t *payload = (const uint32_t *)buffer_data + 2;
-        if (size < (size_t)22u * sizeof(uint32_t)) {
-            return YETTY_ERR(yetty_ydraw_composite_ptr,
-                             "yplot: record too small for buffer header");
+        if (size < 2u * sizeof(uint32_t)) {
+            return YETTY_ERR(yetty_ydraw_composite_ptr, "yplot: record too small for header");
         }
-        uint64_t buffer_words = 0;
-        buffer_words += payload[18];
-        buffer_words += payload[19];
-        uint64_t record_words = (uint64_t)(2u + 20u) + buffer_words;
-        if (record_words * sizeof(uint32_t) > (uint64_t)size) {
-            return YETTY_ERR(yetty_ydraw_composite_ptr, "yplot: buffers exceed record");
+        uint64_t declared_payload = (uint64_t)((const uint32_t *)buffer_data)[1];
+        if (2u * sizeof(uint32_t) + declared_payload > (uint64_t)size) {
+            return YETTY_ERR(yetty_ydraw_composite_ptr, "yplot: payload exceeds wire record");
         }
     }
 

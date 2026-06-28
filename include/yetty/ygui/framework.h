@@ -246,9 +246,7 @@ uint32_t yetty_ygui_framework_ygrid_id(const struct yetty_ygui_framework *framew
  *---------------------------------------------------------------------------*/
 struct yetty_ygui_emit_ctx {
     struct yetty_ygui_framework *framework;
-    struct yetty_ycore_buffer *container_records;
     struct yetty_ydraw_drawable_list *ygrid_drawable_list;
-    struct yetty_ycore_buffer *figure_bodies;
     uint32_t current_figure_id;
 
     /* Sender-side bookkeeping that the receiver only learns about after

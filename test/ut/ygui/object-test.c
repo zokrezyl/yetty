@@ -253,9 +253,7 @@ static void test_tooltip_pilot(void)
     assert(YETTY_IS_OK(dlr));
     struct yetty_ygui_emit_ctx ctx = {
         .framework = NULL,
-        .container_records = NULL,
         .ygrid_drawable_list = dlr.value,
-        .figure_bodies = NULL,
         .current_figure_id = 0,
     };
     struct yetty_ycore_void_result er =

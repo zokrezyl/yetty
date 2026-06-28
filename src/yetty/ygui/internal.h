@@ -180,9 +180,6 @@ struct yetty_ygui_framework {
     /* framework-level dirty flag. Cleared by emit. */
     int dirty;
 
-    /* Reusable per-emit buffer for figure-body record bytes. Cleared at the
-     * start of each emit. */
-    struct yetty_ycore_buffer figure_bodies;
     /* Shared ydraw drawable_list — primitive widgets append SDF / glyph
      * records here. Lazily created on first emit; reused across
      * frames. */
@@ -261,11 +258,6 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_
  * walk through the typed yclass stubs, so the ygrid body is the only stream
  * left to ship here. */
 struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_framework *framework);
-
-/* Append one {length, id, payload} record to `dst`. */
-struct yetty_ycore_void_result yetty_ygui_wire_append_record(struct yetty_ycore_buffer *dst,
-                                                             uint32_t id, const uint8_t *payload,
-                                                             uint32_t payload_len);
 
 /* Main-axis scroll offset on the base widget slice — read by the layout
  * pass to slide a scrolling container's in-flow children. Internal. */

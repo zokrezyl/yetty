@@ -282,9 +282,7 @@ static void test_widget_paint_emits_real_prims(void)
     assert(YETTY_IS_OK(dlr));
     struct yetty_ygui_emit_ctx ctx = {
         .framework = NULL,
-        .container_records = NULL,
         .ygrid_drawable_list = dlr.value,
-        .figure_bodies = NULL,
         .current_figure_id = 0,
     };
     yetty_ygui_widget_paint((struct yetty_yclass_object *)panel, &ctx);

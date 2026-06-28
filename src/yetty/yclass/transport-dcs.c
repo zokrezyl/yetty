@@ -18,8 +18,16 @@
 #ifdef _WIN32
 #include <io.h> /* read/write/close — MSVC ships no <unistd.h> */
 #else
+#include <poll.h>
 #include <unistd.h>
 #endif
+
+/* How long recv() waits for the peer's reply before declaring the link dead.
+ * recv() is only reached for request/response calls (the startup handshake:
+ * translate_class + GET_ROOT); steady-state figure calls are one-way and never
+ * recv(). A real host answers in well under a second; the generous bound just
+ * keeps a host-less invocation from hanging forever instead of failing. */
+#define DCS_RECV_TIMEOUT_MS 5000
 
 struct dcs_transport {
     struct yetty_yclass_transport base;
@@ -124,17 +132,52 @@ static struct yetty_ycore_size_result dcs_recv(struct yetty_yclass_transport *ba
         if (t->eof) {
             return YETTY_OK(yetty_ycore_size, 0);
         }
+#ifndef _WIN32
+        /* Wait for the fd to actually become readable before reading. The
+         * caller's tty is typically in raw mode with VMIN=0, where read()
+         * returns 0 immediately when no data is buffered — and the peer's
+         * reply often lags our request — so a bare read() would spuriously
+         * report EOF (the bug that broke every figure producer's attach
+         * handshake). poll() blocks until real data arrives; a genuine
+         * disconnect shows up as POLLHUP, and the timeout fails closed. */
+        {
+            struct pollfd poll_fd = {.fd = t->read_fd, .events = POLLIN};
+            int poll_result = poll(&poll_fd, 1, DCS_RECV_TIMEOUT_MS);
+            if (poll_result < 0) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                return YETTY_ERR(yetty_ycore_size, "dcs_recv: poll failed");
+            }
+            if (poll_result == 0) {
+                t->eof = 1; /* timed out waiting for the reply */
+                return YETTY_OK(yetty_ycore_size, 0);
+            }
+            /* Pure hangup with no pending data: real disconnect. */
+            if ((poll_fd.revents & (POLLHUP | POLLERR | POLLNVAL)) &&
+                !(poll_fd.revents & POLLIN)) {
+                t->eof = 1;
+                return YETTY_OK(yetty_ycore_size, 0);
+            }
+        }
+#endif
         uint8_t raw[4096];
         ptrdiff_t n = read(t->read_fd, raw, sizeof(raw));
         if (n < 0) {
-            if (errno == EINTR) {
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
                 continue;
             }
             return YETTY_ERR(yetty_ycore_size, "dcs_recv: read failed");
         }
         if (n == 0) {
+#ifndef _WIN32
+            /* poll() said readable but VMIN=0 handed us nothing yet — loop and
+             * wait again rather than mistaking it for EOF. */
+            continue;
+#else
             t->eof = 1;
             return YETTY_OK(yetty_ycore_size, 0);
+#endif
         }
         struct yetty_ycore_void_result fr =
             yetty_ywire_wire_statemachine_feed(t->sm, (const char *)raw, (size_t)n);
