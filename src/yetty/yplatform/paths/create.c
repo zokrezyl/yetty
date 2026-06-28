@@ -30,6 +30,7 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_create(void)
     yetty_yplatform_mkdir_p(paths->data_dir_buf);
     yetty_yplatform_mkdir_p(paths->runtime_dir_buf);
     yetty_yplatform_mkdir_p(paths->config_dir_buf);
+    yetty_yplatform_mkdir_p(paths->state_dir_buf);
     yetty_yplatform_mkdir_p(paths->shaders_dir_buf);
     yetty_yplatform_mkdir_p(paths->fonts_dir_buf);
 

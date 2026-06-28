@@ -45,8 +45,14 @@ yetty_yplatform_tty_redirect_stderr_if_shared_with_stdout(const char *basename)
      * runtime_dir is the right home for short-lived process logs
      * (XDG_RUNTIME_DIR semantics; /tmp/yetty-<uid> fallback). */
     char path[512];
-    const char *runtime = yetty_yplatform_get_runtime_dir();
-    snprintf(path, sizeof(path), "%s/%s-%d.log", runtime, basename, (int)getpid());
+    struct yetty_yplatform_paths_ptr_result paths_res = yetty_yplatform_paths_get_platform_paths();
+    if (YETTY_IS_ERR(paths_res)) {
+        yetty_ycore_error_destroy(paths_res.error);
+        return YETTY_ERR(yetty_yplatform_tty_redirected, "resolve runtime dir failed");
+    }
+    snprintf(path, sizeof(path), "%s/%s-%d.log", paths_res.value->runtime_dir_buf, basename,
+             (int)getpid());
+    yetty_yplatform_paths_destroy(paths_res.value);
 
     FILE *log = fopen(path, "w");
     if (!log) {

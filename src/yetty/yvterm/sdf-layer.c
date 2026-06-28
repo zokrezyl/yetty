@@ -99,6 +99,8 @@ struct yetty_yvterm_sdf_layer {
     struct yetty_ydraw_gpu_allocator *allocator;
     struct yetty_ymsdf_generator *msdf_generator;
     char shaders_dir[512];
+    char cache_dir[512];
+    char data_dir[512];
 
     /* Pipeline + resources. */
     struct yetty_yrender_gpu_resource_binder *binder;
@@ -419,7 +421,7 @@ static struct yetty_ycore_void_result sdf_install_wire_font(
         return YETTY_OK_VOID();
     }
 
-    const char *cache_dir = yetty_yplatform_get_cache_dir();
+    const char *cache_dir = layer->cache_dir;
     if (!cache_dir || !*cache_dir) {
         return YETTY_ERR(yetty_ycore_void, "sdf-layer wire font: no cache dir");
     }
@@ -433,7 +435,7 @@ static struct yetty_ycore_void_result sdf_install_wire_font(
         }
         memcpy(cache_key, fv->name, fv->name_len);
         cache_key[fv->name_len] = '\0';
-        const char *data_dir = yetty_yplatform_get_data_dir();
+        const char *data_dir = layer->data_dir;
         if (!data_dir || !*data_dir) {
             return YETTY_OK_VOID();
         }
@@ -924,9 +926,13 @@ struct yetty_yvterm_sdf_layer_ptr_result yetty_yvterm_sdf_layer_create(
     layer->target_format = context->runtime->gpu.surface_format;
     layer->allocator = context->runtime->gpu.allocator;
     layer->msdf_generator = context->runtime->gpu.msdf_generator;
-    const char *shaders_dir =
-        context->runtime->config->ops->get_string(context->runtime->config, "paths/shaders", "");
+    struct yetty_yconfig_config *config = context->runtime->config;
+    const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
     snprintf(layer->shaders_dir, sizeof(layer->shaders_dir), "%s", shaders_dir ? shaders_dir : "");
+    const char *cache_dir = config->ops->get_string(config, "paths/cache", "");
+    snprintf(layer->cache_dir, sizeof(layer->cache_dir), "%s", cache_dir ? cache_dir : "");
+    const char *data_dir = config->ops->get_string(config, "paths/data", "");
+    snprintf(layer->data_dir, sizeof(layer->data_dir), "%s", data_dir ? data_dir : "");
 
     struct yetty_yfont_cache_ptr_result font_cache_r = yetty_yfont_cache_create(layer->shaders_dir);
     if (YETTY_IS_OK(font_cache_r)) {

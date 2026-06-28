@@ -6,6 +6,7 @@
  *   cache_dir   → %LOCALAPPDATA%\yetty\cache
  *   data_dir    → %LOCALAPPDATA%\yetty\data
  *   config_dir  → %APPDATA%\yetty             (roaming)
+ *   state_dir   → %LOCALAPPDATA%\yetty\state  (non-roaming logs/history)
  *   runtime_dir → %TEMP%\yetty
  *   assets_dir  → directory holding yetty.exe + "\\assets",
  *                  $YETTY_ASSETS_DIR override
@@ -54,6 +55,14 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths
         snprintf(p->config_dir_buf, sizeof(p->config_dir_buf), "%s\\yetty", appData);
     } else {
         snprintf(p->config_dir_buf, sizeof(p->config_dir_buf), "C:\\temp\\yetty");
+    }
+
+    /* state_dir → %LOCALAPPDATA%\yetty\state (per-machine, non-roaming;
+     * logs/history shouldn't follow the user across machines like %APPDATA%). */
+    if (localAppData && *localAppData) {
+        snprintf(p->state_dir_buf, sizeof(p->state_dir_buf), "%s\\yetty\\state", localAppData);
+    } else {
+        snprintf(p->state_dir_buf, sizeof(p->state_dir_buf), "C:\\temp\\yetty");
     }
 
     /* assets_dir = $YETTY_ASSETS_DIR || dirname(GetModuleFileName())\assets */

@@ -226,6 +226,7 @@ struct scrolling_canvas {
     /* Resource dirs + family from config. */
     char shaders_dir[512];
     char fonts_dir[512];
+    char cache_dir[512];
     char font_family[128];
 
     /* Registries + factory. */
@@ -389,7 +390,7 @@ static struct yetty_ycore_void_result ensure_blob_font_cdb(struct scrolling_canv
     uint64_t h = fnv1a64(ttf, ttf_len);
     snprintf(out_hex, 17, "%016llx", (unsigned long long)h);
 
-    const char *cache_dir = yetty_yplatform_get_cache_dir();
+    const char *cache_dir = c->cache_dir;
     if (!cache_dir || !*cache_dir) {
         return YETTY_ERR(yetty_ycore_void, "no cache dir");
     }
@@ -443,7 +444,7 @@ static struct yetty_ycore_void_result ensure_blob_font_cdb(struct scrolling_canv
 static struct yetty_yfont_cache_ref_result resolve_blob_font_handle(struct scrolling_canvas *c,
                                                                     const char *hex)
 {
-    const char *cache_dir = yetty_yplatform_get_cache_dir();
+    const char *cache_dir = c->cache_dir;
     if (!cache_dir || !*cache_dir) {
         return YETTY_ERR(yetty_yfont_cache_ref, "no cache dir");
     }
@@ -702,6 +703,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     struct yetty_yconfig_config *config = context->runtime->config;
     const char *fonts_dir = config->ops->get_string(config, "paths/fonts", "");
     const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
+    const char *cache_dir = config->ops->get_string(config, "paths/cache", "");
     const char *font_family = config->ops->font_family(config);
     if (!font_family || strcmp(font_family, "default") == 0) {
         font_family = "DejaVuSansMNerdFontMono";
@@ -709,6 +711,7 @@ struct yetty_ydraw_canvas_ptr_result yetty_ydraw_scrolling_canvas_create(
     const char *render_method = config->ops->get_string(config, "ydraw/font/render-method", "msdf");
     strncpy(c->shaders_dir, shaders_dir, sizeof(c->shaders_dir) - 1);
     strncpy(c->fonts_dir, fonts_dir, sizeof(c->fonts_dir) - 1);
+    strncpy(c->cache_dir, cache_dir, sizeof(c->cache_dir) - 1);
     strncpy(c->font_family, font_family, sizeof(c->font_family) - 1);
     c->font_render_method = (strcmp(render_method, "raster") == 0) ? 1 : 0;
     c->msdf_generator = context->runtime->gpu.msdf_generator;

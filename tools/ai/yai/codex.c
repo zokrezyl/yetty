@@ -104,7 +104,23 @@ static struct yetty_ycore_void_result codex_send_user_message(struct yetty_yclas
         }
     }
 
-    const char *args[20];
+    /* If the usage proxy is up, route codex's ChatGPT-plan (OAuth) backend
+     * traffic through it. codex has no base-URL env var; chatgpt_base_url is a
+     * config key, overridable per-invocation with -c. The proxy forwards
+     * /backend-api/... on to https://chatgpt.com and mirrors the turn to the
+     * proxy transcript. (API-key codex uses openai_base_url instead and is left
+     * direct.) The -c value is parsed as TOML, so the URL is a quoted string. */
+    char base_url_override[96] = "";
+    int proxy_port = yai_usage_proxy_port(app);
+    if (proxy_port > 0) {
+        int written = snprintf(base_url_override, sizeof(base_url_override),
+                               "chatgpt_base_url=\"http://127.0.0.1:%d/backend-api/\"", proxy_port);
+        if (written < 0 || (size_t)written >= sizeof(base_url_override)) {
+            return YETTY_ERR(yetty_ycore_void, "codex send_user_message: base url override too long");
+        }
+    }
+
+    const char *args[22];
     int arg_count = 0;
     args[arg_count++] = "codex";
     args[arg_count++] = "exec";
@@ -121,6 +137,10 @@ static struct yetty_ycore_void_result codex_send_user_message(struct yetty_yclas
     if (effort_override[0]) {
         args[arg_count++] = "-c";
         args[arg_count++] = effort_override;
+    }
+    if (base_url_override[0]) {
+        args[arg_count++] = "-c";
+        args[arg_count++] = base_url_override;
     }
     if (app->session_id[0]) {
         args[arg_count++] = "resume";

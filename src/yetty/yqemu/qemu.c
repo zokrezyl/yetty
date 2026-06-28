@@ -101,8 +101,22 @@ static void qemu_settings_ensure_default(const char *path)
 
 struct yetty_yplatform_yprocess *yetty_yqemu_qemu_start(uint16_t host_port)
 {
-    const char *raw_data_dir = yetty_yplatform_get_data_dir();
-    const char *raw_config_dir = yetty_yplatform_get_config_dir();
+    /* qemu spawns from the pty factory, which has no config in scope. Resolve
+     * the platform dirs explicitly (the sanctioned init-returns-object call)
+     * into locals and release the struct; the dirs are used throughout below. */
+    char resolved_data_dir[512];
+    char resolved_config_dir[512];
+    struct yetty_yplatform_paths_ptr_result paths_res = yetty_yplatform_paths_get_platform_paths();
+    if (YETTY_IS_ERR(paths_res)) {
+        yetty_ycore_error_destroy(paths_res.error);
+        return NULL;
+    }
+    snprintf(resolved_data_dir, sizeof(resolved_data_dir), "%s", paths_res.value->data_dir_buf);
+    snprintf(resolved_config_dir, sizeof(resolved_config_dir), "%s",
+             paths_res.value->config_dir_buf);
+    yetty_yplatform_paths_destroy(paths_res.value);
+    const char *raw_data_dir = resolved_data_dir;
+    const char *raw_config_dir = resolved_config_dir;
 
 #ifdef _WIN32
     /* Normalize path separators to forward slashes. QEMU's option parsers

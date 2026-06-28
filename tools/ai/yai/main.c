@@ -33,7 +33,8 @@
  *   2. The ygui HUD window — a compositor figure that does NOT scroll.
  *
  * Scrollback: every JSONL event is mirrored to
- * tmp/transcript-<session>.jsonl.
+ * <state_dir>/yai/transcripts/transcript-<session>.jsonl
+ * (state_dir = $XDG_STATE_HOME/yetty, i.e. ~/.local/state/yetty on Linux).
  *
  * Usage (settings come from the config file + CLI flags; see --help):
  *     ./yai                          # fresh session (claude engine)
@@ -75,6 +76,8 @@
 
 #include <yetty/yface/yface.h>
 #include <yetty/ymgui/wire.h>
+#include <yetty/yplatform/fs.h>
+#include <yetty/yplatform/paths.h>
 #include <yetty/yterminal/client-input.h>
 #include <yetty/ytrace/ytrace.h>
 
@@ -336,11 +339,26 @@ static void yai_config_set_hud_parts(struct yai_config *config, const char *cons
     }
 }
 
+/* Canonicalize an engine name to one of the three string literals, defaulting
+ * to "claude" for anything unrecognized. The returned pointer has static
+ * lifetime, so it is safe to store in app->engine_name. */
+static const char *engine_canonical(const char *value)
+{
+    if (strcmp(value, "codex") == 0) {
+        return "codex";
+    }
+    if (strcmp(value, "gemini") == 0) {
+        return "gemini";
+    }
+    return "claude";
+}
+
 /* Seed every setting with its default. Call once, before the file load. */
 static void yai_config_defaults(struct yai_app *app)
 {
     struct yai_config *config = &app->config;
     app->engine_name = "claude";
+    snprintf(config->engine, sizeof(config->engine), "claude");
     app->editor_mode_name = "emacs";
     /* defaults */
     snprintf(config->edit_mode, sizeof(config->edit_mode), "emacs");
@@ -384,9 +402,12 @@ static int yai_config_set_global(struct yai_app *app, const char *key, const cha
 {
     struct yai_config *config = &app->config;
     if (strcmp(key, "engine") == 0) {
-        app->engine_name = (strcmp(value, "codex") == 0)    ? "codex"
-                           : (strcmp(value, "gemini") == 0) ? "gemini"
-                                                            : "claude";
+        /* This path is the config file + /config dialog: the choice is a
+         * persisted default, so update both the active engine and the saved
+         * field. The CLI --engine override sets app->engine_name directly and
+         * deliberately does NOT come through here. */
+        app->engine_name = engine_canonical(value);
+        snprintf(config->engine, sizeof(config->engine), "%s", app->engine_name);
     } else if (strcmp(key, "edit-mode") == 0) {
         snprintf(config->edit_mode, sizeof(config->edit_mode), "%s",
                  strcmp(value, "vi") == 0 ? "vi" : "emacs");
@@ -894,7 +915,7 @@ static struct yetty_ycore_void_result yai_config_save(const struct yai_app *app)
         snprintf(fold_lines, sizeof(fold_lines), "%d", config->fold_lines);
         /* defaults: { … } — the global settings. */
         ok = yai_config_emit_scalar(&emitter, "defaults") && yai_config_emit_map_start(&emitter) &&
-             yai_config_emit_pair(&emitter, "engine", app->engine_name) &&
+             yai_config_emit_pair(&emitter, "engine", config->engine) &&
              yai_config_emit_pair(&emitter, "edit-mode", config->edit_mode) &&
              yai_config_emit_pair(&emitter, "fold-lines", fold_lines) &&
              yai_config_emit_pair(&emitter, "show-thinking",
@@ -2201,6 +2222,71 @@ static void yai_format_reset_time(long long epoch, int include_date, char *out, 
     }
 }
 
+/* The active engine's decomposed quota. codex's lives in its rollout file
+ * (the model call never reaches the proxy); everyone else reads the proxy. */
+void yai_quota_get(struct yai_app *app, struct yai_quota *out)
+{
+    if (strcmp(app->engine_name, "codex") == 0) {
+        if (!yai_codex_quota_read(app, out)) {
+            memset(out, 0, sizeof(*out));
+        }
+        return;
+    }
+    yai_usage_proxy_quota(app, out);
+}
+
+/* The active engine's compact #{quota} one-liner. For codex, format it from the
+ * rollout-sourced quota in the same style the proxy uses for claude:
+ * "<util>% (<reset>) · <util>% (<reset>)" (5h clock, then weekly clock+date). */
+void yai_quota_summary(struct yai_app *app, char *out, size_t out_size)
+{
+    if (out_size == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (strcmp(app->engine_name, "codex") != 0) {
+        yai_usage_proxy_summary(app, out, out_size);
+        return;
+    }
+    struct yai_quota quota;
+    if (!yai_codex_quota_read(app, &quota) || !quota.valid) {
+        return;
+    }
+    char reset_5h[24] = "";
+    char reset_7d[24] = "";
+    yai_format_reset_time(quota.session_reset, /*include_date=*/0, reset_5h, sizeof(reset_5h));
+    yai_format_reset_time(quota.week_reset, /*include_date=*/1, reset_7d, sizeof(reset_7d));
+    snprintf(out, out_size, "%d%% (%s) · %d%% (%s)", quota.session_pct, reset_5h, quota.week_pct,
+             reset_7d);
+}
+
+/* The active engine's multi-line quota block for /usage. codex is formatted from
+ * its rollout-sourced quota; everyone else uses the proxy's decoded block. */
+static void yai_quota_status(struct yai_app *app, char *out, size_t out_size)
+{
+    if (out_size == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (strcmp(app->engine_name, "codex") != 0) {
+        yai_usage_proxy_status(app, out, out_size);
+        return;
+    }
+    struct yai_quota quota;
+    if (!yai_codex_quota_read(app, &quota) || !quota.valid) {
+        return;
+    }
+    char reset_5h[24] = "";
+    char reset_7d[24] = "";
+    yai_format_reset_time(quota.session_reset, /*include_date=*/1, reset_5h, sizeof(reset_5h));
+    yai_format_reset_time(quota.week_reset, /*include_date=*/1, reset_7d, sizeof(reset_7d));
+    snprintf(out, out_size,
+             "codex plan quota\n"
+             "  5h      %d%% used  (resets %s)\n"
+             "  weekly  %d%% used  (resets %s)",
+             quota.session_pct, reset_5h, quota.week_pct, reset_7d);
+}
+
 /* Resolve every HUD format variable from current app state. The atomic
  * values come straight from usage / config / engine_name / the cached
  * state + quota + last-turn fields; the #{turn}/#{session}/#{stats}
@@ -2222,9 +2308,9 @@ static void yai_hud_collect_values(struct yai_app *app, struct yai_hud_var_value
     snprintf(out->value[YAI_HUD_VAR_TURNS], YAI_HUD_VALUE_MAX, "%d", app->usage.turns);
     snprintf(out->value[YAI_HUD_VAR_QUOTA], YAI_HUD_VALUE_MAX, "%s", app->quota_text);
     /* Decomposed quota: per-window percentage + locale reset time. Left empty
-     * until the proxy captures ratelimit headers (out was zeroed above). */
+     * until a source has it (claude: proxy headers; codex: rollout file). */
     struct yai_quota quota;
-    yai_usage_proxy_quota(app, &quota);
+    yai_quota_get(app, &quota);
     if (quota.valid) {
         snprintf(out->value[YAI_HUD_VAR_QUOTA_SESSION_PCT], YAI_HUD_VALUE_MAX, "%d",
                  quota.session_pct);
@@ -2812,17 +2898,17 @@ static struct yetty_ycore_void_result show_usage(struct yai_app *app)
     } else {
         printf("  " YAI_MUTED "(cost not reported by this engine)" YAI_RESET "\n");
     }
-    /* Live account quota, when the usage proxy captured rate-limit headers.
-     * The status is a pre-decoded multi-line block (one field per line). */
+    /* Live account quota: claude from the proxy's decoded rate-limit headers,
+     * codex from its rollout file. A pre-formatted multi-line block. */
     char quota[4096];
-    yai_usage_proxy_status(app, quota, sizeof(quota));
+    yai_quota_status(app, quota, sizeof(quota));
     if (quota[0]) {
         printf("\n");
         for (char *line = strtok(quota, "\n"); line; line = strtok(NULL, "\n")) {
             printf("  " YAI_DIM "%s" YAI_RESET "\n", line);
         }
     } else if (app->usage_proxy) {
-        printf("  " YAI_MUTED "(quota: no API call captured yet)" YAI_RESET "\n");
+        printf("  " YAI_MUTED "(quota: not captured yet)" YAI_RESET "\n");
     }
     printf("\n");
 
@@ -3751,15 +3837,33 @@ static void on_term_signal(uv_signal_t *signal_handle, int signum)
  * main
  *---------------------------------------------------------------------------*/
 
-/* tmp/ + the transcript file. The transcript is a diagnostic mirror —
- * the caller decides whether a failure here is fatal. */
-static struct yetty_ycore_void_result transcript_open(struct yai_app *app, const char *file_tag)
+/* <state_dir>/yai/transcripts — the per-session diagnostics directory.
+ * Shared by main.c and proxy.c (declared in app.h) so the layout lives in
+ * one place. Does not create the directory; callers mkdir_p it. */
+int yai_transcript_dir(char *out, size_t out_size)
 {
-    if (mkdir("tmp", 0777) != 0 && errno != EEXIST) {
-        return YETTY_ERR(yetty_ycore_void, "transcript_open: mkdir tmp failed");
+    struct yetty_yplatform_paths_ptr_result paths_res = yetty_yplatform_paths_get_platform_paths();
+    if (YETTY_IS_ERR(paths_res)) {
+        yetty_ycore_error_destroy(paths_res.error);
+        return -1;
     }
+    int written = snprintf(out, out_size, "%s/yai/transcripts", paths_res.value->state_dir_buf);
+    yetty_yplatform_paths_destroy(paths_res.value);
+    return (written > 0 && (size_t)written < out_size) ? 0 : -1;
+}
+
+/* Open the session transcript under <state_dir>/yai/transcripts. The
+ * transcript is a diagnostic mirror — the caller decides whether a failure
+ * here is fatal. */
+static struct yetty_ycore_void_result transcript_open(struct yai_app *app)
+{
+    char dir[PATH_MAX];
+    if (yai_transcript_dir(dir, sizeof(dir)) != 0) {
+        return YETTY_ERR(yetty_ycore_void, "transcript_open: state dir unavailable");
+    }
+    yetty_yplatform_mkdir_p(dir);
     int written = snprintf(app->transcript_path, sizeof(app->transcript_path),
-                           "tmp/transcript-%s.jsonl", file_tag);
+                           "%s/transcript-%s.jsonl", dir, app->transcript_tag);
     if (written < 0 || (size_t)written >= sizeof(app->transcript_path)) {
         return YETTY_ERR(yetty_ycore_void, "transcript_open: path truncated");
     }
@@ -3770,13 +3874,18 @@ static struct yetty_ycore_void_result transcript_open(struct yai_app *app, const
     return YETTY_OK_VOID();
 }
 
-/* The fd the child's stderr is redirected to (a log under tmp/). */
-static struct yetty_ycore_int_result child_stderr_log_open(const char *engine_name,
-                                                           const char *file_tag)
+/* The fd the child's stderr is redirected to (stderr-<tag>.log, alongside
+ * the transcript). */
+static struct yetty_ycore_int_result child_stderr_log_open(const char *file_tag)
 {
-    char stderr_log_path[256];
-    int written = snprintf(stderr_log_path, sizeof(stderr_log_path), "tmp/%s-stderr-%s.log",
-                           engine_name, file_tag);
+    char dir[PATH_MAX];
+    if (yai_transcript_dir(dir, sizeof(dir)) != 0) {
+        return YETTY_ERR(yetty_ycore_int, "child_stderr_log_open: state dir unavailable");
+    }
+    yetty_yplatform_mkdir_p(dir);
+    char stderr_log_path[PATH_MAX];
+    int written =
+        snprintf(stderr_log_path, sizeof(stderr_log_path), "%s/stderr-%s.log", dir, file_tag);
     if (written < 0 || (size_t)written >= sizeof(stderr_log_path)) {
         return YETTY_ERR(yetty_ycore_int, "child_stderr_log_open: path truncated");
     }
@@ -3969,7 +4078,8 @@ static void print_usage(FILE *stream, const char *program)
         "  Ctrl-C           interrupt the turn in flight\n"
         "  Tab / Up / Down  slash-command completion menu\n"
         "\n"
-        "Each session's JSONL transcript is written to tmp/transcript-<session>.jsonl\n",
+        "Each session's JSONL transcript is written under "
+        "$XDG_STATE_HOME/yetty/yai/transcripts/ (transcript-<session>.jsonl)\n",
         program);
 }
 
@@ -4074,7 +4184,12 @@ int main(int argc, char **argv)
                 free(app);
                 return 2;
             }
-            yai_config_set(app, "engine", value);
+            /* CLI override: change the ACTIVE engine for this session only, then
+             * re-resolve so the active backend's overrides take effect. The
+             * persisted config->engine is left untouched so a later save does
+             * not bake the override into the file. */
+            app->engine_name = engine_canonical(value);
+            yai_config_resolve(app);
         } else {
             int matched = 0;
             for (size_t flag_index = 0; flag_index < sizeof(value_flags) / sizeof(value_flags[0]);
@@ -4147,6 +4262,7 @@ int main(int argc, char **argv)
         free(app);
         return 1;
     }
+    snprintf(app->transcript_tag, sizeof(app->transcript_tag), "%s", file_tag);
     if (resume_session_id) {
         if (strlen(resume_session_id) >= sizeof(app->session_id)) {
             fprintf(stderr, "yai: --resume id too long (max %zu chars)\n",
@@ -4178,12 +4294,12 @@ int main(int argc, char **argv)
 
     /* The transcript is a diagnostic mirror — a failure is reported but
      * not fatal: the session runs without it. */
-    yai_report_error(app, "transcript", transcript_open(app, file_tag));
+    yai_report_error(app, "transcript", transcript_open(app));
 
     /* No log file → the child's stderr stays on ours. Explicit,
      * reported degradation, not a silent one. */
     int stderr_fd = STDERR_FILENO;
-    struct yetty_ycore_int_result stderr_log_res = child_stderr_log_open(engine_name, file_tag);
+    struct yetty_ycore_int_result stderr_log_res = child_stderr_log_open(file_tag);
     if (YETTY_IS_ERR(stderr_log_res)) {
         yai_report_error(app, "child stderr log",
                          (struct yetty_ycore_void_result){.ok = 0, .error = stderr_log_res.error});
@@ -4265,14 +4381,14 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* Builtin usage proxy: interpose on the claude child's API traffic to
-     * capture live quota headers. Brought up BEFORE the engine starts so it
-     * overrides ANTHROPIC_BASE_URL, which the child inherits at spawn time. A
-     * failure is reported but non-fatal — the session just runs without live
-     * quota capture. Only claude honors ANTHROPIC_BASE_URL, so skip the rest. */
-    if (strcmp(app->engine_name, "claude") == 0) {
-        yai_report_error(app, "usage proxy", yai_usage_proxy_start(app));
-    }
+    /* Builtin usage proxy: interpose on the active engine's API traffic so
+     * every request/response is mirrored to the proxy transcript (and, for
+     * claude, live quota headers are captured). Brought up BEFORE the engine
+     * starts so the routing knob is in place at spawn time: claude/gemini
+     * inherit the base-URL env var the proxy sets; codex reads the bound port
+     * (yai_usage_proxy_port) to build its -c chatgpt_base_url override. A
+     * failure is reported but non-fatal — the session just runs unproxied. */
+    yai_report_error(app, "usage proxy", yai_usage_proxy_start(app));
 
     struct yetty_ycore_void_result start_res = yetty_yai_start(app->engine, app);
     if (YETTY_IS_OK(start_res)) {

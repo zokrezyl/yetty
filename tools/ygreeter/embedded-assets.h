@@ -17,7 +17,7 @@
  * Idempotent: a per-build version marker at
  * <data_dir>/.ygreeter-assets/version short-circuits subsequent runs.
  *
- * data_dir is yetty_yplatform_get_data_dir(); pass it through so we
+ * data_dir is the platform paths data dir; pass it through so we
  * don't pull the paths header into the unit-test surface. Returns 0 on
  * success, non-zero on failure (already logged via ytrace). */
 int ygreeter_embedded_assets_extract(const char *data_dir);

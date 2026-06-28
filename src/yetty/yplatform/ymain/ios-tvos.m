@@ -13,6 +13,7 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yplatform/gpu-context.h>
+#include <yetty/yplatform/paths.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/pty.h>
 #include <yetty/yplatform/yplatform/platform.h>
@@ -21,9 +22,6 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <time.h>
-
-/* Forward declarations */
-const char *yetty_yplatform_get_cache_dir(void);
 
 /* Tiny on-disk trace so we can pull the input pipeline state from the
  * device via devicectl after the app runs. iOS sandbox routes stderr
@@ -53,9 +51,6 @@ static void yetty_kb_log(const char *fmt, ...)
     }
     close(fd);
 }
-const char *yetty_yplatform_get_data_dir(void);
-const char *yetty_yplatform_get_runtime_dir(void);
-const char *yetty_yplatform_get_config_dir(void);
 WGPUSurface yetty_yplatform_create_surface_from_layer(WGPUInstance instance, CAMetalLayer *layer);
 
 /* Platform class registration + base create (generated, yplatform module). iOS
@@ -142,25 +137,25 @@ static void *render_thread_func(void *arg)
 - (void)initializeYetty {
     ydebug("initializeYetty starting");
 
-    const char *cache_dir = yetty_yplatform_get_cache_dir();
-    const char *runtime_dir = yetty_yplatform_get_runtime_dir();
-    /* extract_assets writes shaders/fonts under data_dir (Application
-     * Support/yetty), so point yetty at that — not cache_dir which is never
-     * populated. */
-    const char *data_dir = yetty_yplatform_get_data_dir();
-    const char *config_dir = yetty_yplatform_get_config_dir();
-    ydebug("cache_dir=%s data_dir=%s runtime_dir=%s config_dir=%s",
-           cache_dir, data_dir, runtime_dir, config_dir);
-
     /* The shipped tinyemu cfg (assets/yemu/temu/yetty-temu-extended.cfg) uses
      * $YETTY_DATA_DIR / $YETTY_RUNTIME_DIR / $YETTY_CONFIG_DIR path expansion
      * (see expand_env_vars in src/tinyemu/machine.c). Desktop and webasm set
      * these in their main entries (glfw.c, webasm.c); iOS/tvOS must do the
      * same so the cfg's $YETTY_DATA_DIR/yemu/... paths resolve to the
-     * sandbox's Application Support/yetty (or Caches/yetty on tvOS). */
-    setenv("YETTY_RUNTIME_DIR", runtime_dir, 1);
-    setenv("YETTY_DATA_DIR", data_dir, 1);
-    setenv("YETTY_CONFIG_DIR", config_dir, 1);
+     * sandbox's Application Support/yetty (or Caches/yetty on tvOS). Resolve the
+     * platform dirs once (yconfig_create below does it too, but later). */
+    struct yetty_yplatform_paths_ptr_result paths_res = yetty_yplatform_paths_get_platform_paths();
+    if (YETTY_IS_OK(paths_res)) {
+        ydebug("cache_dir=%s data_dir=%s runtime_dir=%s config_dir=%s",
+               paths_res.value->cache_dir_buf, paths_res.value->data_dir_buf,
+               paths_res.value->runtime_dir_buf, paths_res.value->config_dir_buf);
+        setenv("YETTY_RUNTIME_DIR", paths_res.value->runtime_dir_buf, 1);
+        setenv("YETTY_DATA_DIR", paths_res.value->data_dir_buf, 1);
+        setenv("YETTY_CONFIG_DIR", paths_res.value->config_dir_buf, 1);
+        yetty_yplatform_paths_destroy(paths_res.value);
+    } else {
+        yetty_ycore_error_destroy(paths_res.error);
+    }
 
     /* Config — there's no shell command line on iOS / tvOS, so synthesize
      * one. Connect to a telnet server (qemu-on-host or any reachable

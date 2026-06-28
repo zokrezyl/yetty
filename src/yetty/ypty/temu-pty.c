@@ -727,7 +727,7 @@ struct yetty_yplatform_pty_ptr_result yetty_yplatform_tinyemu_pty_create(
      * extract-assets at startup. Path references inside the cfg use
      * $YETTY_RUNTIME_DIR which the platform layer exports (see glfw-main.c). */
     {
-        const char *config_dir = yetty_yplatform_get_config_dir();
+        const char *config_dir = config->ops->get_string(config, "paths/config", "");
         char cfg_path[512];
         snprintf(cfg_path, sizeof(cfg_path), "%s/temu/yetty-temu-extended.cfg", config_dir);
         if (access(cfg_path, F_OK) != 0) {

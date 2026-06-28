@@ -65,6 +65,7 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths
     snprintf(p->data_dir_buf, sizeof(p->data_dir_buf), "%s/files/data", root);
     snprintf(p->runtime_dir_buf, sizeof(p->runtime_dir_buf), "%s/cache", root);
     snprintf(p->config_dir_buf, sizeof(p->config_dir_buf), "%s/files", root);
+    snprintf(p->state_dir_buf, sizeof(p->state_dir_buf), "%s/files/state", root);
     strncpy(p->assets_dir_buf, "/", sizeof(p->assets_dir_buf) - 1);
 
     return YETTY_OK(yetty_yplatform_paths_ptr, p);

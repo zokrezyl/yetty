@@ -535,12 +535,27 @@ static const struct nav_entry code_nav_entries[] = {
  * Image discovery — populate g_image_paths[] with absolute paths to
  * logo-N.jpeg files under the platform's data dir, matching the
  * main-branch behaviour. */
+/* Resolve the platform data dir for this run via the paths struct API (no
+ * process-wide singleton getter). */
+static void ygreeter_data_dir(char *out, size_t out_size)
+{
+    struct yetty_yplatform_paths_ptr_result paths_res = yetty_yplatform_paths_get_platform_paths();
+    snprintf(out, out_size, "%s", YETTY_IS_OK(paths_res) ? paths_res.value->data_dir_buf : "");
+    if (YETTY_IS_OK(paths_res)) {
+        yetty_yplatform_paths_destroy(paths_res.value);
+    } else {
+        yetty_ycore_error_destroy(paths_res.error);
+    }
+}
+
 static void discover_logo_images(struct app *app)
 {
     if (app->image_paths) {
         return;
     }
-    const char *data_dir = yetty_yplatform_get_data_dir();
+    char data_dir_buf[512];
+    ygreeter_data_dir(data_dir_buf, sizeof(data_dir_buf));
+    const char *data_dir = data_dir_buf;
     ydebug("ygreeter: discover_logo_images data_dir=%s", data_dir ? data_dir : "(null)");
     if (!data_dir || !*data_dir) {
         return;
@@ -587,7 +602,9 @@ static void discover_video_files(struct app *app)
     if (app->video_paths) {
         return;
     }
-    const char *data_dir = yetty_yplatform_get_data_dir();
+    char data_dir_buf[512];
+    ygreeter_data_dir(data_dir_buf, sizeof(data_dir_buf));
+    const char *data_dir = data_dir_buf;
     ydebug("ygreeter: discover_video_files data_dir=%s", data_dir ? data_dir : "(null)");
     if (!data_dir || !*data_dir) {
         return;
@@ -633,7 +650,9 @@ static void discover_readme(struct app *app)
     if (app->readme_path) {
         return;
     }
-    const char *data_dir = yetty_yplatform_get_data_dir();
+    char data_dir_buf[512];
+    ygreeter_data_dir(data_dir_buf, sizeof(data_dir_buf));
+    const char *data_dir = data_dir_buf;
     if (!data_dir || !*data_dir) {
         return;
     }
@@ -655,7 +674,9 @@ static void discover_pdf(struct app *app)
     if (app->pdf_path) {
         return;
     }
-    const char *data_dir = yetty_yplatform_get_data_dir();
+    char data_dir_buf[512];
+    ygreeter_data_dir(data_dir_buf, sizeof(data_dir_buf));
+    const char *data_dir = data_dir_buf;
     if (!data_dir || !*data_dir) {
         return;
     }
@@ -4651,7 +4672,9 @@ static struct yetty_ycore_void_result ygreeter_verify_assets(const char *data_di
  * program-init below. Desktop/web place assets via the installer / bundle. */
 YETTY_MAYBE_UNUSED static struct yetty_ycore_void_result ygreeter_extract_assets_cb(void)
 {
-    const char *data_dir = yetty_yplatform_get_data_dir();
+    char data_dir_buf[512];
+    ygreeter_data_dir(data_dir_buf, sizeof(data_dir_buf));
+    const char *data_dir = data_dir_buf;
     if (!data_dir || !*data_dir) {
         return YETTY_ERR(yetty_ycore_void,
                          "ygreeter: could not resolve a data dir for asset extraction");
