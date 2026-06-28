@@ -873,6 +873,25 @@ struct yetty_yclass_object_ptr_result yetty_yclass_object_alloc(const struct yet
     return YETTY_OK(yetty_yclass_object_ptr, obj);
 }
 
+struct yetty_yclass_object_ptr_result yetty_yclass_object_proxy_create(
+    struct yetty_yclass_rpc_session *session, uint64_t handle, const struct yetty_yclass *klass)
+{
+    if (!session) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "object_proxy_create: NULL session");
+    }
+    if (!handle) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "object_proxy_create: handle is 0");
+    }
+    struct yetty_yclass_proxy *proxy = calloc(1, sizeof(*proxy));
+    if (!proxy) {
+        return YETTY_ERR(yetty_yclass_object_ptr, "object_proxy_create: calloc failed");
+    }
+    proxy->header.klass = klass;
+    proxy->header.session = session;
+    proxy->handle = handle;
+    return YETTY_OK(yetty_yclass_object_ptr, &proxy->header);
+}
+
 struct yetty_ycore_void_result yetty_yclass_object_free(struct yetty_yclass_object *obj)
 {
     ydebug("obj=%p", (void *)obj);

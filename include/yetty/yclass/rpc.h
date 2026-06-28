@@ -65,6 +65,11 @@ enum yetty_yclass_rpc_op {
     YETTY_YCLASS_RPC_OP_RESOLVE_SLOT, /* body = slot name; resp = u32 server slot id */
     YETTY_YCLASS_RPC_OP_GET_CLASS,    /* body = class name; resp = (u16 nl, name, u32 id)* */
     YETTY_YCLASS_RPC_OP_CREATE,       /* body = class name; resp = u64 handle */
+    YETTY_YCLASS_RPC_OP_GET_ROOT,     /* no body; resp = u64 handle of the server's root object
+                                       * (0 if none set). Lets a remote producer obtain a proxy to
+                                       * the host's pre-existing root object — e.g. a terminal's
+                                       * yfigure root container — which RPC_OP_CREATE (always a new
+                                       * object) cannot. */
 };
 
 #define YETTY_YCLASS_RPC_OP_SHIFT 28
@@ -106,6 +111,13 @@ struct yetty_yclass_handle_result yetty_yclass_rpc_register_object(void *obj);
 /* Resolve a previously-minted handle to the user object. Errors:
  * handle=0 (invalid), handle not registered. */
 struct yetty_yclass_void_ptr_result yetty_yclass_rpc_handle_resolve(uint64_t handle);
+
+/* Designate `obj` as this server's root object: registers it (minting a
+ * handle) and records that handle as the one RPC_OP_GET_ROOT returns. A
+ * host (e.g. a terminal) calls this once on its root container so remote
+ * producers can obtain a proxy to it rather than each minting a detached
+ * container. Returns the minted handle. */
+struct yetty_yclass_handle_result yetty_yclass_rpc_set_root(void *obj);
 
 /* Serve requests from `transport` until the peer disconnects (recv
  * returns 0). The transport is borrowed; caller retains ownership.
@@ -193,5 +205,10 @@ struct yetty_ycore_void_result yetty_yclass_rpc_session_translate_class(
  * RESOLVE_SLOT round-trip if the xlat entry is missing. */
 struct uint32_result yetty_yclass_rpc_session_ensure_remote_id(struct yetty_yclass_rpc_session *s,
                                                                yetty_yclass_method_slot local_slot);
+
+/* Client: fetch the server's root object handle (RPC_OP_GET_ROOT). 0 if the
+ * server set no root. Pair with yetty_yclass_object_proxy_create to wrap it. */
+struct yetty_yclass_handle_result yetty_yclass_rpc_session_get_root(
+    struct yetty_yclass_rpc_session *s);
 
 #endif /* YCLASS_RPC_H */

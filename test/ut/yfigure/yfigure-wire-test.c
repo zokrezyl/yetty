@@ -694,16 +694,17 @@ static void test_remote_typed_slots(void)
         return;
     }
 
-    /* Server-side real container with a registry that knows TEST_LEAF_KIND. */
+    /* Server-side real container with a registry that knows TEST_LEAF_KIND,
+     * designated as the RPC root (the terminal does the same with its root
+     * container) so the client can discover it via RPC_OP_GET_ROOT. */
     struct yetty_yfigure_registry *reg = make_registry();
     struct yetty_yclass_object *server_container = make_root(reg);
-    struct yetty_yclass_handle_result handle_r = yetty_yclass_rpc_register_object(server_container);
-    if (YETTY_IS_ERR(handle_r)) {
-        FAIL("register_object: %s", handle_r.error.msg);
-        yetty_ycore_error_destroy(handle_r.error);
+    struct yetty_yclass_handle_result root_set_r = yetty_yclass_rpc_set_root(server_container);
+    if (YETTY_IS_ERR(root_set_r)) {
+        FAIL("set_root: %s", root_set_r.error.msg);
+        yetty_ycore_error_destroy(root_set_r.error);
         return;
     }
-    uint64_t handle = handle_r.value;
 
     int fds[2];
     if (socketpair(AF_UNIX, SOCK_STREAM, 0, fds) != 0) {
@@ -746,11 +747,26 @@ static void test_remote_typed_slots(void)
         yetty_ycore_error_destroy(translate_r.error);
     }
 
-    /* Client proxy wrapping the known server handle. */
-    struct yetty_yclass_proxy proxy = {0};
-    proxy.header.session = session;
-    proxy.handle = handle;
-    struct yetty_yclass_object *cobj = &proxy.header;
+    /* Discover the server root via RPC_OP_GET_ROOT and wrap it in a client
+     * proxy — exactly how an out-of-process producer attaches to the host. */
+    struct yetty_yclass_handle_result root_r = yetty_yclass_rpc_session_get_root(session);
+    if (YETTY_IS_ERR(root_r)) {
+        FAIL("get_root: %s", root_r.error.msg);
+        yetty_ycore_error_destroy(root_r.error);
+        return;
+    }
+    if (root_r.value == 0) {
+        FAIL("get_root returned handle 0");
+        return;
+    }
+    struct yetty_yclass_object_ptr_result proxy_r =
+        yetty_yclass_object_proxy_create(session, root_r.value, NULL);
+    if (YETTY_IS_ERR(proxy_r)) {
+        FAIL("proxy_create: %s", proxy_r.error.msg);
+        yetty_ycore_error_destroy(proxy_r.error);
+        return;
+    }
+    struct yetty_yclass_object *cobj = proxy_r.value;
 
     /* Remote typed-slot calls — marshal over the socketpair, dispatch on the
      * server-side container. */
@@ -804,6 +820,7 @@ static void test_remote_typed_slots(void)
     ASSERT_STR_EQ("remote_typed_slots == local", dump, expected);
     free(dump);
 
+    free(cobj); /* heap proxy from yetty_yclass_object_proxy_create */
     yetty_yfigure_destroy(server_container);
     yetty_yfigure_registry_destroy(reg);
 }

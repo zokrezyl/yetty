@@ -2039,6 +2039,21 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     }
     ydebug("terminal_create: yclass-rpc DCS handler registered (code=%d)", YETTY_DCS_YCLASS_RPC);
 
+    /* Designate the root container as this server's root object so remote
+     * producers (subprocess figure tools) can obtain a proxy to it via
+     * RPC_OP_GET_ROOT and drive it with the typed yclass stubs — the in-terminal
+     * equivalent of the legacy YCOMPOSITOR_BIN record stream. rpc_init first so
+     * handle minting starts at 1 (handle 0 is the invalid sentinel). */
+    {
+        struct yetty_ycore_void_result rpc_init_r = yetty_yclass_rpc_init();
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rpc_init_r, "terminal_create: rpc_init");
+        struct yetty_yclass_handle_result root_r =
+            yetty_yclass_rpc_set_root(terminal->root_container_obj);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, root_r, "terminal_create: rpc_set_root");
+        ydebug("terminal_create: root container registered as RPC root handle=%llu",
+               (unsigned long long)root_r.value);
+    }
+
     /* The shader-glyph figure is created, rendered, and destroyed entirely by
      * the text-layer (it scans the cell buffer and renders as a second pass in
      * text_layer_render) — it is NOT a compositor child, so nothing to wire

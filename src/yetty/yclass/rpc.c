@@ -35,6 +35,10 @@ struct rpc_server_state {
     struct object_entry objects[MAX_OBJECTS];
     size_t object_count;
     uint64_t next_handle;
+    /* Handle of the server's designated root object (0 = none). Returned by
+     * RPC_OP_GET_ROOT so remote producers can proxy the host's pre-existing
+     * root rather than minting a detached one. Set via rpc_set_root. */
+    uint64_t root_handle;
 
     /* Per-module skel lookups, chained. First one that returns
      * non-NULL wins. Result cached per-slot. slot values are sparse
@@ -131,6 +135,16 @@ struct yetty_yclass_handle_result yetty_yclass_rpc_register_object(void *obj)
     s->objects[s->object_count].ptr = obj;
     s->object_count++;
     return YETTY_OK(yetty_yclass_handle, h);
+}
+
+struct yetty_yclass_handle_result yetty_yclass_rpc_set_root(void *obj)
+{
+    struct yetty_yclass_handle_result reg_r = yetty_yclass_rpc_register_object(obj);
+    if (YETTY_IS_ERR(reg_r)) {
+        return reg_r;
+    }
+    server()->root_handle = reg_r.value;
+    return reg_r;
 }
 
 struct yetty_yclass_void_ptr_result yetty_yclass_rpc_handle_resolve(uint64_t h)
@@ -377,6 +391,15 @@ struct yetty_ycore_size_result yetty_yclass_rpc_dispatch_one(uint32_t header, co
         return handle_get_class(body, body_len, resp, resp_max);
     case YETTY_YCLASS_RPC_OP_CREATE:
         return handle_create(body, body_len, resp, resp_max);
+    case YETTY_YCLASS_RPC_OP_GET_ROOT: {
+        uint64_t h = server()->root_handle;
+        if (resp_max < sizeof(h)) {
+            return YETTY_ERR(yetty_ycore_size, "get_root: resp buffer too small");
+        }
+        memcpy(resp, &h, sizeof(h));
+        ydebug("get_root -> handle=%llu", (unsigned long long)h);
+        return YETTY_OK(yetty_ycore_size, sizeof(h));
+    }
     default:
         return YETTY_ERR(yetty_ycore_size, "dispatch_one: unknown op");
     }
@@ -573,7 +596,7 @@ static struct yetty_ycore_void_result rpc_write_request(struct yetty_yclass_rpc_
     }
     /* op occupies a 4-bit field; cap at the highest defined op so
      * undefined-but-fits-in-4-bits values are also caught. */
-    if (op > YETTY_YCLASS_RPC_OP_CREATE) {
+    if (op > YETTY_YCLASS_RPC_OP_GET_ROOT) {
         return YETTY_ERR(yetty_ycore_void, "rpc_call: op is not a defined yetty_yclass_rpc_op");
     }
     if (body_len > 0 && body == NULL) {
@@ -728,6 +751,23 @@ struct uint32_result yetty_yclass_rpc_session_ensure_remote_id(struct yetty_ycla
     }
     ydebug("lazy resolve '%s' local=%u remote=%u", name, local_slot, remote);
     return YETTY_OK(uint32, remote);
+}
+
+struct yetty_yclass_handle_result yetty_yclass_rpc_session_get_root(struct yetty_yclass_rpc_session *s)
+{
+    if (!s) {
+        return YETTY_ERR(yetty_yclass_handle, "session_get_root: NULL session");
+    }
+    uint64_t handle = 0;
+    struct yetty_ycore_size_result call_r =
+        yetty_yclass_rpc_call(s, YETTY_YCLASS_RPC_OP_GET_ROOT, 0, NULL, 0, &handle, sizeof(handle));
+    if (YETTY_IS_ERR(call_r)) {
+        return YETTY_ERR(yetty_yclass_handle, "session_get_root: GET_ROOT call failed", call_r);
+    }
+    if (call_r.value != sizeof(handle)) {
+        return YETTY_ERR(yetty_yclass_handle, "session_get_root: GET_ROOT short response");
+    }
+    return YETTY_OK(yetty_yclass_handle, handle);
 }
 
 struct yetty_ycore_void_result yetty_yclass_rpc_session_translate_class(
