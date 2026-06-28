@@ -57,6 +57,10 @@ target_link_libraries(yetty_yrdawn
     PUBLIC
         yetty_ycore
         yetty_yface
+        # Figure-tree emit path: the client attaches to the host root
+        # container over the yclass RPC transport (yetty_yfigure_producer_*)
+        # and drives create/delete/body through the typed container stubs.
+        yetty_yfigure
         # Cross-platform sleep + non-blocking read used by the client
         # pump. yetty_yplatform_core is per-OS so we don't drag POSIX
         # (poll(2), nanosleep) into the Windows build.

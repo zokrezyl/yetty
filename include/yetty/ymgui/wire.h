@@ -75,17 +75,15 @@ extern "C" {
  * is a single switch on osc_code with no body inspection.
  *===========================================================================*/
 
-/* Client → server traffic flows through the figure-tree OSC
- * (YETTY_DCS_YCOMPOSITOR_BIN, see <yetty/yterminal/osc-codes.h>) as
- * `{u32 length, u32 id, body}` records. Body for id != 0 is one of
- * the YETTY_YMGUI_FIGURE_SUB_* sub-records defined below. There are
- * no per-message client→server OSC codes any more — the figure-tree
- * carries everything.
+/* Client → server traffic flows through the typed yfigure yclass stubs over
+ * yclass-RPC: yetty_yfigure_apply_child_body addressed to a figure id carries
+ * a body that is one of the YETTY_YMGUI_FIGURE_SUB_* sub-records defined
+ * below. There are no per-message client→server OSC codes — the typed figure
+ * stubs carry everything.
  *
  * The CARD_* / CLEAR / FRAME / TEX CS codes below are legacy producer
- * fallback (still referenced by ygui_osc.c); they will be deleted with
- * that producer. The pane-wide client-input channel lives in
- * <yetty/yterminal/client-input.h>. */
+ * fallback; they will be deleted with that producer. The pane-wide
+ * client-input channel lives in <yetty/yterminal/client-input.h>. */
 #define YMGUI_OSC_CS_CLEAR 610000       /* ymgui_wire_clear,        comp=0 */
 #define YMGUI_OSC_CS_FRAME 610001       /* ymgui_wire_frame,        comp=1 */
 #define YMGUI_OSC_CS_TEX 610002         /* ymgui_wire_tex,          comp=1 */
@@ -122,11 +120,10 @@ extern "C" {
 /*=============================================================================
  * Figure-tree sub-records
  *
- * When ymgui is carried as a yfigure (kind=YETTY_YFIGURE_KIND_YMGUI=3) on
- * the shared figure-tree OSC code (YETTY_DCS_YCOMPOSITOR_BIN=630000),
- * each top-level container record `{length, id=child_id, payload}` arrives
- * at the figure's process_bytes with `payload` being one self-describing
- * sub-record. The first u32 of `payload` is either:
+ * When ymgui is carried as a yfigure (kind=YETTY_YFIGURE_KIND_YMGUI=3), each
+ * yetty_yfigure_apply_child_body call addressed to the figure id delivers a
+ * `body` to the figure's process_bytes that is one self-describing
+ * sub-record. The first u32 of `body` is either:
  *
  *   - a YMGUI_WIRE_MAGIC_* word (FRAME / TEX) — the legacy in-figure
  *     dispatcher; or

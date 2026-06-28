@@ -11,9 +11,9 @@
  * registry required. `id == 0` is reserved (anonymous, no wire address);
  * add_child rejects it.
  *
- * process_input is the wire-routing layer: reads `{length, id}` record
- * headers from the SM and dispatches `length` bytes to the child found
- * by id (or to the container itself when id=0 = admin/self-target).
+ * Producers drive the figure tree through the typed yclass mutation slots
+ * (create_child / set_child_rect / apply_child_body / …), dispatched
+ * locally or over RPC. There is no record-stream decode path.
  */
 #include <yetty/yclass/class.h>
 /* This TU deliberately does NOT include its own generated header
@@ -24,7 +24,6 @@
  * parent header `figure.h`. */
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 /* Internal module header: the yfigure-domain slot stub prototypes
  * (yetty_yfigure_render / _destroy / _process_bytes / _dump_state / …)
  * this TU dispatches through. It is self-contained and deliberately does
@@ -41,9 +40,7 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 #include <yetty/yetty/yetty.h>
-#include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ytrace/ytrace.h>
-#include <yetty/ywire/wire-statemachine.h>
 
 /* Hit-test result: the child whose rect contains the cursor, plus the cursor
  * coordinates inside that child's own pixel space (origin = child rect's
@@ -92,8 +89,6 @@ struct yetty_ycore_void_result yetty_yfigure_container_remove_child_by_id(
     struct yetty_yclass_object *obj, uint32_t id);
 struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id(
     struct yetty_yclass_object *obj, uint32_t id);
-struct yetty_ycore_void_result yetty_yfigure_container_consume_envelope(
-    struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *sm);
 
 struct child_entry {
     /* uthash key. Parent-scoped, non-zero, unique within the container. */
@@ -454,100 +449,6 @@ static struct yetty_ycore_void_result container_render(struct yetty_yclass_objec
     }
     return YETTY_OK_VOID();
 }
-
-/*===========================================================================
- * Wire-routing layer.
- *
- * Record header layout on the wire (and within any nested container's
- * payload): exactly 8 bytes per record.
- *
- *   u32 length     payload bytes that follow the header
- *   u32 id         parent-scoped figure id; 0 = admin/self
- *
- * Length-first so a generic linter or pipeline tool can walk the stream
- * without knowing ids or figure semantics — it just sums lengths and
- * skips. id=0 records are consumed by the container itself (admin
- * sub-cmds: create/delete child, etc.); id!=0 records resolve via
- * find_child_by_id and the payload is handed to child->process_input.
- *=========================================================================*/
-
-struct container_record_header {
-    uint32_t length;
-    uint32_t id;
-};
-_Static_assert(sizeof(struct container_record_header) == 8,
-               "container record header must be 8 bytes");
-
-/* Read result: OK / END_OF_ENVELOPE (clean) / error. */
-enum sm_read_status {
-    SM_READ_OK = 0,
-    SM_READ_EOE = 1,
-};
-
-/* Read exactly `n` bytes from the SM into `out`. Loops on partial reads
- * and yields the coroutine when no bytes are deliverable yet.
- *
- * Returns SM_READ_EOE via `*out_status` when read() yields 0 AND the
- * envelope has ended (terminator_seen) — caller must treat as a clean
- * end-of-envelope rather than retry. Partial reads followed by EOE
- * are errors. */
-static struct yetty_ycore_void_result sm_read_exact(struct yetty_ywire_wire_statemachine *sm,
-                                                    void *out, size_t n,
-                                                    enum sm_read_status *out_status)
-{
-    if (out_status) {
-        *out_status = SM_READ_OK;
-    }
-    uint8_t *p = (uint8_t *)out;
-    size_t got = 0;
-    while (got < n) {
-        struct yetty_ycore_size_result rr =
-            yetty_ywire_wire_statemachine_read(sm, p + got, n - got);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "container: sm read");
-        if (rr.value == 0) {
-            /* Read returned 0 — either EOE (all body bytes delivered AND
-             * terminator seen) or "no bytes right now, more coming".
-             * Distinguish by at_end(). */
-            if (yetty_ywire_wire_statemachine_at_end(sm)) {
-                if (got == 0 && out_status) {
-                    *out_status = SM_READ_EOE;
-                    return YETTY_OK_VOID();
-                }
-                return YETTY_ERR(yetty_ycore_void, "container: sm_read_exact short read at EOE");
-            }
-            yetty_yplatform_coro_yield();
-            continue;
-        }
-        got += rr.value;
-    }
-    return YETTY_OK_VOID();
-}
-
-/* Skip `n` bytes off the SM (used when no child matches the id, so the
- * payload is unaddressable junk that must still be consumed to keep the
- * stream aligned). Stack scratch; loop reads. */
-static struct yetty_ycore_void_result sm_skip(struct yetty_ywire_wire_statemachine *sm, size_t n)
-{
-    uint8_t scratch[4096];
-    while (n > 0) {
-        size_t take = n > sizeof(scratch) ? sizeof(scratch) : n;
-        enum sm_read_status st = SM_READ_OK;
-        struct yetty_ycore_void_result r = sm_read_exact(sm, scratch, take, &st);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "container: sm skip");
-        if (st == SM_READ_EOE) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "container: sm_skip hit EOE with bytes still expected");
-        }
-        n -= take;
-    }
-    return YETTY_OK_VOID();
-}
-
-/* Forward decl — container_process_bytes is reachable both directly
- * (op vtable) and from the consume_envelope path after buffering. */
-static struct yetty_ycore_void_result container_process_bytes(struct yetty_yclass_object *obj,
-                                                              const uint8_t *bytes,
-                                                              size_t bytes_len);
 
 /* Remove and destroy every child figure, then mark the container dirty so the
  * empty result is repainted. Shared by the CLEAR_ALL admin op and the terminal's
@@ -918,9 +819,8 @@ static struct yetty_ycore_void_result container_do_set_child_content_size(
     return YETTY_OK_VOID();
 }
 
-/* Hand a wire body to the addressed child's process_bytes (the id!=0 record
- * route the envelope used). No-op when the id is unbound or the child has no
- * process_bytes. */
+/* Hand a body buffer to the addressed child's process_bytes. No-op when the
+ * id is unbound or the child has no process_bytes. */
 static struct yetty_ycore_void_result container_do_apply_child_body(struct yetty_yclass_object *obj,
                                                                     uint32_t child_id,
                                                                     const uint8_t *body,
@@ -952,468 +852,6 @@ static struct yetty_ycore_void_result container_do_apply_child_body(struct yetty
         YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
     }
     return YETTY_OK_VOID();
-}
-
-/* Admin sub-cmd dispatcher (byte-buffer source). Reads the first u32
- * as the admin op and dispatches with the remaining bytes as body. */
-static struct yetty_ycore_void_result handle_admin_bytes(struct yetty_yclass_object *obj,
-                                                         const uint8_t *bytes, size_t bytes_len)
-{
-    struct yetty_yfigure_container_ptr_result container_r = yetty_yfigure_container_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, container_r, "container admin: from_obj");
-    struct yetty_yfigure_container *container = container_r.value;
-    if (bytes_len < 4) {
-        return YETTY_ERR(yetty_ycore_void, "container admin: payload too small for op");
-    }
-    uint32_t op;
-    memcpy(&op, bytes, 4);
-    const uint8_t *body = bytes + 4;
-    size_t body_len = bytes_len - 4;
-
-    switch (op) {
-    case YETTY_YFIGURE_ADMIN_CLEAR_ALL: {
-        if (body_len != 0) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "container admin CLEAR_ALL: unexpected trailing bytes");
-        }
-        struct yetty_ycore_void_result clear_r = yetty_yfigure_container_clear_all(obj);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, clear_r, "container admin CLEAR_ALL");
-        return YETTY_OK_VOID();
-    }
-
-    case YETTY_YFIGURE_ADMIN_CREATE_CHILD: {
-        ydebug("container admin CREATE_CHILD: body_len=%zu", body_len);
-        /* Layout: u32 child_id | u32 kind | f32 rect[4] | u32 init_bytes_size | init... */
-        if (body_len < 4 + 4 + 16 + 4) {
-            return YETTY_ERR(yetty_ycore_void, "container admin CREATE_CHILD: header too small");
-        }
-        uint32_t child_id;
-        uint32_t kind;
-        float rect_floats[4];
-        uint32_t init_bytes;
-        memcpy(&child_id, body + 0, 4);
-        memcpy(&kind, body + 4, 4);
-        memcpy(rect_floats, body + 8, 16);
-        memcpy(&init_bytes, body + 24, 4);
-        if (init_bytes != body_len - 28) {
-            return YETTY_ERR(yetty_ycore_void, "container admin CREATE_CHILD: init_bytes mismatch");
-        }
-        if (!container->registry) {
-            return YETTY_ERR(yetty_ycore_void, "container admin CREATE_CHILD: no registry");
-        }
-        struct yetty_ycore_rectangle rect = {
-            .min = {.x = rect_floats[0] + container->viewport_offset_x,
-                    .y = rect_floats[1] + container->viewport_offset_y},
-            .max = {.x = rect_floats[2] + container->viewport_offset_x,
-                    .y = rect_floats[3] + container->viewport_offset_y},
-        };
-        /* Fast path: existing id of the same kind that supports
-         * reset_content. Reuse the figure (and its cached binder /
-         * pipeline / textures), just refresh its content. Without
-         * this the receiver destroys + remints on every CREATE_CHILD,
-         * which drops the binder cache and forces a full pipeline
-         * rebuild on the next render — visible as ~100 ms hover lag. */
-        struct child_entry *existing;
-        HASH_FIND_INT(container->children, &child_id, existing);
-        int existing_can_reset = 0;
-        if (existing && existing->kind == kind) {
-            struct yetty_ycore_int_result reset_impl_r = figure_implements(
-                existing->figure, (yetty_yclass_method_id_t)yetty_yfigure_reset_content);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, reset_impl_r,
-                                "container admin CREATE_CHILD: reset_content support");
-            existing_can_reset = reset_impl_r.value;
-        }
-        if (existing_can_reset) {
-            struct yetty_ycore_void_result rc =
-                yetty_yfigure_reset_content(((struct yetty_yclass_object *)(existing->figure) - 1));
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, rc,
-                                "container admin CREATE_CHILD: reset_content");
-            {
-                struct yetty_ycore_void_result set_r = yetty_yfigure_figure_rect_set(
-                    (struct yetty_yclass_object *)(existing->figure) - 1, rect);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-            }
-            if (init_bytes > 0) {
-                struct yetty_ycore_int_result process_bytes_impl_r = figure_implements(
-                    existing->figure, (yetty_yclass_method_id_t)yetty_yfigure_process_bytes);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, process_bytes_impl_r,
-                                    "container admin CREATE_CHILD: process_bytes support");
-                if (!process_bytes_impl_r.value) {
-                    return YETTY_ERR(yetty_ycore_void, "container admin CREATE_CHILD: "
-                                                       "no process_bytes for non-empty init");
-                }
-                struct yetty_ycore_void_result pr = yetty_yfigure_process_bytes(
-                    ((struct yetty_yclass_object *)(existing->figure) - 1), body + 28, init_bytes);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, pr,
-                                    "container admin CREATE_CHILD: child re-init");
-            }
-            {
-                struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(
-                    (struct yetty_yclass_object *)(existing->figure) - 1, 1);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-            }
-            {
-                struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-            }
-            return YETTY_OK_VOID();
-        }
-
-        struct yetty_yfigure_figure_ptr_result fr =
-            yetty_yfigure_registry_mint(container->registry, kind, rect, container->context);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "container admin CREATE_CHILD: registry mint");
-        struct yetty_yfigure_figure *child = fr.value;
-        /* Existing id but different kind (or kind has no reset_content):
-         * in-place swap the figure pointer. The hash entry stays put,
-         * so z-order (uthash insertion order) is preserved, but the
-         * old figure's GPU resources are released. This path is the
-         * slow fallback — kind changes on the same id are rare. */
-        if (existing) {
-            /* Carry the stacking order across the swap — a re-mint must
-             * not silently drop the child's z back to 0. */
-            {
-                struct yetty_ycore_void_result set_r = yetty_yfigure_figure_z_set(
-                    (struct yetty_yclass_object *)(child)-1,
-                    yetty_yfigure_figure_z_get((struct yetty_yclass_object *)(existing->figure) - 1)
-                        .value);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-            }
-            struct yetty_ycore_void_result dr = figure_dispatch_destroy(existing->figure);
-            if (YETTY_IS_ERR(dr)) {
-                yetty_ycore_error_destroy(dr.error);
-            }
-            existing->figure = child;
-            existing->kind = kind;
-            container->z_order_dirty = 1;
-            {
-                struct yetty_ycore_void_result set_r =
-                    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(child)-1, 1);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-            }
-        } else {
-            struct yetty_ycore_void_result ar =
-                yetty_yfigure_container_add_child(obj, child, child_id);
-            if (YETTY_IS_ERR(ar)) {
-                struct yetty_ycore_void_result dr = figure_dispatch_destroy(child);
-                if (YETTY_IS_ERR(dr)) {
-                    yetty_ycore_error_destroy(dr.error);
-                }
-                return YETTY_ERR(yetty_ycore_void, "container admin CREATE_CHILD: add_child", ar);
-            }
-            struct child_entry *fresh;
-            HASH_FIND_INT(container->children, &child_id, fresh);
-            if (fresh) {
-                fresh->kind = kind;
-            }
-        }
-        if (init_bytes > 0) {
-            struct yetty_ycore_int_result process_bytes_impl_r =
-                figure_implements(child, (yetty_yclass_method_id_t)yetty_yfigure_process_bytes);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, process_bytes_impl_r,
-                                "container admin CREATE_CHILD: process_bytes support");
-            if (!process_bytes_impl_r.value) {
-                return YETTY_ERR(
-                    yetty_ycore_void,
-                    "container admin CREATE_CHILD: child has no process_bytes but init_bytes > 0");
-            }
-            struct yetty_ycore_void_result pr = yetty_yfigure_process_bytes(
-                ((struct yetty_yclass_object *)(child)-1), body + 28, init_bytes);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "container admin CREATE_CHILD: child init");
-        }
-        {
-            struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-        }
-        return YETTY_OK_VOID();
-    }
-
-    case YETTY_YFIGURE_ADMIN_DELETE_CHILD: {
-        if (body_len != 4) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "container admin DELETE_CHILD: expected 4-byte payload");
-        }
-        uint32_t child_id;
-        memcpy(&child_id, body, 4);
-        struct yetty_ycore_void_result r =
-            yetty_yfigure_container_remove_child_by_id(obj, child_id);
-        {
-            struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-        }
-        return r;
-    }
-
-    case YETTY_YFIGURE_ADMIN_SET_CHILD_RECT: {
-        if (body_len != 4 + 16) {
-            return YETTY_ERR(yetty_ycore_void, "container admin SET_CHILD_RECT: bad payload size");
-        }
-        uint32_t child_id;
-        float rect_floats[4];
-        memcpy(&child_id, body + 0, 4);
-        memcpy(rect_floats, body + 4, 16);
-        struct yetty_yfigure_figure_ptr_result child_res =
-            yetty_yfigure_container_find_child_by_id(obj, child_id);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res,
-                            "container admin SET_CHILD_RECT: find_child");
-        struct yetty_yfigure_figure *child = child_res.value;
-        if (!child) {
-            ydebug("container admin SET_CHILD_RECT: id=%u not bound", child_id);
-            return YETTY_OK_VOID();
-        }
-        {
-            struct yetty_ycore_void_result set_r = yetty_yfigure_figure_rect_set(
-                (struct yetty_yclass_object *)(child)-1,
-                (struct yetty_ycore_rectangle){
-                    .min = {.x = rect_floats[0] + container->viewport_offset_x,
-                            .y = rect_floats[1] + container->viewport_offset_y},
-                    .max = {.x = rect_floats[2] + container->viewport_offset_x,
-                            .y = rect_floats[3] + container->viewport_offset_y},
-                });
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: child rect set");
-        }
-        {
-            struct yetty_ycore_void_result set_r =
-                yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(child)-1, 1);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-        }
-        return YETTY_OK_VOID();
-    }
-
-    case YETTY_YFIGURE_ADMIN_SET_RECT: {
-        if (body_len != 16) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "container admin SET_RECT: expected 16-byte payload");
-        }
-        float rect_floats[4];
-        memcpy(rect_floats, body, 16);
-        {
-            struct yetty_ycore_void_result set_r = yetty_yfigure_figure_rect_set(
-                obj, (struct yetty_ycore_rectangle){
-                         .min = {.x = rect_floats[0], .y = rect_floats[1]},
-                         .max = {.x = rect_floats[2], .y = rect_floats[3]},
-                     });
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: base rect set");
-        }
-        {
-            struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-        }
-        return YETTY_OK_VOID();
-    }
-
-    case YETTY_YFIGURE_ADMIN_SET_CHILD_Z: {
-        if (body_len != 4 + 4) {
-            return YETTY_ERR(yetty_ycore_void, "container admin SET_CHILD_Z: bad payload size");
-        }
-        uint32_t child_id;
-        int32_t z;
-        memcpy(&child_id, body + 0, 4);
-        memcpy(&z, body + 4, 4);
-        struct yetty_yfigure_figure_ptr_result child_res =
-            yetty_yfigure_container_find_child_by_id(obj, child_id);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res, "container admin SET_CHILD_Z: find_child");
-        struct yetty_yfigure_figure *child = child_res.value;
-        if (!child) {
-            ydebug("container admin SET_CHILD_Z: id=%u not bound", child_id);
-            return YETTY_OK_VOID();
-        }
-        if (yetty_yfigure_figure_z_get((struct yetty_yclass_object *)(child)-1).value != z) {
-            {
-                struct yetty_ycore_void_result set_r =
-                    yetty_yfigure_figure_z_set((struct yetty_yclass_object *)(child)-1, z);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-            }
-            container->z_order_dirty = 1;
-            {
-                struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-            }
-        }
-        return YETTY_OK_VOID();
-    }
-
-    case YETTY_YFIGURE_ADMIN_SET_CHILD_HIDDEN: {
-        if (body_len != 4 + 4) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "container admin SET_CHILD_HIDDEN: bad payload size");
-        }
-        uint32_t child_id;
-        uint32_t hidden;
-        memcpy(&child_id, body + 0, 4);
-        memcpy(&hidden, body + 4, 4);
-        struct yetty_yfigure_figure_ptr_result child_res =
-            yetty_yfigure_container_find_child_by_id(obj, child_id);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res,
-                            "container admin SET_CHILD_HIDDEN: find_child");
-        struct yetty_yfigure_figure *child = child_res.value;
-        if (!child) {
-            ydebug("container admin SET_CHILD_HIDDEN: id=%u not bound", child_id);
-            return YETTY_OK_VOID();
-        }
-        int want = hidden ? 1 : 0;
-        if (yetty_yfigure_figure_hidden_get((struct yetty_yclass_object *)(child)-1).value !=
-            want) {
-            {
-                struct yetty_ycore_void_result set_r =
-                    yetty_yfigure_figure_hidden_set((struct yetty_yclass_object *)(child)-1, want);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-            }
-            {
-                struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-            }
-        }
-        return YETTY_OK_VOID();
-    }
-
-    case YETTY_YFIGURE_ADMIN_SET_CHILD_SCROLL: {
-        if (body_len != 4 + 8) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "container admin SET_CHILD_SCROLL: bad payload size");
-        }
-        uint32_t child_id;
-        float scroll[2];
-        memcpy(&child_id, body + 0, 4);
-        memcpy(scroll, body + 4, 8);
-        struct yetty_yfigure_figure_ptr_result child_res =
-            yetty_yfigure_container_find_child_by_id(obj, child_id);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res,
-                            "container admin SET_CHILD_SCROLL: find_child");
-        struct yetty_yfigure_figure *child = child_res.value;
-        if (!child) {
-            ydebug("container admin SET_CHILD_SCROLL: id=%u not bound", child_id);
-            return YETTY_OK_VOID();
-        }
-        struct yetty_ycore_int_result set_scroll_impl_r =
-            figure_implements(child, (yetty_yclass_method_id_t)yetty_yfigure_set_scroll);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_scroll_impl_r,
-                            "container admin SET_CHILD_SCROLL: set_scroll support");
-        if (!set_scroll_impl_r.value) {
-            ydebug("container admin SET_CHILD_SCROLL: id=%u not scrollable", child_id);
-            return YETTY_OK_VOID();
-        }
-        struct yetty_ycore_void_result sr = yetty_yfigure_set_scroll(
-            ((struct yetty_yclass_object *)(child)-1), scroll[0], scroll[1]);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "container admin SET_CHILD_SCROLL: set_scroll");
-        {
-            struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-        }
-        return YETTY_OK_VOID();
-    }
-
-    case YETTY_YFIGURE_ADMIN_SET_CHILD_CONTENT_SIZE: {
-        if (body_len != 4 + 8) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "container admin SET_CHILD_CONTENT_SIZE: bad payload size");
-        }
-        uint32_t child_id;
-        float content[2];
-        memcpy(&child_id, body + 0, 4);
-        memcpy(content, body + 4, 8);
-        struct yetty_yfigure_figure_ptr_result child_res =
-            yetty_yfigure_container_find_child_by_id(obj, child_id);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res,
-                            "container admin SET_CHILD_CONTENT_SIZE: find_child");
-        struct yetty_yfigure_figure *child = child_res.value;
-        if (!child) {
-            ydebug("container admin SET_CHILD_CONTENT_SIZE: id=%u not bound", child_id);
-            return YETTY_OK_VOID();
-        }
-        struct yetty_ycore_int_result set_content_size_impl_r =
-            figure_implements(child, (yetty_yclass_method_id_t)yetty_yfigure_set_content_size);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_content_size_impl_r,
-                            "container admin SET_CHILD_CONTENT_SIZE: set_content_size support");
-        if (!set_content_size_impl_r.value) {
-            ydebug("container admin SET_CHILD_CONTENT_SIZE: id=%u not scrollable", child_id);
-            return YETTY_OK_VOID();
-        }
-        struct yetty_ycore_void_result sr = yetty_yfigure_set_content_size(
-            ((struct yetty_yclass_object *)(child)-1), content[0], content[1]);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr,
-                            "container admin SET_CHILD_CONTENT_SIZE: set_content_size");
-        {
-            struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-        }
-        return YETTY_OK_VOID();
-    }
-
-    default:
-        ydebug("container admin: unknown op=%u, skipping %zu bytes", op, body_len);
-        return YETTY_OK_VOID();
-    }
-}
-
-/* Walk a byte buffer of `{length, id, payload}` records and dispatch
- * each. Called for nested container payloads (figure-tree recursion)
- * and for the direct byte-injection entry yui uses. */
-static struct yetty_ycore_void_result container_process_bytes(struct yetty_yclass_object *obj,
-                                                              const uint8_t *bytes,
-                                                              size_t bytes_len)
-{
-    size_t off = 0;
-    while (off < bytes_len) {
-        if (bytes_len - off < sizeof(struct yetty_yfigure_header)) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "container_process_bytes: trailing junk smaller than header");
-        }
-        struct yetty_yfigure_header hdr;
-        memcpy(&hdr, bytes + off, sizeof(hdr));
-        off += sizeof(hdr);
-        if (hdr.length > bytes_len - off) {
-            return YETTY_ERR(yetty_ycore_void,
-                             "container_process_bytes: record length overruns buffer");
-        }
-        const uint8_t *payload = bytes + off;
-        if (hdr.id == 0) {
-            struct yetty_ycore_void_result ar = handle_admin_bytes(obj, payload, hdr.length);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, ar, "container_process_bytes: admin");
-        } else {
-            struct yetty_yfigure_figure_ptr_result child_res =
-                yetty_yfigure_container_find_child_by_id(obj, hdr.id);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, child_res, "container_process_bytes: find_child");
-            struct yetty_yfigure_figure *child = child_res.value;
-            int child_handles_bytes = 0;
-            if (child) {
-                struct yetty_ycore_int_result process_bytes_impl_r =
-                    figure_implements(child, (yetty_yclass_method_id_t)yetty_yfigure_process_bytes);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, process_bytes_impl_r,
-                                    "container_process_bytes: process_bytes support");
-                child_handles_bytes = process_bytes_impl_r.value;
-            }
-            if (!child) {
-                ydebug("container_process_bytes: routed id=%u not bound, skipping %u", hdr.id,
-                       hdr.length);
-            } else if (!child_handles_bytes) {
-                ydebug("container_process_bytes: id=%u no process_bytes, skipping %u", hdr.id,
-                       hdr.length);
-            } else {
-                struct yetty_ycore_void_result cr = yetty_yfigure_process_bytes(
-                    ((struct yetty_yclass_object *)(child)-1), payload, hdr.length);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "container_process_bytes: child");
-                {
-                    struct yetty_ycore_void_result set_r =
-                        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(child)-1, 1);
-                    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-                }
-            }
-        }
-        off += hdr.length;
-    }
-    return YETTY_OK_VOID();
-}
-
-/* process_input op — pumps the wire-statemachine via the existing
- * consume_envelope helper. The SM gives us a fresh envelope each time
- * its OSC code fires; consume_envelope walks `{length, id, body}`
- * records, routes id=0 to handle_admin_bytes and id!=0 to the matching
- * child. Children's input still flows through process_bytes for now —
- * that migrates to process_input figure-by-figure. */
-static struct yetty_ycore_void_result container_process_input(
-    struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *sm)
-{
-    return yetty_yfigure_container_consume_envelope(obj, sm);
 }
 
 static struct yetty_ycore_char_ptr_result container_dump(const struct yetty_yfigure_figure *self,
@@ -1542,225 +980,6 @@ struct yetty_ycore_void_result yetty_yfigure_container_set_viewport_offset(
     container_r.value->viewport_offset_x = offset_x;
     container_r.value->viewport_offset_y = offset_y;
     return YETTY_OK_VOID();
-}
-
-YETTY_ANNOTATE("expose")
-struct yetty_ycore_void_result yetty_yfigure_container_consume_envelope(
-    struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *sm)
-{
-    if (!sm) {
-        return YETTY_ERR(yetty_ycore_void, "yfigure_container_consume_envelope: NULL arg");
-    }
-    ydebug("consume_envelope: ENTRY obj=%p at_end=%d", (void *)obj,
-           yetty_ywire_wire_statemachine_at_end(sm));
-    /* Read records header-by-header from the SM, buffer each record's
-     * payload, then hand it to process_bytes. Buffering is per-record
-     * (not per-envelope) so very large payloads (e.container. an atlas) don't
-     * inflate memory more than necessary. */
-    /* Optional diagnostic: dump every {hdr, payload} that arrives in
-     * this envelope so the decoded record stream can be inspected with
-     * `tools/osc-analyzer -r <path>`. One frame per envelope, prefixed
-     * with `===FRAME===\n`. */
-    FILE *dump_fp = NULL;
-    {
-        const char *dump_path = getenv("YFIGURE_DUMP_RECORDS");
-        if (dump_path && dump_path[0]) {
-            dump_fp = fopen(dump_path, "ab");
-            if (dump_fp) {
-                fwrite("===FRAME===\n", 1, 12, dump_fp);
-                fflush(dump_fp);
-            }
-        }
-    }
-    for (;;) {
-        struct yetty_yfigure_header hdr;
-        enum sm_read_status hst = SM_READ_OK;
-        struct yetty_ycore_void_result hr = sm_read_exact(sm, &hdr, sizeof(hdr), &hst);
-        if (YETTY_IS_ERR(hr)) {
-            if (dump_fp) {
-                fclose(dump_fp);
-            }
-            return YETTY_ERR(yetty_ycore_void, "consume_envelope: read header", hr);
-        }
-        if (hst == SM_READ_EOE) {
-            /* Clean end of envelope — all body bytes delivered. */
-            break;
-        }
-        ydebug("consume_envelope: record id=%u length=%u", hdr.id, hdr.length);
-        struct yetty_ycore_void_result dr = YETTY_OK_VOID();
-        struct yetty_yfigure_figure *child = NULL;
-        if (hdr.id != 0) {
-            struct yetty_yfigure_figure_ptr_result child_res =
-                yetty_yfigure_container_find_child_by_id(obj, hdr.id);
-            if (YETTY_IS_ERR(child_res)) {
-                if (dump_fp) {
-                    fclose(dump_fp);
-                }
-                return YETTY_ERR(yetty_ycore_void, "consume_envelope: find_child", child_res);
-            }
-            child = child_res.value;
-        }
-
-        /* Streaming dispatch: if the target child has its own
-         * process_input coroutine, hand the SM straight to it — no
-         * intermediate buffer, the child pumps the SM and reads its
-         * `hdr.length` bytes via self-describing sub-records.
-         *
-         * Note: dump_fp can't see this record's payload because we
-         * never buffer it. That's a known cost of the streaming path. */
-        int child_handles_input = 0;
-        if (child) {
-            struct yetty_ycore_int_result process_input_impl_r =
-                figure_implements(child, (yetty_yclass_method_id_t)yetty_yfigure_process_input);
-            if (YETTY_IS_ERR(process_input_impl_r)) {
-                if (dump_fp) {
-                    fclose(dump_fp);
-                }
-                return YETTY_ERR(yetty_ycore_void, "consume_envelope: process_input support",
-                                 process_input_impl_r);
-            }
-            child_handles_input = process_input_impl_r.value;
-        }
-        if (child_handles_input) {
-            if (dump_fp) {
-                fwrite(&hdr, 1, sizeof(hdr), dump_fp);
-                fwrite("<<streamed>>", 1, 12, dump_fp);
-            }
-            dr = yetty_yfigure_process_input(((struct yetty_yclass_object *)(child)-1), sm);
-            if (YETTY_IS_OK(dr)) {
-                {
-                    struct yetty_ycore_void_result set_r =
-                        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(child)-1, 1);
-                    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-                }
-                {
-                    struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
-                    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-                }
-            }
-            if (YETTY_IS_ERR(dr)) {
-                if (dump_fp) {
-                    fclose(dump_fp);
-                }
-                return YETTY_ERR(yetty_ycore_void, "consume_envelope: child process_input", dr);
-            }
-            continue;
-        }
-
-        /* Legacy path — buffer the payload bytes then call process_bytes.
-         * Used by admin records (id=0) and by child kinds that haven't
-         * migrated to process_input yet. */
-        uint8_t *payload = NULL;
-        if (hdr.length > 0) {
-            payload = (uint8_t *)malloc(hdr.length);
-            if (!payload) {
-                if (dump_fp) {
-                    fclose(dump_fp);
-                }
-                return YETTY_ERR(yetty_ycore_void, "consume_envelope: payload oom");
-            }
-            enum sm_read_status pst = SM_READ_OK;
-            struct yetty_ycore_void_result pr = sm_read_exact(sm, payload, hdr.length, &pst);
-            if (YETTY_IS_ERR(pr)) {
-                free(payload);
-                if (dump_fp) {
-                    fclose(dump_fp);
-                }
-                return YETTY_ERR(yetty_ycore_void, "consume_envelope: read payload", pr);
-            }
-            if (pst == SM_READ_EOE) {
-                free(payload);
-                if (dump_fp) {
-                    fclose(dump_fp);
-                }
-                return YETTY_ERR(yetty_ycore_void, "consume_envelope: EOE mid-payload");
-            }
-        }
-        if (dump_fp) {
-            fwrite(&hdr, 1, sizeof(hdr), dump_fp);
-            if (payload && hdr.length) {
-                fwrite(payload, 1, hdr.length, dump_fp);
-            }
-        }
-        int child_handles_bytes = 0;
-        if (child) {
-            struct yetty_ycore_int_result process_bytes_impl_r =
-                figure_implements(child, (yetty_yclass_method_id_t)yetty_yfigure_process_bytes);
-            if (YETTY_IS_ERR(process_bytes_impl_r)) {
-                free(payload);
-                if (dump_fp) {
-                    fclose(dump_fp);
-                }
-                return YETTY_ERR(yetty_ycore_void, "consume_envelope: process_bytes support",
-                                 process_bytes_impl_r);
-            }
-            child_handles_bytes = process_bytes_impl_r.value;
-        }
-        if (hdr.id == 0) {
-            dr = handle_admin_bytes(obj, payload, hdr.length);
-        } else if (!child) {
-            ydebug("consume_envelope: id=%u not bound, skipping %u bytes", hdr.id, hdr.length);
-        } else if (!child_handles_bytes) {
-            ydebug("consume_envelope: id=%u no process_bytes / process_input", hdr.id);
-        } else {
-            dr = yetty_yfigure_process_bytes(((struct yetty_yclass_object *)(child)-1), payload,
-                                             hdr.length);
-            if (YETTY_IS_OK(dr)) {
-                {
-                    struct yetty_ycore_void_result set_r =
-                        yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(child)-1, 1);
-                    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-                }
-                {
-                    struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
-                    YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
-                }
-            }
-        }
-        free(payload);
-        if (YETTY_IS_ERR(dr)) {
-            if (dump_fp) {
-                fclose(dump_fp);
-            }
-            return YETTY_ERR(yetty_ycore_void, "consume_envelope: record dispatch", dr);
-        }
-    }
-    if (dump_fp) {
-        fclose(dump_fp);
-    }
-    return YETTY_OK_VOID();
-}
-
-/* Coroutine entry registered on the input pipe — its signature is fixed by
- * the wire callback ABI (`yetty_ywire_process_input_fn` = void *userdata, sm),
- * so the handle arrives as an opaque `userdata` that callers set to the
- * container's yclass object. */
-YETTY_ANNOTATE("expose")
-struct yetty_ycore_void_result yetty_yfigure_container_process_input(
-    void *userdata, struct yetty_ywire_wire_statemachine *sm)
-{
-    struct yetty_yclass_object *obj = userdata;
-    for (;;) {
-        struct yetty_ycore_void_result r = yetty_yfigure_container_consume_envelope(obj, sm);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "container_process_input: consume_envelope");
-        yetty_yplatform_coro_yield();
-    }
-}
-
-YETTY_ANNOTATE("expose")
-struct yetty_ycore_void_result yetty_yfigure_container_process_records(
-    struct yetty_yclass_object *obj, const uint8_t *bytes, size_t bytes_len)
-{
-    struct yetty_yfigure_container_ptr_result container_r = yetty_yfigure_container_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, container_r,
-                        "yfigure_container_process_records: from_obj");
-    if (bytes_len == 0) {
-        return YETTY_OK_VOID();
-    }
-    if (!bytes) {
-        return YETTY_ERR(yetty_ycore_void, "yfigure_container_process_records: NULL bytes");
-    }
-    return container_process_bytes(obj, bytes, bytes_len);
 }
 
 YETTY_ANNOTATE("expose")
@@ -2006,7 +1225,6 @@ struct yetty_yfigure_hit_result yetty_yfigure_container_hit_test(struct yetty_yc
  * One wrapper impl per container public method whose signature is
  * wire-marshallable. Skipped (signature incompatible — these stay as
  * direct C calls on the body pointer):
- *   - consume_envelope, process_input       — wire-statemachine ptr
  *   - find_child_by_id, as_figure           — pointer-Result return
  *   - hit_test                              — by-value struct Result return
  *   - for_each                              — function pointer arg
@@ -2053,13 +1271,6 @@ static struct yetty_ycore_void_result yetty_yfigure_container_raise_child_by_id_
     return yetty_yfigure_container_raise_child_by_id(obj, id);
 }
 
-YETTY_ANNOTATE("virtual@yfigure:container:process_records")
-static struct yetty_ycore_void_result yetty_yfigure_container_process_records_impl(
-    struct yetty_yclass_object *obj, struct yetty_ycore_buffer bytes)
-{
-    return yetty_yfigure_container_process_records(obj, bytes.data, bytes.size);
-}
-
 /*---------------------------------------------------------------------------
  * Typed figure-tree mutation slots — the yclass replacement for the admin
  * record stream. Each is wire-marshallable (primitives + rectangle + buffer)
@@ -2069,6 +1280,10 @@ static struct yetty_ycore_void_result yetty_yfigure_container_process_records_im
  * container_do_* helpers above.
  *-------------------------------------------------------------------------*/
 
+/* Each mutation slot is `oneway@` — the producer fires it and moves on; the
+ * host applies it with no reply. Matches the legacy one-way figure wire and
+ * keeps an interactive producer's input loop unblocked by RPC round-trips. */
+YETTY_ANNOTATE("oneway@yfigure:create_child")
 YETTY_ANNOTATE("virtual@yfigure:container:create_child")
 static struct yetty_ycore_void_result yetty_yfigure_container_create_child_impl(
     struct yetty_yclass_object *obj, uint32_t kind_token, uint32_t id,
@@ -2077,6 +1292,7 @@ static struct yetty_ycore_void_result yetty_yfigure_container_create_child_impl(
     return container_do_create_child(obj, kind_token, id, rect, init.data, init.size);
 }
 
+YETTY_ANNOTATE("oneway@yfigure:delete_child")
 YETTY_ANNOTATE("virtual@yfigure:container:delete_child")
 static struct yetty_ycore_void_result yetty_yfigure_container_delete_child_impl(
     struct yetty_yclass_object *obj, uint32_t id)
@@ -2084,6 +1300,7 @@ static struct yetty_ycore_void_result yetty_yfigure_container_delete_child_impl(
     return container_do_delete_child(obj, id);
 }
 
+YETTY_ANNOTATE("oneway@yfigure:set_child_rect")
 YETTY_ANNOTATE("virtual@yfigure:container:set_child_rect")
 static struct yetty_ycore_void_result yetty_yfigure_container_set_child_rect_impl(
     struct yetty_yclass_object *obj, uint32_t id, struct yetty_ycore_rectangle rect)
@@ -2091,6 +1308,7 @@ static struct yetty_ycore_void_result yetty_yfigure_container_set_child_rect_imp
     return container_do_set_child_rect(obj, id, rect);
 }
 
+YETTY_ANNOTATE("oneway@yfigure:set_rect")
 YETTY_ANNOTATE("virtual@yfigure:container:set_rect")
 static struct yetty_ycore_void_result yetty_yfigure_container_set_rect_impl(
     struct yetty_yclass_object *obj, struct yetty_ycore_rectangle rect)
@@ -2098,6 +1316,7 @@ static struct yetty_ycore_void_result yetty_yfigure_container_set_rect_impl(
     return container_do_set_container_rect(obj, rect);
 }
 
+YETTY_ANNOTATE("oneway@yfigure:set_child_z")
 YETTY_ANNOTATE("virtual@yfigure:container:set_child_z")
 static struct yetty_ycore_void_result yetty_yfigure_container_set_child_z_impl(
     struct yetty_yclass_object *obj, uint32_t id, int32_t z)
@@ -2105,6 +1324,7 @@ static struct yetty_ycore_void_result yetty_yfigure_container_set_child_z_impl(
     return container_do_set_child_z(obj, id, z);
 }
 
+YETTY_ANNOTATE("oneway@yfigure:set_child_hidden")
 YETTY_ANNOTATE("virtual@yfigure:container:set_child_hidden")
 static struct yetty_ycore_void_result yetty_yfigure_container_set_child_hidden_impl(
     struct yetty_yclass_object *obj, uint32_t id, uint32_t hidden)
@@ -2112,6 +1332,7 @@ static struct yetty_ycore_void_result yetty_yfigure_container_set_child_hidden_i
     return container_do_set_child_hidden(obj, id, hidden);
 }
 
+YETTY_ANNOTATE("oneway@yfigure:set_child_scroll")
 YETTY_ANNOTATE("virtual@yfigure:container:set_child_scroll")
 static struct yetty_ycore_void_result yetty_yfigure_container_set_child_scroll_impl(
     struct yetty_yclass_object *obj, uint32_t id, float scroll_x, float scroll_y)
@@ -2119,6 +1340,7 @@ static struct yetty_ycore_void_result yetty_yfigure_container_set_child_scroll_i
     return container_do_set_child_scroll(obj, id, scroll_x, scroll_y);
 }
 
+YETTY_ANNOTATE("oneway@yfigure:set_child_content_size")
 YETTY_ANNOTATE("virtual@yfigure:container:set_child_content_size")
 static struct yetty_ycore_void_result yetty_yfigure_container_set_child_content_size_impl(
     struct yetty_yclass_object *obj, uint32_t id, float content_w, float content_h)
@@ -2126,6 +1348,7 @@ static struct yetty_ycore_void_result yetty_yfigure_container_set_child_content_
     return container_do_set_child_content_size(obj, id, content_w, content_h);
 }
 
+YETTY_ANNOTATE("oneway@yfigure:apply_child_body")
 YETTY_ANNOTATE("virtual@yfigure:container:apply_child_body")
 static struct yetty_ycore_void_result yetty_yfigure_container_apply_child_body_impl(
     struct yetty_yclass_object *obj, uint32_t id, struct yetty_ycore_buffer body)
@@ -2133,26 +1356,12 @@ static struct yetty_ycore_void_result yetty_yfigure_container_apply_child_body_i
     return container_do_apply_child_body(obj, id, body.data, body.size);
 }
 
+YETTY_ANNOTATE("oneway@yfigure:clear_all")
 YETTY_ANNOTATE("virtual@yfigure:container:clear_all")
 static struct yetty_ycore_void_result yetty_yfigure_container_clear_all_slot(
     struct yetty_yclass_object *obj)
 {
     return yetty_yfigure_container_clear_all(obj);
-}
-
-YETTY_ANNOTATE("override@yfigure:container:process_input")
-static struct yetty_ycore_void_result container_process_input_slot(
-    struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *statemachine)
-{
-    return container_process_input(obj, statemachine);
-}
-
-YETTY_ANNOTATE("override@yfigure:container:process_bytes")
-static struct yetty_ycore_void_result container_process_bytes_slot(struct yetty_yclass_object *obj,
-                                                                   const uint8_t *bytes,
-                                                                   size_t bytes_len)
-{
-    return container_process_bytes(obj, bytes, bytes_len);
 }
 
 YETTY_ANNOTATE("override@yfigure:container:dump_state")

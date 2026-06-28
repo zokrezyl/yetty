@@ -81,18 +81,12 @@ types:
         type: "struct yetty_yframework *"
       - name: ctx
         type: struct yetty_context
-      - name: pty_pair
-        type: struct yetty_yplatform_memory_pty_pair
-      - name: has_pty_pair
-        type: int
       - name: root_container
         type: "struct yetty_yclass_object *"
       - name: figure_registry
         type: "struct yetty_yfigure_registry *"
       - name: composite_factory
         type: "struct yetty_ydraw_composite_factory *"
-      - name: wire_sm
-        type: "struct yetty_ywire_wire_statemachine *"
       - name: font
         type: "struct yetty_yfont_font *"
       - name: chrome
@@ -203,13 +197,6 @@ types:
         type: "struct yetty_ydraw_composite_factory *"
       - name: absolute_coords
         type: int
-  - name: yetty_yplatform_memory_pty_pair
-    kind: struct
-    fields:
-      - name: a
-        type: "struct yetty_platform_pty *"
-      - name: b
-        type: "struct yetty_platform_pty *"
 local_types:
   tab_kind: tools/ygreeter/main.c
   top_tab: tools/ygreeter/main.c

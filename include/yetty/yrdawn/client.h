@@ -8,13 +8,14 @@
  * canvases as the host accepts.
  *
  * Wire shape (matches the figure-tree contract used by ymgui):
- *   - Each canvas is announced via a CREATE_CHILD admin record sent
- *     on YETTY_DCS_YCOMPOSITOR_BIN (handled in client.c). The record's
- *     `init_payload` carries `{u32 SUB_HELLO} +
+ *   - Each canvas is announced via yetty_yfigure_create_child on the root
+ *     container (handled in client.c). The create call's `init` carries
+ *     `{u32 SUB_HELLO} +
  *     struct yetty_yrdawn_wire_hello{session_id, figure_id}`.
- *   - Subsequent wgpu* CMDs, BULK uploads, and BYEs go out as
- *     id-targeted records on the same OSC code. Bodies start with a
- *     u32 SUB_OP discriminator from `enum yetty_yrdawn_figure_sub_op`.
+ *   - Subsequent wgpu* CMDs, BULK uploads, and BYEs go out via
+ *     yetty_yfigure_apply_child_body addressed to the canvas's figure id.
+ *     Bodies start with a u32 SUB_OP discriminator from
+ *     `enum yetty_yrdawn_figure_sub_op`.
  *
  * The codegen client stubs (yrdawn_client_wgpu*) take a client pointer
  * (not a canvas) — they emit through the client's "current canvas"

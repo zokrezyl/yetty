@@ -72,11 +72,12 @@ static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result
 
 struct yetty_yui {
     /* yui's own root container — owns the per-widget ygrid figures that
-     * ygui's wire emission creates via process_records. Renders LAST in
-     * the frame so the chrome sits above terminal panes painted earlier. */
+     * ygui's emit creates through the typed yfigure yclass stubs. Renders
+     * LAST in the frame so the chrome sits above terminal panes painted
+     * earlier. */
     struct yetty_yclass_object *root_container_obj;
     /* The same container's yclass object — handed to the ygui framework
-     * via set_container_obj so framework_emit ships records straight in. */
+     * via set_container_obj so framework_emit drives it in-process. */
     struct yetty_yclass_object *container_obj;
     struct yetty_yfigure_registry *figure_registry;
 

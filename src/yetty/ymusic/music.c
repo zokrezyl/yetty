@@ -5,7 +5,7 @@
  * LilyPond input into an editable score model, lays that model out, and renders
  * it to a ydraw drawable list. It does NOT render itself — like a flame, it is a
  * frontend that produces the picture; `yfigure` is the backend that displays it,
- * and `yview` ships the list to a server figure (YCOMPOSITOR_BIN) so it scrolls.
+ * and `yview` ships the list to a server figure over yclass-RPC so it scrolls.
  *
  * It engraves the way LilyPond does: the *symbolic* shapes (clefs, noteheads,
  * rests, accidentals, flags, dots) are glyphs pulled from the Emmentaler music

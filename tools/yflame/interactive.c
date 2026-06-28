@@ -1,8 +1,8 @@
 /*
  * interactive.c — the interactive yflame client.
  *
- * Ships the flame graph as a positioned server figure via `yview`
- * (YCOMPOSITOR_BIN), then stays foreground: it subscribes to pane-wide mouse
+ * Ships the flame graph as a positioned server figure via `yview` over
+ * yclass-RPC, then stays foreground: it subscribes to pane-wide mouse
  * events, and on each event drives the `yflame:flame` class —
  *   hover  → hit_test → set_highlight → re-render → yview_set_content
  *   click  → hit_test → focus (zoom in) / reset (right button) → re-render

@@ -1,8 +1,8 @@
 /*
  * interactive.c — the interactive ymap client.
  *
- * Ships the map as a positioned server figure via `yview`
- * (YCOMPOSITOR_BIN), then stays foreground and re-renders on input:
+ * Ships the map as a positioned server figure via `yview` over yclass-RPC,
+ * then stays foreground and re-renders on input:
  *
  *   Ctrl-Shift-wheel  → zoom in / out, anchored at the cursor (the lat/lon
  *                       under the pointer stays under the pointer)

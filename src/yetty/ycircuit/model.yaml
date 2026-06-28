@@ -14,6 +14,7 @@ methods:
  * default. A `grid` directive in the parsed document takes precedence. Call
  * after create(), before render(). */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: parse
     domain: ycircuit
@@ -29,6 +30,7 @@ methods:
     doc: "/* parse: ingest schematic-DSL text and build the circuit model. Resets the
  * model and clears any selection. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: clear
     domain: ycircuit
@@ -40,6 +42,7 @@ methods:
     doc: "/* clear: drop every element, the title and the selection (configuration is
  * kept). The programmatic counterpart of parse(\"\"). */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: add_component
     domain: ycircuit
@@ -64,6 +67,7 @@ methods:
  * \"npn\", ...; rotation in degrees, multiples of 90; name/value may be NULL or
  * empty). Returns the new element id. */"
     local: true
+    oneway: false
     return_payload_type: int
   - slot: add_ic
     domain: ycircuit
@@ -94,6 +98,7 @@ methods:
  * lists like \"GND,TRIG,OUT\"; NULL or empty = no pins on that side). The body
  * grows to fit the longest side. Returns the new element id. */"
     local: true
+    oneway: false
     return_payload_type: int
   - slot: add_wire
     domain: ycircuit
@@ -112,6 +117,7 @@ methods:
         type: float
     doc: "/* add_wire: append one straight wire segment. Returns the new element id. */"
     local: true
+    oneway: false
     return_payload_type: int
   - slot: add_junction
     domain: ycircuit
@@ -126,6 +132,7 @@ methods:
         type: float
     doc: "/* add_junction: append a connection dot. Returns the new element id. */"
     local: true
+    oneway: false
     return_payload_type: int
   - slot: add_label
     domain: ycircuit
@@ -143,6 +150,7 @@ methods:
     doc: "/* add_label: append a free text label anchored at (x,y). Returns the new
  * element id. */"
     local: true
+    oneway: false
     return_payload_type: int
   - slot: render
     domain: ycircuit
@@ -154,6 +162,7 @@ methods:
     doc: "/* render: lay out the circuit and emit it as a fresh ydraw drawable list
  * (caller owns it). Pointer return -> local-only. */"
     local: true
+    oneway: false
     return_payload_type: "struct yetty_ydraw_drawable_list *"
   - slot: hit_test
     domain: ycircuit
@@ -170,6 +179,7 @@ methods:
  * YETTY_YCIRCUIT_NO_ELEMENT. Requires a prior render() for the layout. On
  * overlap the most recently added element wins (it draws on top). */"
     local: true
+    oneway: false
     return_payload_type: int
   - slot: set_highlight
     domain: ycircuit
@@ -183,6 +193,7 @@ methods:
     doc: "/* set_highlight: mark an element as selected (-1 clears) for the next
  * render. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: destroy
     domain: ycircuit
@@ -193,6 +204,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: "/* destroy: free the circuit model and the object. */"
     local: true
+    oneway: false
     return_payload_type: null
 classes:
   - name: circuit

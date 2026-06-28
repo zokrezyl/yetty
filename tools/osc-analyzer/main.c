@@ -94,8 +94,6 @@ static const char *osc_code_name(int code)
         return "YDRAW_OVERLAY";
     case YETTY_DCS_YDRAW_SCENE_BIN:
         return "YDRAW_SCENE_BIN";
-    case YETTY_DCS_YCOMPOSITOR_BIN:
-        return "YCOMPOSITOR_BIN";
     case YETTY_OSC_CS_CLIENT_INPUT_SUB:
         return "CS_CLIENT_INPUT_SUB";
     case YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE:
@@ -137,7 +135,6 @@ static const int kAnalyzedCodes[] = {
     YETTY_DCS_YDRAW_YAML,
     YETTY_DCS_YDRAW_OVERLAY,
     YETTY_DCS_YDRAW_SCENE_BIN,
-    YETTY_DCS_YCOMPOSITOR_BIN,
     YETTY_OSC_CS_CLIENT_INPUT_SUB,
     YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE,
     YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE,
@@ -153,38 +150,6 @@ static const int kAnalyzedCodes[] = {
     YMGUI_OSC_CS_CARD_REMOVE,
 };
 enum { kAnalyzedCodes_n = (int)(sizeof(kAnalyzedCodes) / sizeof(kAnalyzedCodes[0])) };
-
-static const char *admin_op_name(uint32_t op)
-{
-    switch (op) {
-    case YETTY_YFIGURE_ADMIN_CLEAR_ALL:
-        return "CLEAR_ALL";
-    case YETTY_YFIGURE_ADMIN_CREATE_CHILD:
-        return "CREATE_CHILD";
-    case YETTY_YFIGURE_ADMIN_DELETE_CHILD:
-        return "DELETE_CHILD";
-    case YETTY_YFIGURE_ADMIN_SET_CHILD_RECT:
-        return "SET_CHILD_RECT";
-    case YETTY_YFIGURE_ADMIN_SET_RECT:
-        return "SET_RECT";
-    default:
-        return "UNKNOWN_ADMIN_OP";
-    }
-}
-
-static const char *figure_kind_name(uint32_t kind)
-{
-    /* Kinds are registry tokens (hash of the kind name), not a central enum, so
-     * match against the tokens of the known built-in names. */
-    static const char *const names[] = {"container", "ygrid",  "ymgui", "yrdawn",     "yplot",
-                                        "yimage",    "yvideo", "yzoo",  "yjungle",    "yshadertoy"};
-    for (size_t i = 0; i < sizeof(names) / sizeof(names[0]); ++i) {
-        if (kind == yetty_yfigure_kind_token(names[i])) {
-            return names[i];
-        }
-    }
-    return "UNKNOWN_KIND";
-}
 
 static const char *ymgui_sub_op_name(uint32_t op)
 {
@@ -777,95 +742,15 @@ static void walk_ygrid_body(const uint8_t *bytes, size_t bytes_len, int depth)
     }
 }
 
+/* id==0 records were the legacy figure-tree "admin" op stream. The figure
+ * wire is now yclass-RPC (typed slot calls over YETTY_DCS_YCLASS_RPC), so the
+ * analyzer no longer interprets the per-op admin format; it just dumps the
+ * opaque body for any id==0 record it still finds in a capture. */
 static void walk_admin_payload(const uint8_t *body, size_t blen, int depth)
 {
-    if (blen < 4) {
-        ind(depth);
-        out("(admin payload too short for op)\n");
-        return;
-    }
-    uint32_t op;
-    memcpy(&op, body, 4);
+    (void)body;
     ind(depth);
-    out("admin op=%s(%u)\n", admin_op_name(op), op);
-    const uint8_t *tail = body + 4;
-    size_t tlen = blen - 4;
-
-    switch (op) {
-    case YETTY_YFIGURE_ADMIN_CLEAR_ALL:
-        break;
-    case YETTY_YFIGURE_ADMIN_CREATE_CHILD: {
-        if (tlen < 4u + 4u + 16u + 4u) {
-            ind(depth + 1);
-            out("(CREATE_CHILD header truncated, %zu B)\n", tlen);
-            break;
-        }
-        uint32_t child_id, kind, init_n;
-        float r[4];
-        memcpy(&child_id, tail + 0, 4);
-        memcpy(&kind, tail + 4, 4);
-        memcpy(r, tail + 8, 16);
-        memcpy(&init_n, tail + 24, 4);
-        ind(depth + 1);
-        out("child_id=%u kind=%s(%u) rect=(%.1f,%.1f)..(%.1f,%.1f) "
-            "init_payload=%u B\n",
-            child_id, figure_kind_name(kind), kind, r[0], r[1], r[2], r[3], init_n);
-        if (init_n > 0 && (size_t)init_n + 28u <= tlen) {
-            /* Init payload is the body of the figure being minted. For
-             * YGRID, that's a CMD_GROUP/CMD_DELETE/SDF stream. */
-            ind(depth + 1);
-            out("init payload (figure body):\n");
-            if (kind == yetty_yfigure_kind_token("ygrid")) {
-                walk_ygrid_body(tail + 28, init_n, depth + 2);
-            } else {
-                walk_records(tail + 28, init_n, depth + 2);
-            }
-        }
-        break;
-    }
-    case YETTY_YFIGURE_ADMIN_DELETE_CHILD: {
-        if (tlen < 4) {
-            ind(depth + 1);
-            out("(DELETE_CHILD truncated)\n");
-            break;
-        }
-        uint32_t child_id;
-        memcpy(&child_id, tail, 4);
-        ind(depth + 1);
-        out("child_id=%u\n", child_id);
-        break;
-    }
-    case YETTY_YFIGURE_ADMIN_SET_CHILD_RECT: {
-        if (tlen < 4 + 16) {
-            ind(depth + 1);
-            out("(SET_CHILD_RECT truncated)\n");
-            break;
-        }
-        uint32_t child_id;
-        float r[4];
-        memcpy(&child_id, tail + 0, 4);
-        memcpy(r, tail + 4, 16);
-        ind(depth + 1);
-        out("child_id=%u rect=(%.1f,%.1f)..(%.1f,%.1f)\n", child_id, r[0], r[1], r[2], r[3]);
-        break;
-    }
-    case YETTY_YFIGURE_ADMIN_SET_RECT: {
-        if (tlen < 16) {
-            ind(depth + 1);
-            out("(SET_RECT truncated)\n");
-            break;
-        }
-        float r[4];
-        memcpy(r, tail, 16);
-        ind(depth + 1);
-        out("rect=(%.1f,%.1f)..(%.1f,%.1f)\n", r[0], r[1], r[2], r[3]);
-        break;
-    }
-    default:
-        ind(depth + 1);
-        out("(unrecognised admin op — body=%zu B)\n", tlen);
-        break;
-    }
+    out("(legacy admin record — opaque, %zu B; figure wire is now yclass-RPC)\n", blen);
 }
 
 static void walk_ymgui_frame(const uint8_t *body, size_t blen, int depth)
@@ -1148,9 +1033,9 @@ static struct yetty_ycore_void_result envelope_mock_process_input(
         out("\n");
 
         switch (code) {
-        case YETTY_DCS_YCOMPOSITOR_BIN:
-            walk_records(m->buf, m->len, 1);
-            break;
+        /* The legacy figure-tree compositor DCS is gone — figures now travel
+         * as typed yclass-RPC calls. The record walkers remain only for
+         * decoding old capture files via the raw-file mode. */
         case YETTY_OSC_CS_CLIENT_INPUT_SUB:
             if (m->len >= sizeof(struct yetty_client_input_sub)) {
                 const struct yetty_client_input_sub *s =
@@ -1445,14 +1330,15 @@ static void print_help(const char *prog)
             "  -o FILE              write decoded log to FILE (default: stderr)\n"
             "  --cols N / --rows N  PTY size for -e (cells)\n"
             "\n"
-            "Decoding walks {length, id} figure-tree records inside\n"
-            "YETTY_DCS_YCOMPOSITOR_BIN envelopes (and prints headers for every\n"
-            "other OSC code listed in the public wire headers). Inside each\n"
-            "record the body is walked via the drawable-list registry — every SDF\n"
-            "prim, TEXT_DRAWABLE_LIST, FONT, GLYPH, and CMD_GROUP/CMD_DELETE record is\n"
-            "emitted as YAML with named fields. Complex prims (yplot/yimage/\n"
-            "yvideo etc.) report their type + payload size but omit the data\n"
-            "bytes themselves.\n",
+            "Decoding prints headers for every OSC / DCS code listed in the\n"
+            "public wire headers. The figure wire is now yclass-RPC (typed slot\n"
+            "calls over YETTY_DCS_YCLASS_RPC), not the old compositor record\n"
+            "stream; the raw-file mode still walks {length, id} figure-tree records\n"
+            "for decoding legacy captures. Inside each record the body is walked\n"
+            "via the drawable-list registry — every SDF prim, TEXT_DRAWABLE_LIST,\n"
+            "FONT, GLYPH, and CMD_GROUP/CMD_DELETE record is emitted as YAML with\n"
+            "named fields. Complex prims (yplot/yimage/yvideo etc.) report their\n"
+            "type + payload size but omit the data bytes themselves.\n",
             prog, prog, prog, prog);
 }
 

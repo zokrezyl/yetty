@@ -12,6 +12,7 @@ methods:
         type: size_t
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: clipboard_request_paste
     domain: yplatform
@@ -22,6 +23,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: clipboard_drain
     domain: yplatform
@@ -32,6 +34,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: platform_init
     domain: yplatform
@@ -48,6 +51,7 @@ methods:
         type: "char **"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: platform_run
     domain: yplatform
@@ -64,6 +68,7 @@ methods:
         type: "char **"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_chrome_destroy
     domain: yplatform
@@ -74,6 +79,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_chrome_handle_event
     domain: yplatform
@@ -86,6 +92,7 @@ methods:
         type: "const struct yetty_yui_event *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_chrome_configure
     domain: yplatform
@@ -100,6 +107,7 @@ methods:
  * window + response pipe separately (e.g. glfw_window_chrome_attach), so each
  * class writes only its own data slice. output_pipe is borrowed. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_chrome_iconify
     domain: yplatform
@@ -110,6 +118,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_chrome_toggle_maximize
     domain: yplatform
@@ -120,6 +129,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_chrome_request_close
     domain: yplatform
@@ -130,6 +140,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_chrome_drag_by
     domain: yplatform
@@ -144,6 +155,7 @@ methods:
         type: int
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_chrome_resize_by
     domain: yplatform
@@ -160,6 +172,7 @@ methods:
         type: int
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_chrome_begin_interactive_move
     domain: yplatform
@@ -170,6 +183,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_chrome_begin_interactive_resize
     domain: yplatform
@@ -182,6 +196,7 @@ methods:
         type: int
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_chrome_set_cursor
     domain: yplatform
@@ -194,6 +209,7 @@ methods:
         type: int
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_open
     domain: yplatform
@@ -210,6 +226,7 @@ methods:
         type: "const char *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_get_size
     domain: yplatform
@@ -224,6 +241,7 @@ methods:
         type: "int *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_get_framebuffer_size
     domain: yplatform
@@ -238,6 +256,7 @@ methods:
         type: "int *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_get_content_scale
     domain: yplatform
@@ -252,6 +271,7 @@ methods:
         type: "float *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_should_close
     domain: yplatform
@@ -262,6 +282,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: int
   - slot: window_set_title
     domain: yplatform
@@ -274,6 +295,7 @@ methods:
         type: "const char *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_destroy
     domain: yplatform
@@ -284,6 +306,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: window_create_surface
     domain: yplatform
@@ -299,6 +322,7 @@ methods:
  * stays free of <webgpu/webgpu.h>; the subclass casts. The native handle stays
  * private to the subclass. */"
     local: true
+    oneway: false
     return_payload_type: "void *"
 classes:
   - name: android_clipboard

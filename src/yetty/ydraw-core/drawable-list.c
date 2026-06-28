@@ -16,7 +16,6 @@
 #include <yetty/ydraw-core/font-resource.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/ycore/util.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include "drawable-list-internal.h"
@@ -537,9 +536,8 @@ struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_update(
 
 /*===========================================================================
  * Figure-tree wire records: `{length: u32, id: u32, payload[length]}`.
- * length-first; id=0 = admin/self-target, id!=0 routes to a child.
- * See <yetty/yfigure/wire.h> for the admin sub-cmd codes used in
- * id=0 payloads.
+ * length-first so a consumer can walk the buffer without knowing the
+ * payload semantics; id addresses the child figure the record targets.
  *=========================================================================*/
 
 struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_record(
@@ -596,134 +594,6 @@ struct yetty_ycore_void_result yetty_ydraw_drawable_list_end_record(
     /* Payload bytes = everything written after the 8-byte header. */
     uint32_t length = (uint32_t)(buf->primitives.buf.size - record_marker_offset - 8u);
     memcpy(buf->primitives.buf.data + record_marker_offset, &length, sizeof(length));
-    return YETTY_OK_VOID();
-}
-
-/* Internal helper — emit an admin record (id=0) with the given
- * sub-cmd + body. Body bytes are admin-op specific. */
-static struct yetty_ycore_void_result add_admin_record(struct yetty_ydraw_drawable_list *buf,
-                                                       uint32_t admin_op, const void *body,
-                                                       size_t body_size)
-{
-    /* Admin payload = u32 admin_op | body. */
-    size_t payload_size = sizeof(admin_op) + body_size;
-    uint8_t *payload = (uint8_t *)malloc(payload_size);
-    if (!payload) {
-        return YETTY_ERR(yetty_ycore_void, "add_admin_record: oom");
-    }
-    memcpy(payload, &admin_op, sizeof(admin_op));
-    if (body_size > 0) {
-        memcpy(payload + sizeof(admin_op), body, body_size);
-    }
-    struct yetty_ycore_void_result r =
-        yetty_ydraw_drawable_list_add_record(buf, /*id=*/0u, payload, payload_size);
-    free(payload);
-    return r;
-}
-
-struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_admin_clear_all(
-    struct yetty_ydraw_drawable_list *buf)
-{
-    return add_admin_record(buf, YETTY_YFIGURE_ADMIN_CLEAR_ALL, NULL, 0);
-}
-
-struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_admin_delete_child(
-    struct yetty_ydraw_drawable_list *buf, uint32_t child_id)
-{
-    return add_admin_record(buf, YETTY_YFIGURE_ADMIN_DELETE_CHILD, &child_id, sizeof(child_id));
-}
-
-struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_admin_set_rect(
-    struct yetty_ydraw_drawable_list *buf, float min_x, float min_y, float max_x, float max_y)
-{
-    float r[4] = {min_x, min_y, max_x, max_y};
-    return add_admin_record(buf, YETTY_YFIGURE_ADMIN_SET_RECT, r, sizeof(r));
-}
-
-struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_admin_set_child_rect(
-    struct yetty_ydraw_drawable_list *buf, uint32_t child_id, float min_x, float min_y, float max_x,
-    float max_y)
-{
-    uint8_t body[20];
-    memcpy(body + 0, &child_id, 4);
-    float r[4] = {min_x, min_y, max_x, max_y};
-    memcpy(body + 4, r, sizeof(r));
-    return add_admin_record(buf, YETTY_YFIGURE_ADMIN_SET_CHILD_RECT, body, sizeof(body));
-}
-
-struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_admin_create_child(
-    struct yetty_ydraw_drawable_list *buf, uint32_t child_id, uint32_t kind, float min_x,
-    float min_y, float max_x, float max_y, const void *init_payload, size_t init_payload_size)
-{
-    if (init_payload_size > UINT32_MAX) {
-        return YETTY_ERR(yetty_ycore_void, "add_admin_create_child: init too large");
-    }
-    /* Body = u32 child_id | u32 kind | f32 rect[4] | u32 init_size | init bytes */
-    size_t body_size = 4 + 4 + 16 + 4 + init_payload_size;
-    uint8_t *body = (uint8_t *)malloc(body_size);
-    if (!body) {
-        return YETTY_ERR(yetty_ycore_void, "add_admin_create_child: oom");
-    }
-    memcpy(body + 0, &child_id, 4);
-    memcpy(body + 4, &kind, 4);
-    float r[4] = {min_x, min_y, max_x, max_y};
-    memcpy(body + 8, r, sizeof(r));
-    uint32_t init_n = (uint32_t)init_payload_size;
-    memcpy(body + 24, &init_n, 4);
-    if (init_payload_size > 0) {
-        memcpy(body + 28, init_payload, init_payload_size);
-    }
-    struct yetty_ycore_void_result rr =
-        add_admin_record(buf, YETTY_YFIGURE_ADMIN_CREATE_CHILD, body, body_size);
-    free(body);
-    return rr;
-}
-
-struct yetty_ydraw_id_result yetty_ydraw_drawable_list_begin_admin_create_child(
-    struct yetty_ydraw_drawable_list *buf, uint32_t child_id, uint32_t kind, float min_x,
-    float min_y, float max_x, float max_y)
-{
-    if (!buf) {
-        return YETTY_ERR(yetty_ydraw_id, "begin_admin_create_child: buf is NULL");
-    }
-    /* Layout (40 bytes total, marker = start of outer length):
-     *   offset  0: [length=0]                   u32 (backfilled)
-     *   offset  4: [id=0]                       u32
-     *   offset  8: [admin_op=CREATE_CHILD]      u32
-     *   offset 12: [child_id]                   u32
-     *   offset 16: [kind]                       u32
-     *   offset 20: [rect: 4 floats]             16 bytes  (20..36)
-     *   offset 36: [init_size=0]                u32 (backfilled) */
-    uint8_t hdr[40];
-    uint32_t zero32 = 0;
-    uint32_t id = 0;
-    uint32_t admin_op = YETTY_YFIGURE_ADMIN_CREATE_CHILD;
-    memcpy(hdr + 0, &zero32, 4);
-    memcpy(hdr + 4, &id, 4);
-    memcpy(hdr + 8, &admin_op, 4);
-    memcpy(hdr + 12, &child_id, 4);
-    memcpy(hdr + 16, &kind, 4);
-    float r[4] = {min_x, min_y, max_x, max_y};
-    memcpy(hdr + 20, r, sizeof(r));
-    memcpy(hdr + 36, &zero32, 4);
-    return yetty_ydraw_drawable_list_add_prim(buf, hdr, sizeof(hdr));
-}
-
-struct yetty_ycore_void_result yetty_ydraw_drawable_list_end_admin_create_child(
-    struct yetty_ydraw_drawable_list *buf, uint32_t record_marker_offset)
-{
-    if (!buf) {
-        return YETTY_ERR(yetty_ycore_void, "end_admin_create_child: buf is NULL");
-    }
-    if (record_marker_offset + 40u > buf->primitives.buf.size) {
-        return YETTY_ERR(yetty_ycore_void, "end_admin_create_child: marker oor");
-    }
-    /* Outer record length = total bytes after the 8-byte outer header. */
-    uint32_t outer_payload = (uint32_t)(buf->primitives.buf.size - record_marker_offset - 8u);
-    memcpy(buf->primitives.buf.data + record_marker_offset, &outer_payload, 4);
-    /* init_payload_size = body bytes added after the 40-byte prefix. */
-    uint32_t init_size = (uint32_t)(buf->primitives.buf.size - record_marker_offset - 40u);
-    memcpy(buf->primitives.buf.data + record_marker_offset + 36, &init_size, 4);
     return YETTY_OK_VOID();
 }
 

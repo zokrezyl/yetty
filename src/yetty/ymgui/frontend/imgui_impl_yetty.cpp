@@ -7,13 +7,12 @@
  * UIs side by side. Wire details live in <yetty/ymgui/wire.h>.
  *
  * Renderer flow per figure:
- *   - CreateFigure ships a CREATE_CHILD admin record on the figure-tree
- *     OSC (yfigure wire) when YMGUI_USE_FIGURE_TREE=1, or a legacy
- *     CARD_PLACE on the per-kind OSC otherwise.
+ *   - CreateFigure drives yetty_yfigure_create_child on the host's root
+ *     container (kind=YMGUI) through a typed one-way RPC stub.
  *   - BeginFigureFrame makes that figure's context current; first time
  *     also uploads the figure's font atlas.
  *   - RenderFigureDrawData serializes ImDrawData into wire format and
- *     ships it as a per-figure record tagged with the figure_id.
+ *     ships it as the figure's body via yetty_yfigure_apply_child_body.
  *
  * Input flow:
  *   - The server hit-tests each event against the live figures and
@@ -28,10 +27,11 @@
 #include <yetty/ymgui/wire.h>
 #include <yetty/yterminal/client-input.h>
 #include <yetty/yface/yface.h>
+#include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/yfigure/container.h>
+#include <yetty/yfigure/producer.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
-#include <yetty/yterminal/dcs-codes.h>
 
 #include <float.h>
 #include <stdio.h>
@@ -88,8 +88,15 @@ struct ymgui_figure_state {
 struct ymgui_impl_state {
     int out_fd;
     int in_fd;
-    struct yetty_yface *yface_out; /* OSC envelope + LZ4F + b64 streamer */
-    struct yetty_yface *yface_in;  /* stream-scanner for incoming events */
+    struct yetty_yface *yface_in; /* stream-scanner for incoming events */
+
+    /* yclass-RPC producer session driving the host's root figure container.
+     * The figure-tree mutations (create / set-rect / delete / clear-all) and
+     * the per-figure body uploads (atlas, frame) travel as typed one-way RPC
+     * calls on this session. Attached once during Init(), before the input
+     * poll path flips in_fd to non-blocking. */
+    struct yetty_yfigure_producer_session *producer_session;
+    struct yetty_yclass_object *container; /* root container proxy (borrowed) */
 
     int raw_mode_active;
 #ifndef _WIN32
@@ -113,8 +120,9 @@ struct ymgui_impl_state {
 static struct ymgui_impl_state g_state = {
     YMGUI_STDOUT_FD,
     YMGUI_STDIN_FD,
-    nullptr,
-    nullptr,
+    nullptr, /* yface_in */
+    nullptr, /* producer_session */
+    nullptr, /* container */
     0,
 #ifndef _WIN32
     {},
@@ -147,110 +155,116 @@ static ymgui_figure_state *find_figure(uint32_t id)
     return nullptr;
 }
 
-/* Push everything yface_out accumulated to the wire, blocking until it's
- * fully drained. The pending-write helper queues unfinished tails on
- * EAGAIN, but the libuv loop here doesn't watch POLLOUT, so a queued
- * tail would stall every subsequent emit until the next stdin event
- * incidentally drained it. Cheaper to just block briefly per emit. */
-static int flush_yface_to_fd(void)
+/* Build a pixel rect from the (x0,y0)-(x1,y1) corner coords the legacy
+ * emit helpers used. The figure-tree wire and the typed create/set-rect
+ * stubs both address figures by absolute pixel rect — same convention. */
+static struct yetty_ycore_rectangle make_rect(float x0, float y0, float x1, float y1)
 {
-    if (!g_state.yface_out) {
-        return -1;
+    struct yetty_ycore_rectangle rect = {};
+    rect.min.x = x0;
+    rect.min.y = y0;
+    rect.max.x = x1;
+    rect.max.y = y1;
+    return rect;
+}
+
+/* Drop the heap-linked cause chain of a failed Result. These ImGui backend
+ * entry points return void (or a figure id) and run at the bottom of the
+ * call stack with nowhere to propagate, so a wire error is absorbed here —
+ * the end-consumer destroys the chain rather than leaking it. */
+static void discard_error(struct yetty_ycore_void_result result)
+{
+    if (YETTY_IS_ERR(result)) {
+        yetty_ycore_error_destroy(result.error);
     }
-    struct yetty_ycore_buffer *out = yetty_yface_out_buf(g_state.yface_out);
-    if (!out || out->size == 0) {
-        return 0;
+}
+
+/* Attach to the host's root figure container over yclass RPC, once. The
+ * read fd is terminal->tool (RPC responses), the write fd is tool->terminal
+ * (RPC requests); compressed=1 selects base64 + LZ4 framing. Must run while
+ * in_fd is still blocking — the GET_ROOT
+ * handshake does a blocking read — i.e. before PlatformInit() flips it to
+ * raw/non-blocking. Idempotent. Returns false if the host published no
+ * root container or the transport could not be opened. */
+static bool ensure_attached(void)
+{
+    if (g_state.container) {
+        return true;
     }
-    int rc = yetty_ymgui_pending_write(g_state.out_fd, out->data, out->size);
-    yetty_ycore_buffer_clear(out);
-    if (rc < 0) {
-        return rc;
+    struct yetty_yfigure_producer_session_ptr_result session_result =
+        yetty_yfigure_producer_attach(g_state.in_fd, g_state.out_fd, /*compressed=*/1);
+    if (YETTY_IS_ERR(session_result)) {
+        yetty_ycore_error_destroy(session_result.error);
+        return false;
     }
-    if (yetty_ymgui_pending_active()) {
-        return yetty_ymgui_pending_drain_blocking(g_state.out_fd);
-    }
-    return 0;
+    g_state.producer_session = session_result.value;
+    g_state.container = yetty_yfigure_producer_session_container(g_state.producer_session);
+    return g_state.container != nullptr;
 }
 
 /*===========================================================================
  * Figure-tree record helpers.
  *
- * Each call ships ONE yfigure record on YETTY_DCS_YCOMPOSITOR_BIN.
- * The record layout is:
- *
- *   u32 length        # payload bytes after this header
- *   u32 id            # 0 = admin, !=0 = child figure id
- *   bytes payload[length]
- *
- * For admin records (id=0), the payload starts with u32 admin_op
- * (see yetty_yfigure_wire_admin_op). For child-targeted records, the
- * payload begins with u32 sub_op (see yetty_ymgui_figure_sub_op).
+ * Each call drives the host's root figure container through a typed one-way
+ * RPC stub (yetty_yfigure_create_child / _set_child_rect / _delete_child /
+ * _apply_child_body) on the producer session attached during Init().
  *=========================================================================*/
 
-static bool emit_record(uint32_t id, bool compressed,
-                        const void *body, size_t body_len)
-{
-    if (!g_state.yface_out) {
-        return false;
-    }
-    struct yetty_yfigure_header hdr = {(uint32_t)body_len, id};
-    if (!yetty_yface_start_write(g_state.yface_out, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN,
-                                 compressed ? 1 : 0, /*args=*/NULL, 0)
-             .ok) {
-        return false;
-    }
-    if (!yetty_yface_write(g_state.yface_out, &hdr, sizeof(hdr)).ok) {
-        return false;
-    }
-    if (body_len > 0 && !yetty_yface_write(g_state.yface_out, body, body_len).ok) {
-        return false;
-    }
-    if (!yetty_yface_finish_write(g_state.yface_out).ok) {
-        return false;
-    }
-    return flush_yface_to_fd() >= 0;
-}
-
-/* ADMIN_CREATE_CHILD with kind=YMGUI and no init payload. The receiver
- * uses `rect` as the figure's absolute target rect. */
+/* CREATE_CHILD with kind=YMGUI and no init payload, as a typed one-way RPC
+ * call on the root container proxy. The host uses `rect` as the figure's
+ * absolute target rect. */
 static bool emit_admin_create_child_ymgui(uint32_t child_id,
                                           float x0, float y0, float x1, float y1)
 {
-    uint8_t body[8 + 4 + 4 + 16 + 4]; /* admin_op + child_id + kind + rect[4] + init_size */
-    uint32_t admin_op = YETTY_YFIGURE_ADMIN_CREATE_CHILD;
+    if (!g_state.container && !ensure_attached()) {
+        return false;
+    }
     uint32_t kind = yetty_yfigure_kind_token("ymgui");
-    uint32_t init_size = 0;
-    float r[4] = {x0, y0, x1, y1};
-    size_t off = 0;
-    memcpy(body + off, &admin_op, 4); off += 4;
-    memcpy(body + off, &child_id, 4); off += 4;
-    memcpy(body + off, &kind, 4);     off += 4;
-    memcpy(body + off, r, 16);        off += 16;
-    memcpy(body + off, &init_size, 4); off += 4;
-    return emit_record(/*id=*/0, /*compressed=*/false, body, off);
+    struct yetty_ycore_rectangle rect = make_rect(x0, y0, x1, y1);
+    /* No init payload: ymgui figures are seeded by the first SUB_TEX_UPLOAD /
+     * SUB_FRAME body, not at create time. Point data at a valid (unused)
+     * address so the stub's memcpy(dst, data, 0) never gets a NULL src. */
+    uint8_t init_none = 0;
+    struct yetty_ycore_buffer init = {&init_none, 0, 0};
+    struct yetty_ycore_void_result result =
+        yetty_yfigure_create_child(g_state.container, kind, child_id, rect, init);
+    if (YETTY_IS_ERR(result)) {
+        discard_error(result);
+        return false;
+    }
+    return true;
 }
 
-/* ADMIN_SET_CHILD_RECT — update an existing figure's rect. */
+/* SET_CHILD_RECT — update an existing figure's rect. */
 static bool emit_admin_set_child_rect(uint32_t child_id,
                                       float x0, float y0, float x1, float y1)
 {
-    uint8_t body[4 + 4 + 16];
-    uint32_t admin_op = YETTY_YFIGURE_ADMIN_SET_CHILD_RECT;
-    float r[4] = {x0, y0, x1, y1};
-    memcpy(body + 0, &admin_op, 4);
-    memcpy(body + 4, &child_id, 4);
-    memcpy(body + 8, r, 16);
-    return emit_record(/*id=*/0, /*compressed=*/false, body, sizeof(body));
+    if (!g_state.container && !ensure_attached()) {
+        return false;
+    }
+    struct yetty_ycore_rectangle rect = make_rect(x0, y0, x1, y1);
+    struct yetty_ycore_void_result result =
+        yetty_yfigure_set_child_rect(g_state.container, child_id, rect);
+    if (YETTY_IS_ERR(result)) {
+        discard_error(result);
+        return false;
+    }
+    return true;
 }
 
-/* ADMIN_DELETE_CHILD. */
+/* DELETE_CHILD. */
 static bool emit_admin_delete_child(uint32_t child_id)
 {
-    uint8_t body[4 + 4];
-    uint32_t admin_op = YETTY_YFIGURE_ADMIN_DELETE_CHILD;
-    memcpy(body + 0, &admin_op, 4);
-    memcpy(body + 4, &child_id, 4);
-    return emit_record(/*id=*/0, /*compressed=*/false, body, sizeof(body));
+    if (!g_state.container && !ensure_attached()) {
+        return false;
+    }
+    struct yetty_ycore_void_result result =
+        yetty_yfigure_delete_child(g_state.container, child_id);
+    if (YETTY_IS_ERR(result)) {
+        discard_error(result);
+        return false;
+    }
+    return true;
 }
 
 /* Read the PTY winsize. yetty's terminal_create pushes ws_xpixel /
@@ -326,28 +340,6 @@ static void figure_tree_rect_for_figure(const ymgui_figure_state *c,
     *y1 = *y0 + h_px;
 }
 
-/* Build a no-args OSC envelope around `payload` and ship it. flush_yface
- * blocks until the entire envelope is drained, so every emit either
- * fully reaches the server or returns an error. */
-static bool emit_osc(int osc_code, bool compressed, const void *payload, size_t len)
-{
-    if (!g_state.yface_out) {
-        return false;
-    }
-    if (!yetty_yface_start_write(g_state.yface_out, YETTY_YWIRE_ENVELOPE_DCS, osc_code, compressed ? 1 : 0,
-                                 /*args=*/NULL, /*args_len=*/0)
-             .ok) {
-        return false;
-    }
-    if (!yetty_yface_write(g_state.yface_out, payload, len).ok) {
-        return false;
-    }
-    if (!yetty_yface_finish_write(g_state.yface_out).ok) {
-        return false;
-    }
-    return flush_yface_to_fd() >= 0;
-}
-
 /*===========================================================================
  * Backend lifecycle
  *=========================================================================*/
@@ -379,19 +371,12 @@ void yetty_ymgui_ImGui_ImplYetty_SetInputFd(int fd)
 
 bool yetty_ymgui_ImGui_ImplYetty_Init(void)
 {
-    /* Two yface instances — one each for the encode/decode pipelines. */
+    /* yface instance for the incoming-event decode pipeline. Outgoing figure
+     * traffic now rides typed one-way RPC stubs on the producer session, not
+     * a hand-built OSC envelope, so no encode-side yface is needed. */
     {
         struct yetty_yface_ptr_result yr = yetty_yface_create();
         if (!yr.ok) {
-            return false;
-        }
-        g_state.yface_out = yr.value;
-    }
-    {
-        struct yetty_yface_ptr_result yr = yetty_yface_create();
-        if (!yr.ok) {
-            yetty_yface_destroy(g_state.yface_out);
-            g_state.yface_out = nullptr;
             return false;
         }
         g_state.yface_in = yr.value;
@@ -407,6 +392,15 @@ bool yetty_ymgui_ImGui_ImplYetty_Init(void)
             }
         }
     }
+
+    /* Attach to the host's root container now, while in_fd is still in
+     * blocking mode — the attach handshake (GET_ROOT) reads the host's
+     * reply synchronously. PlatformInit() runs after Init() and switches
+     * in_fd to raw/non-blocking; the steady-state typed emits are
+     * fire-and-forget one-way calls that never read, so they keep working
+     * after that switch. A failed attach is not fatal here (e.g. a headless
+     * test with no host) — the per-emit calls below skip when unattached. */
+    ensure_attached();
     return true;
 }
 
@@ -422,10 +416,15 @@ void yetty_ymgui_ImGui_ImplYetty_Shutdown(void)
     }
     g_state.figures.clear();
 
-    if (g_state.yface_out) {
-        yetty_yface_destroy(g_state.yface_out);
-        g_state.yface_out = nullptr;
+    /* Tear down the producer session (destroys the owned RPC transport and
+     * the root container proxy). NULL-safe; detach absorbs any teardown
+     * error since Shutdown has nowhere to propagate. */
+    if (g_state.producer_session) {
+        discard_error(yetty_yfigure_producer_detach(g_state.producer_session));
+        g_state.producer_session = nullptr;
+        g_state.container = nullptr;
     }
+
     if (g_state.yface_in) {
         yetty_yface_destroy(g_state.yface_in);
         g_state.yface_in = nullptr;
@@ -434,13 +433,13 @@ void yetty_ymgui_ImGui_ImplYetty_Shutdown(void)
 
 void yetty_ymgui_ImGui_ImplYetty_Clear(bool keep_visible)
 {
-    /* Figure-tree CLEAR_ALL admin record on the root. keep_visible has
-     * no archive path yet on the new wire — always drop. */
+    /* CLEAR_ALL on the root container, as a typed one-way RPC call.
+     * keep_visible has no archive path yet on the new wire — always drop. */
     (void)keep_visible;
-    uint8_t body[4];
-    uint32_t admin_op = YETTY_YFIGURE_ADMIN_CLEAR_ALL;
-    memcpy(body, &admin_op, 4);
-    emit_record(/*id=*/0, /*compressed=*/false, body, sizeof(body));
+    if (!g_state.container && !ensure_attached()) {
+        return;
+    }
+    discard_error(yetty_yfigure_clear_all(g_state.container));
 }
 
 /*===========================================================================
@@ -580,28 +579,27 @@ static bool upload_figure_atlas(ymgui_figure_state *c)
     hdr.height = (uint32_t)h;
     hdr.total_size = (uint32_t)payload_sz;
 
-    /* Ship the texture as one record targeted at the figure's child id.
-     * Record body = [u32 sub_op] + [yetty_ymgui_wire_tex hdr] + [pixels].
-     * The outer record length covers all three. */
-    uint32_t sub_op = YETTY_YMGUI_FIGURE_SUB_TEX_UPLOAD;
-    uint32_t body_len = (uint32_t)(sizeof(sub_op) + sizeof(hdr) + pixel_bytes);
-    struct yetty_yfigure_header outer = {body_len, c->id};
-    if (!yetty_yface_start_write(g_state.yface_out, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN,
-                                 /*compressed=*/1, /*args=*/NULL, 0).ok) {
+    /* Ship the texture as one figure-targeted body via apply_child_body.
+     * The body is the exact bytes the ymgui-figure child's process_bytes
+     * decodes: [u32 sub_op] + [yetty_ymgui_wire_tex hdr] + [pixels]. The
+     * outer [length|id] framing is supplied by the typed stub. */
+    if (!g_state.container && !ensure_attached()) {
         return false;
     }
-    if (!yetty_yface_write(g_state.yface_out, &outer, sizeof(outer)).ok) { return false;
-}
-    if (!yetty_yface_write(g_state.yface_out, &sub_op, sizeof(sub_op)).ok) { return false;
-}
-    if (!yetty_yface_write(g_state.yface_out, &hdr, sizeof(hdr)).ok) { return false;
-}
-    if (!yetty_yface_write(g_state.yface_out, pixels, pixel_bytes).ok) { return false;
-}
-    if (!yetty_yface_finish_write(g_state.yface_out).ok) { return false;
-}
-    if (flush_yface_to_fd() < 0) { return false;
-}
+    uint32_t sub_op = YETTY_YMGUI_FIGURE_SUB_TEX_UPLOAD;
+    std::vector<uint8_t> body;
+    body.reserve(sizeof(sub_op) + sizeof(hdr) + pixel_bytes);
+    body.insert(body.end(), (const uint8_t *)&sub_op, (const uint8_t *)&sub_op + sizeof(sub_op));
+    body.insert(body.end(), (const uint8_t *)&hdr, (const uint8_t *)&hdr + sizeof(hdr));
+    body.insert(body.end(), pixels, pixels + pixel_bytes);
+
+    struct yetty_ycore_buffer body_buf = {body.data(), 0, body.size()};
+    struct yetty_ycore_void_result apply_result =
+        yetty_yfigure_apply_child_body(g_state.container, c->id, body_buf);
+    if (YETTY_IS_ERR(apply_result)) {
+        discard_error(apply_result);
+        return false;
+    }
 
     io.Fonts->SetTexID((ImTextureID)(intptr_t)YMGUI_TEX_ID_FONT_ATLAS);
     c->atlas_uploaded = true;
@@ -762,7 +760,7 @@ void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDraw
     if (!draw_data || draw_data->CmdListsCount <= 0) {
         return;
     }
-    if (!g_state.yface_out) {
+    if (!g_state.container && !ensure_attached()) {
         return;
     }
     /* Static-size sanity — we memcpy ImDrawVert straight onto the wire. */
@@ -891,23 +889,24 @@ void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDraw
     fh.fb_scale_x = draw_data->FramebufferScale.x;
     fh.fb_scale_y = draw_data->FramebufferScale.y;
 
-    /* Ship the frame as one record targeted at the figure's child id.
-     * Payload = [u32 sub_op] + [yetty_ymgui_wire_frame] + cmd lists.
-     * Outer length covers the sub_op + the entire frame total_size. */
+    /* Ship the frame as one figure-targeted body via apply_child_body.
+     * The body is the exact bytes the ymgui-figure child's process_bytes
+     * decodes: [u32 sub_op] + [yetty_ymgui_wire_frame] + cmd lists. They
+     * accumulate into a contiguous buffer and ride a single typed one-way
+     * RPC call; the outer [length|id] record framing is supplied by the
+     * typed stub. */
+    if (!g_state.container && !ensure_attached()) {
+        return;
+    }
     uint32_t sub_op = YETTY_YMGUI_FIGURE_SUB_FRAME;
-    uint32_t outer_len = (uint32_t)(sizeof(sub_op) + total_size);
-    struct yetty_yfigure_header outer = {outer_len, figure_id};
-    if (!yetty_yface_start_write(g_state.yface_out, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN,
-                                 /*compressed=*/1, /*args=*/NULL, 0).ok) {
-        return;
-    }
-    if (!yetty_yface_write(g_state.yface_out, &outer, sizeof(outer)).ok) { return;
-}
-    if (!yetty_yface_write(g_state.yface_out, &sub_op, sizeof(sub_op)).ok) { return;
-}
-    if (!yetty_yface_write(g_state.yface_out, &fh, sizeof(fh)).ok) {
-        return;
-    }
+    std::vector<uint8_t> body;
+    body.reserve(sizeof(sub_op) + total_size);
+    auto append = [&body](const void *src, size_t n) {
+        const uint8_t *bytes = (const uint8_t *)src;
+        body.insert(body.end(), bytes, bytes + n);
+    };
+    append(&sub_op, sizeof(sub_op));
+    append(&fh, sizeof(fh));
 
     static const uint8_t pad[4] = {0, 0, 0, 0};
 
@@ -920,9 +919,7 @@ void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDraw
 
         if (p.mode == SLOT_REPEAT) {
             cl_hdr.flags = YMGUI_CMDLIST_FLAG_REPEAT;
-            if (!yetty_yface_write(g_state.yface_out, &cl_hdr, sizeof(cl_hdr)).ok) {
-                return;
-            }
+            append(&cl_hdr, sizeof(cl_hdr));
             continue;
         }
 
@@ -931,23 +928,13 @@ void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDraw
             cl_hdr.idx_count = 0;
             cl_hdr.cmd_count = (uint32_t)p.cmd_hashes.size();
             cl_hdr.flags = YMGUI_CMDLIST_FLAG_CMD_DIFF;
-            if (!yetty_yface_write(g_state.yface_out, &cl_hdr, sizeof(cl_hdr)).ok) {
-                return;
-            }
+            append(&cl_hdr, sizeof(cl_hdr));
             uint32_t hash_count = (uint32_t)p.cmd_hashes.size();
             uint32_t inl = p.inline_count;
-            if (!yetty_yface_write(g_state.yface_out, &hash_count, sizeof(hash_count)).ok) {
-                return;
-            }
-            if (!yetty_yface_write(g_state.yface_out, &inl, sizeof(inl)).ok) {
-                return;
-            }
+            append(&hash_count, sizeof(hash_count));
+            append(&inl, sizeof(inl));
             if (hash_count) {
-                if (!yetty_yface_write(g_state.yface_out, p.cmd_hashes.data(),
-                                       hash_count * sizeof(uint64_t))
-                         .ok) {
-                    return;
-                }
+                append(p.cmd_hashes.data(), hash_count * sizeof(uint64_t));
             }
             for (size_t k = 0; k < p.cmd_hashes.size(); k++) {
                 if (!p.cmd_inline[k]) {
@@ -959,9 +946,7 @@ void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDraw
                 ih.hash = p.cmd_hashes[k];
                 ih.vtx_count = vc;
                 ih.flags = 0;
-                if (!yetty_yface_write(g_state.yface_out, &ih, sizeof(ih)).ok) {
-                    return;
-                }
+                append(&ih, sizeof(ih));
                 struct yetty_ymgui_wire_cmd wc = {};
                 wc.clip_min_x = dc->ClipRect.x;
                 wc.clip_min_y = dc->ClipRect.y;
@@ -971,29 +956,17 @@ void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDraw
                 wc.vtx_offset = 0; /* server reassigns when packing */
                 wc.idx_offset = 0;
                 wc.elem_count = dc->ElemCount;
-                if (!yetty_yface_write(g_state.yface_out, &wc, sizeof(wc)).ok) {
-                    return;
-                }
+                append(&wc, sizeof(wc));
                 if (vc) {
-                    if (!yetty_yface_write(g_state.yface_out,
-                                           cl->VtxBuffer.Data + dc->VtxOffset,
-                                           (size_t)vc * sizeof(ImDrawVert))
-                             .ok) {
-                        return;
-                    }
+                    append(cl->VtxBuffer.Data + dc->VtxOffset,
+                           (size_t)vc * sizeof(ImDrawVert));
                 }
                 if (dc->ElemCount) {
                     size_t nbytes = (size_t)dc->ElemCount * sizeof(ImDrawIdx);
-                    if (!yetty_yface_write(g_state.yface_out,
-                                           cl->IdxBuffer.Data + dc->IdxOffset, nbytes)
-                             .ok) {
-                        return;
-                    }
+                    append(cl->IdxBuffer.Data + dc->IdxOffset, nbytes);
                     size_t rem = nbytes & 3u;
                     if (rem) {
-                        if (!yetty_yface_write(g_state.yface_out, pad, 4u - rem).ok) {
-                            return;
-                        }
+                        append(pad, 4u - rem);
                     }
                 }
             }
@@ -1005,26 +978,18 @@ void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDraw
         cl_hdr.idx_count = (uint32_t)cl->IdxBuffer.Size;
         cl_hdr.cmd_count = (uint32_t)cl->CmdBuffer.Size;
         cl_hdr.flags = 0;
-        if (!yetty_yface_write(g_state.yface_out, &cl_hdr, sizeof(cl_hdr)).ok) {
-            return;
-        }
+        append(&cl_hdr, sizeof(cl_hdr));
 
         if (cl_hdr.vtx_count) {
             size_t nbytes = (size_t)cl_hdr.vtx_count * sizeof(ImDrawVert);
-            if (!yetty_yface_write(g_state.yface_out, cl->VtxBuffer.Data, nbytes).ok) {
-                return;
-            }
+            append(cl->VtxBuffer.Data, nbytes);
         }
         if (cl_hdr.idx_count) {
             size_t nbytes = (size_t)cl_hdr.idx_count * sizeof(ImDrawIdx);
-            if (!yetty_yface_write(g_state.yface_out, cl->IdxBuffer.Data, nbytes).ok) {
-                return;
-            }
+            append(cl->IdxBuffer.Data, nbytes);
             size_t rem = nbytes & 3u;
             if (rem) {
-                if (!yetty_yface_write(g_state.yface_out, pad, 4u - rem).ok) {
-                    return;
-                }
+                append(pad, 4u - rem);
             }
         }
 
@@ -1042,16 +1007,15 @@ void yetty_ymgui_ImGui_ImplYetty_RenderFigureDrawData(uint32_t figure_id, ImDraw
             wc.vtx_offset = dc->VtxOffset;
             wc.idx_offset = dc->IdxOffset;
             wc.elem_count = dc->ElemCount;
-            if (!yetty_yface_write(g_state.yface_out, &wc, sizeof(wc)).ok) {
-                return;
-            }
+            append(&wc, sizeof(wc));
         }
     }
 
-    if (!yetty_yface_finish_write(g_state.yface_out).ok) {
-        return;
-    }
-    if (flush_yface_to_fd() < 0) {
+    struct yetty_ycore_buffer body_buf = {body.data(), 0, body.size()};
+    struct yetty_ycore_void_result apply_result =
+        yetty_yfigure_apply_child_body(g_state.container, figure_id, body_buf);
+    if (YETTY_IS_ERR(apply_result)) {
+        discard_error(apply_result);
         return;
     }
 
@@ -1128,10 +1092,9 @@ bool yetty_ymgui_ImGui_ImplYetty_PlatformInit(void)
     }
     g_state.raw_mode_active = 1;
 
-    /* Stdout stays in default (blocking) mode so partial OSC writes can
-     * never happen — kernel just blocks the writer until the receiver
-     * drains. flush_yface_to_fd's blocking-drain path covers the case
-     * if anything else flips O_NONBLOCK on the fd. */
+    /* Stdout stays in default (blocking) mode so partial writes can never
+     * happen — the kernel just blocks the writer until the receiver drains.
+     * The typed RPC stubs and the subscribe write below both rely on that. */
 
     /* Subscribe: \e[?1500h \e[?1501h. tmux-wrap it so the card-mouse enable
      * survives a multiplexer and actually reaches the host yetty (tmux drops

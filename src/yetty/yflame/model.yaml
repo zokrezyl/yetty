@@ -17,6 +17,7 @@ methods:
     doc: "/* configure: set graph width, row height, min visible box width, and flags.
  * 0 selects the default for each. Call after create(), before parse(). */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: parse
     domain: yflame
@@ -32,6 +33,7 @@ methods:
     doc: "/* parse: ingest folded-stack text, build the call tree, index it. Resets focus
  * to the root and clears any hover highlight. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: render
     domain: yflame
@@ -43,6 +45,7 @@ methods:
     doc: "/* render: lay out the focus subtree and emit it as a fresh ydraw drawable list
  * (caller owns it). Pointer return -> local-only. */"
     local: true
+    oneway: false
     return_payload_type: "struct yetty_ydraw_drawable_list *"
   - slot: hit_test
     domain: yflame
@@ -58,6 +61,7 @@ methods:
     doc: "/* hit_test: id of the frame at content-coordinate (x,y) in the current focus
  * layout, or -1 if none. */"
     local: true
+    oneway: false
     return_payload_type: int
   - slot: focus
     domain: yflame
@@ -70,6 +74,7 @@ methods:
         type: int32_t
     doc: "/* focus: zoom so the given node fills the full width (its subtree is shown). */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: focus_parent
     domain: yflame
@@ -80,6 +85,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: "/* focus_parent: zoom out one level (focus the current node's parent). */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: reset
     domain: yflame
@@ -90,6 +96,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: "/* reset: zoom back out to the whole graph (root). */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: set_highlight
     domain: yflame
@@ -102,6 +109,7 @@ methods:
         type: int32_t
     doc: "/* set_highlight: mark a node as hovered (-1 clears) for the next render. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: destroy
     domain: yflame
@@ -112,6 +120,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: "/* destroy: free the tree, the node index, and the object. */"
     local: true
+    oneway: false
     return_payload_type: null
 classes:
   - name: flame

@@ -19,7 +19,6 @@ size_t yetty_yfigure_constructor_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_add_child_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_remove_child_by_id_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_raise_child_by_id_skel(const void *, size_t, void *, size_t);
-size_t yetty_yfigure_process_records_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_create_child_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_delete_child_skel(const void *, size_t, void *, size_t);
 size_t yetty_yfigure_set_child_rect_skel(const void *, size_t, void *, size_t);
@@ -58,7 +57,6 @@ static const struct yetty_yfigure_skel_row yetty_yfigure_skel_rows[] = {
     {"yetty_yfigure_add_child", yetty_yfigure_add_child_skel},
     {"yetty_yfigure_remove_child_by_id", yetty_yfigure_remove_child_by_id_skel},
     {"yetty_yfigure_raise_child_by_id", yetty_yfigure_raise_child_by_id_skel},
-    {"yetty_yfigure_process_records", yetty_yfigure_process_records_skel},
     {"yetty_yfigure_create_child", yetty_yfigure_create_child_skel},
     {"yetty_yfigure_delete_child", yetty_yfigure_delete_child_skel},
     {"yetty_yfigure_set_child_rect", yetty_yfigure_set_child_rect_skel},

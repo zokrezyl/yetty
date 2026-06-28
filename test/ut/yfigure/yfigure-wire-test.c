@@ -1,24 +1,24 @@
 /*
- * yfigure-wire-test.c — drive bytes through yetty_yfigure_container's wire
- * record path (process_records) and assert the resulting figure-tree state
- * via the polymorphic ops->dump.
+ * yfigure-wire-test.c — drive the yetty_yfigure_container's typed yclass
+ * slots and assert the resulting figure-tree state via the polymorphic
+ * ops->dump.
  *
  * Each test:
  *   1. Create a yfigure_container as the root.
- *   2. Build a wire record stream into a ydraw_drawable_list:
- *        - admin CREATE_CHILD records to mint children,
- *        - admin DELETE_CHILD records to remove them,
- *        - routed records to forward bytes to a specific child,
- *        - admin CLEAR_ALL to wipe everything.
- *   3. Feed the stream to container_process_records.
- *   4. Dump the container.
- *   5. Compare against an expected YAML string.
+ *   2. Mutate the figure tree through the typed yclass stubs:
+ *        - yetty_yfigure_create_child to mint children,
+ *        - yetty_yfigure_delete_child to remove them,
+ *        - yetty_yfigure_apply_child_body to forward bytes to a child,
+ *        - yetty_yfigure_clear_all to wipe everything.
+ *   3. Dump the container.
+ *   4. Compare against an expected YAML string.
  *
  * The tests register a TEST_LEAF figure kind (kind code 0x70000001) whose
  * process_bytes appends to a small in-memory log and whose dump emits a
  * single-line summary. This keeps the tests purely receiver-side and free
  * of any GPU / shader dependencies, while still exercising the real
- * dispatch path through yfigure_container.
+ * dispatch path through yfigure_container — both in-process (local
+ * dispatch) and over a real yclass RPC session.
  *
  * Returns 0 on success, non-zero on first failed assertion.
  */
@@ -33,11 +33,9 @@
 #include <yetty/yclass/rpc.h>
 #include <yetty/yclass/transport-fd.h>
 #include <yetty/ycore/result.h>
-#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 
 static int g_failures = 0;
 static int g_tests = 0;
@@ -248,25 +246,57 @@ static struct yetty_yclass_object *make_root(struct yetty_yfigure_registry *regi
     return root;
 }
 
-static struct yetty_ydraw_drawable_list *make_buf(void)
+/* Convenience wrappers around the typed yclass stubs, exiting the process on
+ * the (test-bug) error path so each test body stays focused on assertions. */
+static void create_child(struct yetty_yclass_object *root, uint32_t child_id, uint32_t kind,
+                         float min_x, float min_y, float max_x, float max_y,
+                         const uint8_t *init_payload, uint32_t init_payload_bytes)
 {
-    struct yetty_ydraw_drawable_list_result r =
-        yetty_ydraw_drawable_list_config_buffer_create(NULL);
+    struct yetty_ycore_rectangle rect = {{min_x, min_y}, {max_x, max_y}};
+    struct yetty_ycore_buffer init = {
+        .data = (uint8_t *)init_payload,
+        .capacity = 0,
+        .size = init_payload_bytes,
+    };
+    struct yetty_ycore_void_result r = yetty_yfigure_create_child(root, kind, child_id, rect, init);
     if (YETTY_IS_ERR(r)) {
-        fprintf(stderr, "buffer_create failed: %s\n", r.error.msg);
+        fprintf(stderr, "create_child failed: %s\n", r.error.msg);
         yetty_ycore_error_destroy(r.error);
-        exit(2);
+        exit(3);
     }
-    return r.value;
 }
 
-static void feed(struct yetty_yclass_object *root, const struct yetty_ydraw_drawable_list *buf)
+static void delete_child(struct yetty_yclass_object *root, uint32_t child_id)
 {
-    const uint8_t *bytes = (const uint8_t *)yetty_ydraw_drawable_list_data(buf);
-    size_t len = yetty_ydraw_drawable_list_size(buf);
-    struct yetty_ycore_void_result r = yetty_yfigure_container_process_records(root, bytes, len);
+    struct yetty_ycore_void_result r = yetty_yfigure_delete_child(root, child_id);
     if (YETTY_IS_ERR(r)) {
-        fprintf(stderr, "container_process_records failed: %s\n", r.error.msg);
+        fprintf(stderr, "delete_child failed: %s\n", r.error.msg);
+        yetty_ycore_error_destroy(r.error);
+        exit(3);
+    }
+}
+
+static void apply_child_body(struct yetty_yclass_object *root, uint32_t child_id,
+                             const uint8_t *bytes, uint32_t bytes_len)
+{
+    struct yetty_ycore_buffer body = {
+        .data = (uint8_t *)bytes,
+        .capacity = 0,
+        .size = bytes_len,
+    };
+    struct yetty_ycore_void_result r = yetty_yfigure_apply_child_body(root, child_id, body);
+    if (YETTY_IS_ERR(r)) {
+        fprintf(stderr, "apply_child_body failed: %s\n", r.error.msg);
+        yetty_ycore_error_destroy(r.error);
+        exit(3);
+    }
+}
+
+static void clear_all(struct yetty_yclass_object *root)
+{
+    struct yetty_ycore_void_result r = yetty_yfigure_clear_all(root);
+    if (YETTY_IS_ERR(r)) {
+        fprintf(stderr, "clear_all failed: %s\n", r.error.msg);
         yetty_ycore_error_destroy(r.error);
         exit(3);
     }
@@ -323,11 +353,7 @@ static void test_one_create_child(void)
     struct yetty_yfigure_registry *reg = make_registry();
     struct yetty_yclass_object *root = make_root(reg);
 
-    struct yetty_ydraw_drawable_list *buf = make_buf();
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, /*child_id=*/1u, TEST_LEAF_KIND, 10.0f,
-                                                     20.0f, 110.0f, 80.0f, NULL, 0);
-    feed(root, buf);
-    yetty_ydraw_drawable_list_destroy(buf);
+    create_child(root, /*child_id=*/1u, TEST_LEAF_KIND, 10.0f, 20.0f, 110.0f, 80.0f, NULL, 0);
 
     char *dump = dump_root(root);
     const char *expected = "kind: container\n"
@@ -358,13 +384,8 @@ static void test_two_create_child(void)
     struct yetty_yfigure_registry *reg = make_registry();
     struct yetty_yclass_object *root = make_root(reg);
 
-    struct yetty_ydraw_drawable_list *buf = make_buf();
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 100, 100, NULL,
-                                                     0);
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, 2u, TEST_LEAF_KIND, 100, 0, 200, 100,
-                                                     NULL, 0);
-    feed(root, buf);
-    yetty_ydraw_drawable_list_destroy(buf);
+    create_child(root, 1u, TEST_LEAF_KIND, 0, 0, 100, 100, NULL, 0);
+    create_child(root, 2u, TEST_LEAF_KIND, 100, 0, 200, 100, NULL, 0);
 
     char *dump = dump_root(root);
     const char *expected = "kind: container\n"
@@ -399,14 +420,9 @@ static void test_create_then_delete(void)
     struct yetty_yfigure_registry *reg = make_registry();
     struct yetty_yclass_object *root = make_root(reg);
 
-    struct yetty_ydraw_drawable_list *buf = make_buf();
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 50, 50, NULL,
-                                                     0);
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, 2u, TEST_LEAF_KIND, 0, 0, 50, 50, NULL,
-                                                     0);
-    yetty_ydraw_drawable_list_add_admin_delete_child(buf, 1u);
-    feed(root, buf);
-    yetty_ydraw_drawable_list_destroy(buf);
+    create_child(root, 1u, TEST_LEAF_KIND, 0, 0, 50, 50, NULL, 0);
+    create_child(root, 2u, TEST_LEAF_KIND, 0, 0, 50, 50, NULL, 0);
+    delete_child(root, 1u);
 
     char *dump = dump_root(root);
     const char *expected = "kind: container\n"
@@ -442,11 +458,7 @@ static void test_create_with_init_payload(void)
     for (int i = 0; i < 32; i++) {
         init[i] = (uint8_t)i;
     }
-    struct yetty_ydraw_drawable_list *buf = make_buf();
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, 7u, TEST_LEAF_KIND, 0, 0, 10, 10, init,
-                                                     sizeof(init));
-    feed(root, buf);
-    yetty_ydraw_drawable_list_destroy(buf);
+    create_child(root, 7u, TEST_LEAF_KIND, 0, 0, 10, 10, init, sizeof(init));
 
     char *dump = dump_root(root);
     const char *expected = "kind: container\n"
@@ -467,8 +479,8 @@ static void test_create_with_init_payload(void)
 }
 
 /*===========================================================================
- * Test 6: CREATE_CHILD then a routed record targeting that id — the
- * child's process_bytes runs again with the routed payload.
+ * Test 6: create_child then apply_child_body targeting that id — the
+ * child's process_bytes runs again with the forwarded payload.
  *===========================================================================*/
 static void test_routed_to_child(void)
 {
@@ -477,14 +489,11 @@ static void test_routed_to_child(void)
     struct yetty_yfigure_registry *reg = make_registry();
     struct yetty_yclass_object *root = make_root(reg);
 
-    struct yetty_ydraw_drawable_list *buf = make_buf();
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, 3u, TEST_LEAF_KIND, 0, 0, 1, 1, NULL, 0);
+    create_child(root, 3u, TEST_LEAF_KIND, 0, 0, 1, 1, NULL, 0);
 
-    /* Now a routed record (id=3) with a 16-byte body. */
+    /* Forward a 16-byte body to child id=3. */
     uint8_t body[16] = {0};
-    yetty_ydraw_drawable_list_add_record(buf, /*id=*/3u, body, sizeof(body));
-    feed(root, buf);
-    yetty_ydraw_drawable_list_destroy(buf);
+    apply_child_body(root, /*child_id=*/3u, body, sizeof(body));
 
     char *dump = dump_root(root);
     const char *expected = "kind: container\n"
@@ -514,12 +523,9 @@ static void test_clear_all(void)
     struct yetty_yfigure_registry *reg = make_registry();
     struct yetty_yclass_object *root = make_root(reg);
 
-    struct yetty_ydraw_drawable_list *buf = make_buf();
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, 1u, TEST_LEAF_KIND, 0, 0, 1, 1, NULL, 0);
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, 2u, TEST_LEAF_KIND, 0, 0, 1, 1, NULL, 0);
-    yetty_ydraw_drawable_list_add_admin_clear_all(buf);
-    feed(root, buf);
-    yetty_ydraw_drawable_list_destroy(buf);
+    create_child(root, 1u, TEST_LEAF_KIND, 0, 0, 1, 1, NULL, 0);
+    create_child(root, 2u, TEST_LEAF_KIND, 0, 0, 1, 1, NULL, 0);
+    clear_all(root);
 
     char *dump = dump_root(root);
     const char *expected = "kind: container\n"
@@ -535,9 +541,9 @@ static void test_clear_all(void)
 }
 
 /*===========================================================================
- * Test 8: stale DELETE_CHILD on an unknown id — benign no-op, the
- * existing child set is unchanged. Matches the existing wire contract
- * (replays / out-of-order traffic must not crash).
+ * Test 8: stale delete_child on an unknown id — benign no-op, the existing
+ * child set is unchanged. Matches the wire contract (replays / out-of-order
+ * traffic must not crash).
  *===========================================================================*/
 static void test_stale_delete_is_noop(void)
 {
@@ -546,12 +552,8 @@ static void test_stale_delete_is_noop(void)
     struct yetty_yfigure_registry *reg = make_registry();
     struct yetty_yclass_object *root = make_root(reg);
 
-    struct yetty_ydraw_drawable_list *buf = make_buf();
-    yetty_ydraw_drawable_list_add_admin_create_child(buf, 5u, TEST_LEAF_KIND, 0, 0, 10, 10, NULL,
-                                                     0);
-    yetty_ydraw_drawable_list_add_admin_delete_child(buf, 99u); /* never bound */
-    feed(root, buf);
-    yetty_ydraw_drawable_list_destroy(buf);
+    create_child(root, 5u, TEST_LEAF_KIND, 0, 0, 10, 10, NULL, 0);
+    delete_child(root, 99u); /* never bound */
 
     char *dump = dump_root(root);
     const char *expected = "kind: container\n"
@@ -574,9 +576,9 @@ static void test_stale_delete_is_noop(void)
 /*===========================================================================
  * Test: the typed yclass container slots (create_child / set_child_rect /
  * apply_child_body / delete_child) called DIRECTLY — the in-process path ygui
- * now uses (local dispatch, ctx.session == NULL) instead of the opaque
- * process_records envelope. Exercises the same figure-tree mutations end to
- * end through the generated stubs.
+ * uses (local dispatch, ctx.session == NULL). Same coverage as the tests
+ * above, here grouping a create + rect move + body forward + delete into one
+ * sequence to exercise the generated stubs end to end.
  *===========================================================================*/
 static void test_typed_slots(void)
 {

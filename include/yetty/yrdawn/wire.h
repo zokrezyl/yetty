@@ -1,14 +1,13 @@
 /*
  * yrdawn/wire.h — wire format for the WebGPU-over-OSC bridge.
  *
- * yrdawn rides the figure-tree OSC channel exactly like ymgui: every
- * client→server message is a record inside YETTY_DCS_YCOMPOSITOR_BIN
- * (see <yetty/yterminal/osc-codes.h>) of shape `{u32 length, u32 id,
- * body}`. `id == 0` means container-admin (CREATE_CHILD / DELETE_CHILD
- * / SET_CHILD_RECT — see <yetty/yfigure/wire.h>); `id != 0` addresses
- * a specific yrdawn figure (== one remote canvas) and the body starts
- * with a u32 SUB_OP discriminator chosen from `enum
- * yetty_yrdawn_figure_sub_op` below.
+ * yrdawn drives the figure tree exactly like ymgui: through the typed
+ * yfigure yclass stubs over yclass-RPC. Figure lifecycle uses
+ * yetty_yfigure_create_child / _delete_child / _set_child_rect on the root
+ * container; per-canvas traffic is shipped with
+ * yetty_yfigure_apply_child_body addressed to a specific yrdawn figure
+ * (== one remote canvas), whose body starts with a u32 SUB_OP discriminator
+ * chosen from `enum yetty_yrdawn_figure_sub_op` below.
  *
  * Server→client messages keep dedicated OSC codes in the 72xxxx range
  * because there is no figure-tree on the server-to-client direction —
@@ -48,8 +47,9 @@ extern "C" {
 /*=============================================================================
  * Server→client OSC codes
  *
- * 72xxxx block. CS direction has no per-message codes any more — every
- * client→server message rides YETTY_DCS_YCOMPOSITOR_BIN as a sub-record.
+ * 72xxxx block. CS direction has no per-message codes — every client→server
+ * message is a typed yfigure stub call (apply_child_body carrying a SUB_OP
+ * body) over yclass-RPC.
  *===========================================================================*/
 
 #define YETTY_YRDAWN_OSC_SC_HELLO_ACK 720000 /* yetty_yrdawn_wire_hello_ack, flag=0 */

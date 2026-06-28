@@ -83,6 +83,7 @@ struct yetty_ygui_event_subscription {
 YETTY_YRESULT_DECLARE(yetty_ygui_event_subscription_ptr, struct yetty_ygui_event_subscription *);
 
 struct yetty_ygui_framework;
+struct yetty_yfigure_producer_session;
 
 /* Framework-internal mutators of the widget base data slice (struct
  * yetty_ygui_widget, defined in widget.c). The widget tree links and the
@@ -179,8 +180,8 @@ struct yetty_ygui_framework {
     /* framework-level dirty flag. Cleared by emit. */
     int dirty;
 
-    /* Reusable per-emit buffers. Cleared at the start of each emit. */
-    struct yetty_ycore_buffer container_records;
+    /* Reusable per-emit buffer for figure-body record bytes. Cleared at the
+     * start of each emit. */
     struct yetty_ycore_buffer figure_bodies;
     /* Shared ydraw drawable_list — primitive widgets append SDF / glyph
      * records here. Lazily created on first emit; reused across
@@ -206,28 +207,35 @@ struct yetty_ygui_framework {
      * on release and on destroy of the captured object. */
     struct yetty_yclass_object *pressed_obj;
 
-    /* yclass-dispatch state for shipping the per-emit envelope to the
-     * receiver-side yfigure root container. When `container_obj` is
-     * set, framework_flush calls `yetty_yfigure_process_records(&ctx,
-     * obj, envelope)` instead of wrapping the bytes in a yface OSC
-     * and writing to output_pty. The slot dispatches locally
+    /* yclass-dispatch state for driving the receiver-side yfigure root
+     * container. The emit walk calls the typed yfigure stubs
+     * (yetty_yfigure_create_child / _set_child_rect / _apply_child_body /
+     * …) directly on `container_obj`. Each slot dispatches locally
      * (ctx.session == NULL → the impl runs directly on the in-process
      * container, zero copy) or via yrpc (ctx.session set → the stub
-     * marshals the buffer over the session's transport).
+     * marshals the call over the session's transport).
      *
      * The runtime tracks ONLY the root container at the yclass level;
-     * every child figure is still addressed by parent-scoped uint32_t
-     * id inside the envelope's record stream (the container's
-     * `process_records` impl decodes those and routes each record to
-     * the right child). No per-child yclass proxy is kept here.
+     * every child figure is addressed by parent-scoped uint32_t id passed
+     * to the typed stubs (the container routes each call to the right
+     * child). No per-child yclass proxy is kept here.
      *
      * Both pointers are caller-owned (borrowed) — the host (e.g. yui)
      * wires them post-create via yetty_ygui_framework_set_container_obj
      * / _set_session and keeps the underlying objects alive for as
-     * long as the framework. When `container_obj` is NULL the
-     * framework keeps using the legacy yface-over-pty path. */
+     * long as the framework. `container_obj` must be set before emit. */
     struct yetty_yclass_ctx yclass_ctx;
     struct yetty_yclass_object *container_obj;
+
+    /* Owned producer session, set when the framework attaches to a host
+     * figure container over the yclass RPC transport via
+     * yetty_ygui_framework_attach. It owns the underlying transport +
+     * RPC session + root-container proxy; container_obj and
+     * yclass_ctx.session above point INTO it. NULL when the framework was
+     * never attached (in-process host that wired container_obj directly,
+     * or the legacy yface-over-pty fallback). Torn down by
+     * framework_destroy via yetty_yfigure_producer_detach. */
+    struct yetty_yfigure_producer_session *producer_session;
 };
 
 /*===========================================================================
@@ -247,14 +255,11 @@ struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_container(
 struct yetty_ycore_void_result yetty_ygui_framework_walk_emit_body(struct yetty_yclass_object *node,
                                                                    struct yetty_ygui_emit_ctx *ctx);
 
-/* Flush the three streams into the output pty as one yface envelope.
- * The envelope body is a sequence of {length, id, payload} records:
- *   - container_records appear with id = framework'S CONTAINER ID and the
- *     bytes are admin-record payloads
- *   - ygrid_body appears with id = ygrid_id wrapped in one record
- *   - figure_bodies are already record-framed inside the buffer
- *     (framework wraps each figure's body at append time using
- *     current_figure_id). */
+/* Hand the accumulated chrome ygrid drawable_list to the ygrid child via
+ * yetty_yfigure_apply_child_body on the container object. The figure-tree
+ * mutations and figure bodies were already applied inline during the emit
+ * walk through the typed yclass stubs, so the ygrid body is the only stream
+ * left to ship here. */
 struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_framework *framework);
 
 /* Append one {length, id, payload} record to `dst`. */

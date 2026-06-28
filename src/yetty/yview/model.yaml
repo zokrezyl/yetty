@@ -25,6 +25,7 @@ methods:
     doc: "/* configure: set the output fd, figure id/kind, opaque background, and rect.
  * Call once after create(), before set_content(). */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: set_content
     domain: yview
@@ -37,6 +38,7 @@ methods:
         type: "const struct yetty_ydraw_drawable_list *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: set_text
     domain: yview
@@ -54,6 +56,7 @@ methods:
  * want when they have text but no drawable list (the pager / nvim case).
  * font_size <= 0 selects a default. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: set_plot
     domain: yview
@@ -78,6 +81,7 @@ methods:
  * default ranges. The ygrid figure renders the yplot composite prim via the
  * terminal's composite factory. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: set_content_size
     domain: yview
@@ -92,6 +96,7 @@ methods:
         type: float
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: scroll_to
     domain: yview
@@ -106,6 +111,7 @@ methods:
         type: float
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: scroll_by
     domain: yview
@@ -120,6 +126,7 @@ methods:
         type: float
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: set_rect
     domain: yview
@@ -138,6 +145,7 @@ methods:
         type: float
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: destroy
     domain: yview
@@ -148,6 +156,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: "/* destroy: clear the surface (DELETE_CHILD) and free the object. */"
     local: true
+    oneway: false
     return_payload_type: null
 classes:
   - name: view
@@ -159,8 +168,12 @@ classes:
     mixins: []
     data: struct yetty_yview_view
     data_fields:
-      - name: fd
-        type: int
+      - name: producer_session
+        type: "struct yetty_yfigure_producer_session *"
+        get: false
+        set: false
+      - name: container
+        type: "struct yetty_yclass_object *"
         get: false
         set: false
       - name: child_id

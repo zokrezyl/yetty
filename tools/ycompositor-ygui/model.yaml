@@ -95,15 +95,15 @@ classes:
         type: float
         get: false
         set: false
-      - name: yface_in
-        type: "struct yetty_yface *"
+      - name: wire_sm
+        type: "struct yetty_ywire_wire_statemachine *"
+        get: false
+        set: false
+      - name: dcs_rpc_server
+        type: "struct yetty_yclass_rpc_dcs_server *"
         get: false
         set: false
       - name: n_osc_total
-        type: uint64_t
-        get: false
-        set: false
-      - name: n_osc_compositor
         type: uint64_t
         get: false
         set: false

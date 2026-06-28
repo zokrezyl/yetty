@@ -41,7 +41,6 @@
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/producer.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/ycircuit/circuit.h>
 #include <yetty/ymusic/music.h>
 #include <yetty/yfont/msdf-font.h>
@@ -54,7 +53,6 @@
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yterminal/client-input.h>
-#include <yetty/yterminal/dcs-codes.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplot/yplot.h>
@@ -276,9 +274,8 @@ struct app {
 
 #ifdef YETTY_YGREETER_HAS_STANDALONE
     /* Standalone-mode resources, NULL in client mode. The headers that
-     * define the by-value member types (memory_pty_pair, figure_args,
-     * event_listener) pull in webgpu transitively, so the whole block
-     * is gated. */
+     * define the by-value member types (figure_args, event_listener) pull in
+     * webgpu transitively, so the whole block is gated. */
     struct yetty_yframework *yframework;
     /* The yetty_context handed to the root container (set_context stores
      * the pointer, not a copy) and to the chrome host. It MUST outlive the
@@ -289,12 +286,9 @@ struct app {
      * the lazy ygrid_create would read freed memory (OOB). Living on the
      * heap-allocated, program-lifetime `app` keeps it valid. */
     struct yetty_context ctx;
-    struct yetty_yplatform_memory_pty_pair pty_pair;
-    int has_pty_pair;
     struct yetty_yclass_object *root_container;
     struct yetty_yfigure_registry *figure_registry;
     struct yetty_ydraw_composite_factory *composite_factory;
-    struct yetty_ywire_wire_statemachine *wire_sm;
     struct yetty_yfont_font *font;
     struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
     struct yetty_ygrid_factory_args figure_args;
@@ -3204,10 +3198,13 @@ struct client_state {
     int running;
 #ifdef YETTY_YGREETER_HAS_CHROME
     /* Window chrome over the wire — the same ychrome the standalone window
-     * gets, but emitted as figures into the hosting yetty's pane. The opaque
-     * backdrop it pins hides the pane's terminal text beneath us; the caption
-     * gives the in-terminal app a titlebar. */
-    struct yetty_yfigure_producer *chrome_producer;
+     * gets, but driven onto the hosting yetty's root figure container proxy via
+     * the typed yclass-RPC stubs. The opaque backdrop it pins hides the pane's
+     * terminal text beneath us; the caption gives the in-terminal app a
+     * titlebar. The producer session owns the RPC transport; the container is a
+     * borrowed proxy obtained from it. */
+    struct yetty_yfigure_producer_session *chrome_session;
+    struct yetty_yclass_object *chrome_container;
     struct yetty_ychrome_host *chrome_host;
     int chrome_width;
     int chrome_height;
@@ -3368,8 +3365,9 @@ static struct yetty_ycore_void_result client_default_sink(void *userdata,
  *---------------------------------------------------------------------------*/
 #ifdef YETTY_YGREETER_HAS_CHROME
 /* Create the wire chrome host on the first known pane size, and keep it sized
- * to the pane thereafter. The host emits its opaque backdrop (hides the pane's
- * terminal text) + caption into the hosting yetty over cs->chrome_producer.
+ * to the pane thereafter. The host drives its opaque backdrop (hides the pane's
+ * terminal text) + caption onto the hosting yetty's root container proxy
+ * (cs->chrome_container) via the typed yclass-RPC stubs.
  * The caption height matches the standalone window (run_standalone_mode) and
  * the space ygreeter's tabbar already reserves for window controls.
  *
@@ -3378,13 +3376,14 @@ static struct yetty_ycore_void_result client_default_sink(void *userdata,
 static struct yetty_ycore_void_result client_chrome_sync(struct client_state *cs, float width,
                                                          float height)
 {
-    if (!cs || !cs->chrome_producer || width <= 0.0f || height <= 0.0f) {
+    if (!cs || !cs->chrome_container || width <= 0.0f || height <= 0.0f) {
         return YETTY_OK_VOID();
     }
     if (!cs->chrome_host) {
         struct yetty_ychrome_host_ptr_result host_result =
-            yetty_ychrome_host_create_wire(cs->chrome_producer, /*window_chrome=*/NULL, width,
-                                           height, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
+            yetty_ychrome_host_create_wire(cs->chrome_container, cs->chrome_session,
+                                           /*window_chrome=*/NULL, width, height, 34.0f, 8.0f,
+                                           YETTY_YCHROME_FLAG_ALL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, host_result, "client_chrome_sync: create wire host");
         cs->chrome_host = host_result.value;
         cs->chrome_width = (int)width;
@@ -3741,18 +3740,24 @@ static int run_client_mode(void)
     cs.running = 1;
 
 #ifdef YETTY_YGREETER_HAS_CHROME
-    /* Emit-side of the figure wire: ships the window chrome (backdrop +
-     * caption) into the hosting yetty's pane. The chrome host itself is
-     * created lazily once we know the pane pixel size (client_chrome_sync,
-     * driven from the resize handler / winsize pickup). */
+    /* Attach to the hosting yetty's root figure container over the yclass-RPC
+     * DCS transport, so the window chrome (backdrop + caption) can be driven
+     * onto the host's pane via the typed stubs. read_fd = our stdin (RPC
+     * responses from the terminal), write_fd = our stdout (RPC requests to the
+     * terminal); compressed=1 (base64+lz4). The attach handshake reads stdin
+     * synchronously ONCE — it MUST run here, before libuv's stdin poll takes
+     * the fd over below. The chrome host itself is created lazily once we know
+     * the pane pixel size (client_chrome_sync, driven from the resize handler /
+     * winsize pickup). */
     {
-        struct yetty_yfigure_producer_ptr_result producer_result =
-            yetty_yfigure_producer_create(&cs.out.base);
-        if (YETTY_IS_OK(producer_result)) {
-            cs.chrome_producer = producer_result.value;
+        struct yetty_yfigure_producer_session_ptr_result session_result =
+            yetty_yfigure_producer_attach(STDIN_FILENO, STDOUT_FILENO, /*compressed=*/1);
+        if (YETTY_IS_OK(session_result)) {
+            cs.chrome_session = session_result.value;
+            cs.chrome_container = yetty_yfigure_producer_session_container(cs.chrome_session);
         } else {
-            ywarn("ygreeter client: chrome producer create failed: %s", producer_result.error.msg);
-            yetty_ycore_error_destroy(producer_result.error);
+            ywarn("ygreeter client: chrome attach failed: %s", session_result.error.msg);
+            yetty_ycore_error_destroy(session_result.error);
         }
     }
 #endif
@@ -3833,20 +3838,22 @@ static int run_client_mode(void)
     struct yetty_ycore_void_result teardown_result = YETTY_OK_VOID();
 
 #ifdef YETTY_YGREETER_HAS_CHROME
-    /* Explicitly remove our backdrop + caption from the host pane FIRST, via a
-     * blocking fd write (the loop has stopped, so the producer's async pty can
-     * no longer flush). Then free our side. */
+    /* Explicitly remove our backdrop + caption from the host pane FIRST, via the
+     * typed delete_child stubs — each is one-way and flushes its request with a
+     * synchronous blocking write (safe now that the loop has stopped). Then free
+     * our side and detach the RPC session (which owns the transport). */
     if (cs.chrome_host) {
-        teardown_result = yetty_ycore_void_chain(
-            teardown_result, yetty_ychrome_host_clear_to_fd(cs.chrome_host, STDOUT_FILENO));
+        teardown_result =
+            yetty_ycore_void_chain(teardown_result, yetty_ychrome_host_clear(cs.chrome_host));
         teardown_result =
             yetty_ycore_void_chain(teardown_result, yetty_ychrome_host_destroy(cs.chrome_host));
         cs.chrome_host = NULL;
     }
-    if (cs.chrome_producer) {
+    if (cs.chrome_session) {
         teardown_result = yetty_ycore_void_chain(
-            teardown_result, yetty_yfigure_producer_destroy(cs.chrome_producer));
-        cs.chrome_producer = NULL;
+            teardown_result, yetty_yfigure_producer_detach(cs.chrome_session));
+        cs.chrome_session = NULL;
+        cs.chrome_container = NULL;
     }
 #endif
 
@@ -3874,11 +3881,11 @@ static int run_client_mode(void)
 
     /* Tell the host to destroy our remote figure containers, otherwise it
      * keeps our last frame frozen on the pane after we exit (the shell that
-     * reclaims the pane would render under a stale ygreeter image). Blocking
-     * fd write for the same reason as disable_fwd above — the uv loop has
-     * stopped so the async output pty can no longer flush. */
-    teardown_result = yetty_ycore_void_chain(
-        teardown_result, yetty_ygui_framework_clear_remote_fd(app.engine, STDOUT_FILENO));
+     * reclaims the pane would render under a stale ygreeter image). Drives
+     * yetty_yfigure_clear_all on the wired host container through the typed
+     * yclass stub. */
+    teardown_result =
+        yetty_ycore_void_chain(teardown_result, yetty_ygui_framework_clear(app.engine));
 
     uv_poll_stop(&cs.stdin_poll);
     uv_signal_stop(&cs.sigwinch);
@@ -3915,13 +3922,13 @@ static int run_client_mode(void)
 
 #ifdef YETTY_YGREETER_HAS_STANDALONE
 /*=============================================================================
- * STANDALONE MODE — yplatform bootstrap + yframework + local container + wire SM +
- * KEY→bytes encoder.
+ * STANDALONE MODE — yplatform bootstrap + yframework + local container +
+ * direct in-process dispatch + KEY→bytes encoder.
  *
- * The ygui framework's output_pty is the producer end of a memory pty
- * pair. The consumer end feeds a wire_statemachine that calls
- * yetty_yfigure_container_process_input, materialising the figure tree
- * locally. Render renders that tree onto yframework's render_target.
+ * The ygui framework is created with no output pty; set_container_obj wires its
+ * typed yfigure_* stubs straight at the local root figure container. Each frame
+ * framework_emit applies the pending figure-tree mutations inline, and render
+ * paints that tree onto yframework's render_target.
  *===========================================================================*/
 
 /* Map yetty's KEY_DOWN keycodes to the CSI escape sequences a terminal
@@ -3994,25 +4001,6 @@ static float app_content_scale(const struct app *app)
     return s > 0.0f ? s : 1.0f;
 }
 
-/* Slave end of the memory-pty pair: a resize on the producer (ygui) endpoint
- * lands here — the SIGWINCH analog — and we hand the new pixel size to the
- * compositor's root container. cols/rows are terminal-grid concepts the
- * compositor has no use for; only the pixel extent matters. */
-static void standalone_pty_resize_cb(void *userdata, uint32_t cols, uint32_t rows, uint32_t pixel_w,
-                                     uint32_t pixel_h)
-{
-    struct app *app = userdata;
-    (void)cols;
-    (void)rows;
-    if (!app->root_container) {
-        return;
-    }
-    struct yetty_ycore_rectangle root_rect = {.min = {0, 0},
-                                              .max = {(float)pixel_w, (float)pixel_h}};
-    yetty_yfigure_figure_rect_set(app->root_container, root_rect);
-    yetty_yfigure_figure_dirty_set(app->root_container, 1);
-}
-
 /* Client-first / chrome-fallback: hand a pointer event the greeter UI didn't
  * consume to the window chrome (drag / edge-resize / maximize / window
  * controls). chrome works in raw framebuffer px, so the unscaled event is
@@ -4050,21 +4038,13 @@ static struct yetty_ycore_int_result standalone_event_handler(
             app->render_target->ops->is_busy(app->render_target)) {
             return YETTY_OK(yetty_ycore_int, 1);
         }
-        /* Produce a new frame's OSC envelope into the mem-pty if dirty. */
+        /* Apply pending figure-tree mutations directly into root_container via
+         * the framework's typed yfigure_* stubs (set_container_obj). No
+         * memory-pty serialize/parse round; the mutations land inline. */
         if (yetty_ygui_framework_is_dirty(app->engine)) {
             struct yetty_ycore_void_result er = yetty_ygui_framework_emit(app->engine);
             if (YETTY_IS_ERR(er)) {
                 yetty_ycore_error_destroy(er.error);
-            }
-        }
-        /* Drain consumer-side bytes through the wire SM → container. On
-         * webasm there is no wire SM — the framework dispatches records
-         * straight into root_container (set_container_obj), so this is
-         * skipped (app->wire_sm is NULL). */
-        if (app->wire_sm) {
-            struct yetty_ycore_void_result pr = yetty_ywire_wire_statemachine_process(app->wire_sm);
-            if (YETTY_IS_ERR(pr)) {
-                yetty_ycore_error_destroy(pr.error);
             }
         }
         /* Clear + paint container + present. */
@@ -4110,15 +4090,15 @@ static struct yetty_ycore_int_result standalone_event_handler(
                 yetty_ycore_error_destroy(vr.error);
             }
         }
-        /* Drive the compositor-side rect through the pty pair (→
-         * standalone_pty_resize_cb) instead of poking the container directly,
-         * so the resize travels the same path as a real PTY's TIOCSWINSZ. */
-        if (app->pty_pair.a && app->pty_pair.a->ops->resize) {
-            struct yetty_ycore_void_result rr = app->pty_pair.a->ops->resize(
-                app->pty_pair.a, 0, 0, (uint32_t)ev->resize.width, (uint32_t)ev->resize.height);
-            if (YETTY_IS_ERR(rr)) {
-                yetty_ycore_error_destroy(rr.error);
-            }
+        /* Size the compositor's root container directly. (The legacy route
+         * travelled this through the memory-pty pair so it reached the receiver
+         * like a real PTY's TIOCSWINSZ; with direct in-process dispatch the
+         * container is local, so we set its rect here.) */
+        if (app->root_container) {
+            struct yetty_ycore_rectangle rr = {
+                .min = {0, 0}, .max = {(float)ev->resize.width, (float)ev->resize.height}};
+            yetty_yfigure_figure_rect_set(app->root_container, rr);
+            yetty_yfigure_figure_dirty_set(app->root_container, 1);
         }
         if (app->chrome) {
             struct yetty_ycore_void_result chrome_rz = yetty_ychrome_host_resized(
@@ -4393,19 +4373,24 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
         yetty_yfigure_container_set_rect(app->root_container, root_rect);
     }
 
-#ifdef __EMSCRIPTEN__
-    /* Webasm: in-process DIRECT dispatch (same path yui.c uses) — the
-     * framework ships its records straight into root_container via the
-     * yclass slot path, with NO memory-pty and NO wire-statemachine.
+    /* ygui framework, driven into the local root container by DIRECT
+     * in-process yclass dispatch — on every platform, webasm and desktop alike.
      *
-     * The pty+wire_sm route used on desktop is unusable here: the webasm
-     * wire-statemachine runs on a degenerate setjmp/longjmp coroutine
-     * (yplatform/coroutine/webasm.c) that abandons its stack on every
-     * yield and re-enters from the top. That survives the terminal's
-     * small per-envelope payloads but not ygreeter's large figure
-     * envelope, whose multi-yield parse corrupts memory (out-of-bounds
-     * in wire_statemachine_process). Direct dispatch sidesteps it
-     * entirely and is also a frame faster (no serialize/parse). */
+     * Producer (the ygui framework) and receiver (the root figure container)
+     * live in this one process on a single thread, so there is no out-of-process
+     * transport: framework_create(NULL) leaves the output pty unset, and
+     * set_container_obj wires the framework's typed yfigure_* stubs straight at
+     * the local container object. framework_emit then applies every figure-tree
+     * mutation inline via those stubs — the in-process equivalent of the
+     * RPC-server path a terminal runs for an out-of-process subprocess producer.
+     *
+     * The deleted legacy route shipped a one-way figure-tree record stream over
+     * an in-process memory-pty into a wire statemachine that decoded it with
+     * yetty_yfigure_container_process_input. Direct dispatch removes the
+     * serialize/parse round and the memory-pty + wire-statemachine entirely.
+     * It is also what webasm always required: the webasm wire-statemachine ran
+     * on a degenerate setjmp/longjmp coroutine that abandoned its stack on every
+     * yield, corrupting memory on ygreeter's large figure envelopes. */
     {
         struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(NULL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "standalone: framework_create");
@@ -4413,40 +4398,6 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
         struct yetty_ycore_void_result scr =
             yetty_ygui_framework_set_container_obj(app->engine, app->root_container);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scr, "standalone: set_container_obj");
-        float cs = app_content_scale(app);
-        struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
-            app->engine, (float)gpu->surface_width / cs, (float)gpu->surface_height / cs);
-        if (YETTY_IS_ERR(vr)) {
-            yetty_ycore_error_destroy(vr.error);
-        }
-    }
-#else
-    /* Memory pty pair: producer.a = ygui output, consumer.b = wire SM. */
-    {
-        struct yetty_yplatform_memory_pty_pair_result pr =
-            yetty_yplatform_memory_pty_pair_create(0);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "standalone: memory_pty_pair_create");
-        app->pty_pair = pr.value;
-        app->has_pty_pair = 1;
-    }
-
-    /* Wire state machine over the consumer end. */
-    {
-        struct yetty_ywire_wire_statemachine_ptr_result sr =
-            yetty_ywire_wire_statemachine_create(app->pty_pair.b);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "standalone: wire_sm_create");
-        app->wire_sm = sr.value;
-        struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
-            app->wire_sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN, /*has_args=*/1,
-            yetty_yfigure_container_process_input, app->root_container);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "standalone: wire_sm register");
-    }
-
-    /* ygui framework — producer end of the pty pair. */
-    {
-        struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(app->pty_pair.a);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "standalone: framework_create");
-        app->engine = fr.value;
         /* Logical viewport: chrome is authored in logical px, the ygrid
          * receiver scales back to framebuffer px (see app_content_scale). */
         float cs = app_content_scale(app);
@@ -4456,7 +4407,6 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
             yetty_ycore_error_destroy(vr.error);
         }
     }
-#endif
 
     struct key_ctx kc = {.app = app, .stop_cb = standalone_stop};
     app->stop_cb = standalone_stop;
@@ -4479,22 +4429,6 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
             yetty_ycore_error_destroy(chrome_r.error);
         }
     }
-
-#ifndef __EMSCRIPTEN__
-    /* Wire memory-pty wake → request_render so producer writes drive the
-     * event loop. Without this, ygui_framework_emit appends bytes to the
-     * mem-pty but the consumer side never schedules a render. (Webasm
-     * uses direct dispatch + the 33 ms frame timer, so there is no pty
-     * pair to wake from here.) */
-    yetty_yplatform_memory_pty_set_wake(
-        app->pty_pair.b,
-        (yetty_yplatform_memory_pty_wake_fn)app->yframework->event_loop->ops->request_render,
-        app->yframework->event_loop);
-
-    /* Window-size changes reach the compositor end the same way bytes do:
-     * the producer endpoint is resized, the pair delivers it to this peer. */
-    yetty_yplatform_memory_pty_set_resize(app->pty_pair.b, standalone_pty_resize_cb, app);
-#endif
 
     app->listener.handler = standalone_event_handler;
     struct yetty_ycore_void_result rel =
@@ -4564,28 +4498,6 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
             yetty_ycore_error_destroy(dr.error);
         }
         app->engine = NULL;
-    }
-    if (app->wire_sm) {
-        struct yetty_ycore_void_result dr = yetty_ywire_wire_statemachine_destroy(app->wire_sm);
-        if (YETTY_IS_ERR(dr)) {
-            yetty_ycore_error_destroy(dr.error);
-        }
-        app->wire_sm = NULL;
-    }
-    if (app->has_pty_pair) {
-        if (app->pty_pair.a && app->pty_pair.a->ops->destroy) {
-            struct yetty_ycore_void_result dr = app->pty_pair.a->ops->destroy(app->pty_pair.a);
-            if (YETTY_IS_ERR(dr)) {
-                yetty_ycore_error_destroy(dr.error);
-            }
-        }
-        if (app->pty_pair.b && app->pty_pair.b->ops->destroy) {
-            struct yetty_ycore_void_result dr = app->pty_pair.b->ops->destroy(app->pty_pair.b);
-            if (YETTY_IS_ERR(dr)) {
-                yetty_ycore_error_destroy(dr.error);
-            }
-        }
-        app->has_pty_pair = 0;
     }
     if (app->root_container) {
         struct yetty_ycore_void_result dr = yetty_yfigure_destroy(app->root_container);

@@ -374,11 +374,15 @@ struct yetty_ycore_size_result yetty_yclass_rpc_dispatch_one(uint32_t header, co
     uint32_t id = YETTY_YCLASS_RPC_HDR_ID(header);
 
     switch (op) {
-    case YETTY_YCLASS_RPC_OP_CALL: {
+    /* CALL and CALL_ONEWAY dispatch identically; they differ only in whether
+     * the SERVER LOOP writes the response (it skips it for one-way). */
+    case YETTY_YCLASS_RPC_OP_CALL:
+    case YETTY_YCLASS_RPC_OP_CALL_ONEWAY: {
         struct yetty_yclass_rpc_skel_fn_result sr =
             yetty_yclass_rpc_skel_for((yetty_yclass_method_slot)id);
         if (YETTY_IS_OK(sr)) {
-            ydebug("CALL slot=%u body_len=%zu", id, body_len);
+            ydebug("CALL slot=%u body_len=%zu oneway=%d", id, body_len,
+                   op == YETTY_YCLASS_RPC_OP_CALL_ONEWAY);
             /* The skel is an externally-typed wire bridge returning a
              * raw resp length (size_t), not a Result. */
             return YETTY_OK(yetty_ycore_size, sr.value(body, body_len, resp, resp_max));
@@ -444,6 +448,12 @@ struct yetty_ycore_void_result yetty_yclass_rpc_server_run(struct yetty_yclass_t
         } else {
             yetty_ycore_error_print(stderr, "[server] dispatch", dispatch_res.error);
             yetty_ycore_error_destroy(dispatch_res.error);
+        }
+
+        /* One-way calls get NO response — the client never reads one, so
+         * writing it would desync the lockstep stream. */
+        if (YETTY_YCLASS_RPC_HDR_OP(header) == YETTY_YCLASS_RPC_OP_CALL_ONEWAY) {
+            continue;
         }
 
         if (write_full(transport, &resp_len, 4) < 0) {
@@ -596,7 +606,7 @@ static struct yetty_ycore_void_result rpc_write_request(struct yetty_yclass_rpc_
     }
     /* op occupies a 4-bit field; cap at the highest defined op so
      * undefined-but-fits-in-4-bits values are also caught. */
-    if (op > YETTY_YCLASS_RPC_OP_GET_ROOT) {
+    if (op > YETTY_YCLASS_RPC_OP_CALL_ONEWAY) {
         return YETTY_ERR(yetty_ycore_void, "rpc_call: op is not a defined yetty_yclass_rpc_op");
     }
     if (body_len > 0 && body == NULL) {
@@ -661,6 +671,25 @@ struct yetty_ycore_size_result yetty_yclass_rpc_call(struct yetty_yclass_rpc_ses
         return YETTY_ERR(yetty_ycore_size, "rpc_call: short read on resp body");
     }
     return YETTY_OK(yetty_ycore_size, (size_t)resp_len);
+}
+
+struct yetty_ycore_void_result yetty_yclass_rpc_call_oneway(struct yetty_yclass_rpc_session *s,
+                                                            uint32_t id, const void *body,
+                                                            size_t body_len)
+{
+    struct yetty_ycore_void_result write_res =
+        rpc_write_request(s, YETTY_YCLASS_RPC_OP_CALL_ONEWAY, id, body, body_len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, write_res, "rpc_call_oneway: request write failed");
+
+    /* No response is read. A buffering transport (DCS) only flushes on recv(),
+     * which never happens for a one-way call — flush explicitly so the request
+     * actually reaches the wire. Transports that write through in send() expose
+     * no flush op (NULL) and need none. */
+    if (s->transport->ops->flush) {
+        struct yetty_ycore_void_result flush_res = s->transport->ops->flush(s->transport);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "rpc_call_oneway: flush failed");
+    }
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_yclass_rpc_call_alloc(struct yetty_yclass_rpc_session *s,
@@ -753,7 +782,8 @@ struct uint32_result yetty_yclass_rpc_session_ensure_remote_id(struct yetty_ycla
     return YETTY_OK(uint32, remote);
 }
 
-struct yetty_yclass_handle_result yetty_yclass_rpc_session_get_root(struct yetty_yclass_rpc_session *s)
+struct yetty_yclass_handle_result yetty_yclass_rpc_session_get_root(
+    struct yetty_yclass_rpc_session *s)
 {
     if (!s) {
         return YETTY_ERR(yetty_yclass_handle, "session_get_root: NULL session");

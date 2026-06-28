@@ -8,6 +8,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: document_destroy
     domain: yrich
@@ -18,6 +19,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: document_content_width
     domain: yrich
@@ -28,6 +30,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
+    oneway: false
     return_payload_type: float
   - slot: document_content_height
     domain: yrich
@@ -38,6 +41,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
+    oneway: false
     return_payload_type: float
   - slot: document_render
     domain: yrich
@@ -48,6 +52,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: document_apply_op
     domain: yrich
@@ -64,6 +69,7 @@ methods:
  * (forwarded to the sync callback). Concrete kinds override to apply the
  * op to their own state and chain up for the base bookkeeping. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: document_undo
     domain: yrich
@@ -74,6 +80,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: document_redo
     domain: yrich
@@ -84,6 +91,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: document_on_mouse_down
     domain: yrich
@@ -102,6 +110,7 @@ methods:
         type: uint32_t
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: document_on_mouse_up
     domain: yrich
@@ -120,6 +129,7 @@ methods:
         type: uint32_t
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: document_on_mouse_drag
     domain: yrich
@@ -138,6 +148,7 @@ methods:
         type: uint32_t
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: document_on_mouse_double_click
     domain: yrich
@@ -156,6 +167,7 @@ methods:
         type: uint32_t
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: document_on_key_down
     domain: yrich
@@ -170,6 +182,7 @@ methods:
         type: uint32_t
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: document_on_text_input
     domain: yrich
@@ -182,6 +195,7 @@ methods:
         type: struct yetty_ycore_buffer
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: element_destroy
     domain: yrich
@@ -194,6 +208,7 @@ methods:
  * owns no heap state, so the default just frees the object; concrete kinds
  * override, free their own fields and chain up via yetty_yrich_super_void. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: element_bounds
     domain: yrich
@@ -206,6 +221,7 @@ methods:
         type: "struct yetty_yrich_rect *"
     doc: "/* element_bounds: write the axis-aligned bounding box into *out_bounds. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: element_hit_test
     domain: yrich
@@ -220,6 +236,7 @@ methods:
         type: float
     doc: "/* element_hit_test: point-in-element; default is point-in-bounds. */"
     local: false
+    oneway: false
     return_payload_type: int
   - slot: element_render
     domain: yrich
@@ -236,6 +253,7 @@ methods:
         type: int
     doc: "/* element_render: emit ydraw primitives at the given base layer. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: element_is_editable
     domain: yrich
@@ -246,6 +264,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
+    oneway: false
     return_payload_type: int
   - slot: element_begin_edit
     domain: yrich
@@ -256,6 +275,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: element_end_edit
     domain: yrich
@@ -266,6 +286,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: element_is_editing
     domain: yrich
@@ -276,6 +297,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
+    oneway: false
     return_payload_type: int
   - slot: element_insert_text
     domain: yrich
@@ -289,6 +311,7 @@ methods:
     doc: "/* element_insert_text: insert UTF-8 text at the cursor. Non-editable
  * elements ignore text input. */"
     local: false
+    oneway: false
     return_payload_type: null
   - slot: element_delete_sel
     domain: yrich
@@ -299,6 +322,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: "/* element_delete_sel: delete current selection or character before cursor. */"
     local: false
+    oneway: false
     return_payload_type: null
   - slot: slides_set_current
     domain: yrich
@@ -311,6 +335,7 @@ methods:
         type: int32_t
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: slides_next
     domain: yrich
@@ -321,6 +346,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: slides_prev
     domain: yrich
@@ -331,6 +357,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: spreadsheet_set_grid_size
     domain: yrich
@@ -345,6 +372,7 @@ methods:
         type: int32_t
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: spreadsheet_set_row_height
     domain: yrich
@@ -359,6 +387,7 @@ methods:
         type: float
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: spreadsheet_set_col_width
     domain: yrich
@@ -373,6 +402,7 @@ methods:
         type: float
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: spreadsheet_set_cell_value
     domain: yrich
@@ -389,6 +419,7 @@ methods:
         type: struct yetty_ycore_buffer
     doc: "/* Set a cell's text value — wire-marshallable slot (scalars + buffer). */"
     local: false
+    oneway: false
     return_payload_type: null
   - slot: ydoc_toggle_format
     domain: yrich
@@ -401,6 +432,7 @@ methods:
         type: uint32_t
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: ydoc_set_text_color
     domain: yrich
@@ -413,6 +445,7 @@ methods:
         type: uint32_t
     doc: "/* Text colour — selection-scoped like toggle_format, absolute (no toggle). */"
     local: false
+    oneway: false
     return_payload_type: null
   - slot: ydoc_set_alignment
     domain: yrich
@@ -425,6 +458,7 @@ methods:
         type: uint32_t
     doc: "/* Paragraph alignment (enum yetty_yrich_halign). */"
     local: false
+    oneway: false
     return_payload_type: null
   - slot: ydoc_set_heading
     domain: yrich
@@ -437,6 +471,7 @@ methods:
         type: uint32_t
     doc: "/* Heading levels — 0 = normal text, 1..3 = headings (size + bold base). */"
     local: false
+    oneway: false
     return_payload_type: null
   - slot: ydoc_change_font_size
     domain: yrich
@@ -449,6 +484,7 @@ methods:
         type: float
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
 classes:
   - name: app

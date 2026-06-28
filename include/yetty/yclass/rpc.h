@@ -70,6 +70,12 @@ enum yetty_yclass_rpc_op {
                                        * the host's pre-existing root object — e.g. a terminal's
                                        * yfigure root container — which RPC_OP_CREATE (always a new
                                        * object) cannot. */
+    YETTY_YCLASS_RPC_OP_CALL_ONEWAY,  /* id = slot index; body = packed args. Like OP_CALL, but the
+                                       * server dispatches WITHOUT writing a response and the client
+                                       * reads none — fire-and-forget for void methods flagged
+                                       * `oneway@`. Preserves the legacy one-way wire's semantics
+                                       * (no per-call error feedback) so an interactive producer
+                                       * never blocks its input loop waiting on a reply. */
 };
 
 #define YETTY_YCLASS_RPC_OP_SHIFT 28
@@ -182,6 +188,17 @@ struct yetty_ycore_void_result yetty_yclass_rpc_call_alloc(struct yetty_yclass_r
                                                            const void *body, size_t body_len,
                                                            uint8_t **resp_out,
                                                            size_t *resp_len_out);
+
+/* Fire-and-forget CALL (YETTY_YCLASS_RPC_OP_CALL_ONEWAY): marshal the args and
+ * return without awaiting a response. The server dispatches the method (side
+ * effects apply) but writes no reply, so the caller cannot observe a remote
+ * error — matching the legacy one-way figure wire. Only valid for void slots
+ * (codegen emits this path for `oneway@`-flagged methods). Flushes the
+ * transport so buffered transports (DCS) actually put the frame on the wire,
+ * since no recv() follows to trigger their lazy flush. */
+struct yetty_ycore_void_result yetty_yclass_rpc_call_oneway(struct yetty_yclass_rpc_session *s,
+                                                            uint32_t id, const void *body,
+                                                            size_t body_len);
 
 /* T2 translation table — indexed by local slot. UINT32_MAX = unresolved
  * (no valid wire id can be ≥ 2^28 since the wire reserves the top 4

@@ -84,6 +84,10 @@ struct yetty_ycore_void_result yetty_yfigure_figure_absolute_coords_set(
 struct yetty_ycore_void_result yetty_yfigure_destroy(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yfigure_render(struct yetty_yclass_object *obj,
                                                     struct yetty_ydraw_target *target);
+/* dump_state: heap text snapshot for tests. Base default yields a NULL
+ * string so the yetty_yfigure_dump wrapper emits its rect fallback. */
+struct yetty_ycore_char_ptr_result yetty_yfigure_dump_state(struct yetty_yclass_object *obj,
+                                                            int indent);
 /* process_input: consume the figure's wire body straight off the SM.
  * Base default rejects — a purely visual figure ignores wire updates.
  * The container only routes here for kinds that override it (capability
@@ -93,10 +97,6 @@ struct yetty_ycore_void_result yetty_yfigure_process_input(
 /* process_bytes: apply a buffered wire body. Base default rejects. */
 struct yetty_ycore_void_result yetty_yfigure_process_bytes(struct yetty_yclass_object *obj,
                                                            const uint8_t *bytes, size_t bytes_len);
-/* dump_state: heap text snapshot for tests. Base default yields a NULL
- * string so the yetty_yfigure_dump wrapper emits its rect fallback. */
-struct yetty_ycore_char_ptr_result yetty_yfigure_dump_state(struct yetty_yclass_object *obj,
-                                                            int indent);
 /* reset_content: drop content, keep GPU state. Base default rejects so the
  * container falls back to destroy + mint for kinds that don't support it. */
 struct yetty_ycore_void_result yetty_yfigure_reset_content(struct yetty_yclass_object *obj);
@@ -117,12 +117,12 @@ struct yetty_ycore_void_result yetty_yfigure_set_content_size(struct yetty_yclas
 typedef struct yetty_ycore_void_result (*yetty_yfigure_destroy_fn)(struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_render_fn)(struct yetty_yclass_object *,
                                                                   struct yetty_ydraw_target *);
+typedef struct yetty_ycore_char_ptr_result (*yetty_yfigure_dump_state_fn)(
+    struct yetty_yclass_object *, int);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_process_input_fn)(
     struct yetty_yclass_object *, struct yetty_ywire_wire_statemachine *);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_process_bytes_fn)(
     struct yetty_yclass_object *, const uint8_t *, size_t);
-typedef struct yetty_ycore_char_ptr_result (*yetty_yfigure_dump_state_fn)(
-    struct yetty_yclass_object *, int);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_reset_content_fn)(
     struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_set_scroll_fn)(struct yetty_yclass_object *,

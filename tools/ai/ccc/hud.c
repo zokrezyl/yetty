@@ -317,6 +317,18 @@ struct ccc_hud_ptr_result ccc_hud_create(void)
     }
     hud->framework = framework_res.value;
 
+    /* Attach to the host's root figure container over yclass RPC so emits
+     * drive the typed yfigure stubs. The fds are borrowed (stdin/stdout stay
+     * open for the lifetime of the HUD). If the host has no container to
+     * attach to, container_obj stays NULL and the subsequent emits surface an
+     * error; the attach failure here is informational. */
+    struct yetty_ycore_void_result attach_res =
+        yetty_ygui_framework_attach(hud->framework, STDIN_FILENO, STDOUT_FILENO, 1);
+    if (YETTY_IS_ERR(attach_res)) {
+        ydebug("ccc hud: RPC attach failed: %s", attach_res.error.msg);
+        yetty_ycore_error_destroy(attach_res.error);
+    }
+
     struct yetty_ycore_void_result build_res = hud_build(hud);
     if (YETTY_IS_ERR(build_res)) {
         /* Best-effort teardown on the failure path; the build error is
@@ -540,8 +552,9 @@ struct yetty_ycore_void_result ccc_hud_destroy(struct ccc_hud *hud)
     /* Best-effort: run every teardown step, accumulate failures. */
     struct yetty_ycore_void_result teardown = YETTY_OK_VOID();
     fflush(stdout);
-    teardown = yetty_ycore_void_chain(
-        teardown, yetty_ygui_framework_clear_remote_fd(hud->framework, STDOUT_FILENO));
+    /* Drop every remote figure this HUD produced via the typed yclass stub on
+     * the attached host container before destroying the framework. */
+    teardown = yetty_ycore_void_chain(teardown, yetty_ygui_framework_clear(hud->framework));
     teardown = yetty_ycore_void_chain(teardown, yetty_ygui_framework_destroy(hud->framework));
     free(hud);
     return teardown;

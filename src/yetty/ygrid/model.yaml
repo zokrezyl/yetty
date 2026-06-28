@@ -10,6 +10,7 @@ methods:
         type: struct yetty_ycore_buffer
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: clear
     domain: ygrid
@@ -20,6 +21,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: destroy
     domain: ygrid
@@ -30,6 +32,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
 classes:
   - name: grid
@@ -212,6 +215,14 @@ classes:
         get: false
         set: false
       - name: shaders_dir
+        type: "char[512]"
+        get: false
+        set: false
+      - name: cache_dir
+        type: "char[512]"
+        get: false
+        set: false
+      - name: data_dir
         type: "char[512]"
         get: false
         set: false

@@ -14,6 +14,7 @@ methods:
         type: int
     doc: null
     local: false
+    oneway: false
     return_payload_type: int
   - slot: widget_on_release
     domain: ygui
@@ -30,6 +31,7 @@ methods:
         type: int
     doc: null
     local: false
+    oneway: false
     return_payload_type: int
   - slot: widget_on_motion
     domain: ygui
@@ -44,6 +46,7 @@ methods:
         type: float
     doc: null
     local: false
+    oneway: false
     return_payload_type: int
   - slot: widget_emit_body
     domain: ygui
@@ -56,6 +59,7 @@ methods:
         type: "struct yetty_ygui_emit_ctx *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: constructor
     domain: ygui
@@ -66,6 +70,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: destructor
     domain: ygui
@@ -76,6 +81,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: widget_on_scroll
     domain: ygui
@@ -96,6 +102,7 @@ methods:
  * not handled (0), so the framework keeps bubbling to an ancestor that
  * scrolls. Scrollable widgets (scrollarea, filepicker) override this. */"
     local: false
+    oneway: false
     return_payload_type: int
   - slot: widget_paint
     domain: ygui
@@ -108,6 +115,7 @@ methods:
         type: "struct yetty_ygui_emit_ctx *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: widget_emit_container
     domain: ygui
@@ -120,6 +128,7 @@ methods:
         type: "struct yetty_ygui_emit_ctx *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
 classes:
   - name: clickable

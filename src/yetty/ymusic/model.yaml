@@ -15,6 +15,7 @@ methods:
     doc: "/* configure: set system width, staff-space (line gap) in px and render flags.
  * 0 selects the default for each. Call after create(), before render(). */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: parse
     domain: ymusic
@@ -30,6 +31,7 @@ methods:
     doc: "/* parse: ingest LilyPond-subset text and build the score model. Resets the model
  * and clears any selection. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: render
     domain: ymusic
@@ -41,6 +43,7 @@ methods:
     doc: "/* render: lay out the score and emit it as a fresh ydraw drawable list (caller
  * owns it). Pointer return -> local-only. */"
     local: true
+    oneway: false
     return_payload_type: "struct yetty_ydraw_drawable_list *"
   - slot: hit_test
     domain: ymusic
@@ -56,6 +59,7 @@ methods:
     doc: "/* hit_test: id of the element whose column + system band contains content
  * (x,y), or YETTY_YMUSIC_NO_ELEMENT. Requires a prior render() for the layout. */"
     local: true
+    oneway: false
     return_payload_type: int
   - slot: set_highlight
     domain: ymusic
@@ -68,6 +72,7 @@ methods:
         type: int32_t
     doc: "/* set_highlight: mark an element as selected (-1 clears) for the next render. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: destroy
     domain: ymusic
@@ -78,6 +83,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: "/* destroy: free the score model and the object. */"
     local: true
+    oneway: false
     return_payload_type: null
 classes:
   - name: music

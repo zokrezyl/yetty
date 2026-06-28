@@ -1,22 +1,24 @@
 /*
  * framework.c — framework lifecycle, ID allocator, two-pass wire emission.
  *
- * The framework owns app-global state for one ygui instance: wire transport
- * (output_pty), id allocator with free-list, the framework-side container
- * + ygrid that hold every widget, and reusable per-emit buffers.
+ * The framework owns app-global state for one ygui instance: the borrowed
+ * output_pty, id allocator with free-list, the receiver-side container
+ * object + ygrid that hold every widget, and reusable per-emit buffers.
  *
  * One yetty_ygui_framework_emit cycle:
  *   1) Clear per-emit buffers; ensure the framework's container + ygrid
- *      have been emitted at least once.
+ *      have been minted at least once.
  *   2) Pass 1 — walk tree, dispatch yetty_ygui_widget_emit_container on
- *      every widget. Default impl writes CREATE_CHILD records for figure
- *      widgets into ctx->container_records.
+ *      every widget. Default impl drives figure-tree mutations
+ *      (create/rect/z/hidden) on the container object through the typed
+ *      yclass stubs (yetty_yfigure_create_child, …), which dispatch
+ *      in-process or over yrpc depending on the session.
  *   3) Pass 2 — walk tree, dispatch yetty_ygui_widget_emit_body. Chrome
- *      widgets append to ctx->ygrid_body (CMD_GROUP record bytes);
- *      figure widgets append to ctx->figure_bodies.
- *   4) Flush pending deletes as DELETE_CHILD records.
- *   5) Concatenate {container_records → ygrid_body → figure_bodies}
- *      and ship via yface envelope over output_pty.
+ *      widgets append to the shared ygrid drawable_list; figure widgets
+ *      apply their body to the container via yetty_yfigure_apply_child_body.
+ *   4) Flush pending deletes via yetty_yfigure_delete_child.
+ *   5) Hand the accumulated ygrid drawable_list to the ygrid child through
+ *      apply_child_body (framework_flush).
  */
 
 #include "internal.h"
@@ -27,13 +29,11 @@
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yface/yface.h>
 #include <yetty/yfigure/container.h>
+#include <yetty/yfigure/producer.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/ygui/theme.h>
 #include <yetty/yplatform/pty.h>
-#include <yetty/yterminal/dcs-codes.h>
 #include <yetty/ytrace/ytrace.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,10 +56,8 @@ struct yetty_ygui_framework_ptr_result yetty_ygui_framework_create(
     struct yetty_platform_pty *output_pty)
 {
     /* output_pty may be NULL: an in-process host (yui) wires a receiver
-     * container via yetty_ygui_framework_set_container_obj and never
-     * touches the pty path. framework_flush only writes to output_pty in
-     * the yface-over-pty fallback, which is taken only when no container
-     * is wired — so a NULL pty is safe as long as a container is set
+     * container via yetty_ygui_framework_set_container_obj and drives the
+     * figure tree through the typed yclass stubs. A container must be set
      * before the first emit. */
     struct yetty_ygui_framework *framework = calloc(1, sizeof(*framework));
     if (!framework) {
@@ -114,6 +112,42 @@ struct yetty_ycore_void_result yetty_ygui_framework_set_session(
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_void_result yetty_ygui_framework_attach(struct yetty_ygui_framework *framework,
+                                                           int read_fd, int write_fd,
+                                                           int compressed)
+{
+    if (!framework) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_attach: NULL framework");
+    }
+    struct yetty_yfigure_producer_session_ptr_result session_res =
+        yetty_yfigure_producer_attach(read_fd, write_fd, compressed);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, session_res,
+                        "yetty_ygui_framework_attach: producer attach");
+    struct yetty_yfigure_producer_session *producer_session = session_res.value;
+
+    /* Wire the framework's dual-dispatch to the host container. The root
+     * container proxy carries its own RPC session (set at proxy create), so
+     * the typed yfigure_* stubs marshal over the wire from container_obj
+     * alone. We mirror that session onto yclass_ctx via the existing
+     * set_session path for callers that consult it. */
+    framework->container_obj = yetty_yfigure_producer_session_container(producer_session);
+    struct yetty_yclass_rpc_session *rpc_session =
+        yetty_yfigure_producer_session_rpc(producer_session);
+    struct yetty_ycore_void_result session_install_res =
+        yetty_ygui_framework_set_session(framework, rpc_session);
+    if (YETTY_IS_ERR(session_install_res)) {
+        struct yetty_ycore_void_result detach_res = yetty_yfigure_producer_detach(producer_session);
+        if (YETTY_IS_ERR(detach_res)) {
+            yetty_ycore_error_destroy(detach_res.error);
+        }
+        framework->container_obj = NULL;
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_attach: set_session",
+                         session_install_res);
+    }
+    framework->producer_session = producer_session;
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_framework *framework)
 {
     if (!framework) {
@@ -126,11 +160,21 @@ struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_fr
         }
         framework->root = NULL;
     }
+    /* Tear down the owned producer session (transport + RPC session + root
+     * container proxy). container_obj / yclass_ctx.session pointed into it,
+     * so clear them first. Best-effort — stash and surface any error after
+     * the rest of teardown. */
+    struct yetty_ycore_void_result detach_res = YETTY_OK_VOID();
+    if (framework->producer_session) {
+        framework->container_obj = NULL;
+        framework->yclass_ctx.session = NULL;
+        detach_res = yetty_yfigure_producer_detach(framework->producer_session);
+        framework->producer_session = NULL;
+    }
     /* output_pty is borrowed — caller destroys it. */
     free(framework->free_ids);
     free(framework->pending_deletes);
     free(framework->minted_figures);
-    yetty_ycore_buffer_destroy(&framework->container_records);
     if (framework->ygrid_drawable_list) {
         yetty_ydraw_drawable_list_destroy(framework->ygrid_drawable_list);
         framework->ygrid_drawable_list = NULL;
@@ -141,7 +185,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_fr
         framework->theme = NULL;
     }
     free(framework);
-    return YETTY_OK_VOID();
+    return detach_res;
 }
 
 /* Membership probe + insert for the minted_figures set. Linear scan —
@@ -842,15 +886,6 @@ static struct yetty_ycore_void_result write_u32_le(struct yetty_ycore_buffer *ds
     return yetty_ycore_buffer_write(dst, bytes, sizeof(bytes));
 }
 
-static struct yetty_ycore_void_result write_f32_le(struct yetty_ycore_buffer *dst, float v)
-{
-    /* IEEE-754 reinterpretation — both host (yetty's supported platforms)
-     * and wire are little-endian; this is a memcpy. */
-    uint32_t raw;
-    memcpy(&raw, &v, sizeof(raw));
-    return write_u32_le(dst, raw);
-}
-
 struct yetty_ycore_void_result yetty_ygui_wire_append_record(struct yetty_ycore_buffer *dst,
                                                              uint32_t id, const uint8_t *payload,
                                                              uint32_t payload_len)
@@ -869,34 +904,6 @@ struct yetty_ycore_void_result yetty_ygui_wire_append_record(struct yetty_ycore_
     return YETTY_OK_VOID();
 }
 
-/* Append an admin record (id=0) targeting a specific container's records
- * buffer. The bytes between admin_op and end-of-payload are caller-
- * supplied; this helper writes the {length, id=0, admin_op, …} prelude. */
-static struct yetty_ycore_void_result append_admin_record(struct yetty_ycore_buffer *dst,
-                                                          uint32_t admin_op, const uint8_t *body,
-                                                          uint32_t body_len)
-{
-    /* Payload = u32 admin_op | body. Guard the addition: body_len within 4 of
-     * UINT32_MAX would wrap `total` small while the full body is still written,
-     * emitting a malformed (length-underreporting) record. */
-    if (body_len > UINT32_MAX - 4u) {
-        return YETTY_ERR(yetty_ycore_void, "append_admin_record: body too large");
-    }
-    uint32_t total = 4 + body_len;
-    struct yetty_ycore_void_result r;
-    r = write_u32_le(dst, total);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "append_admin_record: write length");
-    r = write_u32_le(dst, 0u);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "append_admin_record: write id=0");
-    r = write_u32_le(dst, admin_op);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "append_admin_record: write admin_op");
-    if (body_len > 0 && body) {
-        r = yetty_ycore_buffer_write(dst, body, body_len);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "append_admin_record: write body");
-    }
-    return YETTY_OK_VOID();
-}
-
 /*===========================================================================
  * Emit-side helpers used by widget emit_container implementations.
  *=========================================================================*/
@@ -908,76 +915,23 @@ struct yetty_ycore_void_result yetty_ygui_emit_create_child(
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_create_child: NULL ctx");
     }
-    /* Wired container: call the typed yclass stub directly (in-process local
-     * dispatch, or RPC when the container proxy carries a session). `kind` is
-     * the registry token (yetty_yfigure_kind_token of the kind name). */
-    if (ctx->framework && ctx->framework->container_obj) {
-        struct yetty_ycore_rectangle rect = {
-            .min = {.x = min_x, .y = min_y},
-            .max = {.x = max_x, .y = max_y},
-        };
-        struct yetty_ycore_buffer init_buf = {
-            .data = (uint8_t *)init_payload,
-            .capacity = 0,
-            .size = init_payload_bytes,
-        };
-        return yetty_yfigure_create_child(ctx->framework->container_obj, kind, child_id, rect,
-                                          init_buf);
+    if (!ctx->framework || !ctx->framework->container_obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_create_child: no container");
     }
-    if (!ctx->container_records) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_create_child: NULL ctx");
-    }
-    /* Body layout:
-     *   u32 child_id | u32 kind | f32x4 rect | u32 init_len | bytes init */
-    uint32_t body_len = 4 + 4 + 16 + 4 + init_payload_bytes;
-    /* Compose into a small temp buffer then append. */
-    struct yetty_ycore_buffer tmp = {0};
-    struct yetty_ycore_void_result r;
-    r = write_u32_le(&tmp, child_id);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    r = write_u32_le(&tmp, kind);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    r = write_f32_le(&tmp, min_x);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    r = write_f32_le(&tmp, min_y);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    r = write_f32_le(&tmp, max_x);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    r = write_f32_le(&tmp, max_y);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    r = write_u32_le(&tmp, init_payload_bytes);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    if (init_payload_bytes > 0 && init_payload) {
-        r = yetty_ycore_buffer_write(&tmp, init_payload, init_payload_bytes);
-        if (YETTY_IS_ERR(r)) {
-            goto fail;
-        }
-    }
-    (void)body_len; /* sanity-only, body length encoded inside record */
-    r = append_admin_record(ctx->container_records, YETTY_YFIGURE_ADMIN_CREATE_CHILD, tmp.data,
-                            (uint32_t)tmp.size);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    yetty_ycore_buffer_destroy(&tmp);
-    return YETTY_OK_VOID();
-fail:
-    yetty_ycore_buffer_destroy(&tmp);
-    return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_create_child: write failed", r);
+    /* Call the typed yclass stub directly (in-process local dispatch, or RPC
+     * when the container proxy carries a session). `kind` is the registry
+     * token (yetty_yfigure_kind_token of the kind name). */
+    struct yetty_ycore_rectangle rect = {
+        .min = {.x = min_x, .y = min_y},
+        .max = {.x = max_x, .y = max_y},
+    };
+    struct yetty_ycore_buffer init_buf = {
+        .data = (uint8_t *)init_payload,
+        .capacity = 0,
+        .size = init_payload_bytes,
+    };
+    return yetty_yfigure_create_child(ctx->framework->container_obj, kind, child_id, rect,
+                                      init_buf);
 }
 
 struct yetty_ycore_void_result yetty_ygui_emit_delete_child(struct yetty_ygui_emit_ctx *ctx,
@@ -986,23 +940,10 @@ struct yetty_ycore_void_result yetty_ygui_emit_delete_child(struct yetty_ygui_em
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_delete_child: NULL ctx");
     }
-    if (ctx->framework && ctx->framework->container_obj) {
-        return yetty_yfigure_delete_child(ctx->framework->container_obj, child_id);
+    if (!ctx->framework || !ctx->framework->container_obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_delete_child: no container");
     }
-    if (!ctx->container_records) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_delete_child: NULL ctx");
-    }
-    struct yetty_ycore_buffer tmp = {0};
-    struct yetty_ycore_void_result r = write_u32_le(&tmp, child_id);
-    if (YETTY_IS_ERR(r)) {
-        yetty_ycore_buffer_destroy(&tmp);
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_delete_child: write child_id", r);
-    }
-    r = append_admin_record(ctx->container_records, YETTY_YFIGURE_ADMIN_DELETE_CHILD, tmp.data,
-                            (uint32_t)tmp.size);
-    yetty_ycore_buffer_destroy(&tmp);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "yetty_ygui_emit_delete_child: admin record");
-    return YETTY_OK_VOID();
+    return yetty_yfigure_delete_child(ctx->framework->container_obj, child_id);
 }
 
 struct yetty_ycore_void_result yetty_ygui_emit_figure_body(struct yetty_ygui_emit_ctx *ctx,
@@ -1038,46 +979,14 @@ struct yetty_ycore_void_result yetty_ygui_emit_set_child_rect(struct yetty_ygui_
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_rect: NULL ctx");
     }
-    if (ctx->framework && ctx->framework->container_obj) {
-        struct yetty_ycore_rectangle rect = {
-            .min = {.x = min_x, .y = min_y},
-            .max = {.x = max_x, .y = max_y},
-        };
-        return yetty_yfigure_set_child_rect(ctx->framework->container_obj, child_id, rect);
+    if (!ctx->framework || !ctx->framework->container_obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_rect: no container");
     }
-    if (!ctx->container_records) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_rect: NULL ctx");
-    }
-    struct yetty_ycore_buffer tmp = {0};
-    struct yetty_ycore_void_result r;
-    r = write_u32_le(&tmp, child_id);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    r = write_f32_le(&tmp, min_x);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    r = write_f32_le(&tmp, min_y);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    r = write_f32_le(&tmp, max_x);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    r = write_f32_le(&tmp, max_y);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    r = append_admin_record(ctx->container_records, YETTY_YFIGURE_ADMIN_SET_CHILD_RECT, tmp.data,
-                            (uint32_t)tmp.size);
-fail:
-    yetty_ycore_buffer_destroy(&tmp);
-    if (YETTY_IS_ERR(r)) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_rect: write failed", r);
-    }
-    return YETTY_OK_VOID();
+    struct yetty_ycore_rectangle rect = {
+        .min = {.x = min_x, .y = min_y},
+        .max = {.x = max_x, .y = max_y},
+    };
+    return yetty_yfigure_set_child_rect(ctx->framework->container_obj, child_id, rect);
 }
 
 int32_t yetty_ygui_framework_next_raise_z(struct yetty_ygui_framework *framework)
@@ -1100,32 +1009,10 @@ struct yetty_ycore_void_result yetty_ygui_emit_set_child_z(struct yetty_ygui_emi
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_z: NULL ctx");
     }
-    if (ctx->framework && ctx->framework->container_obj) {
-        return yetty_yfigure_set_child_z(ctx->framework->container_obj, child_id, z);
+    if (!ctx->framework || !ctx->framework->container_obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_z: no container");
     }
-    if (!ctx->container_records) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_z: NULL ctx");
-    }
-    struct yetty_ycore_buffer tmp = {0};
-    struct yetty_ycore_void_result r;
-    r = write_u32_le(&tmp, child_id);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    /* z is signed; its two's-complement bit pattern rides the u32 writer
-     * and the receiver memcpy's it straight back into an int32_t. */
-    r = write_u32_le(&tmp, (uint32_t)z);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    r = append_admin_record(ctx->container_records, YETTY_YFIGURE_ADMIN_SET_CHILD_Z, tmp.data,
-                            (uint32_t)tmp.size);
-fail:
-    yetty_ycore_buffer_destroy(&tmp);
-    if (YETTY_IS_ERR(r)) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_z: write failed", r);
-    }
-    return YETTY_OK_VOID();
+    return yetty_yfigure_set_child_z(ctx->framework->container_obj, child_id, z);
 }
 
 struct yetty_ycore_void_result yetty_ygui_emit_set_child_hidden(struct yetty_ygui_emit_ctx *ctx,
@@ -1134,31 +1021,11 @@ struct yetty_ycore_void_result yetty_ygui_emit_set_child_hidden(struct yetty_ygu
     if (!ctx) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_hidden: NULL ctx");
     }
-    if (ctx->framework && ctx->framework->container_obj) {
-        return yetty_yfigure_set_child_hidden(ctx->framework->container_obj, child_id,
-                                              hidden ? 1u : 0u);
+    if (!ctx->framework || !ctx->framework->container_obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_hidden: no container");
     }
-    if (!ctx->container_records) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_hidden: NULL ctx");
-    }
-    struct yetty_ycore_buffer tmp = {0};
-    struct yetty_ycore_void_result r;
-    r = write_u32_le(&tmp, child_id);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    r = write_u32_le(&tmp, hidden ? 1u : 0u);
-    if (YETTY_IS_ERR(r)) {
-        goto fail;
-    }
-    r = append_admin_record(ctx->container_records, YETTY_YFIGURE_ADMIN_SET_CHILD_HIDDEN, tmp.data,
-                            (uint32_t)tmp.size);
-fail:
-    yetty_ycore_buffer_destroy(&tmp);
-    if (YETTY_IS_ERR(r)) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_emit_set_child_hidden: write failed", r);
-    }
-    return YETTY_OK_VOID();
+    return yetty_yfigure_set_child_hidden(ctx->framework->container_obj, child_id,
+                                          hidden ? 1u : 0u);
 }
 
 /*===========================================================================
@@ -1576,149 +1443,43 @@ static struct yetty_ycore_void_result flush_pending_deletes(struct yetty_ygui_fr
 
 struct yetty_ycore_void_result yetty_ygui_framework_flush(struct yetty_ygui_framework *framework)
 {
-    /* Wired container: every figure-tree mutation (create/rect/z/hidden/delete)
-     * and every figure body was already applied inline during the emit walk via
-     * the typed yclass stubs. The only stream left is the shared chrome ygrid's
-     * accumulated drawable_list, which is serialized once here and handed to the
-     * ygrid child through apply_child_body. */
-    if (framework->container_obj) {
-        if (framework->ygrid_drawable_list) {
-            size_t dl_size = yetty_ydraw_drawable_list_size(framework->ygrid_drawable_list);
-            if (dl_size > 0) {
-                const void *dl_data =
-                    yetty_ydraw_drawable_list_data(framework->ygrid_drawable_list);
-                struct yetty_ycore_buffer body = {
-                    .data = (uint8_t *)dl_data,
-                    .capacity = 0,
-                    .size = dl_size,
-                };
-                struct yetty_ycore_void_result br = yetty_yfigure_apply_child_body(
-                    framework->container_obj, framework->ygrid_id, body);
-                YETTY_RETURN_IF_ERR(yetty_ycore_void, br,
-                                    "yetty_ygui_framework_flush: ygrid apply_child_body");
-            }
-        }
-        return YETTY_OK_VOID();
+    /* Every figure-tree mutation (create/rect/z/hidden/delete) and every figure
+     * body was already applied inline during the emit walk via the typed yclass
+     * stubs on the container object. The only stream left is the shared chrome
+     * ygrid's accumulated drawable_list, which is serialized once here and handed
+     * to the ygrid child through apply_child_body. */
+    if (!framework->container_obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_flush: no container");
     }
-
-    /* Unwired (remote-without-session) fallback: compose the legacy envelope
-     * body and ship it as a yface DCS payload over the output pty. Retained as
-     * the compatibility path for out-of-process producers still on the
-     * YCOMPOSITOR_BIN record wire; deleted once they migrate to yclass RPC over
-     * YETTY_DCS_YCLASS_RPC (tracked in #377).
-     *   - container_records (already record-framed as admin records id=0)
-     *   - one record { ygrid_body bytes, id=ygrid_id }
-     *   - figure_bodies (already record-framed by widgets at append time)
-     */
-    struct yetty_ycore_buffer envelope = {0};
-    struct yetty_ycore_void_result r;
-
-    if (framework->container_records.size > 0) {
-        r = yetty_ycore_buffer_write(&envelope, framework->container_records.data,
-                                     framework->container_records.size);
-        if (YETTY_IS_ERR(r)) {
-            goto fail;
-        }
-    }
-    /* Bytes accumulated by chrome widgets into the framework's per-emit
-     * ydraw drawable_list. The list's primitives buffer is the raw ydraw
-     * FAM stream that ygrid->process_bytes consumes. */
     if (framework->ygrid_drawable_list) {
         size_t dl_size = yetty_ydraw_drawable_list_size(framework->ygrid_drawable_list);
         if (dl_size > 0) {
             const void *dl_data = yetty_ydraw_drawable_list_data(framework->ygrid_drawable_list);
-            r = yetty_ygui_wire_append_record(&envelope, framework->ygrid_id, dl_data,
-                                              (uint32_t)dl_size);
-            if (YETTY_IS_ERR(r)) {
-                goto fail;
-            }
+            struct yetty_ycore_buffer body = {
+                .data = (uint8_t *)dl_data,
+                .capacity = 0,
+                .size = dl_size,
+            };
+            struct yetty_ycore_void_result br =
+                yetty_yfigure_apply_child_body(framework->container_obj, framework->ygrid_id, body);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, br,
+                                "yetty_ygui_framework_flush: ygrid apply_child_body");
         }
     }
-    if (framework->figure_bodies.size > 0) {
-        r = yetty_ycore_buffer_write(&envelope, framework->figure_bodies.data,
-                                     framework->figure_bodies.size);
-        if (YETTY_IS_ERR(r)) {
-            goto fail;
-        }
-    }
-
-    if (envelope.size == 0) {
-        /* Nothing to ship this tick. */
-        yetty_ycore_buffer_destroy(&envelope);
-        return YETTY_OK_VOID();
-    }
-
-    /* Wrap in a yface envelope and write to pty. */
-    struct yetty_yface_bin_meta meta = {
-        .magic = YETTY_YFACE_BIN_MAGIC,
-        .version = YETTY_YFACE_BIN_VERSION,
-        .compressed = YETTY_YFACE_COMP_LZ4F,
-        .compression_algo = 0,
-        .raw_size = envelope.size,
-        .reserved = {0, 0},
-    };
-    struct yetty_ycore_buffer wire_out = {0};
-    r = yetty_yface_emit(YETTY_DCS_YCOMPOSITOR_BIN, /*compressed=*/1, &meta, sizeof(meta),
-                         envelope.data, envelope.size, &wire_out);
-    if (YETTY_IS_ERR(r)) {
-        yetty_ycore_buffer_destroy(&envelope);
-        yetty_ycore_buffer_destroy(&wire_out);
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_flush: yface_emit", r);
-    }
-    yetty_ycore_buffer_destroy(&envelope);
-
-    if (wire_out.size > 0 && framework->output_pty && framework->output_pty->ops &&
-        framework->output_pty->ops->write) {
-        struct yetty_ycore_size_result wr = framework->output_pty->ops->write(
-            framework->output_pty, (const char *)wire_out.data, wire_out.size);
-        if (YETTY_IS_ERR(wr)) {
-            yetty_ycore_buffer_destroy(&wire_out);
-            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_flush: pty write", wr);
-        }
-        if (wr.value != wire_out.size) {
-            yetty_ycore_buffer_destroy(&wire_out);
-            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_flush: short write");
-        }
-    }
-    yetty_ycore_buffer_destroy(&wire_out);
     return YETTY_OK_VOID();
-
-fail:
-    yetty_ycore_buffer_destroy(&envelope);
-    return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_flush: envelope compose", r);
 }
 
-struct yetty_ycore_void_result yetty_ygui_framework_clear_remote_fd(
-    struct yetty_ygui_framework *framework, int fd)
+struct yetty_ycore_void_result yetty_ygui_framework_clear(struct yetty_ygui_framework *framework)
 {
-    if (!framework || fd < 0) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_clear_remote_fd: bad args");
+    if (!framework) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_clear: NULL framework");
     }
-    /* One CLEAR_ALL admin record on the root (id=0) — the host container's
-     * process_records drops every child when it sees this op. */
-    struct yetty_ycore_buffer records = {0};
-    struct yetty_ycore_void_result r =
-        append_admin_record(&records, YETTY_YFIGURE_ADMIN_CLEAR_ALL, NULL, 0);
-    if (YETTY_IS_ERR(r)) {
-        yetty_ycore_buffer_destroy(&records);
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_clear_remote_fd: build record", r);
+    if (!framework->container_obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_clear: no container");
     }
-    /* Same envelope framing as framework_flush, written straight to the fd. */
-    struct yetty_yface_bin_meta meta = {
-        .magic = YETTY_YFACE_BIN_MAGIC,
-        .version = YETTY_YFACE_BIN_VERSION,
-        .compressed = YETTY_YFACE_COMP_LZ4F,
-        .compression_algo = 0,
-        .raw_size = records.size,
-        .reserved = {0, 0},
-    };
-    struct yetty_ycore_void_result er =
-        yetty_yface_emit_to_fd(fd, YETTY_DCS_YCOMPOSITOR_BIN, /*compressed=*/1, &meta, sizeof(meta),
-                               records.data, records.size);
-    yetty_ycore_buffer_destroy(&records);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, er,
-                        "yetty_ygui_framework_clear_remote_fd: yface_emit_to_fd");
-    return YETTY_OK_VOID();
+    /* Drop every remote figure this framework produced by clearing the host
+     * container directly through the typed yclass stub. */
+    return yetty_yfigure_clear_all(framework->container_obj);
 }
 
 struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_framework *framework)
@@ -1727,7 +1488,6 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_frame
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_framework_emit: NULL framework");
     }
 
-    yetty_ycore_buffer_clear(&framework->container_records);
     yetty_ycore_buffer_clear(&framework->figure_bodies);
 
     /* Per-emit ydraw drawable_list — created lazily on first emit, reused
@@ -1757,7 +1517,7 @@ struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_frame
 
     struct yetty_ygui_emit_ctx ctx = {
         .framework = framework,
-        .container_records = &framework->container_records,
+        .container_records = NULL,
         .ygrid_drawable_list = framework->ygrid_drawable_list,
         .figure_bodies = &framework->figure_bodies,
         .current_figure_id = 0,

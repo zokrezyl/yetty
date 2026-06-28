@@ -155,6 +155,13 @@ static struct yetty_ycore_size_result dcs_recv(struct yetty_yclass_transport *ba
     return YETTY_OK(yetty_ycore_size, out);
 }
 
+/* One-way calls never recv(), so flush their buffered request envelope here. */
+static struct yetty_ycore_void_result dcs_flush(struct yetty_yclass_transport *base)
+{
+    struct dcs_transport *t = (struct dcs_transport *)base;
+    return dcs_flush_outbuf(t);
+}
+
 static struct yetty_ycore_void_result dcs_destroy(struct yetty_yclass_transport *base)
 {
     if (!base) {
@@ -191,6 +198,7 @@ struct yetty_yclass_transport_ptr_result yetty_yclass_transport_dcs_create(int r
         .send = dcs_send,
         .recv = dcs_recv,
         .destroy = dcs_destroy,
+        .flush = dcs_flush,
     };
     t->base.ops = &ops;
     t->read_fd = read_fd;

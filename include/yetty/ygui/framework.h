@@ -47,8 +47,9 @@ extern "C" {
  * Lifecycle.
  *---------------------------------------------------------------------------*/
 
-/* Create a framework that writes OSC envelopes through `output_pty`.
- * `output_pty` is BORROWED — caller owns its lifetime. */
+/* Create a framework. `output_pty` is BORROWED — caller owns its lifetime;
+ * it may be NULL for an in-process host that wires a container object via
+ * yetty_ygui_framework_set_container_obj. */
 struct yetty_ygui_framework_ptr_result yetty_ygui_framework_create(
     struct yetty_platform_pty *output_pty);
 
@@ -57,9 +58,9 @@ struct yetty_ygui_framework_ptr_result yetty_ygui_framework_create(
 struct yetty_ycore_void_result yetty_ygui_framework_destroy(struct yetty_ygui_framework *framework);
 
 /* Wire the framework to a receiver-side yfigure container through the
- * yclass slot dispatch path. When set, framework_emit ships its
- * envelope by calling `yetty_yfigure_process_records(&ctx, container,
- * envelope)` instead of building a yface OSC and writing to output_pty.
+ * yclass slot dispatch path. framework_emit drives the figure tree by
+ * calling the typed yfigure stubs (yetty_yfigure_create_child / _set_child_rect
+ * / _apply_child_body / …) directly on `container`.
  *
  * `container` is borrowed — caller owns its lifetime and must keep it
  * alive until the framework is destroyed (or this setter is called
@@ -75,20 +76,36 @@ struct yetty_ycore_void_result yetty_ygui_framework_set_container_obj(
 struct yetty_ycore_void_result yetty_ygui_framework_set_session(
     struct yetty_ygui_framework *framework, struct yetty_yclass_rpc_session *session);
 
+/* Attach an out-of-process framework to the hosting yetty's root figure
+ * container over the yclass RPC transport (DCS YETTY_DCS_YCLASS_RPC). On
+ * success the framework's emit path drives the host container with the typed
+ * yclass stubs, marshalled over the session.
+ *
+ * `read_fd` is where RPC responses arrive (the tool's input from the
+ * terminal); `write_fd` is where requests go (its output to the terminal).
+ * A tool over a PTY passes STDIN_FILENO / STDOUT_FILENO. `compressed`: 0 =
+ * base64 only (cheapest for tiny frames), 1 = base64 + lz4.
+ *
+ * The framework takes ownership of the producer session it opens and tears
+ * it down in framework_destroy. The fds are borrowed — the caller keeps
+ * ownership and closes them after the framework is destroyed. On failure
+ * the framework is left untouched (container_obj stays NULL) and the error
+ * is returned for the caller to log or ignore. */
+struct yetty_ycore_void_result yetty_ygui_framework_attach(struct yetty_ygui_framework *framework,
+                                                           int read_fd, int write_fd,
+                                                           int compressed);
+
 /* Run one full emit cycle: layout pass against the current viewport,
  * walk the widget tree twice (containers then bodies), concatenate
  * streams, wrap in a yface envelope, write through output_pty. */
 struct yetty_ycore_void_result yetty_ygui_framework_emit(struct yetty_ygui_framework *framework);
 
-/* Emit a figure-tree CLEAR_ALL admin record straight to `fd` (blocking
- * write), telling the host to destroy every remote figure container this
- * framework produced. Call this at client-mode shutdown BEFORE destroy: once
- * the event loop has stopped the async output_pty can no longer flush, so
- * the normal emit path silently drops the teardown and the host keeps the
- * client's last frame frozen on the pane. The blocking fd write mirrors how
- * ygreeter emits its ?1500l mouse-unsubscribe on exit. */
-struct yetty_ycore_void_result yetty_ygui_framework_clear_remote_fd(
-    struct yetty_ygui_framework *framework, int fd);
+/* Drop every remote figure this framework produced by clearing the host
+ * container directly through the typed yclass stub (yetty_yfigure_clear_all
+ * on container_obj). Call this at client-mode shutdown BEFORE destroy so the
+ * host does not keep the client's last frame frozen on the pane. Requires
+ * container_obj to be set (the framework was wired to a host container). */
+struct yetty_ycore_void_result yetty_ygui_framework_clear(struct yetty_ygui_framework *framework);
 
 /*-----------------------------------------------------------------------------
  * Input — caller pushes raw byte stream (ASCII + CSI escapes) here.

@@ -10,6 +10,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: run
     domain: yapp
@@ -22,6 +23,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
 classes:
   - name: app

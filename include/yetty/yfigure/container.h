@@ -20,7 +20,6 @@ struct yetty_context;
 struct yetty_ycore_rectangle;
 struct yetty_yfigure_figure;
 struct yetty_yfigure_registry;
-struct yetty_ywire_wire_statemachine;
 
 /* Hit-test result: the child whose rect contains the cursor, plus the cursor
  * coordinates inside that child's own pixel space (origin = child rect's
@@ -78,8 +77,9 @@ struct yetty_ycore_void_result yetty_yfigure_remove_child_by_id(struct yetty_ycl
                                                                 uint32_t id);
 struct yetty_ycore_void_result yetty_yfigure_raise_child_by_id(struct yetty_yclass_object *obj,
                                                                uint32_t id);
-struct yetty_ycore_void_result yetty_yfigure_process_records(struct yetty_yclass_object *obj,
-                                                             struct yetty_ycore_buffer bytes);
+/* Each mutation slot is `oneway@` — the producer fires it and moves on; the
+ * host applies it with no reply. Matches the legacy one-way figure wire and
+ * keeps an interactive producer's input loop unblocked by RPC round-trips. */
 struct yetty_ycore_void_result yetty_yfigure_create_child(struct yetty_yclass_object *obj,
                                                           uint32_t kind_token, uint32_t id,
                                                           struct yetty_ycore_rectangle rect,
@@ -115,8 +115,6 @@ typedef struct yetty_ycore_void_result (*yetty_yfigure_remove_child_by_id_fn)(
     struct yetty_yclass_object *, uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_raise_child_by_id_fn)(
     struct yetty_yclass_object *, uint32_t);
-typedef struct yetty_ycore_void_result (*yetty_yfigure_process_records_fn)(
-    struct yetty_yclass_object *, struct yetty_ycore_buffer);
 typedef struct yetty_ycore_void_result (*yetty_yfigure_create_child_fn)(
     struct yetty_yclass_object *, uint32_t, uint32_t, struct yetty_ycore_rectangle,
     struct yetty_ycore_buffer);
@@ -162,16 +160,6 @@ struct yetty_ycore_void_result yetty_yfigure_container_set_rect(struct yetty_ycl
                                                                 struct yetty_ycore_rectangle rect);
 struct yetty_ycore_void_result yetty_yfigure_container_set_viewport_offset(
     struct yetty_yclass_object *obj, float offset_x, float offset_y);
-struct yetty_ycore_void_result yetty_yfigure_container_consume_envelope(
-    struct yetty_yclass_object *obj, struct yetty_ywire_wire_statemachine *sm);
-/* Coroutine entry registered on the input pipe — its signature is fixed by
- * the wire callback ABI (`yetty_ywire_process_input_fn` = void *userdata, sm),
- * so the handle arrives as an opaque `userdata` that callers set to the
- * container's yclass object. */
-struct yetty_ycore_void_result yetty_yfigure_container_process_input(
-    void *userdata, struct yetty_ywire_wire_statemachine *sm);
-struct yetty_ycore_void_result yetty_yfigure_container_process_records(
-    struct yetty_yclass_object *obj, const uint8_t *bytes, size_t bytes_len);
 struct yetty_yfigure_figure_ptr_result yetty_yfigure_container_as_figure(
     struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yfigure_container_add_child(struct yetty_yclass_object *obj,

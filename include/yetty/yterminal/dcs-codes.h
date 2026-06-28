@@ -38,12 +38,6 @@
  * legacy flat-list producers (ypdf, ycat svg) keep using YDRAW_BIN. */
 #define YETTY_DCS_YDRAW_SCENE_BIN 600004
 
-/* ycompositor envelope — positioned-figure compositor's wire path.
- * Same on-wire shape as YDRAW_SCENE_BIN (yface binary, framed FAM
- * records — `u32 type | u32 payload_size | payload`), but routed to
- * the ycompositor layer which decodes records into a yfigure tree. */
-#define YETTY_DCS_YCOMPOSITOR_BIN 630000
-
 /*
  * yclass RPC. One code covers both directions of a yrpc session:
  * client→server envelopes carry yrpc request frames, server→client

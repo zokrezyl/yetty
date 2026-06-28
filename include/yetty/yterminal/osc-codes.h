@@ -8,11 +8,12 @@
  * control / metadata messages. The client-input channel (mouse / resize
  * / focus / key / subscribe) lives in <yetty/yterminal/client-input.h>.
  *
- * Bulk drawing / figure payloads (ydraw, scene, compositor) used to live
- * here on OSC; they now ride DCS instead — large opaque blobs belong on
- * a Device Control String, which a multiplexer forwards verbatim. See
- * <yetty/yterminal/dcs-codes.h> (YETTY_DCS_YDRAW_*, YETTY_DCS_YCOMPOSITOR_BIN)
- * and the framing rationale in <yetty/ywire/wire-statemachine.h>.
+ * Bulk drawing payloads (ydraw, scene) used to live here on OSC; they now
+ * ride DCS instead — large opaque blobs belong on a Device Control String,
+ * which a multiplexer forwards verbatim. The figure tree is driven over the
+ * typed yclass-RPC channel (YETTY_DCS_YCLASS_RPC). See
+ * <yetty/yterminal/dcs-codes.h> (YETTY_DCS_YDRAW_*) and the framing rationale
+ * in <yetty/ywire/wire-statemachine.h>.
  *
  * 6xxxxx = client → server, 7xxxxx = server → client.
  */

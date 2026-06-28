@@ -745,6 +745,10 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     methods: dict = {}
     classes: dict = {}
     local_slots: set = set()
+    # Slots flagged `oneway@<DOMAIN>:<SLOT>` — their public stub marshals over
+    # RPC fire-and-forget (no response read; server writes none). Void slots
+    # only. See the post-parse application + emit_dispatch_body.
+    oneway_slots: set = set()
     # Slots INTRODUCED via virtual@ in this module (their declaring class is
     # the authoritative owner). Every same-module slot must appear here —
     # see the post-parse enforcement below.
@@ -938,6 +942,20 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
                             # module's wire contract.
                             continue
                         local_slots.add(slot_name)
+                        continue
+                    if role == "oneway":
+                        # `oneway@<DOMAIN>:<SLOT>` — the public stub marshals
+                        # fire-and-forget (RPC_OP_CALL_ONEWAY): no response is
+                        # read and the server writes none. Void slots only
+                        # (enforced post-parse). Like local@, the function it
+                        # rides on is just an anchor for the slot attribute.
+                        require_segments(role, args, 2, "oneway@<DOMAIN>:<SLOT>")
+                        slot_dom, slot_name = args[0], args[1]
+                        if slot_dom != module:
+                            # Foreign-module slot attribute — that module's own
+                            # codegen owns its wire contract; ignore here.
+                            continue
+                        oneway_slots.add(slot_name)
                         continue
                     if role == "virtual":
                         # `virtual@<DOMAIN>:<CLASS>:<SLOT>` — INTRODUCE a virtual
@@ -1135,6 +1153,7 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     # (emit_dispatch_body, emit_lookup_tables) can read off `m["local"]`.
     for m in methods.values():
         m["local"] = m["slot"] in local_slots
+        m["oneway"] = m["slot"] in oneway_slots
     # A `local@` annotation that names a slot we have no impl for is a
     # programmer mistake — without an impl the slot also produces no
     # public stub, so the annotation is dead weight. Surface it loudly.
@@ -1146,6 +1165,21 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
             f"impl in this module: {dangling}. Each local-marked slot must "
             f"have at least one override@ in the same module.\n")
         sys.exit(1)
+    # oneway@ only makes sense for wire-marshalled void slots: a one-way call
+    # reads no response, so a non-void return or a local-only slot is a bug.
+    dangling_oneway = [s for s in oneway_slots if s not in impl_slots]
+    if dangling_oneway:
+        sys.stderr.write(
+            f"error: oneway@{module}:<slot> annotations name slots with no "
+            f"impl in this module: {dangling_oneway}.\n")
+        sys.exit(1)
+    for m in methods.values():
+        if m["oneway"] and m["local"]:
+            sys.stderr.write(
+                f"error: oneway@{module}:{m['slot']} is also local@ — a local "
+                f"slot has no RPC branch to make one-way.\n")
+            sys.exit(1)
+    # The void-return check needs return_payload_type, stamped further below.
     # Every slot owned by THIS module must be INTRODUCED exactly once with
     # virtual@. A slot that only ever appears in override@ has no declared
     # owner — its header home would be guessed from processing order, and a
@@ -1183,6 +1217,15 @@ def parse_sources(include_dirs: list, sources: list, module: str) -> dict:
     for method in model["methods"]:
         method["return_payload_type"] = result_payload_type(
             method["return_type"], payload_types)
+    # one-way is fire-and-forget: it reads no response, so only void slots
+    # qualify (a value return would have nothing to deliver back).
+    for method in model["methods"]:
+        if method.get("oneway") and method["return_payload_type"] is not None:
+            sys.stderr.write(
+                f"error: oneway@{module}:{method['slot']} returns a value — "
+                f"one-way calls read no response, so only void slots may be "
+                f"one-way.\n")
+            sys.exit(1)
     # Map of module-locally-defined type tags -> defining source file, so the
     # header emitter knows which by-value types it may reproduce in full (and
     # in which stem's header) versus which arrive via an #include.
@@ -1520,7 +1563,20 @@ def emit_dispatch_body(m: dict) -> str:
     # sized to fit (yetty_yclass_rpc_call_alloc) rather than a fixed stack
     # buffer. A remote error is rebuilt with yetty_ycore_error_deserialize and
     # returned as the cause of a locally-raised head, symmetric with the value.
-    if vt is None:
+    if vt is None and m.get("oneway"):
+        # Fire-and-forget: marshal the args and return without reading a
+        # response. The caller cannot observe a remote error — matching the
+        # legacy one-way figure wire — so an interactive producer never blocks
+        # its input loop on a reply.
+        remote_call = f"""\
+{body_setup}\
+        struct yetty_ycore_void_result rpc_call_r = yetty_yclass_rpc_call_oneway(
+            {obj_name}->session, remote_id, {body_arg});
+{body_cleanup}\
+        YETTY_RETURN_IF_ERR({rid}, rpc_call_r, "{qs}: one-way RPC call failed");
+        return YETTY_OK_VOID();
+"""
+    elif vt is None:
         remote_call = f"""\
 {body_setup}\
         uint8_t *resp_buf = NULL;

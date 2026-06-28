@@ -14,6 +14,7 @@ methods:
  * — a no-op default, NOT an error: main.c calls this unconditionally
  * at shutdown to never leave a CLI blocked on an unanswered prompt. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: handle_event
     domain: yai
@@ -28,6 +29,7 @@ methods:
         type: "struct yyjson_val *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: send_user_message
     domain: yai
@@ -42,6 +44,7 @@ methods:
         type: "const char *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: interrupt
     domain: yai
@@ -54,6 +57,7 @@ methods:
         type: "struct yai_app *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: start
     domain: yai
@@ -66,6 +70,7 @@ methods:
         type: "struct yai_app *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: describe_config
     domain: yai
@@ -87,6 +92,7 @@ methods:
  * HUD is up, or as scrollback text without one. Errors on truncation.
  * Default: an engine with no knobs writes an empty string. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: config_knob
     domain: yai
@@ -106,6 +112,7 @@ methods:
  * renders it as a radio group; a selection lands back in apply_config.
  * Default: no knob (empty string). */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: apply_config
     domain: yai
@@ -128,6 +135,7 @@ methods:
  * protocol override this (claude pushes the new permission mode into the
  * running session immediately). */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: on_child_exit
     domain: yai
@@ -142,6 +150,7 @@ methods:
         type: int64_t
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: on_child_eof
     domain: yai
@@ -154,6 +163,7 @@ methods:
         type: "struct yai_app *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: feed_byte
     domain: yai
@@ -168,6 +178,7 @@ methods:
         type: int
     doc: null
     local: true
+    oneway: false
     return_payload_type: int
 classes:
   - name: claude
