@@ -10,11 +10,11 @@
  *     here — multiple canvases on the same client each track their own
  *     in-flight requests.
  *
- * Outbound wire shape: every CMD/BULK/BYE goes out as a record inside
- * a YETTY_DCS_YCOMPOSITOR_BIN envelope of shape `{u32 length, u32 id,
- * u32 SUB_OP, payload...}`. canvas_create emits a CREATE_CHILD admin
- * record (id=0) whose init_payload is the SUB_HELLO body, so the
- * server-side figure is bound to its session in the same envelope.
+ * Outbound wire shape: every CMD/BULK/BYE goes out via
+ * yetty_yfigure_apply_child_body addressed to the canvas's figure id, with a
+ * body of shape `{u32 SUB_OP, payload...}`, over yclass-RPC. canvas_create
+ * calls yetty_yfigure_create_child whose init is the SUB_HELLO body, so the
+ * server-side figure is bound to its session at creation.
  */
 #include <yetty/yrdawn/client.h>
 
@@ -22,16 +22,15 @@
 #include <string.h>
 
 #include <yetty/ycore/result.h>
+#include <yetty/ycore/types.h>
 #include <yetty/ytrace/ytrace.h>
 #include <yetty/yface/yface.h>
-#include <yetty/yfigure/wire.h>
+#include <yetty/yfigure/container.h>
+#include <yetty/yfigure/producer.h>
+#include <yetty/yfigure/registry.h>
 #include <yetty/yplatform/io.h>
 #include <yetty/yplatform/time.h>
 #include <yetty/yrdawn/wire.h>
-
-/* Local copy — pulling <yetty/yterminal/dcs-codes.h> would drag in
- * terminal-only constants for a single value. */
-#define YETTY_YRDAWN_CLIENT_DCS_COMPOSITOR_BIN 630000
 
 struct pending_req {
     uint32_t req_id; /* 0 = free slot */
@@ -60,6 +59,15 @@ struct yetty_yrdawn_client {
     int in_fd;
     int out_fd;
     uint32_t session_id;
+
+    /* Figure-tree emit path. Attached once at client creation: the
+     * handshake (slot resolution + GET_ROOT) reads in_fd one time before
+     * the pump loop runs, and the typed yetty_yfigure_* stubs marshal
+     * create/delete/body over the session via this container proxy. The
+     * inbound yrdawn reply/event OSC protocol (72xxxx) is unaffected — it
+     * still flows through in_face / yetty_yrdawn_client_pump. */
+    struct yetty_yfigure_producer_session *producer_session;
+    struct yetty_yclass_object *container;
 
     struct yetty_yface *in_face;
 
@@ -298,6 +306,23 @@ struct yetty_yrdawn_client_ptr_result yetty_yrdawn_client_create(int in_fd, int 
     c->in_face = fr.value;
     yetty_yface_set_handlers(c->in_face, on_osc, on_raw, c);
 
+    /* Attach to the host root figure container over the yclass RPC
+     * transport. read_fd = terminal→tool (in_fd), write_fd = tool→terminal
+     * (out_fd). compressed=1 (base64+lz4) matches the old figure-tree wire's
+     * use of compression for CMD/BULK records. The handshake reads in_fd
+     * once here, before any pump loop runs. */
+    struct yetty_yfigure_producer_session_ptr_result attach_res =
+        yetty_yfigure_producer_attach(c->in_fd, c->out_fd, /*compressed=*/1);
+    if (YETTY_IS_ERR(attach_res)) {
+        yetty_yface_destroy(c->in_face);
+        free(c->rx_buf);
+        free(c);
+        return YETTY_ERR(yetty_yrdawn_client_ptr, "yrdawn_client_create: producer_attach",
+                         attach_res);
+    }
+    c->producer_session = attach_res.value;
+    c->container = yetty_yfigure_producer_session_container(c->producer_session);
+
     return YETTY_OK(yetty_yrdawn_client_ptr, c);
 }
 
@@ -316,6 +341,18 @@ struct yetty_ycore_void_result yetty_yrdawn_client_destroy(struct yetty_yrdawn_c
         }
     }
     free(c->canvases);
+    /* Detach the figure-tree producer session (destroys the owned RPC
+     * transport + container proxy). Best-effort at teardown. Done after the
+     * canvases above have emitted their DELETE_CHILD over the session. */
+    if (c->producer_session) {
+        struct yetty_ycore_void_result detach_res =
+            yetty_yfigure_producer_detach(c->producer_session);
+        if (YETTY_IS_ERR(detach_res)) {
+            yetty_ycore_error_destroy(detach_res.error);
+        }
+        c->producer_session = NULL;
+        c->container = NULL;
+    }
     if (c->in_face) {
         yetty_yface_destroy(c->in_face);
     }
@@ -345,52 +382,60 @@ uint64_t yetty_yrdawn_client_alloc_handle(struct yetty_yrdawn_client *c)
 }
 
 /*===========================================================================
- * Outbound: container envelope writer
+ * Outbound: figure-tree emit via typed container stubs
  *
- * Every outbound record gets wrapped in `{u32 record_length, u32 id}
- * + payload` and ridden on YETTY_DCS_YCOMPOSITOR_BIN. payload always
- * starts with a u32 SUB_OP (figure-targeted) or u32 admin_op (id==0
- * container admin).
+ * create/delete/body all route through the yclass RPC container proxy
+ * (c->container) attached at client creation. The figure child decodes
+ * each body as `u32 sub_op` followed by the sub-op payload.
  *=========================================================================*/
 
-static struct yetty_ycore_void_result emit_envelope(struct yetty_yrdawn_client *c, int compressed,
-                                                    const uint8_t *body, size_t body_len)
-{
-    return yetty_yface_emit_to_fd(c->out_fd, YETTY_YRDAWN_CLIENT_DCS_COMPOSITOR_BIN, compressed,
-                                  NULL, 0, body, body_len);
-}
-
-/* Emit one figure-tree record (id != 0) carrying SUB_OP + body. */
+/* Route one figure-targeted body to child `figure_id` via the typed
+ * apply_child_body stub. The body framing is `{u32 sub_op} ++ body` —
+ * byte-identical to what the legacy id-targeted record carried after its
+ * {length, id} record header, which the figure's process_bytes decodes as
+ * `sub_op` followed by the sub-op payload. `compressed` is no longer
+ * meaningful here (the producer session owns transport compression) and is
+ * accepted only to keep the call sites unchanged. */
 static struct yetty_ycore_void_result emit_record(struct yetty_yrdawn_client *c, uint32_t figure_id,
                                                   int compressed, uint32_t sub_op, const void *body,
                                                   size_t body_len)
 {
-    size_t inner_len = 4u + body_len;  /* sub_op + body */
-    size_t frame_len = 8u + inner_len; /* record hdr + inner */
-    uint8_t *frame = malloc(frame_len);
-    if (!frame) {
+    (void)compressed;
+    if (!c->container) {
+        return YETTY_ERR(yetty_ycore_void, "yrdawn_client: emit_record no container");
+    }
+    size_t inner_len = 4u + body_len; /* sub_op + body */
+    uint8_t *inner = malloc(inner_len);
+    if (!inner) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_client: emit_record oom");
     }
-    uint32_t length = (uint32_t)inner_len;
-    memcpy(frame + 0, &length, 4);
-    memcpy(frame + 4, &figure_id, 4);
-    memcpy(frame + 8, &sub_op, 4);
+    memcpy(inner + 0, &sub_op, 4);
     if (body_len) {
-        memcpy(frame + 12, body, body_len);
+        memcpy(inner + 4, body, body_len);
     }
-    struct yetty_ycore_void_result r = emit_envelope(c, compressed, frame, frame_len);
-    free(frame);
+    struct yetty_ycore_buffer body_buf = {
+        .data = inner,
+        .size = inner_len,
+        .capacity = 0,
+    };
+    struct yetty_ycore_void_result r =
+        yetty_yfigure_apply_child_body(c->container, figure_id, body_buf);
+    free(inner);
     return r;
 }
 
-/* Emit a CREATE_CHILD admin record (id == 0) carrying SUB_HELLO. */
+/* Create the yrdawn figure child via the typed container stub. The init
+ * payload is `{u32 SUB_HELLO} + struct yetty_yrdawn_wire_hello` — exactly
+ * what the figure's process_bytes decodes to bind the new child to its
+ * session. */
 static struct yetty_ycore_void_result emit_create_child(struct yetty_yrdawn_client *c,
                                                         uint32_t figure_id, float min_x,
                                                         float min_y, float max_x, float max_y,
                                                         uint32_t session_id)
 {
-    /* Admin payload: u32 admin_op | u32 child_id | u32 kind | f32 rect[4] |
-     *                u32 init_bytes | init... */
+    if (!c->container) {
+        return YETTY_ERR(yetty_ycore_void, "yrdawn_client: emit_create_child no container");
+    }
     struct yetty_yrdawn_wire_hello hello = {
         .magic = YETTY_YRDAWN_MAGIC_HELLO,
         .version = YETTY_YRDAWN_WIRE_VERSION,
@@ -401,63 +446,37 @@ static struct yetty_ycore_void_result emit_create_child(struct yetty_yrdawn_clie
     uint32_t sub_op = YETTY_YRDAWN_FIGURE_SUB_HELLO;
 
     size_t init_bytes = sizeof(sub_op) + sizeof(hello);
-    size_t admin_len = 4u + 4u + 4u + 16u + 4u + init_bytes;
-    size_t frame_len = 8u + admin_len;
-    uint8_t *frame = malloc(frame_len);
-    if (!frame) {
+    uint8_t *init = malloc(init_bytes);
+    if (!init) {
         return YETTY_ERR(yetty_ycore_void, "yrdawn_client: emit_create_child oom");
     }
-    uint8_t *p = frame;
+    memcpy(init, &sub_op, sizeof(sub_op));
+    memcpy(init + sizeof(sub_op), &hello, sizeof(hello));
 
-    uint32_t length = (uint32_t)admin_len;
-    uint32_t id_zero = 0;
-    memcpy(p, &length, 4);
-    p += 4;
-    memcpy(p, &id_zero, 4);
-    p += 4;
-
-    uint32_t admin_op = YETTY_YFIGURE_ADMIN_CREATE_CHILD;
-    memcpy(p, &admin_op, 4);
-    p += 4;
-    memcpy(p, &figure_id, 4);
-    p += 4;
-    uint32_t kind = YETTY_YFIGURE_KIND_YRDAWN;
-    memcpy(p, &kind, 4);
-    p += 4;
-    float rect_floats[4] = {min_x, min_y, max_x, max_y};
-    memcpy(p, rect_floats, 16);
-    p += 16;
-    uint32_t init_len = (uint32_t)init_bytes;
-    memcpy(p, &init_len, 4);
-    p += 4;
-    memcpy(p, &sub_op, 4);
-    p += 4;
-    memcpy(p, &hello, sizeof(hello));
-    p += sizeof(hello);
-    (void)p;
-
-    /* Admin records contain version/sizes; raw b64 is fine. */
-    struct yetty_ycore_void_result r = emit_envelope(c, 0, frame, frame_len);
-    free(frame);
+    uint32_t kind = yetty_yfigure_kind_token("yrdawn");
+    struct yetty_ycore_rectangle rect = {
+        .min = {.x = min_x, .y = min_y},
+        .max = {.x = max_x, .y = max_y},
+    };
+    struct yetty_ycore_buffer init_buf = {
+        .data = init,
+        .size = init_bytes,
+        .capacity = 0,
+    };
+    struct yetty_ycore_void_result r =
+        yetty_yfigure_create_child(c->container, kind, figure_id, rect, init_buf);
+    free(init);
     return r;
 }
 
-/* Emit a DELETE_CHILD admin record (id == 0). */
+/* Delete the yrdawn figure child via the typed container stub. */
 static struct yetty_ycore_void_result emit_delete_child(struct yetty_yrdawn_client *c,
                                                         uint32_t figure_id)
 {
-    /* Admin payload: u32 admin_op | u32 child_id */
-    size_t admin_len = 4u + 4u;
-    size_t frame_len = 8u + admin_len;
-    uint8_t frame[16];
-    uint32_t length = (uint32_t)admin_len;
-    uint32_t id_zero = 0;
-    uint32_t admin_op = YETTY_YFIGURE_ADMIN_DELETE_CHILD;
-    memcpy(frame + 0, &length, 4);
-    memcpy(frame + 4, &id_zero, 4);
-    memcpy(frame + 8, &admin_op, 4);
-    memcpy(frame + 12, &figure_id, 4);
-    return emit_envelope(c, 0, frame, frame_len);
+    if (!c->container) {
+        return YETTY_ERR(yetty_ycore_void, "yrdawn_client: emit_delete_child no container");
+    }
+    return yetty_yfigure_delete_child(c->container, figure_id);
 }
 
 /*===========================================================================

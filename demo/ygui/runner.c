@@ -30,7 +30,6 @@
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/yshadertoy/figure.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yfont/msdf-font.h>
@@ -80,16 +79,13 @@ struct demo_runner {
     const char *name;
     demo_build_fn build;
 
-    struct yetty_ygui_framework *engine;
+    struct yetty_yclass_object *engine;
     struct yetty_yclass_object *root;
 
     struct yetty_yframework *yframework;
-    struct yetty_yplatform_memory_pty_pair pty_pair;
-    int has_pty_pair;
     struct yetty_yclass_object *root_container;
     struct yetty_yfigure_registry *figure_registry;
     struct yetty_ydraw_composite_factory *composite_factory;
-    struct yetty_ywire_wire_statemachine *wire_sm;
     struct yetty_yfont_font *font;
     struct yetty_ygrid_factory_args figure_args;
     struct yetty_yevent_event_listener listener;
@@ -119,7 +115,8 @@ struct demo_runner {
  * yclass: the only hand-written file is this annotated runner.c; runner.gen.c is
  * #included at the foot.
  */
-struct [[clang::annotate("class@demoygui:app")]] [[clang::annotate("parent@yapp:app")]] yetty_demoygui_app {
+struct [[clang::annotate("class@demoygui:app")]] [[clang::annotate("parent@yapp:app")]]
+yetty_demoygui_app {
     struct demo_runner runner;
 };
 
@@ -158,7 +155,7 @@ static struct yetty_ycore_int_result frame_tick(struct yetty_yevent_event_listen
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-struct yetty_ygui_framework *demo_runner_engine(struct demo_runner *r)
+struct yetty_yclass_object *demo_runner_engine(struct demo_runner *r)
 {
     return r ? r->engine : NULL;
 }
@@ -207,7 +204,7 @@ static const char *encode_key(uint32_t key, char *scratch, size_t scratch_n, siz
     }
 }
 
-static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, void *userdata)
+static int on_key(struct yetty_yclass_object *engine, uint32_t key, int mods, void *userdata)
 {
     (void)engine;
     (void)mods;
@@ -219,31 +216,6 @@ static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, v
         return 1;
     }
     return 0;
-}
-
-/* Slave end of the memory-pty pair: a resize on the producer (ygui) endpoint
- * arrives here — the SIGWINCH analog — and sizes the compositor's root
- * container from the pixel extent. cols/rows are terminal-grid concepts the
- * compositor has no use for. */
-static void runner_pty_resize_cb(void *userdata, uint32_t cols, uint32_t rows, uint32_t pixel_w,
-                                 uint32_t pixel_h)
-{
-    struct demo_runner *r = userdata;
-    (void)cols;
-    (void)rows;
-    if (!r->root_container) {
-        return;
-    }
-    struct yetty_ycore_rectangle rr = {.min = {0, 0}, .max = {(float)pixel_w, (float)pixel_h}};
-    struct yetty_yfigure_figure_ptr_result figure_res =
-        yetty_yfigure_container_as_figure(r->root_container);
-    if (YETTY_IS_ERR(figure_res)) {
-        yetty_ycore_error_destroy(figure_res.error);
-        return;
-    }
-    struct yetty_yfigure_figure *rf = figure_res.value;
-    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(rf)-1, rr);
-    yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 1);
 }
 
 /* Re-paint the chrome caption: ask ychrome to render its titlebar+buttons into
@@ -364,15 +336,11 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
             return YETTY_OK(yetty_ycore_int, 1);
         }
         if (yetty_ygui_framework_is_dirty(r->engine)) {
+            /* Direct dispatch: emit applies the figure tree straight into the
+             * local root container (no wire statemachine to pump afterward). */
             struct yetty_ycore_void_result er = yetty_ygui_framework_emit(r->engine);
             if (YETTY_IS_ERR(er)) {
                 yetty_ycore_error_destroy(er.error);
-            }
-        }
-        if (r->wire_sm) {
-            struct yetty_ycore_void_result pr = yetty_ywire_wire_statemachine_process(r->wire_sm);
-            if (YETTY_IS_ERR(pr)) {
-                yetty_ycore_error_destroy(pr.error);
             }
         }
         struct yetty_ycore_void_result cl = r->render_target->ops->clear(r->render_target);
@@ -380,19 +348,12 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
             yetty_ycore_error_destroy(cl.error);
         }
         if (r->root_container) {
-            struct yetty_yfigure_figure_ptr_result figure_res =
-                yetty_yfigure_container_as_figure(r->root_container);
-            if (YETTY_IS_ERR(figure_res)) {
-                yetty_ycore_error_destroy(figure_res.error);
-            } else {
-                struct yetty_yfigure_figure *rf = figure_res.value;
-                struct yetty_ycore_void_result rr =
-                    yetty_yfigure_render((struct yetty_yclass_object *)rf - 1, r->render_target);
-                if (YETTY_IS_ERR(rr)) {
-                    yetty_ycore_error_destroy(rr.error);
-                }
-                yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(rf)-1, 0);
+            struct yetty_ycore_void_result rr =
+                yetty_yfigure_render(r->root_container, r->render_target);
+            if (YETTY_IS_ERR(rr)) {
+                yetty_ycore_error_destroy(rr.error);
             }
+            yetty_yfigure_figure_dirty_set(r->root_container, 0);
         }
         struct yetty_ycore_void_result pp = r->render_target->ops->present(r->render_target);
         if (YETTY_IS_ERR(pp)) {
@@ -431,19 +392,20 @@ static struct yetty_ycore_int_result event_handler(struct yetty_yevent_event_lis
                 yetty_ycore_error_destroy(vr.error);
             }
         }
-        /* Drive the compositor-side rect through the pty pair (→
-         * runner_pty_resize_cb) rather than poking the container directly, so
-         * the resize travels the pair like a real PTY's TIOCSWINSZ. */
-        if (r->pty_pair.a && r->pty_pair.a->ops->resize) {
-            struct yetty_ycore_void_result rrz = r->pty_pair.a->ops->resize(
-                r->pty_pair.a, 0, 0, (uint32_t)ev->resize.width, (uint32_t)ev->resize.height);
-            if (YETTY_IS_ERR(rrz)) {
-                yetty_ycore_error_destroy(rrz.error);
-            }
+        /* Size the compositor's root container directly. (The legacy route
+         * travelled this through the memory-pty pair so it reached the receiver
+         * like a real PTY's TIOCSWINSZ; with direct in-process dispatch the
+         * container is local, so we set its rect here.) */
+        if (r->root_container) {
+            struct yetty_ycore_rectangle rr = {
+                .min = {0, 0}, .max = {(float)ev->resize.width, (float)ev->resize.height}};
+            yetty_yfigure_figure_rect_set(r->root_container, rr);
+            yetty_yfigure_figure_dirty_set(r->root_container, 1);
         }
         /* Keep chrome's edge bands + the caption figure tracking the window. */
         if (r->enable_chrome && r->chrome) {
-            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(r->chrome, (float)ev->resize.width, (float)ev->resize.height);
+            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(
+                r->chrome, (float)ev->resize.width, (float)ev->resize.height);
             if (YETTY_IS_ERR(csz)) {
                 yetty_ycore_error_destroy(csz.error);
             }
@@ -656,13 +618,11 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
         struct yetty_ycore_void_result rf =
             yetty_ygrid_register_factory(r->figure_registry, &r->figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "demo_runner: ygrid_register_factory");
-        const uint32_t producer_kinds[] = {
-            YETTY_YFIGURE_KIND_YPLOT,
-            YETTY_YFIGURE_KIND_YIMAGE,
-        };
-        for (size_t i = 0; i < sizeof(producer_kinds) / sizeof(producer_kinds[0]); ++i) {
+        const char *const producer_kind_names[] = {"yplot", "yimage"};
+        for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); ++i) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
-                r->figure_registry, producer_kinds[i], &r->figure_args);
+                r->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
+                &r->figure_args);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, kr,
                                 "demo_runner: ygrid_register_factory_for_kind");
         }
@@ -685,30 +645,28 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
         yetty_yfigure_container_set_rect(r->root_container, root_rect);
     }
 
-    /* Memory pty pair → wire SM → container. */
+    /* ygui framework, driven into the local root container by DIRECT
+     * in-process yclass dispatch.
+     *
+     * Producer (the ygui framework) and receiver (the root figure container)
+     * live in this one process on a single thread, so there is no
+     * out-of-process transport: framework_create(NULL) leaves the output pty
+     * unset, and set_container_obj wires the framework's typed yfigure_* stubs
+     * straight at the local container object. framework_emit then applies every
+     * figure-tree mutation inline via those stubs (session NULL → local
+     * dispatch, zero wire).
+     *
+     * The deleted legacy route shipped a one-way figure-tree record stream over
+     * an in-process memory-pty into a wire statemachine that decoded it into the
+     * container. Direct dispatch removes the serialize/parse round and the
+     * memory-pty + wire-statemachine entirely. */
     {
-        struct yetty_yplatform_memory_pty_pair_result pr =
-            yetty_yplatform_memory_pty_pair_create(0);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "demo_runner: memory_pty_pair_create");
-        r->pty_pair = pr.value;
-        r->has_pty_pair = 1;
-    }
-    {
-        struct yetty_ywire_wire_statemachine_ptr_result sr =
-            yetty_ywire_wire_statemachine_create(r->pty_pair.b);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "demo_runner: wire_sm_create");
-        r->wire_sm = sr.value;
-        struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
-            r->wire_sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN, /*has_args=*/1,
-            yetty_yfigure_container_process_input, r->root_container);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "demo_runner: wire_sm register");
-    }
-
-    /* ygui framework on producer end. */
-    {
-        struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(r->pty_pair.a);
+        struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "demo_runner: framework_create");
         r->engine = fr.value;
+        struct yetty_ycore_void_result scr =
+            yetty_ygui_framework_set_container_obj(r->engine, r->root_container);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, scr, "demo_runner: set_container_obj");
         struct yetty_ycore_void_result vr = yetty_ygui_framework_set_viewport(
             r->engine, (float)gpu->surface_width, (float)gpu->surface_height);
         if (YETTY_IS_ERR(vr)) {
@@ -785,12 +743,14 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
         struct yetty_yclass_object_ptr_result cor = yetty_ychrome_chrome_create(NULL);
         if (YETTY_IS_OK(cor)) {
             r->chrome = cor.value;
-            struct yetty_ycore_void_result ccfg = yetty_ychrome_configure(r->chrome, r->yframework->window_chrome, DEMO_CHROME_CAPTION_H,
+            struct yetty_ycore_void_result ccfg = yetty_ychrome_configure(
+                r->chrome, r->yframework->window_chrome, DEMO_CHROME_CAPTION_H,
                 /*edge_size=*/8.0f, YETTY_YCHROME_FLAG_ALL);
             if (YETTY_IS_ERR(ccfg)) {
                 yetty_ycore_error_destroy(ccfg.error);
             }
-            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(r->chrome, (float)gpu->surface_width, (float)gpu->surface_height);
+            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(
+                r->chrome, (float)gpu->surface_width, (float)gpu->surface_height);
             if (YETTY_IS_ERR(csz)) {
                 yetty_ycore_error_destroy(csz.error);
             }
@@ -816,15 +776,10 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "demo_runner: build");
     }
 
-    /* Wake → request_render so producer writes drive the event loop. */
-    yetty_yplatform_memory_pty_set_wake(
-        r->pty_pair.b,
-        (yetty_yplatform_memory_pty_wake_fn)r->yframework->event_loop->ops->request_render,
-        r->yframework->event_loop);
-
-    /* Window-size changes reach the compositor end through the pair, the same
-     * way bytes do. */
-    yetty_yplatform_memory_pty_set_resize(r->pty_pair.b, runner_pty_resize_cb, r);
+    /* No memory-pty wake/resize wiring: with direct in-process dispatch the
+     * framework applies into the root container synchronously inside the render
+     * loop's framework_emit call, and the resize event handler sizes the root
+     * container directly (see YETTY_YCORE_RESIZE above). */
 
     r->listener.handler = event_handler;
     struct yetty_ycore_void_result rel =
@@ -856,8 +811,7 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
         }
     }
 
-    yetty_yevent_post_async(input_pipe,
-                            &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
+    yetty_yevent_post_async(input_pipe, &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
     struct yetty_ycore_void_result run_res =
         r->yframework->event_loop->ops->start(r->yframework->event_loop);
@@ -880,40 +834,10 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
         }
         r->engine = NULL;
     }
-    if (r->wire_sm) {
-        struct yetty_ycore_void_result dr = yetty_ywire_wire_statemachine_destroy(r->wire_sm);
+    if (r->root_container) {
+        struct yetty_ycore_void_result dr = yetty_yfigure_destroy(r->root_container);
         if (YETTY_IS_ERR(dr)) {
             yetty_ycore_error_destroy(dr.error);
-        }
-        r->wire_sm = NULL;
-    }
-    if (r->has_pty_pair) {
-        if (r->pty_pair.a && r->pty_pair.a->ops->destroy) {
-            struct yetty_ycore_void_result dr = r->pty_pair.a->ops->destroy(r->pty_pair.a);
-            if (YETTY_IS_ERR(dr)) {
-                yetty_ycore_error_destroy(dr.error);
-            }
-        }
-        if (r->pty_pair.b && r->pty_pair.b->ops->destroy) {
-            struct yetty_ycore_void_result dr = r->pty_pair.b->ops->destroy(r->pty_pair.b);
-            if (YETTY_IS_ERR(dr)) {
-                yetty_ycore_error_destroy(dr.error);
-            }
-        }
-        r->has_pty_pair = 0;
-    }
-    if (r->root_container) {
-        struct yetty_yfigure_figure_ptr_result figure_res =
-            yetty_yfigure_container_as_figure(r->root_container);
-        if (YETTY_IS_ERR(figure_res)) {
-            yetty_ycore_error_destroy(figure_res.error);
-        } else {
-            struct yetty_yfigure_figure *rf = figure_res.value;
-            struct yetty_ycore_void_result dr =
-                yetty_yfigure_destroy((struct yetty_yclass_object *)rf - 1);
-            if (YETTY_IS_ERR(dr)) {
-                yetty_ycore_error_destroy(dr.error);
-            }
         }
         r->root_container = NULL;
     }
@@ -1097,7 +1021,7 @@ struct client_state {
     int running;
 };
 
-static int client_on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods,
+static int client_on_key(struct yetty_yclass_object *engine, uint32_t key, int mods,
                          void *userdata)
 {
     (void)engine;
@@ -1338,10 +1262,15 @@ static void client_sigwinch_cb(uv_signal_t *handle, int signum)
  * the hosting yetty. */
 static void client_frame_cb(uv_timer_t *handle)
 {
-    struct client_state *cs = (struct client_state *)handle->data;
-    if (cs->runner && cs->runner->engine) {
-        yetty_ygui_framework_mark_dirty(cs->runner->engine);
-    }
+    /* Deliberately does NOT force a redraw. The client renders on demand:
+     * real input and state changes mark the framework dirty (feed_mouse_*,
+     * key dispatch, widget callbacks), and client_prep_cb ships a frame only
+     * when dirty. Forcing dirty every tick re-shipped the full ygrid body at
+     * ~30 fps over the wire even when nothing changed — a constant flood whose
+     * synchronous write stalls the uv loop (and input handling) for seconds
+     * whenever the host falls behind. The timer is kept only to keep the loop
+     * ticking so client_prep_cb runs promptly after a change. */
+    (void)handle;
 }
 
 static void client_prep_cb(uv_prepare_t *handle)
@@ -1382,7 +1311,7 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
         return 1;
     }
 
-    struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(&cs.out.base);
+    struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
     if (YETTY_IS_ERR(fr)) {
         yetty_ycore_error_print(stderr, "demo_runner client: framework_create", fr.error);
         yetty_ycore_error_destroy(fr.error);
@@ -1394,6 +1323,25 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
     cs.runner = &r;
     cs.running = 1;
     yetty_ygui_framework_set_key_cb(r.engine, client_on_key, &cs);
+
+    /* Wire the framework's figure output to the host yetty's root container over
+     * the yclass RPC transport: read_fd = our stdin (RPC responses from the
+     * host), write_fd = our stdout (RPC requests to the host). The legacy
+     * one-way figure-record-over-pty path is gone; without this attach the
+     * framework has no container and framework_emit fails "no container". The
+     * producer_attach get_root handshake is synchronous and must complete before
+     * the uv loop below starts polling stdin. framework_attach stores the
+     * producer session on the framework; framework_destroy tears it down. */
+    {
+        struct yetty_ycore_void_result attach_res =
+            yetty_ygui_framework_attach(r.engine, STDIN_FILENO, STDOUT_FILENO, /*compressed=*/1);
+        if (YETTY_IS_ERR(attach_res)) {
+            yetty_ycore_error_print(stderr, "demo_runner client: framework_attach",
+                                    attach_res.error);
+            yetty_ycore_error_destroy(attach_res.error);
+            return 1;
+        }
+    }
 
     /* Same two-level root the standalone path uses: outer vbox owning
      * the viewport, inner body panel with the brand background and
@@ -1408,8 +1356,7 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
             return 1;
         }
         r.root = rr.value;
-        struct yetty_ygui_layout_const_ptr_result layout_res =
-            yetty_ygui_widget_layout_get(r.root);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(r.root);
         if (YETTY_IS_ERR(layout_res)) {
             yetty_ycore_error_print(stderr, "demo_runner client: root layout_get",
                                     layout_res.error);

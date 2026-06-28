@@ -34,11 +34,11 @@
  * distinct light brand color per field. The field colors are FOREGROUND
  * only and end with YAI_FG_DEFAULT (not YAI_RESET), so the bar's mint
  * background carries through the whole row. */
-#define YAI_HUD_BG "\033[48;2;20;42;35m"           /* dark mint canvas */
-#define YAI_MINT_BRIGHT "\033[38;2;116;197;165m"   /* brightest mint — live activity */
-#define YAI_PRIMARY "\033[38;2;224;229;228m"       /* off-white — the model */
-#define YAI_SECONDARY "\033[38;2;159;167;168m"     /* cool gray — secondary text */
-#define YAI_FG_DEFAULT "\033[39m"                  /* reset foreground only (keep bg) */
+#define YAI_HUD_BG "\033[48;2;20;42;35m"         /* dark mint canvas */
+#define YAI_MINT_BRIGHT "\033[38;2;116;197;165m" /* brightest mint — live activity */
+#define YAI_PRIMARY "\033[38;2;224;229;228m"     /* off-white — the model */
+#define YAI_SECONDARY "\033[38;2;159;167;168m"   /* cool gray — secondary text */
+#define YAI_FG_DEFAULT "\033[39m"                /* reset foreground only (keep bg) */
 
 /* Per-message streaming state + render configuration. */
 struct yai_renderer {
@@ -89,14 +89,14 @@ struct yai_renderer {
      * and no glyph is ever left animating in history (a visible shader
      * glyph pins the host's animation timer).
      */
-    int pin_enabled;          /* stdout is a tty — the zone may be drawn */
-    int pin_shader_glyphs;    /* host is yetty: PUA-B glyphs animate */
-    int pin_active;           /* prompt pinned (off during shutdown/shell) */
-    int zone_visible;         /* the zone is on screen right now */
-    int zone_rows_above;      /* ticker rows drawn above the prompt row */
-    int zone_rows_below;      /* menu rows drawn below the prompt row */
-    char activity_glyph[8];   /* UTF-8 glyph; "" while idle */
-    const char *edit_buffer;  /* the line editor's buffer (borrowed) */
+    int pin_enabled;         /* stdout is a tty — the zone may be drawn */
+    int pin_shader_glyphs;   /* host is yetty: PUA-B glyphs animate */
+    int pin_active;          /* prompt pinned (off during shutdown/shell) */
+    int zone_visible;        /* the zone is on screen right now */
+    int zone_rows_above;     /* ticker rows drawn above the prompt row */
+    int zone_rows_below;     /* menu rows drawn below the prompt row */
+    char activity_glyph[8];  /* UTF-8 glyph; "" while idle */
+    const char *edit_buffer; /* the line editor's buffer (borrowed) */
     const size_t *edit_length;
     const size_t *edit_cursor;   /* byte offset of the editor cursor */
     const char *edit_status_ptr; /* borrowed mode indicator ("[N]"/""); may be NULL */

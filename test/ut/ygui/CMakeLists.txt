@@ -63,8 +63,8 @@ target_include_directories(ygui-figure-test PRIVATE
 target_link_libraries(ygui-figure-test PRIVATE
     yetty_ygui
     yetty_ycore
+    yetty_yfigure
     yetty_yplatform_core
-    yetty_yface
     m
 )
 

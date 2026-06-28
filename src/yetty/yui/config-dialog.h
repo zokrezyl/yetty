@@ -21,7 +21,7 @@
 extern "C" {
 #endif
 
-struct yetty_ygui_framework;
+struct yetty_yclass_object;
 struct yetty_yconfig_config;
 struct yetty_yui_config_dialog;
 
@@ -33,7 +33,7 @@ YETTY_YRESULT_DECLARE(yetty_yui_config_dialog_ptr, struct yetty_yui_config_dialo
  * yetty). Returns the new handle, or an error if widget allocation
  * failed. */
 struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
-    struct yetty_ygui_framework *engine, const struct yetty_yconfig_config *config);
+    struct yetty_yclass_object *engine, const struct yetty_yconfig_config *config);
 
 /* Free the heap-owned callback bundles. The widget tree is destroyed
  * by engine_destroy — do not touch widgets here. NULL-safe. */

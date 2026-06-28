@@ -6,7 +6,7 @@
  * list. It does NOT render itself — a flame is a frontend. In one-shot mode the
  * caller ships the drawable list into the scrolling layer (YDRAW_BIN, like
  * ycat); in interactive mode it ships the same list to a remote server figure
- * via `yview` (YCOMPOSITOR_BIN) and drives hover-highlight + click-to-zoom by
+ * via `yview` over yclass-RPC and drives hover-highlight + click-to-zoom by
  * re-rendering. `yfigure` is the backend that displays it; this class is the
  * frontend that produces the picture.
  *

@@ -153,6 +153,14 @@ YETTY_YRESULT_DECLARE(yetty_yclass_impl_t, yetty_yclass_impl_t);
 YETTY_YRESULT_DECLARE(yetty_yclass_const_char_ptr, const char *);
 YETTY_YRESULT_DECLARE(yetty_yclass_void_ptr, void *); /* opaque ptr (data slice / handle) */
 
+/* Wrap a server-minted `handle` (e.g. from RPC_OP_GET_ROOT / RPC_OP_CREATE)
+ * into a client-side proxy object bound to `session`, so its generated method
+ * stubs marshal over the session. `klass` may be NULL — the remote-dispatch
+ * path reads only session + handle; it is stored for callers that also want
+ * local introspection. Caller frees the returned object with free(). */
+struct yetty_yclass_object_ptr_result yetty_yclass_object_proxy_create(
+    struct yetty_yclass_rpc_session *session, uint64_t handle, const struct yetty_yclass *klass);
+
 /* --- Per-domain slot_table ---------------------------------------- */
 
 /* Return the slot_table for `domain`, allocating one on first sighting

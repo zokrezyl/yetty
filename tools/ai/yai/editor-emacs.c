@@ -26,8 +26,7 @@
 #include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
 
-struct YETTY_ANNOTATE("class@yai:emacs") YETTY_ANNOTATE("parent@yai:editor")
-yetty_yai_emacs {
+struct YETTY_ANNOTATE("class@yai:emacs") YETTY_ANNOTATE("parent@yai:editor") yetty_yai_emacs {
     char unused;
 };
 
@@ -41,7 +40,7 @@ static int emacs_csi(struct yai_app *app, char final_byte, int param)
         return YAI_EDIT_NAV_PREV; /* up */
     case 'B':
         return YAI_EDIT_NAV_NEXT; /* down */
-    case 'C': /* right */
+    case 'C':                     /* right */
         app->stdin_cursor = editor_ops_next_char(app, app->stdin_cursor);
         return YAI_EDIT_MOVED;
     case 'D': /* left */

@@ -1,10 +1,14 @@
 # tools/ycompositor-ygui — ygui rendered through the new ycompositor path.
 #
 # Sibling of tools/ycompositor (which is a pure direct-API ygrid demo).
-# This one allocates an in-process (headless) ygui engine, builds a tiny
-# widget tree, calls engine_rebuild to produce the canonical drawable_list
-# bytes, and feeds them straight into the compositor via
-# root container_process_records. No PTY / no OSC / no parent yetty.
+# Two modes:
+#   - headless (no args): allocates an in-process ygui framework, builds a
+#     tiny widget tree, and emits it into the root container via the typed
+#     yfigure stubs (in-process, no wire). No PTY / no parent yetty.
+#   - interpose (`-e <cmd...>`): forks the producer under a PTY and acts as
+#     a yclass RPC server — the producer drives the root figure container
+#     with typed create_child/set_child_rect/... calls over DCS envelopes
+#     on YETTY_DCS_YCLASS_RPC, dispatched onto the root by the RPC server.
 #
 # Used to validate the new ygui→compositor pipeline that will eventually
 # replace scene-canvas inside the main yetty binary.
@@ -65,6 +69,7 @@ target_link_libraries(ycompositor-ygui PRIVATE
     yetty_ydraw_core
     yetty_yframework
     ${YETTY_LIBS}
+    yetty_yclass
     yetty_ywire
     yetty_ydraw_core
     yetty_yplatform_core

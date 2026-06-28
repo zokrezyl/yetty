@@ -163,7 +163,7 @@ static const struct yetty_platform_pty_ops *hud_pty_ops(void)
 
 struct yai_hud {
     struct yetty_platform_pty pty;
-    struct yetty_ygui_framework *framework;
+    struct yetty_yclass_object *framework;
     struct yetty_yclass_object *root;
     struct yetty_yclass_object *window;
     /* Format-driven body. `format` is borrowed (owned by the app); one label
@@ -247,7 +247,8 @@ static void terminal_pixels(float *width_px, float *height_px)
 static struct yetty_ycore_void_result window_rect(const struct yai_hud *hud, float *min_x,
                                                   float *min_y, float *width, float *height)
 {
-    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(hud->window);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(hud->window);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "window_rect: layout");
     const struct yetty_ygui_layout *layout = layout_res.value;
     *min_x = layout->pos_x;
@@ -437,12 +438,24 @@ struct yai_hud_ptr_result yai_hud_create(int hud_on, int hud_float)
      * top-right window. */
     hud->docked = !hud_float;
 
-    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_framework_create(&hud->pty);
+    struct yetty_yclass_object_ptr_result framework_res = yetty_ygui_framework_create(NULL);
     if (YETTY_IS_ERR(framework_res)) {
         free(hud);
         return YETTY_ERR(yai_hud_ptr, "yai_hud_create: framework_create", framework_res);
     }
     hud->framework = framework_res.value;
+
+    /* Attach to the host's root figure container over yclass RPC so emits
+     * drive the typed yfigure stubs. The fds are borrowed (stdin/stdout stay
+     * open for the lifetime of the HUD). If the host has no container to
+     * attach to, container_obj stays NULL and the subsequent emits surface an
+     * error; the attach failure here is informational. */
+    struct yetty_ycore_void_result attach_res =
+        yetty_ygui_framework_attach(hud->framework, STDIN_FILENO, STDOUT_FILENO, 1);
+    if (YETTY_IS_ERR(attach_res)) {
+        ydebug("yai hud: RPC attach failed: %s", attach_res.error.msg);
+        yetty_ycore_error_destroy(attach_res.error);
+    }
 
     struct yetty_ycore_void_result build_res = hud_build(hud);
     if (YETTY_IS_ERR(build_res)) {
@@ -1098,7 +1111,8 @@ static struct yetty_ycore_int_result point_in_config_dialog(const struct yai_hud
     if (!open_res.value) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(hud->config_dialog);
+    struct yetty_ygui_layout_const_ptr_result layout_res =
+        yetty_ygui_widget_layout_get(hud->config_dialog);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, layout_res, "point_in_config_dialog: layout_get");
     const struct yetty_ygui_layout *layout = layout_res.value;
     int inside = x >= layout->pos_x && x <= layout->pos_x + layout->width && y >= layout->pos_y &&
@@ -1212,7 +1226,8 @@ struct yetty_ycore_int_result yai_hud_mouse_button(struct yai_hud *hud, float x,
         if (titlebar_res.value) {
             struct yetty_ygui_layout_const_ptr_result layout_res =
                 yetty_ygui_widget_layout_get(hud->config_dialog);
-            YETTY_RETURN_IF_ERR(yetty_ycore_int, layout_res, "yai_hud_mouse_button: titlebar layout");
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, layout_res,
+                                "yai_hud_mouse_button: titlebar layout");
             const struct yetty_ygui_layout *layout = layout_res.value;
             hud->config_dragging = 1;
             hud->config_drag_pos_x = layout->pos_x;
@@ -1352,8 +1367,9 @@ struct yetty_ycore_void_result yai_hud_destroy(struct yai_hud *hud)
      * objects belong to the framework widget tree (freed by its destroy);
      * only our pointer array and the borrowed format pointer are ours. */
     struct yetty_ycore_void_result teardown = yai_render_flush_stdout();
-    teardown = yetty_ycore_void_chain(
-        teardown, yetty_ygui_framework_clear_remote_fd(hud->framework, STDOUT_FILENO));
+    /* Drop every remote figure this HUD produced via the typed yclass stub on
+     * the attached host container before destroying the framework. */
+    teardown = yetty_ycore_void_chain(teardown, yetty_ygui_framework_clear(hud->framework));
     teardown = yetty_ycore_void_chain(teardown, yetty_ygui_framework_destroy(hud->framework));
     free(hud->span_labels);
     free(hud);

@@ -26,7 +26,12 @@ target_link_libraries(ymgui_frontend PUBLIC
     yetty_ycore
 )
 if(NOT EMSCRIPTEN)
-    target_link_libraries(ymgui_frontend PUBLIC yetty_yclient)
+    # yetty_yclient: libuv event loop. yetty_yfigure: typed container stubs
+    # (create_child / set_child_rect / apply_child_body / …) plus
+    # yetty_yfigure_producer_attach — the figure-tree records and per-figure
+    # body uploads now travel as typed one-way yclass-RPC calls on the root
+    # container proxy instead of hand-built YCOMPOSITOR_BIN envelopes.
+    target_link_libraries(ymgui_frontend PUBLIC yetty_yclient yetty_yfigure)
 endif()
 
 set_target_properties(ymgui_frontend PROPERTIES

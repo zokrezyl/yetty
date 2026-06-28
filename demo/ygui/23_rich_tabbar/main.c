@@ -31,8 +31,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     err_ok(yetty_ygui_rich_add_span(rr.value, "Bold", 16.0f, 0xFFFFFFFFu));
     err_ok(yetty_ygui_rich_add_span(rr.value, " accent ", 16.0f, 0xFF92A86Bu));
     err_ok(yetty_ygui_rich_add_span(rr.value, "muted", 16.0f, 0xFFA8A79Fu));
-    struct yetty_ygui_layout_const_ptr_result layout_res =
-        yetty_ygui_widget_layout_get(rr.value);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(rr.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "23_rich_tabbar: layout_get");
     struct yetty_ygui_layout l = *layout_res.value;
     l.flex_grow = 1.0f;

@@ -4,11 +4,11 @@
  *
  * Contrast with ycat: ycat dumps rendered content into the scrollback (DCS
  * YDRAW_BIN); it ages out of history like any text. yless ships the content
- * ONCE as a positioned, viewport-anchored figure (DCS YCOMPOSITOR_BIN) and
- * then stays in the foreground translating keystrokes into scroll commands.
- * Scrolling is server-side state: each key sends a tiny SET_CHILD_SCROLL
- * record, never re-shipping the content. On exit the figure is removed
- * (DELETE_CHILD), so the surface is cleared.
+ * ONCE as a positioned, viewport-anchored figure over the yclass-RPC figure
+ * path and then stays in the foreground translating keystrokes into scroll
+ * commands. Scrolling is server-side state: each key sends a tiny
+ * set-child-scroll call, never re-shipping the content. On exit the figure is
+ * deleted, so the surface is cleared.
  *
  * Content comes from a file argument or stdin; keystrokes are read from stdin
  * via the cross-platform yplatform TTY abstraction (raw mode, size, byte

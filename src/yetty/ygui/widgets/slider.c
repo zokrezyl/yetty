@@ -197,9 +197,9 @@ static struct yetty_ycore_int_result slider_on_motion(struct yetty_yclass_object
      * motion to whatever the pointer merely hovers (not just the capture
      * target), so without this guard the value would change on a plain
      * hover instead of a click-drag. */
-    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_widget_framework(obj);
+    struct yetty_yclass_object_ptr_result framework_res = yetty_ygui_widget_framework(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, framework_res, "slider_on_motion: framework");
-    struct yetty_ygui_framework *engine = framework_res.value;
+    struct yetty_yclass_object *engine = framework_res.value;
     if (!engine || yetty_ygui_framework_pressed_widget(engine) != obj) {
         return YETTY_OK(yetty_ycore_int, 0);
     }

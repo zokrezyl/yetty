@@ -86,11 +86,11 @@ struct yai_event_usage {
 struct yai_event {
     enum yai_event_kind kind;
     union {
-        struct yai_event_text text;             /* TEXT/THINKING_DELTA */
-        struct yai_event_tool_call tool_call;   /* TOOL_CALL */
+        struct yai_event_text text;               /* TEXT/THINKING_DELTA */
+        struct yai_event_tool_call tool_call;     /* TOOL_CALL */
         struct yai_event_tool_result tool_result; /* TOOL_RESULT */
-        struct yai_event_hook hook;             /* HOOK */
-        struct yai_event_usage usage;           /* USAGE */
+        struct yai_event_hook hook;               /* HOOK */
+        struct yai_event_usage usage;             /* USAGE */
     };
 };
 

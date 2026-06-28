@@ -1,0 +1,158 @@
+methods:
+  - slot: build
+    domain: yguiapp
+    owning_class: app
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: app
+        type: "struct yetty_yclass_object *"
+      - name: root
+        type: "struct yetty_yclass_object *"
+    doc: "/*===========================================================================
+ * build — the widget-tree population hook. A ygui app subclasses yguiapp:app
+ * and overrides this to add widgets under `root`. Local-only: `root` is a
+ * live in-process widget object, never wire-marshalled. The default is empty.
+ *=========================================================================*/"
+    local: true
+    oneway: false
+    return_payload_type: null
+classes:
+  - name: app
+    domain: yguiapp
+    accessor: yetty_yguiapp_app_class_get
+    type: regular
+    source_file: src/yetty/yguiapp/app.c
+    parent:
+      domain: yapp
+      name: app
+    mixins: []
+    data: struct yetty_yguiapp_app
+    data_fields:
+      - name: engine
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: root
+        type: "struct yetty_yclass_object *"
+        get: true
+        set: false
+      - name: root_container
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: yframework
+        type: "struct yetty_yframework *"
+        get: false
+        set: false
+      - name: figure_registry
+        type: "struct yetty_yfigure_registry *"
+        get: false
+        set: false
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
+        get: false
+        set: false
+      - name: font
+        type: "struct yetty_yfont_font *"
+        get: false
+        set: false
+      - name: figure_args
+        type: struct yetty_ygrid_factory_args
+        get: false
+        set: false
+      - name: render_target
+        type: "struct yetty_ydraw_target *"
+        get: false
+        set: false
+      - name: listener
+        type: struct yetty_yevent_event_listener
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: yguiapp_default_build
+      - slot: init
+        slot_domain: yapp
+        impl: yguiapp_init
+      - slot: run
+        slot_domain: yapp
+        impl: yguiapp_run
+      - slot: quit
+        slot_domain: yapp
+        impl: yguiapp_quit
+    doc: "/*===========================================================================
+ * Class data slice. The host owns the whole environment; the per-instance
+ * pointers below are created in run() and torn down at the end of run().
+ *=========================================================================*/"
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: 
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_yevent_event_listener
+    kind: struct
+    fields:
+      - name: handler
+        type: yetty_ycore_event_handler
+  - name: yetty_ygrid_factory_args
+    kind: struct
+    fields:
+      - name: default_font
+        type: "struct yetty_yfont_font *"
+      - name: composite_factory
+        type: "struct yetty_ydraw_composite_factory *"
+      - name: absolute_coords
+        type: int
+local_types:
+  yetty_yguiapp_app: src/yetty/yguiapp/app.c
+  yetty_yguiapp_app_ptr_result: src/yetty/yguiapp/app.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/yguiapp/app.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/yguiapp/app.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/yguiapp/app.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/yguiapp/app.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/yguiapp/app.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"

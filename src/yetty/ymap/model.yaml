@@ -19,6 +19,7 @@ methods:
     doc: "/* configure: set the whole view in one call. zoom is clamped to the
  * active provider's range; viewport to the engine's sanity bounds. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: set_provider
     domain: ymap
@@ -33,6 +34,7 @@ methods:
  * yetty_ymap_provider_info for enumeration). Clears any custom provider;
  * clamps the current zoom into the new provider's range. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: set_custom_provider
     domain: ymap
@@ -56,6 +58,7 @@ methods:
  * positional %1$u.. reorder for z/y/x servers). `attribution` is what the
  * frontend must display; pass the provider's required credit line. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: set_center
     domain: ymap
@@ -70,6 +73,7 @@ methods:
         type: double
     doc: "/* set_center / set_zoom / set_viewport: individual view setters. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: set_zoom
     domain: ymap
@@ -82,6 +86,7 @@ methods:
         type: uint32_t
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: set_viewport
     domain: ymap
@@ -96,6 +101,7 @@ methods:
         type: uint32_t
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: pan_by_pixels
     domain: ymap
@@ -112,6 +118,7 @@ methods:
  * follows the pointer (drag right → map moves right → center moves
  * west). Latitude clamps so the viewport stays on the Mercator square. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: zoom_by_at
     domain: ymap
@@ -130,6 +137,7 @@ methods:
  * (anchor_x, anchor_y) on the same lat/lon — the wheel-zoom feel.
  * Returns the (clamped) new zoom level. */"
     local: true
+    oneway: false
     return_payload_type: int
   - slot: get_zoom
     domain: ymap
@@ -140,6 +148,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: "/* get_zoom: current zoom level (after clamping). */"
     local: true
+    oneway: false
     return_payload_type: int
   - slot: geolocate
     domain: ymap
@@ -152,6 +161,7 @@ methods:
  * HTTPS request, city-level accuracy, see ymap's geoip notes).
  * Best-effort: on error the view is unchanged and the caller decides. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: attribution
     domain: ymap
@@ -162,6 +172,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: "/* attribution: the credit line the frontend MUST display with the map. */"
     local: true
+    oneway: false
     return_payload_type: "const char *"
   - slot: is_vector
     domain: ymap
@@ -173,6 +184,7 @@ methods:
     doc: "/* is_vector: 1 when the active provider renders through the vector
  * (SDF/MSDF) pipeline — frontends use it to pick drag-render pacing. */"
     local: true
+    oneway: false
     return_payload_type: int
   - slot: render
     domain: ymap
@@ -185,6 +197,7 @@ methods:
  * visible map as a fresh ydraw drawable list (caller owns it). Pointer
  * return -> local-only. */"
     local: true
+    oneway: false
     return_payload_type: "struct yetty_ydraw_drawable_list *"
   - slot: destroy
     domain: ymap
@@ -195,6 +208,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: "/* destroy: free owned strings + the yclass allocation. */"
     local: true
+    oneway: false
     return_payload_type: null
 classes:
   - name: map

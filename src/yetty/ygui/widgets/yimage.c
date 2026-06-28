@@ -28,6 +28,7 @@ struct yetty_ygui_yimage_ptr_result yetty_ygui_yimage_from(struct yetty_yclass_o
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/yimage/yimage.h>
 #include <stdlib.h>
@@ -81,8 +82,8 @@ static struct yetty_ycore_void_result yimage_emit_container(struct yetty_yclass_
     struct yetty_ycore_rectangle r = rect_res.value;
     struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yimage_emit_container: id");
-    return yetty_ygui_emit_ensure_child(ctx, id_res.value, YETTY_YFIGURE_KIND_YIMAGE, r.min.x,
-                                        r.min.y, r.max.x, r.max.y,
+    return yetty_ygui_emit_ensure_child(ctx, id_res.value, yetty_yfigure_kind_token("yimage"),
+                                        r.min.x, r.min.y, r.max.x, r.max.y,
                                         /*init_payload=*/NULL, /*init_payload_bytes=*/0);
 }
 

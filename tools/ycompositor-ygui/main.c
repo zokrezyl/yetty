@@ -12,21 +12,26 @@
  *     Mirrors the platform setup of tools/ycompositor (glfw + texture
  *     render target + compositor render loop) but instead of a hand-
  *     built ygrid full of SDF primitives spins up a headless ygui
- *     engine, builds a tiny widget tree, and pushes the engine's
- *     drawable_list bytes through root container_process_records. On every
- *     RESIZE event the surface is reconfigured, the engine's display
- *     pixel size is updated, and the ygui scene is re-emitted so the
- *     compositor's per-widget figures track the new geometry.
+ *     framework, builds a tiny widget tree, and emits it into the root
+ *     container in-process via the typed yfigure stubs (the framework's
+ *     container_obj is the root, so emit marshals straight onto it with
+ *     no wire/session). On every RESIZE event the surface is
+ *     reconfigured, the viewport is updated, and the ygui scene is
+ *     re-emitted so the compositor's per-widget figures track the new
+ *     geometry.
  *
  *  2. interpose mode (`-e <cmd...>`)
  *     Acts as a debug terminal sitting between an app and a real yetty:
- *     forks the app under a PTY, scans its stdout for OSC envelopes,
- *     logs every envelope (code + payload size + decoded type), and
- *     feeds figure-tree records (YETTY_DCS_YCOMPOSITOR_BIN) into the
- *     existing compositor pipeline so the app's own rendering shows up
- *     in this window. The YMGUI factory is registered alongside YGRID
- *     so ymgui-shaped apps (the demo) render natively. Use this to see
- *     exactly what the app is emitting, in isolation from yetty itself.
+ *     forks the app under a PTY and becomes a yclass RPC server. The
+ *     forked producer obtains a proxy to this tool's root figure
+ *     container via RPC_OP_GET_ROOT and drives it with the typed yclass
+ *     stubs (create_child / set_child_rect / apply_child_body / …) over
+ *     DCS envelopes on YETTY_DCS_YCLASS_RPC; the RPC server dispatches
+ *     each call straight onto app->root, mutating the figure tree so the
+ *     producer's rendering shows up in this window. The YMGUI factory is
+ *     registered alongside YGRID so ymgui-shaped apps (the demo) get
+ *     their figures minted. Use this to see exactly what the app is
+ *     driving, in isolation from yetty itself.
  */
 
 #include <yetty/yplatform/gpu-context.h>
@@ -42,21 +47,18 @@
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
-#include <yetty/ydraw-core/cmds.h>
-#include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yfigure/figure.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
 #include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/ymgui/figure.h>
-#include <yetty/yface/yface.h>
+#include <yetty/ywire/wire-statemachine.h>
+#include <yetty/yclass/rpc.h>
+#include <yetty/yclass/rpc-dcs-server.h>
 #include <yetty/yterminal/dcs-codes.h>
 #include <yetty/ytrace/ytrace.h>
-#include <lz4frame.h>
 #include <webgpu/webgpu.h>
 
 #include <errno.h>
@@ -87,7 +89,8 @@ static inline void yetty_ycore_error_destroy_safe(struct yetty_ycore_void_result
     }
 }
 
-struct YETTY_ANNOTATE("class@ycompositorygui:app") YETTY_ANNOTATE("parent@yapp:app") yetty_ycompositorygui_app {
+struct YETTY_ANNOTATE("class@ycompositorygui:app") YETTY_ANNOTATE("parent@yapp:app")
+    yetty_ycompositorygui_app {
     int quit;
     struct yetty_context ctx;
     struct yetty_yframework *yrt;
@@ -98,7 +101,7 @@ struct YETTY_ANNOTATE("class@ycompositorygui:app") YETTY_ANNOTATE("parent@yapp:a
      * straight in (in-process, no PTY). */
     struct yetty_yclass_object *root;
     struct yetty_yfigure_registry *registry;
-    struct yetty_ygui_framework *ygui;
+    struct yetty_yclass_object *ygui;
     /* Window chrome host (draggable/resizable titlebar + min/max/close). */
     struct yetty_ychrome_host *chrome;
     /* Borrowed pointer to the outer window — it is the framework root,
@@ -120,9 +123,9 @@ struct YETTY_ANNOTATE("class@ycompositorygui:app") YETTY_ANNOTATE("parent@yapp:a
     uint32_t surface_w;
     uint32_t surface_h;
 
-    /* Interpose mode: forkpty + yface scanner. argv slice borrowed from
-     * the process argv vector; NULL/0 means "headless demo mode" and the
-     * in-process ygui scene is used. */
+    /* Interpose mode: forkpty + wire statemachine RPC server. argv slice
+     * borrowed from the process argv vector; NULL/0 means "headless demo
+     * mode" and the in-process ygui scene is used. */
     char **child_argv;
     int child_argc;
     pid_t child_pid;
@@ -132,10 +135,19 @@ struct YETTY_ANNOTATE("class@ycompositorygui:app") YETTY_ANNOTATE("parent@yapp:a
      * gets the pane size it expects. */
     float cell_w_px;
     float cell_h_px;
-    struct yetty_yface *yface_in;
-    /* OSC analyzer counters — populated by on_osc; logged on shutdown. */
+    /* Wire statemachine driven by the producer's PTY output. It hosts the
+     * yclass RPC DCS server (YETTY_DCS_YCLASS_RPC) that dispatches the
+     * producer's typed create_child/set_child_rect/apply_child_body/...
+     * calls straight onto app->root, plus a catch-all that logs every
+     * other envelope for analysis. The tool pushes PTY bytes into it via
+     * yetty_ywire_wire_statemachine_feed (the SM is created with a NULL
+     * PTY — it never pulls bytes itself). */
+    struct yetty_ywire_wire_statemachine *wire_sm;
+    struct yetty_yclass_rpc_dcs_server *dcs_rpc_server;
+    /* Envelope analyzer counters — populated by the catch-all envelope
+     * callback (the RPC code is consumed by the server handler and not
+     * counted here); logged on shutdown. */
     uint64_t n_osc_total;
-    uint64_t n_osc_compositor; /* OSC 630000 */
     uint64_t n_osc_other;
     uint64_t n_bytes_in;
 };
@@ -168,7 +180,7 @@ struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_
  * matter much. */
 /* Add `cls` under `parent`, returning the new object or NULL. */
 static struct yetty_yclass_object *cy_add(struct yetty_yclass_object *parent,
-                                        struct yetty_yclass_ptr_result cls_r)
+                                          struct yetty_yclass_ptr_result cls_r)
 {
     if (YETTY_IS_ERR(cls_r)) {
         yetty_ycore_error_destroy(cls_r.error);
@@ -289,7 +301,7 @@ static struct yetty_ycore_void_result build_scene(struct yetty_ycompositorygui_a
     if (sb) {
         yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(sb, 0.0f, 22.0f));
         yetty_ycore_error_destroy_safe(
-            yetty_ygui_statusbar_set_left(sb, "ycompositor-ygui — ygui via process_records"));
+            yetty_ygui_statusbar_set_left(sb, "ycompositor-ygui — ygui via typed yfigure stubs"));
         yetty_ycore_error_destroy_safe(yetty_ygui_statusbar_set_right(sb, "v0.1"));
     }
     return YETTY_OK_VOID();
@@ -321,7 +333,7 @@ static struct yetty_ycore_void_result push_ygui_scene(struct yetty_ycompositoryg
 }
 
 /*===========================================================================
- * Interpose-mode helpers — forkpty + yface scanner + OSC analyzer.
+ * Interpose-mode helpers — forkpty + wire statemachine RPC server.
  *===========================================================================*/
 
 /* Best-effort name lookup for the small set of OSC codes we care about,
@@ -338,8 +350,8 @@ static const char *osc_code_name(int code)
         return "YETTY_DCS_YDRAW_TEXT_END";
     case 620003:
         return "YETTY_DCS_YDRAW_CLEAR";
-    case 630000:
-        return "YETTY_DCS_YCOMPOSITOR_BIN";
+    case 800000:
+        return "YETTY_DCS_YCLASS_RPC";
     case 610010:
         return "YETTY_OSC_CS_CLIENT_INPUT_SUB";
     case 700000:
@@ -361,128 +373,67 @@ static const char *osc_code_name(int code)
     }
 }
 
-/* LZ4F frame magic; producers that pass compressed=1 to yface emit a
- * frame starting with this little-endian word but don't write a
- * bin_meta into the args slot, so yface's scanner can't auto-flip its
- * decoder. ywire's SM sniffs the magic instead; we mirror that here. */
-#define LZ4F_FRAME_MAGIC_LE 0x184D2204u
-
-/* If `payload` is an LZ4F frame, decompress into a malloc'd buffer and
- * return it (caller frees). Otherwise return NULL and leave the caller
- * to process the bytes as-is. */
-static uint8_t *maybe_decompress_lz4f(const uint8_t *payload, size_t payload_len, size_t *out_len)
-{
-    if (payload_len < 4) {
-        return NULL;
-    }
-    uint32_t magic;
-    memcpy(&magic, payload, 4);
-    if (magic != LZ4F_FRAME_MAGIC_LE) {
-        return NULL;
-    }
-
-    LZ4F_decompressionContext_t ctx = NULL;
-    if (LZ4F_isError(LZ4F_createDecompressionContext(&ctx, LZ4F_VERSION))) {
-        return NULL;
-    }
-    size_t cap = payload_len * 4 + 4096;
-    size_t used = 0;
-    uint8_t *buf = (uint8_t *)malloc(cap);
-    if (!buf) {
-        LZ4F_freeDecompressionContext(ctx);
-        return NULL;
-    }
-    size_t in_pos = 0;
-    while (in_pos < payload_len) {
-        size_t out_left = cap - used;
-        size_t in_left = payload_len - in_pos;
-        size_t r = LZ4F_decompress(ctx, buf + used, &out_left, payload + in_pos, &in_left, NULL);
-        if (LZ4F_isError(r)) {
-            free(buf);
-            LZ4F_freeDecompressionContext(ctx);
-            return NULL;
-        }
-        used += out_left;
-        in_pos += in_left;
-        if (r == 0) {
-            break; /* frame complete */
-        }
-        if (out_left == 0 && used == cap) {
-            cap *= 2;
-            uint8_t *nb = (uint8_t *)realloc(buf, cap);
-            if (!nb) {
-                free(buf);
-                LZ4F_freeDecompressionContext(ctx);
-                return NULL;
-            }
-            buf = nb;
-        }
-    }
-    LZ4F_freeDecompressionContext(ctx);
-    *out_len = used;
-    return buf;
-}
-
-/* yface on_osc — called once per complete envelope scanned from the
- * child's PTY output. Logs the envelope and feeds figure-tree records
- * straight into the existing compositor pipeline so the child's actual
- * rendering becomes visible in this window. */
-static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_len,
-                   const uint8_t *payload, size_t payload_len)
+/* yetty_yclass_rpc_dcs_emit_fn impl — ships an already-encoded DCS
+ * response envelope back to the producer over the SAME channel the tool
+ * reads its requests from: the PTY master. The producer's stdin is the
+ * PTY slave, so these bytes land where its RPC session's read_fd
+ * (transport-dcs) decodes them. Looping write because a single write(2)
+ * may be short. Mirrors terminal_dcs_emit_response. */
+YETTY_EXTERNAL_CALLBACK
+static struct yetty_ycore_void_result on_rpc_response(const uint8_t *bytes, size_t n, void *user)
 {
     struct yetty_ycompositorygui_app *app = user;
-    (void)args;
-    (void)args_len;
-    app->n_osc_total++;
-
-    const char *name = osc_code_name(osc_code);
-
-    /* Producers that ship LZ4F-compressed bodies via yface (the ymgui
-     * FRAME emit path, ydraw bin records, …) don't supply a bin_meta in
-     * args, so the receiving yface scanner hands us raw LZ4F frame
-     * bytes. Detect by magic and decompress; everything else passes
-     * through untouched. */
-    size_t inflated_len = 0;
-    uint8_t *inflated = maybe_decompress_lz4f(payload, payload_len, &inflated_len);
-    const uint8_t *body = inflated ? inflated : payload;
-    size_t body_len = inflated ? inflated_len : payload_len;
-
-    yinfo("ycompositor-ygui[osc]: code=%d (%s) args=%zu payload=%zu%s", osc_code, name ? name : "?",
-          args_len, body_len, inflated ? " [lz4f-decompressed]" : "");
-
-    if (osc_code == YETTY_DCS_YCOMPOSITOR_BIN) {
-        app->n_osc_compositor++;
-        if (app->root && body_len > 0) {
-            struct yetty_ycore_void_result pr =
-                yetty_yfigure_container_process_records(app->root, body, body_len);
-            if (YETTY_IS_ERR(pr)) {
-                yerror("ycompositor-ygui[osc]: process_records failed: %s", pr.error.msg);
-                yetty_ycore_error_destroy(pr.error);
-            }
-            struct yetty_yfigure_figure_ptr_result figure_res =
-                yetty_yfigure_container_as_figure(app->root);
-            if (YETTY_IS_ERR(figure_res)) {
-                yerror("ycompositor-ygui[osc]: container as_figure failed: %s", figure_res.error.msg);
-                yetty_ycore_error_destroy(figure_res.error);
-            } else if (figure_res.value) {
-                yetty_ycore_error_destroy_safe(yetty_yfigure_figure_dirty_set(app->root, 1));
-            }
-        }
-    } else {
-        app->n_osc_other++;
+    if (app->pty_master_fd < 0) {
+        return YETTY_ERR(yetty_ycore_void, "on_rpc_response: PTY master closed");
     }
-
-    free(inflated);
+    size_t off = 0;
+    while (off < n) {
+        ssize_t written = write(app->pty_master_fd, bytes + off, n - off);
+        if (written > 0) {
+            off += (size_t)written;
+            continue;
+        }
+        if (written < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) {
+            continue;
+        }
+        return YETTY_ERR(yetty_ycore_void, "on_rpc_response: PTY master write failed");
+    }
+    return YETTY_OK_VOID();
 }
 
-static void on_raw(void *user, const char *bytes, size_t n)
+/* Catch-all envelope callback — fires for every envelope the producer
+ * ships that ISN'T the yclass RPC code (that one is consumed by the RPC
+ * server handler registered on the same SM). Pure analyzer logging; the
+ * figure tree is mutated by the RPC server dispatching typed calls onto
+ * app->root, not here. The body is already fully decoded (b64 + LZ4F) by
+ * the wire statemachine. */
+static struct yetty_ycore_void_result on_envelope(void *user, enum yetty_ywire_envelope_kind kind,
+                                                  int code, const uint8_t *args, size_t args_len,
+                                                  const uint8_t *payload, size_t payload_len)
+{
+    struct yetty_ycompositorygui_app *app = user;
+    (void)kind;
+    (void)args;
+    (void)payload;
+    /* The RPC code is consumed by the dedicated server handler, so it
+     * never reaches this catch-all — everything seen here is "other". */
+    app->n_osc_total++;
+    app->n_osc_other++;
+    const char *name = osc_code_name(code);
+    yinfo("ycompositor-ygui[env]: code=%d (%s) args=%zu payload=%zu", code, name ? name : "?",
+          args_len, payload_len);
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result on_raw(void *user, const uint8_t *bytes, size_t n)
 {
     struct yetty_ycompositorygui_app *app = user;
     (void)bytes;
     /* Raw output (printf / fprintf / non-OSC ANSI) is reported but
-     * dropped — this tool is for OSC analysis, not full terminal
-     * emulation. */
+     * dropped — this tool renders figures driven over RPC, not full
+     * terminal emulation. */
     app->n_bytes_in += n;
+    return YETTY_OK_VOID();
 }
 
 /* fork+exec the child under a PTY. cell size matches imgui_impl_yetty's
@@ -553,7 +504,11 @@ static void update_child_winsize(struct yetty_ycompositorygui_app *app)
 }
 
 /* Drain whatever is currently readable from the child's PTY and feed it
- * to the yface scanner. Returns 1 if the child closed (EOF). */
+ * to the wire statemachine. The SM scans for DCS envelopes, dispatches
+ * the yclass RPC server handler for YETTY_DCS_YCLASS_RPC requests (which
+ * mutate app->root and emit responses back over the PTY master), and
+ * routes everything else through the analyzer callbacks. Returns 1 if
+ * the child closed (EOF). */
 static int pump_pty_in(struct yetty_ycompositorygui_app *app)
 {
     if (app->pty_master_fd < 0) {
@@ -564,9 +519,9 @@ static int pump_pty_in(struct yetty_ycompositorygui_app *app)
         ssize_t n = read(app->pty_master_fd, buf, sizeof(buf));
         if (n > 0) {
             struct yetty_ycore_void_result fr =
-                yetty_yface_feed_bytes(app->yface_in, buf, (size_t)n);
+                yetty_ywire_wire_statemachine_feed(app->wire_sm, buf, (size_t)n);
             if (YETTY_IS_ERR(fr)) {
-                yerror("ycompositor-ygui: yface_feed_bytes failed: %s", fr.error.msg);
+                yerror("ycompositor-ygui: wire_statemachine_feed failed: %s", fr.error.msg);
                 yetty_ycore_error_destroy(fr.error);
             }
             continue;
@@ -838,12 +793,56 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
     yetty_yfigure_container_set_rect(app->root, root_rect);
 
     if (app->child_argv) {
-        /* Interpose mode — no in-process ygui scene; we render whatever
-         * the child app emits. */
-        struct yetty_yface_ptr_result yr = yetty_yface_create();
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, yr, "yface_create failed");
-        app->yface_in = yr.value;
-        yetty_yface_set_handlers(app->yface_in, on_osc, on_raw, app);
+        /* Interpose mode — no in-process ygui scene. This tool becomes a
+         * yclass RPC server: the forked producer obtains a proxy to
+         * app->root via RPC_OP_GET_ROOT and drives it with typed yclass
+         * stubs over DCS envelopes on YETTY_DCS_YCLASS_RPC.
+         *
+         * Register the yfigure class accessor/skel lookups so the RPC
+         * server can mint and dispatch yfigure classes, then rpc_init
+         * (handle minting starts at 1; handle 0 is the invalid sentinel)
+         * before publishing the root. */
+        struct yetty_ycore_void_result fig_reg = yetty_yfigure_register();
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, fig_reg, "yfigure_register failed");
+        struct yetty_ycore_void_result rpc_init_r = yetty_yclass_rpc_init();
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_init_r, "rpc_init failed");
+
+        /* Wire statemachine fed from the producer's PTY output. NULL PTY
+         * — the tool pushes bytes in via wire_statemachine_feed; the SM
+         * never pulls bytes itself. */
+        struct yetty_ywire_wire_statemachine_ptr_result sm_r =
+            yetty_ywire_wire_statemachine_create(NULL);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sm_r, "wire_statemachine_create failed");
+        app->wire_sm = sm_r.value;
+
+        /* Analyzer logging for every non-RPC envelope (the RPC code is
+         * consumed by the RPC server handler attached below) plus raw
+         * bytes outside any envelope. */
+        struct yetty_ycore_void_result env_r =
+            yetty_ywire_wire_statemachine_set_envelope_default_buffered(app->wire_sm, /*has_args=*/1,
+                                                                        on_envelope, app);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, env_r, "set_envelope_default_buffered failed");
+        struct yetty_ycore_void_result raw_r =
+            yetty_ywire_wire_statemachine_set_default_buffered(app->wire_sm, on_raw, app);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, raw_r, "set_default_buffered failed");
+
+        /* Attach the yclass RPC DCS server to the SAME statemachine. Each
+         * inbound DCS envelope on YETTY_DCS_YCLASS_RPC is one request:
+         * the handler dispatches it and ships the response back to the
+         * producer via on_rpc_response (PTY master write). */
+        struct yetty_yclass_rpc_dcs_server_ptr_result dcs_r =
+            yetty_yclass_rpc_dcs_server_attach(app->wire_sm, YETTY_DCS_YCLASS_RPC, /*compressed=*/0,
+                                               on_rpc_response, app);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dcs_r, "dcs_server_attach failed");
+        app->dcs_rpc_server = dcs_r.value;
+
+        /* Publish the root container so the producer reaches it via
+         * RPC_OP_GET_ROOT. */
+        struct yetty_yclass_handle_result root_r = yetty_yclass_rpc_set_root(app->root);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, root_r, "rpc_set_root failed");
+        yinfo("ycompositor-ygui: RPC server ready (root handle=%llu, dcs code=%d)",
+              (unsigned long long)root_r.value, YETTY_DCS_YCLASS_RPC);
+
         if (spawn_child(app) != 0) {
             return YETTY_ERR(yetty_ycore_void, "spawn_child failed");
         }
@@ -852,7 +851,7 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
          * no PTY; the per-frame envelope ships in-process into app->root
          * via set_container_obj). Built once at startup; the widget tree
          * stays across resizes, only the viewport changes. */
-        struct yetty_ygui_framework_ptr_result eng_r = yetty_ygui_framework_create(NULL);
+        struct yetty_yclass_object_ptr_result eng_r = yetty_ygui_framework_create(NULL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, eng_r, "ygui framework alloc failed");
         app->ygui = eng_r.value;
         struct yetty_ycore_void_result scr =
@@ -922,11 +921,10 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
             int eof = pump_pty_in(app);
             had_events = 1;
             if (eof) {
-                yinfo("ycompositor-ygui: child PTY closed (osc_total=%llu "
-                      "compositor=%llu other=%llu raw_bytes=%llu)",
-                      (unsigned long long)app->n_osc_total,
-                      (unsigned long long)app->n_osc_compositor,
-                      (unsigned long long)app->n_osc_other, (unsigned long long)app->n_bytes_in);
+                yinfo("ycompositor-ygui: child PTY closed (env_total=%llu "
+                      "other=%llu raw_bytes=%llu)",
+                      (unsigned long long)app->n_osc_total, (unsigned long long)app->n_osc_other,
+                      (unsigned long long)app->n_bytes_in);
                 close(app->pty_master_fd);
                 app->pty_master_fd = -1;
             }
@@ -934,8 +932,7 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
         if (gpu->instance) {
             wgpuInstanceProcessEvents(gpu->instance);
         }
-        if (!(needs_render || had_events ||
-              yetty_yfigure_figure_dirty_get(app->root).value)) {
+        if (!(needs_render || had_events || yetty_yfigure_figure_dirty_get(app->root).value)) {
             continue;
         }
 
@@ -997,10 +994,19 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
         app->ygui = NULL;
     }
 
-    if (app->yface_in) {
-        yetty_yface_destroy(app->yface_in);
-        app->yface_in = NULL;
+    /* Destroy the wire statemachine first — it borrows the RPC server as
+     * its handler userdata, so the server is only safe to free once the
+     * SM (and its registered handler) is gone. */
+    if (app->wire_sm) {
+        struct yetty_ycore_void_result dr = yetty_ywire_wire_statemachine_destroy(app->wire_sm);
+        if (YETTY_IS_ERR(dr)) {
+            yerror("ycompositor-ygui: wire_statemachine destroy failed: %s", dr.error.msg);
+            yetty_ycore_error_destroy(dr.error);
+        }
+        app->wire_sm = NULL;
     }
+    yetty_yclass_rpc_dcs_server_destroy(app->dcs_rpc_server);
+    app->dcs_rpc_server = NULL;
     if (app->pty_master_fd >= 0) {
         close(app->pty_master_fd);
         app->pty_master_fd = -1;

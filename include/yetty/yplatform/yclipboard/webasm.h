@@ -33,15 +33,19 @@ struct yetty_yplatform_webasm_clipboard_ptr_result {
         struct yetty_ycore_error error;
     };
 };
-struct yetty_yplatform_webasm_clipboard_ptr_result yetty_yplatform_webasm_clipboard_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_yplatform_webasm_clipboard_to(struct yetty_yplatform_webasm_clipboard *data);
+struct yetty_yplatform_webasm_clipboard_ptr_result yetty_yplatform_webasm_clipboard_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yplatform_webasm_clipboard_to(
+    struct yetty_yplatform_webasm_clipboard *data);
 
-struct yetty_yclass_object_ptr_result yetty_yplatform_webasm_clipboard_create(struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_yplatform_webasm_clipboard_create(
+    struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_yplatform_register(void);
 
 /* Bind the pipe that paste results are delivered on. Borrowed. */
-struct yetty_ycore_void_result yetty_yplatform_webasm_clipboard_configure(struct yetty_yclass_object *obj, struct yetty_ycore_xthread_event_pipe *response_pipe);
+struct yetty_ycore_void_result yetty_yplatform_webasm_clipboard_configure(
+    struct yetty_yclass_object *obj, struct yetty_ycore_xthread_event_pipe *response_pipe);
 
 #ifdef __cplusplus
 }

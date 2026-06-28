@@ -20,8 +20,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     struct yetty_yclass_object_ptr_result ir =
         yetty_ygui_widget_add(root, yetty_ygui_yimage_class_get().value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ir, "yimage");
-    struct yetty_ygui_layout_const_ptr_result layout_res =
-        yetty_ygui_widget_layout_get(ir.value);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(ir.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "29_yimage: layout_get");
     struct yetty_ygui_layout l = *layout_res.value;
     l.flex_grow = 1.0f;

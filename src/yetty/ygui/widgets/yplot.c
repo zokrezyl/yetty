@@ -33,6 +33,7 @@ struct YETTY_ANNOTATE("expose") yetty_ygui_yplot_config {
 
 #include <yetty/ydraw-core/cmds.h>
 #include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <yetty/yplot/yplot.h>
 
@@ -112,8 +113,8 @@ static struct yetty_ycore_void_result yplot_emit_container(struct yetty_yclass_o
     struct yetty_ycore_rectangle r = rect_res.value;
     struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yplot_emit_container: id");
-    return yetty_ygui_emit_ensure_child(ctx, id_res.value, YETTY_YFIGURE_KIND_YPLOT, r.min.x,
-                                        r.min.y, r.max.x, r.max.y,
+    return yetty_ygui_emit_ensure_child(ctx, id_res.value, yetty_yfigure_kind_token("yplot"),
+                                        r.min.x, r.min.y, r.max.x, r.max.y,
                                         /*init_payload=*/NULL, /*init_payload_bytes=*/0);
 }
 

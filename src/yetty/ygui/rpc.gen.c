@@ -13,13 +13,14 @@
  * class .c. A cross-platform class is a plain strong ref, defined in
  * the same library and pulled in when register() is. Submodule
  * registers are chained as strong externs (always co-linked). */
+struct yetty_yclass_ptr_result yetty_ygui_framework_class_get(void);
 struct yetty_yclass_ptr_result yetty_ygui_primitive_widget_class_get(void);
 struct yetty_yclass_ptr_result yetty_ygui_widget_class_get(void);
+size_t yetty_ygui_constructor_skel(const void *, size_t, void *, size_t);
+size_t yetty_ygui_destructor_skel(const void *, size_t, void *, size_t);
 size_t yetty_ygui_widget_on_press_skel(const void *, size_t, void *, size_t);
 size_t yetty_ygui_widget_on_release_skel(const void *, size_t, void *, size_t);
 size_t yetty_ygui_widget_on_motion_skel(const void *, size_t, void *, size_t);
-size_t yetty_ygui_constructor_skel(const void *, size_t, void *, size_t);
-size_t yetty_ygui_destructor_skel(const void *, size_t, void *, size_t);
 size_t yetty_ygui_widget_on_scroll_skel(const void *, size_t, void *, size_t);
 struct yetty_ycore_void_result yetty_ygui_mixins_register(void);
 struct yetty_ycore_void_result yetty_ygui_widgets_register(void);
@@ -29,6 +30,9 @@ struct yetty_ycore_void_result yetty_ygui_register(void);
 
 static struct yetty_yclass_ptr_result yetty_ygui_accessor_lookup(const char *name)
 {
+    if (strcmp(name, "yetty_ygui_framework") == 0) {
+        return yetty_ygui_framework_class_get();
+    }
     if (strcmp(name, "yetty_ygui_primitive_widget") == 0) {
         return yetty_ygui_primitive_widget_class_get();
     }
@@ -47,11 +51,11 @@ struct yetty_ygui_skel_row {
 };
 
 static const struct yetty_ygui_skel_row yetty_ygui_skel_rows[] = {
+    {"yetty_ygui_constructor", yetty_ygui_constructor_skel},
+    {"yetty_ygui_destructor", yetty_ygui_destructor_skel},
     {"yetty_ygui_widget_on_press", yetty_ygui_widget_on_press_skel},
     {"yetty_ygui_widget_on_release", yetty_ygui_widget_on_release_skel},
     {"yetty_ygui_widget_on_motion", yetty_ygui_widget_on_motion_skel},
-    {"yetty_ygui_constructor", yetty_ygui_constructor_skel},
-    {"yetty_ygui_destructor", yetty_ygui_destructor_skel},
     {"yetty_ygui_widget_on_scroll", yetty_ygui_widget_on_scroll_skel},
 };
 

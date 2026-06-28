@@ -28,67 +28,67 @@ class Flame(_rt.YClass):
     def create(cls) -> _rt.Result['Flame']:
         obj = cls()
         return obj.init_result
-    def configure(self, width: float, frame_height: float, min_width: float, flags: int) -> _rt.Result[None]:
+    def configure(self, frame_height: float, min_width: float, flags: int) -> _rt.Result[None]:
         """Call `yetty_yflame_configure`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_yflame_configure", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_float, c_float, c_float, c_uint32])
-        res = _fn(None, self._handle, width, frame_height, min_width, flags)
+        _fn = _rt.cfn("yetty_yflame_configure", _t.yetty_ycore_void_result, [c_void_p, c_float, c_float, c_float, c_uint32])
+        res = _fn(None, self._handle, frame_height, min_width, flags)
         return _rt.result_from_c(res)
-    def parse(self, input: str | bytes | None, len: int) -> _rt.Result[None]:
+    def parse(self, len: int) -> _rt.Result[None]:
         """Call `yetty_yflame_parse`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_yflame_parse", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_char_p, c_size_t])
-        res = _fn(None, self._handle, _rt.cstr(input), len)
+        _fn = _rt.cfn("yetty_yflame_parse", _t.yetty_ycore_void_result, [c_void_p, c_char_p, c_size_t])
+        res = _fn(None, self._handle, len)
         return _rt.result_from_c(res)
     def render(self) -> _rt.Result[Any]:
         """Call `yetty_yflame_render`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_yflame_render", _t.yetty_ydraw_drawable_list_result, [c_void_p, c_void_p])
+        _fn = _rt.cfn("yetty_yflame_render", _t.yetty_ydraw_drawable_list_result, [c_void_p])
         res = _fn(None, self._handle)
         return _rt.result_from_c(res)
-    def hit_test(self, x: float, y: float) -> _rt.Result[int]:
+    def hit_test(self, y: float) -> _rt.Result[int]:
         """Call `yetty_yflame_hit_test`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_yflame_hit_test", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float])
-        res = _fn(None, self._handle, x, y)
+        _fn = _rt.cfn("yetty_yflame_hit_test", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float])
+        res = _fn(None, self._handle, y)
         return _rt.result_from_c(res)
-    def focus(self, node_id: int) -> _rt.Result[None]:
+    def focus(self) -> _rt.Result[None]:
         """Call `yetty_yflame_focus`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_yflame_focus", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_int32])
-        res = _fn(None, self._handle, node_id)
+        _fn = _rt.cfn("yetty_yflame_focus", _t.yetty_ycore_void_result, [c_void_p, c_int32])
+        res = _fn(None, self._handle)
         return _rt.result_from_c(res)
     def focus_parent(self) -> _rt.Result[None]:
         """Call `yetty_yflame_focus_parent`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_yflame_focus_parent", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+        _fn = _rt.cfn("yetty_yflame_focus_parent", _t.yetty_ycore_void_result, [c_void_p])
         res = _fn(None, self._handle)
         return _rt.result_from_c(res)
     def reset(self) -> _rt.Result[None]:
         """Call `yetty_yflame_reset`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_yflame_reset", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+        _fn = _rt.cfn("yetty_yflame_reset", _t.yetty_ycore_void_result, [c_void_p])
         res = _fn(None, self._handle)
         return _rt.result_from_c(res)
-    def set_highlight(self, node_id: int) -> _rt.Result[None]:
+    def set_highlight(self) -> _rt.Result[None]:
         """Call `yetty_yflame_set_highlight`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_yflame_set_highlight", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_int32])
-        res = _fn(None, self._handle, node_id)
+        _fn = _rt.cfn("yetty_yflame_set_highlight", _t.yetty_ycore_void_result, [c_void_p, c_int32])
+        res = _fn(None, self._handle)
         return _rt.result_from_c(res)
     def destroy(self) -> _rt.Result[None]:
         """Call `yetty_yflame_destroy`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_yflame_destroy", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+        _fn = _rt.cfn("yetty_yflame_destroy", _t.yetty_ycore_void_result, [c_void_p])
         res = _fn(None, self._handle)
         return _rt.result_from_c(res)
 

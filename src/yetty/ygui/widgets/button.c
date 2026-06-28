@@ -246,7 +246,7 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_object *y
         /* Pull body font size from the engine theme so style.ygui.font-size
          * in user config reaches the button. Belt-and-braces fallback if
          * theme is somehow NULL (engine owns it post-create). */
-        struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_widget_framework(obj);
+        struct yetty_yclass_object_ptr_result framework_res = yetty_ygui_widget_framework(obj);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res, "button_paint: framework");
         const struct yetty_ygui_theme *theme = yetty_ygui_framework_theme(framework_res.value);
         float font_size = theme && theme->font_size > 0.0f ? theme->font_size : 14.0f;

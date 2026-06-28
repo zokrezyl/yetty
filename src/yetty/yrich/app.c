@@ -69,7 +69,7 @@ struct YETTY_ANNOTATE("class@yrich:app") YETTY_ANNOTATE("parent@yapp:app") yetty
     struct yetty_yclass_object *root_obj;
     struct yetty_yclass_object *container_obj;
     struct yetty_yfigure_registry *registry;
-    struct yetty_ygui_framework *ygui;
+    struct yetty_yclass_object *ygui;
     struct yetty_yclass_object *win; /* framework root widget */
     struct yetty_yfont_font *font;
     struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
@@ -550,7 +550,7 @@ static struct yetty_ycore_void_result yrich_app_run(struct yetty_yclass_object *
     yetty_yfigure_container_set_rect(app->root_obj, root_rect);
 
     /* ygui framework → container over the in-process yclass slot path. */
-    struct yetty_ygui_framework_ptr_result eng_r = yetty_ygui_framework_create(NULL);
+    struct yetty_yclass_object_ptr_result eng_r = yetty_ygui_framework_create(NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, eng_r, "ygui framework alloc failed");
     app->ygui = eng_r.value;
     struct yetty_ycore_void_result result_255 =

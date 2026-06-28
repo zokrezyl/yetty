@@ -11,7 +11,18 @@
 #include <string.h>
 
 #define MAX_OBJECTS 256
-#define BUF_MAX 65536
+/* Max wire body for one RPC frame. Figure bodies are whole drawable-list /
+ * composite payloads shipped one-way (a yplot/yimage figure is multi-MB:
+ * 800x800 RGBA alone is ~2.5 MB), so this must comfortably exceed 64 KB or
+ * rpc_write_request rejects them. The two static scratch buffers in
+ * rpc_server_run are sized from this — they are BSS (demand-paged), and the
+ * production receiver is the DCS server, which reads the body straight from
+ * the wire statemachine rather than into a fixed buffer. */
+#define BUF_MAX (16u * 1024u * 1024u)
+/* GET_CLASS responses are small (a class's method name->id table), and the
+ * translate_class parser reads them into a STACK buffer — so this must stay
+ * modest regardless of BUF_MAX, or raising BUF_MAX overflows the stack. */
+#define GET_CLASS_RESP_MAX 65536u
 
 /* -------- server (process-global) state ---------------------------- */
 
@@ -35,6 +46,10 @@ struct rpc_server_state {
     struct object_entry objects[MAX_OBJECTS];
     size_t object_count;
     uint64_t next_handle;
+    /* Handle of the server's designated root object (0 = none). Returned by
+     * RPC_OP_GET_ROOT so remote producers can proxy the host's pre-existing
+     * root rather than minting a detached one. Set via rpc_set_root. */
+    uint64_t root_handle;
 
     /* Per-module skel lookups, chained. First one that returns
      * non-NULL wins. Result cached per-slot. slot values are sparse
@@ -131,6 +146,16 @@ struct yetty_yclass_handle_result yetty_yclass_rpc_register_object(void *obj)
     s->objects[s->object_count].ptr = obj;
     s->object_count++;
     return YETTY_OK(yetty_yclass_handle, h);
+}
+
+struct yetty_yclass_handle_result yetty_yclass_rpc_set_root(void *obj)
+{
+    struct yetty_yclass_handle_result reg_r = yetty_yclass_rpc_register_object(obj);
+    if (YETTY_IS_ERR(reg_r)) {
+        return reg_r;
+    }
+    server()->root_handle = reg_r.value;
+    return reg_r;
 }
 
 struct yetty_yclass_void_ptr_result yetty_yclass_rpc_handle_resolve(uint64_t h)
@@ -360,11 +385,15 @@ struct yetty_ycore_size_result yetty_yclass_rpc_dispatch_one(uint32_t header, co
     uint32_t id = YETTY_YCLASS_RPC_HDR_ID(header);
 
     switch (op) {
-    case YETTY_YCLASS_RPC_OP_CALL: {
+    /* CALL and CALL_ONEWAY dispatch identically; they differ only in whether
+     * the SERVER LOOP writes the response (it skips it for one-way). */
+    case YETTY_YCLASS_RPC_OP_CALL:
+    case YETTY_YCLASS_RPC_OP_CALL_ONEWAY: {
         struct yetty_yclass_rpc_skel_fn_result sr =
             yetty_yclass_rpc_skel_for((yetty_yclass_method_slot)id);
         if (YETTY_IS_OK(sr)) {
-            ydebug("CALL slot=%u body_len=%zu", id, body_len);
+            ydebug("CALL slot=%u body_len=%zu oneway=%d", id, body_len,
+                   op == YETTY_YCLASS_RPC_OP_CALL_ONEWAY);
             /* The skel is an externally-typed wire bridge returning a
              * raw resp length (size_t), not a Result. */
             return YETTY_OK(yetty_ycore_size, sr.value(body, body_len, resp, resp_max));
@@ -377,6 +406,15 @@ struct yetty_ycore_size_result yetty_yclass_rpc_dispatch_one(uint32_t header, co
         return handle_get_class(body, body_len, resp, resp_max);
     case YETTY_YCLASS_RPC_OP_CREATE:
         return handle_create(body, body_len, resp, resp_max);
+    case YETTY_YCLASS_RPC_OP_GET_ROOT: {
+        uint64_t h = server()->root_handle;
+        if (resp_max < sizeof(h)) {
+            return YETTY_ERR(yetty_ycore_size, "get_root: resp buffer too small");
+        }
+        memcpy(resp, &h, sizeof(h));
+        ydebug("get_root -> handle=%llu", (unsigned long long)h);
+        return YETTY_OK(yetty_ycore_size, sizeof(h));
+    }
     default:
         return YETTY_ERR(yetty_ycore_size, "dispatch_one: unknown op");
     }
@@ -421,6 +459,12 @@ struct yetty_ycore_void_result yetty_yclass_rpc_server_run(struct yetty_yclass_t
         } else {
             yetty_ycore_error_print(stderr, "[server] dispatch", dispatch_res.error);
             yetty_ycore_error_destroy(dispatch_res.error);
+        }
+
+        /* One-way calls get NO response — the client never reads one, so
+         * writing it would desync the lockstep stream. */
+        if (YETTY_YCLASS_RPC_HDR_OP(header) == YETTY_YCLASS_RPC_OP_CALL_ONEWAY) {
+            continue;
         }
 
         if (write_full(transport, &resp_len, 4) < 0) {
@@ -573,7 +617,7 @@ static struct yetty_ycore_void_result rpc_write_request(struct yetty_yclass_rpc_
     }
     /* op occupies a 4-bit field; cap at the highest defined op so
      * undefined-but-fits-in-4-bits values are also caught. */
-    if (op > YETTY_YCLASS_RPC_OP_CREATE) {
+    if (op > YETTY_YCLASS_RPC_OP_CALL_ONEWAY) {
         return YETTY_ERR(yetty_ycore_void, "rpc_call: op is not a defined yetty_yclass_rpc_op");
     }
     if (body_len > 0 && body == NULL) {
@@ -638,6 +682,25 @@ struct yetty_ycore_size_result yetty_yclass_rpc_call(struct yetty_yclass_rpc_ses
         return YETTY_ERR(yetty_ycore_size, "rpc_call: short read on resp body");
     }
     return YETTY_OK(yetty_ycore_size, (size_t)resp_len);
+}
+
+struct yetty_ycore_void_result yetty_yclass_rpc_call_oneway(struct yetty_yclass_rpc_session *s,
+                                                            uint32_t id, const void *body,
+                                                            size_t body_len)
+{
+    struct yetty_ycore_void_result write_res =
+        rpc_write_request(s, YETTY_YCLASS_RPC_OP_CALL_ONEWAY, id, body, body_len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, write_res, "rpc_call_oneway: request write failed");
+
+    /* No response is read. A buffering transport (DCS) only flushes on recv(),
+     * which never happens for a one-way call — flush explicitly so the request
+     * actually reaches the wire. Transports that write through in send() expose
+     * no flush op (NULL) and need none. */
+    if (s->transport->ops->flush) {
+        struct yetty_ycore_void_result flush_res = s->transport->ops->flush(s->transport);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "rpc_call_oneway: flush failed");
+    }
+    return YETTY_OK_VOID();
 }
 
 struct yetty_ycore_void_result yetty_yclass_rpc_call_alloc(struct yetty_yclass_rpc_session *s,
@@ -730,6 +793,24 @@ struct uint32_result yetty_yclass_rpc_session_ensure_remote_id(struct yetty_ycla
     return YETTY_OK(uint32, remote);
 }
 
+struct yetty_yclass_handle_result yetty_yclass_rpc_session_get_root(
+    struct yetty_yclass_rpc_session *s)
+{
+    if (!s) {
+        return YETTY_ERR(yetty_yclass_handle, "session_get_root: NULL session");
+    }
+    uint64_t handle = 0;
+    struct yetty_ycore_size_result call_r =
+        yetty_yclass_rpc_call(s, YETTY_YCLASS_RPC_OP_GET_ROOT, 0, NULL, 0, &handle, sizeof(handle));
+    if (YETTY_IS_ERR(call_r)) {
+        return YETTY_ERR(yetty_yclass_handle, "session_get_root: GET_ROOT call failed", call_r);
+    }
+    if (call_r.value != sizeof(handle)) {
+        return YETTY_ERR(yetty_yclass_handle, "session_get_root: GET_ROOT short response");
+    }
+    return YETTY_OK(yetty_yclass_handle, handle);
+}
+
 struct yetty_ycore_void_result yetty_yclass_rpc_session_translate_class(
     struct yetty_yclass_rpc_session *s, const char *class_name)
 {
@@ -745,7 +826,7 @@ struct yetty_ycore_void_result yetty_yclass_rpc_session_translate_class(
         return YETTY_OK_VOID();
     }
 
-    uint8_t buf[BUF_MAX];
+    uint8_t buf[GET_CLASS_RESP_MAX];
     size_t name_len = strlen(class_name);
     struct yetty_ycore_size_result rr = yetty_yclass_rpc_call(
         s, YETTY_YCLASS_RPC_OP_GET_CLASS, 0, class_name, name_len, buf, sizeof(buf));

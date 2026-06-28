@@ -24,6 +24,7 @@
 YETTY_YRESULT_DECLARE(yetty_ygui_yshadertoy_ptr, struct yetty_ygui_yshadertoy *);
 struct yetty_yclass_ptr_result yetty_ygui_yshadertoy_class_get(void);
 struct yetty_ygui_yshadertoy_ptr_result yetty_ygui_yshadertoy_from(struct yetty_yclass_object *obj);
+#include <yetty/yfigure/registry.h>
 #include <yetty/yfigure/wire.h>
 #include <stdlib.h>
 #include <string.h>
@@ -74,8 +75,8 @@ static struct yetty_ycore_void_result emit_container(struct yetty_yclass_object 
     struct yetty_ycore_rectangle r = rect_res.value;
     struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yshadertoy emit_container: id");
-    return yetty_ygui_emit_ensure_child(ctx, id_res.value, YETTY_YFIGURE_KIND_YSHADERTOY, r.min.x,
-                                        r.min.y, r.max.x, r.max.y, NULL, 0);
+    return yetty_ygui_emit_ensure_child(ctx, id_res.value, yetty_yfigure_kind_token("yshadertoy"),
+                                        r.min.x, r.min.y, r.max.x, r.max.y, NULL, 0);
 }
 
 YETTY_ANNOTATE("override@ygui:yshadertoy:widget_emit_body")

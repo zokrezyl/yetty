@@ -8,10 +8,13 @@
  * Two sinks, one engine:
  *   - LOCAL (standalone): the backdrop + caption are pinned ygrid figures
  *     owned by a yfigure_container the app renders itself.
- *   - WIRE (client / in-terminal): the same two figures are EMITTED as
- *     figure-tree records over a yfigure_producer down the app's output pty,
- *     so they render in a hosting yetty's pane. Same chrome, same backdrop,
- *     no per-app boilerplate.
+ *   - WIRE (client / in-terminal): the same two figures are driven on the
+ *     hosting yetty's root figure container PROXY via the generated typed
+ *     yclass-RPC stubs (yetty_yfigure_create_child / set_child_z /
+ *     delete_child). Each stub is one-way fire-and-forget and flushes its
+ *     request synchronously, so the chrome renders in the host's pane with
+ *     no per-app boilerplate. The owner attaches the producer session and
+ *     hands this host the container proxy + session.
  *
  * The backdrop is an opaque BRAND_BG surface beneath all app content. In
  * client mode it is what hides the host terminal's text under the app; in
@@ -25,7 +28,7 @@
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/producer.h>
-#include <yetty/yfigure/wire.h>
+#include <yetty/yfigure/registry.h>
 #ifdef YETTY_YCHROME_HAS_LOCAL
 /* ygrid is GPU-backed (composites through a pipeline). Only the LOCAL sink —
  * pinned ygrid figures the app renders itself — needs it. The WIRE sink emits
@@ -69,9 +72,12 @@ struct yetty_ychrome_host {
     struct yetty_ygrid_grid *backdrop;
 #endif
 
-    /* WIRE sink — figures emitted over the producer (NULL in local mode;
-     * borrowed). */
-    struct yetty_yfigure_producer *producer;
+    /* WIRE sink — figures driven on the host's root container proxy via the
+     * typed yclass-RPC stubs (NULL in local mode). The owner attaches the
+     * producer session and passes both in; both are borrowed (the owner keeps
+     * ownership and detaches the session after this host is destroyed). */
+    struct yetty_yclass_object *container;                   /* root container proxy */
+    struct yetty_yfigure_producer_session *producer_session; /* owning session */
 
     float width;
     float height;
@@ -174,21 +180,25 @@ static struct yetty_ygrid_grid_ptr_result host_pin_grid(struct yetty_yclass_obje
  * WIRE sink.
  *=========================================================================*/
 
-/* (Re)create one of the chrome figures on the far end via the producer. A
+/* (Re)create one of the chrome figures on the far end via the typed stubs. A
  * CREATE_CHILD on an existing id re-mints the figure with fresh content, so
- * this doubles as the refresh path. */
+ * this doubles as the refresh path. The stubs are one-way and flush their
+ * request synchronously, so there is no separate flush step. */
 static struct yetty_ycore_void_result host_wire_emit(struct yetty_ychrome_host *host, uint32_t id,
                                                      int z, struct yetty_ycore_rectangle rect,
                                                      const uint8_t *body, uint32_t body_len)
 {
-    struct yetty_ycore_void_result create_result = yetty_yfigure_producer_create_child(
-        host->producer, id, YETTY_YFIGURE_KIND_YGRID, rect, body, body_len);
+    /* The create_child stub copies the init bytes synchronously; point at a
+     * valid (unused) address rather than NULL for an empty body so its
+     * memcpy(dst, src, 0) never gets a NULL source. */
+    uint8_t empty_body = 0;
+    struct yetty_ycore_buffer init = {
+        .data = body ? (uint8_t *)body : &empty_body, .capacity = 0, .size = body_len};
+    struct yetty_ycore_void_result create_result = yetty_yfigure_create_child(
+        host->container, yetty_yfigure_kind_token("ygrid"), id, rect, init);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, create_result, "chrome host wire: create_child");
-    struct yetty_ycore_void_result z_result =
-        yetty_yfigure_producer_set_child_z(host->producer, id, z);
+    struct yetty_ycore_void_result z_result = yetty_yfigure_set_child_z(host->container, id, z);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, z_result, "chrome host wire: set_child_z");
-    struct yetty_ycore_void_result flush_result = yetty_yfigure_producer_flush(host->producer);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_result, "chrome host wire: flush");
     return YETTY_OK_VOID();
 }
 
@@ -230,7 +240,7 @@ static struct yetty_ycore_void_result host_wire_caption_emit(struct yetty_ychrom
 
 static struct yetty_ycore_void_result host_caption_refresh(struct yetty_ychrome_host *host)
 {
-    if (host->producer) {
+    if (host->container) {
         return host_wire_caption_emit(host);
     }
 #ifdef YETTY_YCHROME_HAS_LOCAL
@@ -246,8 +256,8 @@ static struct yetty_ycore_void_result host_caption_refresh(struct yetty_ychrome_
     YETTY_RETURN_IF_ERR(yetty_ycore_void, load_result, "chrome host caption refresh: load");
     return YETTY_OK_VOID();
 #else
-    /* Wire-only build: a host with no producer has no sink. Unreachable in
-     * practice (client hosts always carry a producer). */
+    /* Wire-only build: a host with no container proxy has no sink. Unreachable
+     * in practice (client hosts always carry a container proxy). */
     return YETTY_ERR(yetty_ycore_void, "chrome host caption refresh: no sink (wire-only build)");
 #endif
 }
@@ -359,17 +369,19 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
 #endif /* YETTY_YCHROME_HAS_LOCAL */
 
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
-    struct yetty_yfigure_producer *producer, struct yetty_yclass_object *window_chrome, float width,
-    float height, float caption_height, float edge_size, unsigned int flags)
+    struct yetty_yclass_object *container, struct yetty_yfigure_producer_session *producer_session,
+    struct yetty_yclass_object *window_chrome, float width, float height, float caption_height,
+    float edge_size, unsigned int flags)
 {
-    if (!producer) {
-        return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host_create_wire: producer required");
+    if (!container) {
+        return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host_create_wire: container required");
     }
     struct yetty_ychrome_host_ptr_result alloc_result =
         host_alloc(window_chrome, width, height, caption_height, edge_size, flags);
     YETTY_RETURN_IF_ERR(yetty_ychrome_host_ptr, alloc_result, "ychrome_host_create_wire");
     struct yetty_ychrome_host *host = alloc_result.value;
-    host->producer = producer;
+    host->container = container;
+    host->producer_session = producer_session;
 
     struct yetty_ycore_void_result backdrop_result = host_wire_backdrop_emit(host);
     if (YETTY_IS_ERR(backdrop_result)) {
@@ -384,7 +396,7 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
 
 struct yetty_ycore_void_result yetty_ychrome_host_resync(struct yetty_ychrome_host *host)
 {
-    if (!host || !host->producer) {
+    if (!host || !host->container) {
         return YETTY_OK_VOID();
     }
     struct yetty_ycore_void_result result = host_wire_backdrop_emit(host);
@@ -392,20 +404,20 @@ struct yetty_ycore_void_result yetty_ychrome_host_resync(struct yetty_ychrome_ho
     return result;
 }
 
-struct yetty_ycore_void_result yetty_ychrome_host_clear_to_fd(struct yetty_ychrome_host *host,
-                                                              int fd)
+struct yetty_ycore_void_result yetty_ychrome_host_clear(struct yetty_ychrome_host *host)
 {
-    if (!host || !host->producer) {
+    if (!host || !host->container) {
         return YETTY_OK_VOID();
     }
-    /* Queue DELETEs for our two figures and ship them over the fd with a
-     * blocking write — the producer's pending buffer is empty here (each emit
-     * flushes it), so this envelope carries exactly the two DELETE records. */
+    /* Remove our two figures from the host pane via the typed delete_child
+     * stubs. Each is one-way and flushes its request synchronously with a
+     * blocking write to the session's write_fd — safe at process teardown
+     * where an async event loop has already stopped. The owner detaches the
+     * session AFTER this returns. */
     struct yetty_ycore_void_result result =
-        yetty_yfigure_producer_delete_child(host->producer, YCHROME_WIRE_CAPTION_ID);
+        yetty_yfigure_delete_child(host->container, YCHROME_WIRE_CAPTION_ID);
     result = yetty_ycore_void_chain(
-        result, yetty_yfigure_producer_delete_child(host->producer, YCHROME_WIRE_BACKDROP_ID));
-    result = yetty_ycore_void_chain(result, yetty_yfigure_producer_flush_fd(host->producer, fd));
+        result, yetty_yfigure_delete_child(host->container, YCHROME_WIRE_BACKDROP_ID));
     return result;
 }
 
@@ -447,7 +459,7 @@ struct yetty_ycore_void_result yetty_ychrome_host_resized(struct yetty_ychrome_h
     host->height = height;
     struct yetty_ycore_void_result result = yetty_ychrome_set_size(host->chrome, width, height);
 
-    if (host->producer) {
+    if (host->container) {
         /* WIRE: re-emit both figures at the new size (CREATE_CHILD re-mints). */
         result = yetty_ycore_void_chain(result, host_wire_backdrop_emit(host));
         result = yetty_ycore_void_chain(result, host_wire_caption_emit(host));
@@ -498,16 +510,14 @@ struct yetty_ycore_void_result yetty_ychrome_host_destroy(struct yetty_ychrome_h
         return YETTY_OK_VOID();
     }
     struct yetty_ycore_void_result result = YETTY_OK_VOID();
-    /* Figure removal is the container's responsibility, NOT this destroy's:
-     *  - WIRE: the host pane drops our children when the app emits CLEAR_ALL
-     *    (yetty_ygui_framework_clear_remote_fd) over a BLOCKING fd write at
-     *    exit. We must not emit DELETEs through the producer here: at process
-     *    teardown the app's event loop has already stopped, so an async pty
-     *    write can never flush and a half-queued one would corrupt the very
-     *    CLEAR_ALL the app writes next.
+    /* Figure removal is NOT this destroy's job:
+     *  - WIRE: the owner removes our children by calling yetty_ychrome_host_clear
+     *    (typed delete_child stubs, each a synchronous one-way write) BEFORE
+     *    this destroy, then detaches the producer session it owns afterwards.
      *  - LOCAL: the pinned figures are owned by the container (added via
      *    add_child) and destroyed with it.
-     * Either way, destroy only frees what is ours: the chrome engine + host. */
+     * Either way, destroy only frees what is ours: the chrome engine + host.
+     * The container proxy + session are borrowed; the owner detaches them. */
     if (host->chrome) {
         result = yetty_ycore_void_chain(result, yetty_ychrome_destroy(host->chrome));
     }

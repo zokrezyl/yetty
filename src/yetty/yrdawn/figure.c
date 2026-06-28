@@ -1002,8 +1002,8 @@ struct yetty_ycore_void_result yetty_yrdawn_register_factory(
     if (!registry || !args) {
         return YETTY_ERR(yetty_ycore_void, "yetty_yrdawn_register_factory: NULL arg");
     }
-    return yetty_yfigure_registry_register(registry, YETTY_YFIGURE_KIND_YRDAWN, yrdawn_factory,
-                                           args);
+    return yetty_yfigure_registry_register(registry, yetty_yfigure_kind_token("yrdawn"),
+                                           yrdawn_factory, args);
 }
 
 YETTY_ANNOTATE("expose")

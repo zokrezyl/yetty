@@ -28,8 +28,7 @@ struct yai_tool_name_entry {
 
 /* Engine-private state: the tool_use_id -> tool name ring (to label
  * results) and the interrupt request counter. */
-struct YETTY_ANNOTATE("class@yai:claude") YETTY_ANNOTATE("parent@yai:engine")
-yetty_yai_claude {
+struct YETTY_ANNOTATE("class@yai:claude") YETTY_ANNOTATE("parent@yai:engine") yetty_yai_claude {
     struct yai_tool_name_entry tool_names[YAI_TOOL_NAME_MAP_SIZE];
     int tool_name_next;
     int interrupt_request_counter;

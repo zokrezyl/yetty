@@ -11,6 +11,6 @@
 struct yetty_yclass_object;
 
 int ymap_interactive_run(struct yetty_yclass_object *map_object, uint32_t width_px,
-                                uint32_t height_px);
+                         uint32_t height_px);
 
 #endif /* YMAP_INTERACTIVE_H */

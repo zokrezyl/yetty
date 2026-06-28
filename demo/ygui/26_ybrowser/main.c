@@ -259,8 +259,7 @@ static const char *const *demo_labels(int *count)
 
 /* Tabbar VALUE_CHANGED → swap the ybrowser's document to the picked page.
  * userdata is the ybrowser widget itself (it outlives the subscription). */
-static struct yetty_ycore_void_result on_tab_change(
-                                                    struct yetty_yclass_object *target,
+static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_object *target,
                                                     const struct yetty_ygui_event *event,
                                                     void *userdata)
 {
@@ -289,8 +288,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
     YETTY_RETURN_IF_ERR(yetty_ycore_void, tbr, "tabbar");
     struct yetty_yclass_object *tabbar = tbr.value;
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res =
-            yetty_ygui_widget_layout_get(tabbar);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(tabbar);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "26_ybrowser: layout_get");
         struct yetty_ygui_layout l = *layout_res.value;
         l.height = 36;

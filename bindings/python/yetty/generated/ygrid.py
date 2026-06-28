@@ -33,21 +33,21 @@ class Grid(_yfigure.Figure):
         """Call `yetty_ygrid_destroy`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ygrid_destroy", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+        _fn = _rt.cfn("yetty_ygrid_destroy", _t.yetty_ycore_void_result, [c_void_p])
         res = _fn(None, self._handle)
         return _rt.result_from_c(res)
-    def add_record(self, record: _t.yetty_ycore_buffer) -> _rt.Result[None]:
+    def add_record(self) -> _rt.Result[None]:
         """Call `yetty_ygrid_add_record`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ygrid_add_record", _t.yetty_ycore_void_result, [c_void_p, c_void_p, _t.yetty_ycore_buffer])
-        res = _fn(None, self._handle, record)
+        _fn = _rt.cfn("yetty_ygrid_add_record", _t.yetty_ycore_void_result, [c_void_p, _t.yetty_ycore_buffer])
+        res = _fn(None, self._handle)
         return _rt.result_from_c(res)
     def clear(self) -> _rt.Result[None]:
         """Call `yetty_ygrid_clear`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ygrid_clear", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+        _fn = _rt.cfn("yetty_ygrid_clear", _t.yetty_ycore_void_result, [c_void_p])
         res = _fn(None, self._handle)
         return _rt.result_from_c(res)
 

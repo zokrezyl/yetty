@@ -33,16 +33,21 @@ struct yetty_yplatform_glfw_clipboard_ptr_result {
         struct yetty_ycore_error error;
     };
 };
-struct yetty_yplatform_glfw_clipboard_ptr_result yetty_yplatform_glfw_clipboard_from(struct yetty_yclass_object *obj);
-struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_clipboard_to(struct yetty_yplatform_glfw_clipboard *data);
+struct yetty_yplatform_glfw_clipboard_ptr_result yetty_yplatform_glfw_clipboard_from(
+    struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_clipboard_to(
+    struct yetty_yplatform_glfw_clipboard *data);
 
-struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_clipboard_create(struct yetty_yclass_ctx *ctx);
+struct yetty_yclass_object_ptr_result yetty_yplatform_glfw_clipboard_create(
+    struct yetty_yclass_ctx *ctx);
 
 struct yetty_ycore_void_result yetty_yplatform_register(void);
 
 /* Bind the render→main marshalling bus and the main→render response pipe. Both
  * are borrowed. Call once after create(), before any other slot. */
-struct yetty_ycore_void_result yetty_yplatform_glfw_clipboard_configure(struct yetty_yclass_object *obj, struct yetty_ycore_xthread_event_pipe *output_pipe, struct yetty_ycore_xthread_event_pipe *input_pipe);
+struct yetty_ycore_void_result yetty_yplatform_glfw_clipboard_configure(
+    struct yetty_yclass_object *obj, struct yetty_ycore_xthread_event_pipe *output_pipe,
+    struct yetty_ycore_xthread_event_pipe *input_pipe);
 
 #ifdef __cplusplus
 }

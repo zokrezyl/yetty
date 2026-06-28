@@ -1,25 +1,14 @@
 /*
- * producer.h — generic figure-tree wire producer (the emit side).
+ * producer.h — out-of-process figure producer attach helper (the emit side).
  *
- * The container (container.c) is the RECEIVER: it consumes a stream of
- * wire records (CREATE_CHILD / SET_CHILD_* / body records — see wire.h)
- * and builds/updates a live figure tree. This is its mirror image: an
- * object that an out-of-process client uses to PRODUCE that same record
- * stream and ship it, wrapped in the shared YCOMPOSITOR_BIN yface
- * envelope, down an output pty to a hosting yetty.
+ * The container (container.c) is the RECEIVER: it exposes typed figure-tree
+ * mutation slots (create_child / set_child_* / apply_child_body / …). This is
+ * the client-side helper an out-of-process tool uses to reach a hosting
+ * yetty's root figure container over the yclass RPC transport and drive those
+ * typed slots — instead of hand-building a wire record stream.
  *
- * It is ygui-free on purpose. The ygui framework has its own emit path
- * for ygui widget trees; this is the lower-level primitive any app — a
- * ygui app, a bare ydraw tool (ymaze), or the window chrome (ychrome) —
- * uses to put figures on a remote pane without reimplementing the wire
- * framing every time.
- *
- * Records accumulate across emit_* calls and are flushed as ONE envelope
- * by flush(); the buffer is cleared on a successful flush. Call order is
- * preserved on the wire, so the receiver applies CREATE_CHILD before the
- * SET_CHILD_Z / body records that reference the new id.
- *
- * The output pty is borrowed — the caller owns its lifetime.
+ * It is ygui-free on purpose: any app — a ygui app, a bare ydraw tool, or the
+ * window chrome (ychrome) — uses it to put figures on a remote pane.
  */
 #ifndef YETTY_YFIGURE_PRODUCER_H
 #define YETTY_YFIGURE_PRODUCER_H
@@ -29,51 +18,56 @@
 
 #include <stdint.h>
 
-struct yetty_platform_pty;
-struct yetty_yfigure_producer;
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-YETTY_YRESULT_DECLARE(yetty_yfigure_producer_ptr, struct yetty_yfigure_producer *);
+struct yetty_yclass_object;
+struct yetty_yclass_rpc_session;
+struct yetty_yfigure_producer_session;
 
-/* Create a producer that ships its envelopes down `output_pty` (borrowed). */
-struct yetty_yfigure_producer_ptr_result yetty_yfigure_producer_create(
-    struct yetty_platform_pty *output_pty);
+YETTY_YRESULT_DECLARE(yetty_yfigure_producer_session_ptr, struct yetty_yfigure_producer_session *);
 
-struct yetty_ycore_void_result yetty_yfigure_producer_destroy(
-    struct yetty_yfigure_producer *producer);
+/*===========================================================================
+ * yclass-RPC attach — the producer path.
+ *
+ * An out-of-process tool attaches to the hosting yetty's root figure
+ * container over the yclass RPC transport (DCS code YETTY_DCS_YCLASS_RPC) and
+ * drives it with the generated typed stubs (yetty_yfigure_create_child,
+ * yetty_yfigure_set_child_rect, …). The same callsites that dispatch locally
+ * in-process marshal over the session when the object is a proxy.
+ *=========================================================================*/
 
-/* Create a child figure of the target container. `kind` is one of
- * yetty_yfigure_wire_kind. `init_bytes` is the kind-specific init payload
- * forwarded to the child's process_input (for a ygrid figure this is a
- * ydraw drawable-list byte stream). */
-struct yetty_ycore_void_result yetty_yfigure_producer_create_child(
-    struct yetty_yfigure_producer *producer, uint32_t child_id, uint32_t kind,
-    struct yetty_ycore_rectangle rect, const uint8_t *init_bytes, uint32_t init_len);
+/* Attach to the host's root figure container over the yclass RPC DCS
+ * transport. `read_fd` is where RPC responses arrive (the tool's input from
+ * the terminal), `write_fd` is where requests go (its output to the terminal);
+ * a tool over a PTY passes STDIN_FILENO / STDOUT_FILENO. `compressed`: 0 =
+ * base64 only (cheapest for tiny frames), 1 = base64+lz4.
+ *
+ * Ensures the yfigure classes are registered locally, opens the session, runs
+ * the startup handshake (batched slot resolution + RPC_OP_GET_ROOT), and
+ * returns a session wrapping the root container proxy. The fds are borrowed —
+ * the caller keeps ownership and closes them after detach. */
+struct yetty_yfigure_producer_session_ptr_result yetty_yfigure_producer_attach(int read_fd,
+                                                                               int write_fd,
+                                                                               int compressed);
 
-/* Re-ship a child's body (id != 0 record) — replaces the child's content
- * without a re-CREATE. For a ygrid figure this is a fresh drawable-list
- * stream. */
-struct yetty_ycore_void_result yetty_yfigure_producer_figure_body(
-    struct yetty_yfigure_producer *producer, uint32_t child_id, const uint8_t *bytes, uint32_t len);
+/* The root container proxy to drive with the typed yetty_yfigure_* stubs.
+ * Returns NULL for a NULL session. */
+struct yetty_yclass_object *yetty_yfigure_producer_session_container(
+    struct yetty_yfigure_producer_session *producer_session);
 
-struct yetty_ycore_void_result yetty_yfigure_producer_set_child_z(
-    struct yetty_yfigure_producer *producer, uint32_t child_id, int32_t z);
+/* The underlying RPC session (e.g. to proxy other host objects). NULL-safe. */
+struct yetty_yclass_rpc_session *yetty_yfigure_producer_session_rpc(
+    struct yetty_yfigure_producer_session *producer_session);
 
-struct yetty_ycore_void_result yetty_yfigure_producer_set_child_rect(
-    struct yetty_yfigure_producer *producer, uint32_t child_id, struct yetty_ycore_rectangle rect);
+/* Tear down the session (destroys the owned transport) and the container
+ * proxy. NULL-safe. */
+struct yetty_ycore_void_result yetty_yfigure_producer_detach(
+    struct yetty_yfigure_producer_session *producer_session);
 
-struct yetty_ycore_void_result yetty_yfigure_producer_delete_child(
-    struct yetty_yfigure_producer *producer, uint32_t child_id);
-
-/* Ship everything accumulated since the last flush as one yface envelope
- * and clear the record buffer. A no-op (and OK) when nothing is pending. */
-struct yetty_ycore_void_result yetty_yfigure_producer_flush(
-    struct yetty_yfigure_producer *producer);
-
-/* Same as flush(), but writes the envelope straight to `fd` with a BLOCKING
- * write instead of the (async) output pty. Use this at process teardown, where
- * the event loop has stopped and an async pty write can never drain — the same
- * reason yetty_ygui_framework_clear_remote_fd writes to the fd directly. */
-struct yetty_ycore_void_result yetty_yfigure_producer_flush_fd(
-    struct yetty_yfigure_producer *producer, int fd);
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* YETTY_YFIGURE_PRODUCER_H */

@@ -616,10 +616,10 @@ static struct yetty_ycore_void_result on_next_click(struct yetty_yclass_object *
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result
-build_widgets(struct yetty_yaudio_app *app, const struct yetty_yplatform_gpu_context *gpu)
+static struct yetty_ycore_void_result build_widgets(struct yetty_yaudio_app *app,
+                                                    const struct yetty_yplatform_gpu_context *gpu)
 {
-    struct yetty_ygui_framework *engine = yetty_yui_engine(app->yui);
+    struct yetty_yclass_object *engine = yetty_yui_engine(app->yui);
     if (!engine) {
         return YETTY_ERR(yetty_ycore_void, "yaudio: yui engine is NULL — yui allocation failed");
     }
@@ -816,7 +816,7 @@ build_widgets(struct yetty_yaudio_app *app, const struct yetty_yplatform_gpu_con
 static void build_loading_ui(struct yetty_yaudio_app *app,
                              const struct yetty_yplatform_gpu_context *gpu)
 {
-    struct yetty_ygui_framework *engine = yetty_yui_engine(app->yui);
+    struct yetty_yclass_object *engine = yetty_yui_engine(app->yui);
     if (!engine) {
         yerror("yaudio: yui engine is NULL — yui allocation failed");
         return;
@@ -1221,8 +1221,7 @@ static struct yetty_ycore_void_result yaudio_app_run(struct yetty_yclass_object 
     }
 
     /* Present the first frame (the loading screen) immediately. */
-    yetty_yevent_post_async(input_pipe,
-                            &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
+    yetty_yevent_post_async(input_pipe, &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
     /* Run the libuv loop until SHUTDOWN. Input-driven render coalesced via
      * libuv's idle handle; the x11-tile target's tile-diff readback

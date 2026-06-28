@@ -31,15 +31,14 @@ static inline void err_ok(struct yetty_ycore_void_result r)
 /* Add `cls` under `parent` and author its main-axis height. Returns NULL on
  * allocation failure (the demo simply skips that widget). */
 static struct yetty_yclass_object *add_w(struct yetty_yclass_object *parent,
-                                       const struct yetty_yclass *cls, float height)
+                                         const struct yetty_yclass *cls, float height)
 {
     struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_add(parent, cls);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return NULL;
     }
-    struct yetty_ygui_layout_const_ptr_result layout_res =
-        yetty_ygui_widget_layout_get(r.value);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(r.value);
     if (YETTY_IS_ERR(layout_res)) {
         yetty_ycore_error_destroy(layout_res.error);
         return r.value;
@@ -55,8 +54,7 @@ static void set_grow(struct yetty_yclass_object *w, float grow)
     if (!w) {
         return;
     }
-    struct yetty_ygui_layout_const_ptr_result layout_res =
-        yetty_ygui_widget_layout_get(w);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(w);
     if (YETTY_IS_ERR(layout_res)) {
         yetty_ycore_error_destroy(layout_res.error);
         return;
@@ -121,8 +119,7 @@ static void finalize_section(struct yetty_yclass_object *sec)
     if (n > 1) {
         total += sl->gap * (float)(n - 1);
     }
-    struct yetty_ygui_layout_const_ptr_result final_layout_res =
-        yetty_ygui_widget_layout_get(sec);
+    struct yetty_ygui_layout_const_ptr_result final_layout_res = yetty_ygui_widget_layout_get(sec);
     if (YETTY_IS_ERR(final_layout_res)) {
         yetty_ycore_error_destroy(final_layout_res.error);
         return;

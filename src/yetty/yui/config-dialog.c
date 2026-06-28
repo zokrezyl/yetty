@@ -49,7 +49,7 @@ struct path_bundle {
 };
 
 struct yetty_yui_config_dialog {
-    struct yetty_ygui_framework *framework;    /* borrowed */
+    struct yetty_yclass_object *framework;     /* borrowed */
     const struct yetty_yconfig_config *config; /* borrowed */
     struct yetty_yclass_object *window;
     struct yetty_yclass_object *textarea;
@@ -230,7 +230,7 @@ static struct yetty_ycore_void_result build_tree(struct yetty_yui_config_dialog 
 }
 
 struct yetty_yui_config_dialog_ptr_result yetty_yui_config_dialog_create(
-    struct yetty_ygui_framework *framework, const struct yetty_yconfig_config *config)
+    struct yetty_yclass_object *framework, const struct yetty_yconfig_config *config)
 {
     if (!framework) {
         return YETTY_ERR(yetty_yui_config_dialog_ptr, "config_dialog: NULL framework");

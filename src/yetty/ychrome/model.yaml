@@ -17,6 +17,7 @@ methods:
     doc: "/* Bind the engine to a window_chrome and set the caption/edge geometry. Call
  * once after create(), before feeding events. window_chrome is borrowed. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: set_size
     domain: ychrome
@@ -32,6 +33,7 @@ methods:
     doc: "/* Update the window size so the right/bottom edge bands track it. Call on every
  * resize. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: destroy
     domain: ychrome
@@ -42,6 +44,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: edge_cursor_at
     domain: ychrome
@@ -56,6 +59,7 @@ methods:
         type: float
     doc: null
     local: true
+    oneway: false
     return_payload_type: int
   - slot: render
     domain: ychrome
@@ -69,6 +73,7 @@ methods:
  * glyphs flush right. The caller composites the list as a pinned top figure and
  * destroys it. Uses font_id=-1 (the default font), so no font dependency. */"
     local: true
+    oneway: false
     return_payload_type: "struct yetty_ydraw_drawable_list *"
   - slot: handle_event
     domain: ychrome
@@ -83,6 +88,7 @@ methods:
  * processing it), 0 if it's not a chrome gesture. Forward events here only
  * after your own controls (buttons, tabs) had their chance. */"
     local: true
+    oneway: false
     return_payload_type: int
 classes:
   - name: chrome

@@ -33,8 +33,7 @@ static void set_grow(struct yetty_yclass_object *w, float grow)
     if (!w) {
         return;
     }
-    struct yetty_ygui_layout_const_ptr_result layout_res =
-        yetty_ygui_widget_layout_get(w);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(w);
     if (YETTY_IS_ERR(layout_res)) {
         yetty_ycore_error_destroy(layout_res.error);
         return;
@@ -118,8 +117,7 @@ static void finalize_section(struct yetty_yclass_object *sec)
     if (n > 1) {
         total += sl->gap * (float)(n - 1);
     }
-    struct yetty_ygui_layout_const_ptr_result final_layout_res =
-        yetty_ygui_widget_layout_get(sec);
+    struct yetty_ygui_layout_const_ptr_result final_layout_res = yetty_ygui_widget_layout_get(sec);
     if (YETTY_IS_ERR(final_layout_res)) {
         yetty_ycore_error_destroy(final_layout_res.error);
         return;

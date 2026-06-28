@@ -261,7 +261,7 @@ static int proc_cmp_cpu_desc(const void *a, const void *b)
 #define MAX_TABLE_ROWS 32
 
 struct app_state {
-    struct yetty_ygui_framework *engine;
+    struct yetty_yclass_object *engine;
     struct yetty_yclass_object *root;
     struct yetty_yclass_object *header;
     struct yetty_yclass_object *cpu_bars[MAX_CORES + 1];
@@ -308,8 +308,8 @@ static uint32_t core_accent(int core)
 /* Add `cls` under `parent`, position + size it absolutely, return it
  * (or NULL). Absolute placement mirrors ytop's hand-laid-out UI. */
 static struct yetty_yclass_object *ytop_place(struct app_state *s,
-                                            struct yetty_yclass_ptr_result cls_r, float x, float y,
-                                            float w, float h)
+                                              struct yetty_yclass_ptr_result cls_r, float x,
+                                              float y, float w, float h)
 {
     if (YETTY_IS_ERR(cls_r)) {
         yetty_ycore_error_destroy(cls_r.error);
@@ -570,7 +570,7 @@ struct ytop_client {
     struct app_state *s;
 };
 
-static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, void *user)
+static int on_key(struct yetty_yclass_object *engine, uint32_t key, int mods, void *user)
 {
     (void)engine;
     (void)mods;
@@ -680,7 +680,7 @@ int main(int argc, char **argv)
         goto cleanup_loop;
     }
 
-    struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(&c.out.base);
+    struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
     if (YETTY_IS_ERR(fr)) {
         fprintf(stderr, "ytop: framework_create failed: %s\n", fr.error.msg);
         yetty_ycore_error_destroy(fr.error);

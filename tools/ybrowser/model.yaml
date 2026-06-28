@@ -31,18 +31,6 @@ classes:
         type: "struct yetty_ydraw_composite_factory *"
         get: false
         set: false
-      - name: wire_sm
-        type: "struct yetty_ywire_wire_statemachine *"
-        get: false
-        set: false
-      - name: pty_pair
-        type: struct yetty_yplatform_memory_pty_pair
-        get: false
-        set: false
-      - name: has_pty_pair
-        type: int
-        get: false
-        set: false
       - name: font
         type: "struct yetty_yfont_font *"
         get: false
@@ -271,13 +259,6 @@ types:
         type: "struct yetty_ydraw_composite_factory *"
       - name: absolute_coords
         type: int
-  - name: yetty_yplatform_memory_pty_pair
-    kind: struct
-    fields:
-      - name: a
-        type: "struct yetty_platform_pty *"
-      - name: b
-        type: "struct yetty_platform_pty *"
 local_types:
   content_kind: tools/ybrowser/browser-ui.c
   cache_entry: tools/ybrowser/browser-ui.c

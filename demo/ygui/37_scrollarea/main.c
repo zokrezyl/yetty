@@ -56,7 +56,7 @@ static inline void err_ok(struct yetty_ycore_void_result r)
 /* Instantiate `cls` under `parent`, swallowing (and freeing) any error so
  * the build keeps going — a demo wants best-effort, not abort-on-first. */
 static struct yetty_yclass_object *add_obj(struct yetty_yclass_object *parent,
-                                         struct yetty_yclass_ptr_result cls)
+                                           struct yetty_yclass_ptr_result cls)
 {
     if (YETTY_IS_ERR(cls)) {
         yetty_ycore_error_destroy(cls.error);
@@ -76,8 +76,7 @@ static void set_size(struct yetty_yclass_object *o, float w, float h)
     if (!o) {
         return;
     }
-    struct yetty_ygui_layout_const_ptr_result layout_res =
-        yetty_ygui_widget_layout_get(o);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(o);
     if (YETTY_IS_ERR(layout_res)) {
         yetty_ycore_error_destroy(layout_res.error);
         return;
@@ -97,8 +96,7 @@ static void set_grow(struct yetty_yclass_object *o, float grow)
     if (!o) {
         return;
     }
-    struct yetty_ygui_layout_const_ptr_result layout_res =
-        yetty_ygui_widget_layout_get(o);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(o);
     if (YETTY_IS_ERR(layout_res)) {
         yetty_ycore_error_destroy(layout_res.error);
         return;
@@ -113,8 +111,7 @@ static void set_gap(struct yetty_yclass_object *o, float gap)
     if (!o) {
         return;
     }
-    struct yetty_ygui_layout_const_ptr_result layout_res =
-        yetty_ygui_widget_layout_get(o);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(o);
     if (YETTY_IS_ERR(layout_res)) {
         yetty_ycore_error_destroy(layout_res.error);
         return;
@@ -132,8 +129,7 @@ static void show_scene(int idx)
     }
 }
 
-static struct yetty_ycore_void_result on_tab_changed(
-                                                     struct yetty_yclass_object *target,
+static struct yetty_ycore_void_result on_tab_changed(struct yetty_yclass_object *target,
                                                      const struct yetty_ygui_event *event,
                                                      void *userdata)
 {
@@ -153,7 +149,8 @@ static struct yetty_ycore_void_result on_tab_changed(
 /* Begin a scene: an outer column holding a one-line description above a
  * flex-filling scrollarea. Registers the outer column for tab toggling
  * and returns the scrollarea for the caller to populate. */
-static struct yetty_yclass_object *begin_scene(struct yetty_yclass_object *content, const char *desc)
+static struct yetty_yclass_object *begin_scene(struct yetty_yclass_object *content,
+                                               const char *desc)
 {
     struct yetty_yclass_object *scene = add_obj(content, yetty_ygui_vbox_class_get());
     if (!scene) {
@@ -340,8 +337,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 {
     (void)runner;
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res =
-            yetty_ygui_widget_layout_get(root);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(root);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "37_scrollarea: layout_get");
         struct yetty_ygui_layout l = *layout_res.value;
         l.direction = YETTY_YGUI_FLEX_COLUMN;

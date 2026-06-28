@@ -10,6 +10,7 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: run
     domain: yapp
@@ -22,6 +23,22 @@ methods:
         type: "struct yetty_yclass_object *"
     doc: null
     local: true
+    oneway: false
+    return_payload_type: null
+  - slot: quit
+    domain: yapp
+    owning_class: app
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: app
+        type: "struct yetty_yclass_object *"
+    doc: "/*
+ * Ask the app to end its run loop. The base default is a no-op (an app with no
+ * event loop has nothing to stop); a concrete app overrides this to stop its
+ * loop so run() returns. Local — an app quits itself in-process.
+ */"
+    local: true
+    oneway: false
     return_payload_type: null
 classes:
   - name: app
@@ -44,6 +61,9 @@ classes:
       - slot: run
         slot_domain: yapp
         impl: yapp_default_run
+      - slot: quit
+        slot_domain: yapp
+        impl: yapp_default_quit
     doc: null
 exposed:
   - source_file: src/yetty/yapp/app.c

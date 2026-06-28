@@ -32,7 +32,7 @@
 #include <string.h>
 
 struct YETTY_ANNOTATE("class@yai:gemini") YETTY_ANNOTATE("parent@yai:turn_engine")
-yetty_yai_gemini {
+    yetty_yai_gemini {
     /* The class@ annotation needs a struct to sit on; gemini keeps no
      * engine-private state. */
     char unused;

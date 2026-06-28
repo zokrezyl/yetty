@@ -1066,7 +1066,8 @@ struct yetty_ycore_void_result yetty_ymgui_register_factory(struct yetty_yfigure
     if (!registry || !args) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ymgui_register_factory: NULL arg");
     }
-    return yetty_yfigure_registry_register(registry, YETTY_YFIGURE_KIND_YMGUI, ymgui_factory, args);
+    return yetty_yfigure_registry_register(registry, yetty_yfigure_kind_token("ymgui"),
+                                           ymgui_factory, args);
 }
 
 YETTY_ANNOTATE("expose")

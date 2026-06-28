@@ -69,6 +69,11 @@ static struct yetty_ycore_void_result on_request_envelope(void *userdata,
         yetty_ycore_error_destroy(dispatch_res.error);
     }
 
+    /* One-way calls get NO response envelope — the producer never reads one. */
+    if (YETTY_YCLASS_RPC_HDR_OP(header) == YETTY_YCLASS_RPC_OP_CALL_ONEWAY) {
+        return YETTY_OK_VOID();
+    }
+
     /* Wire response: u32 resp_len | resp bytes — packed into one
      * DCS envelope. */
     uint8_t resp_frame[DCS_SERVER_BUF_MAX + 4];

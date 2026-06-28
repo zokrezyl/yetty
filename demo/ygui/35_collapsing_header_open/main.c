@@ -37,15 +37,14 @@ static inline void err_ok(struct yetty_ycore_void_result r)
 /* Add `cls` under `parent` and author its main-axis height. Returns NULL
  * on allocation failure (the demo simply skips that widget). */
 static struct yetty_yclass_object *add_w(struct yetty_yclass_object *parent,
-                                       const struct yetty_yclass *cls, float height)
+                                         const struct yetty_yclass *cls, float height)
 {
     struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_add(parent, cls);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
         return NULL;
     }
-    struct yetty_ygui_layout_const_ptr_result layout_res =
-        yetty_ygui_widget_layout_get(r.value);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(r.value);
     if (YETTY_IS_ERR(layout_res)) {
         yetty_ycore_error_destroy(layout_res.error);
         return r.value;
@@ -61,8 +60,7 @@ static void set_width(struct yetty_yclass_object *w, float width)
     if (!w) {
         return;
     }
-    struct yetty_ygui_layout_const_ptr_result layout_res =
-        yetty_ygui_widget_layout_get(w);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(w);
     if (YETTY_IS_ERR(layout_res)) {
         yetty_ycore_error_destroy(layout_res.error);
         return;
@@ -77,8 +75,7 @@ static void set_grow(struct yetty_yclass_object *w, float grow)
     if (!w) {
         return;
     }
-    struct yetty_ygui_layout_const_ptr_result layout_res =
-        yetty_ygui_widget_layout_get(w);
+    struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(w);
     if (YETTY_IS_ERR(layout_res)) {
         yetty_ycore_error_destroy(layout_res.error);
         return;
@@ -144,8 +141,7 @@ static void finalize_section(struct yetty_yclass_object *sec)
     if (n > 1) {
         total += sl->gap * (float)(n - 1);
     }
-    struct yetty_ygui_layout_const_ptr_result final_layout_res =
-        yetty_ygui_widget_layout_get(sec);
+    struct yetty_ygui_layout_const_ptr_result final_layout_res = yetty_ygui_widget_layout_get(sec);
     if (YETTY_IS_ERR(final_layout_res)) {
         yetty_ycore_error_destroy(final_layout_res.error);
         return;
@@ -157,8 +153,7 @@ static void finalize_section(struct yetty_yclass_object *sec)
 
 /* ---- Overlay trigger callbacks ---- */
 
-static struct yetty_ycore_void_result on_menu_item(
-                                                   struct yetty_yclass_object *menu, int idx,
+static struct yetty_ycore_void_result on_menu_item(struct yetty_yclass_object *menu, int idx,
                                                    void *ud)
 {
     (void)menu;
@@ -167,21 +162,20 @@ static struct yetty_ycore_void_result on_menu_item(
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result on_open_dialog(
-                                                     struct yetty_yclass_object *obj, void *ud)
+static struct yetty_ycore_void_result on_open_dialog(struct yetty_yclass_object *obj, void *ud)
 {
     (void)obj;
     return yetty_ygui_dialog_open_at((struct yetty_yclass_object *)ud, 240, 180, 380, 180);
 }
 
-static struct yetty_ycore_void_result on_open_menu(
-                                                   struct yetty_yclass_object *obj, void *ud)
+static struct yetty_ycore_void_result on_open_menu(struct yetty_yclass_object *obj, void *ud)
 {
     struct yetty_ycore_rectangle_result rect_res =
         yetty_ygui_widget_rect((struct yetty_yclass_object *)obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "35_collapsing_header_open: widget_rect");
     struct yetty_ycore_rectangle r = rect_res.value;
-    return yetty_ygui_popup_menu_toggle_at((struct yetty_yclass_object *)ud, r.min.x, r.max.y + 2.0f);
+    return yetty_ygui_popup_menu_toggle_at((struct yetty_yclass_object *)ud, r.min.x,
+                                           r.max.y + 2.0f);
 }
 
 /* ---- Section builders ---- */
@@ -302,7 +296,8 @@ static void build_display(struct yetty_yclass_object *area)
         }
         static const char *tags[] = {"linux", "gpu", "rust-free"};
         for (int i = 0; i < 3; i++) {
-            struct yetty_yclass_object *chip = add_w(chip_row, yetty_ygui_chip_class_get().value, 24);
+            struct yetty_yclass_object *chip =
+                add_w(chip_row, yetty_ygui_chip_class_get().value, 24);
             set_width(chip, 90);
             err_ok(yetty_ygui_chip_set_label(chip, tags[i]));
             err_ok(yetty_ygui_chip_set_closable(chip, i < 2 ? 1 : 0));
@@ -360,8 +355,7 @@ static void build_layout_containers(struct yetty_yclass_object *area)
     /* [left panel | splitter | right panel] — drag the splitter to resize. */
     struct yetty_yclass_object *row = add_w(sec, yetty_ygui_hbox_class_get().value, 80);
     if (row) {
-        struct yetty_ygui_layout_const_ptr_result layout_res =
-            yetty_ygui_widget_layout_get(row);
+        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(row);
         if (YETTY_IS_ERR(layout_res)) {
             yetty_ycore_error_destroy(layout_res.error);
         } else {

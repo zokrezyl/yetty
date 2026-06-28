@@ -32,8 +32,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
         err_ok(yetty_ygui_progress_set_value(r.value, values[i]));
         struct yetty_yclass_object *w = r.value;
         {
-            struct yetty_ygui_layout_const_ptr_result layout_res =
-                yetty_ygui_widget_layout_get(w);
+            struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(w);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "11_progress_bar: layout_get");
             struct yetty_ygui_layout l = *layout_res.value;
             l.height = 14;

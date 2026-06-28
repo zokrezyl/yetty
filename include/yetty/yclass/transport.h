@@ -36,6 +36,12 @@ struct yetty_yclass_transport_ops {
                                            size_t len);
     struct yetty_ycore_size_result (*recv)(struct yetty_yclass_transport *t, void *buf, size_t max);
     struct yetty_ycore_void_result (*destroy)(struct yetty_yclass_transport *t);
+    /* Optional. Force any buffered outbound bytes onto the wire. NULL means
+     * send() writes through immediately (no buffering). One-way calls need
+     * this: they never recv(), so a buffering transport (DCS, which coalesces
+     * a call's sends into one envelope on the next recv) would otherwise never
+     * emit the frame. */
+    struct yetty_ycore_void_result (*flush)(struct yetty_yclass_transport *t);
 };
 
 struct yetty_yclass_transport {

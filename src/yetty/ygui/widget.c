@@ -128,9 +128,9 @@ struct YETTY_ANNOTATE("class@ygui:widget") yetty_ygui_widget {
     /* Hover state — set by the framework's pointer-tracking pass when this is
      * the deepest hit; cleared when the mouse leaves. */
     int hovered;
-    /* framework that owns this widget tree. Stored only on the root; children
-     * resolve via parent walk through yetty_ygui_widget_framework. */
-    struct yetty_ygui_framework *framework;
+    /* framework object that owns this widget tree. Stored only on the root;
+     * children resolve via parent walk through yetty_ygui_widget_framework. */
+    struct yetty_yclass_object *framework;
     /* Event subscriptions — singly-linked list, freed at object destroy. */
     struct yetty_ygui_event_subscription *subscriptions;
 };
@@ -835,18 +835,18 @@ struct yetty_yclass_object_ptr_result yetty_ygui_widget_next_sibling(
 }
 
 YETTY_ANNOTATE("expose")
-struct yetty_ygui_framework_ptr_result yetty_ygui_widget_framework(struct yetty_yclass_object *obj)
+struct yetty_yclass_object_ptr_result yetty_ygui_widget_framework(struct yetty_yclass_object *obj)
 {
     while (obj) {
         struct yetty_ygui_widget_ptr_result wd_res = yetty_ygui_widget_from(obj);
-        YETTY_RETURN_IF_ERR(yetty_ygui_framework_ptr, wd_res,
+        YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, wd_res,
                             "yetty_ygui_widget_framework: data_get");
         if (wd_res.value->framework) {
-            return YETTY_OK(yetty_ygui_framework_ptr, wd_res.value->framework);
+            return YETTY_OK(yetty_yclass_object_ptr, wd_res.value->framework);
         }
         obj = wd_res.value->parent;
     }
-    return YETTY_OK(yetty_ygui_framework_ptr, NULL);
+    return YETTY_OK(yetty_yclass_object_ptr, NULL);
 }
 
 YETTY_ANNOTATE("expose")
@@ -870,7 +870,7 @@ struct yetty_ycore_void_result yetty_ygui_widget_set_dirty(struct yetty_yclass_o
     struct yetty_ygui_widget_ptr_result wd_res = yetty_ygui_widget_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, wd_res, "yetty_ygui_widget_set_dirty: data_get");
     wd_res.value->dirty = 1;
-    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_widget_framework(obj);
+    struct yetty_yclass_object_ptr_result framework_res = yetty_ygui_widget_framework(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res, "yetty_ygui_widget_set_dirty: framework");
     if (framework_res.value) {
         yetty_ygui_framework_mark_dirty(framework_res.value);
@@ -912,7 +912,7 @@ struct yetty_ycore_int_result yetty_ygui_widget_is_hovered(const struct yetty_yc
  *-------------------------------------------------------------------------*/
 
 struct yetty_ycore_void_result yetty_ygui_widget_set_framework(
-    struct yetty_yclass_object *obj, struct yetty_ygui_framework *framework)
+    struct yetty_yclass_object *obj, struct yetty_yclass_object *framework)
 {
     if (!obj) {
         return YETTY_ERR(yetty_ycore_void, "yetty_ygui_widget_set_framework: NULL obj");
@@ -1087,7 +1087,7 @@ static struct yetty_yclass_object_ptr_result widget_instantiate(const struct yet
     }
     struct yetty_ygui_widget *obj_widget = obj_widget_res.value;
 
-    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_widget_framework(obj);
+    struct yetty_yclass_object_ptr_result framework_res = yetty_ygui_widget_framework(obj);
     if (YETTY_IS_ERR(framework_res)) {
         struct yetty_ycore_void_result unlink_res = widget_unlink_from_parent(obj);
         if (YETTY_IS_ERR(unlink_res)) {
@@ -1096,7 +1096,7 @@ static struct yetty_yclass_object_ptr_result widget_instantiate(const struct yet
         free(obj);
         return YETTY_ERR(yetty_yclass_object_ptr, "widget_instantiate: framework", framework_res);
     }
-    struct yetty_ygui_framework *framework = framework_res.value;
+    struct yetty_yclass_object *framework = framework_res.value;
     if (framework) {
         struct uint32_result idr = yetty_ygui_framework_alloc_id(framework);
         if (YETTY_IS_ERR(idr)) {
@@ -1178,8 +1178,8 @@ struct yetty_ycore_void_result yetty_ygui_widget_destroy(struct yetty_yclass_obj
     if (YETTY_IS_ERR(dr)) {
         yetty_ycore_error_destroy(dr.error);
     }
-    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_widget_framework(obj);
-    struct yetty_ygui_framework *framework = NULL;
+    struct yetty_yclass_object_ptr_result framework_res = yetty_ygui_widget_framework(obj);
+    struct yetty_yclass_object *framework = NULL;
     if (YETTY_IS_ERR(framework_res)) {
         yetty_ycore_error_destroy(framework_res.error);
     } else {
@@ -1191,11 +1191,15 @@ struct yetty_ycore_void_result yetty_ygui_widget_destroy(struct yetty_yclass_obj
             yetty_ycore_error_destroy(fr.error);
         }
     }
-    if (framework && framework->hovered_obj == obj) {
-        framework->hovered_obj = NULL;
-    }
-    if (framework && framework->pressed_obj == obj) {
-        framework->pressed_obj = NULL;
+    /* Drop any hover/press capture this framework still holds on the widget
+     * being destroyed. The framework data slice is opaque here, so go through
+     * the accessor instead of poking the fields directly. */
+    if (framework) {
+        struct yetty_ycore_void_result forget_res =
+            yetty_ygui_framework_forget_widget(framework, obj);
+        if (YETTY_IS_ERR(forget_res)) {
+            yetty_ycore_error_destroy(forget_res.error);
+        }
     }
     struct yetty_ycore_void_result unlink_res = widget_unlink_from_parent(obj);
     if (YETTY_IS_ERR(unlink_res)) {

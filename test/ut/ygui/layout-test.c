@@ -36,7 +36,8 @@ static int approx_eq(float a, float b)
 
 static void test_hbox_two_children(void)
 {
-    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_new(yetty_ygui_hbox_class_get().value);
+    struct yetty_yclass_object_ptr_result r =
+        yetty_ygui_widget_new(yetty_ygui_hbox_class_get().value);
     assert(YETTY_IS_OK(r));
     struct yetty_yclass_object *root = r.value;
 
@@ -101,14 +102,18 @@ static void test_vbox_flex_grow(void)
 {
     /* vbox 200 tall, three children. First has flex_grow=1, others=0
      * with explicit heights. Free space should land in the grow child. */
-    struct yetty_yclass_object_ptr_result r = yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
+    struct yetty_yclass_object_ptr_result r =
+        yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
     assert(YETTY_IS_OK(r));
     struct yetty_yclass_object *root = r.value;
 
     /* Append at tail: insertion order == layout order (c1, c2, c3). */
-    struct yetty_yclass_object *c1 = yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value).value;
-    struct yetty_yclass_object *c2 = yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value).value;
-    struct yetty_yclass_object *c3 = yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value).value;
+    struct yetty_yclass_object *c1 =
+        yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value).value;
+    struct yetty_yclass_object *c2 =
+        yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value).value;
+    struct yetty_yclass_object *c3 =
+        yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value).value;
 
     struct yetty_ygui_layout_const_ptr_result layout_c1_res = yetty_ygui_widget_layout_get(c1);
     assert(YETTY_IS_OK(layout_c1_res));
@@ -159,8 +164,10 @@ static void test_vbox_flex_grow(void)
 
 static void test_padding(void)
 {
-    struct yetty_yclass_object *root = yetty_ygui_widget_new(yetty_ygui_hbox_class_get().value).value;
-    struct yetty_yclass_object *c = yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value).value;
+    struct yetty_yclass_object *root =
+        yetty_ygui_widget_new(yetty_ygui_hbox_class_get().value).value;
+    struct yetty_yclass_object *c =
+        yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value).value;
 
     struct yetty_ygui_layout_const_ptr_result root_layout_res = yetty_ygui_widget_layout_get(root);
     assert(YETTY_IS_OK(root_layout_res));
@@ -196,8 +203,7 @@ static void test_padding(void)
 
 /* Click callback test. */
 static int click_fired = 0;
-static struct yetty_ycore_void_result on_click_cb(
-                                                  struct yetty_yclass_object *_yc_obj,
+static struct yetty_ycore_void_result on_click_cb(struct yetty_yclass_object *_yc_obj,
                                                   void *userdata)
 {
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)_yc_obj;
@@ -209,7 +215,8 @@ static struct yetty_ycore_void_result on_click_cb(
 
 static void test_clickable_state_machine(void)
 {
-    struct yetty_yclass_object *btn = yetty_ygui_widget_new(yetty_ygui_button_class_get().value).value;
+    struct yetty_yclass_object *btn =
+        yetty_ygui_widget_new(yetty_ygui_button_class_get().value).value;
     assert(btn);
     yetty_ygui_button_set_label(btn, "OK");
     struct yetty_ycore_const_char_ptr_result label = yetty_ygui_button_get_label(btn);
@@ -275,9 +282,7 @@ static void test_widget_paint_emits_real_prims(void)
     assert(YETTY_IS_OK(dlr));
     struct yetty_ygui_emit_ctx ctx = {
         .framework = NULL,
-        .container_records = NULL,
         .ygrid_drawable_list = dlr.value,
-        .figure_bodies = NULL,
         .current_figure_id = 0,
     };
     yetty_ygui_widget_paint((struct yetty_yclass_object *)panel, &ctx);

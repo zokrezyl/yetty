@@ -37,7 +37,7 @@ extern "C" {
 
 struct yetty_ychrome_host;
 struct yetty_yfigure_container;
-struct yetty_yfigure_producer;
+struct yetty_yfigure_producer_session;
 struct yetty_yfont_font;
 struct yetty_context;
 struct yetty_yclass_object;
@@ -56,23 +56,27 @@ struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create(
     float height, float caption_height, float edge_size, unsigned int flags);
 
 /* Wire variant for client / in-terminal mode: instead of pinning figures into
- * a local container, EMIT the backdrop + caption as figure-tree records over
- * `producer` (the emit side of the figure wire), so they render in a hosting
- * yetty's pane. The opaque backdrop is what hides the host terminal's text
- * beneath the app. `producer` is borrowed; `window_chrome` is typically a
- * wire adapter (close/min/max → pane ops) or NULL. */
+ * a local container, DRIVE the backdrop + caption onto the hosting yetty's root
+ * figure container PROXY via the generated typed yclass-RPC stubs, so they
+ * render in the host's pane. The opaque backdrop is what hides the host
+ * terminal's text beneath the app. The owner attaches the producer session
+ * (yetty_yfigure_producer_attach) and passes both the root container proxy
+ * (yetty_yfigure_producer_session_container) and the owning session in here;
+ * both are borrowed — the owner detaches the session after this host is
+ * destroyed. `window_chrome` is typically a wire adapter (close/min/max → pane
+ * ops) or NULL. */
 struct yetty_ychrome_host_ptr_result yetty_ychrome_host_create_wire(
-    struct yetty_yfigure_producer *producer, struct yetty_yclass_object *window_chrome, float width,
-    float height, float caption_height, float edge_size, unsigned int flags);
+    struct yetty_yclass_object *container, struct yetty_yfigure_producer_session *producer_session,
+    struct yetty_yclass_object *window_chrome, float width, float height, float caption_height,
+    float edge_size, unsigned int flags);
 
 /* Explicitly remove the wire chrome's figures (backdrop + caption) from the
- * host pane by writing DELETE records straight to `fd` with a BLOCKING write.
- * No-op for a local host. Call this at process teardown — after the event loop
- * has stopped the producer's async pty can no longer flush, so the figures must
- * be cleared over the fd directly (same approach as
- * yetty_ygui_framework_clear_remote_fd). */
-struct yetty_ycore_void_result yetty_ychrome_host_clear_to_fd(struct yetty_ychrome_host *host,
-                                                              int fd);
+ * host pane via the typed delete_child stubs. Each is one-way and flushes its
+ * request synchronously with a blocking write to the session's write_fd, so
+ * this is safe at process teardown after the event loop has stopped. No-op for
+ * a local host. Call this BEFORE yetty_ychrome_host_destroy; the owner detaches
+ * the producer session afterwards. */
+struct yetty_ycore_void_result yetty_ychrome_host_clear(struct yetty_ychrome_host *host);
 
 /* Re-emit the wire chrome's figures (backdrop + caption). No-op for a local
  * host. Use it to re-establish the chrome when the host pane may not have the

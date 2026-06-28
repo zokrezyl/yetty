@@ -45,10 +45,10 @@ enum yai_hud_var {
     YAI_HUD_VAR_SESSION_ID,
     YAI_HUD_VAR_INPUT, /* session totals, human-formatted (12.3k) */
     YAI_HUD_VAR_OUTPUT,
-    YAI_HUD_VAR_CACHE,      /* session cache_read */
-    YAI_HUD_VAR_COST,       /* session cost, "%.4f" (no leading $) */
-    YAI_HUD_VAR_TURNS,      /* session turn count */
-    YAI_HUD_VAR_QUOTA,      /* account quota summary (usage proxy) */
+    YAI_HUD_VAR_CACHE, /* session cache_read */
+    YAI_HUD_VAR_COST,  /* session cost, "%.4f" (no leading $) */
+    YAI_HUD_VAR_TURNS, /* session turn count */
+    YAI_HUD_VAR_QUOTA, /* account quota summary (usage proxy) */
     /* Decomposed quota — the 5h ("session") and 7d ("week") windows, each as a
      * percentage and a locale-formatted reset time. */
     YAI_HUD_VAR_QUOTA_SESSION_PCT,    /* "5" */
@@ -56,7 +56,7 @@ enum yai_hud_var {
     YAI_HUD_VAR_QUOTA_WEEK_PCT,       /* "12" */
     YAI_HUD_VAR_QUOTA_WEEK_RESETS,    /* "Jun 21, 10:40am" (local time, locale) */
     YAI_HUD_VAR_EST_TOKENS,           /* in-flight token estimate */
-    YAI_HUD_VAR_TURN_INPUT, /* last turn, human-formatted */
+    YAI_HUD_VAR_TURN_INPUT,           /* last turn, human-formatted */
     YAI_HUD_VAR_TURN_OUTPUT,
     YAI_HUD_VAR_TURN_CACHE,
     YAI_HUD_VAR_TURN_COST,  /* last turn cost, "%.4f" */

@@ -28,88 +28,88 @@ class Circuit(_rt.YClass):
     def create(cls) -> _rt.Result['Circuit']:
         obj = cls()
         return obj.init_result
-    def configure(self, grid_px: float, flags: int) -> _rt.Result[None]:
+    def configure(self, flags: int) -> _rt.Result[None]:
         """Call `yetty_ycircuit_configure`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ycircuit_configure", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_float, c_uint32])
-        res = _fn(None, self._handle, grid_px, flags)
+        _fn = _rt.cfn("yetty_ycircuit_configure", _t.yetty_ycore_void_result, [c_void_p, c_float, c_uint32])
+        res = _fn(None, self._handle, flags)
         return _rt.result_from_c(res)
-    def parse(self, input: str | bytes | None, len: int) -> _rt.Result[None]:
+    def parse(self, len: int) -> _rt.Result[None]:
         """Call `yetty_ycircuit_parse`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ycircuit_parse", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_char_p, c_size_t])
-        res = _fn(None, self._handle, _rt.cstr(input), len)
+        _fn = _rt.cfn("yetty_ycircuit_parse", _t.yetty_ycore_void_result, [c_void_p, c_char_p, c_size_t])
+        res = _fn(None, self._handle, len)
         return _rt.result_from_c(res)
     def clear(self) -> _rt.Result[None]:
         """Call `yetty_ycircuit_clear`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ycircuit_clear", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+        _fn = _rt.cfn("yetty_ycircuit_clear", _t.yetty_ycore_void_result, [c_void_p])
         res = _fn(None, self._handle)
         return _rt.result_from_c(res)
-    def add_component(self, kind: str | bytes | None, x: float, y: float, rotation_deg: int, name: str | bytes | None, value: str | bytes | None) -> _rt.Result[int]:
+    def add_component(self, x: float, y: float, rotation_deg: int, name: str | bytes | None, value: str | bytes | None) -> _rt.Result[int]:
         """Call `yetty_ycircuit_add_component`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ycircuit_add_component", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_char_p, c_float, c_float, c_int32, c_char_p, c_char_p])
-        res = _fn(None, self._handle, _rt.cstr(kind), x, y, rotation_deg, _rt.cstr(name), _rt.cstr(value))
+        _fn = _rt.cfn("yetty_ycircuit_add_component", _t.yetty_ycore_int_result, [c_void_p, c_char_p, c_float, c_float, c_int32, c_char_p, c_char_p])
+        res = _fn(None, self._handle, x, y, rotation_deg, _rt.cstr(name), _rt.cstr(value))
         return _rt.result_from_c(res)
-    def add_ic(self, x: float, y: float, rotation_deg: int, name: str | bytes | None, value: str | bytes | None, pins_left: str | bytes | None, pins_right: str | bytes | None, pins_top: str | bytes | None, pins_bottom: str | bytes | None) -> _rt.Result[int]:
+    def add_ic(self, y: float, rotation_deg: int, name: str | bytes | None, value: str | bytes | None, pins_left: str | bytes | None, pins_right: str | bytes | None, pins_top: str | bytes | None, pins_bottom: str | bytes | None) -> _rt.Result[int]:
         """Call `yetty_ycircuit_add_ic`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ycircuit_add_ic", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float, c_int32, c_char_p, c_char_p, c_char_p, c_char_p, c_char_p, c_char_p])
-        res = _fn(None, self._handle, x, y, rotation_deg, _rt.cstr(name), _rt.cstr(value), _rt.cstr(pins_left), _rt.cstr(pins_right), _rt.cstr(pins_top), _rt.cstr(pins_bottom))
+        _fn = _rt.cfn("yetty_ycircuit_add_ic", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_int32, c_char_p, c_char_p, c_char_p, c_char_p, c_char_p, c_char_p])
+        res = _fn(None, self._handle, y, rotation_deg, _rt.cstr(name), _rt.cstr(value), _rt.cstr(pins_left), _rt.cstr(pins_right), _rt.cstr(pins_top), _rt.cstr(pins_bottom))
         return _rt.result_from_c(res)
-    def add_wire(self, x0: float, y0: float, x1: float, y1: float) -> _rt.Result[int]:
+    def add_wire(self, y0: float, x1: float, y1: float) -> _rt.Result[int]:
         """Call `yetty_ycircuit_add_wire`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ycircuit_add_wire", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float, c_float, c_float])
-        res = _fn(None, self._handle, x0, y0, x1, y1)
+        _fn = _rt.cfn("yetty_ycircuit_add_wire", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_float, c_float])
+        res = _fn(None, self._handle, y0, x1, y1)
         return _rt.result_from_c(res)
-    def add_junction(self, x: float, y: float) -> _rt.Result[int]:
+    def add_junction(self, y: float) -> _rt.Result[int]:
         """Call `yetty_ycircuit_add_junction`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ycircuit_add_junction", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float])
-        res = _fn(None, self._handle, x, y)
+        _fn = _rt.cfn("yetty_ycircuit_add_junction", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float])
+        res = _fn(None, self._handle, y)
         return _rt.result_from_c(res)
-    def add_label(self, x: float, y: float, text: str | bytes | None) -> _rt.Result[int]:
+    def add_label(self, y: float, text: str | bytes | None) -> _rt.Result[int]:
         """Call `yetty_ycircuit_add_label`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ycircuit_add_label", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float, c_char_p])
-        res = _fn(None, self._handle, x, y, _rt.cstr(text))
+        _fn = _rt.cfn("yetty_ycircuit_add_label", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_char_p])
+        res = _fn(None, self._handle, y, _rt.cstr(text))
         return _rt.result_from_c(res)
     def render(self) -> _rt.Result[Any]:
         """Call `yetty_ycircuit_render`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ycircuit_render", _t.yetty_ydraw_drawable_list_result, [c_void_p, c_void_p])
+        _fn = _rt.cfn("yetty_ycircuit_render", _t.yetty_ydraw_drawable_list_result, [c_void_p])
         res = _fn(None, self._handle)
         return _rt.result_from_c(res)
-    def hit_test(self, x: float, y: float) -> _rt.Result[int]:
+    def hit_test(self, y: float) -> _rt.Result[int]:
         """Call `yetty_ycircuit_hit_test`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ycircuit_hit_test", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float])
-        res = _fn(None, self._handle, x, y)
+        _fn = _rt.cfn("yetty_ycircuit_hit_test", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float])
+        res = _fn(None, self._handle, y)
         return _rt.result_from_c(res)
-    def set_highlight(self, element_id: int) -> _rt.Result[None]:
+    def set_highlight(self) -> _rt.Result[None]:
         """Call `yetty_ycircuit_set_highlight`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ycircuit_set_highlight", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_int32])
-        res = _fn(None, self._handle, element_id)
+        _fn = _rt.cfn("yetty_ycircuit_set_highlight", _t.yetty_ycore_void_result, [c_void_p, c_int32])
+        res = _fn(None, self._handle)
         return _rt.result_from_c(res)
     def destroy(self) -> _rt.Result[None]:
         """Call `yetty_ycircuit_destroy`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ycircuit_destroy", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+        _fn = _rt.cfn("yetty_ycircuit_destroy", _t.yetty_ycore_void_result, [c_void_p])
         res = _fn(None, self._handle)
         return _rt.result_from_c(res)
 

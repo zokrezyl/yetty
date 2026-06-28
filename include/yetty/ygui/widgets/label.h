@@ -39,10 +39,14 @@ struct yetty_yclass_object_ptr_result yetty_ygui_label_create(struct yetty_yclas
 
 struct yetty_ycore_void_result yetty_ygui_register(void);
 
-struct yetty_ycore_void_result yetty_ygui_label_set_text(struct yetty_yclass_object *obj, const char *text);
-struct yetty_ycore_const_char_ptr_result yetty_ygui_label_get_text(const struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_label_set_font_size(struct yetty_yclass_object *obj, float size_px);
-struct yetty_ycore_void_result yetty_ygui_label_set_color(struct yetty_yclass_object *obj, struct yetty_ycore_rgba color);
+struct yetty_ycore_void_result yetty_ygui_label_set_text(struct yetty_yclass_object *obj,
+                                                         const char *text);
+struct yetty_ycore_const_char_ptr_result yetty_ygui_label_get_text(
+    const struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_label_set_font_size(struct yetty_yclass_object *obj,
+                                                              float size_px);
+struct yetty_ycore_void_result yetty_ygui_label_set_color(struct yetty_yclass_object *obj,
+                                                          struct yetty_ycore_rgba color);
 
 #ifdef __cplusplus
 }

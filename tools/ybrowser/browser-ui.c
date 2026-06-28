@@ -165,14 +165,14 @@ struct tab {
 };
 
 struct app {
-    struct yetty_ygui_framework *fw;
+    struct yetty_yclass_object *fw;
     struct yetty_yclass_object *root;
     struct yetty_yclass_object *tabbar;
     struct yetty_yclass_object *address; /* textinput */
     struct yetty_yclass_object *scroll;  /* scrollarea */
     struct yetty_yclass_object *page;    /* ydraw_embed (HTML/SVG) — shared */
     struct yetty_yclass_object *image;   /* yimage widget (raster) — shared */
-    int showing_image;                 /* which content widget is visible */
+    int showing_image;                   /* which content widget is visible */
 
     /* `--no-ui`: hide the tab strip + toolbar so only the page content is
 	 * rendered (the whole window is the page). Useful for clean recordings /
@@ -907,7 +907,7 @@ static void focus_address(struct app *a)
     yetty_ygui_framework_mark_dirty(a->fw);
 }
 
-static int key_cb(struct yetty_ygui_framework *fw, uint32_t key, int mods, void *ud)
+static int key_cb(struct yetty_yclass_object *fw, uint32_t key, int mods, void *ud)
 {
     struct app *a = ud;
     (void)mods;
@@ -1168,8 +1168,9 @@ static void on_raw(void *user, const char *bytes, size_t n)
 /* ===========================================================================
  * UI construction + render pipeline.
  * ===========================================================================*/
-static struct yetty_yclass_object *add_nav_button(struct yetty_yclass_object *parent, const char *label,
-                                                float w, yetty_ygui_click_cb cb, void *ud)
+static struct yetty_yclass_object *add_nav_button(struct yetty_yclass_object *parent,
+                                                  const char *label, float w,
+                                                  yetty_ygui_click_cb cb, void *ud)
 {
     struct yetty_yclass_object_ptr_result r =
         yetty_ygui_widget_add(parent, yetty_ygui_button_class_get().value);
@@ -1215,7 +1216,8 @@ static int build_ui(struct app *a)
     }
     a->tabbar = tr.value;
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(a->tabbar);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(a->tabbar);
         if (YETTY_IS_ERR(layout_res)) {
             yetty_ycore_error_destroy(layout_res.error);
             return -1;
@@ -1238,7 +1240,8 @@ static int build_ui(struct app *a)
 	 * stays created so tab bookkeeping elsewhere keeps working; it just takes
 	 * no space and never paints. */
     if (a->no_ui) {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(a->tabbar);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(a->tabbar);
         if (YETTY_IS_ERR(layout_res)) {
             yetty_ycore_error_destroy(layout_res.error);
             return -1;
@@ -1258,7 +1261,8 @@ static int build_ui(struct app *a)
     }
     struct yetty_yclass_object *toolbar = br.value;
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(toolbar);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(toolbar);
         if (YETTY_IS_ERR(layout_res)) {
             yetty_ycore_error_destroy(layout_res.error);
             return -1;
@@ -1276,7 +1280,8 @@ static int build_ui(struct app *a)
 
     /* --no-ui: collapse + hide the address/nav toolbar too. */
     if (a->no_ui) {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(toolbar);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(toolbar);
         if (YETTY_IS_ERR(layout_res)) {
             yetty_ycore_error_destroy(layout_res.error);
             return -1;
@@ -1302,7 +1307,8 @@ static int build_ui(struct app *a)
     a->address = ar.value;
     err_ok(yetty_ygui_textinput_set_placeholder(a->address, "Type a URL and press Enter"));
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(a->address);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(a->address);
         if (YETTY_IS_ERR(layout_res)) {
             yetty_ycore_error_destroy(layout_res.error);
             return -1;
@@ -1321,7 +1327,8 @@ static int build_ui(struct app *a)
     }
     a->scroll = sr.value;
     {
-        struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(a->scroll);
+        struct yetty_ygui_layout_const_ptr_result layout_res =
+            yetty_ygui_widget_layout_get(a->scroll);
         if (YETTY_IS_ERR(layout_res)) {
             yetty_ycore_error_destroy(layout_res.error);
             return -1;
@@ -1568,7 +1575,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 
     struct stdout_pty out = {0};
     out.base.ops = stdout_pty_ops();
-    struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(&out.base);
+    struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
     if (YETTY_IS_ERR(fr)) {
         fprintf(stderr, "ybrowser: framework_create: %s\n", fr.error.msg);
         yetty_ycore_error_destroy(fr.error);
@@ -1658,7 +1665,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 
     /* Teardown — drop our figures on the host, then free everything. */
     set_mouse_forwarding(0);
-    err_ok(yetty_ygui_framework_clear_remote_fd(a.fw, STDOUT_FILENO));
+    err_ok(yetty_ygui_framework_clear(a.fw));
     fflush(stdout);
     for (int i = 0; i < a.n_tabs; i++) {
         tab_free(&a.tabs[i]);
@@ -1692,7 +1699,6 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/ychrome/chrome.h> /* YETTY_YCHROME_FLAG_* + yetty_ychrome_handle_event */
 #include <yetty/ychrome/host.h>
 #include <yetty/yfont/msdf-font.h>
@@ -1705,7 +1711,6 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 #include <yetty/yclass/class.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yrender/render-target.h>
-#include <yetty/ywire/wire-statemachine.h>
 
 #include <pthread.h>
 
@@ -1723,9 +1728,6 @@ struct YETTY_ANNOTATE("class@ybrowser:app") YETTY_ANNOTATE("parent@yapp:app") ye
     struct yetty_yclass_object *root_container;
     struct yetty_yfigure_registry *figure_registry;
     struct yetty_ydraw_composite_factory *composite_factory;
-    struct yetty_ywire_wire_statemachine *wire_sm;
-    struct yetty_yplatform_memory_pty_pair pty_pair;
-    int has_pty_pair;
     struct yetty_yfont_font *font;
     struct yetty_ychrome_host *chrome; /* draggable/resizable titlebar + min/max/close */
     struct yetty_ygrid_factory_args figure_args;
@@ -1769,8 +1771,7 @@ struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_
 static void *sa_prefetch_main(void *arg)
 {
     struct yetty_ybrowser_app *s = arg;
-    s->prefetch_data =
-        ybrowser_slurp_file(s->prefetch_url, &s->prefetch_len, &s->prefetch_eff);
+    s->prefetch_data = ybrowser_slurp_file(s->prefetch_url, &s->prefetch_len, &s->prefetch_eff);
     return NULL;
 }
 
@@ -1784,24 +1785,6 @@ static void sa_request_render(struct yetty_ybrowser_app *s)
         s->yframework->event_loop->ops->request_render) {
         s->yframework->event_loop->ops->request_render(s->yframework->event_loop);
     }
-}
-
-/* Slave end of the memory-pty pair: a resize on the producer (ygui) endpoint
- * arrives here — the SIGWINCH analog — and we size the compositor's root
- * container from the pixel extent. cols/rows are terminal-grid concepts the
- * compositor has no use for. */
-static void sa_pty_resize_cb(void *userdata, uint32_t cols, uint32_t rows, uint32_t pixel_w,
-                             uint32_t pixel_h)
-{
-    struct yetty_ybrowser_app *s = userdata;
-    (void)cols;
-    (void)rows;
-    if (!s->root_container) {
-        return;
-    }
-    struct yetty_ycore_rectangle rr = {.min = {0, 0}, .max = {(float)pixel_w, (float)pixel_h}};
-    yetty_yfigure_figure_rect_set(s->root_container, rr);
-    yetty_yfigure_figure_dirty_set(s->root_container, 1);
 }
 
 static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_listener *listener,
@@ -1844,13 +1827,9 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
             render_pass(&s->app);
         }
         if (yetty_ygui_framework_is_dirty(s->app.fw)) {
+            /* Direct dispatch: emit applies the figure tree straight into the
+             * local root container (no wire statemachine to pump afterward). */
             err_ok(yetty_ygui_framework_emit(s->app.fw));
-        }
-        if (s->wire_sm) {
-            struct yetty_ycore_void_result pr = yetty_ywire_wire_statemachine_process(s->wire_sm);
-            if (YETTY_IS_ERR(pr)) {
-                yetty_ycore_error_destroy(pr.error);
-            }
         }
         struct yetty_ycore_void_result cl = s->render_target->ops->clear(s->render_target);
         if (YETTY_IS_ERR(cl)) {
@@ -1902,15 +1881,15 @@ static struct yetty_ycore_int_result sa_event_handler(struct yetty_yevent_event_
                 yetty_ycore_error_destroy(cr.error);
             }
         }
-        /* Drive the compositor-side rect through the pty pair (→
-		 * sa_pty_resize_cb) rather than poking the container directly, so
-		 * the resize travels the pair like a real PTY's TIOCSWINSZ. */
-        if (s->pty_pair.a && s->pty_pair.a->ops->resize) {
-            struct yetty_ycore_void_result rrz = s->pty_pair.a->ops->resize(
-                s->pty_pair.a, 0, 0, (uint32_t)ev->resize.width, (uint32_t)ev->resize.height);
-            if (YETTY_IS_ERR(rrz)) {
-                yetty_ycore_error_destroy(rrz.error);
-            }
+        /* Size the compositor's root container directly. (The legacy route
+		 * travelled this through the memory-pty pair so it reached the receiver
+		 * like a real PTY's TIOCSWINSZ; with direct in-process dispatch the
+		 * container is local, so we set its rect here.) */
+        if (s->root_container) {
+            struct yetty_ycore_rectangle rr = {
+                .min = {0, 0}, .max = {(float)ev->resize.width, (float)ev->resize.height}};
+            yetty_yfigure_figure_rect_set(s->root_container, rr);
+            yetty_yfigure_figure_dirty_set(s->root_container, 1);
         }
         s->app.tabs[s->app.active].needs_render = 1;
         s->app.pending_render = 1;
@@ -2190,10 +2169,11 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         struct yetty_ycore_void_result rf =
             yetty_ygrid_register_factory(s->figure_registry, &s->figure_args);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rf, "ybrowser standalone: ygrid_register_factory");
-        const uint32_t producer_kinds[] = {YETTY_YFIGURE_KIND_YPLOT, YETTY_YFIGURE_KIND_YIMAGE};
-        for (size_t i = 0; i < sizeof(producer_kinds) / sizeof(producer_kinds[0]); ++i) {
+        const char *const producer_kind_names[] = {"yplot", "yimage"};
+        for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); ++i) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
-                s->figure_registry, producer_kinds[i], &s->figure_args);
+                s->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
+                &s->figure_args);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, kr,
                                 "ybrowser standalone: register_factory_for_kind");
         }
@@ -2227,30 +2207,32 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         }
     }
 
-    /* Memory pty pair → wire SM → container. */
+    /* ygui framework, driven into the local root container by DIRECT
+     * in-process yclass dispatch.
+     *
+     * Producer (the ygui framework) and receiver (the root figure container)
+     * live in this one process on a single thread, so there is no out-of-process
+     * transport: framework_create(NULL) leaves the output pty unset, and
+     * set_container_obj wires the framework's typed yfigure_* stubs straight at
+     * the local container object. framework_flush then applies every figure-tree
+     * mutation inline via those stubs — the in-process equivalent of the
+     * RPC-server path a terminal runs for an out-of-process subprocess producer.
+     *
+     * The deleted legacy route shipped a one-way figure-tree record stream over
+     * an in-process memory-pty into a wire statemachine that decoded it with
+     * yetty_yfigure_container_process_input. Direct dispatch removes the
+     * serialize/parse round and the memory-pty + wire-statemachine entirely. A
+     * blocking yclass-RPC DCS session is not usable here: the DCS transport needs
+     * real fds (the memory-pty exposes none) and would block this single thread
+     * on the get_root/RESOLVE_SLOT handshake waiting on a server that cannot run
+     * until the producer yields. */
     {
-        struct yetty_yplatform_memory_pty_pair_result pr =
-            yetty_yplatform_memory_pty_pair_create(0);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "ybrowser standalone: memory_pty_pair");
-        s->pty_pair = pr.value;
-        s->has_pty_pair = 1;
-    }
-    {
-        struct yetty_ywire_wire_statemachine_ptr_result sr =
-            yetty_ywire_wire_statemachine_create(s->pty_pair.b);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "ybrowser standalone: wire_sm_create");
-        s->wire_sm = sr.value;
-        struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
-            s->wire_sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN,
-            /*has_args=*/1, yetty_yfigure_container_process_input, s->root_container);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "ybrowser standalone: wire_sm register");
-    }
-
-    /* ygui framework on the producer end → writes into the pty pair. */
-    {
-        struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(s->pty_pair.a);
+        struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "ybrowser standalone: framework_create");
         s->app.fw = fr.value;
+        struct yetty_ycore_void_result scr =
+            yetty_ygui_framework_set_container_obj(s->app.fw, s->root_container);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, scr, "ybrowser standalone: set_container_obj");
         s->app.event_loop = s->yframework->event_loop;
         /* Worker pool for parallel image fetch+decode (8 concurrent). Created
          * on the loop thread; destroyed before the tabs/engines at teardown. */
@@ -2294,23 +2276,17 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
     yetty_ylexbor_prof("UI ready — open first tab (triggers fetch + load_html)");
     open_first_tab(&s->app, s->initial_url);
 
-    /* Producer writes wake the loop so emitted frames get rendered. */
-    yetty_yplatform_memory_pty_set_wake(
-        s->pty_pair.b,
-        (yetty_yplatform_memory_pty_wake_fn)s->yframework->event_loop->ops->request_render,
-        s->yframework->event_loop);
-
-    /* Window-size changes reach the compositor end through the pair, the
-	 * same way bytes do. */
-    yetty_yplatform_memory_pty_set_resize(s->pty_pair.b, sa_pty_resize_cb, s);
+    /* No memory-pty wake/resize wiring: with direct in-process dispatch the
+     * framework applies into the root container synchronously inside the render
+     * loop's framework_emit call, and the resize event handler sizes the root
+     * container directly (see YETTY_YCORE_RESIZE below). */
 
     s->listener.handler = sa_event_handler;
     struct yetty_ycore_void_result rel =
         yetty_yevent_register_default_listeners(s->yframework->event_loop, &s->listener);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rel, "ybrowser standalone: register_listeners");
 
-    yetty_yevent_post_async(input_pipe,
-                            &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
+    yetty_yevent_post_async(input_pipe, &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
     struct yetty_ycore_void_result run_res =
         s->yframework->event_loop->ops->start(s->yframework->event_loop);
@@ -2334,19 +2310,6 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
     if (s->app.fw) {
         err_ok(yetty_ygui_framework_destroy(s->app.fw));
         s->app.fw = NULL;
-    }
-    if (s->wire_sm) {
-        err_ok(yetty_ywire_wire_statemachine_destroy(s->wire_sm));
-        s->wire_sm = NULL;
-    }
-    if (s->has_pty_pair) {
-        if (s->pty_pair.a && s->pty_pair.a->ops->destroy) {
-            err_ok(s->pty_pair.a->ops->destroy(s->pty_pair.a));
-        }
-        if (s->pty_pair.b && s->pty_pair.b->ops->destroy) {
-            err_ok(s->pty_pair.b->ops->destroy(s->pty_pair.b));
-        }
-        s->has_pty_pair = 0;
     }
     if (s->chrome) {
         err_ok(yetty_ychrome_host_destroy(s->chrome));

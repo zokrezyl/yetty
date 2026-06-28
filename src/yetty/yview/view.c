@@ -3,9 +3,11 @@
  * scrollable content surface.
  *
  * A view is one positioned figure under a running yetty's root figure
- * container, shipped over DCS YETTY_DCS_YCOMPOSITOR_BIN (the compositor wire
- * path — NOT the scrolling ydraw layer ycat uses). The content is sent ONCE;
- * scrolling, clipping and repositioning are server-side state thereafter.
+ * container, driven over yclass RPC (DCS YETTY_DCS_YCLASS_RPC): configure()
+ * attaches to the host's root container and the typed yetty_yfigure_* stubs
+ * (create_child / set_child_rect / set_child_scroll / …) marshal each mutation
+ * to it. The content is sent ONCE as the CREATE_CHILD init payload; scrolling,
+ * clipping and repositioning are server-side state thereafter.
  *
  * This is a yclass class so codegen emits the public header (view.h), the
  * method dispatch, model.yaml, and the FFI / host-language binding surface.
@@ -30,22 +32,27 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
 
-#include <yetty/yface/yface.h>
 #include <yetty/ydraw-core/drawable-list.h>
-#include <yetty/yfigure/wire.h>
+#include <yetty/yfigure/container.h>
+#include <yetty/yfigure/producer.h>
+#include <yetty/yfigure/registry.h>
 #include <yetty/yplot/yplot.h>
 #include <yetty/ysdf/types.gen.h>
-#include <yetty/yterminal/dcs-codes.h>
 
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 /* Default figure kind when configure() is passed 0: a text/SDF grid, the only
- * scrollable kind. */
-#define YVIEW_DEFAULT_KIND ((uint32_t)YETTY_YFIGURE_KIND_YGRID)
+ * scrollable kind. Resolved through the registry token (no central kind enum). */
+#define YVIEW_DEFAULT_KIND (yetty_yfigure_kind_token("ygrid"))
 
 struct YETTY_ANNOTATE("class@yview:view") yetty_yview_view {
-    int fd;
+    /* Attached over yclass RPC to the host's root figure container. The session
+     * owns the transport; `container` is the root container proxy the typed
+     * yetty_yfigure_* stubs are dispatched on (one-way fire-and-forget). */
+    struct yetty_yfigure_producer_session *producer_session;
+    struct yetty_yclass_object *container;
     uint32_t child_id;
     uint32_t kind;
     uint32_t bg_color;
@@ -79,38 +86,6 @@ static struct yetty_yclass_void_ptr_result view_from_obj(struct yetty_yclass_obj
     struct yetty_yclass_void_ptr_result slice_r = yetty_yclass_object_data(obj, class_r.value);
     YETTY_RETURN_IF_ERR(yetty_yclass_void_ptr, slice_r, "view_from_obj: object_data");
     return slice_r;
-}
-
-/* Ship a built record stream as one YCOMPOSITOR_BIN envelope. */
-static struct yetty_ycore_void_result view_emit_records(struct yetty_yview_view *view,
-                                                        struct yetty_ydraw_drawable_list *records)
-{
-    const uint8_t *body = (const uint8_t *)yetty_ydraw_drawable_list_data(records);
-    size_t body_len = yetty_ydraw_drawable_list_size(records);
-    struct yetty_yface_bin_meta meta = {
-        .magic = YETTY_YFACE_BIN_MAGIC,
-        .version = YETTY_YFACE_BIN_VERSION,
-        .compressed = YETTY_YFACE_COMP_LZ4F,
-        .compression_algo = 0,
-        .raw_size = body_len,
-        .reserved = {0, 0},
-    };
-    return yetty_yface_emit_to_fd(view->fd, YETTY_DCS_YCOMPOSITOR_BIN, /*compressed=*/1, &meta,
-                                  sizeof(meta), body, body_len);
-}
-
-/* Append an admin record `{u32 admin_op, u32 child_id, f32, f32}` framed as
- * `{length, id=0, payload}` (id=0 marks it admin). */
-static struct yetty_ycore_void_result append_admin_id_f32x2(struct yetty_ydraw_drawable_list *buf,
-                                                            uint32_t admin_op, uint32_t child_id,
-                                                            float first, float second)
-{
-    uint8_t payload[4 + 4 + 4 + 4];
-    memcpy(payload + 0, &admin_op, 4);
-    memcpy(payload + 4, &child_id, 4);
-    memcpy(payload + 8, &first, 4);
-    memcpy(payload + 12, &second, 4);
-    return yetty_ydraw_drawable_list_add_record(buf, /*id=*/0u, payload, sizeof(payload));
 }
 
 /* Prepend an opaque filled box covering (0,0)-(box_w,box_h) in content coords.
@@ -174,7 +149,16 @@ static struct yetty_ycore_void_result view_configure(struct yetty_yclass_object 
     struct yetty_yclass_void_ptr_result view_r = view_from_obj(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, view_r, "yview configure: object");
     struct yetty_yview_view *view = (struct yetty_yview_view *)view_r.value;
-    view->fd = fd;
+
+    /* Attach to the host's root figure container over yclass RPC. These tools
+     * run inside a yetty pane: stdin carries terminal→tool (RPC responses), the
+     * passed `fd` is tool→terminal (RPC requests). */
+    struct yetty_yfigure_producer_session_ptr_result session_r =
+        yetty_yfigure_producer_attach(STDIN_FILENO, fd, /*compressed=*/1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, session_r, "yview configure: attach");
+    view->producer_session = session_r.value;
+    view->container = yetty_yfigure_producer_session_container(view->producer_session);
+
     view->child_id = child_id ? child_id : 1u;
     view->kind = kind ? kind : YVIEW_DEFAULT_KIND;
     view->bg_color = bg_color;
@@ -186,67 +170,59 @@ static struct yetty_ycore_void_result view_configure(struct yetty_yclass_object 
 /* set_content: ship the drawable list as the child figure's body (CREATE_CHILD
  * init payload), optionally under an opaque background, and declare the content
  * extent from the scene bounds. Pointer arg → local-only. */
-/* Build the CREATE_CHILD envelope (optional opaque background, then the
- * content prim stream, then a content-size record) and ship it. The caller
- * sets view->content_w/h first. Shared by set_content (external drawable list)
- * and set_text (internally built list). */
+/* Build the child's init byte stream (optional opaque background, then the
+ * content prim stream) and ship it via the typed container stubs: a CREATE_CHILD
+ * with the init payload, then a SET_CHILD_CONTENT_SIZE if a content extent is
+ * known. The init payload is exactly the prim stream the child's process_bytes
+ * consumes. The caller sets view->content_w/h first. Shared by set_content
+ * (external drawable list) and set_text (internally built list). */
 static struct yetty_ycore_void_result view_ship(struct yetty_yview_view *view,
                                                 const void *content_data, size_t content_size)
 {
-    struct yetty_ydraw_drawable_list_result env_r =
+    struct yetty_ydraw_drawable_list_result init_r =
         yetty_ydraw_drawable_list_config_buffer_create(NULL);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, env_r, "yview ship: envelope create");
-    struct yetty_ydraw_drawable_list *env = env_r.value;
-
-    struct yetty_ydraw_id_result marker_r = yetty_ydraw_drawable_list_begin_admin_create_child(
-        env, view->child_id, view->kind, view->rect.min.x, view->rect.min.y, view->rect.max.x,
-        view->rect.max.y);
-    if (YETTY_IS_ERR(marker_r)) {
-        yetty_ydraw_drawable_list_destroy(env);
-        return YETTY_ERR(yetty_ycore_void, "yview ship: begin create_child", marker_r);
-    }
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, init_r, "yview ship: init list create");
+    struct yetty_ydraw_drawable_list *init = init_r.value;
 
     if ((view->bg_color & 0xFF000000u) && view->kind == YVIEW_DEFAULT_KIND) {
         float rect_w = view->rect.max.x - view->rect.min.x;
         float rect_h = view->rect.max.y - view->rect.min.y;
         float box_w = view->content_w > rect_w ? view->content_w : rect_w;
         float box_h = view->content_h > rect_h ? view->content_h : rect_h;
-        struct yetty_ycore_void_result bg = add_background_box(env, view->bg_color, box_w, box_h);
+        struct yetty_ycore_void_result bg = add_background_box(init, view->bg_color, box_w, box_h);
         if (YETTY_IS_ERR(bg)) {
-            yetty_ydraw_drawable_list_destroy(env);
+            yetty_ydraw_drawable_list_destroy(init);
             return YETTY_ERR(yetty_ycore_void, "yview ship: background", bg);
         }
     }
 
     if (content_size > 0 && content_data) {
         struct yetty_ydraw_id_result pr =
-            yetty_ydraw_drawable_list_add_prim(env, content_data, content_size);
+            yetty_ydraw_drawable_list_add_prim(init, content_data, content_size);
         if (YETTY_IS_ERR(pr)) {
-            yetty_ydraw_drawable_list_destroy(env);
+            yetty_ydraw_drawable_list_destroy(init);
             return YETTY_ERR(yetty_ycore_void, "yview ship: content prims", pr);
         }
     }
 
-    struct yetty_ycore_void_result cr =
-        yetty_ydraw_drawable_list_end_admin_create_child(env, marker_r.value);
-    if (YETTY_IS_ERR(cr)) {
-        yetty_ydraw_drawable_list_destroy(env);
-        return YETTY_ERR(yetty_ycore_void, "yview ship: end create_child", cr);
+    struct yetty_ycore_buffer init_buf = {
+        .data = (uint8_t *)yetty_ydraw_drawable_list_data(init),
+        .capacity = 0,
+        .size = yetty_ydraw_drawable_list_size(init),
+    };
+    struct yetty_ycore_void_result create_r = yetty_yfigure_create_child(
+        view->container, view->kind, view->child_id, view->rect, init_buf);
+    if (YETTY_IS_ERR(create_r)) {
+        yetty_ydraw_drawable_list_destroy(init);
+        return YETTY_ERR(yetty_ycore_void, "yview ship: create_child", create_r);
     }
+    yetty_ydraw_drawable_list_destroy(init);
 
     if (view->content_w > 0.0f || view->content_h > 0.0f) {
-        struct yetty_ycore_void_result szr =
-            append_admin_id_f32x2(env, (uint32_t)YETTY_YFIGURE_ADMIN_SET_CHILD_CONTENT_SIZE,
-                                  view->child_id, view->content_w, view->content_h);
-        if (YETTY_IS_ERR(szr)) {
-            yetty_ydraw_drawable_list_destroy(env);
-            return YETTY_ERR(yetty_ycore_void, "yview ship: content_size", szr);
-        }
+        struct yetty_ycore_void_result szr = yetty_yfigure_set_child_content_size(
+            view->container, view->child_id, view->content_w, view->content_h);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, szr, "yview ship: content_size");
     }
-
-    struct yetty_ycore_void_result er = view_emit_records(view, env);
-    yetty_ydraw_drawable_list_destroy(env);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "yview ship: emit");
     return YETTY_OK_VOID();
 }
 
@@ -435,20 +411,9 @@ static struct yetty_ycore_void_result view_set_content_size(struct yetty_yclass_
     view->content_w = content_w > 0.0f ? content_w : 0.0f;
     view->content_h = content_h > 0.0f ? content_h : 0.0f;
 
-    struct yetty_ydraw_drawable_list_result env_r =
-        yetty_ydraw_drawable_list_config_buffer_create(NULL);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, env_r, "yview set_content_size: envelope create");
-    struct yetty_ydraw_drawable_list *env = env_r.value;
-    struct yetty_ycore_void_result ar =
-        append_admin_id_f32x2(env, (uint32_t)YETTY_YFIGURE_ADMIN_SET_CHILD_CONTENT_SIZE,
-                              view->child_id, view->content_w, view->content_h);
-    if (YETTY_IS_ERR(ar)) {
-        yetty_ydraw_drawable_list_destroy(env);
-        return YETTY_ERR(yetty_ycore_void, "yview set_content_size: append", ar);
-    }
-    struct yetty_ycore_void_result er = view_emit_records(view, env);
-    yetty_ydraw_drawable_list_destroy(env);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "yview set_content_size: emit");
+    struct yetty_ycore_void_result szr = yetty_yfigure_set_child_content_size(
+        view->container, view->child_id, view->content_w, view->content_h);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, szr, "yview set_content_size: stub");
     return YETTY_OK_VOID();
 }
 
@@ -467,20 +432,9 @@ static struct yetty_ycore_void_result view_scroll_to(struct yetty_yclass_object 
     view->scroll_y = view->content_h > 0.0f ? clamp_scroll(scroll_y, view->content_h, viewport_h)
                                             : (scroll_y > 0.0f ? scroll_y : 0.0f);
 
-    struct yetty_ydraw_drawable_list_result env_r =
-        yetty_ydraw_drawable_list_config_buffer_create(NULL);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, env_r, "yview scroll_to: envelope create");
-    struct yetty_ydraw_drawable_list *env = env_r.value;
-    struct yetty_ycore_void_result ar =
-        append_admin_id_f32x2(env, (uint32_t)YETTY_YFIGURE_ADMIN_SET_CHILD_SCROLL, view->child_id,
-                              view->scroll_x, view->scroll_y);
-    if (YETTY_IS_ERR(ar)) {
-        yetty_ydraw_drawable_list_destroy(env);
-        return YETTY_ERR(yetty_ycore_void, "yview scroll_to: append", ar);
-    }
-    struct yetty_ycore_void_result er = view_emit_records(view, env);
-    yetty_ydraw_drawable_list_destroy(env);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "yview scroll_to: emit");
+    struct yetty_ycore_void_result scr = yetty_yfigure_set_child_scroll(
+        view->container, view->child_id, view->scroll_x, view->scroll_y);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, scr, "yview scroll_to: stub");
     return YETTY_OK_VOID();
 }
 
@@ -509,19 +463,9 @@ static struct yetty_ycore_void_result view_set_rect(struct yetty_yclass_object *
     view->rect = (struct yetty_ycore_rectangle){.min = {.x = min_x, .y = min_y},
                                                 .max = {.x = max_x, .y = max_y}};
 
-    struct yetty_ydraw_drawable_list_result env_r =
-        yetty_ydraw_drawable_list_config_buffer_create(NULL);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, env_r, "yview set_rect: envelope create");
-    struct yetty_ydraw_drawable_list *env = env_r.value;
-    struct yetty_ycore_void_result ar = yetty_ydraw_drawable_list_add_admin_set_child_rect(
-        env, view->child_id, min_x, min_y, max_x, max_y);
-    if (YETTY_IS_ERR(ar)) {
-        yetty_ydraw_drawable_list_destroy(env);
-        return YETTY_ERR(yetty_ycore_void, "yview set_rect: append", ar);
-    }
-    struct yetty_ycore_void_result er = view_emit_records(view, env);
-    yetty_ydraw_drawable_list_destroy(env);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, er, "yview set_rect: emit");
+    struct yetty_ycore_void_result rr =
+        yetty_yfigure_set_child_rect(view->container, view->child_id, view->rect);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yview set_rect: stub");
     return YETTY_OK_VOID();
 }
 
@@ -539,20 +483,26 @@ static struct yetty_ycore_void_result view_destroy(struct yetty_yclass_object *o
         YETTY_IS_ERR(view_r) ? YETTY_ERR(yetty_ycore_void, "yview destroy: object", view_r)
                              : YETTY_OK_VOID();
     if (view) {
-        struct yetty_ydraw_drawable_list_result env_r =
-            yetty_ydraw_drawable_list_config_buffer_create(NULL);
-        if (YETTY_IS_OK(env_r)) {
-            struct yetty_ydraw_drawable_list *env = env_r.value;
-            struct yetty_ycore_void_result ar =
-                yetty_ydraw_drawable_list_add_admin_delete_child(env, view->child_id);
-            if (YETTY_IS_OK(ar)) {
-                result = view_emit_records(view, env);
-            } else {
-                result = YETTY_ERR(yetty_ycore_void, "yview destroy: delete_child", ar);
+        /* Clear the surface, then tear the session (and its transport) down.
+         * Best-effort: run the detach even if delete_child failed, stashing the
+         * first error to surface at the end. */
+        if (view->container) {
+            struct yetty_ycore_void_result dr =
+                yetty_yfigure_delete_child(view->container, view->child_id);
+            if (YETTY_IS_OK(result) && YETTY_IS_ERR(dr)) {
+                result = YETTY_ERR(yetty_ycore_void, "yview destroy: delete_child", dr);
+            } else if (YETTY_IS_ERR(dr)) {
+                yetty_ycore_error_destroy(dr.error);
             }
-            yetty_ydraw_drawable_list_destroy(env);
-        } else {
-            result = YETTY_ERR(yetty_ycore_void, "yview destroy: envelope create", env_r);
+        }
+        if (view->producer_session) {
+            struct yetty_ycore_void_result detach_r =
+                yetty_yfigure_producer_detach(view->producer_session);
+            if (YETTY_IS_OK(result) && YETTY_IS_ERR(detach_r)) {
+                result = YETTY_ERR(yetty_ycore_void, "yview destroy: detach", detach_r);
+            } else if (YETTY_IS_ERR(detach_r)) {
+                yetty_ycore_error_destroy(detach_r.error);
+            }
         }
     }
     struct yetty_ycore_void_result fr = yetty_yclass_object_free(obj);

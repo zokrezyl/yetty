@@ -10,6 +10,7 @@ methods:
  * default is a no-op — the base class is never instantiated as a leaf;
  * every concrete kind overrides this and frees via object_free. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: render
     domain: yfigure
@@ -22,6 +23,7 @@ methods:
         type: "struct yetty_ydraw_target *"
     doc: null
     local: true
+    oneway: false
     return_payload_type: null
   - slot: constructor
     domain: yfigure
@@ -34,6 +36,7 @@ methods:
  * (the `struct yetty_yfigure_container` body) immediately after. Cast
  * via (obj + 1) advances past the header in pointer arithmetic. */"
     local: false
+    oneway: false
     return_payload_type: null
   - slot: add_child
     domain: yfigure
@@ -48,6 +51,7 @@ methods:
         type: uint32_t
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: remove_child_by_id
     domain: yfigure
@@ -60,6 +64,7 @@ methods:
         type: uint32_t
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
   - slot: raise_child_by_id
     domain: yfigure
@@ -72,19 +77,174 @@ methods:
         type: uint32_t
     doc: null
     local: false
+    oneway: false
     return_payload_type: null
-  - slot: process_records
+  - slot: create_child
     domain: yfigure
     owning_class: container
     return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-      - name: bytes
+      - name: kind_token
+        type: uint32_t
+      - name: id
+        type: uint32_t
+      - name: rect
+        type: struct yetty_ycore_rectangle
+      - name: init
+        type: struct yetty_ycore_buffer
+    doc: "/* Each mutation slot is `oneway@` — the producer fires it and moves on; the
+ * host applies it with no reply. Matches the legacy one-way figure wire and
+ * keeps an interactive producer's input loop unblocked by RPC round-trips. */"
+    local: false
+    oneway: true
+    return_payload_type: null
+  - slot: delete_child
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+    doc: null
+    local: false
+    oneway: true
+    return_payload_type: null
+  - slot: set_child_rect
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+      - name: rect
+        type: struct yetty_ycore_rectangle
+    doc: null
+    local: false
+    oneway: true
+    return_payload_type: null
+  - slot: set_rect
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: rect
+        type: struct yetty_ycore_rectangle
+    doc: null
+    local: false
+    oneway: true
+    return_payload_type: null
+  - slot: set_child_z
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+      - name: z
+        type: int32_t
+    doc: null
+    local: false
+    oneway: true
+    return_payload_type: null
+  - slot: set_child_hidden
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+      - name: hidden
+        type: uint32_t
+    doc: null
+    local: false
+    oneway: true
+    return_payload_type: null
+  - slot: set_child_scroll
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+      - name: scroll_x
+        type: float
+      - name: scroll_y
+        type: float
+    doc: null
+    local: false
+    oneway: true
+    return_payload_type: null
+  - slot: set_child_content_size
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+      - name: content_w
+        type: float
+      - name: content_h
+        type: float
+    doc: null
+    local: false
+    oneway: true
+    return_payload_type: null
+  - slot: apply_child_body
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: id
+        type: uint32_t
+      - name: body
         type: struct yetty_ycore_buffer
     doc: null
     local: false
+    oneway: true
     return_payload_type: null
+  - slot: clear_all
+    domain: yfigure
+    owning_class: container
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: false
+    oneway: true
+    return_payload_type: null
+  - slot: dump_state
+    domain: yfigure
+    owning_class: figure
+    return_type: struct yetty_ycore_char_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: indent
+        type: int
+    doc: "/* dump_state: heap text snapshot for tests. Base default yields a NULL
+ * string so the yetty_yfigure_dump wrapper emits its rect fallback. */"
+    local: true
+    oneway: false
+    return_payload_type: "char *"
   - slot: process_input
     domain: yfigure
     owning_class: figure
@@ -99,6 +259,7 @@ methods:
  * The container only routes here for kinds that override it (capability
  * detected via yetty_yfigure_figure_implements). */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: process_bytes
     domain: yfigure
@@ -113,20 +274,8 @@ methods:
         type: size_t
     doc: "/* process_bytes: apply a buffered wire body. Base default rejects. */"
     local: true
+    oneway: false
     return_payload_type: null
-  - slot: dump_state
-    domain: yfigure
-    owning_class: figure
-    return_type: struct yetty_ycore_char_ptr_result
-    args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: indent
-        type: int
-    doc: "/* dump_state: heap text snapshot for tests. Base default yields a NULL
- * string so the yetty_yfigure_dump wrapper emits its rect fallback. */"
-    local: true
-    return_payload_type: "char *"
   - slot: reset_content
     domain: yfigure
     owning_class: figure
@@ -137,6 +286,7 @@ methods:
     doc: "/* reset_content: drop content, keep GPU state. Base default rejects so the
  * container falls back to destroy + mint for kinds that don't support it. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: set_scroll
     domain: yfigure
@@ -156,6 +306,7 @@ methods:
  * record or the terminal's autonomous wheel/key handler, without re-shipping
  * content. */"
     local: true
+    oneway: false
     return_payload_type: null
   - slot: set_content_size
     domain: yfigure
@@ -172,6 +323,7 @@ methods:
  * the visible window; content may be larger, making the figure a scroll
  * viewport). Base default rejects. Scrollable kinds override it. */"
     local: true
+    oneway: false
     return_payload_type: null
 classes:
   - name: container
@@ -232,15 +384,36 @@ classes:
       - slot: raise_child_by_id
         slot_domain: yfigure
         impl: yetty_yfigure_container_raise_child_by_id_impl
-      - slot: process_records
+      - slot: create_child
         slot_domain: yfigure
-        impl: yetty_yfigure_container_process_records_impl
-      - slot: process_input
+        impl: yetty_yfigure_container_create_child_impl
+      - slot: delete_child
         slot_domain: yfigure
-        impl: container_process_input_slot
-      - slot: process_bytes
+        impl: yetty_yfigure_container_delete_child_impl
+      - slot: set_child_rect
         slot_domain: yfigure
-        impl: container_process_bytes_slot
+        impl: yetty_yfigure_container_set_child_rect_impl
+      - slot: set_rect
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_set_rect_impl
+      - slot: set_child_z
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_set_child_z_impl
+      - slot: set_child_hidden
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_set_child_hidden_impl
+      - slot: set_child_scroll
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_set_child_scroll_impl
+      - slot: set_child_content_size
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_set_child_content_size_impl
+      - slot: apply_child_body
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_apply_child_body_impl
+      - slot: clear_all
+        slot_domain: yfigure
+        impl: yetty_yfigure_container_clear_all_slot
       - slot: dump_state
         slot_domain: yfigure
         impl: container_dump_state_slot
@@ -405,38 +578,6 @@ exposed:
         type: float
       - name: offset_y
         type: float
-    doc: null
-  - source_file: src/yetty/yfigure/container.c
-    name: yetty_yfigure_container_consume_envelope
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: sm
-        type: "struct yetty_ywire_wire_statemachine *"
-    doc: null
-  - source_file: src/yetty/yfigure/container.c
-    name: yetty_yfigure_container_process_input
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: userdata
-        type: "void *"
-      - name: sm
-        type: "struct yetty_ywire_wire_statemachine *"
-    doc: "/* Coroutine entry registered on the input pipe — its signature is fixed by
- * the wire callback ABI (`yetty_ywire_process_input_fn` = void *userdata, sm),
- * so the handle arrives as an opaque `userdata` that callers set to the
- * container's yclass object. */"
-  - source_file: src/yetty/yfigure/container.c
-    name: yetty_yfigure_container_process_records
-    return_type: struct yetty_ycore_void_result
-    args:
-      - name: obj
-        type: "struct yetty_yclass_object *"
-      - name: bytes
-        type: "const uint8_t *"
-      - name: bytes_len
-        type: size_t
     doc: null
   - source_file: src/yetty/yfigure/container.c
     name: yetty_yfigure_container_as_figure
@@ -619,8 +760,6 @@ local_types:
   child_entry: src/yetty/yfigure/container.c
   yetty_yfigure_container: src/yetty/yfigure/container.c
   yetty_yfigure_container_ptr_result: src/yetty/yfigure/container.c
-  container_record_header: src/yetty/yfigure/container.c
-  sm_read_status: src/yetty/yfigure/container.c
   hit_visitor_state: src/yetty/yfigure/container.c
   yetty_yfigure_figure: src/yetty/yfigure/figure.c
   yetty_yfigure_figure_ptr_result: src/yetty/yfigure/figure.c

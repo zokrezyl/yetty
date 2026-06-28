@@ -55,7 +55,6 @@
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfigure/container.h>
 #include <yetty/yfigure/registry.h>
-#include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/ygrid/grid.h>
 #include <yetty/ytrace/ytrace.h>
@@ -103,10 +102,6 @@ struct yetty_yterminal_terminal_context {
     struct yetty_context yetty_context;
     struct yetty_platform_pty *pty;
 };
-
-/* The compositor's wire-SM entry now lives in yfigure/container.c as
- * yetty_yfigure_container_process_input — it's registered directly with
- * userdata = terminal->root_container_obj, no terminal-local wrapper. */
 
 struct yetty_yterminal_terminal {
     struct yetty_yui_view view; /* MUST be first - allows cast to view */
@@ -175,10 +170,10 @@ struct yetty_yterminal_terminal {
      * 0 = no figure focused. */
     uint32_t focused_figure_id;
 
-    /* Root container — replaces the legacy compositor. Holds every
-     * figure the producer addresses by id; consumes YCOMPOSITOR_BIN
-     * envelopes as `{length, id, payload}` record streams via the
-     * comp_sm_shim below. Owned directly. */
+    /* Root container — positioned-figure root of the rendering stack.
+     * Holds every figure the producer addresses by id; producers mutate
+     * it through the yclass-RPC DCS server (typed create_child /
+     * set_child_rect / apply_child_body / … slots). Owned directly. */
     struct yetty_yclass_object *root_container_obj;
     struct yetty_yfigure_registry *figure_registry;
 
@@ -215,9 +210,9 @@ struct yetty_yterminal_terminal {
      * mint. */
     struct yetty_ygrid_factory_args figure_args;
 
-    /* No wire-SM shim — the compositor's process_input is registered
-     * directly with the wire SM (userdata = terminal). The figure tree
-     * is reached via yetty_yfigure_container_as_figure(root_container). */
+    /* The figure tree is reached via
+     * yetty_yfigure_container_as_figure(root_container); producers drive it
+     * through the yclass-RPC DCS server (see dcs_rpc_server below). */
 
     /* Cell-precise selection state.
      *
@@ -344,11 +339,12 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
              * with the text automatically — no separate rolling-row origin to
              * keep in sync. */
         }
-        /* Root-container path: the wire-SM dispatch into consume_envelope
-         * lands new figure data here. The legacy text-layer dirty check
-         * above only covers libvterm-side mutations, so without this any
-         * frame coming over OSC 630000 lands silently and the screen stays
-         * stale until something else triggers a render. */
+        /* Root-container path: yclass-RPC figure mutations (create_child,
+         * apply_child_body, …) applied during this feed mark the container
+         * dirty here. The text-layer dirty check above only covers
+         * libvterm-side mutations, so without this a figure-only frame lands
+         * silently and the screen stays stale until something else triggers
+         * a render. */
         if (terminal->root_container_obj) {
             /* External-callback boundary (this fn is YETTY_EXTERNAL_CALLBACK):
              * the obj→figure downcast cannot propagate, so absorb here. */
@@ -1687,21 +1683,20 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * renders it as a pass inside the grid's render. Not handled here. */
 
     /* ymgui has moved out of the layer stack. ImGui frames now flow as
-     * yetty_ymgui_figure children of the root container (figure-tree
-     * wire on OSC 630000). Mouse / focus routing scans the root
-     * container, the figures paint themselves, and ymgui-layer.c is
-     * gone. */
+     * yetty_ymgui_figure children of the root container, created and driven
+     * through the yclass-RPC figure-mutation slots. Mouse / focus routing
+     * scans the root container, the figures paint themselves, and
+     * ymgui-layer.c is gone. */
 
-    /* yrdawn now flows through the figure-tree wire like ymgui — the
-     * factory args wired into yframework_register_figure_factories
-     * below carry the emit/request_render callbacks, and CREATE_CHILD
-     * kind=YRDAWN admin records inside YCOMPOSITOR_BIN mint each
-     * remote canvas. yrdawn-layer.c is gone. */
+    /* yrdawn now flows through the figure tree like ymgui — the factory
+     * args wired into yframework_register_figure_factories below carry the
+     * emit/request_render callbacks, and a create_child of kind YRDAWN mints
+     * each remote canvas. yrdawn-layer.c is gone. */
 
     /* Root container — positioned-figure root of the rendering stack. Owned
      * directly by the terminal (it is not the content layer). The render loop
-     * calls root_container->ops->render after the content layer; the wire SM
-     * dispatches OSC envelopes to it via the comp_sm_shim below.
+     * calls root_container->ops->render after the content layer; producers
+     * mutate it through the yclass-RPC DCS server registered below.
      *
      * Default MSDF font: ygui-emitting subprocesses (ygreeter, ytop, …)
      * ship widget labels as TEXT_DRAWABLE_LIST records; each ygrid figure the
@@ -1846,17 +1841,16 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
         YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rf,
                             "terminal_create: ygrid register_factory");
         /* Producer-widget kinds reuse the ygrid factory today (same SDF /
-         * glyph prim stream) but ship under distinct kind codes on the
-         * wire — see yfigure/wire.h. The composite factory in figure_args
-         * lets each ygrid render yplot/yimage/etc. instances embedded in
-         * the prim stream. */
-        static const uint32_t producer_kinds[] = {
-            YETTY_YFIGURE_KIND_YPLOT, YETTY_YFIGURE_KIND_YIMAGE,  YETTY_YFIGURE_KIND_YVIDEO,
-            YETTY_YFIGURE_KIND_YZOO,  YETTY_YFIGURE_KIND_YJUNGLE,
-        };
-        for (size_t i = 0; i < sizeof(producer_kinds) / sizeof(producer_kinds[0]); i++) {
+         * glyph prim stream) but register under distinct kind tokens — see
+         * yetty_yfigure_kind_token in yfigure/registry.h. The composite
+         * factory in figure_args lets each ygrid render yplot/yimage/etc.
+         * instances embedded in the prim stream. */
+        static const char *const producer_kind_names[] = {"yplot", "yimage", "yvideo", "yzoo",
+                                                          "yjungle"};
+        for (size_t i = 0; i < sizeof(producer_kind_names) / sizeof(producer_kind_names[0]); i++) {
             struct yetty_ycore_void_result kr = yetty_ygrid_register_factory_for_kind(
-                terminal->figure_registry, producer_kinds[i], &terminal->figure_args);
+                terminal->figure_registry, yetty_yfigure_kind_token(producer_kind_names[i]),
+                &terminal->figure_args);
             YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, kr,
                                 "terminal_create: ygrid register_factory_for_kind");
         }
@@ -1943,16 +1937,6 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, clear_hook_res,
                         "terminal_create: set clear hook failed");
 
-    /* Register the root container directly with the wire SM —
-     * userdata is the container itself; no terminal-local wrapper. */
-    rr = yetty_ywire_wire_statemachine_register(
-        terminal->sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YCOMPOSITOR_BIN, /*has_args=*/1,
-        (yetty_ywire_process_input_fn)yetty_yfigure_container_process_input,
-        terminal->root_container_obj);
-    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr,
-                        "terminal_create: register compositor for YCOMPOSITOR_BIN");
-    ydebug("terminal_create: ycompositor registered for DCS %d", YETTY_DCS_YCOMPOSITOR_BIN);
-
     /* Client-input reinject — pane-wide subscribers bounce unconsumed
      * mouse events back here for default handling (wheel → scrollback).
      * Same DCS transport as every client→server yface emit. */
@@ -2025,11 +2009,10 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
      * yface OSC envelopes and yclass DCS envelopes in parallel.
      *
      * compressed=0 keeps tiny calls fast (b64-only); large frames
-     * (process_records buffers with a full envelope's records inside)
-     * benefit from compressed=1 but the call-time pick lives at the
-     * client transport. The server agrees on a fixed setting for
-     * simplicity; switch to a per-envelope sniff if asymmetric
-     * compression turns out to matter. */
+     * (apply_child_body buffers carrying a full figure body) benefit from
+     * compressed=1 but the call-time pick lives at the client transport.
+     * The server agrees on a fixed setting for simplicity; switch to a
+     * per-envelope sniff if asymmetric compression turns out to matter. */
     {
         struct yetty_yclass_rpc_dcs_server_ptr_result dr =
             yetty_yclass_rpc_dcs_server_attach(terminal->sm, YETTY_DCS_YCLASS_RPC, /*compressed=*/0,
@@ -2039,6 +2022,21 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
         terminal->dcs_rpc_server = dr.value;
     }
     ydebug("terminal_create: yclass-rpc DCS handler registered (code=%d)", YETTY_DCS_YCLASS_RPC);
+
+    /* Designate the root container as this server's root object so remote
+     * producers (subprocess figure tools) can obtain a proxy to it via
+     * RPC_OP_GET_ROOT and drive it with the typed yclass stubs. rpc_init
+     * first so handle minting starts at 1 (handle 0 is the invalid
+     * sentinel). */
+    {
+        struct yetty_ycore_void_result rpc_init_r = yetty_yclass_rpc_init();
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rpc_init_r, "terminal_create: rpc_init");
+        struct yetty_yclass_handle_result root_r =
+            yetty_yclass_rpc_set_root(terminal->root_container_obj);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, root_r, "terminal_create: rpc_set_root");
+        ydebug("terminal_create: root container registered as RPC root handle=%llu",
+               (unsigned long long)root_r.value);
+    }
 
     /* The shader-glyph figure is created, rendered, and destroyed entirely by
      * the text-layer (it scans the cell buffer and renders as a second pass in

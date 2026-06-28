@@ -30,3 +30,27 @@ class Figure(_yfigure.Figure):
         obj = cls()
         return obj.init_result
 
+def figure_from_base(base: Any) -> _rt.Result[Any]:
+    """Call `yetty_yrdawn_figure_from_base`."""
+    _fn = _rt.cfn("yetty_yrdawn_figure_from_base", _t.yetty_yrdawn_figure_ptr_result, [c_void_p])
+    res = _fn(_rt.handle(base))
+    return _rt.result_from_c(res)
+
+def figure_as_figure(obj: Any) -> _rt.Result[Any]:
+    """Call `yetty_yrdawn_figure_as_figure`."""
+    _fn = _rt.cfn("yetty_yrdawn_figure_as_figure", _t.yetty_yfigure_figure_ptr_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def register_factory(registry: Any, args: Any) -> _rt.Result[None]:
+    """Call `yetty_yrdawn_register_factory`."""
+    _fn = _rt.cfn("yetty_yrdawn_register_factory", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+    res = _fn(_rt.handle(registry), _rt.handle(args))
+    return _rt.result_from_c(res)
+
+def factory_args_release(args: Any) -> _rt.Result[None]:
+    """Call `yetty_yrdawn_factory_args_release`."""
+    _fn = _rt.cfn("yetty_yrdawn_factory_args_release", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(args))
+    return _rt.result_from_c(res)
+

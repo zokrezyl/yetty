@@ -972,14 +972,13 @@ static void test_position_relative(void)
 static void test_position_absolute(void)
 {
     fprintf(stderr, "[test_position_absolute]\n");
-    static const char html[] =
-        "<html><body style='margin:0'>"
-        "<div id='wrap' style='position:relative; height:300px'>"
-        "<div id='card' style='position:absolute; top:100px; left:20px; "
-        "width:200px; height:80px'>card</div>"
-        "<div id='flow' style='height:40px'>flow</div>"
-        "</div>"
-        "</body></html>";
+    static const char html[] = "<html><body style='margin:0'>"
+                               "<div id='wrap' style='position:relative; height:300px'>"
+                               "<div id='card' style='position:absolute; top:100px; left:20px; "
+                               "width:200px; height:80px'>card</div>"
+                               "<div id='flow' style='height:40px'>flow</div>"
+                               "</div>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     struct box_info card = {0}, flow = {0};
@@ -1039,13 +1038,12 @@ static void test_transform_translate(void)
 static void test_flex_column_text_height(void)
 {
     fprintf(stderr, "[test_flex_column_text_height]\n");
-    static const char html[] =
-        "<html><body style='margin:0'>"
-        "<div style='display:flex; flex-direction:column; width:280px'>"
-        "<div id='img' style='height:100px'>img</div>"
-        "<div id='txt'>headline text here</div>"
-        "</div>"
-        "</body></html>";
+    static const char html[] = "<html><body style='margin:0'>"
+                               "<div style='display:flex; flex-direction:column; width:280px'>"
+                               "<div id='img' style='height:100px'>img</div>"
+                               "<div id='txt'>headline text here</div>"
+                               "</div>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     /* div 0 = flex column, div 1 = image, div 2 = headline text. */
@@ -1158,13 +1156,13 @@ static void test_grid_two_column(void)
 static void test_css_image_size(void)
 {
     fprintf(stderr, "[test_css_image_size]\n");
-    static const char html[] =
-        "<html><head><style>img{width:14px;height:14px}</style></head>"
-        "<body style='margin:0'>"
-        "<img src='data:image/png;base64,"
-        "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAEklEQVR42mP4z8DwHxkzkC4AADxAH+Ea86VIAAAAAEl"
-        "FTkSuQmCC'>"
-        "</body></html>";
+    static const char html[] = "<html><head><style>img{width:14px;height:14px}</style></head>"
+                               "<body style='margin:0'>"
+                               "<img src='data:image/png;base64,"
+                               "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+"
+                               "AAAAEklEQVR42mP4z8DwHxkzkC4AADxAH+Ea86VIAAAAAEl"
+                               "FTkSuQmCC'>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     struct box_info img = {0};
@@ -1187,13 +1185,12 @@ static void test_css_image_size(void)
 static void test_flex_image_intrinsic_size(void)
 {
     fprintf(stderr, "[test_flex_image_intrinsic_size]\n");
-    static const char html[] =
-        "<html><body style='margin:0'>"
-        "<div style='display:flex; flex-direction:row; width:400px'>"
-        "<img width='14' height='14'>"
-        "<div>Source name and the rest of the headline text here</div>"
-        "</div>"
-        "</body></html>";
+    static const char html[] = "<html><body style='margin:0'>"
+                               "<div style='display:flex; flex-direction:row; width:400px'>"
+                               "<img width='14' height='14'>"
+                               "<div>Source name and the rest of the headline text here</div>"
+                               "</div>"
+                               "</body></html>";
     struct yetty_ylexbor *yl = load(html, 1000, 600);
 
     struct box_info img = {0};

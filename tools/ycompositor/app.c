@@ -55,7 +55,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct YETTY_ANNOTATE("class@ycompositor:app") YETTY_ANNOTATE("parent@yapp:app") yetty_ycompositor_app {
+struct YETTY_ANNOTATE("class@ycompositor:app") YETTY_ANNOTATE("parent@yapp:app")
+    yetty_ycompositor_app {
     int quit;
     struct yetty_context ctx;
     struct yetty_yframework *yrt;
@@ -633,8 +634,7 @@ static struct yetty_ycore_void_result ycompositor_app_run(struct yetty_yclass_ob
         if (gpu->instance) {
             wgpuInstanceProcessEvents(gpu->instance);
         }
-        if (!(needs_render || had_events ||
-              yetty_yfigure_figure_dirty_get(app->root).value)) {
+        if (!(needs_render || had_events || yetty_yfigure_figure_dirty_get(app->root).value)) {
             continue;
         }
 
