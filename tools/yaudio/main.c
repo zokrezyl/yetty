@@ -619,7 +619,7 @@ static struct yetty_ycore_void_result on_next_click(struct yetty_yclass_object *
 static struct yetty_ycore_void_result build_widgets(struct yetty_yaudio_app *app,
                                                     const struct yetty_yplatform_gpu_context *gpu)
 {
-    struct yetty_ygui_framework *engine = yetty_yui_engine(app->yui);
+    struct yetty_yclass_object *engine = yetty_yui_engine(app->yui);
     if (!engine) {
         return YETTY_ERR(yetty_ycore_void, "yaudio: yui engine is NULL — yui allocation failed");
     }
@@ -816,7 +816,7 @@ static struct yetty_ycore_void_result build_widgets(struct yetty_yaudio_app *app
 static void build_loading_ui(struct yetty_yaudio_app *app,
                              const struct yetty_yplatform_gpu_context *gpu)
 {
-    struct yetty_ygui_framework *engine = yetty_yui_engine(app->yui);
+    struct yetty_yclass_object *engine = yetty_yui_engine(app->yui);
     if (!engine) {
         yerror("yaudio: yui engine is NULL — yui allocation failed");
         return;

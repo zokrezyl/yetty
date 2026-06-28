@@ -40,6 +40,19 @@ static struct yetty_ycore_void_result yapp_default_run(struct yetty_yclass_objec
 }
 
 /*
+ * Ask the app to end its run loop. The base default is a no-op (an app with no
+ * event loop has nothing to stop); a concrete app overrides this to stop its
+ * loop so run() returns. Local — an app quits itself in-process.
+ */
+YETTY_ANNOTATE("virtual@yapp:app:quit")
+YETTY_ANNOTATE("local@yapp:quit")
+static struct yetty_ycore_void_result yapp_default_quit(struct yetty_yclass_object *app)
+{
+    (void)app;
+    return YETTY_OK_VOID();
+}
+
+/*
  * App-injection point. The generic platform bootstrap (ymain/<plat>.c) knows
  * only yapp:app, so it calls this fixed-name forwarder; the concrete app module
  * linked into the binary defines it to build — and, when the app is wire-proxied,

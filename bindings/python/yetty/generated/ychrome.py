@@ -28,47 +28,47 @@ class Chrome(_rt.YClass):
     def create(cls) -> _rt.Result['Chrome']:
         obj = cls()
         return obj.init_result
-    def configure(self, window_manager: Any, caption_height: float, edge_size: float, flags: int) -> _rt.Result[None]:
+    def configure(self, caption_height: float, edge_size: float, flags: int) -> _rt.Result[None]:
         """Call `yetty_ychrome_configure`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ychrome_configure", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p, c_float, c_float, c_uint32])
-        res = _fn(None, self._handle, window_manager, caption_height, edge_size, flags)
+        _fn = _rt.cfn("yetty_ychrome_configure", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_float, c_float, c_uint32])
+        res = _fn(None, self._handle, caption_height, edge_size, flags)
         return _rt.result_from_c(res)
-    def set_size(self, width: float, height: float) -> _rt.Result[None]:
+    def set_size(self, height: float) -> _rt.Result[None]:
         """Call `yetty_ychrome_set_size`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ychrome_set_size", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_float, c_float])
-        res = _fn(None, self._handle, width, height)
+        _fn = _rt.cfn("yetty_ychrome_set_size", _t.yetty_ycore_void_result, [c_void_p, c_float, c_float])
+        res = _fn(None, self._handle, height)
         return _rt.result_from_c(res)
     def destroy(self) -> _rt.Result[None]:
         """Call `yetty_ychrome_destroy`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ychrome_destroy", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+        _fn = _rt.cfn("yetty_ychrome_destroy", _t.yetty_ycore_void_result, [c_void_p])
         res = _fn(None, self._handle)
         return _rt.result_from_c(res)
-    def edge_cursor_at(self, x: float, y: float) -> _rt.Result[int]:
+    def edge_cursor_at(self, y: float) -> _rt.Result[int]:
         """Call `yetty_ychrome_edge_cursor_at`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ychrome_edge_cursor_at", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float])
-        res = _fn(None, self._handle, x, y)
+        _fn = _rt.cfn("yetty_ychrome_edge_cursor_at", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float])
+        res = _fn(None, self._handle, y)
         return _rt.result_from_c(res)
     def render(self) -> _rt.Result[Any]:
         """Call `yetty_ychrome_render`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ychrome_render", _t.yetty_ydraw_drawable_list_result, [c_void_p, c_void_p])
+        _fn = _rt.cfn("yetty_ychrome_render", _t.yetty_ydraw_drawable_list_result, [c_void_p])
         res = _fn(None, self._handle)
         return _rt.result_from_c(res)
-    def handle_event(self, event: Any) -> _rt.Result[int]:
+    def handle_event(self) -> _rt.Result[int]:
         """Call `yetty_ychrome_handle_event`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ychrome_handle_event", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_void_p])
-        res = _fn(None, self._handle, event)
+        _fn = _rt.cfn("yetty_ychrome_handle_event", _t.yetty_ycore_int_result, [c_void_p, c_void_p])
+        res = _fn(None, self._handle)
         return _rt.result_from_c(res)
 
 def hover_button(obj: Any) -> _rt.Result[int]:

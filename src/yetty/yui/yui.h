@@ -164,7 +164,7 @@ struct yetty_yclass_object *yetty_yui_statusbar(struct yetty_yui *yui);
  * free-floating widgets (yplot, custom layouts) outside the tabbar /
  * statusbar / menu chrome that yui owns. NULL if engine allocation
  * failed at create time. Caller must not destroy. */
-struct yetty_ygui_framework *yetty_yui_engine(struct yetty_yui *yui);
+struct yetty_yclass_object *yetty_yui_engine(struct yetty_yui *yui);
 
 /* Dispatch a platform input event into yui (forwards mouse/key/char
  * into the ygui engine for widget hit-testing and click handling).

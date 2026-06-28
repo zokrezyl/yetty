@@ -148,6 +148,139 @@ struct yetty_yclass_object_ptr_result yetty_ygui_widget_to(struct yetty_ygui_wid
                     (struct yetty_yclass_object *)((char *)data - offset_r.value));
 }
 
+struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object *obj)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_ygui", (yetty_yclass_method_id_t)yetty_ygui_constructor);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_constructor: method_slot_get failed",
+                             method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_constructor: NULL object");
+    }
+
+    if (obj->session) {
+        struct uint32_result remote_id_r =
+            yetty_yclass_rpc_session_ensure_remote_id(obj->session, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, remote_id_r,
+                            "yetty_ygui_constructor: ensure_remote_id failed");
+        uint32_t remote_id = remote_id_r.value;
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {
+            uint64_t obj_handle;
+        } wire_args = {
+            container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)
+                ->handle};
+#pragma pack(pop)
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
+                            "yetty_ygui_constructor: RPC call failed");
+        if (response_len < 1) {
+            free(resp_buf);
+            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_constructor: short RPC response");
+        }
+        if (resp_buf[0] != 0) {
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error =
+                YETTY_ERR(yetty_ycore_void, "yetty_ygui_constructor: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
+        }
+        free(resp_buf);
+        return YETTY_OK_VOID();
+    } else {
+        struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
+                            "yetty_ygui_constructor: object_class failed");
+        struct yetty_yclass_impl_t_result dispatch_impl_r =
+            yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
+                            "yetty_ygui_constructor: dispatch_lookup failed");
+        return ((yetty_ygui_constructor_fn)dispatch_impl_r.value)(obj);
+    }
+}
+
+struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_object *obj)
+{
+    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
+    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
+        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
+            "yetty_ygui", (yetty_yclass_method_id_t)yetty_ygui_destructor);
+        if (YETTY_IS_ERR(method_slot_r)) {
+            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_destructor: method_slot_get failed",
+                             method_slot_r);
+        }
+        method_slot = method_slot_r.value;
+    }
+
+    if (!obj) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_destructor: NULL object");
+    }
+
+    if (obj->session) {
+        struct uint32_result remote_id_r =
+            yetty_yclass_rpc_session_ensure_remote_id(obj->session, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, remote_id_r,
+                            "yetty_ygui_destructor: ensure_remote_id failed");
+        uint32_t remote_id = remote_id_r.value;
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+        struct {
+            uint64_t obj_handle;
+        } wire_args = {
+            container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)
+                ->handle};
+#pragma pack(pop)
+        uint8_t *resp_buf = NULL;
+        size_t response_len = 0;
+        struct yetty_ycore_void_result rpc_call_r =
+            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
+                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r, "yetty_ygui_destructor: RPC call failed");
+        if (response_len < 1) {
+            free(resp_buf);
+            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_destructor: short RPC response");
+        }
+        if (resp_buf[0] != 0) {
+            struct yetty_ycore_error *remote_chain =
+                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
+            free(resp_buf);
+            struct yetty_ycore_void_result remote_error =
+                YETTY_ERR(yetty_ycore_void, "yetty_ygui_destructor: remote impl returned error");
+            remote_error.error.cause = remote_chain;
+            return remote_error;
+        }
+        free(resp_buf);
+        return YETTY_OK_VOID();
+    } else {
+        struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
+                            "yetty_ygui_destructor: object_class failed");
+        struct yetty_yclass_impl_t_result dispatch_impl_r =
+            yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
+                            "yetty_ygui_destructor: dispatch_lookup failed");
+        return ((yetty_ygui_destructor_fn)dispatch_impl_r.value)(obj);
+    }
+}
+
 struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_object *obj, float x,
                                                          float y, int button)
 {
@@ -410,139 +543,6 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_o
     return ((yetty_ygui_widget_emit_body_fn)dispatch_impl_r.value)(obj, emit_ctx);
 }
 
-struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object *obj)
-{
-    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
-    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
-        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
-            "yetty_ygui", (yetty_yclass_method_id_t)yetty_ygui_constructor);
-        if (YETTY_IS_ERR(method_slot_r)) {
-            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_constructor: method_slot_get failed",
-                             method_slot_r);
-        }
-        method_slot = method_slot_r.value;
-    }
-
-    if (!obj) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_constructor: NULL object");
-    }
-
-    if (obj->session) {
-        struct uint32_result remote_id_r =
-            yetty_yclass_rpc_session_ensure_remote_id(obj->session, method_slot);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, remote_id_r,
-                            "yetty_ygui_constructor: ensure_remote_id failed");
-        uint32_t remote_id = remote_id_r.value;
-/* Byte-exact wire layout — #pragma pack matches the first-party
- * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
- * packed attribute. */
-#pragma pack(push, 1)
-        struct {
-            uint64_t obj_handle;
-        } wire_args = {
-            container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)
-                ->handle};
-#pragma pack(pop)
-        uint8_t *resp_buf = NULL;
-        size_t response_len = 0;
-        struct yetty_ycore_void_result rpc_call_r =
-            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
-                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r,
-                            "yetty_ygui_constructor: RPC call failed");
-        if (response_len < 1) {
-            free(resp_buf);
-            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_constructor: short RPC response");
-        }
-        if (resp_buf[0] != 0) {
-            struct yetty_ycore_error *remote_chain =
-                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
-            free(resp_buf);
-            struct yetty_ycore_void_result remote_error =
-                YETTY_ERR(yetty_ycore_void, "yetty_ygui_constructor: remote impl returned error");
-            remote_error.error.cause = remote_chain;
-            return remote_error;
-        }
-        free(resp_buf);
-        return YETTY_OK_VOID();
-    } else {
-        struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
-                            "yetty_ygui_constructor: object_class failed");
-        struct yetty_yclass_impl_t_result dispatch_impl_r =
-            yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
-                            "yetty_ygui_constructor: dispatch_lookup failed");
-        return ((yetty_ygui_constructor_fn)dispatch_impl_r.value)(obj);
-    }
-}
-
-struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_object *obj)
-{
-    static yetty_yclass_method_slot method_slot = YETTY_YCLASS_METHOD_SLOT_UNDEFINED;
-    if (method_slot == YETTY_YCLASS_METHOD_SLOT_UNDEFINED) {
-        struct yetty_yclass_method_slot_result method_slot_r = yetty_yclass_method_slot_get(
-            "yetty_ygui", (yetty_yclass_method_id_t)yetty_ygui_destructor);
-        if (YETTY_IS_ERR(method_slot_r)) {
-            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_destructor: method_slot_get failed",
-                             method_slot_r);
-        }
-        method_slot = method_slot_r.value;
-    }
-
-    if (!obj) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ygui_destructor: NULL object");
-    }
-
-    if (obj->session) {
-        struct uint32_result remote_id_r =
-            yetty_yclass_rpc_session_ensure_remote_id(obj->session, method_slot);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, remote_id_r,
-                            "yetty_ygui_destructor: ensure_remote_id failed");
-        uint32_t remote_id = remote_id_r.value;
-/* Byte-exact wire layout — #pragma pack matches the first-party
- * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
- * packed attribute. */
-#pragma pack(push, 1)
-        struct {
-            uint64_t obj_handle;
-        } wire_args = {
-            container_of((struct yetty_yclass_object *)obj, struct yetty_yclass_proxy, header)
-                ->handle};
-#pragma pack(pop)
-        uint8_t *resp_buf = NULL;
-        size_t response_len = 0;
-        struct yetty_ycore_void_result rpc_call_r =
-            yetty_yclass_rpc_call_alloc(obj->session, YETTY_YCLASS_RPC_OP_CALL, remote_id,
-                                        &wire_args, sizeof(wire_args), &resp_buf, &response_len);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rpc_call_r, "yetty_ygui_destructor: RPC call failed");
-        if (response_len < 1) {
-            free(resp_buf);
-            return YETTY_ERR(yetty_ycore_void, "yetty_ygui_destructor: short RPC response");
-        }
-        if (resp_buf[0] != 0) {
-            struct yetty_ycore_error *remote_chain =
-                yetty_ycore_error_deserialize(resp_buf + 1, response_len - 1);
-            free(resp_buf);
-            struct yetty_ycore_void_result remote_error =
-                YETTY_ERR(yetty_ycore_void, "yetty_ygui_destructor: remote impl returned error");
-            remote_error.error.cause = remote_chain;
-            return remote_error;
-        }
-        free(resp_buf);
-        return YETTY_OK_VOID();
-    } else {
-        struct yetty_yclass_ptr_result object_class_r = yetty_yclass_object_class(obj);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, object_class_r,
-                            "yetty_ygui_destructor: object_class failed");
-        struct yetty_yclass_impl_t_result dispatch_impl_r =
-            yetty_yclass_dispatch_lookup(object_class_r.value, method_slot);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
-                            "yetty_ygui_destructor: dispatch_lookup failed");
-        return ((yetty_ygui_destructor_fn)dispatch_impl_r.value)(obj);
-    }
-}
-
 struct yetty_ycore_int_result yetty_ygui_widget_on_scroll(struct yetty_yclass_object *obj, float x,
                                                           float y, float dx, float dy)
 {
@@ -677,6 +677,122 @@ struct yetty_ycore_void_result yetty_ygui_widget_emit_container(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dispatch_impl_r,
                         "yetty_ygui_widget_emit_container: dispatch_lookup failed");
     return ((yetty_ygui_widget_emit_container_fn)dispatch_impl_r.value)(obj, emit_ctx);
+}
+
+/* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table
+ * contract (the RPC engine calls it as a fn-pointer), so it cannot return
+ * a Result; handle_resolve / impl failures are absorbed into the 1-byte
+ * status wire response at this boundary. External linkage so this module's
+ * skel-lookup table (in the module-aggregator <stem>.gen.c) can name it
+ * across translation units. */
+size_t yetty_ygui_constructor_skel(const void *, size_t, void *, size_t);
+YETTY_EXTERNAL_CALLBACK
+size_t yetty_ygui_constructor_skel(const void *body, size_t body_len, void *resp, size_t resp_max)
+{
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
+        uint64_t obj_handle;
+    } wire_args;
+#pragma pack(pop)
+    /* Strict length match — both sides regenerate from the same
+     * annotated source; a size mismatch means signature drift, and
+     * silently truncating to the local prefix would let the server
+     * execute against a misaligned struct. */
+    if (body_len != sizeof(wire_args)) {
+        return 0;
+    }
+    memcpy(&wire_args, body, sizeof(wire_args));
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_ygui_constructor: handle_resolve",
+                                obj_resolve_r.error);
+        if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
+            return 0;
+        }
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
+    }
+    struct yetty_ycore_void_result call_r =
+        yetty_ygui_constructor((struct yetty_yclass_object *)obj_resolve_r.value);
+    if (resp_max < 1) {
+        return 0;
+    }
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_ygui_constructor", call_r.error);
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
+    }
+    ((uint8_t *)resp)[0] = 0;
+    return 1;
+}
+
+/* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table
+ * contract (the RPC engine calls it as a fn-pointer), so it cannot return
+ * a Result; handle_resolve / impl failures are absorbed into the 1-byte
+ * status wire response at this boundary. External linkage so this module's
+ * skel-lookup table (in the module-aggregator <stem>.gen.c) can name it
+ * across translation units. */
+size_t yetty_ygui_destructor_skel(const void *, size_t, void *, size_t);
+YETTY_EXTERNAL_CALLBACK
+size_t yetty_ygui_destructor_skel(const void *body, size_t body_len, void *resp, size_t resp_max)
+{
+/* Byte-exact wire layout — #pragma pack matches the first-party
+ * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
+ * packed attribute. */
+#pragma pack(push, 1)
+    struct {
+        uint64_t obj_handle;
+    } wire_args;
+#pragma pack(pop)
+    /* Strict length match — both sides regenerate from the same
+     * annotated source; a size mismatch means signature drift, and
+     * silently truncating to the local prefix would let the server
+     * execute against a misaligned struct. */
+    if (body_len != sizeof(wire_args)) {
+        return 0;
+    }
+    memcpy(&wire_args, body, sizeof(wire_args));
+    struct yetty_yclass_void_ptr_result obj_resolve_r =
+        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
+    if (YETTY_IS_ERR(obj_resolve_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_ygui_destructor: handle_resolve",
+                                obj_resolve_r.error);
+        if (resp_max < 1) {
+            yetty_ycore_error_destroy(obj_resolve_r.error);
+            return 0;
+        }
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(obj_resolve_r.error);
+        return 1 + err_bytes;
+    }
+    struct yetty_ycore_void_result call_r =
+        yetty_ygui_destructor((struct yetty_yclass_object *)obj_resolve_r.value);
+    if (resp_max < 1) {
+        return 0;
+    }
+    if (YETTY_IS_ERR(call_r)) {
+        yetty_ycore_error_print(stderr, "[skel] yetty_ygui_destructor", call_r.error);
+        ((uint8_t *)resp)[0] = 1;
+        size_t err_bytes =
+            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
+        yetty_ycore_error_destroy(call_r.error);
+        return 1 + err_bytes;
+    }
+    ((uint8_t *)resp)[0] = 0;
+    return 1;
 }
 
 /* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table
@@ -876,122 +992,6 @@ size_t yetty_ygui_widget_on_motion_skel(const void *body, size_t body_len, void 
     ((uint8_t *)resp)[0] = 0;
     memcpy((uint8_t *)resp + 1, &call_r.value, sizeof(call_r.value));
     return 1 + sizeof(call_r.value);
-}
-
-/* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table
- * contract (the RPC engine calls it as a fn-pointer), so it cannot return
- * a Result; handle_resolve / impl failures are absorbed into the 1-byte
- * status wire response at this boundary. External linkage so this module's
- * skel-lookup table (in the module-aggregator <stem>.gen.c) can name it
- * across translation units. */
-size_t yetty_ygui_constructor_skel(const void *, size_t, void *, size_t);
-YETTY_EXTERNAL_CALLBACK
-size_t yetty_ygui_constructor_skel(const void *body, size_t body_len, void *resp, size_t resp_max)
-{
-/* Byte-exact wire layout — #pragma pack matches the first-party
- * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
- * packed attribute. */
-#pragma pack(push, 1)
-    struct {
-        uint64_t obj_handle;
-    } wire_args;
-#pragma pack(pop)
-    /* Strict length match — both sides regenerate from the same
-     * annotated source; a size mismatch means signature drift, and
-     * silently truncating to the local prefix would let the server
-     * execute against a misaligned struct. */
-    if (body_len != sizeof(wire_args)) {
-        return 0;
-    }
-    memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_void_ptr_result obj_resolve_r =
-        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
-    if (YETTY_IS_ERR(obj_resolve_r)) {
-        yetty_ycore_error_print(stderr, "[skel] yetty_ygui_constructor: handle_resolve",
-                                obj_resolve_r.error);
-        if (resp_max < 1) {
-            yetty_ycore_error_destroy(obj_resolve_r.error);
-            return 0;
-        }
-        ((uint8_t *)resp)[0] = 1;
-        size_t err_bytes =
-            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
-        return 1 + err_bytes;
-    }
-    struct yetty_ycore_void_result call_r =
-        yetty_ygui_constructor((struct yetty_yclass_object *)obj_resolve_r.value);
-    if (resp_max < 1) {
-        return 0;
-    }
-    if (YETTY_IS_ERR(call_r)) {
-        yetty_ycore_error_print(stderr, "[skel] yetty_ygui_constructor", call_r.error);
-        ((uint8_t *)resp)[0] = 1;
-        size_t err_bytes =
-            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
-        yetty_ycore_error_destroy(call_r.error);
-        return 1 + err_bytes;
-    }
-    ((uint8_t *)resp)[0] = 0;
-    return 1;
-}
-
-/* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table
- * contract (the RPC engine calls it as a fn-pointer), so it cannot return
- * a Result; handle_resolve / impl failures are absorbed into the 1-byte
- * status wire response at this boundary. External linkage so this module's
- * skel-lookup table (in the module-aggregator <stem>.gen.c) can name it
- * across translation units. */
-size_t yetty_ygui_destructor_skel(const void *, size_t, void *, size_t);
-YETTY_EXTERNAL_CALLBACK
-size_t yetty_ygui_destructor_skel(const void *body, size_t body_len, void *resp, size_t resp_max)
-{
-/* Byte-exact wire layout — #pragma pack matches the first-party
- * convention (yvnc/ydvnc/libvterm) and compiles on MSVC, unlike a GNU
- * packed attribute. */
-#pragma pack(push, 1)
-    struct {
-        uint64_t obj_handle;
-    } wire_args;
-#pragma pack(pop)
-    /* Strict length match — both sides regenerate from the same
-     * annotated source; a size mismatch means signature drift, and
-     * silently truncating to the local prefix would let the server
-     * execute against a misaligned struct. */
-    if (body_len != sizeof(wire_args)) {
-        return 0;
-    }
-    memcpy(&wire_args, body, sizeof(wire_args));
-    struct yetty_yclass_void_ptr_result obj_resolve_r =
-        yetty_yclass_rpc_handle_resolve(wire_args.obj_handle);
-    if (YETTY_IS_ERR(obj_resolve_r)) {
-        yetty_ycore_error_print(stderr, "[skel] yetty_ygui_destructor: handle_resolve",
-                                obj_resolve_r.error);
-        if (resp_max < 1) {
-            yetty_ycore_error_destroy(obj_resolve_r.error);
-            return 0;
-        }
-        ((uint8_t *)resp)[0] = 1;
-        size_t err_bytes =
-            yetty_ycore_error_serialize(obj_resolve_r.error, (uint8_t *)resp + 1, resp_max - 1);
-        yetty_ycore_error_destroy(obj_resolve_r.error);
-        return 1 + err_bytes;
-    }
-    struct yetty_ycore_void_result call_r =
-        yetty_ygui_destructor((struct yetty_yclass_object *)obj_resolve_r.value);
-    if (resp_max < 1) {
-        return 0;
-    }
-    if (YETTY_IS_ERR(call_r)) {
-        yetty_ycore_error_print(stderr, "[skel] yetty_ygui_destructor", call_r.error);
-        ((uint8_t *)resp)[0] = 1;
-        size_t err_bytes =
-            yetty_ycore_error_serialize(call_r.error, (uint8_t *)resp + 1, resp_max - 1);
-        yetty_ycore_error_destroy(call_r.error);
-        return 1 + err_bytes;
-    }
-    ((uint8_t *)resp)[0] = 0;
-    return 1;
 }
 
 /* Signature is dictated by the yetty_yclass_rpc_skel_fn dispatch-table

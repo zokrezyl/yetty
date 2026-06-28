@@ -53,7 +53,7 @@ static struct yetty_ycore_rgba debug_rgba(uint32_t packed)
 }
 
 struct yetty_yui_debug_window {
-    struct yetty_ygui_framework *engine; /* borrowed */
+    struct yetty_yclass_object *engine; /* borrowed */
     struct yetty_yclass_object *window;
     /* Edge resize grips (splitter widgets in external-drive mode) —
      * right edge drives width, bottom edge drives height. Repositioned
@@ -221,7 +221,7 @@ static struct yetty_ycore_void_result debug_window_on_close_event(
 }
 
 struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
-    struct yetty_ygui_framework *engine, yetty_ycore_object_id pane_id,
+    struct yetty_yclass_object *engine, yetty_ycore_object_id pane_id,
     yetty_yui_debug_window_close_cb on_close, void *on_close_userdata)
 {
     if (!engine) {

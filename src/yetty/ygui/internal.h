@@ -96,7 +96,13 @@ struct yetty_yfigure_producer_session;
  * _set_dirty_flag does NOT mark the framework dirty (unlike the public
  * yetty_ygui_widget_set_dirty), so framework.c manages that bit itself. */
 struct yetty_ycore_void_result yetty_ygui_widget_set_framework(
-    struct yetty_yclass_object *obj, struct yetty_ygui_framework *framework);
+    struct yetty_yclass_object *obj, struct yetty_yclass_object *framework);
+
+/* Clear any hover/press capture the framework holds on `widget`. Called from
+ * widget destroy; the framework data slice is opaque outside framework.c, so
+ * the field reset goes through this accessor. Defined in framework.c. */
+struct yetty_ycore_void_result yetty_ygui_framework_forget_widget(
+    struct yetty_yclass_object *obj, struct yetty_yclass_object *widget);
 struct yetty_ycore_void_result yetty_ygui_widget_set_id(struct yetty_yclass_object *obj,
                                                         uint32_t id);
 struct yetty_ycore_void_result yetty_ygui_widget_set_hovered(struct yetty_yclass_object *obj,
@@ -127,113 +133,10 @@ struct yetty_ygui_input_state {
     int params_len;
 };
 
-struct yetty_ygui_framework {
-    /* Borrowed — caller owns the lifetime. */
-    struct yetty_platform_pty *output_pty;
-
-    uint32_t next_id;
-    uint32_t *free_ids;
-    size_t free_id_count;
-    size_t free_id_cap;
-
-    /* Monotonic floating-window raise allocator (see
-     * yetty_ygui_framework_next_raise_z). Sits in the floating z band. */
-    int32_t next_raise_z;
-
-    /* Pending deletes — ids whose receiver-side figures need to go
-     * away on the next envelope. */
-    uint32_t *pending_deletes;
-    size_t pending_delete_count;
-    size_t pending_delete_cap;
-
-    /* Receiver-side ygrid id. Primitive widgets share this one ygrid;
-     * figure widgets emit their own CREATE_CHILD records with their
-     * own ids alongside it. */
-    uint32_t ygrid_id;
-    int ygrid_created;
-
-    /* Set of figure ids that have already been minted on the receiver
-     * via CREATE_CHILD. Each frame: figure widgets check this set; if
-     * their id is present they emit SET_CHILD_RECT (cheap rect update);
-     * otherwise they emit CREATE_CHILD and add themselves to the set.
-     *
-     * The set is a sorted dense array kept small — figure widgets are
-     * rare (a handful per app). free_id drops the id back out. */
-    uint32_t *minted_figures;
-    size_t minted_figure_count;
-    size_t minted_figure_cap;
-
-    struct yetty_yclass_object *root;
-
-    /* Viewport in pixels — root widget bounds for the next layout
-     * pass. Defaults to 800x600 until set_viewport is called. */
-    float viewport_w;
-    float viewport_h;
-
-    /* Chrome palette + canonical sizes. Owned by the framework: created
-     * in framework_create with the brand defaults; destroyed in
-     * framework_destroy. yetty_ygui_framework_set_theme replaces the
-     * owned theme (caller passes ownership in). Widget paint code
-     * consults this via yetty_ygui_framework_theme(framework). */
-    struct yetty_ygui_theme *theme;
-
-    /* framework-level dirty flag. Cleared by emit. */
-    int dirty;
-
-    /* Shared ydraw drawable_list — primitive widgets append SDF / glyph
-     * records here. Lazily created on first emit; reused across
-     * frames. */
-    struct yetty_ydraw_drawable_list *ygrid_drawable_list;
-
-    /* Byte-stream input decoder state. */
-    struct yetty_ygui_input_state input;
-
-    /* App-level key callback. */
-    yetty_ygui_key_cb key_cb;
-    void *key_userdata;
-
-    /* Deepest widget currently under the mouse, tracked by
-     * feed_mouse_motion. Used to dispatch enter/leave + flip the
-     * obj->hovered flag so widgets can paint a hover variant. */
-    struct yetty_yclass_object *hovered_obj;
-
-    /* Pointer-capture target. Set to the widget that consumed the last
-     * press; subsequent motion + the matching release are routed here
-     * regardless of hit-test, so click-and-drag (slider, splitter)
-     * keeps working when the cursor leaves the widget's rect. Cleared
-     * on release and on destroy of the captured object. */
-    struct yetty_yclass_object *pressed_obj;
-
-    /* yclass-dispatch state for driving the receiver-side yfigure root
-     * container. The emit walk calls the typed yfigure stubs
-     * (yetty_yfigure_create_child / _set_child_rect / _apply_child_body /
-     * …) directly on `container_obj`. Each slot dispatches locally
-     * (ctx.session == NULL → the impl runs directly on the in-process
-     * container, zero copy) or via yrpc (ctx.session set → the stub
-     * marshals the call over the session's transport).
-     *
-     * The runtime tracks ONLY the root container at the yclass level;
-     * every child figure is addressed by parent-scoped uint32_t id passed
-     * to the typed stubs (the container routes each call to the right
-     * child). No per-child yclass proxy is kept here.
-     *
-     * Both pointers are caller-owned (borrowed) — the host (e.g. yui)
-     * wires them post-create via yetty_ygui_framework_set_container_obj
-     * / _set_session and keeps the underlying objects alive for as
-     * long as the framework. `container_obj` must be set before emit. */
-    struct yetty_yclass_ctx yclass_ctx;
-    struct yetty_yclass_object *container_obj;
-
-    /* Owned producer session, set when the framework attaches to a host
-     * figure container over the yclass RPC transport via
-     * yetty_ygui_framework_attach. It owns the underlying transport +
-     * RPC session + root-container proxy; container_obj and
-     * yclass_ctx.session above point INTO it. NULL when the framework was
-     * never attached (in-process host that wired container_obj directly,
-     * or the legacy yface-over-pty fallback). Torn down by
-     * framework_destroy via yetty_yfigure_producer_detach. */
-    struct yetty_yfigure_producer_session *producer_session;
-};
+/* struct yetty_ygui_framework is the data slice of the `class@ygui:framework`
+ * yclass class — its definition (with the annotation) lives in framework.c so
+ * the codegen source scan can see it. Other ygui translation units treat it as
+ * opaque and reach its state through the generated object-keyed accessors. */
 
 /*===========================================================================
  * Internal helpers.

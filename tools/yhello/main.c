@@ -184,7 +184,7 @@ struct tab_state {
 };
 
 struct app {
-    struct yetty_ygui_framework *engine;
+    struct yetty_yclass_object *engine;
     struct yetty_yclass_object *root;
     struct yetty_yclass_object *tabbar;
     struct yetty_yclass_object *body_panel;
@@ -3069,7 +3069,7 @@ struct key_ctx {
     void (*stop_cb)(struct app *app);
 };
 
-static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, void *userdata)
+static int on_key(struct yetty_yclass_object *engine, uint32_t key, int mods, void *userdata)
 {
     (void)engine;
     (void)mods;
@@ -3608,7 +3608,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
     /* In-process DIRECT dispatch (same path yui.c uses): the framework ships
      * its records straight into root_container via the yclass slot path. */
     {
-        struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(NULL);
+        struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "standalone: framework_create");
         app->engine = fr.value;
         struct yetty_ycore_void_result scr =

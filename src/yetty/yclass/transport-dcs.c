@@ -154,8 +154,7 @@ static struct yetty_ycore_size_result dcs_recv(struct yetty_yclass_transport *ba
                 return YETTY_OK(yetty_ycore_size, 0);
             }
             /* Pure hangup with no pending data: real disconnect. */
-            if ((poll_fd.revents & (POLLHUP | POLLERR | POLLNVAL)) &&
-                !(poll_fd.revents & POLLIN)) {
+            if ((poll_fd.revents & (POLLHUP | POLLERR | POLLNVAL)) && !(poll_fd.revents & POLLIN)) {
                 t->eof = 1;
                 return YETTY_OK(yetty_ycore_size, 0);
             }

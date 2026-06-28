@@ -43,7 +43,7 @@ typedef struct yetty_ycore_void_result (*yetty_yui_debug_window_close_cb)(
  * a debug tag so multiple debug windows are distinguishable in traces.
  * `on_close` (optional) fires when the title-bar close button is hit. */
 struct yetty_yui_debug_window_ptr_result yetty_yui_debug_window_create(
-    struct yetty_ygui_framework *engine, yetty_ycore_object_id pane_id,
+    struct yetty_yclass_object *engine, yetty_ycore_object_id pane_id,
     yetty_yui_debug_window_close_cb on_close, void *on_close_userdata);
 
 /* Removes the widget tree from the engine and frees the bookkeeping. */

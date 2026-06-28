@@ -218,7 +218,7 @@ struct tab_state {
 };
 
 struct app {
-    struct yetty_ygui_framework *engine;
+    struct yetty_yclass_object *engine;
     struct yetty_yclass_object *root;
     struct yetty_yclass_object *tabbar;
     struct yetty_yclass_object *body_panel;
@@ -3038,7 +3038,7 @@ struct key_ctx {
     void (*stop_cb)(struct app *app);
 };
 
-static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, void *userdata)
+static int on_key(struct yetty_yclass_object *engine, uint32_t key, int mods, void *userdata)
 {
     (void)engine;
     (void)mods;
@@ -3724,7 +3724,7 @@ static int run_client_mode(void)
         return 1;
     }
 
-    struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(&cs.out.base);
+    struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
     if (YETTY_IS_ERR(fr)) {
         yetty_ycore_error_print(stderr, "ygreeter client: framework_create", fr.error);
         yetty_ycore_error_destroy(fr.error);
@@ -4416,7 +4416,7 @@ static struct yetty_ycore_void_result standalone_worker(struct yetty_yclass_obje
      * on a degenerate setjmp/longjmp coroutine that abandoned its stack on every
      * yield, corrupting memory on ygreeter's large figure envelopes. */
     {
-        struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(NULL);
+        struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "standalone: framework_create");
         app->engine = fr.value;
         struct yetty_ycore_void_result scr =

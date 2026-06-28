@@ -79,7 +79,7 @@ struct demo_runner {
     const char *name;
     demo_build_fn build;
 
-    struct yetty_ygui_framework *engine;
+    struct yetty_yclass_object *engine;
     struct yetty_yclass_object *root;
 
     struct yetty_yframework *yframework;
@@ -155,7 +155,7 @@ static struct yetty_ycore_int_result frame_tick(struct yetty_yevent_event_listen
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
-struct yetty_ygui_framework *demo_runner_engine(struct demo_runner *r)
+struct yetty_yclass_object *demo_runner_engine(struct demo_runner *r)
 {
     return r ? r->engine : NULL;
 }
@@ -204,7 +204,7 @@ static const char *encode_key(uint32_t key, char *scratch, size_t scratch_n, siz
     }
 }
 
-static int on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods, void *userdata)
+static int on_key(struct yetty_yclass_object *engine, uint32_t key, int mods, void *userdata)
 {
     (void)engine;
     (void)mods;
@@ -661,7 +661,7 @@ static struct yetty_ycore_void_result demoygui_app_run(struct yetty_yclass_objec
      * container. Direct dispatch removes the serialize/parse round and the
      * memory-pty + wire-statemachine entirely. */
     {
-        struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(NULL);
+        struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "demo_runner: framework_create");
         r->engine = fr.value;
         struct yetty_ycore_void_result scr =
@@ -1021,7 +1021,7 @@ struct client_state {
     int running;
 };
 
-static int client_on_key(struct yetty_ygui_framework *engine, uint32_t key, int mods,
+static int client_on_key(struct yetty_yclass_object *engine, uint32_t key, int mods,
                          void *userdata)
 {
     (void)engine;
@@ -1262,10 +1262,15 @@ static void client_sigwinch_cb(uv_signal_t *handle, int signum)
  * the hosting yetty. */
 static void client_frame_cb(uv_timer_t *handle)
 {
-    struct client_state *cs = (struct client_state *)handle->data;
-    if (cs->runner && cs->runner->engine) {
-        yetty_ygui_framework_mark_dirty(cs->runner->engine);
-    }
+    /* Deliberately does NOT force a redraw. The client renders on demand:
+     * real input and state changes mark the framework dirty (feed_mouse_*,
+     * key dispatch, widget callbacks), and client_prep_cb ships a frame only
+     * when dirty. Forcing dirty every tick re-shipped the full ygrid body at
+     * ~30 fps over the wire even when nothing changed — a constant flood whose
+     * synchronous write stalls the uv loop (and input handling) for seconds
+     * whenever the host falls behind. The timer is kept only to keep the loop
+     * ticking so client_prep_cb runs promptly after a change. */
+    (void)handle;
 }
 
 static void client_prep_cb(uv_prepare_t *handle)
@@ -1306,7 +1311,7 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
         return 1;
     }
 
-    struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(&cs.out.base);
+    struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
     if (YETTY_IS_ERR(fr)) {
         yetty_ycore_error_print(stderr, "demo_runner client: framework_create", fr.error);
         yetty_ycore_error_destroy(fr.error);
@@ -1318,6 +1323,25 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
     cs.runner = &r;
     cs.running = 1;
     yetty_ygui_framework_set_key_cb(r.engine, client_on_key, &cs);
+
+    /* Wire the framework's figure output to the host yetty's root container over
+     * the yclass RPC transport: read_fd = our stdin (RPC responses from the
+     * host), write_fd = our stdout (RPC requests to the host). The legacy
+     * one-way figure-record-over-pty path is gone; without this attach the
+     * framework has no container and framework_emit fails "no container". The
+     * producer_attach get_root handshake is synchronous and must complete before
+     * the uv loop below starts polling stdin. framework_attach stores the
+     * producer session on the framework; framework_destroy tears it down. */
+    {
+        struct yetty_ycore_void_result attach_res =
+            yetty_ygui_framework_attach(r.engine, STDIN_FILENO, STDOUT_FILENO, /*compressed=*/1);
+        if (YETTY_IS_ERR(attach_res)) {
+            yetty_ycore_error_print(stderr, "demo_runner client: framework_attach",
+                                    attach_res.error);
+            yetty_ycore_error_destroy(attach_res.error);
+            return 1;
+        }
+    }
 
     /* Same two-level root the standalone path uses: outer vbox owning
      * the viewport, inner body panel with the brand background and

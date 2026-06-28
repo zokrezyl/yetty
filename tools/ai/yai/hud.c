@@ -163,7 +163,7 @@ static const struct yetty_platform_pty_ops *hud_pty_ops(void)
 
 struct yai_hud {
     struct yetty_platform_pty pty;
-    struct yetty_ygui_framework *framework;
+    struct yetty_yclass_object *framework;
     struct yetty_yclass_object *root;
     struct yetty_yclass_object *window;
     /* Format-driven body. `format` is borrowed (owned by the app); one label
@@ -438,7 +438,7 @@ struct yai_hud_ptr_result yai_hud_create(int hud_on, int hud_float)
      * top-right window. */
     hud->docked = !hud_float;
 
-    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_framework_create(&hud->pty);
+    struct yetty_yclass_object_ptr_result framework_res = yetty_ygui_framework_create(NULL);
     if (YETTY_IS_ERR(framework_res)) {
         free(hud);
         return YETTY_ERR(yai_hud_ptr, "yai_hud_create: framework_create", framework_res);

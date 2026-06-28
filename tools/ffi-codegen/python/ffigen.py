@@ -96,6 +96,73 @@ def is_char_ptr(type_str: str) -> bool:
     return t in ("char *", "char*")
 
 
+# ---------------------------------------------------------------------------
+# Property accessors. A `property`-annotated member of type T gets a generated
+# C getter `..._<field>_get(obj)` returning `struct <id>_result` and a setter
+# `..._<field>_set(obj, T value)` returning a void Result. The result-type id
+# below MUST match codegen's result_type_id() so the symbol names line up.
+# ---------------------------------------------------------------------------
+
+def prop_result_id(field_type: str) -> str:
+    """The YRESULT_DECLARE id for a property's value type (mirrors codegen)."""
+    import re
+    r = (field_type or "").strip()
+    if r in ("int", "int32_t"):
+        return "yetty_ycore_int"
+    if r == "size_t":
+        return "yetty_ycore_size"
+    if r == "uint32_t":
+        return "uint32"
+    m = re.match(r"^struct\s+(\w+)\s*\*\s*$", r)
+    if m:
+        return f"{m.group(1)}_ptr"
+    m = re.match(r"^struct\s+(\w+)\s*$", r)
+    if m:
+        overrides = {
+            "yetty_ycore_rectangle": "rectangle",
+            "yetty_ycore_pixel_size": "pixel_size",
+            "yetty_ycore_pixel_coord": "pixel_coord",
+        }
+        return overrides.get(m.group(1), m.group(1))
+    return r
+
+
+def prop_result_name(field_type: str) -> str:
+    return f"{prop_result_id(field_type)}_result"
+
+
+def synth_result_entry(result_name: str, value_type: str) -> dict:
+    """A `kind: result` type entry matching YETTY_YRESULT_DECLARE's layout, so
+    a property getter's by-value Result return has the right ABI in _types."""
+    return {
+        "name": result_name,
+        "kind": "result",
+        "fields": [
+            {"name": "ok", "type": "int"},
+            {"kind": "union", "fields": [
+                {"name": "value", "type": value_type},
+                {"name": "error", "type": "struct yetty_ycore_error"},
+            ]},
+        ],
+    }
+
+
+def add_property_result_types(models: dict[str, dict], types: list[dict]) -> None:
+    """Ensure every property getter's result type exists in the shared type set;
+    synthesize the ones codegen didn't already harvest into a module's `types`."""
+    present = {t["name"] for t in types}
+    for model in models.values():
+        for cls in model.get("classes", []) or []:
+            for field in cls.get("data_fields", []) or []:
+                if not field.get("get"):
+                    continue
+                name = prop_result_name(field.get("type", ""))
+                if name in present:
+                    continue
+                types.append(synth_result_entry(name, field.get("type", "")))
+                present.add(name)
+
+
 # ===========================================================================
 # Python (ctypes) emitter
 # ===========================================================================
@@ -482,6 +549,67 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
             passed = ["None", "self._handle"] + [pass_expr(a) for a in args[2:]]
             parts.append(f"        res = _fn({', '.join(passed)})")
             parts.append(return_expr(m["return_type"]))
+        # property members → idiomatic @property getters/setters. Unlike
+        # methods (which return a Result), a property RAISES _rt.YettyError on
+        # failure so it reads as a plain attribute: `obj.rect`, `obj.rect = v`.
+        # The C accessors take the object only (getter) or object + value
+        # (setter); there is no ctx arg.
+        for field in cls.get("data_fields", []) or []:
+            fname = field.get("name")
+            ftype = field.get("type", "")
+            if not fname or not (field.get("get") or field.get("set")):
+                continue
+            base_sym = f"yetty_{cls['domain']}_{cls['name']}_{fname}"
+            has_get = bool(field.get("get"))
+            has_set = bool(field.get("set"))
+            vann = py_arg_annot(ftype, type_names)
+            vct = py_ctype(ftype, type_names, prefix="_t.")
+            plain_ct = py_ctype(ftype, type_names)
+            if plain_ct == "c_char_p":
+                passv = "_rt.cstr(value)"
+            elif plain_ct == "c_void_p":
+                passv = "_rt.handle(value)"
+            else:
+                passv = "value"
+
+            def emit_getter():
+                rname = prop_result_name(ftype)
+                rstr = f"struct {rname}"
+                ret_ann = py_result_value_annot(rstr)
+                conv = py_result_converter(rstr)
+                parts.append("    @property")
+                parts.append(f"    def {fname}(self) -> {ret_ann}:")
+                parts.append(f'        """Property `{fname}` (raises YettyError on failure)."""')
+                parts.append("        if self._handle is None:")
+                parts.append('            raise _rt.YettyError("uninitialized yclass handle")')
+                parts.append(f'        _fn = _rt.cfn("{base_sym}_get", _t.{rname}, [c_void_p])')
+                arg = f"_fn(self._handle), {conv}" if conv else "_fn(self._handle)"
+                parts.append(f"        res = _rt.result_from_c({arg})")
+                parts.append("        if res.error is not None:")
+                parts.append("            raise _rt.YettyError(res.error.message)")
+                parts.append("        return res.value")
+
+            def emit_setter(decorator):
+                if decorator:
+                    parts.append(f"    {decorator}")
+                parts.append(f"    def {fname}(self, value: {vann}) -> None:")
+                parts.append(f'        """Property `{fname}` (raises YettyError on failure)."""')
+                parts.append("        if self._handle is None:")
+                parts.append('            raise _rt.YettyError("uninitialized yclass handle")')
+                parts.append(
+                    f'        _fn = _rt.cfn("{base_sym}_set", _t.yetty_ycore_void_result, [c_void_p, {vct}])')
+                parts.append(f"        res = _rt.result_from_c(_fn(self._handle, {passv}))")
+                parts.append("        if res.error is not None:")
+                parts.append("            raise _rt.YettyError(res.error.message)")
+
+            if has_get:
+                emit_getter()
+                if has_set:
+                    emit_setter(f"@{fname}.setter")
+            else:
+                # write-only: a plain setter promoted to a setter-only property.
+                emit_setter(None)
+                parts.append(f"    {fname} = property(None, {fname})")
         parts.append("")
 
     for fn in model.get("exposed", []) or []:
@@ -532,6 +660,7 @@ def emit_python(models: dict[str, dict]):
     gen = root / "generated"
     gen.mkdir(parents=True, exist_ok=True)
     types = global_types(models)
+    add_property_result_types(models, types)
     type_names = {t["name"] for t in types}
     py_emit_types(types, gen / "_types.py")
     module_names = []

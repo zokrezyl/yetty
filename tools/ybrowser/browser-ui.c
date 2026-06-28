@@ -165,7 +165,7 @@ struct tab {
 };
 
 struct app {
-    struct yetty_ygui_framework *fw;
+    struct yetty_yclass_object *fw;
     struct yetty_yclass_object *root;
     struct yetty_yclass_object *tabbar;
     struct yetty_yclass_object *address; /* textinput */
@@ -907,7 +907,7 @@ static void focus_address(struct app *a)
     yetty_ygui_framework_mark_dirty(a->fw);
 }
 
-static int key_cb(struct yetty_ygui_framework *fw, uint32_t key, int mods, void *ud)
+static int key_cb(struct yetty_yclass_object *fw, uint32_t key, int mods, void *ud)
 {
     struct app *a = ud;
     (void)mods;
@@ -1575,7 +1575,7 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
 
     struct stdout_pty out = {0};
     out.base.ops = stdout_pty_ops();
-    struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(&out.base);
+    struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
     if (YETTY_IS_ERR(fr)) {
         fprintf(stderr, "ybrowser: framework_create: %s\n", fr.error.msg);
         yetty_ycore_error_destroy(fr.error);
@@ -2227,7 +2227,7 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
      * on the get_root/RESOLVE_SLOT handshake waiting on a server that cannot run
      * until the producer yields. */
     {
-        struct yetty_ygui_framework_ptr_result fr = yetty_ygui_framework_create(NULL);
+        struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "ybrowser standalone: framework_create");
         s->app.fw = fr.value;
         struct yetty_ycore_void_result scr =

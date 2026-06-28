@@ -7,6 +7,28 @@ from typing import Any, ClassVar
 from .. import runtime as _rt
 from . import _types as _t
 
+class Framework(_rt.YClass):
+    """yclass ygui:framework"""
+    __yclass_domain__: ClassVar[str] = 'ygui'
+    __yclass_name__: ClassVar[str] = 'framework'
+    @classmethod
+    def yclass(cls) -> _rt.Result[Any]:
+        _fn = _rt.cfn("yetty_ygui_framework_class_get", _t.yetty_yclass_ptr_result, [])
+        return _rt.result_from_c(_fn())
+    def __init__(self, _handle: Any = None) -> None:
+        if _handle is None:
+            _fn = _rt.cfn("yetty_ygui_framework_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
+            res = _rt.result_from_c(_fn(None))
+            if not res:
+                _rt.YClass.__init__(self, None, res.error)
+                return
+            _handle = res.value
+        super().__init__(_handle)
+    @classmethod
+    def create(cls) -> _rt.Result['Framework']:
+        obj = cls()
+        return obj.init_result
+
 class Widget(_rt.YClass):
     """yclass ygui:widget"""
     __yclass_domain__: ClassVar[str] = 'ygui'
@@ -32,64 +54,64 @@ class Widget(_rt.YClass):
         """Call `yetty_ygui_constructor`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ygui_constructor", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+        _fn = _rt.cfn("yetty_ygui_constructor", _t.yetty_ycore_void_result, [c_void_p])
         res = _fn(None, self._handle)
         return _rt.result_from_c(res)
     def destructor(self) -> _rt.Result[None]:
         """Call `yetty_ygui_destructor`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ygui_destructor", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+        _fn = _rt.cfn("yetty_ygui_destructor", _t.yetty_ycore_void_result, [c_void_p])
         res = _fn(None, self._handle)
         return _rt.result_from_c(res)
-    def widget_on_press(self, x: float, y: float, button: int) -> _rt.Result[int]:
+    def widget_on_press(self, y: float, button: int) -> _rt.Result[int]:
         """Call `yetty_ygui_widget_on_press`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ygui_widget_on_press", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float, c_int])
-        res = _fn(None, self._handle, x, y, button)
+        _fn = _rt.cfn("yetty_ygui_widget_on_press", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_int])
+        res = _fn(None, self._handle, y, button)
         return _rt.result_from_c(res)
-    def widget_on_release(self, x: float, y: float, button: int) -> _rt.Result[int]:
+    def widget_on_release(self, y: float, button: int) -> _rt.Result[int]:
         """Call `yetty_ygui_widget_on_release`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ygui_widget_on_release", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float, c_int])
-        res = _fn(None, self._handle, x, y, button)
+        _fn = _rt.cfn("yetty_ygui_widget_on_release", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_int])
+        res = _fn(None, self._handle, y, button)
         return _rt.result_from_c(res)
-    def widget_on_motion(self, x: float, y: float) -> _rt.Result[int]:
+    def widget_on_motion(self, y: float) -> _rt.Result[int]:
         """Call `yetty_ygui_widget_on_motion`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ygui_widget_on_motion", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float])
-        res = _fn(None, self._handle, x, y)
+        _fn = _rt.cfn("yetty_ygui_widget_on_motion", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float])
+        res = _fn(None, self._handle, y)
         return _rt.result_from_c(res)
-    def widget_on_scroll(self, x: float, y: float, dx: float, dy: float) -> _rt.Result[int]:
+    def widget_on_scroll(self, y: float, dx: float, dy: float) -> _rt.Result[int]:
         """Call `yetty_ygui_widget_on_scroll`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ygui_widget_on_scroll", _t.yetty_ycore_int_result, [c_void_p, c_void_p, c_float, c_float, c_float, c_float])
-        res = _fn(None, self._handle, x, y, dx, dy)
+        _fn = _rt.cfn("yetty_ygui_widget_on_scroll", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_float, c_float])
+        res = _fn(None, self._handle, y, dx, dy)
         return _rt.result_from_c(res)
-    def widget_paint(self, emit_ctx: Any) -> _rt.Result[None]:
+    def widget_paint(self) -> _rt.Result[None]:
         """Call `yetty_ygui_widget_paint`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ygui_widget_paint", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
-        res = _fn(None, self._handle, emit_ctx)
+        _fn = _rt.cfn("yetty_ygui_widget_paint", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+        res = _fn(None, self._handle)
         return _rt.result_from_c(res)
-    def widget_emit_container(self, emit_ctx: Any) -> _rt.Result[None]:
+    def widget_emit_container(self) -> _rt.Result[None]:
         """Call `yetty_ygui_widget_emit_container`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ygui_widget_emit_container", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
-        res = _fn(None, self._handle, emit_ctx)
+        _fn = _rt.cfn("yetty_ygui_widget_emit_container", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+        res = _fn(None, self._handle)
         return _rt.result_from_c(res)
-    def widget_emit_body(self, emit_ctx: Any) -> _rt.Result[None]:
+    def widget_emit_body(self) -> _rt.Result[None]:
         """Call `yetty_ygui_widget_emit_body`; returns Result, never raises for yclass errors."""
         if self._handle is None:
             return self._invalid_result()
-        _fn = _rt.cfn("yetty_ygui_widget_emit_body", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
-        res = _fn(None, self._handle, emit_ctx)
+        _fn = _rt.cfn("yetty_ygui_widget_emit_body", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+        res = _fn(None, self._handle)
         return _rt.result_from_c(res)
 
 class PrimitiveWidget(Widget):
@@ -1280,6 +1302,102 @@ class Yzoo(YdrawEmbed):
         obj = cls()
         return obj.init_result
 
+def framework_destroy(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_destroy`."""
+    _fn = _rt.cfn("yetty_ygui_framework_destroy", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def framework_set_container_obj(obj: Any, container: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_set_container_obj`."""
+    _fn = _rt.cfn("yetty_ygui_framework_set_container_obj", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(container))
+    return _rt.result_from_c(res)
+
+def framework_set_session(obj: Any, session: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_set_session`."""
+    _fn = _rt.cfn("yetty_ygui_framework_set_session", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(session))
+    return _rt.result_from_c(res)
+
+def framework_attach(obj: Any, read_fd: int, write_fd: int, compressed: int) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_attach`."""
+    _fn = _rt.cfn("yetty_ygui_framework_attach", _t.yetty_ycore_void_result, [c_void_p, c_int, c_int, c_int])
+    res = _fn(_rt.handle(obj), read_fd, write_fd, compressed)
+    return _rt.result_from_c(res)
+
+def framework_set_viewport(obj: Any, width_px: float, height_px: float) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_set_viewport`."""
+    _fn = _rt.cfn("yetty_ygui_framework_set_viewport", _t.yetty_ycore_void_result, [c_void_p, c_float, c_float])
+    res = _fn(_rt.handle(obj), width_px, height_px)
+    return _rt.result_from_c(res)
+
+def framework_set_theme(obj: Any, theme: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_set_theme`."""
+    _fn = _rt.cfn("yetty_ygui_framework_set_theme", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(theme))
+    return _rt.result_from_c(res)
+
+def framework_apply_config_to_theme(obj: Any, config: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_apply_config_to_theme`."""
+    _fn = _rt.cfn("yetty_ygui_framework_apply_config_to_theme", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(config))
+    return _rt.result_from_c(res)
+
+def framework_feed_input(obj: Any, bytes: str | bytes | None, n: int) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_feed_input`."""
+    _fn = _rt.cfn("yetty_ygui_framework_feed_input", _t.yetty_ycore_void_result, [c_void_p, c_char_p, c_size_t])
+    res = _fn(_rt.handle(obj), _rt.cstr(bytes), n)
+    return _rt.result_from_c(res)
+
+def framework_feed_mouse_button(obj: Any, x: float, y: float, button: int, pressed: int, mods: int) -> _rt.Result[int]:
+    """Call `yetty_ygui_framework_feed_mouse_button`."""
+    _fn = _rt.cfn("yetty_ygui_framework_feed_mouse_button", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_int, c_int, c_int])
+    res = _fn(_rt.handle(obj), x, y, button, pressed, mods)
+    return _rt.result_from_c(res)
+
+def framework_feed_mouse_motion(obj: Any, x: float, y: float) -> _rt.Result[int]:
+    """Call `yetty_ygui_framework_feed_mouse_motion`."""
+    _fn = _rt.cfn("yetty_ygui_framework_feed_mouse_motion", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float])
+    res = _fn(_rt.handle(obj), x, y)
+    return _rt.result_from_c(res)
+
+def framework_feed_mouse_scroll(obj: Any, x: float, y: float, dx: float, dy: float) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_feed_mouse_scroll`."""
+    _fn = _rt.cfn("yetty_ygui_framework_feed_mouse_scroll", _t.yetty_ycore_void_result, [c_void_p, c_float, c_float, c_float, c_float])
+    res = _fn(_rt.handle(obj), x, y, dx, dy)
+    return _rt.result_from_c(res)
+
+def framework_set_root(obj: Any, root: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_set_root`."""
+    _fn = _rt.cfn("yetty_ygui_framework_set_root", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(root))
+    return _rt.result_from_c(res)
+
+def framework_alloc_id(obj: Any) -> _rt.Result[int]:
+    """Call `yetty_ygui_framework_alloc_id`."""
+    _fn = _rt.cfn("yetty_ygui_framework_alloc_id", _t.uint32_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def framework_free_id(obj: Any, id: int) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_free_id`."""
+    _fn = _rt.cfn("yetty_ygui_framework_free_id", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
+    res = _fn(_rt.handle(obj), id)
+    return _rt.result_from_c(res)
+
+def framework_clear(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_clear`."""
+    _fn = _rt.cfn("yetty_ygui_framework_clear", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def framework_emit(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_emit`."""
+    _fn = _rt.cfn("yetty_ygui_framework_emit", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
 def clickable_on_click_set(obj: Any, cb: Any, userdata: Any) -> _rt.Result[None]:
     """Call `yetty_ygui_clickable_on_click_set`."""
     _fn = _rt.cfn("yetty_ygui_clickable_on_click_set", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
@@ -1310,6 +1428,119 @@ def draggable_is_dragging(obj: Any) -> _rt.Result[int]:
     res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
 
+def layout_compute(root: Any, root_rect: _t.yetty_ycore_rectangle) -> _rt.Result[None]:
+    """Call `yetty_ygui_layout_compute`."""
+    _fn = _rt.cfn("yetty_ygui_layout_compute", _t.yetty_ycore_void_result, [c_void_p, _t.yetty_ycore_rectangle])
+    res = _fn(_rt.handle(root), root_rect)
+    return _rt.result_from_c(res)
+
+def layout_default() -> _t.yetty_ygui_layout:
+    """Call `yetty_ygui_layout_default`."""
+    _fn = _rt.cfn("yetty_ygui_layout_default", _t.yetty_ygui_layout, [])
+    return _fn()
+
+def widget_set_rect(obj: Any, rect: _t.yetty_ycore_rectangle) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_set_rect`."""
+    _fn = _rt.cfn("yetty_ygui_widget_set_rect", _t.yetty_ycore_void_result, [c_void_p, _t.yetty_ycore_rectangle])
+    res = _fn(_rt.handle(obj), rect)
+    return _rt.result_from_c(res)
+
+def widget_rect(obj: Any) -> _rt.Result[Any]:
+    """Call `yetty_ygui_widget_rect`."""
+    _fn = _rt.cfn("yetty_ygui_widget_rect", _t.yetty_ycore_rectangle_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def widget_layout_set(obj: Any, layout: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_layout_set`."""
+    _fn = _rt.cfn("yetty_ygui_widget_layout_set", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(layout))
+    return _rt.result_from_c(res)
+
+def widget_layout_get(obj: Any) -> _rt.Result[Any]:
+    """Call `yetty_ygui_widget_layout_get`."""
+    _fn = _rt.cfn("yetty_ygui_widget_layout_get", _t.yetty_ygui_layout_const_ptr_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def widget_set_visible(obj: Any, visible: int) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_set_visible`."""
+    _fn = _rt.cfn("yetty_ygui_widget_set_visible", _t.yetty_ycore_void_result, [c_void_p, c_int])
+    res = _fn(_rt.handle(obj), visible)
+    return _rt.result_from_c(res)
+
+def widget_is_visible(obj: Any) -> _rt.Result[int]:
+    """Call `yetty_ygui_widget_is_visible`."""
+    _fn = _rt.cfn("yetty_ygui_widget_is_visible", _t.yetty_ycore_int_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def widget_set_size(obj: Any, w: float, h: float) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_set_size`."""
+    _fn = _rt.cfn("yetty_ygui_widget_set_size", _t.yetty_ycore_void_result, [c_void_p, c_float, c_float])
+    res = _fn(_rt.handle(obj), w, h)
+    return _rt.result_from_c(res)
+
+def widget_set_position(obj: Any, x: float, y: float) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_set_position`."""
+    _fn = _rt.cfn("yetty_ygui_widget_set_position", _t.yetty_ycore_void_result, [c_void_p, c_float, c_float])
+    res = _fn(_rt.handle(obj), x, y)
+    return _rt.result_from_c(res)
+
+def widget_make_figure(obj: Any, kind: int, z: int) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_make_figure`."""
+    _fn = _rt.cfn("yetty_ygui_widget_make_figure", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_int32])
+    res = _fn(_rt.handle(obj), kind, z)
+    return _rt.result_from_c(res)
+
+def widget_set_figure_z(obj: Any, z: int) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_set_figure_z`."""
+    _fn = _rt.cfn("yetty_ygui_widget_set_figure_z", _t.yetty_ycore_void_result, [c_void_p, c_int32])
+    res = _fn(_rt.handle(obj), z)
+    return _rt.result_from_c(res)
+
+def widget_set_floating(obj: Any, floating: int) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_set_floating`."""
+    _fn = _rt.cfn("yetty_ygui_widget_set_floating", _t.yetty_ycore_void_result, [c_void_p, c_int])
+    res = _fn(_rt.handle(obj), floating)
+    return _rt.result_from_c(res)
+
+def widget_is_floating(obj: Any) -> _rt.Result[int]:
+    """Call `yetty_ygui_widget_is_floating`."""
+    _fn = _rt.cfn("yetty_ygui_widget_is_floating", _t.yetty_ycore_int_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def widget_figure_kind(obj: Any) -> _rt.Result[int]:
+    """Call `yetty_ygui_widget_figure_kind`."""
+    _fn = _rt.cfn("yetty_ygui_widget_figure_kind", _t.yetty_ycore_uint32_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def widget_figure_z(obj: Any) -> _rt.Result[int]:
+    """Call `yetty_ygui_widget_figure_z`."""
+    _fn = _rt.cfn("yetty_ygui_widget_figure_z", _t.yetty_ycore_int_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def widget_set_bg_color(obj: Any, color: int) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_set_bg_color`."""
+    _fn = _rt.cfn("yetty_ygui_widget_set_bg_color", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
+    res = _fn(_rt.handle(obj), color)
+    return _rt.result_from_c(res)
+
+def widget_bg(obj: Any) -> _rt.Result[int]:
+    """Call `yetty_ygui_widget_bg`."""
+    _fn = _rt.cfn("yetty_ygui_widget_bg", _t.yetty_ycore_uint32_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def widget_apply_css(obj: Any, css: str | bytes | None) -> _rt.Result[None]:
+    """Call `yetty_ygui_widget_apply_css`."""
+    _fn = _rt.cfn("yetty_ygui_widget_apply_css", _t.yetty_ycore_void_result, [c_void_p, c_char_p])
+    res = _fn(_rt.handle(obj), _rt.cstr(css))
+    return _rt.result_from_c(res)
+
 def super_void(obj: Any, self_class: Any, method_id: Any) -> _rt.Result[None]:
     """Call `yetty_ygui_super_void`."""
     _fn = _rt.cfn("yetty_ygui_super_void", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
@@ -1327,30 +1558,35 @@ def class_expect(class_result: _t.yetty_yclass_ptr_result, name: str | bytes | N
     _fn = _rt.cfn("yetty_ygui_class_expect", c_void_p, [_t.yetty_yclass_ptr_result, c_char_p])
     return _fn(class_result, _rt.cstr(name))
 
-def widget_parent(obj: Any) -> Any:
+def widget_parent(obj: Any) -> _rt.Result[Any]:
     """Call `yetty_ygui_widget_parent`."""
-    _fn = _rt.cfn("yetty_ygui_widget_parent", c_void_p, [c_void_p])
-    return _fn(_rt.handle(obj))
+    _fn = _rt.cfn("yetty_ygui_widget_parent", _t.yetty_yclass_object_ptr_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
 
-def widget_first_child(obj: Any) -> Any:
+def widget_first_child(obj: Any) -> _rt.Result[Any]:
     """Call `yetty_ygui_widget_first_child`."""
-    _fn = _rt.cfn("yetty_ygui_widget_first_child", c_void_p, [c_void_p])
-    return _fn(_rt.handle(obj))
+    _fn = _rt.cfn("yetty_ygui_widget_first_child", _t.yetty_yclass_object_ptr_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
 
-def widget_next_sibling(obj: Any) -> Any:
+def widget_next_sibling(obj: Any) -> _rt.Result[Any]:
     """Call `yetty_ygui_widget_next_sibling`."""
-    _fn = _rt.cfn("yetty_ygui_widget_next_sibling", c_void_p, [c_void_p])
-    return _fn(_rt.handle(obj))
+    _fn = _rt.cfn("yetty_ygui_widget_next_sibling", _t.yetty_yclass_object_ptr_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
 
-def widget_framework(obj: Any) -> Any:
+def widget_framework(obj: Any) -> _rt.Result[Any]:
     """Call `yetty_ygui_widget_framework`."""
-    _fn = _rt.cfn("yetty_ygui_widget_framework", c_void_p, [c_void_p])
-    return _fn(_rt.handle(obj))
+    _fn = _rt.cfn("yetty_ygui_widget_framework", _t.yetty_yclass_object_ptr_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
 
-def widget_id(obj: Any) -> int:
+def widget_id(obj: Any) -> _rt.Result[int]:
     """Call `yetty_ygui_widget_id`."""
-    _fn = _rt.cfn("yetty_ygui_widget_id", c_uint32, [c_void_p])
-    return _fn(_rt.handle(obj))
+    _fn = _rt.cfn("yetty_ygui_widget_id", _t.yetty_ycore_uint32_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
 
 def widget_set_dirty(obj: Any) -> _rt.Result[None]:
     """Call `yetty_ygui_widget_set_dirty`."""
@@ -1358,15 +1594,17 @@ def widget_set_dirty(obj: Any) -> _rt.Result[None]:
     res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
 
-def widget_is_dirty(obj: Any) -> int:
+def widget_is_dirty(obj: Any) -> _rt.Result[int]:
     """Call `yetty_ygui_widget_is_dirty`."""
-    _fn = _rt.cfn("yetty_ygui_widget_is_dirty", c_int, [c_void_p])
-    return _fn(_rt.handle(obj))
+    _fn = _rt.cfn("yetty_ygui_widget_is_dirty", _t.yetty_ycore_int_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
 
-def widget_is_hovered(obj: Any) -> int:
+def widget_is_hovered(obj: Any) -> _rt.Result[int]:
     """Call `yetty_ygui_widget_is_hovered`."""
-    _fn = _rt.cfn("yetty_ygui_widget_is_hovered", c_int, [c_void_p])
-    return _fn(_rt.handle(obj))
+    _fn = _rt.cfn("yetty_ygui_widget_is_hovered", _t.yetty_ycore_int_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
 
 def widget_new(cls: Any) -> _rt.Result[Any]:
     """Call `yetty_ygui_widget_new`."""
@@ -1476,10 +1714,11 @@ def collapsing_header_set_open(obj: Any, open: int) -> _rt.Result[None]:
     res = _fn(_rt.handle(obj), open)
     return _rt.result_from_c(res)
 
-def collapsing_header_is_open(obj: Any) -> int:
+def collapsing_header_is_open(obj: Any) -> _rt.Result[int]:
     """Call `yetty_ygui_collapsing_header_is_open`."""
-    _fn = _rt.cfn("yetty_ygui_collapsing_header_is_open", c_int, [c_void_p])
-    return _fn(_rt.handle(obj))
+    _fn = _rt.cfn("yetty_ygui_collapsing_header_is_open", _t.yetty_ycore_int_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
 
 def colorpicker_set_color(obj: Any, c: int) -> _rt.Result[None]:
     """Call `yetty_ygui_colorpicker_set_color`."""
@@ -1523,11 +1762,11 @@ def datepicker_set_date(obj: Any, year: int, month_0_based: int, day: int) -> _r
     res = _fn(_rt.handle(obj), year, month_0_based, day)
     return _rt.result_from_c(res)
 
-def datepicker_get_date(obj: Any, year: Any, month_0_based: Any, day: Any) -> None:
+def datepicker_get_date(obj: Any, year: Any, month_0_based: Any, day: Any) -> _rt.Result[None]:
     """Call `yetty_ygui_datepicker_get_date`."""
-    _fn = _rt.cfn("yetty_ygui_datepicker_get_date", None, [c_void_p, c_void_p, c_void_p, c_void_p])
-    _fn(_rt.handle(obj), _rt.handle(year), _rt.handle(month_0_based), _rt.handle(day))
-    return None
+    _fn = _rt.cfn("yetty_ygui_datepicker_get_date", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(year), _rt.handle(month_0_based), _rt.handle(day))
+    return _rt.result_from_c(res)
 
 def dialog_set_title(obj: Any, title: str | bytes | None) -> _rt.Result[None]:
     """Call `yetty_ygui_dialog_set_title`."""
@@ -1589,10 +1828,11 @@ def filepicker_set_dir(obj: Any, path: str | bytes | None) -> _rt.Result[None]:
     res = _fn(_rt.handle(obj), _rt.cstr(path))
     return _rt.result_from_c(res)
 
-def filepicker_get_dir(obj: Any) -> bytes | None:
+def filepicker_get_dir(obj: Any) -> _rt.Result[str | None]:
     """Call `yetty_ygui_filepicker_get_dir`."""
-    _fn = _rt.cfn("yetty_ygui_filepicker_get_dir", c_char_p, [c_void_p])
-    return _fn(_rt.handle(obj))
+    _fn = _rt.cfn("yetty_ygui_filepicker_get_dir", _t.yetty_ycore_const_char_ptr_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res, _rt.decode_cstr)
 
 def label_set_text(obj: Any, text: str | bytes | None) -> _rt.Result[None]:
     """Call `yetty_ygui_label_set_text`."""
@@ -1894,10 +2134,11 @@ def tabbar_set_label(tabbar: Any, index: int, label: str | bytes | None) -> _rt.
     res = _fn(_rt.handle(tabbar), index, _rt.cstr(label))
     return _rt.result_from_c(res)
 
-def tabbar_count(tabbar: Any) -> int:
+def tabbar_count(tabbar: Any) -> _rt.Result[int]:
     """Call `yetty_ygui_tabbar_count`."""
-    _fn = _rt.cfn("yetty_ygui_tabbar_count", c_int, [c_void_p])
-    return _fn(_rt.handle(tabbar))
+    _fn = _rt.cfn("yetty_ygui_tabbar_count", _t.yetty_ycore_int_result, [c_void_p])
+    res = _fn(_rt.handle(tabbar))
+    return _rt.result_from_c(res)
 
 def tabbar_active(tabbar: Any) -> _rt.Result[int]:
     """Call `yetty_ygui_tabbar_active`."""
@@ -2037,10 +2278,11 @@ def tree_node_on_toggle(obj: Any, cb: Any, userdata: Any) -> _rt.Result[None]:
     res = _fn(_rt.handle(obj), _rt.handle(cb), _rt.handle(userdata))
     return _rt.result_from_c(res)
 
-def window_body(obj: Any) -> Any:
+def window_body(obj: Any) -> _rt.Result[Any]:
     """Call `yetty_ygui_window_body`."""
-    _fn = _rt.cfn("yetty_ygui_window_body", c_void_p, [c_void_p])
-    return _fn(_rt.handle(obj))
+    _fn = _rt.cfn("yetty_ygui_window_body", _t.yetty_yclass_object_ptr_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
 
 def window_set_title(obj: Any, title: str | bytes | None) -> _rt.Result[None]:
     """Call `yetty_ygui_window_set_title`."""
@@ -2126,15 +2368,17 @@ def ynode_reflow(node: Any) -> _rt.Result[None]:
     res = _fn(_rt.handle(node))
     return _rt.result_from_c(res)
 
-def ynode_pin_pos(node: Any, output: int, index: int, x: Any, y: Any) -> int:
+def ynode_pin_pos(node: Any, output: int, index: int, x: Any, y: Any) -> _rt.Result[int]:
     """Call `yetty_ygui_ynode_pin_pos`."""
-    _fn = _rt.cfn("yetty_ygui_ynode_pin_pos", c_int, [c_void_p, c_int, c_int, c_void_p, c_void_p])
-    return _fn(_rt.handle(node), output, index, _rt.handle(x), _rt.handle(y))
+    _fn = _rt.cfn("yetty_ygui_ynode_pin_pos", _t.yetty_ycore_int_result, [c_void_p, c_int, c_int, c_void_p, c_void_p])
+    res = _fn(_rt.handle(node), output, index, _rt.handle(x), _rt.handle(y))
+    return _rt.result_from_c(res)
 
-def ynode_pin_at(node: Any, x: float, y: float, output: Any, index: Any) -> int:
+def ynode_pin_at(node: Any, x: float, y: float, output: Any, index: Any) -> _rt.Result[int]:
     """Call `yetty_ygui_ynode_pin_at`."""
-    _fn = _rt.cfn("yetty_ygui_ynode_pin_at", c_int, [c_void_p, c_float, c_float, c_void_p, c_void_p])
-    return _fn(_rt.handle(node), x, y, _rt.handle(output), _rt.handle(index))
+    _fn = _rt.cfn("yetty_ygui_ynode_pin_at", _t.yetty_ycore_int_result, [c_void_p, c_float, c_float, c_void_p, c_void_p])
+    res = _fn(_rt.handle(node), x, y, _rt.handle(output), _rt.handle(index))
+    return _rt.result_from_c(res)
 
 def ynode_set_title(node: Any, title: str | bytes | None) -> _rt.Result[None]:
     """Call `yetty_ygui_ynode_set_title`."""
@@ -2148,11 +2392,11 @@ def ynode_set_graph_pos(node: Any, gx: float, gy: float) -> _rt.Result[None]:
     res = _fn(_rt.handle(node), gx, gy)
     return _rt.result_from_c(res)
 
-def ynode_graph_pos(node: Any, gx: Any, gy: Any) -> None:
+def ynode_graph_pos(node: Any, gx: Any, gy: Any) -> _rt.Result[None]:
     """Call `yetty_ygui_ynode_graph_pos`."""
-    _fn = _rt.cfn("yetty_ygui_ynode_graph_pos", None, [c_void_p, c_void_p, c_void_p])
-    _fn(_rt.handle(node), _rt.handle(gx), _rt.handle(gy))
-    return None
+    _fn = _rt.cfn("yetty_ygui_ynode_graph_pos", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
+    res = _fn(_rt.handle(node), _rt.handle(gx), _rt.handle(gy))
+    return _rt.result_from_c(res)
 
 def ynode_set_graph_size(node: Any, gw: float, gh: float) -> _rt.Result[None]:
     """Call `yetty_ygui_ynode_set_graph_size`."""
@@ -2160,11 +2404,11 @@ def ynode_set_graph_size(node: Any, gw: float, gh: float) -> _rt.Result[None]:
     res = _fn(_rt.handle(node), gw, gh)
     return _rt.result_from_c(res)
 
-def ynode_graph_size(node: Any, gw: Any, gh: Any) -> None:
+def ynode_graph_size(node: Any, gw: Any, gh: Any) -> _rt.Result[None]:
     """Call `yetty_ygui_ynode_graph_size`."""
-    _fn = _rt.cfn("yetty_ygui_ynode_graph_size", None, [c_void_p, c_void_p, c_void_p])
-    _fn(_rt.handle(node), _rt.handle(gw), _rt.handle(gh))
-    return None
+    _fn = _rt.cfn("yetty_ygui_ynode_graph_size", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
+    res = _fn(_rt.handle(node), _rt.handle(gw), _rt.handle(gh))
+    return _rt.result_from_c(res)
 
 def ynode_add_input(node: Any, name: str | bytes | None) -> _rt.Result[int]:
     """Call `yetty_ygui_ynode_add_input`."""
@@ -2178,26 +2422,29 @@ def ynode_add_output(node: Any, name: str | bytes | None) -> _rt.Result[int]:
     res = _fn(_rt.handle(node), _rt.cstr(name))
     return _rt.result_from_c(res)
 
-def ynode_input_count(node: Any) -> int:
+def ynode_input_count(node: Any) -> _rt.Result[int]:
     """Call `yetty_ygui_ynode_input_count`."""
-    _fn = _rt.cfn("yetty_ygui_ynode_input_count", c_int, [c_void_p])
-    return _fn(_rt.handle(node))
+    _fn = _rt.cfn("yetty_ygui_ynode_input_count", _t.yetty_ycore_int_result, [c_void_p])
+    res = _fn(_rt.handle(node))
+    return _rt.result_from_c(res)
 
-def ynode_output_count(node: Any) -> int:
+def ynode_output_count(node: Any) -> _rt.Result[int]:
     """Call `yetty_ygui_ynode_output_count`."""
-    _fn = _rt.cfn("yetty_ygui_ynode_output_count", c_int, [c_void_p])
-    return _fn(_rt.handle(node))
+    _fn = _rt.cfn("yetty_ygui_ynode_output_count", _t.yetty_ycore_int_result, [c_void_p])
+    res = _fn(_rt.handle(node))
+    return _rt.result_from_c(res)
 
-def ynodes_view(editor: Any, pan_x: Any, pan_y: Any, zoom: Any) -> None:
+def ynodes_view(editor: Any, pan_x: Any, pan_y: Any, zoom: Any) -> _rt.Result[None]:
     """Call `yetty_ygui_ynodes_view`."""
-    _fn = _rt.cfn("yetty_ygui_ynodes_view", None, [c_void_p, c_void_p, c_void_p, c_void_p])
-    _fn(_rt.handle(editor), _rt.handle(pan_x), _rt.handle(pan_y), _rt.handle(zoom))
-    return None
+    _fn = _rt.cfn("yetty_ygui_ynodes_view", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p, c_void_p])
+    res = _fn(_rt.handle(editor), _rt.handle(pan_x), _rt.handle(pan_y), _rt.handle(zoom))
+    return _rt.result_from_c(res)
 
-def ynodes_zoom(editor: Any) -> float:
+def ynodes_zoom(editor: Any) -> _rt.Result[float]:
     """Call `yetty_ygui_ynodes_zoom`."""
-    _fn = _rt.cfn("yetty_ygui_ynodes_zoom", c_float, [c_void_p])
-    return _fn(_rt.handle(editor))
+    _fn = _rt.cfn("yetty_ygui_ynodes_zoom", _t.yetty_ycore_float_result, [c_void_p])
+    res = _fn(_rt.handle(editor))
+    return _rt.result_from_c(res)
 
 def ynodes_reflow(editor: Any) -> _rt.Result[None]:
     """Call `yetty_ygui_ynodes_reflow`."""
@@ -2319,10 +2566,11 @@ def yrich_view_invalidate(obj: Any) -> _rt.Result[None]:
     res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
 
-def yrich_view_document(obj: Any) -> Any:
+def yrich_view_document(obj: Any) -> _rt.Result[Any]:
     """Call `yetty_ygui_yrich_view_document`."""
-    _fn = _rt.cfn("yetty_ygui_yrich_view_document", c_void_p, [c_void_p])
-    return _fn(_rt.handle(obj))
+    _fn = _rt.cfn("yetty_ygui_yrich_view_document", _t.yetty_yclass_object_ptr_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
 
 def yrich_view_content_size(obj: Any, w: Any, h: Any) -> _rt.Result[None]:
     """Call `yetty_ygui_yrich_view_content_size`."""
@@ -2330,9 +2578,15 @@ def yrich_view_content_size(obj: Any, w: Any, h: Any) -> _rt.Result[None]:
     res = _fn(_rt.handle(obj), _rt.handle(w), _rt.handle(h))
     return _rt.result_from_c(res)
 
-def yrich_view_feed_key(obj: Any, key: int, mods: _t.yetty_yrich_input_mods) -> _rt.Result[None]:
+def yrich_view_fit_content(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_yrich_view_fit_content`."""
+    _fn = _rt.cfn("yetty_ygui_yrich_view_fit_content", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def yrich_view_feed_key(obj: Any, key: int, mods: int) -> _rt.Result[None]:
     """Call `yetty_ygui_yrich_view_feed_key`."""
-    _fn = _rt.cfn("yetty_ygui_yrich_view_feed_key", _t.yetty_ycore_void_result, [c_void_p, c_uint32, _t.yetty_yrich_input_mods])
+    _fn = _rt.cfn("yetty_ygui_yrich_view_feed_key", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_uint32])
     res = _fn(_rt.handle(obj), key, mods)
     return _rt.result_from_c(res)
 

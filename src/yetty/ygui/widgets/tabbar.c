@@ -492,7 +492,7 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_object *y
      * style.ygui.font-size in user config reach the renderer. The
      * fallback literals are belt-and-braces — theme is engine-owned and
      * non-NULL after framework_create. */
-    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_widget_framework(obj);
+    struct yetty_yclass_object_ptr_result framework_res = yetty_ygui_widget_framework(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res, "tabbar_paint: framework");
     const struct yetty_ygui_theme *theme = yetty_ygui_framework_theme(framework_res.value);
     uint32_t color_strip = theme ? theme->yui_strip : 0xFF1F1A14u;

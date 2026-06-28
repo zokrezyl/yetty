@@ -165,9 +165,9 @@ static void yrich_view_retint_text(struct yetty_ydraw_drawable_list *buf, uint32
 static struct yetty_ycore_void_result yrich_view_theme_colors(struct yetty_yclass_object *obj,
                                                               uint32_t *text, uint32_t *page)
 {
-    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_widget_framework(obj);
+    struct yetty_yclass_object_ptr_result framework_res = yetty_ygui_widget_framework(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res, "yrich_view_theme_colors: framework");
-    struct yetty_ygui_framework *engine = framework_res.value;
+    struct yetty_yclass_object *engine = framework_res.value;
     if (engine) {
         struct yetty_ygui_theme *theme = yetty_ygui_framework_theme(engine);
         if (theme) {

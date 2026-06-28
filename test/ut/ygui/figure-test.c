@@ -217,7 +217,7 @@ static const uint8_t k_bmp_2x2[] = {
 /* Create a headless container + framework wired together, whose root panel
  * holds one 100x100 yimage. The container and registry are returned through
  * out-params; the caller owns and destroys all three. */
-static struct yetty_ygui_framework *make_engine_with_yimage(
+static struct yetty_yclass_object *make_engine_with_yimage(
     struct yetty_yfigure_registry **out_registry, struct yetty_yclass_object **out_container,
     struct yetty_yclass_object **out_img)
 {
@@ -230,9 +230,9 @@ static struct yetty_ygui_framework *make_engine_with_yimage(
     yetty_yfigure_container_set_registry(container, registry);
     yetty_yfigure_container_set_rect(container, container_rect);
 
-    struct yetty_ygui_framework_ptr_result er = yetty_ygui_framework_create(NULL);
+    struct yetty_yclass_object_ptr_result er = yetty_ygui_framework_create(NULL);
     CHECK(YETTY_IS_OK(er), "engine_create");
-    struct yetty_ygui_framework *engine = er.value;
+    struct yetty_yclass_object *engine = er.value;
     CHECK(YETTY_IS_OK(yetty_ygui_framework_set_container_obj(engine, container)),
           "engine_set_container_obj");
 
@@ -267,7 +267,7 @@ static void test_yimage_emit(void)
     struct yetty_yfigure_registry *registry = NULL;
     struct yetty_yclass_object *container = NULL;
     struct yetty_yclass_object *img = NULL;
-    struct yetty_ygui_framework *engine =
+    struct yetty_yclass_object *engine =
         make_engine_with_yimage(&registry, &container, &img);
 
     struct yetty_ycore_void_result br =
@@ -333,9 +333,9 @@ static void test_incremental_figure_skip(void)
     yetty_yfigure_container_set_registry(container, registry);
     yetty_yfigure_container_set_rect(container, container_rect);
 
-    struct yetty_ygui_framework_ptr_result er = yetty_ygui_framework_create(NULL);
+    struct yetty_yclass_object_ptr_result er = yetty_ygui_framework_create(NULL);
     CHECK(YETTY_IS_OK(er), "skip: framework_create");
-    struct yetty_ygui_framework *engine = er.value;
+    struct yetty_yclass_object *engine = er.value;
     CHECK(YETTY_IS_OK(yetty_ygui_framework_set_container_obj(engine, container)),
           "skip: set_container_obj");
 
@@ -410,7 +410,7 @@ static void test_yimage_emit_rejects_malformed(void)
     struct yetty_yfigure_registry *registry = NULL;
     struct yetty_yclass_object *container = NULL;
     struct yetty_yclass_object *img = NULL;
-    struct yetty_ygui_framework *engine =
+    struct yetty_yclass_object *engine =
         make_engine_with_yimage(&registry, &container, &img);
 
     uint8_t garbage[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04};

@@ -88,7 +88,7 @@ struct yetty_yui {
 
     /* Producer engine (new yclass framework). framework_emit lays out the
      * widget tree and ships the envelope into root_container. */
-    struct yetty_ygui_framework *engine;
+    struct yetty_yclass_object *engine;
 
     /* Engine widget-tree root — a column vbox holding the titlebar
      * (top), a flex spacer, and the statusbar (bottom). Floating
@@ -745,7 +745,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
 
     /* Producer engine (new framework). No output pty — the envelope is
      * shipped in-process into root_container via the yclass slot path. */
-    struct yetty_ygui_framework_ptr_result er = yetty_ygui_framework_create(NULL);
+    struct yetty_yclass_object_ptr_result er = yetty_ygui_framework_create(NULL);
     if (YETTY_IS_OK(er)) {
         yui->engine = er.value;
         yetty_ycore_error_destroy_safe(
@@ -2329,7 +2329,7 @@ struct yetty_yclass_object *yetty_yui_statusbar(struct yetty_yui *yui)
     return yui ? yui->statusbar : NULL;
 }
 
-struct yetty_ygui_framework *yetty_yui_engine(struct yetty_yui *yui)
+struct yetty_yclass_object *yetty_yui_engine(struct yetty_yui *yui)
 {
     return yui ? yui->engine : NULL;
 }

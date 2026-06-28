@@ -101,7 +101,7 @@ struct YETTY_ANNOTATE("class@ycompositorygui:app") YETTY_ANNOTATE("parent@yapp:a
      * straight in (in-process, no PTY). */
     struct yetty_yclass_object *root;
     struct yetty_yfigure_registry *registry;
-    struct yetty_ygui_framework *ygui;
+    struct yetty_yclass_object *ygui;
     /* Window chrome host (draggable/resizable titlebar + min/max/close). */
     struct yetty_ychrome_host *chrome;
     /* Borrowed pointer to the outer window — it is the framework root,
@@ -851,7 +851,7 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
          * no PTY; the per-frame envelope ships in-process into app->root
          * via set_container_obj). Built once at startup; the widget tree
          * stays across resizes, only the viewport changes. */
-        struct yetty_ygui_framework_ptr_result eng_r = yetty_ygui_framework_create(NULL);
+        struct yetty_yclass_object_ptr_result eng_r = yetty_ygui_framework_create(NULL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, eng_r, "ygui framework alloc failed");
         app->ygui = eng_r.value;
         struct yetty_ycore_void_result scr =

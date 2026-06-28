@@ -82,6 +82,8 @@ struct yetty_ygui_widget_ptr_result {
 struct yetty_ygui_widget_ptr_result yetty_ygui_widget_from(struct yetty_yclass_object *obj);
 struct yetty_yclass_object_ptr_result yetty_ygui_widget_to(struct yetty_ygui_widget *data);
 
+struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_object *obj);
 struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_object *obj, float x,
                                                          float y, int button);
 struct yetty_ycore_int_result yetty_ygui_widget_on_release(struct yetty_yclass_object *obj, float x,
@@ -90,8 +92,6 @@ struct yetty_ycore_int_result yetty_ygui_widget_on_motion(struct yetty_yclass_ob
                                                           float y);
 struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_object *obj,
                                                            struct yetty_ygui_emit_ctx *emit_ctx);
-struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_object *obj);
 /* Wheel / trackpad scroll. (dx, dy) are the deltas at (x, y). Default:
  * not handled (0), so the framework keeps bubbling to an ancestor that
  * scrolls. Scrollable widgets (scrollarea, filepicker) override this. */
@@ -102,6 +102,8 @@ struct yetty_ycore_void_result yetty_ygui_widget_paint(struct yetty_yclass_objec
 struct yetty_ycore_void_result yetty_ygui_widget_emit_container(
     struct yetty_yclass_object *obj, struct yetty_ygui_emit_ctx *emit_ctx);
 
+typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_yclass_object *);
 typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_press_fn)(struct yetty_yclass_object *,
                                                                        float, float, int);
 typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_release_fn)(
@@ -110,8 +112,6 @@ typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_motion_fn)(
     struct yetty_yclass_object *, float, float);
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_emit_body_fn)(
     struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
-typedef struct yetty_ycore_void_result (*yetty_ygui_constructor_fn)(struct yetty_yclass_object *);
-typedef struct yetty_ycore_void_result (*yetty_ygui_destructor_fn)(struct yetty_yclass_object *);
 typedef struct yetty_ycore_int_result (*yetty_ygui_widget_on_scroll_fn)(
     struct yetty_yclass_object *, float, float, float, float);
 typedef struct yetty_ycore_void_result (*yetty_ygui_widget_paint_fn)(struct yetty_yclass_object *,
@@ -171,7 +171,7 @@ struct yetty_yclass_object_ptr_result yetty_ygui_widget_first_child(
     struct yetty_yclass_object *obj);
 struct yetty_yclass_object_ptr_result yetty_ygui_widget_next_sibling(
     struct yetty_yclass_object *obj);
-struct yetty_ygui_framework_ptr_result yetty_ygui_widget_framework(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_ygui_widget_framework(struct yetty_yclass_object *obj);
 struct yetty_ycore_uint32_result yetty_ygui_widget_id(const struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ygui_widget_set_dirty(struct yetty_yclass_object *obj);
 struct yetty_ycore_int_result yetty_ygui_widget_is_dirty(const struct yetty_yclass_object *obj);

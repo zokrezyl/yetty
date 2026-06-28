@@ -278,10 +278,10 @@ static struct yetty_ycore_int_result fp_on_motion(struct yetty_yclass_object *yc
 {
     (void)x;
     struct yetty_yclass_object *obj = (struct yetty_yclass_object *)yclass_obj;
-    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_widget_framework(obj);
+    struct yetty_yclass_object_ptr_result framework_res = yetty_ygui_widget_framework(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, framework_res, "fp_on_motion: framework");
-    struct yetty_ygui_framework *eng = framework_res.value;
-    if (!eng || eng->pressed_obj != obj) {
+    struct yetty_yclass_object *eng = framework_res.value;
+    if (!eng || yetty_ygui_framework_pressed_widget(eng) != obj) {
         return YETTY_OK(yetty_ycore_int, 0); /* only while we're the drag target */
     }
     struct yetty_ygui_filepicker_ptr_result d_dr = yetty_ygui_filepicker_from(obj);
