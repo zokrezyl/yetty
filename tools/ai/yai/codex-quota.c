@@ -23,17 +23,69 @@
 
 #include "app.h"
 
-#include <glob.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include <yetty/yplatform/fs.h>
 #include <yyjson.h>
 
 /* Tail size: the token_count event is appended each turn, so the most recent
  * one is always within the last few KB. 256 KiB is generous headroom and bounds
  * the work per refresh regardless of how long the session has run. */
 enum { YAI_CODEX_ROLLOUT_TAIL = 256 * 1024 };
+
+static int yai_str_has_suffix(const char *str, const char *suffix)
+{
+    size_t str_len = strlen(str);
+    size_t suffix_len = strlen(suffix);
+    if (suffix_len > str_len) {
+        return 0;
+    }
+    return memcmp(str + str_len - suffix_len, suffix, suffix_len) == 0;
+}
+
+/* Walk the codex sessions tree (sessions/YYYY/MM/DD/) to find the rollout
+ * file for this session. `dir_levels_remaining` is how many directory levels
+ * still separate `dir` from the rollout files (3 at the sessions root: year,
+ * month, day). At the file level we keep the lexically-greatest matching path
+ * — for the date-segmented layout that is the most recent rollout, matching
+ * the old glob() "last sorted match wins" behaviour. A portable directory scan
+ * (yetty_yplatform_dir_*) replaces POSIX glob() so this builds on Windows too. */
+static void yai_codex_scan_sessions(const char *dir, int dir_levels_remaining,
+                                    const char *name_suffix, char *best, size_t best_size)
+{
+    struct yetty_yplatform_dir *handle = yetty_yplatform_dir_open(dir);
+    if (!handle) {
+        return;
+    }
+    struct yetty_yplatform_dir_entry entry;
+    while (yetty_yplatform_dir_next(handle, &entry)) {
+        if (entry.name[0] == '.') {
+            continue; /* skip ".", "..", and hidden entries */
+        }
+        char child[PATH_MAX];
+        if (snprintf(child, sizeof(child), "%s/%s", dir, entry.name) >= (int)sizeof(child)) {
+            continue;
+        }
+        if (dir_levels_remaining > 0) {
+            if (entry.is_dir) {
+                yai_codex_scan_sessions(child, dir_levels_remaining - 1, name_suffix, best,
+                                        best_size);
+            }
+            continue;
+        }
+        /* File level: rollout-<ts>-<session_id>.jsonl. */
+        if (entry.is_dir || strncmp(entry.name, "rollout-", 8) != 0 ||
+            !yai_str_has_suffix(entry.name, name_suffix)) {
+            continue;
+        }
+        if (strcmp(child, best) > 0) {
+            snprintf(best, best_size, "%s", child);
+        }
+    }
+    yetty_yplatform_dir_close(handle);
+}
 
 /* Resolve the rollout file for this session via $CODEX_HOME (default ~/.codex).
  * The filename ends with the thread_id (== app->session_id). Returns 1 and
@@ -54,30 +106,28 @@ static int yai_codex_rollout_path(const struct yai_app *app, char *out, size_t o
         codex_home = home_buf;
     }
 
-    /* sessions/YYYY/MM/DD/rollout-<ts>-<session_id>.jsonl */
-    char pattern[PATH_MAX];
-    int written = snprintf(pattern, sizeof(pattern), "%s/sessions/*/*/*/rollout-*%s.jsonl",
-                           codex_home, app->session_id);
-    if (written < 0 || (size_t)written >= sizeof(pattern)) {
+    char sessions_root[PATH_MAX];
+    if (snprintf(sessions_root, sizeof(sessions_root), "%s/sessions", codex_home) >=
+        (int)sizeof(sessions_root)) {
+        return 0;
+    }
+    char name_suffix[PATH_MAX];
+    if (snprintf(name_suffix, sizeof(name_suffix), "%s.jsonl", app->session_id) >=
+        (int)sizeof(name_suffix)) {
         return 0;
     }
 
-    glob_t globbed;
-    if (glob(pattern, 0, NULL, &globbed) != 0) {
-        globfree(&globbed);
+    /* sessions/YYYY/MM/DD/rollout-<ts>-<session_id>.jsonl — three dir levels. */
+    char best[PATH_MAX];
+    best[0] = '\0';
+    yai_codex_scan_sessions(sessions_root, 3, name_suffix, best, sizeof(best));
+    if (!best[0]) {
         return 0;
     }
-    int found = 0;
-    if (globbed.gl_pathc > 0) {
-        /* session_id is unique; if more than one matched, the last (glob sorts
-         * lexically, so latest date) is the right one. */
-        const char *match = globbed.gl_pathv[globbed.gl_pathc - 1];
-        if (snprintf(out, out_size, "%s", match) < (int)out_size) {
-            found = 1;
-        }
+    if (snprintf(out, out_size, "%s", best) >= (int)out_size) {
+        return 0;
     }
-    globfree(&globbed);
-    return found;
+    return 1;
 }
 
 /* Pull a numeric field out of a rate-limit window object. */

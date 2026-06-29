@@ -264,6 +264,14 @@ classes:
         type: int
         get: false
         set: false
+      - name: cache_base
+        type: "char[1024]"
+        get: false
+        set: false
+      - name: cache_base_resolved
+        type: int
+        get: false
+        set: false
     ops:
       - slot: configure
         slot_domain: ymap
