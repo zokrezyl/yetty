@@ -115,7 +115,8 @@ static struct yetty_ycore_void_result codex_send_user_message(struct yetty_yclas
         int written = snprintf(base_url_override, sizeof(base_url_override),
                                "chatgpt_base_url=\"http://127.0.0.1:%d/backend-api/\"", proxy_port);
         if (written < 0 || (size_t)written >= sizeof(base_url_override)) {
-            return YETTY_ERR(yetty_ycore_void, "codex send_user_message: base url override too long");
+            return YETTY_ERR(yetty_ycore_void,
+                             "codex send_user_message: base url override too long");
         }
     }
 

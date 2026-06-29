@@ -62,7 +62,8 @@ YETTY_YRESULT_DECLARE(yetty_yai_engine_ptr, struct yetty_yai_engine *);
  *===========================================================================*/
 
 YETTY_ANNOTATE("virtual@yai:engine:start")
-YETTY_ANNOTATE("local@yai:start") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yai:start")
+static struct yetty_ycore_void_result
     engine_start(struct yetty_yclass_object *obj, struct yai_app *app)
 {
     (void)obj;
@@ -71,7 +72,8 @@ YETTY_ANNOTATE("local@yai:start") static struct yetty_ycore_void_result
 }
 
 YETTY_ANNOTATE("virtual@yai:engine:send_user_message")
-YETTY_ANNOTATE("local@yai:send_user_message") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yai:send_user_message")
+static struct yetty_ycore_void_result
     engine_send_user_message(struct yetty_yclass_object *obj, struct yai_app *app, const char *text)
 {
     (void)obj;
@@ -82,7 +84,8 @@ YETTY_ANNOTATE("local@yai:send_user_message") static struct yetty_ycore_void_res
 }
 
 YETTY_ANNOTATE("virtual@yai:engine:handle_event")
-YETTY_ANNOTATE("local@yai:handle_event") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yai:handle_event")
+static struct yetty_ycore_void_result
     engine_handle_event(struct yetty_yclass_object *obj, struct yai_app *app,
                         struct yyjson_val *event)
 {
@@ -93,7 +96,8 @@ YETTY_ANNOTATE("local@yai:handle_event") static struct yetty_ycore_void_result
 }
 
 YETTY_ANNOTATE("virtual@yai:engine:interrupt")
-YETTY_ANNOTATE("local@yai:interrupt") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yai:interrupt")
+static struct yetty_ycore_void_result
     engine_interrupt(struct yetty_yclass_object *obj, struct yai_app *app)
 {
     (void)obj;
@@ -102,7 +106,8 @@ YETTY_ANNOTATE("local@yai:interrupt") static struct yetty_ycore_void_result
 }
 
 YETTY_ANNOTATE("virtual@yai:engine:on_child_exit")
-YETTY_ANNOTATE("local@yai:on_child_exit") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yai:on_child_exit")
+static struct yetty_ycore_void_result
     engine_on_child_exit(struct yetty_yclass_object *obj, struct yai_app *app, int64_t exit_status)
 {
     (void)obj;
@@ -112,7 +117,8 @@ YETTY_ANNOTATE("local@yai:on_child_exit") static struct yetty_ycore_void_result
 }
 
 YETTY_ANNOTATE("virtual@yai:engine:on_child_eof")
-YETTY_ANNOTATE("local@yai:on_child_eof") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yai:on_child_eof")
+static struct yetty_ycore_void_result
     engine_on_child_eof(struct yetty_yclass_object *obj, struct yai_app *app)
 {
     (void)obj;
@@ -127,7 +133,8 @@ YETTY_ANNOTATE("local@yai:on_child_eof") static struct yetty_ycore_void_result
  * HUD is up, or as scrollback text without one. Errors on truncation.
  * Default: an engine with no knobs writes an empty string. */
 YETTY_ANNOTATE("virtual@yai:engine:describe_config")
-YETTY_ANNOTATE("local@yai:describe_config") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yai:describe_config")
+static struct yetty_ycore_void_result
     engine_describe_config(struct yetty_yclass_object *obj, struct yai_app *app, char *out,
                            size_t out_size)
 {
@@ -145,7 +152,8 @@ YETTY_ANNOTATE("local@yai:describe_config") static struct yetty_ycore_void_resul
  * renders it as a radio group; a selection lands back in apply_config.
  * Default: no knob (empty string). */
 YETTY_ANNOTATE("virtual@yai:engine:config_knob")
-YETTY_ANNOTATE("local@yai:config_knob") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yai:config_knob")
+static struct yetty_ycore_void_result
     engine_config_knob(struct yetty_yclass_object *obj, struct yai_app *app, char *out,
                        size_t out_size)
 {
@@ -166,7 +174,8 @@ YETTY_ANNOTATE("local@yai:config_knob") static struct yetty_ycore_void_result
  * protocol override this (claude pushes the new permission mode into the
  * running session immediately). */
 YETTY_ANNOTATE("virtual@yai:engine:apply_config")
-YETTY_ANNOTATE("local@yai:apply_config") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yai:apply_config")
+static struct yetty_ycore_void_result
     engine_apply_config(struct yetty_yclass_object *obj, struct yai_app *app, const char *key,
                         const char *value)
 {
@@ -181,7 +190,8 @@ YETTY_ANNOTATE("local@yai:apply_config") static struct yetty_ycore_void_result
  * — a no-op default, NOT an error: main.c calls this unconditionally
  * at shutdown to never leave a CLI blocked on an unanswered prompt. */
 YETTY_ANNOTATE("virtual@yai:engine:resolve_permission")
-YETTY_ANNOTATE("local@yai:resolve_permission") static struct yetty_ycore_void_result
+YETTY_ANNOTATE("local@yai:resolve_permission")
+static struct yetty_ycore_void_result
     engine_resolve_permission(struct yetty_yclass_object *obj, struct yai_app *app, int allowed)
 {
     (void)obj;
