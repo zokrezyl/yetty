@@ -1292,13 +1292,13 @@ static struct yetty_ycore_void_result run_shell(struct yai_app *app, const char 
 }
 
 /* Ctrl-G: edit the current message in an external editor ($VISUAL /
- * $EDITOR, default nvim then vi). The compose file holds the current
- * draft and — below a separator — the assistant's last reply, for
- * reference/quoting. On save+quit the text ABOVE the separator becomes
- * the prompt; it is NOT submitted (the user reviews, then presses Enter).
- * Mirrors run_shell's terminal handoff. */
+ * $EDITOR, default nvim then vi). The compose file holds the assistant's
+ * last reply — above a separator, for reference/quoting — followed below
+ * by the current draft, where the user writes. On save+quit the text
+ * BELOW the separator becomes the prompt; it is NOT submitted (the user
+ * reviews, then presses Enter). Mirrors run_shell's terminal handoff. */
 #define YAI_COMPOSE_SEPARATOR                                                                      \
-    "──────── write your message ABOVE · the assistant's last reply is below (reference) ────────"
+    "──────── the assistant's last reply is above (reference) · write your message BELOW ────────"
 
 static struct yetty_ycore_void_result open_external_editor(struct yai_app *app)
 {
@@ -1324,11 +1324,11 @@ static struct yetty_ycore_void_result open_external_editor(struct yai_app *app)
         unlink(path);
         return YETTY_ERR(yetty_ycore_void, "open_external_editor: fdopen failed");
     }
-    fwrite(app->stdin_buf, 1, app->stdin_len, compose);
     if (app->last_response_len > 0) {
-        fputs("\n" YAI_COMPOSE_SEPARATOR "\n", compose);
         fwrite(app->last_response, 1, app->last_response_len, compose);
+        fputs("\n" YAI_COMPOSE_SEPARATOR "\n", compose);
     }
+    fwrite(app->stdin_buf, 1, app->stdin_len, compose);
     if (fclose(compose) != 0) {
         unlink(path);
         return YETTY_ERR(yetty_ycore_void, "open_external_editor: temp write failed");
@@ -1385,7 +1385,7 @@ static struct yetty_ycore_void_result open_external_editor(struct yai_app *app)
     tcsetpgrp(STDIN_FILENO, getpgrp());
     signal(SIGTTOU, saved_ttou_handler);
 
-    /* Read the edited file back: the text above the separator is the new
+    /* Read the edited file back: the text below the separator is the new
      * message (or the whole file if the separator was removed). */
     FILE *result = fopen(path, "r");
     if (result) {
@@ -1393,17 +1393,26 @@ static struct yetty_ycore_void_result open_external_editor(struct yai_app *app)
         size_t got = fread(buffer, 1, sizeof(buffer) - 1, result);
         fclose(result);
         buffer[got] = '\0';
+        char *message = buffer;
         char *separator = strstr(buffer, YAI_COMPOSE_SEPARATOR);
-        size_t prompt_len = separator ? (size_t)(separator - buffer) : got;
+        if (separator) {
+            message = separator + strlen(YAI_COMPOSE_SEPARATOR);
+        }
+        /* Drop the line break that follows the separator (and any blank
+         * lines the user left above their reply). */
+        while (*message == '\n' || *message == '\r') {
+            message++;
+        }
+        size_t prompt_len = strlen(message);
         while (prompt_len > 0 &&
-               (buffer[prompt_len - 1] == '\n' || buffer[prompt_len - 1] == '\r' ||
-                buffer[prompt_len - 1] == ' ' || buffer[prompt_len - 1] == '\t')) {
+               (message[prompt_len - 1] == '\n' || message[prompt_len - 1] == '\r' ||
+                message[prompt_len - 1] == ' ' || message[prompt_len - 1] == '\t')) {
             prompt_len--;
         }
         if (prompt_len >= sizeof(app->stdin_buf)) {
             prompt_len = sizeof(app->stdin_buf) - 1;
         }
-        memcpy(app->stdin_buf, buffer, prompt_len);
+        memcpy(app->stdin_buf, message, prompt_len);
         app->stdin_len = prompt_len;
         app->stdin_cursor = prompt_len;
         app->history_browse = -1;

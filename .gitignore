@@ -10,6 +10,10 @@ tmp/
 .vscode/
 compile_commands.json
 
+# Python bytecode cache (qa-tools/, codegen, ffi-codegen, …)
+__pycache__/
+*.pyc
+
 # Object files and build artifacts
 *.o
 *.d

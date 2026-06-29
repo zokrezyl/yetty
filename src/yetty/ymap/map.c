@@ -138,6 +138,13 @@ struct YETTY_ANNOTATE("class@ymap:map") YETTY_ANNOTATE("include@yetty/ydraw-core
     char custom_extension[16];
     uint32_t custom_max_zoom;
     int custom_vector;
+
+    /* Platform cache base dir, resolved once on first render and reused. The
+     * per-provider subtree (<base>/ymap/<provider>) is rebuilt cheaply each
+     * render, but the platform path lookup (getenv + heap alloc + free) is not
+     * repeated per frame during interactive pan/zoom. */
+    char cache_base[1024];
+    int cache_base_resolved;
 };
 
 /* Result wrapper for the map handle. Declared here (not pulled from map.h,
@@ -486,15 +493,21 @@ static struct yetty_ydraw_drawable_list_result map_render(struct yetty_yclass_ob
      * may serve; pass a fresh name to avoid that. */
     const char *provider_name =
         map->custom_url_template ? "custom" : (map->provider ? map->provider->name : "osm");
-    char cache_dir[1024];
-    struct yetty_yplatform_paths_ptr_result paths_res = yetty_yplatform_paths_get_platform_paths();
-    const char *base_cache = YETTY_IS_OK(paths_res) ? paths_res.value->cache_dir_buf : "";
-    snprintf(cache_dir, sizeof(cache_dir), "%s/ymap/%s", base_cache, provider_name);
-    if (YETTY_IS_OK(paths_res)) {
-        yetty_yplatform_paths_destroy(paths_res.value);
-    } else {
-        yetty_ycore_error_destroy(paths_res.error);
+    if (!map->cache_base_resolved) {
+        struct yetty_yplatform_paths_ptr_result paths_res =
+            yetty_yplatform_paths_get_platform_paths();
+        if (YETTY_IS_OK(paths_res)) {
+            snprintf(map->cache_base, sizeof(map->cache_base), "%s",
+                     paths_res.value->cache_dir_buf);
+            yetty_yplatform_paths_destroy(paths_res.value);
+        } else {
+            yetty_ycore_error_destroy(paths_res.error);
+            map->cache_base[0] = '\0';
+        }
+        map->cache_base_resolved = 1;
     }
+    char cache_dir[1024];
+    snprintf(cache_dir, sizeof(cache_dir), "%s/ymap/%s", map->cache_base, provider_name);
 
     struct yetty_ymap_config engine_config = {
         .latitude = map->latitude,
