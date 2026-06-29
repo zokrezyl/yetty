@@ -39,8 +39,11 @@ extern "C" {
 
 /* Highest zoom the default openstreetmap.org raster servers carry. */
 #define YETTY_YMAP_MAX_ZOOM 19u
-/* Highest zoom of the shortbread vector tile set (z15+ is overzoom). */
+/* Highest zoom of the shortbread vector tile set actually served. */
 #define YETTY_YMAP_MAX_VECTOR_ZOOM 14u
+/* Highest VIEW zoom for vector maps: past the tile max the engine over-zooms
+ * (renders the deepest tile scaled up), so streets/buildings stay reachable. */
+#define YETTY_YMAP_MAX_VECTOR_VIEW_ZOOM 19u
 
 struct yetty_ymap_config {
     double latitude;  /* map center, degrees (WGS84), -85.05..85.05 */

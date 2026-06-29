@@ -280,6 +280,19 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
         (void)yetty_yflame_destroy(flame);
         return 1;
     }
+    /* Raw mode MUST precede configure(): configure() attaches the server figure
+     * via a yclass-RPC handshake that writes a request to stdout and BLOCKS
+     * reading the binary reply from stdin. In canonical mode the line discipline
+     * withholds that reply until a newline (and mangles control bytes), so the
+     * handshake would stall to its timeout and the attach would fail. Raw/binary
+     * mode makes the reply readable immediately. */
+    yetty_yplatform_tty_binary_io();
+    if (yetty_yplatform_tty_set_raw() < 0) {
+        fprintf(stderr, "yflame: cannot put stdin into raw mode\n");
+        (void)yetty_yview_destroy(view_r.value);
+        (void)yetty_yflame_destroy(flame);
+        return 1;
+    }
     {
         struct yetty_ycore_void_result cfg_r =
             yetty_yview_configure(view_r.value, YFLAME_STDOUT_FD, YFLAME_GETPID(),
@@ -289,6 +302,7 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
             yetty_ycore_error_destroy(cfg_r.error);
             (void)yetty_yview_destroy(view_r.value);
             (void)yetty_yflame_destroy(flame);
+            yetty_yplatform_tty_restore();
             return 1;
         }
     }
@@ -311,6 +325,7 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
         yetty_ycore_error_destroy(yface_r.error);
         (void)yetty_yview_destroy(ui.view);
         (void)yetty_yflame_destroy(flame);
+        yetty_yplatform_tty_restore();
         return 1;
     }
     struct yetty_yface *yface = yface_r.value;
@@ -321,15 +336,6 @@ int yflame_interactive_run(const char *input, size_t input_len, float min_width,
 #ifdef SIGHUP
     signal(SIGHUP, on_signal);
 #endif
-
-    yetty_yplatform_tty_binary_io();
-    if (yetty_yplatform_tty_set_raw() < 0) {
-        fprintf(stderr, "yflame: cannot put stdin into raw mode\n");
-        yetty_yface_destroy(yface);
-        (void)yetty_yview_destroy(ui.view);
-        (void)yetty_yflame_destroy(flame);
-        return 1;
-    }
 
     subscribe_input(YFLAME_STDOUT_FD,
                     YETTY_CLIENT_INPUT_SUB_MOUSE_CLICK | YETTY_CLIENT_INPUT_SUB_MOUSE_MOVE);

@@ -664,8 +664,11 @@ static struct yetty_ycore_void_result emit_text(struct osm_vector_emit *emit, fl
 struct osm_tile_transform {
     float offset_x; /* viewport px of the tile's north-west corner */
     float offset_y;
-    float scale; /* tile units → viewport px (256 / extent) */
+    float scale; /* tile units → viewport px (tile_display_size / extent) */
     uint32_t extent;
+    /* Viewport px one tile spans: 256 at native zoom, 256<<overzoom past the
+     * tile set's max (a z14 tile drawn at z18 spans 256*16 px). */
+    float tile_display_size;
 };
 
 static struct osm_point transform_point(const struct osm_tile_transform *transform,
@@ -935,7 +938,7 @@ static struct yetty_ycore_void_result emit_tile(struct osm_vector_emit *emit,
         }
         struct osm_tile_transform transform = *transform_template;
         transform.extent = layer->extent;
-        transform.scale = OSM_VECTOR_TILE_SIZE / (float)layer->extent;
+        transform.scale = transform.tile_display_size / (float)layer->extent;
 
         int is_ocean = strcmp(layer->name, "ocean") == 0;
         int is_water_polygons = strcmp(layer->name, "water_polygons") == 0;
@@ -1148,10 +1151,16 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_vector(
     if (!config) {
         return YETTY_ERR(yetty_ydraw_drawable_list, "ymap vector: config is NULL");
     }
-    if (config->zoom > YETTY_YMAP_MAX_VECTOR_ZOOM) {
-        return YETTY_ERR(yetty_ydraw_drawable_list,
-                         "ymap vector: zoom exceeds vector maximum (14)");
-    }
+    /* Over-zoom: the shortbread vector set tops out at z14, but vector
+     * geometry scales freely. Past z14 we keep fetching the deepest tile
+     * (tile_zoom) and render it at the larger display scale that the view
+     * zoom (config->zoom) implies — so streets and buildings stay reachable.
+     * view_zoom drives center/origin/styling; tile_zoom drives what we fetch;
+     * tile_display_size is the viewport px one tile spans at the view zoom. */
+    uint32_t view_zoom = config->zoom;
+    uint32_t tile_zoom =
+        view_zoom > YETTY_YMAP_MAX_VECTOR_ZOOM ? YETTY_YMAP_MAX_VECTOR_ZOOM : view_zoom;
+    int64_t tile_display_size = (int64_t)OSM_VECTOR_TILE_SIZE << (view_zoom - tile_zoom);
     if (config->width_px == 0 || config->height_px == 0 ||
         config->width_px > OSM_VECTOR_MAX_VIEWPORT_PX ||
         config->height_px > OSM_VECTOR_MAX_VIEWPORT_PX) {
@@ -1186,8 +1195,8 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_vector(
     int64_t origin_x = (int64_t)llround(center_pixel_x) - (int64_t)config->width_px / 2;
     int64_t origin_y = (int64_t)llround(center_pixel_y) - (int64_t)config->height_px / 2;
 
-    int64_t tile_count = (int64_t)1 << config->zoom;
-    int64_t tile_size = (int64_t)OSM_VECTOR_TILE_SIZE;
+    int64_t tile_count = (int64_t)1 << tile_zoom;
+    int64_t tile_size = tile_display_size; /* px one tile spans at the view zoom */
     int64_t tile_x_first =
         origin_x >= 0 ? origin_x / tile_size : (origin_x - (tile_size - 1)) / tile_size;
     int64_t tile_y_first =
@@ -1278,7 +1287,7 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_vector(
 
     const char *tile_extension = config->tile_file_extension ? config->tile_file_extension : "mvt";
     struct yetty_ycore_void_result fetch_res = yetty_ymap_tiles_fetch(
-        url_template, cache_root, tile_extension, config->zoom, requests, request_count);
+        url_template, cache_root, tile_extension, tile_zoom, requests, request_count);
     if (YETTY_IS_ERR(fetch_res)) {
         free(slots);
         free(requests);
@@ -1298,7 +1307,7 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_vector(
         struct yetty_ycore_void_result parse_res =
             yetty_ymap_vt_parse(request->bytes, request->len, &tile);
         if (YETTY_IS_ERR(parse_res)) {
-            ywarn("ymap vector: tile %u/%u/%lld parse failed: %s", config->zoom, request->tile_x,
+            ywarn("ymap vector: tile %u/%u/%lld parse failed: %s", tile_zoom, request->tile_x,
                   (long long)slot->tile_y, parse_res.error.msg);
             yetty_ycore_error_destroy(parse_res.error);
             continue;
@@ -1306,8 +1315,9 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_vector(
         struct osm_tile_transform transform = {
             .offset_x = (float)(slot->tile_x * tile_size - origin_x),
             .offset_y = (float)(slot->tile_y * tile_size - origin_y),
-            .scale = 1.0f,  /* per-layer: 256 / extent */
+            .scale = 1.0f,  /* per-layer: tile_display_size / extent */
             .extent = 4096, /* per-layer override */
+            .tile_display_size = (float)tile_display_size,
         };
         emit_result = emit_tile(&emit, &tile, &transform);
         yetty_ymap_vt_free(&tile);
@@ -1338,6 +1348,7 @@ struct yetty_ydraw_drawable_list_result yetty_ymap_render_vector(
     if (!emit_budget_left(&emit)) {
         ywarn("ymap vector: prim budget (%u) exhausted — map truncated", OSM_VECTOR_MAX_PRIMS);
     }
-    ydebug("ymap vector: %u tiles, %u prims at z%u", tiles_rendered, emit.prim_count, config->zoom);
+    ydebug("ymap vector: %u tiles, %u prims at view z%u (tiles z%u)", tiles_rendered,
+           emit.prim_count, view_zoom, tile_zoom);
     return YETTY_OK(yetty_ydraw_drawable_list, emit.list);
 }
