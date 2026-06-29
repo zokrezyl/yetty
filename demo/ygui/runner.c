@@ -1285,25 +1285,63 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
             yetty_ycore_error_destroy(wr.error);
         }
     }
-    if (uv_poll_init(&cs.loop, &cs.stdin_poll, yetty_ywire_connection_fd(cs.conn)) == 0) {
-        stdin_inited = 1;
-        cs.stdin_poll.data = &cs;
-        uv_poll_start(&cs.stdin_poll, UV_READABLE, client_stdin_cb);
+    /* stdin polling is the input path — fatal on init OR start failure (the
+     * timer/prepare would otherwise keep the loop alive forever with no input).
+     * The *_inited flag is set right after a successful init so cleanup closes
+     * the handle even if its start fails. */
+    int uvrc = uv_poll_init(&cs.loop, &cs.stdin_poll, yetty_ywire_connection_fd(cs.conn));
+    if (uvrc != 0) {
+        fprintf(stderr, "demo_runner client: uv_poll_init: %s\n", uv_strerror(uvrc));
+        goto fail;
     }
-    if (uv_signal_init(&cs.loop, &cs.sigwinch) == 0) {
+    stdin_inited = 1;
+    cs.stdin_poll.data = &cs;
+    uvrc = uv_poll_start(&cs.stdin_poll, UV_READABLE, client_stdin_cb);
+    if (uvrc != 0) {
+        fprintf(stderr, "demo_runner client: uv_poll_start: %s\n", uv_strerror(uvrc));
+        goto fail;
+    }
+
+    /* SIGWINCH is optional — a resize just won't be picked up live. Report and
+     * carry on. */
+    uvrc = uv_signal_init(&cs.loop, &cs.sigwinch);
+    if (uvrc == 0) {
         sigwinch_inited = 1;
         cs.sigwinch.data = &cs;
-        uv_signal_start(&cs.sigwinch, client_sigwinch_cb, SIGWINCH);
+        uvrc = uv_signal_start(&cs.sigwinch, client_sigwinch_cb, SIGWINCH);
+        if (uvrc != 0) {
+            fprintf(stderr, "demo_runner client: uv_signal_start: %s\n", uv_strerror(uvrc));
+        }
+    } else {
+        fprintf(stderr, "demo_runner client: uv_signal_init: %s\n", uv_strerror(uvrc));
     }
-    if (uv_prepare_init(&cs.loop, &cs.prep) == 0) {
-        prep_inited = 1;
-        cs.prep.data = &cs;
-        uv_prepare_start(&cs.prep, client_prep_cb);
+
+    /* The prepare hook ships dirty frames each tick — fatal without it. */
+    uvrc = uv_prepare_init(&cs.loop, &cs.prep);
+    if (uvrc != 0) {
+        fprintf(stderr, "demo_runner client: uv_prepare_init: %s\n", uv_strerror(uvrc));
+        goto fail;
     }
-    if (uv_timer_init(&cs.loop, &cs.frame_timer) == 0) {
-        timer_inited = 1;
-        cs.frame_timer.data = &cs;
-        uv_timer_start(&cs.frame_timer, client_frame_cb, 33, 33);
+    prep_inited = 1;
+    cs.prep.data = &cs;
+    uvrc = uv_prepare_start(&cs.prep, client_prep_cb);
+    if (uvrc != 0) {
+        fprintf(stderr, "demo_runner client: uv_prepare_start: %s\n", uv_strerror(uvrc));
+        goto fail;
+    }
+
+    /* The frame timer keeps the loop ticking so prep drains output — fatal. */
+    uvrc = uv_timer_init(&cs.loop, &cs.frame_timer);
+    if (uvrc != 0) {
+        fprintf(stderr, "demo_runner client: uv_timer_init: %s\n", uv_strerror(uvrc));
+        goto fail;
+    }
+    timer_inited = 1;
+    cs.frame_timer.data = &cs;
+    uvrc = uv_timer_start(&cs.frame_timer, client_frame_cb, 33, 33);
+    if (uvrc != 0) {
+        fprintf(stderr, "demo_runner client: uv_timer_start: %s\n", uv_strerror(uvrc));
+        goto fail;
     }
 
     uv_run(&cs.loop, UV_RUN_DEFAULT);
@@ -1329,7 +1367,11 @@ fail:
             uv_timer_stop(&cs.frame_timer);
             uv_close((uv_handle_t *)&cs.frame_timer, client_close_cb);
         }
-        uv_run(&cs.loop, UV_RUN_NOWAIT);
+        /* uv_close() completion is async. With every handle now closing and
+         * nothing re-arming, UV_RUN_DEFAULT runs until all close callbacks have
+         * fired and no active handles remain — a real guarantee that the loop is
+         * empty before uv_loop_close() below (a single NOWAIT pass is not). */
+        uv_run(&cs.loop, UV_RUN_DEFAULT);
     }
 
     /* Tear down in order: the framework first (it detaches the producer session,
@@ -1355,7 +1397,10 @@ fail:
         }
     }
     if (loop_inited) {
-        uv_loop_close(&cs.loop);
+        int close_rc = uv_loop_close(&cs.loop);
+        if (close_rc != 0) {
+            fprintf(stderr, "demo_runner client: uv_loop_close: %s\n", uv_strerror(close_rc));
+        }
     }
     return rc;
 }

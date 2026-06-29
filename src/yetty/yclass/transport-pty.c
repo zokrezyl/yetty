@@ -39,7 +39,8 @@ struct yetty_yclass_transport_pty {
     int eof;
 
     /* Raw-mode / O_NONBLOCK ownership, restored at destroy. */
-    int raw_active;
+    int reactor_enabled; /* enable_raw_mode() fully applied — idempotence guard */
+    int raw_active;      /* tty termios raw mode was set (subset of the above) */
     int flags_saved;
 #ifndef _WIN32
     struct termios saved_tty;
@@ -282,30 +283,44 @@ struct yetty_ycore_void_result yetty_yclass_transport_pty_enable_raw_mode(
     if (!transport) {
         return YETTY_ERR(yetty_ycore_void, "transport_pty_enable_raw_mode: NULL transport");
     }
-    if (transport->raw_active) {
+    /* Idempotent once fully applied — keyed on reactor_enabled (set at the end),
+     * NOT raw_active, which is only set in the tty branch and so would let a
+     * second call on a non-tty re-save the already-mutated O_NONBLOCK flags. */
+    if (transport->reactor_enabled) {
         return YETTY_OK_VOID();
     }
 #ifdef _WIN32
     (void)transport;
+    transport->reactor_enabled = 1;
     return YETTY_OK_VOID();
 #else
-    /* Save fd flags so destroy can restore O_NONBLOCK exactly. */
+    /* Save fd flags so destroy can restore them exactly. A failure here is
+     * fatal: without the saved flags we can neither apply O_NONBLOCK nor restore
+     * it, so the reactor contract (non-blocking pumps) cannot be honored. */
     transport->fd_in_flags = fcntl(transport->fd_in, F_GETFL, 0);
+    if (transport->fd_in_flags < 0) {
+        return YETTY_ERR(yetty_ycore_void, "transport_pty_enable_raw_mode: F_GETFL fd_in failed");
+    }
     transport->fd_out_flags = fcntl(transport->fd_out, F_GETFL, 0);
+    if (transport->fd_out_flags < 0) {
+        return YETTY_ERR(yetty_ycore_void, "transport_pty_enable_raw_mode: F_GETFL fd_out failed");
+    }
+    /* Both flags captured — from here any later failure is cleaned up by destroy,
+     * which restores these saved flags. */
     transport->flags_saved = 1;
 
-    /* The output fd is always made non-blocking so pump_writable never stalls
-     * the loop, regardless of the input outcome below. */
-    if (transport->fd_out_flags >= 0) {
-        fcntl(transport->fd_out, F_SETFL, transport->fd_out_flags | O_NONBLOCK);
+    /* The output fd MUST be non-blocking or pump_writable() can stall the host
+     * loop; the input fd MUST be too or read_available() can stall on a non-tty
+     * (and it is belt-and-braces with VMIN=0 on a tty). A failure to set either
+     * breaks the reactor contract, so it is fatal — the caller tears the
+     * transport down and destroy restores the saved flags. */
+    if (fcntl(transport->fd_out, F_SETFL, transport->fd_out_flags | O_NONBLOCK) < 0) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "transport_pty_enable_raw_mode: F_SETFL O_NONBLOCK fd_out failed");
     }
-
-    /* Always make input non-blocking too. On a tty this is belt-and-braces with
-     * VMIN=0; it is the only protection on a non-tty pipe, and it is the
-     * fallback that keeps read_available() from blocking the host loop if the
-     * termios raw-mode step below fails. */
-    if (transport->fd_in_flags >= 0) {
-        fcntl(transport->fd_in, F_SETFL, transport->fd_in_flags | O_NONBLOCK);
+    if (fcntl(transport->fd_in, F_SETFL, transport->fd_in_flags | O_NONBLOCK) < 0) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "transport_pty_enable_raw_mode: F_SETFL O_NONBLOCK fd_in failed");
     }
 
     if (isatty(transport->fd_in)) {
@@ -330,6 +345,7 @@ struct yetty_ycore_void_result yetty_yclass_transport_pty_enable_raw_mode(
         }
         transport->raw_active = 1;
     }
+    transport->reactor_enabled = 1;
     return YETTY_OK_VOID();
 #endif
 }
