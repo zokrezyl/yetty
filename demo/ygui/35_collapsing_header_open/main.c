@@ -19,7 +19,8 @@
  * Standalone-mode ygui demo. Press 'q' (or Ctrl-C / Ctrl-D) to quit.
  */
 
-#include "../runner.h"
+#include <yetty/yguiapp/app.h>
+#include <yetty/yguiapp/run.h>
 #include <yetty/ygui/ygui.h>
 
 #include <stdlib.h>
@@ -452,10 +453,23 @@ static void build_menubar(struct yetty_yclass_object *mb, struct yetty_yclass_ob
     }
 }
 
-static struct yetty_ycore_void_result build(struct demo_runner *runner,
+/* Demo app class: a yguiapp:app subclass with no extra state. */
+struct [[clang::annotate("class@demoygui:35_collapsing_header_open")]] [[clang::annotate(
+    "parent@yguiapp:app")]] yetty_demoygui_35_collapsing_header_open {
+    int unused;
+};
+
+/* Result wrapper + class accessor forward-decls (this TU does not include its
+ * own generated header; main.gen.c is #included at the foot). */
+YETTY_YRESULT_DECLARE(yetty_demoygui_35_collapsing_header_open_ptr,
+                      struct yetty_demoygui_35_collapsing_header_open *);
+struct yetty_yclass_ptr_result yetty_demoygui_35_collapsing_header_open_class_get(void);
+
+[[clang::annotate("override@yguiapp:app:build")]]
+static struct yetty_ycore_void_result build(struct yetty_yclass_object *app,
                                             struct yetty_yclass_object *root)
 {
-    (void)runner;
+    (void)app;
 
     /* Menubar across the top. */
     struct yetty_yclass_object *mb = add_w(root, yetty_ygui_menubar_class_get().value, ROW_H);
@@ -485,5 +499,8 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 
 int main(int argc, char **argv)
 {
-    return demo_runner_run(argc, argv, "35_collapsing_header_open", build);
+    return yetty_yguiapp_run_main(argc, argv,
+                                  yetty_demoygui_35_collapsing_header_open_class_get().value);
 }
+
+#include "main.gen.c"

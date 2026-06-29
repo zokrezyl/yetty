@@ -20,9 +20,10 @@ Reads annotated .c sources, builds the in-memory model, emits:
     rpc.h          — every <class>_create() in this module.
 
   Internal (under <module_src_dir>/):
-    <class>.gen.c      — accessor body, included at the foot of <class>.c.
-    methods.gen.c      — public stub bodies.
-    rpc.gen.c          — skels + accessor/skel lookups + yetty_<module>_register().
+    <class>.gen.c      — accessor body + public stubs + server skels + the
+                         class factory, included at the foot of <class>.c.
+    rpc.gen.c          — accessor/skel lookups + yetty_<module>_register()
+                         (one per submodule; the module-root chains them).
     model.yaml         — informational dump.
 
 Symbol naming:
@@ -50,12 +51,15 @@ Object creation:
   proxy whose header.session = ctx->session.
 
 Usage:
-  ./codegen.py <module> <include_base> <module_src_dir> <source.c>...
+  ./codegen.py <module> <include_base> <module_src_dir> [--headers-local] <source.c>...
 
   <include_base>      shared include root, e.g. "include". Generated
                       public headers land in <include_base>/<module>/.
   <module_src_dir>    where the annotated .c files live. Generated
                       internal artefacts (.gen.c, model.yaml) land here.
+  --headers-local     write each generated public header next to its source
+                      (same dir as the .c) instead of under <include_base>/,
+                      for modules whose sources live outside the include tree.
 """
 
 import json
@@ -1682,38 +1686,6 @@ def emit_stub_def(m: dict) -> str:
     return f"{rt} {qualified_slot(m)}({params})\n{{\n{emit_dispatch_body(m)}}}\n\n"
 
 
-def emit_methods_c(model: dict, module: str, out_path: Path, module_src: Path):
-    # This TU DEFINES every public slot stub and casts the resolved impl to
-    # the slot's `<slot>_fn`. It is a STANDALONE .gen.c — never `#include`d
-    # into a hand-written .c — so it can pull in every per-class header
-    # without the "redefine an expose'd struct" hazard that the *appended*
-    # <stem>.gen.c has. And it needs them: the `<slot>_fn` typedefs it casts
-    # to, plus the COMPLETE result types its stubs return by value (some are
-    # foreign, e.g. a ydraw result), live in (or are reachable through) those
-    # headers. There is no module-wide methods header anymore.
-    parts = [HEADER]
-    seen_headers = []
-    for c in model.get("classes", []):
-        h = class_header_for(c, module, module_src)
-        if h not in seen_headers:
-            seen_headers.append(h)
-    for h in seen_headers:
-        parts.append(f'#include "{h}"\n')
-    parts += ['#include <yetty/yclass/rpc.h>\n',
-              '#include <yetty/ycore/result.h>\n',
-              '#include <yetty/ycore/types.h>  /* container_of */\n',
-              '#include <yetty/ytrace/ytrace.h>\n',
-              '#include <stdint.h>\n'
-              '#include <stdlib.h>  /* malloc/free for buffer-arg marshalling */\n'
-              '#include <string.h>\n\n']
-    for m in model["methods"]:
-        params = ", ".join(f"{a['type']} {a['name']}" for a in m["args"])
-        rt = result_type(m["return_type"])
-        parts.append(f"{rt} {qualified_slot(m)}({params})\n{{\n"
-                     f"{emit_dispatch_body(m)}}}\n\n")
-    _write_atomic(out_path, "".join(parts))
-
-
 # ---------------- .gen.c — class accessor body ---------------------------
 
 def emit_class_accessor(cls: dict) -> str:
@@ -2014,13 +1986,17 @@ def _local_byvalue_type_defs(model: dict, src_file: str, byval_tags: set,
 
 
 def emit_class_public_headers(model: dict, module: str, include_module_dir: Path,
-                              module_src: Path):
+                              module_src: Path, headers_local: bool = False):
     """One generated public header per class. Output path mirrors the
     source's subdir structure under `include/yetty/<module>/` so a
     widget at `src/yetty/<module>/widgets/foo.c` lands at
     `include/yetty/<module>/widgets/foo.h` (not `.gen.h` — the file
     IS the public interface; consumers don't care that it's
     generated).
+
+    When `headers_local` is set, the header is written next to its annotated
+    source instead (same directory as the .c / .gen.c) — for modules whose
+    sources live outside the shared include tree, e.g. the ygui demos.
 
     The header is 100% generated — there is no hand-written section.
     Function APIs come from `expose` annotations and method slots; the public
@@ -2037,12 +2013,16 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
     for src_file, classes in groups.items():
         src_path = Path(src_file).resolve()
         stem = src_path.stem
-        # Mirror the source's subdir (every nesting level) under
-        # include/yetty/<module>/, relative to the module's source root.
         rel_subdir = source_rel_subdir(src_file, module_src)
-        out_dir = include_module_dir / rel_subdir
-        out_dir.mkdir(parents=True, exist_ok=True)
-        header_path = out_dir / f"{stem}.h"
+        if headers_local:
+            # Co-locate the header with its source (same dir as the .c/.gen.c).
+            header_path = src_path.with_name(f"{stem}.h")
+        else:
+            # Mirror the source's subdir (every nesting level) under
+            # include/yetty/<module>/, relative to the module's source root.
+            out_dir = include_module_dir / rel_subdir
+            out_dir.mkdir(parents=True, exist_ok=True)
+            header_path = out_dir / f"{stem}.h"
         # Distinct guard per file path under the module — prevents
         # collisions between widgets/button.h and any other button.h
         # that might exist in the tree.
@@ -2284,7 +2264,7 @@ def emit_class_public_headers(model: dict, module: str, include_module_dir: Path
         sys.exit(1)
 
 
-def emit_class_gen_c(model: dict, module: str, module_dir: Path, fold: bool = True):
+def emit_class_gen_c(model: dict, module: str, module_dir: Path):
     """One `<class>.gen.c` per annotated source. `#include`d at the foot
     of the matching hand-written `<class>.c` — so it must sit in the
     SAME directory as that .c, not at the module root. A widget at
@@ -2355,29 +2335,21 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path, fold: bool = Tr
         # included from a hand-written .c that hasn't imported them
         # yet (the hand-written .c may include only its module-local
         # header for backward compat).
-        if fold:
-            # The folded stubs/skels/factories/aggregator need the RPC runtime,
-            # buffer/container_of helpers and the C stdlib used for marshalling.
-            include_block += (
-                '#include <yetty/yclass/rpc.h>\n'
-                '#include <yetty/ycore/result.h>\n'
-                '#include <yetty/ycore/types.h>  /* container_of, buffer */\n'
-                '#include <yetty/ytrace/ytrace.h>\n'
-                '#include <stdbool.h>\n'
-                '#include <stddef.h>  /* NULL, size_t */\n'
-                '#include <stdint.h>\n'
-                '#include <stdio.h>  /* stderr */\n'
-                '#include <stdlib.h>  /* calloc/free for proxy + buffer marshalling */\n'
-                '#include <string.h>  /* memcpy/strcmp/strlen */\n'
-            )
-        else:
-            # Accessor-only stem (legacy split): the stubs/skels/factories live
-            # in the standalone methods.gen.c / rpc.gen.c units instead.
-            include_block += (
-                '#include <yetty/ycore/result.h>\n'
-                '#include <yetty/ytrace/ytrace.h>\n'
-                '#include <stddef.h>  /* NULL, size_t */\n'
-            )
+        # The stubs/skels/factories/aggregator folded into each <stem>.gen.c need
+        # the RPC runtime, buffer/container_of helpers and the C stdlib used for
+        # marshalling.
+        include_block += (
+            '#include <yetty/yclass/rpc.h>\n'
+            '#include <yetty/ycore/result.h>\n'
+            '#include <yetty/ycore/types.h>  /* container_of, buffer */\n'
+            '#include <yetty/ytrace/ytrace.h>\n'
+            '#include <stdbool.h>\n'
+            '#include <stddef.h>  /* NULL, size_t */\n'
+            '#include <stdint.h>\n'
+            '#include <stdio.h>  /* stderr */\n'
+            '#include <stdlib.h>  /* calloc/free for proxy + buffer marshalling */\n'
+            '#include <string.h>  /* memcpy/strcmp/strlen */\n'
+        )
 
         # Same-module slot stubs this .gen.c's ops reference, emitted locally:
         # the bare stub prototype (the ops-table method-id sentinel) + the
@@ -2424,37 +2396,34 @@ def emit_class_gen_c(model: dict, module: str, module_dir: Path, fold: bool = Tr
 
         accessor_block = "\n".join(emit_class_accessor(c) for c in classes)
 
-        stub_block = skel_block = create_block = ""
-        if fold:
-            # Caller stubs + server skels for the slots THIS stem's classes own,
-            # plus the factory for each regular class — formerly methods.gen.c
-            # and the per-class half of rpc.gen.c.
-            own_methods = methods_by_source.get(src_path, [])
-            stub_block = "".join(emit_stub_def(m) for m in own_methods)
-            skel_block = "".join(
-                emit_skel(m) + "\n" for m in own_methods if not m.get("local"))
-            # Local create prototype before each factory so the .gen.c is self-
-            # sufficient (the matching decl also lives in the class's public .h,
-            # but that header is not re-included here — see above). Redeclaration
-            # with an identical signature is well-formed.
-            regular_in_stem = [c for c in classes if c.get("type") == "regular"]
-            create_block = "".join(
-                f"struct yetty_yclass_object_ptr_result "
-                f"{qualified_class(c)}_create(struct yetty_yclass_ctx *ctx);\n"
-                + emit_create_fn(c, model, module) + "\n"
-                for c in regular_in_stem)
-            # If the module owns a `constructor` slot, each factory's local
-            # branch calls its public stub yetty_<module>_constructor. That stub
-            # is owned by (and defined in) another class's stem, so forward-
-            # declare it here for the factories above.
-            module_has_ctor = any(
-                m["domain"] == module and m["slot"] == "constructor"
-                for m in model.get("methods", []))
-            if regular_in_stem and module_has_ctor:
-                create_block = (
-                    "struct yetty_ycore_void_result "
-                    f"yetty_{module}_constructor(struct yetty_yclass_object *obj);\n"
-                    + create_block)
+        # Caller stubs + server skels for the slots THIS stem's classes own, plus
+        # the factory for each regular class — all folded into this <stem>.gen.c.
+        own_methods = methods_by_source.get(src_path, [])
+        stub_block = "".join(emit_stub_def(m) for m in own_methods)
+        skel_block = "".join(
+            emit_skel(m) + "\n" for m in own_methods if not m.get("local"))
+        # Local create prototype before each factory so the .gen.c is self-
+        # sufficient (the matching decl also lives in the class's public .h,
+        # but that header is not re-included here — see above). Redeclaration
+        # with an identical signature is well-formed.
+        regular_in_stem = [c for c in classes if c.get("type") == "regular"]
+        create_block = "".join(
+            f"struct yetty_yclass_object_ptr_result "
+            f"{qualified_class(c)}_create(struct yetty_yclass_ctx *ctx);\n"
+            + emit_create_fn(c, model, module) + "\n"
+            for c in regular_in_stem)
+        # If the module owns a `constructor` slot, each factory's local branch
+        # calls its public stub yetty_<module>_constructor. That stub is owned by
+        # (and defined in) another class's stem, so forward-declare it here for
+        # the factories above.
+        module_has_ctor = any(
+            m["domain"] == module and m["slot"] == "constructor"
+            for m in model.get("methods", []))
+        if regular_in_stem and module_has_ctor:
+            create_block = (
+                "struct yetty_ycore_void_result "
+                f"yetty_{module}_constructor(struct yetty_yclass_object *obj);\n"
+                + create_block)
 
         body = (HEADER + include_block + "\n" + slot_block
                 + accessor_block + "\n\n"
@@ -2968,45 +2937,17 @@ def emit_rpc_h(model: dict, module: str, out_path: Path):
     )
 
 
-def emit_rpc_c(model: dict, module: str, out_path: Path, module_src: Path):
-    class_includes = "".join(
-        f'#include "{class_header_for(c, module, module_src)}"\n'
-        for c in model.get("classes", [])
-    )
-    parts = [HEADER,
-             '#include <yetty/yclass/rpc.h>\n',
-             '#include <yetty/ycore/result.h>\n',
-             '#include <yetty/ytrace/ytrace.h>\n',
-             '#include <yetty/yclass/class.h>\n',
-             class_includes,
-             '#include <stdbool.h>\n#include <stdint.h>\n#include <stdio.h>\n'
-             '#include <stdlib.h>\n#include <string.h>\n\n']
-    for m in model["methods"]:
-        # Local-only slots never cross the wire and have no skel — the
-        # public stub is dispatch-only, and emit_lookup_tables omits
-        # them from skel_rows.
-        if m.get("local"):
-            continue
-        parts.append(emit_skel(m))
-        parts.append("\n")
-    for c in regular_classes(model):
-        parts.append(emit_create_fn(c, model, module))
-        parts.append("\n")
-    parts.append(emit_lookup_tables(model, module))
-    _write_atomic(out_path, "".join(parts))
-
-
 # ---------------- main ---------------------------------------------------
 
 def main():
-    # --no-fold keeps the legacy layout: the public stubs go to a standalone
-    # methods.gen.c and the skels/factories/aggregator to a standalone
-    # rpc.gen.c, instead of folding both into each class's <stem>.gen.c. Used
-    # by modules whose sole class lives in a platform-gated source (e.g.
-    # yplatform's GLFW-bound window_manager) where the stubs must compile on
-    # every platform but the class .c does not.
-    argv = [a for a in sys.argv[1:] if a != "--no-fold"]
-    fold = "--no-fold" not in sys.argv
+    # --headers-local writes each class's generated public header next to its
+    # annotated source (the same directory as the .c / .gen.c) instead of under
+    # <include_base>/<module>/. Used for modules whose sources live OUTSIDE the
+    # shared include tree (e.g. the ygui demos under demo/ygui/), so each demo
+    # directory stays self-contained rather than scattering headers into include/.
+    argv = sys.argv[1:]
+    headers_local = "--headers-local" in argv
+    argv = [a for a in argv if a != "--headers-local"]
     if len(argv) < 4:
         sys.stderr.write(__doc__)
         sys.exit(2)
@@ -3035,16 +2976,20 @@ def main():
             inc = s.with_name(s.stem + ".gen.c")
             if not inc.exists():
                 _write_atomic(inc, "")
-            # Pre-touch the per-class header at the source-mirrored
-            # subdir. We don't know the class name (and a source can
-            # define more than one) at this point, so we use the file
+            # Pre-touch the per-class header. We don't know the class name (and a
+            # source can define more than one) at this point, so we use the file
             # stem as a best-effort placeholder for first parse.
-            # emit_class_public_headers may pick a different name
-            # later; the orphan stub is harmless.
-            rel_subdir = source_rel_subdir(s, module_src)
-            hdr_dir = include_module / rel_subdir
-            hdr_dir.mkdir(parents=True, exist_ok=True)
-            hdr = hdr_dir / (s.stem + ".h")
+            # emit_class_public_headers may pick a different name later; the
+            # orphan stub is harmless. With --headers-local the header sits next
+            # to the source; otherwise at the source-mirrored subdir under
+            # include/yetty/<module>/.
+            if headers_local:
+                hdr = s.with_name(s.stem + ".h")
+            else:
+                rel_subdir = source_rel_subdir(s, module_src)
+                hdr_dir = include_module / rel_subdir
+                hdr_dir.mkdir(parents=True, exist_ok=True)
+                hdr = hdr_dir / (s.stem + ".h")
             if not hdr.exists():
                 _write_atomic(hdr, placeholder_class_h)
     # Remove stale module-wide method headers — slot stubs + `_fn` typedefs
@@ -3076,54 +3021,39 @@ def main():
     for m in model["methods"]:
         validate_method(m)
 
-    emit_class_public_headers(model, module, include_module, module_src)
-    # Default (fold): the public stubs (formerly methods.gen.c) and the server
-    # skels + factories + module aggregator (formerly rpc.gen.c) are emitted
-    # INTO each class's own <stem>.gen.c by emit_class_gen_c — no standalone
-    # methods.gen.c / rpc.gen.c translation units.
-    emit_class_gen_c(model, module, module_src, fold=fold)
-    if fold:
-        # Per-class stubs/skels/factories are folded into each <stem>.gen.c
-        # above. The registration glue lives in rpc.gen.c — one PER SUBMODULE
-        # (each subdir of the module), registering only that subdir's classes.
-        # The module-root rpc.gen.c registers the root classes and chains the
-        # submodule registers, so existing callers of yetty_<module>_register()
-        # still register everything.
-        cls_source = {(c["domain"], c["name"]): c["source_file"]
-                      for c in model["classes"]}
-        sub_groups: dict = {}
-        for c in model["classes"]:
-            sub = _submodule_of(c["source_file"], module_src)
-            sub_groups.setdefault(sub, {"classes": [], "methods": []})["classes"].append(c)
-        for m in model.get("methods", []):
-            src = cls_source.get((m["domain"], m["owning_class"]))
-            sub = _submodule_of(src, module_src) if src else ""
-            sub_groups.setdefault(sub, {"classes": [], "methods": []})["methods"].append(m)
+    emit_class_public_headers(model, module, include_module, module_src, headers_local)
+    # The public stubs and the server skels + factories are emitted INTO each
+    # class's own <stem>.gen.c by emit_class_gen_c.
+    emit_class_gen_c(model, module, module_src)
+    # The registration glue lives in rpc.gen.c — one PER SUBMODULE (each subdir of
+    # the module), registering only that subdir's classes. The module-root
+    # rpc.gen.c registers the root classes and chains the submodule registers, so
+    # existing callers of yetty_<module>_register() still register everything.
+    cls_source = {(c["domain"], c["name"]): c["source_file"]
+                  for c in model["classes"]}
+    sub_groups: dict = {}
+    for c in model["classes"]:
+        sub = _submodule_of(c["source_file"], module_src)
+        sub_groups.setdefault(sub, {"classes": [], "methods": []})["classes"].append(c)
+    for m in model.get("methods", []):
+        src = cls_source.get((m["domain"], m["owning_class"]))
+        sub = _submodule_of(src, module_src) if src else ""
+        sub_groups.setdefault(sub, {"classes": [], "methods": []})["methods"].append(m)
 
-        def group_symbol(submodule):
-            return re.sub(r"\W", "_", f"{module}_{submodule}") if submodule else module
+    def group_symbol(submodule):
+        return re.sub(r"\W", "_", f"{module}_{submodule}") if submodule else module
 
-        submodules = sorted(s for s in sub_groups if s)
-        for sub in submodules:
-            bucket = sub_groups[sub]
-            (module_src / sub).mkdir(parents=True, exist_ok=True)
-            emit_rpc_aggregator_c(bucket["classes"], bucket["methods"],
-                                  group_symbol(sub), (),
-                                  module_src / sub / "rpc.gen.c")
-        root = sub_groups.get("", {"classes": [], "methods": []})
-        emit_rpc_aggregator_c(root["classes"], root["methods"], module,
-                              [group_symbol(s) for s in submodules],
-                              module_src / "rpc.gen.c")
-        # methods.gen.c is fully folded away; drop it so a regen removes it
-        # (callers must also delete it from CMake source lists).
-        stale = module_src / "methods.gen.c"
-        if stale.exists():
-            stale.unlink()
-    else:
-        # Legacy split: stubs in methods.gen.c, skels/factories/aggregator in
-        # rpc.gen.c, <stem>.gen.c carries only accessor bodies.
-        emit_methods_c(model, module, module_src / "methods.gen.c", module_src)
-        emit_rpc_c(model, module, module_src / "rpc.gen.c", module_src)
+    submodules = sorted(s for s in sub_groups if s)
+    for sub in submodules:
+        bucket = sub_groups[sub]
+        (module_src / sub).mkdir(parents=True, exist_ok=True)
+        emit_rpc_aggregator_c(bucket["classes"], bucket["methods"],
+                              group_symbol(sub), (),
+                              module_src / sub / "rpc.gen.c")
+    root = sub_groups.get("", {"classes": [], "methods": []})
+    emit_rpc_aggregator_c(root["classes"], root["methods"], module,
+                          [group_symbol(s) for s in submodules],
+                          module_src / "rpc.gen.c")
 
     _write_atomic(module_src / "model.yaml", yaml_dump(model) + "\n")
 

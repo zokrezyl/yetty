@@ -58,7 +58,7 @@
 #define YAI_DEFAULT_HUD_PART_2 "#[align=right,fg=primary]#{engine} · #{model}"
 #define YAI_DEFAULT_HUD_PART_3 "\n#[fg=secondary]#{turn}#[align=right,fg=accent]#{stats}"
 #define YAI_DEFAULT_HUD_PART_4                                                                     \
-    "\n#[fg=muted]#{session}#[align=right,fg=secondary]cache #{cache} · $#{cost} · #{turns} "    \
+    "\n#[fg=muted]#{session}#[align=right,fg=secondary]cache #{cache} · $#{cost} · #{turns} "      \
     "turn(s)"
 #define YAI_DEFAULT_HUD_FORMAT                                                                     \
     YAI_DEFAULT_HUD_PART_0 YAI_DEFAULT_HUD_PART_1 YAI_DEFAULT_HUD_PART_2 YAI_DEFAULT_HUD_PART_3    \
@@ -155,12 +155,12 @@ struct yai_config {
      * app->engine_name, which --engine overrides without touching this field
      * (a CLI override is a per-invocation choice, not a config change). */
     char engine[16];
-    char edit_mode[8];     /* "emacs" | "vi" */
-    int fold_lines;        /* folded-output line budget */
-    int show_thinking;     /* 1 = show the model's thinking blocks */
-    int hud_on;            /* 1 = ygui HUD window; 0 = stats as plain text */
-    int hud_float;         /* 1 = float the HUD instead of docking */
-    char hud_mode[8];      /* "yetty" = ygui HUD; "text" = plain text bar */
+    char edit_mode[8]; /* "emacs" | "vi" */
+    int fold_lines;    /* folded-output line budget */
+    int show_thinking; /* 1 = show the model's thinking blocks */
+    int hud_on;        /* 1 = ygui HUD window; 0 = stats as plain text */
+    int hud_float;     /* 1 = float the HUD instead of docking */
+    char hud_mode[8];  /* "yetty" = ygui HUD; "text" = plain text bar */
     /* Markdown rendering backend for completed assistant answers, the sibling
      * of hud_mode: "yetty" = render through yetty's SDF/MSDF markdown facility
      * (a ycat figure envelope); "text" = plain styled text. "yetty" only takes

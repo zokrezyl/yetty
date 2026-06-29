@@ -24,6 +24,7 @@ extern "C" {
 
 struct yetty_yclass_object;
 struct yetty_yclass_rpc_session;
+struct yetty_yclass_transport;
 struct yetty_yfigure_producer_session;
 
 YETTY_YRESULT_DECLARE(yetty_yfigure_producer_session_ptr, struct yetty_yfigure_producer_session *);
@@ -51,6 +52,14 @@ YETTY_YRESULT_DECLARE(yetty_yfigure_producer_session_ptr, struct yetty_yfigure_p
 struct yetty_yfigure_producer_session_ptr_result yetty_yfigure_producer_attach(int read_fd,
                                                                                int write_fd,
                                                                                int compressed);
+
+/* Attach over a caller-provided transport (dependency injection). Takes
+ * ownership of `transport` — destroys it on failure, and the returned session
+ * destroys it at detach. This is the seam the endpoint path uses: it passes a
+ * yetty_ywire_channel-backed transport so the producer rides the multiplexed
+ * connection's rpc channel instead of reading the fd directly. */
+struct yetty_yfigure_producer_session_ptr_result yetty_yfigure_producer_attach_transport(
+    struct yetty_yclass_transport *transport);
 
 /* The root container proxy to drive with the typed yetty_yfigure_* stubs.
  * Returns NULL for a NULL session. */

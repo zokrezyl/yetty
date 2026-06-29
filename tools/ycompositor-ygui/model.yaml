@@ -36,7 +36,7 @@ classes:
         get: false
         set: false
       - name: ygui
-        type: "struct yetty_ygui_framework *"
+        type: "struct yetty_yclass_object *"
         get: false
         set: false
       - name: chrome

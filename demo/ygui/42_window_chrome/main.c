@@ -1,8 +1,8 @@
 /*
  * Demo 42_window_chrome — window-chrome POC and adoption model.
  *
- * Runs via demo_runner_run_chrome instead of demo_runner_run. In standalone
- * (own-window) mode that makes the shared runner draw a caption strip and wire
+ * A plain yguiapp:app subclass. The shared yguiapp host enables window chrome by
+ * default in standalone (own-window) mode: it draws a caption strip and wires
  * the ychrome engine to the OS window_chrome, so this borderless window can be:
  *
  *   - moved    — drag the caption strip at the top
@@ -16,19 +16,33 @@
  * caption falls through to chrome.
  *
  * To adopt window chrome in another app, copy the integration in
- * demo/ygui/runner.c (search for `enable_chrome`): create + configure a chrome
- * object against rt->window_chrome, draw a caption strip, feed it set_size on
- * resize, and route unclaimed mouse events through it.
+ * src/yetty/yguiapp/app.c (search for `chrome`): create + configure a chrome
+ * object against yframework->window_chrome, draw a caption strip, feed it
+ * set_size on resize, and route unclaimed mouse events through it.
  */
-#include "runner.h"
-
+#include <yetty/yguiapp/app.h>
+#include <yetty/yguiapp/run.h>
+#include <yetty/ygui/ygui.h>
 #include <yetty/ygui/widgets/button.h>
 #include <yetty/ygui/widgets/label.h>
 
-static struct yetty_ycore_void_result build(struct demo_runner *runner,
+/* Demo app class: a yguiapp:app subclass with no extra state. */
+struct [[clang::annotate("class@demoygui:42_window_chrome")]] [[clang::annotate(
+    "parent@yguiapp:app")]] yetty_demoygui_42_window_chrome {
+    int unused;
+};
+
+/* Result wrapper + class accessor forward-decls (this TU does not include its
+ * own generated header; main.gen.c is #included at the foot). */
+YETTY_YRESULT_DECLARE(yetty_demoygui_42_window_chrome_ptr,
+                      struct yetty_demoygui_42_window_chrome *);
+struct yetty_yclass_ptr_result yetty_demoygui_42_window_chrome_class_get(void);
+
+[[clang::annotate("override@yguiapp:app:build")]]
+static struct yetty_ycore_void_result build(struct yetty_yclass_object *app,
                                             struct yetty_yclass_object *root)
 {
-    (void)runner;
+    (void)app;
 
     struct yetty_yclass_object_ptr_result label_r =
         yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
@@ -49,5 +63,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 
 int main(int argc, char **argv)
 {
-    return demo_runner_run_chrome(argc, argv, "42_window_chrome", build);
+    return yetty_yguiapp_run_main(argc, argv, yetty_demoygui_42_window_chrome_class_get().value);
 }
+
+#include "main.gen.c"

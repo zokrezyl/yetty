@@ -48,4 +48,9 @@ struct yetty_yclass_transport {
     const struct yetty_yclass_transport_ops *ops;
 };
 
+/* Result wrapper for a transport handle. Lives on the base transport header so
+ * consumers (the ywire channel adapter, the producer attach) can name it without
+ * pulling a concrete transport backend (fd / dcs / pty). */
+YETTY_YRESULT_DECLARE(yetty_yclass_transport_ptr, struct yetty_yclass_transport *);
+
 #endif /* YCLASS_TRANSPORT_H */

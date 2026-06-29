@@ -160,13 +160,12 @@ all: help
 # or <name>=<path> for yclass modules living elsewhere (yclass-based tools).
 YCLASS_MODULES := yapp yetty yfigure ygrid ygui yguiapp ymgui yrdawn yshadertoy yvterm yflame ymap yview yplatform ychrome ymusic ycircuit yai=tools/ai/yai yrich yzoo=tools/yzoo ymaze=tools/ymaze yjungle=tools/yjungle demoygui=demo/ygui ycompositor=tools/ycompositor yaudio=tools/yaudio ycompositorygui=tools/ycompositor-ygui ybrowser=tools/ybrowser yhello=tools/yhello ygreeter=tools/ygreeter
 
-# Modules kept on the legacy split (standalone methods.gen.c + rpc.gen.c instead
-# of folding the per-class code into each <stem>.gen.c). Empty now: the module
-# aggregator's lookup tables use WEAK references, so a class whose <stem>.gen.c
-# isn't compiled on this platform (yplatform's per-OS glfw/ios/webasm window,
-# platform and clipboard classes) resolves to NULL instead of an undefined
-# symbol — no module needs the legacy split to dodge that anymore.
-YCLASS_NOFOLD :=
+# Modules whose generated public headers are written NEXT TO their source instead
+# of under include/yetty/<module>/ (codegen --headers-local). Used for modules
+# whose sources live outside the shared include tree — the ygui demos under
+# demo/ygui/, where each demo dir stays self-contained (main.c + main.gen.c +
+# main.h + rpc.gen.c together) rather than scattering headers into include/.
+YCLASS_LOCAL_HEADERS := demoygui
 
 # Bare module names (strip any "=<srcdir>" suffix used by out-of-tree modules).
 YCLASS_MODNAMES := $(foreach spec,$(YCLASS_MODULES),$(firstword $(subst =, ,$(spec))))
@@ -174,7 +173,7 @@ YCLASS_MODNAMES := $(foreach spec,$(YCLASS_MODULES),$(firstword $(subst =, ,$(sp
 CODEGEN_JOBS ?= $(shell nproc 2>/dev/null || echo 4)
 
 # Regenerate ONE module by name: resolve its spec (for the `yai=<dir>` form),
-# its annotated sources, and the --no-fold flag, then run the generator.
+# its annotated sources, and the --headers-local flag, then run the generator.
 # Feature guards a module keeps its annotated class/overrides behind. codegen
 # can't see annotations under an #ifdef unless the macro is defined for its parse
 # (the generated output is committed and compiled under the real CMake define).
@@ -189,9 +188,9 @@ for s in $(YCLASS_MODULES); do case "$$s" in "$$mod"=*) spec="$$s";; esac; done;
 case "$$spec" in *=*) src_dir=$${spec#*=};; *) src_dir="src/yetty/$$mod";; esac; \
 sources=$$(grep -lrE '(clang::annotate|YETTY_ANNOTATE)\("(class|mixin)@'"$$mod"':' "$$src_dir" --include='*.c' --exclude='*.gen.c' | LC_ALL=C sort); \
 if [ -z "$$sources" ]; then echo "ERROR: no annotated sources under $$src_dir"; exit 1; fi; \
-nofold=""; case " $(YCLASS_NOFOLD) " in *" $$mod "*) nofold="--no-fold";; esac; \
+local_headers=""; case " $(YCLASS_LOCAL_HEADERS) " in *" $$mod "*) local_headers="--headers-local";; esac; \
 echo "  codegen: $$mod"; \
-YCLASS_DEFINES="$(YCLASS_DEFINES_$(1))" PYTHONHASHSEED=0 uv run src/yetty/yclass/gen/codegen.py "$$mod" "$(CURDIR)/include/yetty" "$(CURDIR)/$$src_dir" $$nofold $$sources
+YCLASS_DEFINES="$(YCLASS_DEFINES_$(1))" PYTHONHASHSEED=0 uv run src/yetty/yclass/gen/codegen.py "$$mod" "$(CURDIR)/include/yetty" "$(CURDIR)/$$src_dir" $$local_headers $$sources
 endef
 
 # NB: the per-module _cg1-%/_cg2-% targets are deliberately NOT .PHONY — GNU

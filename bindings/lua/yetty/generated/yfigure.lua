@@ -5,19 +5,28 @@ require("yetty.generated._types")
 ffi.cdef[[
 struct yetty_yclass_object_ptr_result yetty_yfigure_container_create(struct yetty_yclass_ctx *);
 struct yetty_yclass_object_ptr_result yetty_yfigure_figure_create(struct yetty_yclass_ctx *);
-struct yetty_ycore_void_result yetty_yfigure_destroy(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
-struct yetty_ycore_void_result yetty_yfigure_render(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ydraw_target *);
-struct yetty_ycore_void_result yetty_yfigure_constructor(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
-struct yetty_ycore_void_result yetty_yfigure_add_child(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_yfigure_figure *, uint32_t);
-struct yetty_ycore_void_result yetty_yfigure_remove_child_by_id(struct yetty_yclass_ctx *, struct yetty_yclass_object *, uint32_t);
-struct yetty_ycore_void_result yetty_yfigure_raise_child_by_id(struct yetty_yclass_ctx *, struct yetty_yclass_object *, uint32_t);
-struct yetty_ycore_void_result yetty_yfigure_process_records(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ycore_buffer);
-struct yetty_ycore_void_result yetty_yfigure_process_input(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ywire_wire_statemachine *);
-struct yetty_ycore_void_result yetty_yfigure_process_bytes(struct yetty_yclass_ctx *, struct yetty_yclass_object *, const uint8_t *, size_t);
-struct yetty_ycore_char_ptr_result yetty_yfigure_dump_state(struct yetty_yclass_ctx *, struct yetty_yclass_object *, int);
-struct yetty_ycore_void_result yetty_yfigure_reset_content(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
-struct yetty_ycore_void_result yetty_yfigure_set_scroll(struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float);
-struct yetty_ycore_void_result yetty_yfigure_set_content_size(struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float);
+struct yetty_ycore_void_result yetty_yfigure_destroy(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_yfigure_render(struct yetty_yclass_object *, struct yetty_ydraw_target *);
+struct yetty_ycore_void_result yetty_yfigure_constructor(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_yfigure_add_child(struct yetty_yclass_object *, struct yetty_yfigure_figure *, uint32_t);
+struct yetty_ycore_void_result yetty_yfigure_remove_child_by_id(struct yetty_yclass_object *, uint32_t);
+struct yetty_ycore_void_result yetty_yfigure_raise_child_by_id(struct yetty_yclass_object *, uint32_t);
+struct yetty_ycore_void_result yetty_yfigure_create_child(struct yetty_yclass_object *, uint32_t, uint32_t, struct yetty_ycore_rectangle, struct yetty_ycore_buffer);
+struct yetty_ycore_void_result yetty_yfigure_delete_child(struct yetty_yclass_object *, uint32_t);
+struct yetty_ycore_void_result yetty_yfigure_set_child_rect(struct yetty_yclass_object *, uint32_t, struct yetty_ycore_rectangle);
+struct yetty_ycore_void_result yetty_yfigure_set_rect(struct yetty_yclass_object *, struct yetty_ycore_rectangle);
+struct yetty_ycore_void_result yetty_yfigure_set_child_z(struct yetty_yclass_object *, uint32_t, int32_t);
+struct yetty_ycore_void_result yetty_yfigure_set_child_hidden(struct yetty_yclass_object *, uint32_t, uint32_t);
+struct yetty_ycore_void_result yetty_yfigure_set_child_scroll(struct yetty_yclass_object *, uint32_t, float, float);
+struct yetty_ycore_void_result yetty_yfigure_set_child_content_size(struct yetty_yclass_object *, uint32_t, float, float);
+struct yetty_ycore_void_result yetty_yfigure_apply_child_body(struct yetty_yclass_object *, uint32_t, struct yetty_ycore_buffer);
+struct yetty_ycore_void_result yetty_yfigure_clear_all(struct yetty_yclass_object *);
+struct yetty_ycore_char_ptr_result yetty_yfigure_dump_state(struct yetty_yclass_object *, int);
+struct yetty_ycore_void_result yetty_yfigure_process_input(struct yetty_yclass_object *, struct yetty_ywire_wire_statemachine *);
+struct yetty_ycore_void_result yetty_yfigure_process_bytes(struct yetty_yclass_object *, const uint8_t *, size_t);
+struct yetty_ycore_void_result yetty_yfigure_reset_content(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_yfigure_set_scroll(struct yetty_yclass_object *, float, float);
+struct yetty_ycore_void_result yetty_yfigure_set_content_size(struct yetty_yclass_object *, float, float);
 ]]
 local M = {}
 local Container = {}
@@ -31,40 +40,68 @@ function Container:destroy()
   local res = rt.C().yetty_yfigure_destroy(nil, self.handle)
   rt.check(res)
 end
-function Container:render(target)
-  local res = rt.C().yetty_yfigure_render(nil, self.handle, target)
+function Container:render()
+  local res = rt.C().yetty_yfigure_render(nil, self.handle)
   rt.check(res)
 end
 function Container:constructor()
   local res = rt.C().yetty_yfigure_constructor(nil, self.handle)
   rt.check(res)
 end
-function Container:add_child(child, id)
-  local res = rt.C().yetty_yfigure_add_child(nil, self.handle, child, id)
+function Container:add_child(id)
+  local res = rt.C().yetty_yfigure_add_child(nil, self.handle, id)
   rt.check(res)
 end
-function Container:remove_child_by_id(id)
-  local res = rt.C().yetty_yfigure_remove_child_by_id(nil, self.handle, id)
+function Container:remove_child_by_id()
+  local res = rt.C().yetty_yfigure_remove_child_by_id(nil, self.handle)
   rt.check(res)
 end
-function Container:raise_child_by_id(id)
-  local res = rt.C().yetty_yfigure_raise_child_by_id(nil, self.handle, id)
+function Container:raise_child_by_id()
+  local res = rt.C().yetty_yfigure_raise_child_by_id(nil, self.handle)
   rt.check(res)
 end
-function Container:process_records(bytes)
-  local res = rt.C().yetty_yfigure_process_records(nil, self.handle, bytes)
+function Container:create_child(id, rect, init)
+  local res = rt.C().yetty_yfigure_create_child(nil, self.handle, id, rect, init)
   rt.check(res)
 end
-function Container:process_input(statemachine)
-  local res = rt.C().yetty_yfigure_process_input(nil, self.handle, statemachine)
+function Container:delete_child()
+  local res = rt.C().yetty_yfigure_delete_child(nil, self.handle)
   rt.check(res)
 end
-function Container:process_bytes(bytes, bytes_len)
-  local res = rt.C().yetty_yfigure_process_bytes(nil, self.handle, bytes, bytes_len)
+function Container:set_child_rect(rect)
+  local res = rt.C().yetty_yfigure_set_child_rect(nil, self.handle, rect)
   rt.check(res)
 end
-function Container:dump_state(indent)
-  local res = rt.C().yetty_yfigure_dump_state(nil, self.handle, indent)
+function Container:set_rect()
+  local res = rt.C().yetty_yfigure_set_rect(nil, self.handle)
+  rt.check(res)
+end
+function Container:set_child_z(z)
+  local res = rt.C().yetty_yfigure_set_child_z(nil, self.handle, z)
+  rt.check(res)
+end
+function Container:set_child_hidden(hidden)
+  local res = rt.C().yetty_yfigure_set_child_hidden(nil, self.handle, hidden)
+  rt.check(res)
+end
+function Container:set_child_scroll(scroll_x, scroll_y)
+  local res = rt.C().yetty_yfigure_set_child_scroll(nil, self.handle, scroll_x, scroll_y)
+  rt.check(res)
+end
+function Container:set_child_content_size(content_w, content_h)
+  local res = rt.C().yetty_yfigure_set_child_content_size(nil, self.handle, content_w, content_h)
+  rt.check(res)
+end
+function Container:apply_child_body(body)
+  local res = rt.C().yetty_yfigure_apply_child_body(nil, self.handle, body)
+  rt.check(res)
+end
+function Container:clear_all()
+  local res = rt.C().yetty_yfigure_clear_all(nil, self.handle)
+  rt.check(res)
+end
+function Container:dump_state()
+  local res = rt.C().yetty_yfigure_dump_state(nil, self.handle)
   rt.check(res)
   return res.value
 end
@@ -76,37 +113,37 @@ function Figure.new()
   rt.check(res)
   return setmetatable({ handle = res.value }, Figure)
 end
-function Figure:render(target)
-  local res = rt.C().yetty_yfigure_render(nil, self.handle, target)
+function Figure:render()
+  local res = rt.C().yetty_yfigure_render(nil, self.handle)
   rt.check(res)
 end
 function Figure:destroy()
   local res = rt.C().yetty_yfigure_destroy(nil, self.handle)
   rt.check(res)
 end
-function Figure:process_input(statemachine)
-  local res = rt.C().yetty_yfigure_process_input(nil, self.handle, statemachine)
+function Figure:process_input()
+  local res = rt.C().yetty_yfigure_process_input(nil, self.handle)
   rt.check(res)
 end
-function Figure:process_bytes(bytes, bytes_len)
-  local res = rt.C().yetty_yfigure_process_bytes(nil, self.handle, bytes, bytes_len)
+function Figure:process_bytes(bytes_len)
+  local res = rt.C().yetty_yfigure_process_bytes(nil, self.handle, bytes_len)
   rt.check(res)
 end
 function Figure:reset_content()
   local res = rt.C().yetty_yfigure_reset_content(nil, self.handle)
   rt.check(res)
 end
-function Figure:dump_state(indent)
-  local res = rt.C().yetty_yfigure_dump_state(nil, self.handle, indent)
+function Figure:dump_state()
+  local res = rt.C().yetty_yfigure_dump_state(nil, self.handle)
   rt.check(res)
   return res.value
 end
-function Figure:set_scroll(scroll_x, scroll_y)
-  local res = rt.C().yetty_yfigure_set_scroll(nil, self.handle, scroll_x, scroll_y)
+function Figure:set_scroll(scroll_y)
+  local res = rt.C().yetty_yfigure_set_scroll(nil, self.handle, scroll_y)
   rt.check(res)
 end
-function Figure:set_content_size(content_w, content_h)
-  local res = rt.C().yetty_yfigure_set_content_size(nil, self.handle, content_w, content_h)
+function Figure:set_content_size(content_h)
+  local res = rt.C().yetty_yfigure_set_content_size(nil, self.handle, content_h)
   rt.check(res)
 end
 M.Figure = Figure

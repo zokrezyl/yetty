@@ -819,8 +819,8 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
          * consumed by the RPC server handler attached below) plus raw
          * bytes outside any envelope. */
         struct yetty_ycore_void_result env_r =
-            yetty_ywire_wire_statemachine_set_envelope_default_buffered(app->wire_sm, /*has_args=*/1,
-                                                                        on_envelope, app);
+            yetty_ywire_wire_statemachine_set_envelope_default_buffered(
+                app->wire_sm, /*has_args=*/1, on_envelope, app);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, env_r, "set_envelope_default_buffered failed");
         struct yetty_ycore_void_result raw_r =
             yetty_ywire_wire_statemachine_set_default_buffered(app->wire_sm, on_raw, app);
@@ -830,9 +830,8 @@ static struct yetty_ycore_void_result ycompositorygui_app_run(struct yetty_yclas
          * inbound DCS envelope on YETTY_DCS_YCLASS_RPC is one request:
          * the handler dispatches it and ships the response back to the
          * producer via on_rpc_response (PTY master write). */
-        struct yetty_yclass_rpc_dcs_server_ptr_result dcs_r =
-            yetty_yclass_rpc_dcs_server_attach(app->wire_sm, YETTY_DCS_YCLASS_RPC, /*compressed=*/0,
-                                               on_rpc_response, app);
+        struct yetty_yclass_rpc_dcs_server_ptr_result dcs_r = yetty_yclass_rpc_dcs_server_attach(
+            app->wire_sm, YETTY_DCS_YCLASS_RPC, /*compressed=*/0, on_rpc_response, app);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, dcs_r, "dcs_server_attach failed");
         app->dcs_rpc_server = dcs_r.value;
 

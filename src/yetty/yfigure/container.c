@@ -681,6 +681,12 @@ static struct yetty_ycore_void_result container_do_set_child_rect(
             yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(child)-1, 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
     }
+    /* Container dirty too, so the host repaints on a child relayout (see the note
+     * in container_do_apply_child_body). */
+    {
+        struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container set_child_rect: container dirty");
+    }
     return YETTY_OK_VOID();
 }
 
@@ -850,6 +856,18 @@ static struct yetty_ycore_void_result container_do_apply_child_body(struct yetty
         struct yetty_ycore_void_result set_r =
             yetty_yfigure_figure_dirty_set((struct yetty_yclass_object *)(child)-1, 1);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container: figure attr set");
+    }
+    /* Mark the CONTAINER dirty too, not just the child. The host's figure-frame
+     * render-trigger (terminal_pty_pipe_read) repaints only when the root
+     * container's own dirty bit is set. apply_child_body is the hot path for
+     * every ygui re-emit; without flagging the container here a content update
+     * (e.g. a button relabel after a click) is applied to the child but the
+     * screen stays stale until some unrelated event forces a render — so
+     * interactive updates appear frozen / "seconds late". Mirrors the other
+     * container_do_* mutators, which all set the container dirty. */
+    {
+        struct yetty_ycore_void_result set_r = yetty_yfigure_figure_dirty_set(obj, 1);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, set_r, "container apply_child_body: container dirty");
     }
     return YETTY_OK_VOID();
 }

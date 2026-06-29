@@ -34,7 +34,7 @@ types:
     kind: struct
     fields:
       - name: engine
-        type: "struct yetty_ygui_framework *"
+        type: "struct yetty_yclass_object *"
       - name: root
         type: "struct yetty_yclass_object *"
       - name: tabbar

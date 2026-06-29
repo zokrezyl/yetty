@@ -53,6 +53,11 @@ struct yetty_ycore_void_result yetty_ygui_framework_set_session(
 struct yetty_ycore_void_result yetty_ygui_framework_attach(struct yetty_yclass_object *obj,
                                                            int read_fd, int write_fd,
                                                            int compressed);
+/* Attach over a caller-provided transport — the endpoint path passes a
+ * yetty_ywire_channel-backed transport so the framework rides the multiplexed
+ * connection's rpc channel instead of opening its own DCS transport on the fd. */
+struct yetty_ycore_void_result yetty_ygui_framework_attach_transport(
+    struct yetty_yclass_object *obj, struct yetty_yclass_transport *transport);
 struct yetty_ycore_void_result yetty_ygui_framework_set_viewport(struct yetty_yclass_object *obj,
                                                                  float width_px, float height_px);
 struct yetty_ycore_void_result yetty_ygui_framework_set_theme(struct yetty_yclass_object *obj,

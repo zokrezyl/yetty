@@ -317,25 +317,15 @@ struct yetty_ycore_void_result yetty_ygui_framework_set_session(
     return YETTY_OK_VOID();
 }
 
-YETTY_ANNOTATE("expose")
-struct yetty_ycore_void_result yetty_ygui_framework_attach(struct yetty_yclass_object *obj,
-                                                           int read_fd, int write_fd,
-                                                           int compressed)
+/* Wire the framework's dual-dispatch to an attached producer session. The root
+ * container proxy carries its own RPC session (set at proxy create), so the
+ * typed yfigure_* stubs marshal over the wire from container_obj alone; we
+ * mirror that session onto yclass_ctx for callers that consult it. Shared by
+ * the fd-based attach and the injected-transport (endpoint) attach. */
+static struct yetty_ycore_void_result framework_wire_producer_session(
+    struct yetty_yclass_object *obj, struct yetty_ygui_framework *framework,
+    struct yetty_yfigure_producer_session *producer_session)
 {
-    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_framework_from(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res, "yetty_ygui_framework_attach: from_obj");
-    struct yetty_ygui_framework *framework = framework_res.value;
-    struct yetty_yfigure_producer_session_ptr_result session_res =
-        yetty_yfigure_producer_attach(read_fd, write_fd, compressed);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, session_res,
-                        "yetty_ygui_framework_attach: producer attach");
-    struct yetty_yfigure_producer_session *producer_session = session_res.value;
-
-    /* Wire the framework's dual-dispatch to the host container. The root
-     * container proxy carries its own RPC session (set at proxy create), so
-     * the typed yfigure_* stubs marshal over the wire from container_obj
-     * alone. We mirror that session onto yclass_ctx via the existing
-     * set_session path for callers that consult it. */
     framework->container_obj = yetty_yfigure_producer_session_container(producer_session);
     struct yetty_yclass_rpc_session *rpc_session =
         yetty_yfigure_producer_session_rpc(producer_session);
@@ -352,6 +342,37 @@ struct yetty_ycore_void_result yetty_ygui_framework_attach(struct yetty_yclass_o
     }
     framework->producer_session = producer_session;
     return YETTY_OK_VOID();
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_ygui_framework_attach(struct yetty_yclass_object *obj,
+                                                           int read_fd, int write_fd,
+                                                           int compressed)
+{
+    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_framework_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res, "yetty_ygui_framework_attach: from_obj");
+    struct yetty_yfigure_producer_session_ptr_result session_res =
+        yetty_yfigure_producer_attach(read_fd, write_fd, compressed);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, session_res,
+                        "yetty_ygui_framework_attach: producer attach");
+    return framework_wire_producer_session(obj, framework_res.value, session_res.value);
+}
+
+/* Attach over a caller-provided transport — the endpoint path passes a
+ * yetty_ywire_channel-backed transport so the framework rides the multiplexed
+ * connection's rpc channel instead of opening its own DCS transport on the fd. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_ygui_framework_attach_transport(
+    struct yetty_yclass_object *obj, struct yetty_yclass_transport *transport)
+{
+    struct yetty_ygui_framework_ptr_result framework_res = yetty_ygui_framework_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, framework_res,
+                        "yetty_ygui_framework_attach_transport: from_obj");
+    struct yetty_yfigure_producer_session_ptr_result session_res =
+        yetty_yfigure_producer_attach_transport(transport);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, session_res,
+                        "yetty_ygui_framework_attach_transport: producer attach");
+    return framework_wire_producer_session(obj, framework_res.value, session_res.value);
 }
 
 /* Membership probe + insert for the minted_figures set. Linear scan —

@@ -3380,10 +3380,9 @@ static struct yetty_ycore_void_result client_chrome_sync(struct client_state *cs
         return YETTY_OK_VOID();
     }
     if (!cs->chrome_host) {
-        struct yetty_ychrome_host_ptr_result host_result =
-            yetty_ychrome_host_create_wire(cs->chrome_container, cs->chrome_session,
-                                           /*window_chrome=*/NULL, width, height, 34.0f, 8.0f,
-                                           YETTY_YCHROME_FLAG_ALL);
+        struct yetty_ychrome_host_ptr_result host_result = yetty_ychrome_host_create_wire(
+            cs->chrome_container, cs->chrome_session,
+            /*window_chrome=*/NULL, width, height, 34.0f, 8.0f, YETTY_YCHROME_FLAG_ALL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, host_result, "client_chrome_sync: create wire host");
         cs->chrome_host = host_result.value;
         cs->chrome_width = (int)width;
@@ -3921,8 +3920,8 @@ static int run_client_mode(void)
      * finally safe to detach the shared RPC session, which frees the root-
      * container proxy and destroys the transport. Must be the LAST use of it. */
     if (cs.chrome_session) {
-        teardown_result = yetty_ycore_void_chain(
-            teardown_result, yetty_yfigure_producer_detach(cs.chrome_session));
+        teardown_result = yetty_ycore_void_chain(teardown_result,
+                                                 yetty_yfigure_producer_detach(cs.chrome_session));
         cs.chrome_session = NULL;
         cs.chrome_container = NULL;
     }

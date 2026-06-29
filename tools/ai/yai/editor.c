@@ -34,7 +34,8 @@ struct YETTY_ANNOTATE("class@yai:editor") yetty_yai_editor {
 YETTY_YRESULT_DECLARE(yetty_yai_editor_ptr, struct yetty_yai_editor *);
 
 YETTY_ANNOTATE("virtual@yai:editor:feed_byte")
-YETTY_ANNOTATE("local@yai:feed_byte") static struct yetty_ycore_int_result
+YETTY_ANNOTATE("local@yai:feed_byte")
+static struct yetty_ycore_int_result
     editor_feed_byte(struct yetty_yclass_object *obj, struct yai_app *app, int byte)
 {
     (void)obj;
