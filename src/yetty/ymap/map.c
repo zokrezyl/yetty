@@ -193,11 +193,19 @@ static uint32_t map_clamp_zoom(const struct yetty_ymap_map *map, int64_t zoom)
     int vector;
     const char *attribution;
     map_active_provider(map, &url_template, &extension, &max_zoom, &vector, &attribution);
+    /* Vector maps over-zoom past the tile set's max: the engine renders the
+     * deepest available tile scaled up, so the view can go to street/building
+     * level even though no deeper tile is served. Raster has no tiles past its
+     * max, so it clamps to the provider's max. */
+    uint32_t ceiling = max_zoom;
+    if (vector && YETTY_YMAP_MAX_VECTOR_VIEW_ZOOM > max_zoom) {
+        ceiling = YETTY_YMAP_MAX_VECTOR_VIEW_ZOOM;
+    }
     if (zoom < 0) {
         return 0;
     }
-    if (zoom > (int64_t)max_zoom) {
-        return max_zoom;
+    if (zoom > (int64_t)ceiling) {
+        return ceiling;
     }
     return (uint32_t)zoom;
 }

@@ -4,19 +4,18 @@
  * Ships the map as a positioned server figure via `yview` over yclass-RPC,
  * then stays foreground and re-renders on input:
  *
- *   Ctrl-Shift-wheel  → zoom in / out, anchored at the cursor (the lat/lon
+ *   wheel             → zoom in / out, anchored at the cursor (the lat/lon
  *                       under the pointer stays under the pointer)
  *   left-drag         → pan
  *   + / -             → zoom at the viewport center
  *   q / Ctrl-C / Esc  → quit
  *
- * Input model follows tools/yflame/interactive.c: subscribe to pane-wide
- * mouse events, DEC ?1500h/?1501h so the terminal hit-tests the cursor
- * against our figure and forwards FIGURE_MOUSE events; yface splits stdin
- * into OSC envelopes + raw keystrokes. The wheel events carry the GLFW
- * modifier mask (client_input_mouse.mods) — the terminal only forwards a
- * Ctrl-Shift-wheel to a subscribed figure under the cursor, falling back
- * to its own cell zoom elsewhere.
+ * Input model follows tools/yflame/interactive.c: DEC ?1500h/?1501h so the
+ * terminal hit-tests the cursor against our figure and forwards FIGURE_MOUSE
+ * events; yface splits stdin into OSC envelopes + raw keystrokes. The terminal
+ * routes every wheel that lands on a subscribed figure to that figure (it does
+ * not scroll its own history under the cursor), so a plain wheel is the map's
+ * zoom gesture — no modifier needed.
  *
  * Each zoom/pan does a full tile fetch + re-render; the disk cache makes
  * revisited areas instant, fresh areas block the loop for the download
@@ -59,10 +58,6 @@
 #define ymap_write(fd, p, n) ((int)write((fd), (p), (n)))
 #endif
 
-/* GLFW-compatible modifier bits (client_input_mouse.mods). */
-#define YMAP_MOD_SHIFT 1
-#define YMAP_MOD_CONTROL 2
-
 #define YMAP_BG_COLOR 0xfff2efe9u /* land color — blank while tiles load */
 
 /* Signal flag: a foreground CLI needs file-scope here because a signal
@@ -80,25 +75,24 @@ struct map_ui {
     struct yetty_yclass_object *map; /* the ymap:map model (borrowed) */
     uint32_t width_px;
     uint32_t height_px;
-    bool vector_mode;
     int out_fd;
-    bool dragging;
-    float drag_last_x;
-    float drag_last_y;
     bool dirty;
     bool want_quit;
-    /* Drag-render throttling. A raster re-render ships the whole
-     * viewport as raw pixels (tens of MB through the PTY) — doing that
-     * per mouse-move event drowns the pipe and the map appears frozen.
-     * During a drag, renders coalesce to one per interval; release
-     * flushes immediately. Vector envelopes are ~50x smaller, so their
-     * interval is short. */
-    double last_render_sec;
+    /* Drag = grab-and-slide. A re-render re-runs the whole tile pipeline and
+     * ships the map (often ~1 MB) — far too slow to do per mouse-move, which
+     * is what made dragging feel frozen. Instead, while a drag is in flight we
+     * only SLIDE the already-shipped figure with a cheap set_rect (a few-byte
+     * RPC, composited on the GPU), accumulating the pixel offset; nothing is
+     * re-fetched or re-rendered. On release we fold that offset into the map
+     * center with one real pan + a single crisp re-render, then snap the
+     * figure back to the pane. */
+    bool dragging;
+    float drag_offset_x; /* current figure slide, viewport px (rect.min) */
+    float drag_offset_y;
+    float drag_start_pane_x; /* pane-pixel cursor at button-down (offset 0 then) */
+    float drag_start_pane_y;
+    bool drag_commit_pending; /* release seen — fold the slide into a real pan */
 };
-
-/* Minimum seconds between re-renders WHILE DRAGGING. */
-#define YMAP_DRAG_RENDER_INTERVAL_VECTOR 0.08
-#define YMAP_DRAG_RENDER_INTERVAL_RASTER 0.5
 
 static int emit_envelope(int out_fd, int osc_code, const void *body, size_t body_len)
 {
@@ -195,6 +189,28 @@ static void pan_by(struct map_ui *ui, float delta_x, float delta_y)
     ui->dirty = true;
 }
 
+/* Reposition the figure to follow the cursor mid-drag — cheap (no re-render).
+ * For a captured-figure drag the terminal reports the cursor in PANE pixels
+ * (the figure's display rect slides under set_rect, but the cursor is still
+ * reported against the pane origin, not the slid rect). So the slide offset is
+ * just the cursor's travel from the grab point — no feedback from how far the
+ * figure has already moved, which is what matters: set_rect is async, so any
+ * dependence on the current offset would compound under a fast drag and fling
+ * the map across the world. */
+static void drag_slide(struct map_ui *ui, float pane_x, float pane_y)
+{
+    float new_offset_x = pane_x - ui->drag_start_pane_x;
+    float new_offset_y = pane_y - ui->drag_start_pane_y;
+    ui->drag_offset_x = new_offset_x;
+    ui->drag_offset_y = new_offset_y;
+    struct yetty_ycore_void_result rect_res = yetty_yview_set_rect(
+        ui->view, new_offset_x, new_offset_y, new_offset_x + (float)ui->width_px,
+        new_offset_y + (float)ui->height_px);
+    if (YETTY_IS_ERR(rect_res)) {
+        yetty_ycore_error_destroy(rect_res.error);
+    }
+}
+
 static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_len,
                    const uint8_t *payload, size_t payload_len)
 {
@@ -209,33 +225,40 @@ static void on_osc(void *user, int osc_code, const uint8_t *args, size_t args_le
             (const struct yetty_client_input_mouse *)payload;
 
         if (mouse->kind == YETTY_YMGUI_INPUT_MOUSE_WHEEL) {
-            bool ctrl = (mouse->mods & YMAP_MOD_CONTROL) != 0;
-            bool shift = (mouse->mods & YMAP_MOD_SHIFT) != 0;
             ydebug("ymap wheel: dy=%.2f mods=%d at (%.1f,%.1f)", (double)mouse->wheel_dy,
                    mouse->mods, (double)mouse->x, (double)mouse->y);
-            if (ctrl && shift && mouse->wheel_dy != 0.0f) {
+            /* The terminal forwards every wheel landing on our figure here
+             * (rather than scrolling its own history under the cursor), so a
+             * plain wheel is the natural zoom — anchored at the pointer. */
+            if (mouse->wheel_dy != 0.0f) {
                 zoom_at(ui, mouse->wheel_dy > 0.0f ? +1 : -1, mouse->x, mouse->y);
             }
         } else if (mouse->kind == YETTY_YMGUI_INPUT_MOUSE_BUTTON) {
             if (mouse->button == 0) {
                 if (mouse->pressed) {
                     ui->dragging = true;
-                    ui->drag_last_x = mouse->x;
-                    ui->drag_last_y = mouse->y;
-                } else {
+                    ui->drag_offset_x = 0.0f;
+                    ui->drag_offset_y = 0.0f;
+                    ui->drag_start_pane_x = mouse->x; /* offset is 0 here, so local == pane */
+                    ui->drag_start_pane_y = mouse->y;
+                } else if (ui->dragging) {
                     ui->dragging = false;
+                    ui->drag_commit_pending = true; /* settle on the main loop */
                 }
             }
         } else if (mouse->kind == YETTY_YMGUI_INPUT_MOUSE_POS) {
             if (mouse->figure_id == 0u) {
-                /* Cursor left our figure — end any drag. */
-                ui->dragging = false;
+                /* Cursor left our figure — settle the drag where it stands. */
+                if (ui->dragging) {
+                    ui->dragging = false;
+                    ui->drag_commit_pending = true;
+                }
             } else if (ui->dragging && (mouse->buttons_held & 1u)) {
-                pan_by(ui, mouse->x - ui->drag_last_x, mouse->y - ui->drag_last_y);
-                ui->drag_last_x = mouse->x;
-                ui->drag_last_y = mouse->y;
+                drag_slide(ui, mouse->x, mouse->y);
             } else if (ui->dragging && !(mouse->buttons_held & 1u)) {
+                /* Button released between events — settle. */
                 ui->dragging = false;
+                ui->drag_commit_pending = true;
             }
         }
     } else if ((osc_code == YETTY_OSC_SC_CLIENT_INPUT_RESIZE ||
@@ -286,15 +309,6 @@ int ymap_interactive_run(struct yetty_yclass_object *map_object, uint32_t width_
         fprintf(stderr, "ymap: --interactive needs a terminal (run inside yetty)\n");
         return 2;
     }
-    bool vector_mode = false;
-    {
-        struct yetty_ycore_int_result vector_res = yetty_ymap_is_vector(map_object);
-        if (YETTY_IS_OK(vector_res)) {
-            vector_mode = vector_res.value != 0;
-        } else {
-            yetty_ycore_error_destroy(vector_res.error);
-        }
-    }
 
     struct yetty_ycore_void_result register_res = yetty_yview_register();
     if (YETTY_IS_ERR(register_res)) {
@@ -314,9 +328,22 @@ int ymap_interactive_run(struct yetty_yclass_object *map_object, uint32_t width_
         .map = map_object,
         .width_px = width_px,
         .height_px = height_px,
-        .vector_mode = vector_mode,
         .out_fd = YMAP_STDOUT_FD,
     };
+
+    /* Raw mode MUST be entered before configure(). configure() attaches the
+     * server figure via a yclass-RPC handshake that writes a request to stdout
+     * and BLOCKS reading the binary reply from stdin. While the tty is in
+     * canonical mode the line discipline holds that reply until a newline (and
+     * mangles control bytes), so the handshake would stall until its timeout
+     * and the attach would fail. Putting stdin into raw/binary mode first makes
+     * the reply readable immediately. */
+    yetty_yplatform_tty_binary_io();
+    if (yetty_yplatform_tty_set_raw() < 0) {
+        fprintf(stderr, "ymap: cannot put stdin into raw mode\n");
+        (void)yetty_yview_destroy(ui.view);
+        return 1;
+    }
 
     {
         struct yetty_ycore_void_result cfg_res = yetty_yview_configure(
@@ -326,6 +353,7 @@ int ymap_interactive_run(struct yetty_yclass_object *map_object, uint32_t width_
             fprintf(stderr, "ymap: view configure failed: %s\n", cfg_res.error.msg);
             yetty_ycore_error_destroy(cfg_res.error);
             (void)yetty_yview_destroy(ui.view);
+            yetty_yplatform_tty_restore();
             return 1;
         }
     }
@@ -335,6 +363,7 @@ int ymap_interactive_run(struct yetty_yclass_object *map_object, uint32_t width_
         fprintf(stderr, "ymap: yface create failed: %s\n", yface_res.error.msg);
         yetty_ycore_error_destroy(yface_res.error);
         (void)yetty_yview_destroy(ui.view);
+        yetty_yplatform_tty_restore();
         return 1;
     }
     struct yetty_yface *yface = yface_res.value;
@@ -346,31 +375,20 @@ int ymap_interactive_run(struct yetty_yclass_object *map_object, uint32_t width_
     signal(SIGHUP, on_signal);
 #endif
 
-    yetty_yplatform_tty_binary_io();
-    if (yetty_yplatform_tty_set_raw() < 0) {
-        fprintf(stderr, "ymap: cannot put stdin into raw mode\n");
-        yetty_yface_destroy(yface);
-        (void)yetty_yview_destroy(ui.view);
-        return 1;
-    }
-
     subscribe_input(YMAP_STDOUT_FD, YETTY_CLIENT_INPUT_SUB_MOUSE_CLICK |
                                         YETTY_CLIENT_INPUT_SUB_MOUSE_MOVE |
                                         YETTY_CLIENT_INPUT_SUB_MOUSE_WHEEL);
     /* DEC ?1500h (click) + ?1501h (move): the terminal hit-tests the
      * cursor against figures and forwards FIGURE_MOUSE events to ours —
-     * including the Ctrl-Shift-wheel zoom gesture. */
+     * including the wheel-zoom gesture. */
     {
         static const char mouse_on[] = "\x1b[?1500h\x1b[?1501h";
         (void)ymap_write(YMAP_STDOUT_FD, mouse_on, sizeof(mouse_on) - 1);
     }
 
     rerender(&ui);
-    ui.last_render_sec = yetty_yplatform_ytime_monotonic_sec();
 
     char buf[8192];
-    double drag_interval =
-        vector_mode ? YMAP_DRAG_RENDER_INTERVAL_VECTOR : YMAP_DRAG_RENDER_INTERVAL_RASTER;
     while (!g_signal_quit && !ui.want_quit) {
         int ready = yetty_yplatform_tty_stdin_wait(50);
         if (ready < 0) {
@@ -384,15 +402,29 @@ int ymap_interactive_run(struct yetty_yclass_object *map_object, uint32_t width_
                 break;
             }
         }
-        if (ui.dirty) {
-            double now = yetty_yplatform_ytime_monotonic_sec();
-            /* Mid-drag renders coalesce; everything else (wheel zoom,
-             * key zoom, resize, drag release) renders right away. */
-            if (!ui.dragging || now - ui.last_render_sec >= drag_interval) {
+        if (ui.drag_commit_pending) {
+            ui.drag_commit_pending = false;
+            /* Fold the accumulated slide into a real pan, then re-render once at
+             * the new center. The figure stays slid (showing the grabbed view)
+             * through the blocking render; set_content and the snap-back rect go
+             * out back-to-back, so the crisp map lands where the slide left it —
+             * no flash. A pure click (zero offset) needs none of this. */
+            if (ui.drag_offset_x != 0.0f || ui.drag_offset_y != 0.0f) {
+                pan_by(&ui, ui.drag_offset_x, ui.drag_offset_y);
                 rerender(&ui);
-                ui.last_render_sec = yetty_yplatform_ytime_monotonic_sec();
-                ui.dirty = false;
+                struct yetty_ycore_void_result snap_res = yetty_yview_set_rect(
+                    ui.view, 0.0f, 0.0f, (float)ui.width_px, (float)ui.height_px);
+                if (YETTY_IS_ERR(snap_res)) {
+                    yetty_ycore_error_destroy(snap_res.error);
+                }
+                ui.drag_offset_x = 0.0f;
+                ui.drag_offset_y = 0.0f;
             }
+            ui.dirty = false;
+        } else if (ui.dirty) {
+            /* Wheel zoom, +/- zoom, resize — discrete, render right away. */
+            rerender(&ui);
+            ui.dirty = false;
         }
     }
 

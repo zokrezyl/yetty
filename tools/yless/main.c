@@ -641,6 +641,28 @@ int main(int argc, char **argv)
     }
     struct yetty_yclass_object *view = view_r.value;
 
+    /* When stdin is the controlling tty, enter raw mode BEFORE configure():
+     * configure() attaches the server figure via a yclass-RPC handshake that
+     * writes a request to stdout and BLOCKS reading the binary reply from
+     * stdin. In canonical mode the line discipline withholds that reply until a
+     * newline (and mangles control bytes), so the handshake would stall to its
+     * timeout and the attach would fail. Raw/binary mode makes it readable at
+     * once. set_raw runs exactly once (the interactive loop below reuses it). */
+    bool stdin_tty = yetty_yplatform_tty_stdin_is_tty();
+    if (stdin_tty) {
+        yetty_yplatform_tty_binary_io();
+        if (yetty_yplatform_tty_set_raw() < 0) {
+            fprintf(stderr, "yless: cannot put stdin into raw mode\n");
+            struct yetty_ycore_void_result dr = yetty_yview_destroy(view);
+            if (YETTY_IS_ERR(dr)) {
+                yetty_ycore_error_destroy(dr.error);
+            }
+            yetty_ydraw_drawable_list_destroy(content);
+            free(input.data);
+            return 1;
+        }
+    }
+
     struct yetty_ycore_void_result cfg_r =
         yetty_yview_configure(view, YLESS_STDOUT_FD, YLESS_GETPID(), /*kind=*/0u, bg_color,
                               origin_x, origin_y, origin_x + rect_w, origin_y + rect_h);
@@ -652,6 +674,9 @@ int main(int argc, char **argv)
             yetty_ycore_error_destroy(dr.error);
         }
         yetty_ydraw_drawable_list_destroy(content);
+        if (stdin_tty) {
+            yetty_yplatform_tty_restore();
+        }
         free(input.data);
         return 1;
     }
@@ -665,6 +690,9 @@ int main(int argc, char **argv)
         if (YETTY_IS_ERR(dr)) {
             yetty_ycore_error_destroy(dr.error);
         }
+        if (stdin_tty) {
+            yetty_yplatform_tty_restore();
+        }
         free(input.data);
         return 1;
     }
@@ -672,65 +700,64 @@ int main(int argc, char **argv)
     /* Raw stdin (cross-platform): byte-at-a-time, no echo, no signal
      * generation — so Ctrl-C/D arrive as bytes and the normal exit path (which
      * clears the surface) always runs. Interactive only when stdin is a tty;
-     * with piped content there is no keyboard, so just emit and exit. */
+     * with piped content there is no keyboard, so just emit and exit. Raw mode
+     * was already entered before configure() above (the RPC attach needs it);
+     * here we only run the key loop and restore on the way out. */
     const float line = (float)vp.cell_h;
     const float page = rect_h > line ? rect_h - line : line;
     const float to_bottom = 1.0e9f; /* clamped server-side and in yview */
 
-    if (yetty_yplatform_tty_stdin_is_tty()) {
-        yetty_yplatform_tty_binary_io();
-        if (yetty_yplatform_tty_set_raw() == 0) {
-            char buf[64];
-            bool running = true;
-            while (running) {
-                int rdy = yetty_yplatform_tty_stdin_wait(200);
-                if (rdy < 0) {
+    if (stdin_tty) {
+        char buf[64];
+        bool running = true;
+        while (running) {
+            int rdy = yetty_yplatform_tty_stdin_wait(200);
+            if (rdy < 0) {
+                break;
+            }
+            if (rdy == 0) {
+                continue;
+            }
+            int n = yetty_yplatform_tty_stdin_read(buf, sizeof(buf));
+            if (n <= 0) {
+                break; /* EOF / error */
+            }
+            int i = 0;
+            while (i < n && running) {
+                struct yetty_ycore_void_result sr = YETTY_OK_VOID();
+                switch (decode_key(buf, n, &i)) {
+                case KEY_QUIT:
+                    running = false;
+                    break;
+                case KEY_LINE_DOWN:
+                    sr = yetty_yview_scroll_by(view, 0.0f, line);
+                    break;
+                case KEY_LINE_UP:
+                    sr = yetty_yview_scroll_by(view, 0.0f, -line);
+                    break;
+                case KEY_PAGE_DOWN:
+                    sr = yetty_yview_scroll_by(view, 0.0f, page);
+                    break;
+                case KEY_PAGE_UP:
+                    sr = yetty_yview_scroll_by(view, 0.0f, -page);
+                    break;
+                case KEY_TOP:
+                    sr = yetty_yview_scroll_to(view, 0.0f, 0.0f);
+                    break;
+                case KEY_BOTTOM:
+                    sr = yetty_yview_scroll_to(view, 0.0f, to_bottom);
+                    break;
+                case KEY_NONE:
+                default:
                     break;
                 }
-                if (rdy == 0) {
-                    continue;
-                }
-                int n = yetty_yplatform_tty_stdin_read(buf, sizeof(buf));
-                if (n <= 0) {
-                    break; /* EOF / error */
-                }
-                int i = 0;
-                while (i < n && running) {
-                    struct yetty_ycore_void_result sr = YETTY_OK_VOID();
-                    switch (decode_key(buf, n, &i)) {
-                    case KEY_QUIT:
-                        running = false;
-                        break;
-                    case KEY_LINE_DOWN:
-                        sr = yetty_yview_scroll_by(view, 0.0f, line);
-                        break;
-                    case KEY_LINE_UP:
-                        sr = yetty_yview_scroll_by(view, 0.0f, -line);
-                        break;
-                    case KEY_PAGE_DOWN:
-                        sr = yetty_yview_scroll_by(view, 0.0f, page);
-                        break;
-                    case KEY_PAGE_UP:
-                        sr = yetty_yview_scroll_by(view, 0.0f, -page);
-                        break;
-                    case KEY_TOP:
-                        sr = yetty_yview_scroll_to(view, 0.0f, 0.0f);
-                        break;
-                    case KEY_BOTTOM:
-                        sr = yetty_yview_scroll_to(view, 0.0f, to_bottom);
-                        break;
-                    case KEY_NONE:
-                    default:
-                        break;
-                    }
-                    if (YETTY_IS_ERR(sr)) {
-                        yetty_ycore_error_destroy(sr.error);
-                        running = false;
-                    }
+                if (YETTY_IS_ERR(sr)) {
+                    yetty_ycore_error_destroy(sr.error);
+                    running = false;
                 }
             }
-            yetty_yplatform_tty_restore();
         }
+        yetty_yplatform_tty_restore();
     }
 
     /* Clear the surface: DELETE_CHILD removes the figure from the container. */
