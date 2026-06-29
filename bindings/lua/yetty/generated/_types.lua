@@ -4,22 +4,31 @@ ffi.cdef[[
 typedef long __syscall_slong_t;
 typedef long __time_t;
 typedef long yetty_ycore_event_handler;
+typedef long yetty_yrich_element_id;
 struct yetty_yclass;
-struct yetty_yclass_ctx;
 struct yetty_yclass_object;
+struct yetty_yclass_rpc_session;
+struct yetty_yconfig_config;
 struct yetty_ycore_xthread_event_pipe;
+struct yetty_ydraw_composite;
+struct yetty_ydraw_composite_factory;
 struct yetty_ydraw_drawable_list;
 struct yetty_ydraw_target;
+struct yetty_yevent_event_loop;
 struct yetty_yfigure_figure;
+struct yetty_yfont_font;
+struct yetty_yframework;
 struct yetty_ygui_emit_ctx;
 struct yetty_ymgui_figure;
+struct yetty_yplatform_pty_factory;
+struct yetty_yrdawn_figure;
+struct yetty_yrich_command;
+struct yetty_yrich_operation;
+struct yetty_yrich_slide;
 struct yetty_yui_event;
+struct yetty_yvterm_text_cell;
 struct yetty_ywire_wire_statemachine;
 struct ymusic_measure;
-struct timespec {
-  __time_t tv_sec;
-  __syscall_slong_t tv_nsec;
-};
 struct yetty_ycore_error {
   const char *msg;
   const char *file;
@@ -27,12 +36,59 @@ struct yetty_ycore_error {
   int line;
   struct yetty_ycore_error *cause;
 };
+struct yetty_ycore_pixel_size {
+  float width;
+  float height;
+};
+struct pixel_size_result {
+  int ok;
+  union {
+    struct yetty_ycore_pixel_size value;
+    struct yetty_ycore_error error;
+  };
+};
+struct timespec {
+  __time_t tv_sec;
+  __syscall_slong_t tv_nsec;
+};
 struct uint32_result {
   int ok;
   union {
     uint32_t value;
     struct yetty_ycore_error error;
   };
+};
+struct vterm_uniforms {
+  float grid_size[2];
+  float cell_size[2];
+  float scale;
+  float baseline_y;
+  float glyph_left;
+  float pixel_range;
+  uint32_t root_row;
+  uint32_t cursor_col;
+  uint32_t cursor_row;
+  uint32_t cursor_visible;
+  uint32_t sel_active;
+  uint32_t sel_start_row;
+  uint32_t sel_start_col;
+  uint32_t sel_end_row;
+  uint32_t sel_end_col;
+  uint32_t ring_rows;
+  float visual_zoom_scale;
+  float visual_zoom_offset_x;
+  float visual_zoom_offset_y;
+  uint32_t pad_b;
+  uint32_t pad_c;
+  uint32_t pad_d;
+};
+struct yetty_context {
+  struct yetty_yframework *runtime;
+  struct yetty_yplatform_pty_factory *pty_factory;
+  struct yetty_yevent_event_loop *event_loop;
+};
+struct yetty_yclass_ctx {
+  struct yetty_yclass_rpc_session *session;
 };
 struct yetty_yclass_object_ptr_result {
   int ok;
@@ -45,6 +101,20 @@ struct yetty_yclass_ptr_result {
   int ok;
   union {
     const struct yetty_yclass *value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_yclass_void_ptr_result {
+  int ok;
+  union {
+    void *value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_yconfig_config_ptr_result {
+  int ok;
+  union {
+    struct yetty_yconfig_config *value;
     struct yetty_ycore_error error;
   };
 };
@@ -64,6 +134,13 @@ struct yetty_ycore_const_char_ptr_result {
   int ok;
   union {
     const char *value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_ycore_const_uint32_ptr_result {
+  int ok;
+  union {
+    const uint32_t *value;
     struct yetty_ycore_error error;
   };
 };
@@ -96,13 +173,16 @@ struct yetty_ycore_pixel_coord {
   float x;
   float y;
 };
-struct yetty_ycore_pixel_size {
-  float width;
-  float height;
-};
 struct yetty_ycore_rectangle {
   struct yetty_ycore_pixel_coord min;
   struct yetty_ycore_pixel_coord max;
+};
+struct yetty_ycore_rectangle_result {
+  int ok;
+  union {
+    struct yetty_ycore_rectangle value;
+    struct yetty_ycore_error error;
+  };
 };
 struct yetty_ycore_rgba {
   uint8_t r;
@@ -131,6 +211,20 @@ struct yetty_ycore_void_result {
     struct yetty_ycore_error error;
   };
 };
+struct yetty_ycore_xthread_event_pipe_ptr_result {
+  int ok;
+  union {
+    struct yetty_ycore_xthread_event_pipe *value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_ydraw_composite_const_ptr_ptr_result {
+  int ok;
+  union {
+    struct yetty_ydraw_composite *const *value;
+    struct yetty_ycore_error error;
+  };
+};
 struct yetty_ydraw_drawable_list_result {
   int ok;
   union {
@@ -152,6 +246,23 @@ struct yetty_yfigure_hit {
   uint32_t figure_id;
   float local_x;
   float local_y;
+};
+struct yetty_yfigure_hit_result {
+  int ok;
+  union {
+    struct yetty_yfigure_hit value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_ygrid_factory_args {
+  struct yetty_yfont_font *default_font;
+  struct yetty_ydraw_composite_factory *composite_factory;
+  int absolute_coords;
+};
+struct yetty_ygui_input_state {
+  int st;
+  char params[16];
+  int params_len;
 };
 struct yetty_ygui_layout {
   int direction;
@@ -175,6 +286,13 @@ struct yetty_ygui_layout {
   float pos_y;
   int hidden;
 };
+struct yetty_ygui_layout_const_ptr_result {
+  int ok;
+  union {
+    const struct yetty_ygui_layout *value;
+    struct yetty_ycore_error error;
+  };
+};
 struct yetty_ygui_yplot_config {
   float x_min;
   float x_max;
@@ -186,6 +304,29 @@ struct yetty_ymgui_figure_ptr_result {
   int ok;
   union {
     struct yetty_ymgui_figure *value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_yplatform_gpu_context {
+  int instance;
+  int surface;
+  uint32_t surface_width;
+  uint32_t surface_height;
+  float content_scale;
+  void *x11_display;
+  unsigned long x11_window;
+};
+struct yetty_yplatform_gpu_context_const_ptr_result {
+  int ok;
+  union {
+    const struct yetty_yplatform_gpu_context *value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_yrdawn_figure_ptr_result {
+  int ok;
+  union {
+    struct yetty_yrdawn_figure *value;
     struct yetty_ycore_error error;
   };
 };
@@ -241,11 +382,117 @@ struct yetty_yrender_gpu_resource_set {
   size_t children_count;
   uint32_t instance_count;
 };
-struct yetty_yrich_input_mods {
-  bool shift;
-  bool ctrl;
-  bool alt;
-  bool meta;
+struct yetty_yrich_border {
+  float width;
+  uint32_t color;
+  uint32_t style;
+};
+struct yetty_yrich_cell_addr {
+  int32_t row;
+  int32_t col;
+};
+struct yetty_yrich_cell_addr_result {
+  int ok;
+  union {
+    struct yetty_yrich_cell_addr value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_yrich_cell_range {
+  struct yetty_yrich_cell_addr start;
+  struct yetty_yrich_cell_addr end;
+};
+struct yetty_yrich_drawable_list_ptr_result {
+  int ok;
+  union {
+    struct yetty_ydraw_drawable_list *value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_yrich_element_id_result {
+  int ok;
+  union {
+    yetty_yrich_element_id value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_yrich_history {
+  struct yetty_yrich_command **undo_stack;
+  size_t undo_count;
+  size_t undo_capacity;
+  struct yetty_yrich_command **redo_stack;
+  size_t redo_count;
+  size_t redo_capacity;
+  size_t max_size;
+};
+struct yetty_yrich_op_log {
+  struct yetty_yrich_operation **ops;
+  size_t count;
+  size_t capacity;
+  uint64_t current_ts;
+};
+struct yetty_yrich_operation_ptr_result {
+  int ok;
+  union {
+    struct yetty_yrich_operation *value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_yrich_rect {
+  float x;
+  float y;
+  float w;
+  float h;
+};
+struct yetty_yrich_selection_cells {
+  struct yetty_yrich_cell_range range;
+  struct yetty_yrich_cell_addr active;
+};
+struct yetty_yrich_selection_elements {
+  yetty_yrich_element_id *ids;
+  size_t count;
+  size_t capacity;
+};
+struct yetty_yrich_selection_text {
+  yetty_yrich_element_id element_id;
+  int32_t start;
+  int32_t end;
+};
+struct yetty_yrich_selection {
+  uint32_t kind;
+  union {
+    struct yetty_yrich_selection_elements elements;
+    struct yetty_yrich_selection_cells cells;
+    struct yetty_yrich_selection_text text;
+  } u;
+};
+struct yetty_yrich_selection_ptr_result {
+  int ok;
+  union {
+    struct yetty_yrich_selection *value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_yrich_slide_ptr_result {
+  int ok;
+  union {
+    struct yetty_yrich_slide *value;
+    struct yetty_ycore_error error;
+  };
+};
+struct yetty_yrich_text_style {
+  float font_size;
+  uint32_t color;
+  uint32_t bg_color;
+  uint32_t format;
+  int32_t font_id;
+};
+struct yetty_yvterm_text_cell_const_ptr_result {
+  int ok;
+  union {
+    const struct yetty_yvterm_text_cell *value;
+    struct yetty_ycore_error error;
+  };
 };
 struct ymusic_staff {
   int clef;
@@ -266,6 +513,11 @@ M.yetty_yrender_uniform_type = {
   YETTY_YRENDER_UNIFORM_MAT4 = 4,
   YETTY_YRENDER_UNIFORM_U32 = 5,
   YETTY_YRENDER_UNIFORM_I32 = 6,
+}
+M.yetty_ygui_csi_state = {
+  YETTY_YGUI_CSI_NORMAL = 0,
+  YETTY_YGUI_CSI_ESC = 1,
+  YETTY_YGUI_CSI_BRACKET = 2,
 }
 M.yetty_ygui_flex_align = {
   YETTY_YGUI_ALIGN_START = 0,
@@ -294,5 +546,10 @@ M.ymusic_clef = {
   YMUSIC_CLEF_BASS = 1,
   YMUSIC_CLEF_ALTO = 2,
   YMUSIC_CLEF_TENOR = 3,
+}
+M.yetty_yrich_app_kind = {
+  YETTY_YRICH_APP_YDOC = 0,
+  YETTY_YRICH_APP_YSHEET = 1,
+  YETTY_YRICH_APP_YSLIDE = 2,
 }
 return M

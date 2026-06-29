@@ -16,7 +16,8 @@
  * Standalone-mode ygui demo. Press 'q' (or Ctrl-C / Ctrl-D) to quit.
  */
 
-#include "../runner.h"
+#include <yetty/yguiapp/app.h>
+#include <yetty/yguiapp/run.h>
 #include <yetty/ygui/ygui.h>
 
 #include <string.h>
@@ -155,10 +156,22 @@ static void add_md_section(struct yetty_yclass_object *area, const char *title, 
     finalize_section(sec);
 }
 
-static struct yetty_ycore_void_result build(struct demo_runner *runner,
+/* Demo app class: a yguiapp:app subclass with no extra state. */
+struct [[clang::annotate("class@demoygui:24_ymarkdown")]] [[clang::annotate("parent@yguiapp:app")]]
+yetty_demoygui_24_ymarkdown {
+    int unused;
+};
+
+/* Result wrapper + class accessor forward-decls (this TU does not include its
+ * own generated header; main.gen.c is #included at the foot). */
+YETTY_YRESULT_DECLARE(yetty_demoygui_24_ymarkdown_ptr, struct yetty_demoygui_24_ymarkdown *);
+struct yetty_yclass_ptr_result yetty_demoygui_24_ymarkdown_class_get(void);
+
+[[clang::annotate("override@yguiapp:app:build")]]
+static struct yetty_ycore_void_result build(struct yetty_yclass_object *app,
                                             struct yetty_yclass_object *root)
 {
-    (void)runner;
+    (void)app;
 
     /* Scrollarea fills the window and stacks the feature sections. */
     struct yetty_yclass_object_ptr_result sr =
@@ -241,5 +254,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 
 int main(int argc, char **argv)
 {
-    return demo_runner_run(argc, argv, "24_ymarkdown", build);
+    return yetty_yguiapp_run_main(argc, argv, yetty_demoygui_24_ymarkdown_class_get().value);
 }
+
+#include "main.gen.c"

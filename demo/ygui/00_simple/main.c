@@ -1,15 +1,27 @@
 /*
  * Demo 00_simple: a single button with a click callback.
  *
- * Standalone-mode ygui demo. The runner brings up window + GPU +
- * receiver-side container; this file only adds one button and wires its
- * click event. Click the button to change its label; press 'q' (or
- * Ctrl-C / Ctrl-D) to quit.
+ * A yguiapp:app subclass that overrides only build(): the shared yguiapp host
+ * brings up window + GPU (standalone) or the in-terminal client; this file only
+ * adds one button and wires its click event. Click the button to change its
+ * label; press 'q' (or Ctrl-C / Ctrl-D) to quit.
  */
 
-#include "../runner.h"
+#include <yetty/yguiapp/app.h>
+#include <yetty/yguiapp/run.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/ygui/mixins/clickable.h>
+
+/* Demo app class: a yguiapp:app subclass with no extra state. */
+struct [[clang::annotate("class@demoygui:00_simple")]] [[clang::annotate("parent@yguiapp:app")]]
+yetty_demoygui_00_simple {
+    int unused;
+};
+
+/* Result wrapper + class accessor forward-decls (this TU does not include its
+ * own generated header; main.gen.c is #included at the foot). */
+YETTY_YRESULT_DECLARE(yetty_demoygui_00_simple_ptr, struct yetty_demoygui_00_simple *);
+struct yetty_yclass_ptr_result yetty_demoygui_00_simple_class_get(void);
 
 static inline void err_ok(struct yetty_ycore_void_result r)
 {
@@ -26,10 +38,11 @@ static struct yetty_ycore_void_result on_click(struct yetty_yclass_object *obj, 
     return yetty_ygui_button_set_label(obj, "Clicked!");
 }
 
-static struct yetty_ycore_void_result build(struct demo_runner *runner,
+[[clang::annotate("override@yguiapp:app:build")]]
+static struct yetty_ycore_void_result build(struct yetty_yclass_object *app,
                                             struct yetty_yclass_object *root)
 {
-    (void)runner;
+    (void)app;
 
     struct yetty_yclass_object_ptr_result br =
         yetty_ygui_widget_add(root, yetty_ygui_button_class_get().value);
@@ -50,5 +63,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 
 int main(int argc, char **argv)
 {
-    return demo_runner_run(argc, argv, "00_simple", build);
+    return yetty_yguiapp_run_main(argc, argv, yetty_demoygui_00_simple_class_get().value);
 }
+
+#include "main.gen.c"

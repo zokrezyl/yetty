@@ -1,78 +1,846 @@
 methods: []
 classes:
-  - name: app
+  - name: 00_simple
     domain: demoygui
-    accessor: yetty_demoygui_app_class_get
+    accessor: yetty_demoygui_00_simple_class_get
     type: regular
-    source_file: demo/ygui/runner.c
+    source_file: demo/ygui/00_simple/main.c
     parent:
-      domain: yapp
+      domain: yguiapp
       name: app
     mixins: []
-    data: struct yetty_demoygui_app
+    data: struct yetty_demoygui_00_simple
     data_fields:
-      - name: runner
-        type: struct demo_runner
+      - name: unused
+        type: int
         get: false
         set: false
     ops:
-      - slot: init
-        slot_domain: yapp
-        impl: demoygui_app_init
-      - slot: run
-        slot_domain: yapp
-        impl: demoygui_app_run
-    doc: "/*
- * yclass app wrapper. The standalone bring-up is a yapp:app subclass: the
- * shared glfw_platform brings up the window/surface/GPU/channels and drives the
- * run override below. The heavy per-demo state stays in `struct demo_runner`
- * (the build_fn API the numbered demos depend on); the app data block just
- * embeds it. demo_runner_run creates the app, stamps name/build/enable_chrome
- * onto the embedded runner, then runs the platform sequence.
- *
- * yclass: the only hand-written file is this annotated runner.c; runner.gen.c is
- * #included at the foot.
- */"
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 01_button_test
+    domain: demoygui
+    accessor: yetty_demoygui_01_button_test_class_get
+    type: regular
+    source_file: demo/ygui/01_button_test/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_01_button_test
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 02_coord_debug
+    domain: demoygui
+    accessor: yetty_demoygui_02_coord_debug_class_get
+    type: regular
+    source_file: demo/ygui/02_coord_debug/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_02_coord_debug
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 03_all_widgets
+    domain: demoygui
+    accessor: yetty_demoygui_03_all_widgets_class_get
+    type: regular
+    source_file: demo/ygui/03_all_widgets/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_03_all_widgets
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 04_edge_test
+    domain: demoygui
+    accessor: yetty_demoygui_04_edge_test_class_get
+    type: regular
+    source_file: demo/ygui/04_edge_test/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_04_edge_test
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 05_debug_events
+    domain: demoygui
+    accessor: yetty_demoygui_05_debug_events_class_get
+    type: regular
+    source_file: demo/ygui/05_debug_events/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_05_debug_events
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 06_hello_button
+    domain: demoygui
+    accessor: yetty_demoygui_06_hello_button_class_get
+    type: regular
+    source_file: demo/ygui/06_hello_button/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_06_hello_button
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 07_label_and_button
+    domain: demoygui
+    accessor: yetty_demoygui_07_label_and_button_class_get
+    type: regular
+    source_file: demo/ygui/07_label_and_button/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_07_label_and_button
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 08_slider
+    domain: demoygui
+    accessor: yetty_demoygui_08_slider_class_get
+    type: regular
+    source_file: demo/ygui/08_slider/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_08_slider
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 09_checkbox
+    domain: demoygui
+    accessor: yetty_demoygui_09_checkbox_class_get
+    type: regular
+    source_file: demo/ygui/09_checkbox/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_09_checkbox
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 10_panel_layout
+    domain: demoygui
+    accessor: yetty_demoygui_10_panel_layout_class_get
+    type: regular
+    source_file: demo/ygui/10_panel_layout/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_10_panel_layout
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 11_progress_bar
+    domain: demoygui
+    accessor: yetty_demoygui_11_progress_bar_class_get
+    type: regular
+    source_file: demo/ygui/11_progress_bar/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_11_progress_bar
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 12_calculator
+    domain: demoygui
+    accessor: yetty_demoygui_12_calculator_class_get
+    type: regular
+    source_file: demo/ygui/12_calculator/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_12_calculator
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 13_color_mixer
+    domain: demoygui
+    accessor: yetty_demoygui_13_color_mixer_class_get
+    type: regular
+    source_file: demo/ygui/13_color_mixer/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_13_color_mixer
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 14_todo_list
+    domain: demoygui
+    accessor: yetty_demoygui_14_todo_list_class_get
+    type: regular
+    source_file: demo/ygui/14_todo_list/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_14_todo_list
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 15_dashboard
+    domain: demoygui
+    accessor: yetty_demoygui_15_dashboard_class_get
+    type: regular
+    source_file: demo/ygui/15_dashboard/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_15_dashboard
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 16_new_widgets
+    domain: demoygui
+    accessor: yetty_demoygui_16_new_widgets_class_get
+    type: regular
+    source_file: demo/ygui/16_new_widgets/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_16_new_widgets
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 17_flex_row
+    domain: demoygui
+    accessor: yetty_demoygui_17_flex_row_class_get
+    type: regular
+    source_file: demo/ygui/17_flex_row/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_17_flex_row
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 18_flex_column
+    domain: demoygui
+    accessor: yetty_demoygui_18_flex_column_class_get
+    type: regular
+    source_file: demo/ygui/18_flex_column/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_18_flex_column
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 19_flex_dashboard
+    domain: demoygui
+    accessor: yetty_demoygui_19_flex_dashboard_class_get
+    type: regular
+    source_file: demo/ygui/19_flex_dashboard/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_19_flex_dashboard
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 20_tree_view
+    domain: demoygui
+    accessor: yetty_demoygui_20_tree_view_class_get
+    type: regular
+    source_file: demo/ygui/20_tree_view/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_20_tree_view
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 21_tree_with_panes
+    domain: demoygui
+    accessor: yetty_demoygui_21_tree_with_panes_class_get
+    type: regular
+    source_file: demo/ygui/21_tree_with_panes/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_21_tree_with_panes
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 22_tree_complex
+    domain: demoygui
+    accessor: yetty_demoygui_22_tree_complex_class_get
+    type: regular
+    source_file: demo/ygui/22_tree_complex/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_22_tree_complex
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 23_rich_tabbar
+    domain: demoygui
+    accessor: yetty_demoygui_23_rich_tabbar_class_get
+    type: regular
+    source_file: demo/ygui/23_rich_tabbar/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_23_rich_tabbar
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 24_ymarkdown
+    domain: demoygui
+    accessor: yetty_demoygui_24_ymarkdown_class_get
+    type: regular
+    source_file: demo/ygui/24_ymarkdown/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_24_ymarkdown
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 25_ypdf
+    domain: demoygui
+    accessor: yetty_demoygui_25_ypdf_class_get
+    type: regular
+    source_file: demo/ygui/25_ypdf/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_25_ypdf
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 26_ybrowser
+    domain: demoygui
+    accessor: yetty_demoygui_26_ybrowser_class_get
+    type: regular
+    source_file: demo/ygui/26_ybrowser/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_26_ybrowser
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 27_yjungle
+    domain: demoygui
+    accessor: yetty_demoygui_27_yjungle_class_get
+    type: regular
+    source_file: demo/ygui/27_yjungle/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_27_yjungle
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 28_yzoo
+    domain: demoygui
+    accessor: yetty_demoygui_28_yzoo_class_get
+    type: regular
+    source_file: demo/ygui/28_yzoo/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_28_yzoo
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 29_yimage
+    domain: demoygui
+    accessor: yetty_demoygui_29_yimage_class_get
+    type: regular
+    source_file: demo/ygui/29_yimage/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_29_yimage
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 30_radio
+    domain: demoygui
+    accessor: yetty_demoygui_30_radio_class_get
+    type: regular
+    source_file: demo/ygui/30_radio/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_30_radio
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 31_spinner
+    domain: demoygui
+    accessor: yetty_demoygui_31_spinner_class_get
+    type: regular
+    source_file: demo/ygui/31_spinner/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_31_spinner
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 32_splitter
+    domain: demoygui
+    accessor: yetty_demoygui_32_splitter_class_get
+    type: regular
+    source_file: demo/ygui/32_splitter/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_32_splitter
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 33_dialog
+    domain: demoygui
+    accessor: yetty_demoygui_33_dialog_class_get
+    type: regular
+    source_file: demo/ygui/33_dialog/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_33_dialog
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 34_textarea
+    domain: demoygui
+    accessor: yetty_demoygui_34_textarea_class_get
+    type: regular
+    source_file: demo/ygui/34_textarea/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_34_textarea
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 35_collapsing_header_open
+    domain: demoygui
+    accessor: yetty_demoygui_35_collapsing_header_open_class_get
+    type: regular
+    source_file: demo/ygui/35_collapsing_header_open/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_35_collapsing_header_open
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 36_ydiagram
+    domain: demoygui
+    accessor: yetty_demoygui_36_ydiagram_class_get
+    type: regular
+    source_file: demo/ygui/36_ydiagram/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_36_ydiagram
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 37_scrollarea
+    domain: demoygui
+    accessor: yetty_demoygui_37_scrollarea_class_get
+    type: regular
+    source_file: demo/ygui/37_scrollarea/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_37_scrollarea
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 38_ynodes
+    domain: demoygui
+    accessor: yetty_demoygui_38_ynodes_class_get
+    type: regular
+    source_file: demo/ygui/38_ynodes/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_38_ynodes
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 40_ymaze
+    domain: demoygui
+    accessor: yetty_demoygui_40_ymaze_class_get
+    type: regular
+    source_file: demo/ygui/40_ymaze/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_40_ymaze
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 41_yshadertoy
+    domain: demoygui
+    accessor: yetty_demoygui_41_yshadertoy_class_get
+    type: regular
+    source_file: demo/ygui/41_yshadertoy/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_41_yshadertoy
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
+  - name: 42_window_chrome
+    domain: demoygui
+    accessor: yetty_demoygui_42_window_chrome_class_get
+    type: regular
+    source_file: demo/ygui/42_window_chrome/main.c
+    parent:
+      domain: yguiapp
+      name: app
+    mixins: []
+    data: struct yetty_demoygui_42_window_chrome
+    data_fields:
+      - name: unused
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: build
+        slot_domain: yguiapp
+        impl: build
+    doc: "/* Demo app class: a yguiapp:app subclass with no extra state. */"
 types:
-  - name: demo_runner
-    kind: struct
-    fields:
-      - name: name
-        type: "const char *"
-      - name: build
-        type: demo_build_fn
-      - name: engine
-        type: "struct yetty_yclass_object *"
-      - name: root
-        type: "struct yetty_yclass_object *"
-      - name: yframework
-        type: "struct yetty_yframework *"
-      - name: root_container
-        type: "struct yetty_yclass_object *"
-      - name: figure_registry
-        type: "struct yetty_yfigure_registry *"
-      - name: composite_factory
-        type: "struct yetty_ydraw_composite_factory *"
-      - name: font
-        type: "struct yetty_yfont_font *"
-      - name: figure_args
-        type: struct yetty_ygrid_factory_args
-      - name: listener
-        type: struct yetty_yevent_event_listener
-      - name: frame_listener
-        type: struct yetty_yevent_event_listener
-      - name: frame_timer
-        type: yetty_yevent_timer_id
-      - name: render_target
-        type: "struct yetty_ydraw_target *"
-      - name: enable_chrome
-        type: int
-      - name: chrome
-        type: "struct yetty_yclass_object *"
-      - name: chrome_caption
-        type: "struct yetty_ygrid_grid *"
-      - name: chrome_last_hover
-        type: int
   - name: yetty_yclass_object_ptr_result
     kind: result
     fields:
@@ -98,37 +866,104 @@ types:
         type: int
       - name: cause
         type: "struct yetty_ycore_error *"
-  - name: yetty_yevent_event_listener
-    kind: struct
-    fields:
-      - name: handler
-        type: yetty_ycore_event_handler
-  - name: yetty_ygrid_factory_args
-    kind: struct
-    fields:
-      - name: default_font
-        type: "struct yetty_yfont_font *"
-      - name: composite_factory
-        type: "struct yetty_ydraw_composite_factory *"
-      - name: absolute_coords
-        type: int
 local_types:
-  demo_runner: demo/ygui/runner.c
-  yetty_demoygui_app: demo/ygui/runner.c
-  yetty_demoygui_app_ptr_result: demo/ygui/runner.c
+  yetty_demoygui_00_simple: demo/ygui/00_simple/main.c
+  yetty_demoygui_00_simple_ptr_result: demo/ygui/00_simple/main.c
+  yetty_demoygui_01_button_test: demo/ygui/01_button_test/main.c
+  yetty_demoygui_01_button_test_ptr_result: demo/ygui/01_button_test/main.c
+  yetty_demoygui_02_coord_debug: demo/ygui/02_coord_debug/main.c
+  yetty_demoygui_02_coord_debug_ptr_result: demo/ygui/02_coord_debug/main.c
+  yetty_demoygui_03_all_widgets: demo/ygui/03_all_widgets/main.c
+  yetty_demoygui_03_all_widgets_ptr_result: demo/ygui/03_all_widgets/main.c
+  yetty_demoygui_04_edge_test: demo/ygui/04_edge_test/main.c
+  yetty_demoygui_04_edge_test_ptr_result: demo/ygui/04_edge_test/main.c
+  yetty_demoygui_05_debug_events: demo/ygui/05_debug_events/main.c
+  yetty_demoygui_05_debug_events_ptr_result: demo/ygui/05_debug_events/main.c
+  yetty_demoygui_06_hello_button: demo/ygui/06_hello_button/main.c
+  yetty_demoygui_06_hello_button_ptr_result: demo/ygui/06_hello_button/main.c
+  yetty_demoygui_07_label_and_button: demo/ygui/07_label_and_button/main.c
+  yetty_demoygui_07_label_and_button_ptr_result: demo/ygui/07_label_and_button/main.c
+  yetty_demoygui_08_slider: demo/ygui/08_slider/main.c
+  yetty_demoygui_08_slider_ptr_result: demo/ygui/08_slider/main.c
+  yetty_demoygui_09_checkbox: demo/ygui/09_checkbox/main.c
+  yetty_demoygui_09_checkbox_ptr_result: demo/ygui/09_checkbox/main.c
+  yetty_demoygui_10_panel_layout: demo/ygui/10_panel_layout/main.c
+  yetty_demoygui_10_panel_layout_ptr_result: demo/ygui/10_panel_layout/main.c
+  yetty_demoygui_11_progress_bar: demo/ygui/11_progress_bar/main.c
+  yetty_demoygui_11_progress_bar_ptr_result: demo/ygui/11_progress_bar/main.c
+  yetty_demoygui_12_calculator: demo/ygui/12_calculator/main.c
+  yetty_demoygui_12_calculator_ptr_result: demo/ygui/12_calculator/main.c
+  yetty_demoygui_13_color_mixer: demo/ygui/13_color_mixer/main.c
+  yetty_demoygui_13_color_mixer_ptr_result: demo/ygui/13_color_mixer/main.c
+  yetty_demoygui_14_todo_list: demo/ygui/14_todo_list/main.c
+  yetty_demoygui_14_todo_list_ptr_result: demo/ygui/14_todo_list/main.c
+  yetty_demoygui_15_dashboard: demo/ygui/15_dashboard/main.c
+  yetty_demoygui_15_dashboard_ptr_result: demo/ygui/15_dashboard/main.c
+  yetty_demoygui_16_new_widgets: demo/ygui/16_new_widgets/main.c
+  yetty_demoygui_16_new_widgets_ptr_result: demo/ygui/16_new_widgets/main.c
+  yetty_demoygui_17_flex_row: demo/ygui/17_flex_row/main.c
+  yetty_demoygui_17_flex_row_ptr_result: demo/ygui/17_flex_row/main.c
+  yetty_demoygui_18_flex_column: demo/ygui/18_flex_column/main.c
+  yetty_demoygui_18_flex_column_ptr_result: demo/ygui/18_flex_column/main.c
+  yetty_demoygui_19_flex_dashboard: demo/ygui/19_flex_dashboard/main.c
+  yetty_demoygui_19_flex_dashboard_ptr_result: demo/ygui/19_flex_dashboard/main.c
+  yetty_demoygui_20_tree_view: demo/ygui/20_tree_view/main.c
+  yetty_demoygui_20_tree_view_ptr_result: demo/ygui/20_tree_view/main.c
+  yetty_demoygui_21_tree_with_panes: demo/ygui/21_tree_with_panes/main.c
+  yetty_demoygui_21_tree_with_panes_ptr_result: demo/ygui/21_tree_with_panes/main.c
+  yetty_demoygui_22_tree_complex: demo/ygui/22_tree_complex/main.c
+  yetty_demoygui_22_tree_complex_ptr_result: demo/ygui/22_tree_complex/main.c
+  yetty_demoygui_23_rich_tabbar: demo/ygui/23_rich_tabbar/main.c
+  yetty_demoygui_23_rich_tabbar_ptr_result: demo/ygui/23_rich_tabbar/main.c
+  yetty_demoygui_24_ymarkdown: demo/ygui/24_ymarkdown/main.c
+  yetty_demoygui_24_ymarkdown_ptr_result: demo/ygui/24_ymarkdown/main.c
+  yetty_demoygui_25_ypdf: demo/ygui/25_ypdf/main.c
+  yetty_demoygui_25_ypdf_ptr_result: demo/ygui/25_ypdf/main.c
+  yetty_demoygui_26_ybrowser: demo/ygui/26_ybrowser/main.c
+  yetty_demoygui_26_ybrowser_ptr_result: demo/ygui/26_ybrowser/main.c
+  yetty_demoygui_27_yjungle: demo/ygui/27_yjungle/main.c
+  yetty_demoygui_27_yjungle_ptr_result: demo/ygui/27_yjungle/main.c
+  yetty_demoygui_28_yzoo: demo/ygui/28_yzoo/main.c
+  yetty_demoygui_28_yzoo_ptr_result: demo/ygui/28_yzoo/main.c
+  yetty_demoygui_29_yimage: demo/ygui/29_yimage/main.c
+  yetty_demoygui_29_yimage_ptr_result: demo/ygui/29_yimage/main.c
+  yetty_demoygui_30_radio: demo/ygui/30_radio/main.c
+  yetty_demoygui_30_radio_ptr_result: demo/ygui/30_radio/main.c
+  yetty_demoygui_31_spinner: demo/ygui/31_spinner/main.c
+  yetty_demoygui_31_spinner_ptr_result: demo/ygui/31_spinner/main.c
+  yetty_demoygui_32_splitter: demo/ygui/32_splitter/main.c
+  yetty_demoygui_32_splitter_ptr_result: demo/ygui/32_splitter/main.c
+  yetty_demoygui_33_dialog: demo/ygui/33_dialog/main.c
+  yetty_demoygui_33_dialog_ptr_result: demo/ygui/33_dialog/main.c
+  yetty_demoygui_34_textarea: demo/ygui/34_textarea/main.c
+  yetty_demoygui_34_textarea_ptr_result: demo/ygui/34_textarea/main.c
+  yetty_demoygui_35_collapsing_header_open: demo/ygui/35_collapsing_header_open/main.c
+  yetty_demoygui_35_collapsing_header_open_ptr_result: demo/ygui/35_collapsing_header_open/main.c
+  yetty_demoygui_36_ydiagram: demo/ygui/36_ydiagram/main.c
+  yetty_demoygui_36_ydiagram_ptr_result: demo/ygui/36_ydiagram/main.c
+  yetty_demoygui_37_scrollarea: demo/ygui/37_scrollarea/main.c
+  yetty_demoygui_37_scrollarea_ptr_result: demo/ygui/37_scrollarea/main.c
+  yetty_demoygui_38_ynodes: demo/ygui/38_ynodes/main.c
+  yetty_demoygui_38_ynodes_ptr_result: demo/ygui/38_ynodes/main.c
+  yetty_demoygui_40_ymaze: demo/ygui/40_ymaze/main.c
+  yetty_demoygui_40_ymaze_ptr_result: demo/ygui/40_ymaze/main.c
+  yetty_demoygui_41_yshadertoy: demo/ygui/41_yshadertoy/main.c
+  yetty_demoygui_41_yshadertoy_ptr_result: demo/ygui/41_yshadertoy/main.c
+  yetty_demoygui_42_window_chrome: demo/ygui/42_window_chrome/main.c
+  yetty_demoygui_42_window_chrome_ptr_result: demo/ygui/42_window_chrome/main.c
 local_typedefs:
   __int128_t:
-    source_file: demo/ygui/runner.c
+    source_file: demo/ygui/00_simple/main.c
     text: typedef __int128 __int128_t;
   __uint128_t:
-    source_file: demo/ygui/runner.c
+    source_file: demo/ygui/00_simple/main.c
     text: typedef unsigned __int128 __uint128_t;
   __NSConstantString:
-    source_file: demo/ygui/runner.c
+    source_file: demo/ygui/00_simple/main.c
     text: typedef struct __NSConstantString_tag __NSConstantString;
   __builtin_ms_va_list:
-    source_file: demo/ygui/runner.c
+    source_file: demo/ygui/00_simple/main.c
     text: "typedef char *__builtin_ms_va_list;"
   __builtin_va_list:
-    source_file: demo/ygui/runner.c
+    source_file: demo/ygui/00_simple/main.c
     text: "typedef struct __va_list_tag[1] __builtin_va_list;"

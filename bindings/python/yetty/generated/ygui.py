@@ -1326,6 +1326,12 @@ def framework_attach(obj: Any, read_fd: int, write_fd: int, compressed: int) -> 
     res = _fn(_rt.handle(obj), read_fd, write_fd, compressed)
     return _rt.result_from_c(res)
 
+def framework_attach_transport(obj: Any, transport: Any) -> _rt.Result[None]:
+    """Call `yetty_ygui_framework_attach_transport`."""
+    _fn = _rt.cfn("yetty_ygui_framework_attach_transport", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(transport))
+    return _rt.result_from_c(res)
+
 def framework_set_viewport(obj: Any, width_px: float, height_px: float) -> _rt.Result[None]:
     """Call `yetty_ygui_framework_set_viewport`."""
     _fn = _rt.cfn("yetty_ygui_framework_set_viewport", _t.yetty_ycore_void_result, [c_void_p, c_float, c_float])

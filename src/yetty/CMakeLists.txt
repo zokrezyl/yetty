@@ -259,6 +259,14 @@ endif()
 # yetty_yplatform_window_chrome.
 add_subdirectory(ychrome)
 
+# yguiapp — generic ygui application host (yclass). Generalizes the per-demo
+# bring-up that used to live in demo/ygui/runner.c: standalone window/GPU host,
+# the in-terminal (TERM_PROGRAM=yetty) host, window chrome, and a dual-mode
+# launcher. Needs ygui + the GPU services layer, so gate it like the demos.
+if(YETTY_ENABLE_FEATURE_YGUI AND YETTY_ENABLE_LIB_WEBGPU)
+    add_subdirectory(yguiapp)
+endif()
+
 # ymusic — LilyPond-subset music renderer. Needs the ydraw-core record builder,
 # the SDF primitives and the yface envelope encoder (same set as yflame).
 if(YETTY_ENABLE_FEATURE_YMUSIC AND YETTY_ENABLE_FEATURE_YDRAW AND YETTY_ENABLE_FEATURE_YFACE)

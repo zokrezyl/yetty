@@ -68,6 +68,30 @@ classes:
         type: struct yetty_yevent_event_listener
         get: false
         set: false
+      - name: frame_listener
+        type: struct yetty_yevent_event_listener
+        get: false
+        set: false
+      - name: frame_timer
+        type: yetty_yevent_timer_id
+        get: false
+        set: false
+      - name: chrome_enabled
+        type: int
+        get: false
+        set: false
+      - name: chrome
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: chrome_caption
+        type: "struct yetty_ygrid_grid *"
+        get: false
+        set: false
+      - name: chrome_last_hover
+        type: int
+        get: false
+        set: false
     ops:
       - slot: build
         slot_domain: yguiapp

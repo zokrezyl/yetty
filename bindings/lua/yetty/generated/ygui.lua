@@ -3,6 +3,7 @@ local ffi = require("ffi")
 local rt = require("yetty.runtime")
 require("yetty.generated._types")
 ffi.cdef[[
+struct yetty_yclass_object_ptr_result yetty_ygui_framework_create(struct yetty_yclass_ctx *);
 struct yetty_yclass_object_ptr_result yetty_ygui_primitive_widget_create(struct yetty_yclass_ctx *);
 struct yetty_yclass_object_ptr_result yetty_ygui_widget_create(struct yetty_yclass_ctx *);
 struct yetty_yclass_object_ptr_result yetty_ygui_breadcrumbs_create(struct yetty_yclass_ctx *);
@@ -58,17 +59,33 @@ struct yetty_yclass_object_ptr_result yetty_ygui_yrich_view_create(struct yetty_
 struct yetty_yclass_object_ptr_result yetty_ygui_yshadertoy_create(struct yetty_yclass_ctx *);
 struct yetty_yclass_object_ptr_result yetty_ygui_yvideo_create(struct yetty_yclass_ctx *);
 struct yetty_yclass_object_ptr_result yetty_ygui_yzoo_create(struct yetty_yclass_ctx *);
-struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, int);
-struct yetty_ycore_int_result yetty_ygui_widget_on_release(struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, int);
-struct yetty_ycore_int_result yetty_ygui_widget_on_motion(struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float);
-struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
-struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
-struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_ctx *, struct yetty_yclass_object *);
-struct yetty_ycore_int_result yetty_ygui_widget_on_scroll(struct yetty_yclass_ctx *, struct yetty_yclass_object *, float, float, float, float);
-struct yetty_ycore_void_result yetty_ygui_widget_paint(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
-struct yetty_ycore_void_result yetty_ygui_widget_emit_container(struct yetty_yclass_ctx *, struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
+struct yetty_ycore_void_result yetty_ygui_constructor(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_ygui_destructor(struct yetty_yclass_object *);
+struct yetty_ycore_int_result yetty_ygui_widget_on_press(struct yetty_yclass_object *, float, float, int);
+struct yetty_ycore_int_result yetty_ygui_widget_on_release(struct yetty_yclass_object *, float, float, int);
+struct yetty_ycore_int_result yetty_ygui_widget_on_motion(struct yetty_yclass_object *, float, float);
+struct yetty_ycore_void_result yetty_ygui_widget_emit_body(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
+struct yetty_ycore_int_result yetty_ygui_widget_on_scroll(struct yetty_yclass_object *, float, float, float, float);
+struct yetty_ycore_void_result yetty_ygui_widget_paint(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
+struct yetty_ycore_void_result yetty_ygui_widget_emit_container(struct yetty_yclass_object *, struct yetty_ygui_emit_ctx *);
 ]]
 local M = {}
+local Framework = {}
+Framework.__index = Framework
+function Framework.new()
+  local res = rt.C().yetty_ygui_framework_create(nil)
+  rt.check(res)
+  return setmetatable({ handle = res.value }, Framework)
+end
+function Framework:constructor()
+  local res = rt.C().yetty_ygui_constructor(nil, self.handle)
+  rt.check(res)
+end
+function Framework:destructor()
+  local res = rt.C().yetty_ygui_destructor(nil, self.handle)
+  rt.check(res)
+end
+M.Framework = Framework
 local PrimitiveWidget = {}
 PrimitiveWidget.__index = PrimitiveWidget
 function PrimitiveWidget.new()
@@ -76,8 +93,8 @@ function PrimitiveWidget.new()
   rt.check(res)
   return setmetatable({ handle = res.value }, PrimitiveWidget)
 end
-function PrimitiveWidget:widget_emit_body(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
+function PrimitiveWidget:widget_emit_body()
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle)
   rt.check(res)
 end
 M.PrimitiveWidget = PrimitiveWidget
@@ -96,36 +113,36 @@ function Widget:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Widget:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
+function Widget:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
-function Widget:widget_on_release(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_release(nil, self.handle, x, y, button)
+function Widget:widget_on_release(y, button)
+  local res = rt.C().yetty_ygui_widget_on_release(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
-function Widget:widget_on_motion(x, y)
-  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, x, y)
+function Widget:widget_on_motion(y)
+  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, y)
   rt.check(res)
   return res.value
 end
-function Widget:widget_on_scroll(x, y, dx, dy)
-  local res = rt.C().yetty_ygui_widget_on_scroll(nil, self.handle, x, y, dx, dy)
+function Widget:widget_on_scroll(y, dx, dy)
+  local res = rt.C().yetty_ygui_widget_on_scroll(nil, self.handle, y, dx, dy)
   rt.check(res)
   return res.value
 end
-function Widget:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Widget:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
-function Widget:widget_emit_container(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_container(nil, self.handle, emit_ctx)
+function Widget:widget_emit_container()
+  local res = rt.C().yetty_ygui_widget_emit_container(nil, self.handle)
   rt.check(res)
 end
-function Widget:widget_emit_body(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
+function Widget:widget_emit_body()
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle)
   rt.check(res)
 end
 M.Widget = Widget
@@ -144,8 +161,8 @@ function Breadcrumbs:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Breadcrumbs:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Breadcrumbs:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Breadcrumbs = Breadcrumbs
@@ -164,8 +181,8 @@ function Button:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Button:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Button:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Button = Button
@@ -184,8 +201,8 @@ function Checkbox:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Checkbox:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Checkbox:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Checkbox = Checkbox
@@ -204,8 +221,8 @@ function Chip:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Chip:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Chip:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Chip = Chip
@@ -224,13 +241,13 @@ function Choicebox:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Choicebox:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
+function Choicebox:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
-function Choicebox:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Choicebox:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Choicebox = Choicebox
@@ -249,13 +266,13 @@ function CollapsingHeader:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function CollapsingHeader:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
+function CollapsingHeader:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
-function CollapsingHeader:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function CollapsingHeader:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.CollapsingHeader = CollapsingHeader
@@ -270,8 +287,8 @@ function Colorpicker:constructor()
   local res = rt.C().yetty_ygui_constructor(nil, self.handle)
   rt.check(res)
 end
-function Colorpicker:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Colorpicker:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Colorpicker = Colorpicker
@@ -290,8 +307,8 @@ function Combobox:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Combobox:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Combobox:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Combobox = Combobox
@@ -306,12 +323,12 @@ function Datepicker:constructor()
   local res = rt.C().yetty_ygui_constructor(nil, self.handle)
   rt.check(res)
 end
-function Datepicker:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Datepicker:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
-function Datepicker:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
+function Datepicker:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
@@ -331,8 +348,8 @@ function Dialog:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Dialog:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Dialog:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Dialog = Dialog
@@ -351,8 +368,8 @@ function Dropdown:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Dropdown:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Dropdown:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Dropdown = Dropdown
@@ -371,22 +388,22 @@ function Filepicker:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Filepicker:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Filepicker:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
-function Filepicker:widget_on_motion(x, y)
-  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, x, y)
-  rt.check(res)
-  return res.value
-end
-function Filepicker:widget_on_scroll(x, y, dx, dy)
-  local res = rt.C().yetty_ygui_widget_on_scroll(nil, self.handle, x, y, dx, dy)
+function Filepicker:widget_on_motion(y)
+  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, y)
   rt.check(res)
   return res.value
 end
-function Filepicker:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
+function Filepicker:widget_on_scroll(y, dx, dy)
+  local res = rt.C().yetty_ygui_widget_on_scroll(nil, self.handle, y, dx, dy)
+  rt.check(res)
+  return res.value
+end
+function Filepicker:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
@@ -418,8 +435,8 @@ function Label:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Label:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Label:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Label = Label
@@ -438,13 +455,13 @@ function List:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function List:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
+function List:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
-function List:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function List:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.List = List
@@ -471,8 +488,8 @@ function Panel:constructor()
   local res = rt.C().yetty_ygui_constructor(nil, self.handle)
   rt.check(res)
 end
-function Panel:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Panel:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Panel = Panel
@@ -491,17 +508,17 @@ function PopupMenu:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function PopupMenu:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function PopupMenu:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
-function PopupMenu:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
+function PopupMenu:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
-function PopupMenu:widget_on_motion(x, y)
-  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, x, y)
+function PopupMenu:widget_on_motion(y)
+  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, y)
   rt.check(res)
   return res.value
 end
@@ -517,8 +534,8 @@ function Progress:constructor()
   local res = rt.C().yetty_ygui_constructor(nil, self.handle)
   rt.check(res)
 end
-function Progress:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Progress:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Progress = Progress
@@ -537,8 +554,8 @@ function Radio:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Radio:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Radio:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Radio = Radio
@@ -557,8 +574,8 @@ function Rich:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Rich:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Rich:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Rich = Rich
@@ -569,8 +586,8 @@ function Scrollarea.new()
   rt.check(res)
   return setmetatable({ handle = res.value }, Scrollarea)
 end
-function Scrollarea:widget_on_scroll(x, y, dx, dy)
-  local res = rt.C().yetty_ygui_widget_on_scroll(nil, self.handle, x, y, dx, dy)
+function Scrollarea:widget_on_scroll(y, dx, dy)
+  local res = rt.C().yetty_ygui_widget_on_scroll(nil, self.handle, y, dx, dy)
   rt.check(res)
   return res.value
 end
@@ -578,8 +595,8 @@ function Scrollarea:constructor()
   local res = rt.C().yetty_ygui_constructor(nil, self.handle)
   rt.check(res)
 end
-function Scrollarea:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Scrollarea:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Scrollarea = Scrollarea
@@ -598,8 +615,8 @@ function Selectable:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Selectable:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Selectable:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Selectable = Selectable
@@ -610,8 +627,8 @@ function Separator.new()
   rt.check(res)
   return setmetatable({ handle = res.value }, Separator)
 end
-function Separator:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Separator:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Separator = Separator
@@ -626,17 +643,17 @@ function Slider:constructor()
   local res = rt.C().yetty_ygui_constructor(nil, self.handle)
   rt.check(res)
 end
-function Slider:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Slider:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
-function Slider:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
+function Slider:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
-function Slider:widget_on_motion(x, y)
-  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, x, y)
+function Slider:widget_on_motion(y)
+  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, y)
   rt.check(res)
   return res.value
 end
@@ -652,13 +669,13 @@ function Spinner:constructor()
   local res = rt.C().yetty_ygui_constructor(nil, self.handle)
   rt.check(res)
 end
-function Spinner:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
+function Spinner:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
-function Spinner:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Spinner:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Spinner = Spinner
@@ -669,17 +686,17 @@ function Splitter.new()
   rt.check(res)
   return setmetatable({ handle = res.value }, Splitter)
 end
-function Splitter:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Splitter:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
-function Splitter:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
+function Splitter:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
-function Splitter:widget_on_motion(x, y)
-  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, x, y)
+function Splitter:widget_on_motion(y)
+  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, y)
   rt.check(res)
   return res.value
 end
@@ -699,8 +716,8 @@ function Statusbar:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Statusbar:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Statusbar:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Statusbar = Statusbar
@@ -719,8 +736,8 @@ function Stepper:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Stepper:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Stepper:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Stepper = Stepper
@@ -731,13 +748,13 @@ function Tabbar.new()
   rt.check(res)
   return setmetatable({ handle = res.value }, Tabbar)
 end
-function Tabbar:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
+function Tabbar:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
-function Tabbar:widget_on_release(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_release(nil, self.handle, x, y, button)
+function Tabbar:widget_on_release(y, button)
+  local res = rt.C().yetty_ygui_widget_on_release(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
@@ -745,8 +762,8 @@ function Tabbar:constructor()
   local res = rt.C().yetty_ygui_constructor(nil, self.handle)
   rt.check(res)
 end
-function Tabbar:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Tabbar:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Tabbar = Tabbar
@@ -765,8 +782,8 @@ function Table:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Table:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Table:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Table = Table
@@ -785,8 +802,8 @@ function Textarea:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Textarea:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Textarea:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Textarea = Textarea
@@ -805,8 +822,8 @@ function Textinput:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Textinput:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Textinput:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Textinput = Textinput
@@ -825,8 +842,8 @@ function Toggle:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Toggle:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Toggle:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Toggle = Toggle
@@ -845,8 +862,8 @@ function Tooltip:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Tooltip:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Tooltip:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.Tooltip = Tooltip
@@ -865,13 +882,13 @@ function TreeNode:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function TreeNode:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
+function TreeNode:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
-function TreeNode:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function TreeNode:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.TreeNode = TreeNode
@@ -902,22 +919,22 @@ function Window:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Window:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Window:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
-function Window:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
-  rt.check(res)
-  return res.value
-end
-function Window:widget_on_motion(x, y)
-  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, x, y)
+function Window:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
-function Window:widget_on_release(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_release(nil, self.handle, x, y, button)
+function Window:widget_on_motion(y)
+  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, y)
+  rt.check(res)
+  return res.value
+end
+function Window:widget_on_release(y, button)
+  local res = rt.C().yetty_ygui_widget_on_release(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
@@ -937,8 +954,8 @@ function Ybrowser:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Ybrowser:widget_emit_body(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
+function Ybrowser:widget_emit_body()
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle)
   rt.check(res)
 end
 M.Ybrowser = Ybrowser
@@ -973,8 +990,8 @@ function YdrawEmbed:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function YdrawEmbed:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function YdrawEmbed:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
 M.YdrawEmbed = YdrawEmbed
@@ -993,12 +1010,12 @@ function Yimage:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Yimage:widget_emit_container(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_container(nil, self.handle, emit_ctx)
+function Yimage:widget_emit_container()
+  local res = rt.C().yetty_ygui_widget_emit_container(nil, self.handle)
   rt.check(res)
 end
-function Yimage:widget_emit_body(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
+function Yimage:widget_emit_body()
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle)
   rt.check(res)
 end
 M.Yimage = Yimage
@@ -1017,8 +1034,8 @@ function Yjungle:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Yjungle:widget_emit_body(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
+function Yjungle:widget_emit_body()
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle)
   rt.check(res)
 end
 M.Yjungle = Yjungle
@@ -1037,8 +1054,8 @@ function Ymarkdown:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Ymarkdown:widget_emit_body(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
+function Ymarkdown:widget_emit_body()
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle)
   rt.check(res)
 end
 M.Ymarkdown = Ymarkdown
@@ -1057,8 +1074,8 @@ function Ymaze:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Ymaze:widget_emit_body(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
+function Ymaze:widget_emit_body()
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle)
   rt.check(res)
 end
 M.Ymaze = Ymaze
@@ -1077,22 +1094,22 @@ function Ynode:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Ynode:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Ynode:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
-function Ynode:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
-  rt.check(res)
-  return res.value
-end
-function Ynode:widget_on_motion(x, y)
-  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, x, y)
+function Ynode:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
-function Ynode:widget_on_release(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_release(nil, self.handle, x, y, button)
+function Ynode:widget_on_motion(y)
+  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, y)
+  rt.check(res)
+  return res.value
+end
+function Ynode:widget_on_release(y, button)
+  local res = rt.C().yetty_ygui_widget_on_release(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
@@ -1112,27 +1129,27 @@ function Ynodes:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Ynodes:widget_paint(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle, emit_ctx)
+function Ynodes:widget_paint()
+  local res = rt.C().yetty_ygui_widget_paint(nil, self.handle)
   rt.check(res)
 end
-function Ynodes:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
-  rt.check(res)
-  return res.value
-end
-function Ynodes:widget_on_motion(x, y)
-  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, x, y)
+function Ynodes:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
-function Ynodes:widget_on_release(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_release(nil, self.handle, x, y, button)
+function Ynodes:widget_on_motion(y)
+  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, y)
   rt.check(res)
   return res.value
 end
-function Ynodes:widget_on_scroll(x, y, dx, dy)
-  local res = rt.C().yetty_ygui_widget_on_scroll(nil, self.handle, x, y, dx, dy)
+function Ynodes:widget_on_release(y, button)
+  local res = rt.C().yetty_ygui_widget_on_release(nil, self.handle, y, button)
+  rt.check(res)
+  return res.value
+end
+function Ynodes:widget_on_scroll(y, dx, dy)
+  local res = rt.C().yetty_ygui_widget_on_scroll(nil, self.handle, y, dx, dy)
   rt.check(res)
   return res.value
 end
@@ -1160,12 +1177,12 @@ function Yplot:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Yplot:widget_emit_container(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_container(nil, self.handle, emit_ctx)
+function Yplot:widget_emit_container()
+  local res = rt.C().yetty_ygui_widget_emit_container(nil, self.handle)
   rt.check(res)
 end
-function Yplot:widget_emit_body(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
+function Yplot:widget_emit_body()
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle)
   rt.check(res)
 end
 M.Yplot = Yplot
@@ -1184,22 +1201,22 @@ function YrichView:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function YrichView:widget_emit_body(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
+function YrichView:widget_emit_body()
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle)
   rt.check(res)
 end
-function YrichView:widget_on_press(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, x, y, button)
-  rt.check(res)
-  return res.value
-end
-function YrichView:widget_on_release(x, y, button)
-  local res = rt.C().yetty_ygui_widget_on_release(nil, self.handle, x, y, button)
+function YrichView:widget_on_press(y, button)
+  local res = rt.C().yetty_ygui_widget_on_press(nil, self.handle, y, button)
   rt.check(res)
   return res.value
 end
-function YrichView:widget_on_motion(x, y)
-  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, x, y)
+function YrichView:widget_on_release(y, button)
+  local res = rt.C().yetty_ygui_widget_on_release(nil, self.handle, y, button)
+  rt.check(res)
+  return res.value
+end
+function YrichView:widget_on_motion(y)
+  local res = rt.C().yetty_ygui_widget_on_motion(nil, self.handle, y)
   rt.check(res)
   return res.value
 end
@@ -1219,12 +1236,12 @@ function Yshadertoy:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Yshadertoy:widget_emit_container(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_container(nil, self.handle, emit_ctx)
+function Yshadertoy:widget_emit_container()
+  local res = rt.C().yetty_ygui_widget_emit_container(nil, self.handle)
   rt.check(res)
 end
-function Yshadertoy:widget_emit_body(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
+function Yshadertoy:widget_emit_body()
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle)
   rt.check(res)
 end
 M.Yshadertoy = Yshadertoy
@@ -1243,12 +1260,12 @@ function Yvideo:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Yvideo:widget_emit_container(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_container(nil, self.handle, emit_ctx)
+function Yvideo:widget_emit_container()
+  local res = rt.C().yetty_ygui_widget_emit_container(nil, self.handle)
   rt.check(res)
 end
-function Yvideo:widget_emit_body(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
+function Yvideo:widget_emit_body()
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle)
   rt.check(res)
 end
 M.Yvideo = Yvideo
@@ -1267,8 +1284,8 @@ function Yzoo:destructor()
   local res = rt.C().yetty_ygui_destructor(nil, self.handle)
   rt.check(res)
 end
-function Yzoo:widget_emit_body(emit_ctx)
-  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle, emit_ctx)
+function Yzoo:widget_emit_body()
+  local res = rt.C().yetty_ygui_widget_emit_body(nil, self.handle)
   rt.check(res)
 end
 M.Yzoo = Yzoo

@@ -18,7 +18,8 @@
  * Press 'q' (or Ctrl-C / Ctrl-D) to quit.
  */
 
-#include "../runner.h"
+#include <yetty/yguiapp/app.h>
+#include <yetty/yguiapp/run.h>
 #include <yetty/ygui/ygui.h>
 
 static inline void err_ok(struct yetty_ycore_void_result r)
@@ -183,10 +184,22 @@ static const char *k_state_machine = "flowchart TD\n"
                                      "  Failed -->|retry|      Connecting\n"
                                      "  Failed -->|abort|      Done((done))\n";
 
-static struct yetty_ycore_void_result build(struct demo_runner *runner,
+/* Demo app class: a yguiapp:app subclass with no extra state. */
+struct [[clang::annotate("class@demoygui:36_ydiagram")]] [[clang::annotate("parent@yguiapp:app")]]
+yetty_demoygui_36_ydiagram {
+    int unused;
+};
+
+/* Result wrapper + class accessor forward-decls (this TU does not include its
+ * own generated header; main.gen.c is #included at the foot). */
+YETTY_YRESULT_DECLARE(yetty_demoygui_36_ydiagram_ptr, struct yetty_demoygui_36_ydiagram *);
+struct yetty_yclass_ptr_result yetty_demoygui_36_ydiagram_class_get(void);
+
+[[clang::annotate("override@yguiapp:app:build")]]
+static struct yetty_ycore_void_result build(struct yetty_yclass_object *app,
                                             struct yetty_yclass_object *root)
 {
-    (void)runner;
+    (void)app;
 
     /* Scrollarea fills the body and stacks the sections vertically. */
     struct yetty_yclass_object_ptr_result sr =
@@ -217,5 +230,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 
 int main(int argc, char **argv)
 {
-    return demo_runner_run(argc, argv, "36_ydiagram", build);
+    return yetty_yguiapp_run_main(argc, argv, yetty_demoygui_36_ydiagram_class_get().value);
 }
+
+#include "main.gen.c"

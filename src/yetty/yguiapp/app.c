@@ -8,10 +8,16 @@
  *
  *   - standalone: the shared glfw_platform brings up window + GPU + event loop
  *     and drives this app's run() override, which creates a local yfigure
- *     container, a ygui framework wired to it, and a root widget;
+ *     container, a ygui framework wired to it, a styled root/body, and (when
+ *     enabled) window chrome — a draggable/resizable caption strip;
  *   - the widget tree is populated through the `build` virtual slot — an app
- *     subclasses yguiapp:app and overrides build(self, root); the default is a
+ *     subclasses yguiapp:app and overrides build(self, body); the default is a
  *     no-op so a bare host just shows an empty styled canvas.
+ *
+ * The in-terminal (TERM_PROGRAM=yetty) host and the dual-mode launcher live in
+ * the sibling run.c; the shared root/body construction (yetty_yguiapp_build_root_body)
+ * is declared in run.h and used by both this standalone run() and run.c's
+ * terminal path.
  *
  * The container belongs to the host, not to ygui: an app that renders figures
  * straight into the container (yplot, yimage, a remote yfigure tree) can sit on
@@ -27,6 +33,7 @@
 #include <yetty/yclass/class.h>
 #include <yetty/yconfig/config.h>
 
+#include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-factory/composite-factory.h>
 #include <yetty/yevent/dispatch.h>
 #include <yetty/yevent/event.h>
@@ -45,10 +52,23 @@
 #include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yrender/render-target.h>
+#include <yetty/yshadertoy/figure.h>
+#include <yetty/ytrace/ytrace.h>
+
+/* Window chrome (drag/resize/maximize the borderless OS window) — the
+ * reusable, ygui/yui-independent engine. */
+#include <yetty/ychrome/chrome.h>
+#include <yetty/yplatform/ywindow-chrome/window-chrome.h>
+
+#include "yetty/yguiapp/run.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* Caption-strip height (px) for chrome-enabled standalone apps. The drawn strip
+ * and the engine's drag/double-click zone share this value. */
+#define YGUIAPP_CHROME_CAPTION_H 34.0f
 
 /*===========================================================================
  * Class data slice. The host owns the whole environment; the per-instance
@@ -73,6 +93,19 @@ yetty_yguiapp_app {
     struct yetty_ygrid_factory_args figure_args;
     struct yetty_ydraw_target *render_target;
     struct yetty_yevent_event_listener listener;
+
+    /* ~30 fps animation pump: fires request_render so self-dirtying widgets
+     * (ymaze / yzoo / yjungle) keep re-emitting. */
+    struct yetty_yevent_event_listener frame_listener;
+    yetty_yevent_timer_id frame_timer;
+
+    /* Window chrome (standalone mode only). When chrome_enabled is set the host
+     * draws a caption strip and routes unclaimed mouse events through `chrome`
+     * to move/resize/maximize the borderless OS window. */
+    int chrome_enabled;
+    struct yetty_yclass_object *chrome;      /* ychrome:chrome object, or NULL */
+    struct yetty_ygrid_grid *chrome_caption; /* pinned figure compositing chrome's bar */
+    int chrome_last_hover;                   /* last hovered control — repaint on change */
 };
 
 /* Result wrapper + codegen accessor/downcast forward-decls (this TU does not
@@ -101,9 +134,183 @@ static struct yetty_ycore_void_result yguiapp_default_build(struct yetty_yclass_
 }
 
 /*===========================================================================
+ * Animation pump — fires request_render each tick so animated widgets re-run
+ * their emit_body (a widget's self-set dirty flag does not survive the emit
+ * pass on its own).
+ *=========================================================================*/
+static struct yetty_ycore_int_result yguiapp_frame_tick(
+    struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *ev)
+{
+    (void)ev;
+    struct yetty_yguiapp_app *app =
+        container_of(listener, struct yetty_yguiapp_app, frame_listener);
+    if (app->engine) {
+        yetty_ygui_framework_mark_dirty(app->engine);
+    }
+    if (app->yframework && app->yframework->event_loop &&
+        app->yframework->event_loop->ops->request_render) {
+        app->yframework->event_loop->ops->request_render(app->yframework->event_loop);
+    }
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
+/* GLFW-style keycode → terminal byte sequence. Same map the runner used. */
+static const char *yguiapp_encode_key(uint32_t key, char *scratch, size_t scratch_n,
+                                      size_t *out_len)
+{
+    if (key >= 32 && key < 127) {
+        scratch[0] = (char)key;
+        *out_len = 1;
+        return scratch;
+    }
+    switch (key) {
+    case 256:
+        scratch[0] = 0x1B;
+        *out_len = 1;
+        return scratch; /* ESC */
+    case 257:
+        scratch[0] = '\r';
+        *out_len = 1;
+        return scratch; /* Enter */
+    case 259:
+        scratch[0] = 0x7F;
+        *out_len = 1;
+        return scratch; /* Backspace */
+    case 263:
+        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[D");
+        return scratch;
+    case 262:
+        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[C");
+        return scratch;
+    case 265:
+        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[A");
+        return scratch;
+    case 264:
+        *out_len = (size_t)snprintf(scratch, scratch_n, "\x1b[B");
+        return scratch;
+    default:
+        *out_len = 0;
+        return NULL;
+    }
+}
+
+static int yguiapp_on_key(struct yetty_yclass_object *engine, uint32_t key, int mods,
+                          void *userdata)
+{
+    (void)engine;
+    (void)mods;
+    struct yetty_yguiapp_app *app = (struct yetty_yguiapp_app *)userdata;
+    if (key == 'q' || key == 'Q' || key == 0x03 || key == 0x04) {
+        if (app->yframework && app->yframework->event_loop &&
+            app->yframework->event_loop->ops->stop) {
+            app->yframework->event_loop->ops->stop(app->yframework->event_loop);
+        }
+        return 1;
+    }
+    return 0;
+}
+
+/* Re-paint the chrome caption: ask ychrome to render its titlebar+buttons into
+ * a drawable list (pure ydraw, no ygui), then load that record stream into the
+ * pinned ygrid figure that composites it. Called on create + on resize. */
+static void yguiapp_chrome_caption_refresh(struct yetty_yguiapp_app *app)
+{
+    if (!app->chrome || !app->chrome_caption) {
+        return;
+    }
+    struct yetty_ydraw_drawable_list_result lr = yetty_ychrome_render(app->chrome);
+    if (YETTY_IS_ERR(lr)) {
+        yetty_ycore_error_destroy(lr.error);
+        return;
+    }
+    struct yetty_ydraw_drawable_list *list = lr.value;
+    const uint8_t *data = (const uint8_t *)yetty_ydraw_drawable_list_data(list);
+    size_t size = yetty_ydraw_drawable_list_size(list);
+    struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(app->chrome_caption);
+    struct yetty_yclass_object *fobj = (struct yetty_yclass_object *)(fig)-1;
+    struct yetty_ycore_void_result rc = yetty_yfigure_reset_content(fobj);
+    if (YETTY_IS_ERR(rc)) {
+        yetty_ycore_error_destroy(rc.error);
+    }
+    if (data && size > 0) {
+        struct yetty_ycore_void_result pb = yetty_yfigure_process_bytes(fobj, data, size);
+        if (YETTY_IS_ERR(pb)) {
+            yetty_ycore_error_destroy(pb.error);
+        }
+    }
+    struct yetty_ycore_void_result dr = yetty_yfigure_figure_dirty_set(fobj, 1);
+    if (YETTY_IS_ERR(dr)) {
+        yetty_ycore_error_destroy(dr.error);
+    }
+    yetty_ydraw_drawable_list_destroy(list);
+}
+
+/* Create the pinned ygrid figure that composites chrome's self-rendered caption
+ * on top of the app content. The caption pixels come entirely from ychrome
+ * (ydraw), not ygui — a ygrid is just the framework's drawable-list→GPU figure. */
+static struct yetty_ycore_void_result yguiapp_chrome_caption_create(struct yetty_yguiapp_app *app,
+                                                                    const struct yetty_context *ctx,
+                                                                    float width)
+{
+    struct yetty_ycore_rectangle rect = {.min = {0.0f, 0.0f},
+                                         .max = {width, YGUIAPP_CHROME_CAPTION_H}};
+    struct yetty_ygrid_grid_ptr_result gr = yetty_ygrid_create(rect, 1, 1, ctx);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "yguiapp: chrome caption grid");
+    app->chrome_caption = gr.value;
+    if (app->font) {
+        struct yetty_ycore_void_result fr = yetty_ygrid_set_font(app->chrome_caption, 0, app->font);
+        if (YETTY_IS_ERR(fr)) {
+            yetty_ycore_error_destroy(fr.error);
+        }
+    }
+    struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(app->chrome_caption);
+    struct yetty_yclass_object *fobj = (struct yetty_yclass_object *)(fig)-1;
+    /* Pin to the top (no scroll) and force on top of the app content. */
+    struct yetty_ycore_void_result ar = yetty_yfigure_figure_absolute_coords_set(fobj, 1);
+    if (YETTY_IS_ERR(ar)) {
+        yetty_ycore_error_destroy(ar.error);
+    }
+    struct yetty_ycore_void_result zr = yetty_yfigure_figure_z_set(fobj, 100000);
+    if (YETTY_IS_ERR(zr)) {
+        yetty_ycore_error_destroy(zr.error);
+    }
+    struct yetty_ycore_void_result adr =
+        yetty_yfigure_container_add_child(app->root_container, fig, 0x7FFF0001u);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, adr, "yguiapp: chrome caption add_child");
+    yguiapp_chrome_caption_refresh(app);
+    return YETTY_OK_VOID();
+}
+
+/* Forward one event to the window-chrome engine. Returns 1 if chrome claimed
+ * it (caption drag/maximize, edge resize), 0 otherwise. No-op when chrome is
+ * disabled (chrome create failed / chrome_enabled clear). */
+static int yguiapp_chrome_handle(struct yetty_yguiapp_app *app, const struct yetty_yui_event *ev)
+{
+    if (!app->chrome_enabled || !app->chrome) {
+        return 0;
+    }
+    struct yetty_ycore_int_result cr = yetty_ychrome_handle_event(app->chrome, ev);
+    int consumed = YETTY_IS_OK(cr) && cr.value;
+    if (YETTY_IS_ERR(cr)) {
+        yetty_ycore_error_destroy(cr.error);
+    }
+    /* Re-paint the caption when the hovered control changes (hover highlight). */
+    struct yetty_ycore_int_result hr = yetty_ychrome_hover_button(app->chrome);
+    int hover = YETTY_IS_OK(hr) ? hr.value : 0;
+    if (YETTY_IS_ERR(hr)) {
+        yetty_ycore_error_destroy(hr.error);
+    }
+    if (hover != app->chrome_last_hover) {
+        app->chrome_last_hover = hover;
+        yguiapp_chrome_caption_refresh(app);
+    }
+    return consumed;
+}
+
+/*===========================================================================
  * Render / input event handler. Pumps the framework's emit into the local
  * container and routes input back into the framework. Mirrors the proven
- * demo/ygui/runner.c path, trimmed to the core events.
+ * demo/ygui/runner.c standalone path.
  *=========================================================================*/
 static struct yetty_ycore_int_result yguiapp_event(struct yetty_yevent_event_listener *listener,
                                                    const struct yetty_yui_event *ev)
@@ -149,6 +356,12 @@ static struct yetty_ycore_int_result yguiapp_event(struct yetty_yevent_event_lis
         if (YETTY_IS_ERR(pp)) {
             yetty_ycore_error_destroy(pp.error);
         }
+        /* Animation pump: a self-dirtying widget re-marks itself during emit;
+         * re-arm a render whenever the framework is still dirty so animated
+         * demos keep a steady frame loop. Static demos never self-dirty. */
+        if (yetty_ygui_framework_is_dirty(app->engine) && loop && loop->ops->request_render) {
+            loop->ops->request_render(loop);
+        }
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
@@ -177,18 +390,71 @@ static struct yetty_ycore_int_result yguiapp_event(struct yetty_yevent_event_lis
             yetty_yfigure_figure_rect_set(app->root_container, rr);
             yetty_yfigure_figure_dirty_set(app->root_container, 1);
         }
+        /* Keep chrome's edge bands + the caption figure tracking the window. */
+        if (app->chrome_enabled && app->chrome) {
+            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(
+                app->chrome, (float)ev->resize.width, (float)ev->resize.height);
+            if (YETTY_IS_ERR(csz)) {
+                yetty_ycore_error_destroy(csz.error);
+            }
+            if (app->chrome_caption) {
+                struct yetty_yfigure_figure *fig = yetty_ygrid_as_figure(app->chrome_caption);
+                struct yetty_ycore_rectangle rect = {
+                    .min = {0.0f, 0.0f},
+                    .max = {(float)ev->resize.width, YGUIAPP_CHROME_CAPTION_H}};
+                struct yetty_ycore_void_result rr =
+                    yetty_yfigure_figure_rect_set((struct yetty_yclass_object *)(fig)-1, rect);
+                if (YETTY_IS_ERR(rr)) {
+                    yetty_ycore_error_destroy(rr.error);
+                }
+                yguiapp_chrome_caption_refresh(app);
+            }
+        }
         if (loop && loop->ops->request_render) {
             loop->ops->request_render(loop);
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
+    case YETTY_YCORE_KEY_DOWN: {
+        char scratch[8];
+        size_t n = 0;
+        const char *bytes = yguiapp_encode_key(ev->key.key, scratch, sizeof(scratch), &n);
+        if (bytes && n > 0) {
+            struct yetty_ycore_void_result fr =
+                yetty_ygui_framework_feed_input(app->engine, bytes, n);
+            if (YETTY_IS_ERR(fr)) {
+                yetty_ycore_error_destroy(fr.error);
+            }
+            if (loop && loop->ops->request_render) {
+                loop->ops->request_render(loop);
+            }
+        }
+        return YETTY_OK(yetty_ycore_int, 1);
+    }
     case YETTY_YCORE_MOUSE_DOWN:
     case YETTY_YCORE_MOUSE_UP: {
-        struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_button(
-            app->engine, ev->mouse.x, ev->mouse.y, ev->mouse.button,
-            ev->type == YETTY_YCORE_MOUSE_DOWN ? 1 : 0, ev->mouse.mods);
-        if (YETTY_IS_ERR(fr)) {
-            yetty_ycore_error_destroy(fr.error);
+        /* Chrome integration model: the widget tree gets first dibs on a press,
+         * so caption controls (and any widget near a resize edge) keep working.
+         * Chrome only arms a window gesture when no widget consumed the press.
+         * On release, chrome ends an active move/resize before the widget tree. */
+        if (ev->type == YETTY_YCORE_MOUSE_DOWN) {
+            struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_button(
+                app->engine, ev->mouse.x, ev->mouse.y, ev->mouse.button, 1, ev->mouse.mods);
+            if (YETTY_IS_ERR(fr)) {
+                yetty_ycore_error_destroy(fr.error);
+            }
+            if (app->chrome_enabled && app->chrome &&
+                !yetty_ygui_framework_has_pressed_widget(app->engine)) {
+                yguiapp_chrome_handle(app, ev);
+            }
+        } else {
+            if (!yguiapp_chrome_handle(app, ev)) {
+                struct yetty_ycore_int_result fr = yetty_ygui_framework_feed_mouse_button(
+                    app->engine, ev->mouse.x, ev->mouse.y, ev->mouse.button, 0, ev->mouse.mods);
+                if (YETTY_IS_ERR(fr)) {
+                    yetty_ycore_error_destroy(fr.error);
+                }
+            }
         }
         if (loop && loop->ops->request_render) {
             loop->ops->request_render(loop);
@@ -197,10 +463,14 @@ static struct yetty_ycore_int_result yguiapp_event(struct yetty_yevent_event_lis
     }
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG: {
-        struct yetty_ycore_int_result fr =
-            yetty_ygui_framework_feed_mouse_motion(app->engine, ev->mouse.x, ev->mouse.y);
-        if (YETTY_IS_ERR(fr)) {
-            yetty_ycore_error_destroy(fr.error);
+        /* While chrome owns an active move/resize it consumes motion; otherwise
+         * the widget tree gets it (hover, slider drag, …). */
+        if (!yguiapp_chrome_handle(app, ev)) {
+            struct yetty_ycore_int_result fr =
+                yetty_ygui_framework_feed_mouse_motion(app->engine, ev->mouse.x, ev->mouse.y);
+            if (YETTY_IS_ERR(fr)) {
+                yetty_ycore_error_destroy(fr.error);
+            }
         }
         if (loop && loop->ops->request_render) {
             loop->ops->request_render(loop);
@@ -219,6 +489,17 @@ static struct yetty_ycore_int_result yguiapp_event(struct yetty_yevent_event_lis
         }
         return YETTY_OK(yetty_ycore_int, 1);
     }
+    case YETTY_YCORE_MOUSE_DOUBLE_CLICK:
+        /* Double-click in the caption toggles maximize. Chrome gates on the
+         * caption height internally, so a double-click on body content falls
+         * through to the widget tree. */
+        if (yguiapp_chrome_handle(app, ev)) {
+            if (loop && loop->ops->request_render) {
+                loop->ops->request_render(loop);
+            }
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+        break;
     default:
         break;
     }
@@ -229,14 +510,20 @@ static struct yetty_ycore_int_result yguiapp_event(struct yetty_yevent_event_lis
 }
 
 /*===========================================================================
- * yapp:app:init — nothing to do up front; run() owns the bring-up.
+ * yapp:app:init — set the chrome-on default before run() reads it. run() owns
+ * the rest of the bring-up.
  *=========================================================================*/
 [[clang::annotate("override@yapp:app:init")]]
 static struct yetty_ycore_void_result yguiapp_init(struct yetty_yclass_object *obj,
                                                    struct yetty_yclass_object *platform)
 {
-    (void)obj;
     (void)platform;
+    struct yetty_yguiapp_app_ptr_result app_res = yetty_yguiapp_app_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, app_res, "yguiapp:init: app_from");
+    /* Window chrome on by default for the standalone host (borderless windows
+     * benefit from a draggable/resizable caption). A future opt-out setter can
+     * clear this between init() and run(). */
+    app_res.value->chrome_enabled = 1;
     return YETTY_OK_VOID();
 }
 
@@ -332,6 +619,9 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
                 &app->figure_args);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, kr, "yguiapp:run: register_factory_for_kind");
         }
+        /* yshadertoy has its own factory + renderer (not the ygrid path). */
+        struct yetty_ycore_void_result sr = yetty_yshadertoy_register_factory(app->figure_registry);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yguiapp:run: yshadertoy_register_factory");
     }
 
     /* Local container the framework drives by direct in-process dispatch. */
@@ -364,32 +654,89 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
         }
     }
 
-    /* Root widget — a stretching vbox the app builds into. */
+    /* Two-level styled root: outer vbox owns the viewport, inner body panel
+     * fills it with the brand background, padding and a column layout. The body
+     * panel is what the app subclass builds into (shared with the terminal host
+     * via run.c). The chrome caption overlays the top strip, so inset the body
+     * by the caption height when chrome is enabled. */
+    struct yetty_yclass_object *body = NULL;
     {
-        struct yetty_yclass_object_ptr_result rr =
-            yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "yguiapp:run: root new");
-        app->root = rr.value;
-        struct yetty_ygui_layout_const_ptr_result layout_res =
-            yetty_ygui_widget_layout_get(app->root);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, layout_res, "yguiapp:run: root layout_get");
-        struct yetty_ygui_layout l = *layout_res.value;
-        l.align = YETTY_YGUI_ALIGN_STRETCH;
-        l.flex_grow = 1.0f;
-        struct yetty_ycore_void_result lr = yetty_ygui_widget_layout_set(app->root, &l);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, lr, "yguiapp:run: root layout");
-        struct yetty_ycore_void_result sr = yetty_ygui_framework_set_root(app->engine, app->root);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "yguiapp:run: set_root");
+        float inset = app->chrome_enabled ? YGUIAPP_CHROME_CAPTION_H : 0.0f;
+        struct yetty_ycore_void_result rbr =
+            yetty_yguiapp_build_root_body(app->engine, inset, &app->root, &body);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, rbr, "yguiapp:run: build_root_body");
     }
 
-    /* Hand the root to the app subclass to populate (virtual dispatch). */
-    struct yetty_ycore_void_result br = yetty_yguiapp_build(obj, app->root);
+    /* Window-chrome engine — bind it to the borderless OS window's manager so
+     * the caption strip and edges drive real move/resize/maximize. Borrowed
+     * window_chrome comes from yplatform via yframework; absent in headless. A
+     * failure here just leaves chrome disabled rather than aborting. */
+    if (app->chrome_enabled && app->yframework->window_chrome) {
+        struct yetty_ycore_void_result creg = yetty_ychrome_register();
+        if (YETTY_IS_ERR(creg)) {
+            yetty_ycore_error_destroy(creg.error);
+        }
+        struct yetty_yclass_object_ptr_result cor = yetty_ychrome_chrome_create(NULL);
+        if (YETTY_IS_OK(cor)) {
+            app->chrome = cor.value;
+            struct yetty_ycore_void_result ccfg = yetty_ychrome_configure(
+                app->chrome, app->yframework->window_chrome, YGUIAPP_CHROME_CAPTION_H,
+                /*edge_size=*/8.0f, YETTY_YCHROME_FLAG_ALL);
+            if (YETTY_IS_ERR(ccfg)) {
+                yetty_ycore_error_destroy(ccfg.error);
+            }
+            struct yetty_ycore_void_result csz = yetty_ychrome_set_size(
+                app->chrome, (float)gpu->surface_width, (float)gpu->surface_height);
+            if (YETTY_IS_ERR(csz)) {
+                yetty_ycore_error_destroy(csz.error);
+            }
+            struct yetty_ycore_void_result cap =
+                yguiapp_chrome_caption_create(app, &ctx, (float)gpu->surface_width);
+            if (YETTY_IS_ERR(cap)) {
+                ywarn("yguiapp: chrome caption create failed: %s", cap.error.msg);
+                yetty_ycore_error_destroy(cap.error);
+            }
+        } else {
+            ywarn("yguiapp: chrome create failed: %s", cor.error.msg);
+            yetty_ycore_error_destroy(cor.error);
+        }
+    }
+
+    yetty_ygui_framework_set_key_cb(app->engine, yguiapp_on_key, app);
+
+    /* Hand the styled body to the app subclass to populate (virtual dispatch). */
+    struct yetty_ycore_void_result br = yetty_yguiapp_build(obj, body);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "yguiapp:run: build");
 
     app->listener.handler = yguiapp_event;
     struct yetty_ycore_void_result rel =
         yetty_yevent_register_default_listeners(app->yframework->event_loop, &app->listener);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rel, "yguiapp:run: register_default_listeners");
+
+    /* Start the ~30 fps animation pump. */
+    {
+        struct yetty_yevent_event_loop *loop = app->yframework->event_loop;
+        struct yetty_yevent_timer_id_result tr = loop->ops->create_timer(loop);
+        if (YETTY_IS_OK(tr)) {
+            app->frame_timer = tr.value;
+            app->frame_listener.handler = yguiapp_frame_tick;
+            struct yetty_ycore_void_result cr = loop->ops->config_timer(loop, app->frame_timer, 33);
+            if (YETTY_IS_ERR(cr)) {
+                yetty_ycore_error_destroy(cr.error);
+            }
+            struct yetty_ycore_void_result lr =
+                loop->ops->register_timer_listener(loop, app->frame_timer, &app->frame_listener);
+            if (YETTY_IS_ERR(lr)) {
+                yetty_ycore_error_destroy(lr.error);
+            }
+            struct yetty_ycore_void_result st = loop->ops->start_timer(loop, app->frame_timer);
+            if (YETTY_IS_ERR(st)) {
+                yetty_ycore_error_destroy(st.error);
+            }
+        } else {
+            yetty_ycore_error_destroy(tr.error);
+        }
+    }
 
     yetty_yevent_post_async(input_pipe, &(struct yetty_yui_event){.type = YETTY_YCORE_RENDER});
 
@@ -400,6 +747,13 @@ static struct yetty_ycore_void_result yguiapp_run(struct yetty_yclass_object *ob
     }
 
     /* Teardown — reverse build order. */
+    if (app->chrome) {
+        struct yetty_ycore_void_result dr = yetty_ychrome_destroy(app->chrome);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
+        app->chrome = NULL;
+    }
     if (app->engine) {
         struct yetty_ycore_void_result dr = yetty_ygui_framework_destroy(app->engine);
         if (YETTY_IS_ERR(dr)) {

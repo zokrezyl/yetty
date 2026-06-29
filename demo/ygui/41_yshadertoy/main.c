@@ -18,7 +18,8 @@
 
 #include <string.h>
 
-#include "../runner.h"
+#include <yetty/yguiapp/app.h>
+#include <yetty/yguiapp/run.h>
 #include <yetty/ygui/ygui.h>
 #include <yetty/ygui/widgets/yshadertoy.h>
 #include <yetty/yshadertoy/demo-shaders.h>
@@ -49,10 +50,22 @@ static struct yetty_ycore_void_result on_tab_change(struct yetty_yclass_object *
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result build(struct demo_runner *runner,
+/* Demo app class: a yguiapp:app subclass with no extra state. */
+struct [[clang::annotate("class@demoygui:41_yshadertoy")]] [[clang::annotate("parent@yguiapp:app")]]
+yetty_demoygui_41_yshadertoy {
+    int unused;
+};
+
+/* Result wrapper + class accessor forward-decls (this TU does not include its
+ * own generated header; main.gen.c is #included at the foot). */
+YETTY_YRESULT_DECLARE(yetty_demoygui_41_yshadertoy_ptr, struct yetty_demoygui_41_yshadertoy *);
+struct yetty_yclass_ptr_result yetty_demoygui_41_yshadertoy_class_get(void);
+
+[[clang::annotate("override@yguiapp:app:build")]]
+static struct yetty_ycore_void_result build(struct yetty_yclass_object *app,
                                             struct yetty_yclass_object *root)
 {
-    (void)runner;
+    (void)app;
 
     /* Vertical stack: tabbar on top, shader fills the rest. */
     struct yetty_yclass_object_ptr_result vr =
@@ -115,5 +128,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 
 int main(int argc, char **argv)
 {
-    return demo_runner_run(argc, argv, "41_yshadertoy", build);
+    return yetty_yguiapp_run_main(argc, argv, yetty_demoygui_41_yshadertoy_class_get().value);
 }
+
+#include "main.gen.c"

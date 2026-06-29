@@ -21,7 +21,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../runner.h"
+#include <yetty/yguiapp/app.h>
+#include <yetty/yguiapp/run.h>
 #include <yetty/ygui/ygui.h>
 
 #define COLOR_TEXT 0xFFE4E5E0u  /* BRAND_TEXT_PRIMARY */
@@ -98,10 +99,22 @@ static void reg_widget(struct yetty_yclass_object *editor, const char *name,
     err_ok(yetty_ygui_ynodes_register_widget(editor, name, cls.value));
 }
 
-static struct yetty_ycore_void_result build(struct demo_runner *runner,
+/* Demo app class: a yguiapp:app subclass with no extra state. */
+struct [[clang::annotate("class@demoygui:38_ynodes")]] [[clang::annotate("parent@yguiapp:app")]]
+yetty_demoygui_38_ynodes {
+    int unused;
+};
+
+/* Result wrapper + class accessor forward-decls (this TU does not include its
+ * own generated header; main.gen.c is #included at the foot). */
+YETTY_YRESULT_DECLARE(yetty_demoygui_38_ynodes_ptr, struct yetty_demoygui_38_ynodes *);
+struct yetty_yclass_ptr_result yetty_demoygui_38_ynodes_class_get(void);
+
+[[clang::annotate("override@yguiapp:app:build")]]
+static struct yetty_ycore_void_result build(struct yetty_yclass_object *app,
                                             struct yetty_yclass_object *root)
 {
-    (void)runner;
+    (void)app;
 
     /* Instruction strip. */
     struct yetty_yclass_object *hint = add_obj(root, yetty_ygui_label_class_get());
@@ -200,5 +213,7 @@ static struct yetty_ycore_void_result build(struct demo_runner *runner,
 
 int main(int argc, char **argv)
 {
-    return demo_runner_run(argc, argv, "38_ynodes", build);
+    return yetty_yguiapp_run_main(argc, argv, yetty_demoygui_38_ynodes_class_get().value);
 }
+
+#include "main.gen.c"

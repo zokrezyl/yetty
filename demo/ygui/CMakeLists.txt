@@ -1,7 +1,8 @@
-# ygui C demos — each builds a tiny program that uses the new ygui
-# widget API. The standalone bring-up (window, GPU, font, container,
-# wire SM, event loop) lives in runner.{h,c}; each demo only provides
-# build_ui().
+# ygui C demos — each builds a tiny program that uses the ygui widget API.
+# Every demo is a yguiapp:app subclass (class demoygui:<name> in its main.c)
+# overriding only build(); the shared host (window/GPU/font/container/event loop
+# for standalone, transport-pty + ywire for in-terminal) lives in yetty_yguiapp.
+# Each demo's main() forwards to yetty_yguiapp_run_main().
 #
 # Builds gated on Linux + WebGPU (matches ygreeter — the only other
 # standalone-window app sharing the same yplatform/yframework path).
@@ -14,12 +15,11 @@ if(NOT YETTY_ENABLE_LIB_WEBGPU)
     return()
 endif()
 
-# Platform / yframework / yconfig sources. The demo runner is a yapp:app
-# subclass (class demoygui:app in runner.c); it owns its own entry
-# (demo_runner_run) so it pulls the glfw_platform bootstrap
-# (${YETTY_APP_BOOTSTRAP_SOURCES}) WITHOUT the shared ymain/glfw.c. There is no
-# static lib for this platform layer, so each standalone binary pulls the
-# sources directly.
+# Platform / yframework / yconfig sources. Demos provide their own main()
+# (yetty_yguiapp_run_main decides standalone vs in-terminal), so they pull the
+# glfw_platform bootstrap (${YETTY_APP_BOOTSTRAP_SOURCES}) WITHOUT the shared
+# ymain/glfw.c. There is no static lib for this platform layer, so the sources
+# are compiled once into the OBJECT library below and linked into each demo.
 set(DEMO_YGUI_PLATFORM_SOURCES
     ${YETTY_APP_BOOTSTRAP_SOURCES}
     ${YETTY_ROOT}/src/yetty/yframework/yframework.c
@@ -42,36 +42,35 @@ find_package(Threads REQUIRED)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(DEMO_FONTCONFIG REQUIRED fontconfig)
 
-# OBJECT library: the runner + platform sources get compiled once and
-# linked into each demo executable. (A STATIC archive doesn't work for
-# the platform sources — they carry file-static state that the linker
-# must keep available; the same trick ygreeter uses.)
-add_library(demo_ygui_runner OBJECT
-    runner.c
-    # Shared Shadertoy gallery (demo 41 / ygreeter Shadertoy tab). Plain
-    # string data, no GPU deps — compiled in directly rather than pulled
-    # from the webgpu-bound yetty_yshadertoy lib.
+# OBJECT library: the shared platform/bootstrap sources, compiled once and linked
+# into each demo executable. (A STATIC archive doesn't work for the platform
+# sources — they carry file-static state that the linker must keep available; the
+# same trick ygreeter uses.) The host lifecycle itself lives in yetty_yguiapp.
+add_library(demo_ygui_platform OBJECT
+    # Shared Shadertoy gallery (demo 41 / ygreeter Shadertoy tab). Plain string
+    # data, no GPU deps — compiled in directly rather than pulled from the
+    # webgpu-bound yetty_yshadertoy lib.
     ${YETTY_ROOT}/src/yetty/yshadertoy/demo-shaders.c
     ${DEMO_YGUI_PLATFORM_SOURCES}
 )
-target_include_directories(demo_ygui_runner PUBLIC
+target_include_directories(demo_ygui_platform PUBLIC
     ${YETTY_ROOT}/src
     ${YETTY_ROOT}/include
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${DEMO_FONTCONFIG_INCLUDE_DIRS}
 )
-target_compile_definitions(demo_ygui_runner PUBLIC
+target_compile_definitions(demo_ygui_platform PUBLIC
     YETTY_WEB=0
     YETTY_ANDROID=0
     YETTY_USE_FORKPTY=1
     YETTY_YGUI_HAS_UV
 )
-# Inherit usage requirements (include dirs, defs) from every dep that
-# the inlined platform sources transitively reach: webgpu headers from
-# Dawn, glfw, ygui's own headers, yetty_yplatform_*, etc. OBJECT libs
-# propagate these to consumers but also use them to compile their own
-# sources — exactly what we need for runner.c + the platform .c files.
-target_link_libraries(demo_ygui_runner PUBLIC
+# Inherit usage requirements (include dirs, defs) from every dep the inlined
+# platform sources transitively reach (Dawn webgpu headers, glfw, ygui headers,
+# yetty_yplatform_*, …). OBJECT libs propagate these to consumers and use them to
+# compile their own sources.
+target_link_libraries(demo_ygui_platform PUBLIC
+    yetty_yguiapp
     yetty_ygui
     yetty_ywire
     yetty_yfigure
@@ -90,9 +89,10 @@ target_link_libraries(demo_ygui_runner PUBLIC
     yetty_telnet
 )
 
-# Helper macro: define one demo executable. `name` is the suffix
-# (e.g. `00-simple` → `demo-ygui-00-simple`). Extra link libs (for
-# producer-widget demos) come after via `EXTRA_LIBS`.
+# Helper: define one demo executable. `name` is the suffix (e.g. `00-simple` →
+# `demo-ygui-00-simple`); `ARGV1` is the source dir under demo/ygui. The demo's
+# main.c (#includes its own main.gen.c) links the shared platform objects +
+# yetty_yguiapp.
 function(demo_ygui_add name)
     set(target demo-ygui-${name})
     set(srcdir ${CMAKE_CURRENT_SOURCE_DIR}/${ARGV1})
@@ -101,7 +101,7 @@ function(demo_ygui_add name)
     endif()
     add_executable(${target}
         ${srcdir}/main.c
-        $<TARGET_OBJECTS:demo_ygui_runner>
+        $<TARGET_OBJECTS:demo_ygui_platform>
     )
     target_include_directories(${target} PRIVATE
         ${YETTY_ROOT}/src
@@ -114,10 +114,12 @@ function(demo_ygui_add name)
         YETTY_USE_FORKPTY=1
     )
     target_link_libraries(${target} PRIVATE
+        yetty_yguiapp
         yetty_ygui
         yetty_ywire
         yetty_yfigure
         yetty_ygrid
+        yetty_yshadertoy
         yetty_yfont_core
         yetty_ydraw_factory
         yetty_yimage
@@ -201,5 +203,6 @@ demo_ygui_add(35-collapsing-header 35_collapsing_header_open)
 demo_ygui_add(37-scrollarea 37_scrollarea)
 demo_ygui_add(38-ynodes 38_ynodes)
 
-# Window-chrome POC: standalone window gains drag/resize/maximize via ychrome.
+# Window-chrome POC: standalone window gains drag/resize/maximize via ychrome
+# (now enabled by default in the shared yguiapp host).
 demo_ygui_add(42-window-chrome 42_window_chrome)
