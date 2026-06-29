@@ -2551,6 +2551,17 @@ exposed:
         type: int
     doc: null
   - source_file: src/yetty/ygui/framework.c
+    name: yetty_ygui_framework_attach_transport
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: transport
+        type: "struct yetty_yclass_transport *"
+    doc: "/* Attach over a caller-provided transport — the endpoint path passes a
+ * yetty_ywire_channel-backed transport so the framework rides the multiplexed
+ * connection's rpc channel instead of opening its own DCS transport on the fd. */"
+  - source_file: src/yetty/ygui/framework.c
     name: yetty_ygui_framework_set_viewport
     return_type: struct yetty_ycore_void_result
     args:

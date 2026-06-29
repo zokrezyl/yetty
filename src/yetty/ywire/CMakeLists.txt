@@ -10,6 +10,8 @@ endif()
 
 add_library(yetty_ywire STATIC
     wire-statemachine.c
+    connection.c
+    channel.c
     ${_ywire_coro_impl}
 )
 

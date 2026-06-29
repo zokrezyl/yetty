@@ -35,6 +35,12 @@ target_link_libraries(yetty_ffi PRIVATE
     yetty_yshadertoy
     yetty_yview
     yetty_yvterm
+    # The multiplexed PTY endpoint surface the bindings drive directly (the #380
+    # reactor seam): transport-pty (yclass) + connection/channel (ywire). These
+    # are plain-C functions, not yclass stubs, so nothing else in the .so
+    # references them — whole-archive keeps their symbols exported for ctypes.
+    yetty_yclass
+    yetty_ywire
     -Wl,--no-whole-archive
     yetty_yplatform_core
     yetty_ydraw     # full ydraw (cell-ref-table, …), referenced by yvterm

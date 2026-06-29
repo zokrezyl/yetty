@@ -28,12 +28,36 @@ struct yetty_yfigure_producer_session_ptr_result yetty_yfigure_producer_attach(i
                                                                                int write_fd,
                                                                                int compressed)
 {
+    /* The DCS-over-PTY transport is the default in-band backend. The endpoint
+     * path (yetty_ywire_connection) injects its own channel-backed transport
+     * via _attach_transport() instead. */
+    struct yetty_yclass_transport_ptr_result transport_result = yetty_yclass_transport_dcs_create(
+        read_fd, write_fd, YETTY_DCS_YCLASS_RPC, compressed ? 1 : 0);
+    YETTY_RETURN_IF_ERR(yetty_yfigure_producer_session_ptr, transport_result,
+                        "yfigure_producer_attach: transport_dcs_create");
+    return yetty_yfigure_producer_attach_transport(transport_result.value);
+}
+
+struct yetty_yfigure_producer_session_ptr_result yetty_yfigure_producer_attach_transport(
+    struct yetty_yclass_transport *transport)
+{
+    if (!transport) {
+        return YETTY_ERR(yetty_yfigure_producer_session_ptr,
+                         "yfigure_producer_attach_transport: NULL transport");
+    }
     /* The yfigure classes must be known locally so method_slot_get resolves
      * each typed stub's slot and translate_class can populate the slot table.
-     * Idempotent. */
+     * Idempotent. We took ownership of the transport — tear it down on the
+     * early failures that precede rpc_session_create taking it over. */
     struct yetty_ycore_void_result register_result = yetty_yfigure_register();
-    YETTY_RETURN_IF_ERR(yetty_yfigure_producer_session_ptr, register_result,
-                        "yfigure_producer_attach: yfigure_register");
+    if (YETTY_IS_ERR(register_result)) {
+        struct yetty_ycore_void_result destroy_result = transport->ops->destroy(transport);
+        if (YETTY_IS_ERR(destroy_result)) {
+            yetty_ycore_error_destroy(destroy_result.error);
+        }
+        return YETTY_ERR(yetty_yfigure_producer_session_ptr,
+                         "yfigure_producer_attach: yfigure_register", register_result);
+    }
 
     /* register() only installs the lazy accessor/skel lookups; the domain's
      * method slots are not entered into the slot table until a class is built.
@@ -45,21 +69,21 @@ struct yetty_yfigure_producer_session_ptr_result yetty_yfigure_producer_attach(i
      * Building the container class registers it and its figure parent, i.e.
      * every yetty_yfigure slot the typed stubs use. */
     struct yetty_yclass_ptr_result class_result = yetty_yfigure_container_class_get();
-    YETTY_RETURN_IF_ERR(yetty_yfigure_producer_session_ptr, class_result,
-                        "yfigure_producer_attach: container_class_get");
-
-    struct yetty_yclass_transport_ptr_result transport_result = yetty_yclass_transport_dcs_create(
-        read_fd, write_fd, YETTY_DCS_YCLASS_RPC, compressed ? 1 : 0);
-    YETTY_RETURN_IF_ERR(yetty_yfigure_producer_session_ptr, transport_result,
-                        "yfigure_producer_attach: transport_dcs_create");
+    if (YETTY_IS_ERR(class_result)) {
+        struct yetty_ycore_void_result destroy_result = transport->ops->destroy(transport);
+        if (YETTY_IS_ERR(destroy_result)) {
+            yetty_ycore_error_destroy(destroy_result.error);
+        }
+        return YETTY_ERR(yetty_yfigure_producer_session_ptr,
+                         "yfigure_producer_attach: container_class_get", class_result);
+    }
 
     struct yetty_yclass_rpc_session_ptr_result session_result =
-        yetty_yclass_rpc_session_create(transport_result.value);
+        yetty_yclass_rpc_session_create(transport);
     if (YETTY_IS_ERR(session_result)) {
         /* session_create did not take ownership on failure — destroy the
          * transport ourselves. */
-        struct yetty_ycore_void_result destroy_result =
-            transport_result.value->ops->destroy(transport_result.value);
+        struct yetty_ycore_void_result destroy_result = transport->ops->destroy(transport);
         if (YETTY_IS_ERR(destroy_result)) {
             yetty_ycore_error_destroy(destroy_result.error);
         }

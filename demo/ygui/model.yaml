@@ -42,7 +42,7 @@ types:
       - name: build
         type: demo_build_fn
       - name: engine
-        type: "struct yetty_ygui_framework *"
+        type: "struct yetty_yclass_object *"
       - name: root
         type: "struct yetty_yclass_object *"
       - name: yframework

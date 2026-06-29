@@ -16,7 +16,6 @@ import sys
 import termios
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from . import runtime as rt
 from .generated import _types as T
@@ -41,6 +40,20 @@ Ctypes = C
 
 MSG_CB = C.CFUNCTYPE(None, C.c_void_p, C.c_int, C.c_void_p, C.c_size_t, C.c_void_p, C.c_size_t)
 RAW_CB = C.CFUNCTYPE(None, C.c_void_p, C.c_void_p, C.c_size_t)
+RESIZE_CB = C.CFUNCTYPE(None, C.c_void_p, C.c_int, C.c_int, C.c_int, C.c_int)
+
+# The #380 multiplexed-wire reactor seam (yetty_ywire_connection over
+# yetty_yclass_transport_pty). Well-known channel ids match channel.h.
+CHANNEL_RPC = 1
+CHANNEL_INPUT = 2
+CHANNEL_RAW = 3
+
+
+class _Reactor(C.Structure):
+    """struct yetty_yclass_transport_reactor — {userdata, ops}, passed by value
+    from transport_pty_reactor() into connection_create()."""
+
+    _fields_ = [("userdata", C.c_void_p), ("ops", C.c_void_p)]
 
 CLIENT_INPUT_SUB = 610010
 SUB_MAGIC = 0x53504954
@@ -137,15 +150,119 @@ class Widget:
 
 
 class App:
-    def __init__(self, out_fd: int | None = None):
+    """In-terminal ygui app driven by the multiplexed wire connection (#380).
+
+    Owns the single PTY byte stream via ``yetty_yclass_transport_pty`` (raw-mode,
+    non-blocking writer, the fd()/pump() reactor seam), multiplexes rpc/input/raw
+    channels over it with ``yetty_ywire_connection``, and binds the ygui
+    framework to the rpc channel. All the dangerous byte handling — demux, raw
+    mode, framing — lives in the C connection; Python just registers the fd with
+    its loop and calls pump(). No Python-side frame parsing.
+
+    Drive it with ``run()`` (synchronous select loop) or ``await run_async()``
+    (registers the connection fd with the running asyncio loop).
+    """
+
+    def __init__(self, *, compressed: bool = True, in_fd: int | None = None,
+                 out_fd: int | None = None):
         load_default()
+        self.in_fd = in_fd if in_fd is not None else sys.stdin.fileno()
         self.out_fd = out_fd if out_fd is not None else sys.stdout.fileno()
-        self.pty = _raw("yetty_yffi_fd_pty_create", C.c_void_p, [C.c_int], self.out_fd)
-        self.framework = must(
-            _cresult("yetty_ygui_framework_create", _PtrResult, (C.c_void_p,), self.pty),
-            "framework_create")
         self.root: Widget | None = None
+        self.running = True
         self._closed = False
+
+        # Sole owner of the PTY stream: raw-mode + non-blocking writer + reactor.
+        self.transport = must(_cresult(
+            "yetty_yclass_transport_pty_create", _PtrResult, (C.c_int, C.c_int),
+            self.in_fd, self.out_fd), "transport_pty_create")
+        _cvoid("yetty_yclass_transport_pty_enable_raw_mode", (C.c_void_p,), self.transport)
+        reactor = _raw("yetty_yclass_transport_pty_reactor", _Reactor, [C.c_void_p], self.transport)
+
+        # The multiplexed connection over the single stream.
+        self.conn = must(_cresult(
+            "yetty_ywire_connection_create", _PtrResult, (_Reactor, C.c_int),
+            reactor, 1 if compressed else 0), "connection_create")
+
+        # The ygui framework, bound to the connection's rpc channel (RPC requests
+        # ride the channel transport adapter; the get_root handshake reads stdin
+        # synchronously here, before any loop owns the fd).
+        self.framework = must(_cresult(
+            "yetty_ygui_framework_create", _PtrResult, (C.c_void_p,), None), "framework_create")
+        chtr = must(_cresult("yetty_ywire_channel_transport", _PtrResult, (C.c_void_p,),
+                             self._channel(CHANNEL_RPC)), "channel_transport")
+        must(_cvoid("yetty_ygui_framework_attach_transport", (C.c_void_p, C.c_void_p),
+                    self.framework, chtr), "framework_attach_transport")
+
+        # Inbound routing: forwarded mouse → framework; raw keystrokes → input
+        # decoder; resize → viewport. Keep the CFUNCTYPE trampolines alive on self.
+        self._env_cb = MSG_CB(self._on_input)
+        self._raw_cb = RAW_CB(self._on_raw)
+        self._resize_cb = RESIZE_CB(self._on_resize)
+        _cvoid("yetty_ywire_channel_set_envelope_sink", (C.c_void_p, MSG_CB, C.c_void_p),
+               self._channel(CHANNEL_INPUT), self._env_cb, None)
+        _cvoid("yetty_ywire_channel_set_raw_sink", (C.c_void_p, RAW_CB, C.c_void_p),
+               self._channel(CHANNEL_RAW), self._raw_cb, None)
+        _cvoid("yetty_ywire_connection_set_resize_cb", (C.c_void_p, RESIZE_CB, C.c_void_p),
+               self.conn, self._resize_cb, None)
+
+        # Ask the host to forward pointer events (DEC ?1500/?1501), sent verbatim
+        # through the raw channel; pick up the initial viewport.
+        self._enable_mouse_forwarding()
+        _cvoid("yetty_ywire_connection_pickup_winsize", (C.c_void_p,), self.conn)
+
+    # --- connection plumbing -------------------------------------------------
+
+    def _channel(self, channel_id: int):
+        return _raw("yetty_ywire_connection_channel", C.c_void_p, [C.c_void_p, C.c_uint],
+                    self.conn, channel_id)
+
+    def _enable_mouse_forwarding(self) -> None:
+        raw = self._channel(CHANNEL_RAW)
+        seq = b"\x1b[?1500h\x1b[?1501h"
+        buf = C.create_string_buffer(seq, len(seq))
+        _cresult("yetty_ywire_channel_write", T.yetty_ycore_size_result,
+                 (C.c_void_p, C.c_void_p, C.c_size_t), raw, buf, len(seq))
+        _cvoid("yetty_ywire_channel_flush", (C.c_void_p,), raw)
+
+    def fd(self) -> int:
+        """The readable fd to register with a host loop (the reactor seam)."""
+        return _raw("yetty_ywire_connection_fd", C.c_int, [C.c_void_p], self.conn)
+
+    def pump_readable(self) -> Result[int | None]:
+        return _cresult("yetty_ywire_connection_pump_readable", T.yetty_ycore_size_result,
+                        (C.c_void_p,), self.conn)
+
+    def pump_writable(self) -> Result[int | None]:
+        return _cresult("yetty_ywire_connection_pump_writable", T.yetty_ycore_size_result,
+                        (C.c_void_p,), self.conn)
+
+    def is_eof(self) -> bool:
+        return bool(_raw("yetty_ywire_connection_is_eof", C.c_int, [C.c_void_p], self.conn))
+
+    # --- inbound sinks (fired from C during pump_readable) -------------------
+
+    def _on_input(self, _user, wire_code, _args, _args_len, payload, payload_len) -> None:
+        if wire_code in (OSC_FIGURE_MOUSE, OSC_MOUSE):
+            parsed = parse_mouse(payload, payload_len)
+            if parsed:
+                kind, button, pressed, x, y, wheel = parsed
+                self.feed_mouse_event(kind, button, pressed, x, y, wheel)
+
+    def _on_raw(self, _user, data, n) -> None:
+        if not data or n <= 0:
+            return
+        raw = C.string_at(data, n)
+        if any(b in (0x71, 0x03, 0x04) for b in raw):  # q / Ctrl-C / Ctrl-D
+            self.running = False
+        self.feed_input(raw, n)
+
+    def _on_resize(self, _user, width_px, height_px, _cols, _rows) -> None:
+        if width_px > 0 and height_px > 0:
+            _cvoid("yetty_ygui_framework_set_viewport", (C.c_void_p, C.c_float, C.c_float),
+                   self.framework, C.c_float(float(width_px)), C.c_float(float(height_px)))
+
+    # --- widget building -----------------------------------------------------
 
     def add(self, kind: str, parent: Widget | None = None, *, width: float = 0.0,
             height: float = 0.0, label: str | None = None, text: str | None = None) -> Widget:
@@ -165,11 +282,6 @@ class App:
         self.root = root
         return _cvoid("yetty_ygui_framework_set_root", (C.c_void_p, C.c_void_p),
                       self.framework, root.handle)
-
-    def resize_to_terminal(self) -> Result[None]:
-        width, height = terminal_geometry(self.out_fd)
-        return _cvoid("yetty_ygui_framework_set_viewport", (C.c_void_p, C.c_float, C.c_float),
-                      self.framework, C.c_float(width), C.c_float(height))
 
     def emit(self) -> Result[None]:
         return _cvoid("yetty_ygui_framework_emit", (C.c_void_p,), self.framework)
@@ -199,17 +311,82 @@ class App:
         return _cvoid("yetty_ygui_framework_feed_input", (C.c_void_p, C.c_void_p, C.c_size_t),
                       self.framework, data, n)
 
-    def clear(self) -> Result[None]:
-        return _cvoid("yetty_ygui_framework_clear_remote_fd", (C.c_void_p, C.c_int),
-                      self.framework, self.out_fd)
+    # --- run loops -----------------------------------------------------------
+
+    def run(self) -> int:
+        """Synchronous facade: a select() loop over the connection fd plus a
+        ~30 fps tick that ships dirty frames. q / Ctrl-C / Ctrl-D quits."""
+        import selectors
+
+        sel = selectors.DefaultSelector()
+        sel.register(self.fd(), selectors.EVENT_READ)
+        try:
+            while self.running:
+                for _key, _mask in sel.select(timeout=0.033):
+                    self.pump_readable()
+                self.emit_if_dirty()
+                self.pump_writable()
+                if self.is_eof():
+                    self.running = False
+        except KeyboardInterrupt:
+            pass
+        finally:
+            sel.close()
+            self.close()
+        return 0
+
+    async def run_async(self) -> int:
+        """Async facade: register the connection fd with the running asyncio
+        loop and pump on readiness; a periodic task ships dirty frames. This is
+        the loop-agnostic integration — the host loop owns the fd, the C
+        connection owns the bytes."""
+        import asyncio
+
+        loop = asyncio.get_running_loop()
+        fd = self.fd()
+        done: asyncio.Future = loop.create_future()
+
+        def finish() -> None:
+            if not done.done():
+                done.set_result(0)
+
+        def on_readable() -> None:
+            self.pump_readable()
+            self.emit_if_dirty()
+            self.pump_writable()
+            if self.is_eof() or not self.running:
+                finish()
+
+        async def ticker() -> None:
+            try:
+                while self.running and not done.done():
+                    self.emit_if_dirty()
+                    self.pump_writable()
+                    await asyncio.sleep(0.033)
+            except asyncio.CancelledError:
+                pass
+            finish()
+
+        loop.add_reader(fd, on_readable)
+        task = loop.create_task(ticker())
+        try:
+            await done
+        finally:
+            loop.remove_reader(fd)
+            task.cancel()
+            self.close()
+        return 0
 
     def close(self) -> None:
         if self._closed:
             return
         self._closed = True
-        self.clear()
+        # Order: framework first (detaches the producer session, destroying the
+        # rpc channel transport adapter), then the connection (state machine +
+        # channels), then the transport (restores raw mode). NULL-safe in C.
         _cvoid("yetty_ygui_framework_destroy", (C.c_void_p,), self.framework)
-        _raw("yetty_yffi_fd_pty_destroy", None, [C.c_void_p], self.pty)
+        _cvoid("yetty_ywire_connection_destroy", (C.c_void_p,), self.conn)
+        _cvoid("yetty_yclass_transport_pty_destroy", (C.c_void_p,), self.transport)
 
     def __enter__(self):
         return self
@@ -219,22 +396,9 @@ class App:
         return False
 
 
-class Demux:
-    def __init__(self, on_osc: Callable, on_raw: Callable):
-        load_default()
-        self.yface = must(_cresult("yetty_yface_create", _PtrResult, ()), "yface_create")
-        self._osc_cb = MSG_CB(on_osc)
-        self._raw_cb = RAW_CB(on_raw)
-        _raw("yetty_yface_set_handlers", None, [C.c_void_p, MSG_CB, RAW_CB, C.c_void_p],
-             self.yface, self._osc_cb, self._raw_cb, None)
-
-    def feed(self, data: bytes) -> Result[None]:
-        buf = C.create_string_buffer(data, len(data))
-        return _cvoid("yetty_yface_feed_bytes", (C.c_void_p, C.c_void_p, C.c_size_t),
-                      self.yface, buf, len(data))
-
-    def close(self) -> Result[None]:
-        return _cvoid("yetty_yface_destroy", (C.c_void_p,), self.yface)
+# The widget-framework app IS the App today (the north-star App/GuiApp split —
+# generic container host vs. + ygui framework — lands with the yapp:app mirror).
+GuiApp = App
 
 
 def parse_key(payload, payload_len):
@@ -264,25 +428,6 @@ def parse_mouse(payload, payload_len):
     (_magic, _version, _figure, kind, button, pressed, _held,
      x, y, wheel, _pad) = MOUSE_STRUCT.unpack(C.string_at(payload, MOUSE_STRUCT.size))
     return kind, button, pressed, x, y, wheel
-
-
-def _emit_sub(fd: int, flags: int) -> Result[None]:
-    sub = struct.pack("<IIII", SUB_MAGIC, WIRE_VERSION, flags, 0)
-    buf = C.create_string_buffer(sub, len(sub))
-    return _cvoid("yetty_yface_emit_to_fd",
-                  (C.c_int, C.c_int, C.c_int, C.c_void_p, C.c_size_t, C.c_void_p, C.c_size_t),
-                  fd, CLIENT_INPUT_SUB, 0, None, 0, buf, len(sub))
-
-
-def subscribe_mouse(fd: int) -> Result[None]:
-    result = _emit_sub(fd, SUB_MOUSE_CLICK | SUB_MOUSE_MOVE | SUB_MOUSE_WHEEL)
-    os.write(fd, b"\x1b[?1500h\x1b[?1501h")
-    return result
-
-
-def unsubscribe_mouse(fd: int) -> Result[None]:
-    os.write(fd, b"\x1b[?1500l\x1b[?1501l")
-    return _emit_sub(fd, 0)
 
 
 def terminal_geometry(fd: int):
