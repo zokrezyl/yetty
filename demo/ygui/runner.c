@@ -1082,8 +1082,18 @@ static void client_close_cb(uv_handle_t *h)
 
 static int run_client_mode(const char *name, demo_build_fn build, int enable_chrome)
 {
-    (void)name;
+    /* Cleanup state declared up front so every error path can `goto fail` and
+     * the single teardown restores whatever was set up — crucially raw mode,
+     * which once enabled MUST be restored (by destroying the transport) on every
+     * exit. uv handles are tracked individually so teardown only touches the
+     * ones that were actually initialized. */
     struct client_state cs = {0};
+    struct demo_runner r = {.name = name, .build = build, .enable_chrome = enable_chrome};
+    struct yetty_yclass_object *body = NULL;
+    int loop_inited = 0, stdin_inited = 0, sigwinch_inited = 0, prep_inited = 0, timer_inited = 0;
+    int rc = 1;
+    cs.runner = &r;
+    cs.running = 1;
 
     /* The connection's transport owns STDIN/STDOUT. Raw mode runs BEFORE any
      * OSC write — the first thing the host might echo back is the ?1500/?1501
@@ -1093,13 +1103,18 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
     if (YETTY_IS_ERR(tr)) {
         yetty_ycore_error_print(stderr, "demo_runner client: transport_pty_create", tr.error);
         yetty_ycore_error_destroy(tr.error);
-        return 1;
+        return 1; /* nothing acquired yet */
     }
     cs.transport = tr.value;
+
+    /* Raw-mode failure is fatal: without it the cooked-tty echo loop corrupts
+     * the stream. Fall through to cleanup, which restores the fd flags. */
     {
         struct yetty_ycore_void_result rr = yetty_yclass_transport_pty_enable_raw_mode(cs.transport);
         if (YETTY_IS_ERR(rr)) {
+            yetty_ycore_error_print(stderr, "demo_runner client: enable_raw_mode", rr.error);
             yetty_ycore_error_destroy(rr.error);
+            goto fail;
         }
     }
 
@@ -1108,30 +1123,23 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
     if (YETTY_IS_ERR(cr)) {
         yetty_ycore_error_print(stderr, "demo_runner client: connection_create", cr.error);
         yetty_ycore_error_destroy(cr.error);
-        struct yetty_ycore_void_result td = yetty_yclass_transport_pty_destroy(cs.transport);
-        if (YETTY_IS_ERR(td)) {
-            yetty_ycore_error_destroy(td.error);
-        }
-        return 1;
+        goto fail;
     }
     cs.conn = cr.value;
 
     if (uv_loop_init(&cs.loop) != 0) {
         fprintf(stderr, "demo_runner client: uv_loop_init failed\n");
-        return 1;
+        goto fail;
     }
+    loop_inited = 1;
 
     struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
     if (YETTY_IS_ERR(fr)) {
         yetty_ycore_error_print(stderr, "demo_runner client: framework_create", fr.error);
         yetty_ycore_error_destroy(fr.error);
-        return 1;
+        goto fail;
     }
-
-    struct demo_runner r = {
-        .name = name, .build = build, .engine = fr.value, .enable_chrome = enable_chrome};
-    cs.runner = &r;
-    cs.running = 1;
+    r.engine = fr.value;
     yetty_ygui_framework_set_key_cb(r.engine, client_on_key, &cs);
 
     /* Bind the framework's figure output to the connection's rpc channel: the
@@ -1149,7 +1157,7 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
             yetty_ycore_error_print(stderr, "demo_runner client: rpc channel transport",
                                     rpc_transport.error);
             yetty_ycore_error_destroy(rpc_transport.error);
-            return 1;
+            goto fail;
         }
         struct yetty_ycore_void_result attach_res =
             yetty_ygui_framework_attach_transport(r.engine, rpc_transport.value);
@@ -1157,21 +1165,20 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
             yetty_ycore_error_print(stderr, "demo_runner client: framework_attach_transport",
                                     attach_res.error);
             yetty_ycore_error_destroy(attach_res.error);
-            return 1;
+            goto fail;
         }
     }
 
     /* Same two-level root the standalone path uses: outer vbox owning
      * the viewport, inner body panel with the brand background and
      * column-direction layout. */
-    struct yetty_yclass_object *body = NULL;
     {
         struct yetty_yclass_object_ptr_result rr =
             yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
         if (YETTY_IS_ERR(rr)) {
             yetty_ycore_error_print(stderr, "demo_runner client: root add", rr.error);
             yetty_ycore_error_destroy(rr.error);
-            return 1;
+            goto fail;
         }
         r.root = rr.value;
         struct yetty_ygui_layout_const_ptr_result layout_res = yetty_ygui_widget_layout_get(r.root);
@@ -1179,7 +1186,7 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
             yetty_ycore_error_print(stderr, "demo_runner client: root layout_get",
                                     layout_res.error);
             yetty_ycore_error_destroy(layout_res.error);
-            return 1;
+            goto fail;
         }
         struct yetty_ygui_layout l = *layout_res.value;
         l.align = YETTY_YGUI_ALIGN_STRETCH;
@@ -1187,13 +1194,13 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
         if (YETTY_IS_ERR(lr)) {
             yetty_ycore_error_print(stderr, "demo_runner client: root layout", lr.error);
             yetty_ycore_error_destroy(lr.error);
-            return 1;
+            goto fail;
         }
         struct yetty_ycore_void_result sr = yetty_ygui_framework_set_root(r.engine, r.root);
         if (YETTY_IS_ERR(sr)) {
             yetty_ycore_error_print(stderr, "demo_runner client: set_root", sr.error);
             yetty_ycore_error_destroy(sr.error);
-            return 1;
+            goto fail;
         }
         /* NOTE: in-terminal (client) mode renders into the host yetty's
          * compositor via OSC, not a local container, so the chrome caption
@@ -1204,7 +1211,7 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
         if (YETTY_IS_ERR(br)) {
             yetty_ycore_error_print(stderr, "demo_runner client: body add", br.error);
             yetty_ycore_error_destroy(br.error);
-            return 1;
+            goto fail;
         }
         body = br.value;
         struct yetty_ygui_layout_const_ptr_result body_layout_res =
@@ -1213,7 +1220,7 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
             yetty_ycore_error_print(stderr, "demo_runner client: body layout_get",
                                     body_layout_res.error);
             yetty_ycore_error_destroy(body_layout_res.error);
-            return 1;
+            goto fail;
         }
         struct yetty_ygui_layout bl = *body_layout_res.value;
         bl.direction = YETTY_YGUI_FLEX_COLUMN;
@@ -1257,10 +1264,10 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
         }
     }
     {
-        struct yetty_ycore_void_result rc =
+        struct yetty_ycore_void_result resize_res =
             yetty_ywire_connection_set_resize_cb(cs.conn, client_resize_cb, &cs);
-        if (YETTY_IS_ERR(rc)) {
-            yetty_ycore_error_destroy(rc.error);
+        if (YETTY_IS_ERR(resize_res)) {
+            yetty_ycore_error_destroy(resize_res.error);
         }
     }
     /* Tell the host yetty to forward pointer events to our stdin. */
@@ -1279,51 +1286,78 @@ static int run_client_mode(const char *name, demo_build_fn build, int enable_chr
         }
     }
     if (uv_poll_init(&cs.loop, &cs.stdin_poll, yetty_ywire_connection_fd(cs.conn)) == 0) {
+        stdin_inited = 1;
         cs.stdin_poll.data = &cs;
         uv_poll_start(&cs.stdin_poll, UV_READABLE, client_stdin_cb);
     }
     if (uv_signal_init(&cs.loop, &cs.sigwinch) == 0) {
+        sigwinch_inited = 1;
         cs.sigwinch.data = &cs;
         uv_signal_start(&cs.sigwinch, client_sigwinch_cb, SIGWINCH);
     }
     if (uv_prepare_init(&cs.loop, &cs.prep) == 0) {
+        prep_inited = 1;
         cs.prep.data = &cs;
         uv_prepare_start(&cs.prep, client_prep_cb);
     }
     if (uv_timer_init(&cs.loop, &cs.frame_timer) == 0) {
+        timer_inited = 1;
         cs.frame_timer.data = &cs;
         uv_timer_start(&cs.frame_timer, client_frame_cb, 33, 33);
     }
 
     uv_run(&cs.loop, UV_RUN_DEFAULT);
+    rc = 0;
 
-    uv_poll_stop(&cs.stdin_poll);
-    uv_signal_stop(&cs.sigwinch);
-    uv_prepare_stop(&cs.prep);
-    uv_timer_stop(&cs.frame_timer);
-    uv_close((uv_handle_t *)&cs.stdin_poll, client_close_cb);
-    uv_close((uv_handle_t *)&cs.sigwinch, client_close_cb);
-    uv_close((uv_handle_t *)&cs.prep, client_close_cb);
-    uv_close((uv_handle_t *)&cs.frame_timer, client_close_cb);
-    uv_run(&cs.loop, UV_RUN_NOWAIT);
+fail:
+    /* Stop + close only the uv handles that were initialized, then drain their
+     * close callbacks. */
+    if (loop_inited) {
+        if (stdin_inited) {
+            uv_poll_stop(&cs.stdin_poll);
+            uv_close((uv_handle_t *)&cs.stdin_poll, client_close_cb);
+        }
+        if (sigwinch_inited) {
+            uv_signal_stop(&cs.sigwinch);
+            uv_close((uv_handle_t *)&cs.sigwinch, client_close_cb);
+        }
+        if (prep_inited) {
+            uv_prepare_stop(&cs.prep);
+            uv_close((uv_handle_t *)&cs.prep, client_close_cb);
+        }
+        if (timer_inited) {
+            uv_timer_stop(&cs.frame_timer);
+            uv_close((uv_handle_t *)&cs.frame_timer, client_close_cb);
+        }
+        uv_run(&cs.loop, UV_RUN_NOWAIT);
+    }
 
     /* Tear down in order: the framework first (it detaches the producer session,
      * which destroys the rpc channel transport adapter), then the connection
-     * (state machine + channels), then the transport (restores raw mode). */
-    struct yetty_ycore_void_result dr = yetty_ygui_framework_destroy(r.engine);
-    if (YETTY_IS_ERR(dr)) {
-        yetty_ycore_error_destroy(dr.error);
+     * (state machine + channels), then the transport (restores raw mode). Each
+     * is skipped if it was never created. */
+    if (r.engine) {
+        struct yetty_ycore_void_result dr = yetty_ygui_framework_destroy(r.engine);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
     }
-    struct yetty_ycore_void_result cd = yetty_ywire_connection_destroy(cs.conn);
-    if (YETTY_IS_ERR(cd)) {
-        yetty_ycore_error_destroy(cd.error);
+    if (cs.conn) {
+        struct yetty_ycore_void_result cd = yetty_ywire_connection_destroy(cs.conn);
+        if (YETTY_IS_ERR(cd)) {
+            yetty_ycore_error_destroy(cd.error);
+        }
     }
-    struct yetty_ycore_void_result td = yetty_yclass_transport_pty_destroy(cs.transport);
-    if (YETTY_IS_ERR(td)) {
-        yetty_ycore_error_destroy(td.error);
+    if (cs.transport) {
+        struct yetty_ycore_void_result td = yetty_yclass_transport_pty_destroy(cs.transport);
+        if (YETTY_IS_ERR(td)) {
+            yetty_ycore_error_destroy(td.error);
+        }
     }
-    uv_loop_close(&cs.loop);
-    return 0;
+    if (loop_inited) {
+        uv_loop_close(&cs.loop);
+    }
+    return rc;
 }
 
 #endif /* YETTY_YGUI_HAS_UV */

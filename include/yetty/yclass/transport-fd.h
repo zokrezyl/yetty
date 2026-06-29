@@ -8,10 +8,8 @@
 #ifndef YCLASS_TRANSPORT_FD_H
 #define YCLASS_TRANSPORT_FD_H
 
-#include <yetty/yclass/transport.h>
+#include <yetty/yclass/transport.h> /* yetty_yclass_transport_ptr_result */
 #include <yetty/ycore/result.h>
-
-YETTY_YRESULT_DECLARE(yetty_yclass_transport_ptr, struct yetty_yclass_transport *);
 
 struct yetty_yclass_transport_ptr_result yetty_yclass_transport_fd_create(int fd);
 

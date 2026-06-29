@@ -18,7 +18,7 @@
 #ifndef YETTY_YWIRE_CHANNEL_H
 #define YETTY_YWIRE_CHANNEL_H
 
-#include <yetty/yclass/transport-fd.h> /* yetty_yclass_transport_ptr_result */
+#include <yetty/yclass/transport.h> /* yetty_yclass_transport_ptr_result */
 #include <yetty/ycore/result.h>
 
 #include <stddef.h>

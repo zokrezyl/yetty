@@ -171,45 +171,63 @@ class App:
         self.root: Widget | None = None
         self.running = True
         self._closed = False
+        # Declared up front so close() can run after a partial init (e.g. a
+        # failure right after raw mode is enabled). Each C destroy is NULL-safe.
+        self.transport = None
+        self.conn = None
+        self.framework = None
+        self._env_cb = self._raw_cb = self._resize_cb = None
 
-        # Sole owner of the PTY stream: raw-mode + non-blocking writer + reactor.
-        self.transport = must(_cresult(
-            "yetty_yclass_transport_pty_create", _PtrResult, (C.c_int, C.c_int),
-            self.in_fd, self.out_fd), "transport_pty_create")
-        _cvoid("yetty_yclass_transport_pty_enable_raw_mode", (C.c_void_p,), self.transport)
-        reactor = _raw("yetty_yclass_transport_pty_reactor", _Reactor, [C.c_void_p], self.transport)
+        # Once raw mode is enabled the terminal MUST be restored on every exit
+        # path, so the whole bring-up is guarded: any failure tears down what was
+        # set up (destroying the transport restores raw mode + fd flags).
+        try:
+            # Sole owner of the PTY stream: raw-mode + non-blocking writer + reactor.
+            self.transport = must(_cresult(
+                "yetty_yclass_transport_pty_create", _PtrResult, (C.c_int, C.c_int),
+                self.in_fd, self.out_fd), "transport_pty_create")
+            # Fatal on a tty if raw mode can't be set — otherwise the cooked-tty
+            # echo loop corrupts the stream.
+            must(_cvoid("yetty_yclass_transport_pty_enable_raw_mode", (C.c_void_p,),
+                        self.transport), "enable_raw_mode")
+            reactor = _raw("yetty_yclass_transport_pty_reactor", _Reactor, [C.c_void_p],
+                           self.transport)
 
-        # The multiplexed connection over the single stream.
-        self.conn = must(_cresult(
-            "yetty_ywire_connection_create", _PtrResult, (_Reactor, C.c_int),
-            reactor, 1 if compressed else 0), "connection_create")
+            # The multiplexed connection over the single stream.
+            self.conn = must(_cresult(
+                "yetty_ywire_connection_create", _PtrResult, (_Reactor, C.c_int),
+                reactor, 1 if compressed else 0), "connection_create")
 
-        # The ygui framework, bound to the connection's rpc channel (RPC requests
-        # ride the channel transport adapter; the get_root handshake reads stdin
-        # synchronously here, before any loop owns the fd).
-        self.framework = must(_cresult(
-            "yetty_ygui_framework_create", _PtrResult, (C.c_void_p,), None), "framework_create")
-        chtr = must(_cresult("yetty_ywire_channel_transport", _PtrResult, (C.c_void_p,),
-                             self._channel(CHANNEL_RPC)), "channel_transport")
-        must(_cvoid("yetty_ygui_framework_attach_transport", (C.c_void_p, C.c_void_p),
-                    self.framework, chtr), "framework_attach_transport")
+            # The ygui framework, bound to the connection's rpc channel (RPC
+            # requests ride the channel transport adapter; the get_root handshake
+            # reads stdin synchronously here, before any loop owns the fd).
+            self.framework = must(_cresult(
+                "yetty_ygui_framework_create", _PtrResult, (C.c_void_p,), None), "framework_create")
+            chtr = must(_cresult("yetty_ywire_channel_transport", _PtrResult, (C.c_void_p,),
+                                 self._channel(CHANNEL_RPC)), "channel_transport")
+            must(_cvoid("yetty_ygui_framework_attach_transport", (C.c_void_p, C.c_void_p),
+                        self.framework, chtr), "framework_attach_transport")
 
-        # Inbound routing: forwarded mouse → framework; raw keystrokes → input
-        # decoder; resize → viewport. Keep the CFUNCTYPE trampolines alive on self.
-        self._env_cb = MSG_CB(self._on_input)
-        self._raw_cb = RAW_CB(self._on_raw)
-        self._resize_cb = RESIZE_CB(self._on_resize)
-        _cvoid("yetty_ywire_channel_set_envelope_sink", (C.c_void_p, MSG_CB, C.c_void_p),
-               self._channel(CHANNEL_INPUT), self._env_cb, None)
-        _cvoid("yetty_ywire_channel_set_raw_sink", (C.c_void_p, RAW_CB, C.c_void_p),
-               self._channel(CHANNEL_RAW), self._raw_cb, None)
-        _cvoid("yetty_ywire_connection_set_resize_cb", (C.c_void_p, RESIZE_CB, C.c_void_p),
-               self.conn, self._resize_cb, None)
+            # Inbound routing: forwarded mouse → framework; raw keystrokes → input
+            # decoder; resize → viewport. Keep the CFUNCTYPE trampolines alive.
+            self._env_cb = MSG_CB(self._on_input)
+            self._raw_cb = RAW_CB(self._on_raw)
+            self._resize_cb = RESIZE_CB(self._on_resize)
+            _cvoid("yetty_ywire_channel_set_envelope_sink", (C.c_void_p, MSG_CB, C.c_void_p),
+                   self._channel(CHANNEL_INPUT), self._env_cb, None)
+            _cvoid("yetty_ywire_channel_set_raw_sink", (C.c_void_p, RAW_CB, C.c_void_p),
+                   self._channel(CHANNEL_RAW), self._raw_cb, None)
+            _cvoid("yetty_ywire_connection_set_resize_cb", (C.c_void_p, RESIZE_CB, C.c_void_p),
+                   self.conn, self._resize_cb, None)
 
-        # Ask the host to forward pointer events (DEC ?1500/?1501), sent verbatim
-        # through the raw channel; pick up the initial viewport.
-        self._enable_mouse_forwarding()
-        _cvoid("yetty_ywire_connection_pickup_winsize", (C.c_void_p,), self.conn)
+            # Ask the host to forward pointer events (DEC ?1500/?1501), sent
+            # verbatim through the raw channel; pick up the initial viewport.
+            self._enable_mouse_forwarding()
+            _cvoid("yetty_ywire_connection_pickup_winsize", (C.c_void_p,), self.conn)
+        except BaseException:
+            # Includes SystemExit from must(): restore the terminal, then re-raise.
+            self.close()
+            raise
 
     # --- connection plumbing -------------------------------------------------
 
@@ -383,10 +401,17 @@ class App:
         self._closed = True
         # Order: framework first (detaches the producer session, destroying the
         # rpc channel transport adapter), then the connection (state machine +
-        # channels), then the transport (restores raw mode). NULL-safe in C.
-        _cvoid("yetty_ygui_framework_destroy", (C.c_void_p,), self.framework)
-        _cvoid("yetty_ywire_connection_destroy", (C.c_void_p,), self.conn)
-        _cvoid("yetty_yclass_transport_pty_destroy", (C.c_void_p,), self.transport)
+        # channels), then the transport (restores raw mode). Each is skipped if
+        # it was never created — close() also runs cleanup after a partial init.
+        if self.framework:
+            _cvoid("yetty_ygui_framework_destroy", (C.c_void_p,), self.framework)
+            self.framework = None
+        if self.conn:
+            _cvoid("yetty_ywire_connection_destroy", (C.c_void_p,), self.conn)
+            self.conn = None
+        if self.transport:
+            _cvoid("yetty_yclass_transport_pty_destroy", (C.c_void_p,), self.transport)
+            self.transport = None
 
     def __enter__(self):
         return self

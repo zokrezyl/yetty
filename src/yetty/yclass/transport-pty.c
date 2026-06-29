@@ -108,6 +108,9 @@ struct yetty_ycore_size_result yetty_yclass_transport_pty_pump_writable(
             }
             return YETTY_ERR(yetty_ycore_size, "transport_pty_pump_writable: write failed");
         }
+        if (n == 0) {
+            break; /* wrote nothing with bytes still queued — treat as would-block */
+        }
         transport->out_off += (size_t)n;
         written += (size_t)n;
     }
@@ -144,6 +147,12 @@ struct yetty_ycore_void_result yetty_yclass_transport_pty_flush_blocking(
             }
 #endif
             return YETTY_ERR(yetty_ycore_void, "transport_pty_flush_blocking: write failed");
+        }
+        if (n == 0) {
+            /* No progress with bytes still queued and no EAGAIN — anomalous for
+             * a blocking flush; fail rather than spin forever. */
+            return YETTY_ERR(yetty_ycore_void,
+                             "transport_pty_flush_blocking: write returned 0 (no progress)");
         }
         transport->out_off += (size_t)n;
     }
@@ -285,25 +294,41 @@ struct yetty_ycore_void_result yetty_yclass_transport_pty_enable_raw_mode(
     transport->fd_out_flags = fcntl(transport->fd_out, F_GETFL, 0);
     transport->flags_saved = 1;
 
-    if (isatty(transport->fd_in)) {
-        /* Raw mode breaks the cooked-tty echo loop: the slave echoes the OSC
-         * bytes we write back, which would be re-read and parsed as garbage. */
-        if (tcgetattr(transport->fd_in, &transport->saved_tty) == 0) {
-            struct termios raw = transport->saved_tty;
-            cfmakeraw(&raw);
-            raw.c_cc[VMIN] = 0;
-            raw.c_cc[VTIME] = 0;
-            if (tcsetattr(transport->fd_in, TCSANOW, &raw) == 0) {
-                transport->raw_active = 1;
-            }
-        }
-    } else if (transport->fd_in_flags >= 0) {
-        /* Non-tty (pipe): make reads non-blocking so read_available never
-         * stalls the loop after the kernel buffer drains. */
-        fcntl(transport->fd_in, F_SETFL, transport->fd_in_flags | O_NONBLOCK);
-    }
+    /* The output fd is always made non-blocking so pump_writable never stalls
+     * the loop, regardless of the input outcome below. */
     if (transport->fd_out_flags >= 0) {
         fcntl(transport->fd_out, F_SETFL, transport->fd_out_flags | O_NONBLOCK);
+    }
+
+    /* Always make input non-blocking too. On a tty this is belt-and-braces with
+     * VMIN=0; it is the only protection on a non-tty pipe, and it is the
+     * fallback that keeps read_available() from blocking the host loop if the
+     * termios raw-mode step below fails. */
+    if (transport->fd_in_flags >= 0) {
+        fcntl(transport->fd_in, F_SETFL, transport->fd_in_flags | O_NONBLOCK);
+    }
+
+    if (isatty(transport->fd_in)) {
+        /* Raw mode breaks the cooked-tty echo loop: the slave echoes the OSC
+         * bytes we write back, which would be re-read and parsed as garbage.
+         * A failure here is fatal: without it the echo loop reappears, so the
+         * caller must treat this error as terminal and tear the transport down
+         * (which also restores the fd flags set above). */
+        if (tcgetattr(transport->fd_in, &transport->saved_tty) != 0) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "transport_pty_enable_raw_mode: tcgetattr failed (raw mode "
+                             "unavailable; cooked-tty echo loop would corrupt the stream)");
+        }
+        struct termios raw = transport->saved_tty;
+        cfmakeraw(&raw);
+        raw.c_cc[VMIN] = 0;
+        raw.c_cc[VTIME] = 0;
+        if (tcsetattr(transport->fd_in, TCSANOW, &raw) != 0) {
+            return YETTY_ERR(yetty_ycore_void,
+                             "transport_pty_enable_raw_mode: tcsetattr failed (raw mode "
+                             "unavailable; cooked-tty echo loop would corrupt the stream)");
+        }
+        transport->raw_active = 1;
     }
     return YETTY_OK_VOID();
 #endif
