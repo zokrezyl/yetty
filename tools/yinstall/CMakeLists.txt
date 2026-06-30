@@ -285,30 +285,58 @@ if(EXISTS "${YETTY_ROOT}/demo")
     incbin_add_directory(yinstall "demos" "${YETTY_ROOT}/demo" "*" TRUE)
 endif()
 
-# bin/ — the curated set of user-facing executables. Each is embedded only
-# if it exists in this configuration, so the list stays robust across the
-# feature flags. Internal codegen / dev tools are intentionally absent.
-set(_yinstall_exe_candidates
+# ---------------------------------------------------------------------
+# yinstall_collect_executables(OUT_VAR ROOT_DIR)
+#
+# Walks the CMake directory graph rooted at ROOT_DIR (breadth-first over the
+# SUBDIRECTORIES directory property) and returns every EXECUTABLE target
+# defined anywhere beneath it. This lets the installer embed *all* tool
+# binaries built in this configuration without a hand-curated list: a tool
+# gated off by a feature flag never defines its target, so it is simply
+# absent from the walk — the set stays correct across every feature
+# combination. Relies on yinstall being configured last (see the top-level
+# CMakeLists), by which point every tool target already exists.
+# ---------------------------------------------------------------------
+function(yinstall_collect_executables out_var root_dir)
+    set(_found "")
+    set(_worklist "${root_dir}")
+    while(_worklist)
+        list(POP_FRONT _worklist _current_dir)
+        get_property(_dir_targets DIRECTORY "${_current_dir}" PROPERTY BUILDSYSTEM_TARGETS)
+        foreach(_target ${_dir_targets})
+            get_target_property(_target_type ${_target} TYPE)
+            if(_target_type STREQUAL "EXECUTABLE")
+                list(APPEND _found ${_target})
+            endif()
+        endforeach()
+        get_property(_child_dirs DIRECTORY "${_current_dir}" PROPERTY SUBDIRECTORIES)
+        list(APPEND _worklist ${_child_dirs})
+    endwhile()
+    set(${out_var} "${_found}" PARENT_SCOPE)
+endfunction()
+
+# bin/ — every executable built under tools/, plus the main yetty binary and
+# the demo programs (which live outside tools/). The installer ships the whole
+# toolset rather than a curated subset; anything switched off in this
+# configuration is absent from the directory walk, so the set stays robust
+# across feature flags. The installer never embeds itself.
+yinstall_collect_executables(_yinstall_tool_exes "${YETTY_ROOT}/tools")
+
+# Executables that must also ship but live outside tools/: the main yetty app
+# and the demo programs (built under demo/ when YETTY_ENABLE_FEATURE_DEMO).
+set(_yinstall_extra_exes
     yetty
-    ycat
-    yplot
-    ygreeter
-    ydoc
-    ysheet
-    yslide
-    yvideo
-    yecho
-    ymesh
-    ytop
-    ybrowser
-    ydiagram-cli
     demo-ygui
     demo-ymgui
     demo-yplot
     demo-yvideo
 )
+
 set(_yinstall_exes "")
-foreach(_candidate ${_yinstall_exe_candidates})
+foreach(_candidate ${_yinstall_tool_exes} ${_yinstall_extra_exes})
+    if(_candidate STREQUAL "yinstall")
+        continue()  # never embed the installer into itself
+    endif()
     if(TARGET ${_candidate})
         list(APPEND _yinstall_exes ${_candidate})
     endif()
@@ -328,6 +356,8 @@ if(WIN32)
         list(APPEND _yinstall_exes ${_yinstall_dawn_dlls})
     endif()
 endif()
+
+list(REMOVE_DUPLICATES _yinstall_exes)
 
 if(_yinstall_exes)
     yinstall_embed_executables(yinstall ${_yinstall_exes})
