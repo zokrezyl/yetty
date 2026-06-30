@@ -89,8 +89,13 @@ typedef uint32_t yetty_yclass_method_slot;
  * 28-bit id field; the top 4 bits carry enum yetty_yclass_rpc_op (see
  * yclass/rpc.h, YETTY_YCLASS_RPC_OP_SHIFT == 28). Keep domain+index
  * within 28 bits or remote dispatch silently corrupts the op field. */
+#ifdef __cplusplus
+static_assert(YETTY_YCLASS_METHOD_SLOT_INDEX_SHIFT + YETTY_YCLASS_METHOD_SLOT_DOMAIN_BITS <= 28,
+              "yclass slot (domain+index) must fit the 28-bit rpc wire id field");
+#else
 _Static_assert(YETTY_YCLASS_METHOD_SLOT_INDEX_SHIFT + YETTY_YCLASS_METHOD_SLOT_DOMAIN_BITS <= 28,
                "yclass slot (domain+index) must fit the 28-bit rpc wire id field");
+#endif
 
 struct yetty_yclass_descriptor {
     const char *name; /* qualified, e.g. "yetty_yvehicle_sportscar" */
