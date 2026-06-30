@@ -41,7 +41,13 @@
 
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#ifndef STDIN_FILENO
+#define STDIN_FILENO 0 /* MSVC ships no <unistd.h>; stdin is fd 0 */
+#endif
+#else
 #include <unistd.h>
+#endif
 
 /* Default figure kind when configure() is passed 0: a text/SDF grid, the only
  * scrollable kind. Resolved through the registry token (no central kind enum). */

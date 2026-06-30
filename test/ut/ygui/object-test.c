@@ -240,7 +240,9 @@ static void test_tooltip_pilot(void)
     struct yetty_ycore_const_char_ptr_result text_after = yetty_ygui_tooltip_get_text(obj);
     assert(YETTY_IS_OK(text_after));
     assert(strcmp(text_after.value, "hello") == 0);
-    assert(yetty_ygui_widget_is_dirty(obj));
+    struct yetty_ycore_int_result dirty_after = yetty_ygui_widget_is_dirty(obj);
+    assert(YETTY_IS_OK(dirty_after));
+    assert(dirty_after.value);
 
     /* Position the widget so paint emits a TEXT_DRAWABLE_LIST at a known coord. */
     struct yetty_ycore_rectangle wr = {{10.0f, 20.0f}, {200.0f, 60.0f}};
