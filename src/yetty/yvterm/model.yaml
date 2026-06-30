@@ -29,6 +29,10 @@ classes:
         type: uint32_t
         get: false
         set: false
+      - name: scrollback_rows
+        type: uint32_t
+        get: false
+        set: false
       - name: vterm
         type: "int *"
         get: false
@@ -326,6 +330,10 @@ classes:
         type: "struct yetty_yvterm_sdf_layer *"
         get: false
         set: false
+      - name: shader_glyph_layer
+        type: "struct yetty_yvterm_shader_glyph_layer *"
+        get: false
+        set: false
     ops:
       - slot: render
         slot_domain: yfigure
@@ -368,6 +376,8 @@ exposed:
       - name: cols
         type: uint32_t
       - name: rows
+        type: uint32_t
+      - name: scrollback_rows
         type: uint32_t
     doc: null
   - source_file: src/yetty/yvterm/grid.c

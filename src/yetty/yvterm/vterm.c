@@ -35,10 +35,13 @@
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterminal/terminal.h>
 #include <yetty/ytrace/ytrace.h>
+#include <yetty/yfont/shader-glyph.h>      /* shader-glyph codepoint table lookup */
 #include <yetty/yvterm/grid.h>
+#include <yetty/yvterm/shader-glyph-pua.h> /* PUA-B codepoint helpers */
 #include <yetty/ywire/wire-statemachine.h>
 
 #include "sdf-layer.h"
+#include "shader-glyph-layer.h"
 
 /* GPU cell layout the text shader reads: 4 u32 words per cell. */
 enum { YVTERM_WORDS_PER_CELL = 4 };
@@ -201,6 +204,11 @@ struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("include@yetty/ytermi
      * the grid ring (ycat PDF/SVG/markdown). Best-effort: NULL if its shaders
      * couldn't load — text + composites still render. */
     struct yetty_yvterm_sdf_layer *sdf_layer;
+
+    /* Animated procedural "shader glyphs": PUA-B cells (U+100000..U+100FFF)
+     * rendered as per-cell fragment shaders on top of the text. Best-effort:
+     * NULL if its shaders couldn't load — the rest still renders. */
+    struct yetty_yvterm_shader_glyph_layer *shader_glyph_layer;
 };
 
 /* Result wrapper for the vterm handle. Declared here (this TU does not include
@@ -210,6 +218,7 @@ YETTY_YRESULT_DECLARE(yetty_yvterm_vterm_ptr, struct yetty_yvterm_vterm *);
 /* Defined in the appended vterm.gen.c. */
 struct yetty_yclass_ptr_result yetty_yvterm_vterm_class_get(void);
 struct yetty_yvterm_vterm_ptr_result yetty_yvterm_vterm_from(struct yetty_yclass_object *obj);
+struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_to(struct yetty_yvterm_vterm *data);
 
 /*===========================================================================
  * GPU text renderer — ported from poc/yvterm-new. Resolves each cell's glyph
@@ -423,7 +432,15 @@ static void vterm_pack_line(struct yetty_yvterm_vterm *vterm,
          * Bold/italic pick a styled atlas slot via the cell attributes. */
         uint32_t glyph = 0u;
         if (cell->codepoint && !(cell->attrs & YETTY_YVTERM_ATTR_CONCEAL)) {
-            glyph = vterm_resolve_glyph(vterm, cell->codepoint, vterm_cell_style(cell->attrs));
+            /* PUA-B shader-glyph cells are painted by the shader-glyph layer, not
+             * the font atlas — leave glyph 0 so the text pass draws only the
+             * cell background under the animation. */
+            if (yetty_shader_glyph_codepoint_in_range(cell->codepoint) &&
+                yetty_yfont_shader_glyph_codepoint_exists(cell->codepoint)) {
+                glyph = 0u;
+            } else {
+                glyph = vterm_resolve_glyph(vterm, cell->codepoint, vterm_cell_style(cell->attrs));
+            }
         }
         uint32_t fg = cell->fg;
         uint32_t bg = cell->bg;
@@ -544,15 +561,14 @@ static struct yetty_ycore_void_result vterm_create_cell_buffer(struct yetty_yvte
     struct yetty_ycore_void_result dims_res =
         yetty_yvterm_grid_dims(vterm->grid_obj, &cols, &rows, NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dims_res, "vterm_create_cell_buffer: grid dims");
-    /* The buffer is ring-slot-indexed and must cover the FULL ring (visible +
-     * scrollback), not just the visible rows, so retained history stays
-     * resident for the scrolled-back view. */
-    struct yetty_ycore_uint32_result slot_count_res = yetty_yvterm_grid_slot_count(vterm->grid_obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_count_res, "vterm_create_cell_buffer: slot count");
-    uint32_t ring_rows = slot_count_res.value;
-    if (ring_rows < rows) {
-        ring_rows = rows;
-    }
+    /* The GPU buffer holds ONLY the visible window (rows × cols). The full
+     * scrollback ring stays in the CPU model; the GPU can never display rows
+     * that aren't on screen, and a single WebGPU storage-buffer binding is
+     * capped at 128 MiB — sizing this to the whole ring overflows that cap with
+     * deep scrollback (100k lines → ~250 MiB → device-lost). The visible window
+     * is re-packed for the current scroll position every frame in
+     * vterm_render_grid. */
+    uint32_t ring_rows = rows;
     if (vterm->cell_buffer) {
         wgpuBufferDestroy(vterm->cell_buffer);
         wgpuBufferRelease(vterm->cell_buffer);
@@ -806,12 +822,35 @@ static struct yetty_ycore_void_result vterm_gpu_init(struct yetty_yvterm_vterm *
         yetty_ycore_error_destroy(sdf_res.error);
     }
 
+    /* Animated shader-glyph renderer for PUA-B cells. The anim timer needs this
+     * figure object to mark itself dirty; recover it from the body. Best-effort:
+     * a failure leaves it NULL and shader glyphs simply don't animate. */
+    struct yetty_yclass_object_ptr_result self_res = yetty_yvterm_vterm_to(vterm);
+    struct yetty_yclass_object *self_obj = YETTY_IS_OK(self_res) ? self_res.value : NULL;
+    if (YETTY_IS_ERR(self_res)) {
+        yetty_ycore_error_destroy(self_res.error);
+    }
+    struct yetty_yvterm_shader_glyph_layer_ptr_result sg_res =
+        yetty_yvterm_shader_glyph_layer_create(context, self_obj, vterm->request_render_fn,
+                                               vterm->request_render_userdata);
+    if (YETTY_IS_OK(sg_res)) {
+        vterm->shader_glyph_layer = sg_res.value;
+    } else {
+        ywarn("vterm: shader-glyph layer init failed (animated glyphs disabled): %s",
+              sg_res.error.msg);
+        yetty_ycore_error_destroy(sg_res.error);
+    }
+
     vterm->gpu_ready = 1;
     return YETTY_OK_VOID();
 }
 
 static void vterm_gpu_destroy(struct yetty_yvterm_vterm *vterm)
 {
+    if (vterm->shader_glyph_layer) {
+        yetty_yvterm_shader_glyph_layer_destroy(vterm->shader_glyph_layer);
+        vterm->shader_glyph_layer = NULL;
+    }
     if (vterm->sdf_layer) {
         yetty_yvterm_sdf_layer_destroy(vterm->sdf_layer);
         vterm->sdf_layer = NULL;
@@ -888,28 +927,43 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     struct yetty_ycore_uint32_result slot_count_res = yetty_yvterm_grid_slot_count(grid);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_count_res, "vterm_render: slot count");
     uint32_t slot_count = slot_count_res.value;
-    /* The model may have been resized since the cell buffer was sized. The buffer
-     * covers the full ring (visible + scrollback), so compare against that. */
-    if (vterm->cell_buffer_cells != slot_count * cols) {
+    /* The GPU buffer holds only the visible window, so it tracks rows × cols —
+     * resize on a grid geometry change, not on scrollback depth. */
+    if (vterm->cell_buffer_cells != rows * cols) {
         struct yetty_ycore_void_result br = vterm_create_cell_buffer(vterm);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, br, "vterm_render: resize cell buffer");
-        struct yetty_ycore_uint32_result reread_res = yetty_yvterm_grid_slot_count(grid);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, reread_res, "vterm_render: reread slot count");
-        slot_count = reread_res.value;
     }
     struct yetty_ycore_void_result rsr = vterm_ensure_row_scratch(vterm, cols);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rsr, "vterm_render: row scratch");
 
-    /* The cell buffer is ring-slot-indexed; the shader maps visible row →
-     * (row + root_row) % ring_rows, so upload by raw slot and pass the view's
-     * top slot as root_row. */
-    size_t row_bytes = (size_t)cols * YVTERM_WORDS_PER_CELL * sizeof(uint32_t);
-    for (uint32_t slot = 0; slot < slot_count; ++slot) {
-        struct yetty_ycore_int_result slot_dirty_res = yetty_yvterm_grid_slot_dirty(grid, slot);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, slot_dirty_res, "vterm_render: slot dirty");
-        if (!slot_dirty_res.value) {
-            continue;
+    /* root_row is the ring slot shown at visible row 0. Live view: the ring
+     * base. Scrolled-back view: shift base back by how far the requested top row
+     * (view_top_total_idx) sits behind the live top (total_scrolled), wrapping
+     * over the ring. Used to pick which model slots feed the visible GPU window,
+     * and by the composite / SDF / shader-glyph passes that read the model by
+     * slot. */
+    uint32_t root_row = base;
+    if (vterm->view_top_active) {
+        struct yetty_ycore_uint32_result live_top_res = yetty_yvterm_grid_scroll_origin(grid);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, live_top_res, "vterm_render: scroll origin");
+        uint32_t live_top = live_top_res.value;
+        if (vterm->view_top_total_idx < live_top) {
+            uint32_t back_rows = live_top - vterm->view_top_total_idx;
+            if (slot_count > 0) {
+                back_rows %= slot_count;
+                root_row = (base + slot_count - back_rows) % slot_count;
+            }
         }
+    }
+
+    /* Pack ONLY the visible window into the GPU buffer, indexed by visible row
+     * [0, rows). The text shader reads cell_index = row*cols + col with
+     * root_row 0 (set below) — no off-screen scrollback resident on the GPU.
+     * The window is small (rows × cols), so re-packing it each frame is cheap
+     * and glyph resolution stays cached in the font. */
+    size_t row_bytes = (size_t)cols * YVTERM_WORDS_PER_CELL * sizeof(uint32_t);
+    for (uint32_t r = 0; r < rows; ++r) {
+        uint32_t slot = slot_count ? (root_row + r) % slot_count : r;
         struct yetty_yvterm_text_cell_const_ptr_result cells_res =
             yetty_yvterm_grid_slot_cells(grid, slot);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, cells_res, "vterm_render: slot cells");
@@ -918,7 +972,7 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
             continue;
         }
         vterm_pack_line(vterm, cells, cols, vterm->row_scratch);
-        wgpuQueueWriteBuffer(vterm->queue, vterm->cell_buffer, (uint64_t)slot * row_bytes,
+        wgpuQueueWriteBuffer(vterm->queue, vterm->cell_buffer, (uint64_t)r * row_bytes,
                              vterm->row_scratch, row_bytes);
     }
     /* Glyph resolution above may have grown the atlas/meta — re-pull the font. */
@@ -935,25 +989,11 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     vterm->uniforms.grid_size[1] = (float)rows;
     vterm->uniforms.cell_size[0] = vterm->cell_size.width;
     vterm->uniforms.cell_size[1] = vterm->cell_size.height;
-    vterm->uniforms.ring_rows = slot_count;
-    /* root_row is the ring slot drawn at visible row 0. Live view: the ring
-     * base. Scrolled-back view: shift base back by how far the requested top row
-     * (view_top_total_idx) sits behind the live top (total_scrolled), wrapping
-     * over the ring so the retained history slots are addressed. */
-    uint32_t root_row = base;
-    if (vterm->view_top_active) {
-        struct yetty_ycore_uint32_result live_top_res = yetty_yvterm_grid_scroll_origin(grid);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, live_top_res, "vterm_render: scroll origin");
-        uint32_t live_top = live_top_res.value;
-        if (vterm->view_top_total_idx < live_top) {
-            uint32_t back = live_top - vterm->view_top_total_idx;
-            if (slot_count > 0) {
-                back %= slot_count;
-                root_row = (base + slot_count - back) % slot_count;
-            }
-        }
-    }
-    vterm->uniforms.root_row = root_row;
+    /* The GPU buffer is the visible window indexed by visible row, so the text
+     * shader maps row→cell with root_row 0 over `rows` ring rows. (The real
+     * ring root_row, computed above, still drives the model-reading passes.) */
+    vterm->uniforms.ring_rows = rows;
+    vterm->uniforms.root_row = 0u;
     vterm->uniforms.cursor_col = cursor_col;
     vterm->uniforms.cursor_row = cursor_row;
     /* Hide the cursor while scrolled back — it belongs to the live bottom, not
@@ -1161,6 +1201,18 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
         }
     }
 
+    /* Shader-glyph pass: animated procedural glyphs for PUA-B cells, drawn on
+     * top of the text with the same root_row/zoom mapping. Best-effort. */
+    if (vterm->shader_glyph_layer) {
+        struct yetty_ycore_void_result sg_res = yetty_yvterm_shader_glyph_layer_render(
+            vterm->shader_glyph_layer, grid, target, rect, vterm->cell_size.width,
+            vterm->cell_size.height, cols, rows, root_row, slot_count, zoom, vz_off_x, vz_off_y);
+        if (YETTY_IS_ERR(sg_res)) {
+            ywarn("vterm_render: shader-glyph layer: %s", sg_res.error.msg);
+            yetty_ycore_error_destroy(sg_res.error);
+        }
+    }
+
     /* Uploaded — clear model dirty now that the renderer has consumed the text
      * plane, the anchored composites, and the SDF/glyph records. */
     struct yetty_ycore_void_result clear_dirty_res = yetty_yvterm_grid_clear_dirty(grid);
@@ -1260,8 +1312,17 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
     }
     struct yetty_yvterm_vterm *vterm = vterm_res.value;
 
+    /* Scrollback depth from config (`scrollback/lines`); fall back to the
+     * model's built-in default when config is unavailable. */
+    struct yetty_yconfig_config *config =
+        (context && context->runtime) ? context->runtime->config : NULL;
+    uint32_t scrollback_rows =
+        config ? (uint32_t)config->ops->get_int(config, YETTY_YCONFIG_KEY_SCROLLBACK_LINES, 10000)
+               : 0u;
+
     /* The model is a separate yvterm:grid object this figure composes/owns. */
-    struct yetty_yclass_object_ptr_result grid_res = yetty_yvterm_grid_make(cols, rows);
+    struct yetty_yclass_object_ptr_result grid_res =
+        yetty_yvterm_grid_make(cols, rows, scrollback_rows);
     if (YETTY_IS_ERR(grid_res)) {
         struct yetty_ycore_void_result free_res = yetty_yclass_object_free(obj);
         if (YETTY_IS_ERR(free_res)) {
