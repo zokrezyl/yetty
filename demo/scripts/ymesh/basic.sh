@@ -17,7 +17,10 @@ ASSETS="$ROOT/demo/assets/ymesh"
 PAUSE="${DEMO_PAUSE:-0.1}"
 
 if [ ! -x "$YMESH" ]; then
-    echo "ymesh binary not found at $YMESH — set YMESH=path/to/ymesh" >&2
+    YMESH="$(command -v "${YMESH##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YMESH" ] || [ ! -x "$YMESH" ]; then
+    echo "ymesh binary not found in build dir or on \$PATH — set YMESH=path/to/ymesh" >&2
     exit 1
 fi
 

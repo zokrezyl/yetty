@@ -14,7 +14,10 @@ YSHEET="$PROJECT_ROOT/build-desktop-ytrace-release/tools/ysheet/ysheet"
 ASSET="$PROJECT_ROOT/demo/assets/yrich/ysheet/sample.ysheet.yaml"
 
 if [[ ! -x "$YSHEET" ]]; then
-    echo "Error: ysheet not found at $YSHEET" >&2
+    YSHEET="$(command -v "${YSHEET##*/}" 2>/dev/null || true)"
+fi
+if [[ -z "$YSHEET" || ! -x "$YSHEET" ]]; then
+    echo "Error: ysheet not found in build dir or on \$PATH" >&2
     echo "Build first: make build-desktop-ytrace-release" >&2
     exit 1
 fi

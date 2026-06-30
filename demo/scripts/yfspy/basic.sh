@@ -16,7 +16,10 @@ ASSETS="$ROOT/demo/assets/yfspy"
 PAUSE="${DEMO_PAUSE:-0}"
 
 if [ ! -x "$YFSPY" ]; then
-    echo "yfspy binary not found at $YFSPY" >&2
+    YFSPY="$(command -v "${YFSPY##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YFSPY" ] || [ ! -x "$YFSPY" ]; then
+    echo "yfspy binary not found in build dir or on \$PATH" >&2
     exit 1
 fi
 

@@ -12,7 +12,10 @@ YECHO="${YECHO:-$ROOT/build-desktop-ytrace-release/tools/yecho/yecho}"
 PAUSE="${DEMO_PAUSE:-1}"
 
 if [ ! -x "$YECHO" ]; then
-    echo "yecho binary not found at $YECHO" >&2
+    YECHO="$(command -v "${YECHO##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YECHO" ] || [ ! -x "$YECHO" ]; then
+    echo "yecho binary not found in build dir or on \$PATH" >&2
     exit 1
 fi
 

@@ -12,7 +12,10 @@ ROOT="$(cd "$DIR/../../.." && pwd)"
 YLESS="${YLESS:-$ROOT/build-desktop-ytrace-release/tools/yless/yless}"
 
 if [ ! -x "$YLESS" ]; then
-    echo "yless binary not found at $YLESS — set YLESS=path/to/yless" >&2
+    YLESS="$(command -v "${YLESS##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YLESS" ] || [ ! -x "$YLESS" ]; then
+    echo "yless binary not found in build dir or on \$PATH — set YLESS=path/to/yless" >&2
     exit 1
 fi
 

@@ -15,7 +15,10 @@ TVG="$ROOT/demo/assets/thorvg"
 PAUSE="${DEMO_PAUSE:-0}"
 
 if [ ! -x "$YTHORVG" ]; then
-    echo "yetty-ythorvg binary not found at $YTHORVG — set YTHORVG=path/to/yetty-ythorvg" >&2
+    YTHORVG="$(command -v "${YTHORVG##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YTHORVG" ] || [ ! -x "$YTHORVG" ]; then
+    echo "yetty-ythorvg binary not found in build dir or on \$PATH — set YTHORVG=path/to/yetty-ythorvg" >&2
     exit 1
 fi
 

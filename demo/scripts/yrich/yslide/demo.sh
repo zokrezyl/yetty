@@ -14,7 +14,10 @@ YSLIDE="$PROJECT_ROOT/build-desktop-ytrace-release/tools/yslide/yslide"
 ASSET="$PROJECT_ROOT/demo/assets/yrich/yslide/sample.yslide.yaml"
 
 if [[ ! -x "$YSLIDE" ]]; then
-    echo "Error: yslide not found at $YSLIDE" >&2
+    YSLIDE="$(command -v "${YSLIDE##*/}" 2>/dev/null || true)"
+fi
+if [[ -z "$YSLIDE" || ! -x "$YSLIDE" ]]; then
+    echo "Error: yslide not found in build dir or on \$PATH" >&2
     echo "Build first: make build-desktop-ytrace-release" >&2
     exit 1
 fi

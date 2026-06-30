@@ -13,7 +13,10 @@ YMAP="${YMAP:-$ROOT/build-desktop-ytrace-release/tools/ymap/ymap}"
 PAUSE="${DEMO_PAUSE:-0}"
 
 if [ ! -x "$YMAP" ]; then
-    echo "ymap binary not found at $YMAP — set YMAP=path/to/ymap" >&2
+    YMAP="$(command -v "${YMAP##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YMAP" ] || [ ! -x "$YMAP" ]; then
+    echo "ymap binary not found in build dir or on \$PATH — set YMAP=path/to/ymap" >&2
     exit 1
 fi
 
