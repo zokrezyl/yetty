@@ -22,6 +22,7 @@
 #include <yetty/ymusic/music.h>   /* yetty_ymusic_* — LilyPond score rendering */
 #include <yetty/yplatform/getopt.h>
 #include <yetty/yplatform/term.h> /* yetty_yplatform_term_get_size */
+#include <yetty/yplatform/time.h> /* monotonic clock + sleep (--duration) */
 #include <yetty/yplatform/tty.h>  /* raw mode + stdin read, cross-platform */
 #include <yetty/yview/view.h>     /* yetty_yview_configure / _set_content / _scroll_* / _destroy */
 
@@ -56,6 +57,7 @@ struct yless_opts {
     int w_cells;   /* width  in cells; 0 = to right edge */
     int h_cells;   /* height in cells; 0 = to bottom edge */
     float opacity; /* background opacity 0.0..1.0 (1.0 = opaque) */
+    float duration_sec; /* auto-exit after this many seconds; 0 = run until quit */
 };
 
 /* Brand near-black background (#0B1014), per the palette. RGB only — the
@@ -90,6 +92,11 @@ static void usage(FILE *out, const char *prog)
             "  -H, --height=N   height in cells (default: to bottom edge)\n"
             "  -a, --alpha=F    background opacity 0.0..1.0 (default 1.0 = opaque;\n"
             "                   0.0 = transparent, terminal text shows through)\n"
+            "  -d, --duration=F run for F seconds, then auto-exit (clears the\n"
+            "                   surface); default 0 = run until quit. Lets a\n"
+            "                   non-interactive caller (e.g. a demo driver) hold\n"
+            "                   the view on screen for a fixed time; with a\n"
+            "                   keyboard, q still quits earlier.\n"
             "  -h, --help       show this help\n"
             "\n"
             "Keys (interactive):\n"
@@ -104,8 +111,9 @@ static void usage(FILE *out, const char *prog)
             "Examples:\n"
             "  %s main.c                 # page a source file, whole pane\n"
             "  %s -w 40 -H 20 a.svg      # an svg in a 40x20-cell box at the top-left\n"
-            "  %s -x 42 -w 38 b.pdf      # a pdf in the right-hand half\n",
-            prog, prog, prog, prog);
+            "  %s -x 42 -w 38 b.pdf      # a pdf in the right-hand half\n"
+            "  %s --duration 3 a.svg     # show for 3s, then exit (no keyboard needed)\n",
+            prog, prog, prog, prog, prog);
 }
 
 /*=============================================================================
@@ -535,12 +543,13 @@ int main(int argc, char **argv)
         {"width", required_argument, NULL, 'w'},
         {"height", required_argument, NULL, 'H'},
         {"alpha", required_argument, NULL, 'a'},
+        {"duration", required_argument, NULL, 'd'},
         {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0},
     };
 
     int c;
-    while ((c = yetty_yplatform_getopt_long(argc, argv, "x:y:w:H:a:h", long_opts, NULL)) != -1) {
+    while ((c = yetty_yplatform_getopt_long(argc, argv, "x:y:w:H:a:d:h", long_opts, NULL)) != -1) {
         switch (c) {
         case 'x':
             opts.x_cells = atoi(yetty_yplatform_optarg);
@@ -561,6 +570,12 @@ int main(int argc, char **argv)
             }
             if (opts.opacity > 1.0f) {
                 opts.opacity = 1.0f;
+            }
+            break;
+        case 'd':
+            opts.duration_sec = (float)atof(yetty_yplatform_optarg);
+            if (opts.duration_sec < 0.0f) {
+                opts.duration_sec = 0.0f;
             }
             break;
         case 'h':
@@ -707,11 +722,30 @@ int main(int argc, char **argv)
     const float page = rect_h > line ? rect_h - line : line;
     const float to_bottom = 1.0e9f; /* clamped server-side and in yview */
 
+    /* --duration: auto-exit after this many seconds, measured from here (the
+     * content is on screen now). A deadline of 0 means "run until the user
+     * quits" — the default. */
+    const bool have_deadline = opts.duration_sec > 0.0f;
+    const double deadline = yetty_yplatform_ytime_monotonic_sec() + (double)opts.duration_sec;
+
     if (stdin_tty) {
         char buf[64];
         bool running = true;
         while (running) {
-            int rdy = yetty_yplatform_tty_stdin_wait(200);
+            unsigned wait_ms = 200;
+            if (have_deadline) {
+                double remaining = deadline - yetty_yplatform_ytime_monotonic_sec();
+                if (remaining <= 0.0) {
+                    break;
+                }
+                /* Don't poll past the deadline — clamp so the auto-exit lands
+                 * on time rather than up to one full poll interval late. */
+                double remaining_ms = remaining * 1000.0;
+                if (remaining_ms < (double)wait_ms) {
+                    wait_ms = remaining_ms >= 1.0 ? (unsigned)remaining_ms : 1u;
+                }
+            }
+            int rdy = yetty_yplatform_tty_stdin_wait(wait_ms);
             if (rdy < 0) {
                 break;
             }
@@ -758,6 +792,12 @@ int main(int argc, char **argv)
             }
         }
         yetty_yplatform_tty_restore();
+    } else if (have_deadline) {
+        /* No keyboard (stdin is not a tty): hold the figure on screen for the
+         * requested duration, then fall through to clear it. Keeps the flag's
+         * contract — "run for F seconds" — honoured on the non-interactive
+         * path too. */
+        yetty_yplatform_ytime_sleep_ms((unsigned)(opts.duration_sec * 1000.0f + 0.5f));
     }
 
     /* Clear the surface: DELETE_CHILD removes the figure from the container. */

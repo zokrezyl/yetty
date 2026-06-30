@@ -19,5 +19,12 @@ if [ -z "$YLESS" ] || [ ! -x "$YLESS" ]; then
     exit 1
 fi
 
+# all.sh exports YLESS_DURATION so the demo runs for a fixed time and exits on
+# its own (clearing the surface). Unset when run standalone → interactive (q).
+dur_args=()
+if [ -n "${YLESS_DURATION:-}" ]; then
+    dur_args=(--duration "$YLESS_DURATION")
+fi
+
 # Right-hand half: start at column 42, span 38 cells wide.
-exec "$YLESS" -x 42 -w 38 "$ROOT/demo/assets/ydiagram/class-diagram.mmd"
+exec "$YLESS" "${dur_args[@]}" -x 42 -w 38 "$ROOT/demo/assets/ydiagram/class-diagram.mmd"

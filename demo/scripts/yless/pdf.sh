@@ -19,4 +19,11 @@ if [ -z "$YLESS" ] || [ ! -x "$YLESS" ]; then
     exit 1
 fi
 
-exec "$YLESS" -x 16 -y 4 -w 48 -H 28 "$ROOT/test/ut/ypdf/pdf-sample.pdf"
+# all.sh exports YLESS_DURATION so the demo runs for a fixed time and exits on
+# its own (clearing the surface). Unset when run standalone → interactive (q).
+dur_args=()
+if [ -n "${YLESS_DURATION:-}" ]; then
+    dur_args=(--duration "$YLESS_DURATION")
+fi
+
+exec "$YLESS" "${dur_args[@]}" -x 16 -y 4 -w 48 -H 28 "$ROOT/test/ut/ypdf/pdf-sample.pdf"
