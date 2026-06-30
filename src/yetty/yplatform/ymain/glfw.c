@@ -54,17 +54,24 @@ int main(int argc, char **argv)
     if (YETTY_IS_ERR(platform_res)) {
         yetty_ycore_error_print(stderr, "yetty: platform create", platform_res.error);
         yetty_ycore_error_destroy(platform_res.error);
+        (void)yetty_yclass_object_free(app_res.value);
         return 1;
     }
 
     /* Single step — run() calls init(app, argc, argv) internally. */
     struct yetty_ycore_void_result run_res =
         yetty_yplatform_platform_run(platform_res.value, app_res.value, argc, argv);
+    int rc = 0;
     if (YETTY_IS_ERR(run_res)) {
         yetty_ycore_error_print(stderr, "yetty: platform run", run_res.error);
         yetty_ycore_error_destroy(run_res.error);
-        return 1;
+        rc = 1;
     }
 
-    return 0;
+    /* main owns both objects (neither create transfers ownership, and these
+     * classes expose no destroy method) — free them on every exit path so the
+     * leak checker stays clean when run() bails early (e.g. headless GLFW). */
+    (void)yetty_yclass_object_free(platform_res.value);
+    (void)yetty_yclass_object_free(app_res.value);
+    return rc;
 }
