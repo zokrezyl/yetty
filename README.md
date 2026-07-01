@@ -1,235 +1,255 @@
-> **Note:** This is the repo of the new rewrite of yetty code. The old yetty code, is at https://github.com/zokrezyl/yetty-poc
-
-
 <p align="center">
-  <img src="docs/pres.gif" alt="Yetty demo — MSDF text, inline plots, ycat README, ygui/ymgui" width="900">
+  <img src="docs/pres.gif" alt="Yetty demo: terminal text, rich figures, plots, documents, and GUI surfaces" width="900">
 </p>
 
 # Yetty
 
-GPU-accelerated terminal with rich content. Pure C. Any language.
+Yetty is a GPU-accelerated terminal and rich-content runtime. It keeps normal
+terminal workflows intact, but lets programs place plots, images, diagrams,
+documents, video, GUI panels, remote desktops, and AI-generated figures directly
+into the same scrolling surface as text.
 
-> **License:** Business Source License 1.1, applying to Yetty's own code only. Non-production use is free; production use requires a commercial license. See [LICENSE](LICENSE). Bundled third-party components keep their own (mostly permissive) licenses — see [DEPENDENCIES.md](DEPENDENCIES.md).
+Pure C. WebGPU-rendered. FFI-first. Built around small composable modules.
 
-> **Status:** Early alpha — actively rewriting established concepts for efficiency.
+> **License:** Business Source License 1.1 for Yetty's own code. Non-production
+> use is free; production use requires a commercial license. Bundled third-party
+> components keep their own licenses. See [LICENSE](LICENSE) and
+> [DEPENDENCIES.md](DEPENDENCIES.md).
 
-## Vision
+> **Status:** Early alpha. Many core paths are usable, but APIs and internals are
+> still changing quickly.
 
-Terminals are stuck in the 1970s — text, maybe colors, that's it. Meanwhile, the rest of computing evolved to support rich graphics, animations, and interactive content.
+## What Yetty Is
 
-**Yetty changes this.** A WebGPU-powered terminal where plots, images, videos, documents, and interactive widgets live alongside text — all scrolling together as one unified surface.
+- **A terminal application**: VT/xterm terminal emulation, PTY backends, tabs,
+  panes, tiled workspaces, scrollback, selection, and platform integration.
+- **A figure compositor**: rich content is represented as nested `yfigure`
+  objects with size, dirty state, GPU resources, and z-order.
+- **A rich terminal protocol**: child processes can emit OSC/DCS envelopes that
+  Yetty decodes into row-anchored figures.
+- **A toolkit for terminal-native apps**: `ygui`, `ymgui`, `ydraw`, `ygrid`,
+  `yplot`, `ycat`, and other modules let tools render more than text.
+- **An AI-agent work surface**: `yai` and the Yetty MCP server let agents chat,
+  run tools, and draw rich content directly inside the terminal.
+- **A C library ecosystem**: modules are designed for explicit ownership,
+  generated bindings, and language FFI rather than a single monolithic app.
 
-## Design Principles
+## AI-Native Terminal
 
-- **Pure C, FFI-first** — no hidden costs, bind from Rust, Go, Python, Swift, Kotlin
-- **Figure-based composition** — text and graphics share one z-ordered surface
-- **Composable primitives** — simple (SDF shapes) and complex (figures)
-- **Dirty-driven pipeline** — nothing runs unless something changed
-- **GPU resource binding** — all buffers and textures packed into minimal GPU bindings
+Yetty includes `yai`, a terminal-native AI shell under `tools/ai/yai`. It drives
+headless agent CLIs such as Claude Code, Codex, and Gemini over JSONL. The chat
+scrolls like normal terminal output, while a non-scrolling `ygui` HUD shows
+state, token and cost data, activity, and controls.
+
+Agents can also draw rich content through the Yetty MCP server at
+`tools/mcp/poc/yetty_mcp.py`. The server exposes drawing tools backed by `ycat`
+and related figure emitters, so an agent can render Markdown, Mermaid diagrams,
+charts, plots, flame graphs, images, PDFs, SVG, LilyPond music, meshes, and other
+content inline in the current Yetty session.
+
+The result is a chat surface where text, tool output, rendered documents,
+diagrams, charts, and interactive figures share one scrollback.
 
 ## Architecture
 
+```text
+main()
+  -> yinit              platform bootstrap, config, assets, OS loop
+  -> yframework         GPU/device/queue, allocator, events, RPC services
+  -> yetty              terminal application
+  -> yui/yterminal      tabs, panes, PTY, scrollback, input
+      + content layer   libvterm text grid + row-anchored ydraw content
+      + root yfigure    z-ordered rich-content compositor
 ```
-Terminal
-  ├── content layer      terminal text + row-anchored ydraw content
-  │     ├── text grid    libvterm (VT100/xterm)
-  │     └── ydraw canvas SDF primitives: circles, boxes, lines, glyphs
-  └── root yfigure       generic compositor with z-ordered figures
-        └── yplot · yimage · yvideo · ygui · ymgui · yrdawn · ygrid ·
-            ydiagram · ysvg · ypdf · yvnc · ...
-```
 
-A **figure** is the generic composition unit in yetty: it has position,
-size, dirty state, GPU resources, and z-order, and figures may contain other
-figures. The old fixed terminal-layer stack has been collapsed into one content
-layer for text + row-anchored ydraw content, plus a root `yfigure` compositor for
-rich content. Conceptually this still gives layered output, but the layering now
-comes from render order and figure z-order.
+The terminal content layer handles text and scrolling primitive content. The
+root `yfigure` compositor hosts richer objects such as GUI surfaces, plots,
+images, videos, PDFs, VNC desktops, remote WebGPU canvases, diagrams, and agent
+figures.
 
-> Yetty is built from ~70 small C modules. See the **[Architecture & Module
-> Map](docs/architecture.md)** for the complete inventory and how the pieces
-> connect.
+For the full module inventory and maturity notes, start with
+[docs/architecture.md](docs/architecture.md).
 
-## Rich Content Figures
+## Rich Content
 
-Figures are composites that integrate seamlessly with the terminal grid.
-They scroll with text, share the GPU resource model, and can be nested.
+Yetty's figure system currently covers:
 
-| Figure | Description | Status |
-|------|-------------|--------|
-| **yplot** | GPU-accelerated charts and data visualization | ✅ Working |
-| **yimage** | Inline images (PNG, JPEG, WebP) | ✅ Working |
-| **ygui** | Interactive widgets (buttons, menus, tables, dialogs) | ✅ Working |
-| **ymgui** | Compositor-side GUI figure | ✅ Working |
-| **yvnc** / **ydvnc** | VNC client + desktop viewer | ✅ Working |
-| **ydiagram** | Mermaid diagrams (parser + layout + render) | ✅ Working |
-| **ysvg** | SVG (Tiny 1.2) rendering | ✅ Working |
-| **ypdf** | PDF rendering (via pdfio) | ✅ Working |
-| **ycat** | MIME-dispatched content viewer | ✅ Working |
-| **yvideo** | Video playback (H.264) | 🚧 Beta |
-| **ymarkdown** | Markdown rendering/editing (WYSIWYG) | 🚧 Porting |
-| **yrich** | Documents, spreadsheets, presentations | 🚧 Porting |
-| **ymesh** | 3D mesh rendering | 🚧 Early |
-| **ythorvg** | SVG and Lottie animations (ThorVG) | 📋 Planned |
+| Area | Modules and tools |
+|---|---|
+| Primitive drawing | `ydraw`, `ydraw-core`, `ydraw-factory`, `ygrid`, `ysdf` |
+| Charts and plots | `yplot`, `ychart`, `yflame`, `tools/yplot`, `tools/ychart`, `tools/yflame` |
+| Documents and markup | `ycat`, `ymarkdown`, `ypdf`, `ysvg`, `yrich`, `tools/yless` |
+| Diagrams and notation | `ydiagram`, `ycircuit`, `ymusic` |
+| Media and 3D | `yimage`, `yvideo`, `ylottie`, `ymesh` |
+| GUI surfaces | `ygui`, `ymgui`, `yguiapp`, `tools/ycompositor`, `tools/ygreeter`, `tools/yhello` |
+| Remote content | `yrdawn`, `yvnc`, `ydvnc`, `yssh`, `ytelnet`, `yctl` |
+| AI surfaces | `tools/ai/yai`, `tools/mcp/poc/yetty_mcp.py` |
 
-## Beyond the desktop
+Detailed status lives in [docs/architecture.md](docs/architecture.md), not in
+this README, so the root overview stays stable as modules move.
 
-Yetty is more than a renderer — it speaks to remote machines and embeds a web
-stack.
+## Quick Start
 
-| Capability | Module(s) | Status |
-|---|---|---|
-| **SSH / Telnet** | yssh, ytelnet | ✅ Working |
-| **Remote GPU rendering** | yrdawn (client + server over OSC) | ✅ Working |
-| **RPC control plane** | yctl | ✅ Working |
-| **Web rendering** | ylexbor (lexbor + QuickJS), ybrowser | 🚧 Early |
-| **RISC-V VM console** | yqemu, embedded TinyEMU | 🚧 Early |
-
-## Core Features
-
-| Feature | Description |
-|---------|-------------|
-| **MSDF fonts** | Crisp, scalable text at any zoom level |
-| **Raster fonts** | Color emoji and bitmap glyphs |
-| **SDF primitives** | GPU-rendered shapes with anti-aliasing |
-| **Tiling workspaces** | Multiple terminals with window management |
-| **Rolling scroll** | O(1) scroll — primitives never update coordinates |
-| **ytrace logging** | Switchable trace points, near-zero cost when off |
-
-## Platforms
-
-| Platform | Status |
-|----------|--------|
-| Linux | ✅ Working |
-| macOS | ✅ Working |
-| Android | ✅ Working |
-| WebAssembly | ✅ Working |
-| Windows | 🚧 In progress |
-| iOS / tvOS | 🧪 Experimental |
-
-## Building
-
-Build targets are defined in the `Makefile`. List available targets with:
+List build targets:
 
 ```bash
 make
 ```
 
-Common build commands:
+Build and run the desktop daily-driver configuration:
 
 ```bash
-# Desktop (Linux/macOS) - release build with tracing
 make build-desktop-ytrace-release
-
-# WebAssembly
-make build-webasm-ytrace-release
-
-# Android (ARM)
-make build-android-ytrace-release
-
-# Android emulator (x86_64)
-make build-android_x86_64-ytrace-release
+make run-desktop-ytrace-release
 ```
 
-## Usage
+Run desktop tests for that configuration:
 
 ```bash
-# Run with default shell
-./build-desktop-ytrace-release/yetty
-
-# Run with specific command
-./build-desktop-ytrace-release/yetty -e 'htop'
+make test-desktop-ytrace-release
 ```
+
+Build the FFI shared library:
+
+```bash
+make build-desktop-ffi-release
+```
+
+Serve the WebAssembly build:
+
+```bash
+make build-webasm-ytrace-release
+make run-webasm-ytrace-release
+```
+
+Build outputs follow the pattern shown by `make help`, for example
+`build-desktop-ytrace-release/yetty` and `build-webasm-ytrace-release/yetty.html`.
+
+## Build Targets
+
+Common target families:
+
+| Target family | Purpose |
+|---|---|
+| `build-desktop-*` | Linux/macOS desktop builds |
+| `run-desktop-*` | Run an existing desktop build |
+| `test-desktop-*` | Run desktop test targets |
+| `build-webasm-*` / `run-webasm-*` | WebAssembly build and local serve |
+| `build-android-*` / `test-android-*` | Android APK builds and device/emulator runs |
+| `build-windows-*` / `run-windows-*` | Windows MSVC builds |
+| `build-ios-*`, `build-tvos-*` | Apple mobile and simulator builds |
+| `build-linux-aarch64-*`, `build-linux-riscv-*` | Linux cross-builds |
+| `build-desktop-ffi-release` | PIC build for `libyetty_ffi.so` |
+
+Logging/build variants:
+
+- `ytrace`: full tracing and logging; the normal development build.
+- `yinfo`: reduced logging for release and performance testing.
+- `debug`, `release`, `asan`: standard build-type variants where available.
+
+## Developer Workflow
+
+Generated `yclass` output is committed. Platform builds compile what is already
+in the tree; they do not run code generation automatically.
+
+```bash
+# Regenerate yclass models, generated C, RPC stubs, and public headers
+make codegen
+
+# Generate FFI language bindings from the committed model.yaml files
+make ffi
+
+# Format C/H sources
+make format-code
+```
+
+Use `make help` for the authoritative list of build, run, test, codegen, FFI,
+and platform targets.
+
+## Platforms
+
+The build system has targets for:
+
+| Platform | Notes |
+|---|---|
+| Linux | Primary desktop development platform |
+| macOS | Desktop build target |
+| Android | Device and x86_64 emulator APK targets |
+| WebAssembly | Browser WebGPU build |
+| Windows | MSVC build target |
+| iOS / tvOS | Device and simulator build targets |
+| Linux aarch64 / riscv64 | Cross-build targets; riscv64 is tools/demos oriented |
+
+Platform quality varies by subsystem. See [docs/platform.md](docs/platform.md)
+and [docs/architecture.md](docs/architecture.md) for lower-level details.
+
+## Design Principles
+
+- **Pure C, FFI-first**: explicit ABI-friendly module boundaries and generated
+  language bindings.
+- **Figure-based composition**: rich content and terminal content share one
+  composited surface.
+- **Dirty-driven rendering**: uploads and redraws happen only when something
+  changed.
+- **GPU resource binding**: buffers and textures are packed into predictable
+  WebGPU binding sets.
+- **Small modules**: the codebase is split into focused libraries under
+  `src/yetty/`, with tools and demos layered on top.
+- **Protocol-friendly output**: terminal programs can produce rich figures by
+  writing structured envelopes, while still behaving like normal CLIs.
 
 ## Documentation
 
-Start with the **[Architecture & Module Map](docs/architecture.md)** for the full
-picture, then dive into a subsystem.
+Start here:
 
-**Overview**
 | Document | Description |
-|----------|-------------|
-| [Architecture & Module Map](docs/architecture.md) | The ~70 modules, grouped, with maturity |
+|---|---|
+| [Architecture & Module Map](docs/architecture.md) | Current module inventory, ownership chain, and maturity notes |
 | [Design Overview](docs/design.md) | Core decisions and rationale |
 | [Contexts](docs/contexts.md) | Bootstrap chain and context structs |
+| [Layered Rendering](docs/layered-rendering.md) | Terminal content layer, root figures, scrolling, and alt-screen behavior |
+| [Render Pipeline](docs/render.md) | Dirty-driven upload, compilation, and draw flow |
+| [GPU Resource Binding](docs/gpu-resource-binding.md) | Buffer packing and atlas texture model |
+| [Platform Abstraction](docs/platform.md) | PTY, event loop, paths, windows, OS services |
+| [FFI Generation](docs/ffi-gen.md) | Binding model and generated metadata |
+| [C Coding Style](docs/c-coding-style.md) | Naming, structs, memory, and result rules |
 
-**Rendering**
-| Document | Description |
-|----------|-------------|
-| [Layered Rendering](docs/layered-rendering.md) | Virtual layers, direct-to-target rendering, yfigures, scrolling, alt-screen |
-| [WebGPU Architecture](docs/webgpu-architecture.md) | WebGPU object ownership |
-| [WebGPU Concepts](docs/webgpu.md) | WebGPU primer (C) |
-| [GPU Resource Binding](docs/gpu-resource-binding.md) | Buffer packing and atlas textures |
-| [Render Pipeline](docs/render.md) | Dirty-driven upload and recompilation |
-| [ydraw](src/yetty/ydraw/README.md) | Primitives, figures, and scrolling model |
-| [Font System](src/yetty/yfont/README.md) | Glyph rendering and atlas |
-| [yfsvm](src/yetty/yfsvm/README.md) | Shader expression VM |
-| [Enhanced Plots](src/yetty/yplot/README.md) | yplot internals |
+Subsystem references:
 
-**Terminal & platform**
-| Document | Description |
-|----------|-------------|
-| [Terminal Screen](docs/terminal-screen.md) | Screen state and compositing |
-| [Platform Abstraction](docs/platform.md) | PTY, event loop, per-OS layout |
-| [Platform PTY](docs/platform-pty.md) | PTY backends |
-| [Platform Pipe](docs/platform-pipe.md) | Cross-thread input pipe |
-| [Coroutines](docs/coroutines.md) | yco / yevent concurrency |
-| [yvnc](src/yetty/yvnc/README.md) | VNC client/server |
-
-**Codegen & bindings**
-| Document | Description |
-|----------|-------------|
-| [yclass](src/yclass/README.md) | Annotation-driven classes, RPC, and the binding model |
-| [FFI Generation](docs/ffi-gen.md) | Per-language binding emitters |
-
-**Conventions & tooling**
-| Document | Description |
-|----------|-------------|
-| [C Coding Style](docs/c-coding-style.md) | Naming, structs, memory rules |
-| [Result Types](docs/result.md) | Typed error propagation |
-| [ytrace](src/yetty/ytrace/README.md) | Logging and tracing |
-| [Buck2](docs/buck2.md) | Buck2 build notes |
-
-## Contributing
-
-We're developing intensively and moving fast. Contributions welcome:
-
-- Code and bug fixes
-- Documentation improvements
-- Testing (coverage is still limited)
-- Ideas and feedback
-
-Share suggestions on [GitHub Discussions](https://github.com/zokrezyl/yetty/discussions).
+| Area | Document |
+|---|---|
+| Drawing primitives | [src/yetty/ydraw/README.md](src/yetty/ydraw/README.md) |
+| Charts | [src/yetty/ychart/README.md](src/yetty/ychart/README.md) |
+| Plots | [src/yetty/yplot/README.md](src/yetty/yplot/README.md) |
+| Flame graphs | [src/yetty/yflame/README.md](src/yetty/yflame/README.md) |
+| Fonts | [src/yetty/yfont/README.md](src/yetty/yfont/README.md) |
+| Shader expression VM | [src/yetty/yfsvm/README.md](src/yetty/yfsvm/README.md) |
+| Class/codegen system | [src/yetty/yclass/README.md](src/yetty/yclass/README.md) |
+| VNC | [src/yetty/yvnc/README.md](src/yetty/yvnc/README.md) |
+| Tracing | [src/yetty/ytrace/README.md](src/yetty/ytrace/README.md) |
 
 ## Dependencies
 
-### Core
-- **libvterm** — VT100/xterm terminal emulation (vendored)
-- **Dawn** — WebGPU implementation
-- **FreeType** — Font rasterization
-- **GLFW** — Cross-platform windowing
-- **libuv** — Async I/O and event loop
-- **libco** — Coroutines
-- **brotli** — Bundled-asset compression
+Yetty uses Dawn/WebGPU, libvterm, FreeType, GLFW, libuv, libco, brotli, pdfio,
+OpenH264, QuickJS, lexbor, libssh2, LZ4, cdb, TinyEMU, and other libraries
+depending on enabled features. Most bundled dependencies are permissively
+licensed. Optional NetSurf integration is GPL and off by default.
 
-### Content & remote
-- **pdfio** — PDF parsing (ypdf)
-- **openh264** — H.264 video decode (yvideo)
-- **lexbor** + **QuickJS** — HTML/CSS/JS web stack (ylexbor)
-- **libssh2** — SSH backend (yssh)
-- **LZ4** — Wire-stream compression (yface)
-- **cdb** — Constant key/value database (ycdb)
-- **TinyEMU** — RISC-V VM console (vendored)
+The authoritative dependency and license list is
+[DEPENDENCIES.md](DEPENDENCIES.md).
 
-### Optional / planned
-- **ThorVG** — SVG and Lottie rendering (wired in build; renderer in progress)
+## Contributing
 
-Dependencies use permissive licenses (MIT, BSD, Zlib, Apache-2.0); the optional
-NetSurf integration (`ynetsurf`) is GPL and off by default. Yetty's BSL applies
-only to its own code and does not relicense these components. Full list and
-license terms: [DEPENDENCIES.md](DEPENDENCIES.md).
+The project is moving quickly, but contributions are welcome:
 
+- Bug fixes and focused code improvements
+- Documentation updates
+- Tests and reproducible issue reports
+- Feedback on protocols, tools, bindings, and platform behavior
+
+Use [GitHub Discussions](https://github.com/zokrezyl/yetty/discussions) for
+larger design ideas.
 
 ---
 
-*Your terminal, unchained.*
+Your terminal, unchained.
