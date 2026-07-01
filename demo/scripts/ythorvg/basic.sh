@@ -22,7 +22,7 @@ if [ -z "$YTHORVG" ] || [ ! -x "$YTHORVG" ]; then
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 printf '=== ythorvg — SVG + Lottie via ThorVG ===\n\n'
 p

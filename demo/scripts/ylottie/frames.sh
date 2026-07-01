@@ -21,7 +21,7 @@ if [ -z "$YLOTTIE" ] || [ ! -x "$YLOTTIE" ]; then
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 printf '=== ylottie — frame stepping (bouncing-ball.json) ===\n\n'
 p

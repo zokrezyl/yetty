@@ -24,7 +24,7 @@ if [ -z "$YFSPY" ] || [ ! -x "$YFSPY" ]; then
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 printf '=== yfspy — escape-time fractals (heatmap fields) ===\n\n'
 p

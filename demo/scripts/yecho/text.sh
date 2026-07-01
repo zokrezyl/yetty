@@ -17,7 +17,7 @@ if [ -z "$YECHO" ] || [ ! -x "$YECHO" ]; then
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 printf '=== yecho text showcase ===\n\n'
 p
@@ -49,4 +49,4 @@ EOF
 )"
 
 printf '\n=== done — holding open ===\n'
-sleep 600
+sleep "${DEMO_HOLD:-600}"

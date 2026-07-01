@@ -25,7 +25,7 @@ if [ -z "$YLOTTIE" ] || [ ! -x "$YLOTTIE" ]; then
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 printf '=== ylottie basics ===\n\n'
 p

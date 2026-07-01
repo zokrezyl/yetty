@@ -31,7 +31,7 @@ fi
 # orbit/zoom viewer has its own demo in interactive.sh.
 ymesh() { "$YMESH" --once "$@"; }
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 printf '=== ymesh tool basics ===\n\n'
 p
@@ -62,4 +62,4 @@ ymesh -w 200 -H 200 "$ASSETS/Duck.glb"
 ymesh -w 200 -H 200 "$ASSETS/Avocado.glb"
 
 printf '\n=== done — holding open ===\n'
-sleep 600
+sleep "${DEMO_HOLD:-600}"

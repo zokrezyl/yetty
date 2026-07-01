@@ -7,20 +7,20 @@ FILES="$DIR/files"
 DEMO_PAUSE=${DEMO_PAUSE:-3}
 
 echo "TITLE"
-sleep "$DEMO_PAUSE"
+[ "$DEMO_PAUSE" = 0 ] || sleep "$DEMO_PAUSE"
 
 echo "OVERVIEW:"
 cat "$FILES/glyphs.txt"
-sleep "$DEMO_PAUSE"
+[ "$DEMO_PAUSE" = 0 ] || sleep "$DEMO_PAUSE"
 
 echo
 echo "PLASMA TILE:"
 bash "$DIR/tile.sh" plasma 4 30
-sleep "$DEMO_PAUSE"
+[ "$DEMO_PAUSE" = 0 ] || sleep "$DEMO_PAUSE"
 
 echo
 echo "BIOMINE FRACTAL:"
 cat "$FILES/fractals/biomine.txt"
-sleep "$DEMO_PAUSE"
+[ "$DEMO_PAUSE" = 0 ] || sleep "$DEMO_PAUSE"
 
-sleep 600
+sleep "${DEMO_HOLD:-600}"

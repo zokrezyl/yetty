@@ -18,7 +18,7 @@ if [ -z "$YPLOT" ] || [ ! -x "$YPLOT" ]; then
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 printf '=== yplot dashboard ===\n\n'
 p

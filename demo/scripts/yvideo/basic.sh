@@ -21,7 +21,7 @@ if [ -z "$YVIDEO" ] || [ ! -x "$YVIDEO" ]; then
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 printf '=== yvideo basics ===\n\n'
 p

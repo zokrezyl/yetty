@@ -22,7 +22,7 @@ if [ -z "$YECHO" ] || [ ! -x "$YECHO" ]; then
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 printf '=== yecho yplot showcase ===\n\n'
 p
@@ -72,4 +72,4 @@ p
 }'
 
 printf '\n=== done — holding open ===\n'
-sleep 600
+sleep "${DEMO_HOLD:-600}"

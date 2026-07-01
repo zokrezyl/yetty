@@ -20,7 +20,7 @@ if [ -z "$YCAT" ] || [ ! -x "$YCAT" ]; then
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 printf '=== ycircuit symbol coverage ===\n\n'
 p

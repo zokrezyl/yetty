@@ -21,7 +21,7 @@ if [ -z "$YFLAME" ] || [ ! -x "$YFLAME" ]; then
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 printf '=== yflame basics ===\n\n'
 p

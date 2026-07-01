@@ -11,9 +11,10 @@
 #   gdb -batch -ex run -ex 'thread apply all bt' \
 #       --args ./build-desktop-ytrace-debug/yetty -e demo/scripts/all.sh
 #
-# Every demo runs with DEMO_PAUSE=0 (no inter-step sleeps) and a per-demo
-# wall-clock cap, so the holds ("sleep 600"), the yless pagers and the
-# interactive viewers are all cut short and the whole set runs through quickly.
+# Every demo runs with DEMO_PAUSE=0 and DEMO_HOLD=0 (no inter-step pauses and no
+# end-of-demo hold sleeps) under a per-demo wall-clock cap, so the demos self-
+# collapse to near-zero delay; the yless pagers self-exit via --duration and the
+# cap is only a backstop for anything interactive. The whole set runs fast.
 #
 # Knobs (environment):
 #   ALL_CAP=3         per-demo wall-clock cap in seconds
@@ -39,8 +40,12 @@ RUN_YCTL="${ALL_YCTL:-0}"
 DRYRUN="${ALL_DRYRUN:-0}"
 PROGRESS="${ALL_PROGRESS:-$ROOT/tmp/all-progress.log}"
 
-# No inter-step pauses anywhere.
+# No delays anywhere: DEMO_PAUSE=0 zeroes the inter-step pauses (p()), and
+# DEMO_HOLD=0 collapses the end-of-demo "hold open" sleeps (sleep 600 / 30) that
+# otherwise keep content on screen for a human viewer. Together the whole set
+# runs through at full speed without relying on the per-demo timeout to cut holds.
 export DEMO_PAUSE=0
+export DEMO_HOLD=0
 
 # Point the demos' overridable tool variables at the chosen build dir, so the
 # run exercises that build's tools. Each demo still falls back to its own
@@ -97,6 +102,7 @@ for rep in $(seq 1 "$REPEAT"); do
         rel="${demo#$ROOT/}"
         printf '[%s] %d/%d rep%d %s\n' "$(date +%H:%M:%S)" "$index" "$grand" "$rep" "$rel" >> "$PROGRESS"
         printf '\n===== [%d/%d] %s =====\n' "$index" "$grand" "$rel"
+        printf '>>> RUN  %s\n' "$rel"
         # </dev/null so pagers/interactive viewers get EOF and exit fast; the
         # timeout is the hard backstop. Never let one demo abort the run.
         #
@@ -110,6 +116,7 @@ for rep in $(seq 1 "$REPEAT"); do
         esac
         # A killed raw-mode pager can leave the line discipline dirty; reset.
         stty sane 2>/dev/null || true
+        printf '<<< DONE %s\n' "$rel"
     done
 done
 
