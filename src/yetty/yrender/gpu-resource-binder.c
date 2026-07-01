@@ -145,6 +145,8 @@ static struct yetty_ycore_void_result binder_submit(
     const struct yetty_yrender_gpu_resource_set *rs);
 static struct yetty_ycore_void_result binder_finalize(
     struct yetty_yrender_gpu_resource_binder *self);
+static struct yetty_ycore_void_result binder_release_gpu(
+    struct yetty_yrender_gpu_resource_binder *self);
 static struct yetty_ycore_void_result binder_update(struct yetty_yrender_gpu_resource_binder *self);
 static struct yetty_ycore_void_result binder_bind(struct yetty_yrender_gpu_resource_binder *self,
                                                   WGPURenderPassEncoder pass, uint32_t group_index);
@@ -159,6 +161,7 @@ static const struct yetty_yrender_gpu_resource_binder_ops binder_ops = {
     .destroy = binder_destroy,
     .submit = binder_submit,
     .finalize = binder_finalize,
+    .release_gpu = binder_release_gpu,
     .update = binder_update,
     .bind = binder_bind,
     .get_pipeline = binder_get_pipeline,
@@ -1137,21 +1140,14 @@ static struct yetty_ycore_void_result binder_submit(struct yetty_yrender_gpu_res
     return YETTY_OK_VOID();
 }
 
-static struct yetty_ycore_void_result binder_finalize(
-    struct yetty_yrender_gpu_resource_binder *self)
+/* Release every GPU object this binder owns and reset the flattened
+ * collection state, leaving the submitted resource sets and the quad vertex
+ * buffer intact so a later finalize() rebuilds from the same CPU-side data.
+ * Cache-owned pipeline / shader module are dropped by reference only. Shared
+ * by binder_finalize's re-finalize prologue and binder_release_gpu, and
+ * idempotent — safe to call on a fresh or already-released binder. */
+static void binder_teardown_gpu_state(struct yetty_yrender_gpu_resource_binder_impl *impl)
 {
-    struct yetty_yrender_gpu_resource_binder_impl *impl =
-        (struct yetty_yrender_gpu_resource_binder_impl *)self;
-
-    if (impl->finalized) {
-        ydebug("GpuResourceBinder: finalize CACHE HIT (already finalized)");
-        return YETTY_OK_VOID();
-    }
-    ydebug("GpuResourceBinder: finalize CACHE MISS - rebuilding pipeline");
-
-    /* Release old GPU resources if re-finalizing. A cache-owned pipeline /
-     * shader module belongs to the allocator cache — drop our reference
-     * without releasing it. */
     if (impl->pipeline) {
         if (!impl->pipeline_cached) {
             wgpuRenderPipelineRelease(impl->pipeline);
@@ -1211,6 +1207,38 @@ static struct yetty_ycore_void_result binder_finalize(
     impl->storage_buffer_size = 0;
     impl->shader_code.size = 0;
     impl->visited_rs_count = 0;
+    impl->finalized = 0;
+}
+
+/* Hand the per-instance GPU allocations back to the allocator without
+ * destroying the binder. finalize() rebuilds them on demand. */
+static struct yetty_ycore_void_result binder_release_gpu(
+    struct yetty_yrender_gpu_resource_binder *self)
+{
+    struct yetty_yrender_gpu_resource_binder_impl *impl =
+        (struct yetty_yrender_gpu_resource_binder_impl *)self;
+    if (!impl->finalized && !impl->storage_buffer && !impl->uniform_buffer) {
+        return YETTY_OK_VOID(); /* already released / never finalized */
+    }
+    binder_teardown_gpu_state(impl);
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result binder_finalize(
+    struct yetty_yrender_gpu_resource_binder *self)
+{
+    struct yetty_yrender_gpu_resource_binder_impl *impl =
+        (struct yetty_yrender_gpu_resource_binder_impl *)self;
+
+    if (impl->finalized) {
+        ydebug("GpuResourceBinder: finalize CACHE HIT (already finalized)");
+        return YETTY_OK_VOID();
+    }
+    ydebug("GpuResourceBinder: finalize CACHE MISS - rebuilding pipeline");
+
+    /* Release any GPU resources left from a previous finalize (idempotent on a
+     * fresh binder) before rebuilding from the retained resource sets. */
+    binder_teardown_gpu_state(impl);
 
     for (size_t i = 0; i < impl->resource_set_count; i++) {
         collect_resources(impl, impl->resource_sets[i]);
@@ -1462,8 +1490,11 @@ static struct yetty_ycore_void_result binder_write_buffer_chunk(
     struct yetty_yrender_gpu_resource_binder_impl *impl =
         (struct yetty_yrender_gpu_resource_binder_impl *)self;
     if (!impl->finalized || !impl->storage_buffer) {
-        return YETTY_ERR(yetty_ycore_void,
-                         "write_buffer_chunk: binder not finalized / no storage buffer");
+        /* The binder has handed its GPU allocations back (off-screen figure).
+         * The caller keeps the authoritative bytes in its own CPU record and a
+         * later finalize() re-uploads the whole buffer, so a direct GPU chunk
+         * write here is simply skipped rather than treated as an error. */
+        return YETTY_OK_VOID();
     }
     if (buffer_index >= impl->flat_buffer_count) {
         return YETTY_ERR(yetty_ycore_void, "write_buffer_chunk: buffer_index out of range");

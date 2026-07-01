@@ -8,6 +8,133 @@
 
 #define MAX_CONCRETE_FACTORIES 32
 
+/* How many figures may hold live GPU allocations at once. Each figure's
+ * binder holds a handful of allocator slots (storage + uniform buffers, and
+ * for some types an atlas texture); the allocator caps total slots (see
+ * MAX_ALLOCATIONS in gpu-allocator.c). A scrollback of thousands of lines can
+ * anchor far more figures than that, so residency is bounded here instead:
+ * only the BUDGET most-recently-rendered figures stay resident, the rest hand
+ * their slots back and reacquire on their next render. Kept well below the
+ * allocator budget (even at a few slots per figure) yet far above the handful
+ * of figures visible in any one frame, so an on-screen figure is never evicted
+ * mid-frame. */
+#define YETTY_YDRAW_GPU_RESIDENCY_BUDGET 128u
+
+//=============================================================================
+// GPU residency — bounded LRU of GPU-resident figures (see the residency block
+// in struct yetty_ydraw_composite). Owned by the abstract factory; every
+// instance it mints back-points here. Not thread-safe: all mutation happens on
+// the render/ingest thread that owns the factory.
+//=============================================================================
+
+struct yetty_ydraw_gpu_residency {
+    struct yetty_ydraw_composite *mru; /* most recently used — list head */
+    struct yetty_ydraw_composite *lru; /* least recently used — list tail */
+    uint32_t count;
+    uint32_t budget;
+};
+
+static void residency_init(struct yetty_ydraw_gpu_residency *residency, uint32_t budget)
+{
+    residency->mru = NULL;
+    residency->lru = NULL;
+    residency->count = 0;
+    residency->budget = budget ? budget : YETTY_YDRAW_GPU_RESIDENCY_BUDGET;
+}
+
+/* Detach `composite` from the LRU list. Leaves its GPU resources untouched —
+ * callers that also want the slots freed call residency_release_one(). */
+static void residency_list_remove(struct yetty_ydraw_gpu_residency *residency,
+                                  struct yetty_ydraw_composite *composite)
+{
+    if (!composite->resident) {
+        return;
+    }
+    if (composite->res_prev) {
+        composite->res_prev->res_next = composite->res_next;
+    } else {
+        residency->mru = composite->res_next;
+    }
+    if (composite->res_next) {
+        composite->res_next->res_prev = composite->res_prev;
+    } else {
+        residency->lru = composite->res_prev;
+    }
+    composite->res_prev = NULL;
+    composite->res_next = NULL;
+    composite->resident = 0;
+    if (residency->count > 0) {
+        residency->count--;
+    }
+}
+
+/* Push `composite` at the MRU (front). Caller guarantees it is not currently
+ * linked. */
+static void residency_list_push_front(struct yetty_ydraw_gpu_residency *residency,
+                                      struct yetty_ydraw_composite *composite)
+{
+    composite->res_prev = NULL;
+    composite->res_next = residency->mru;
+    if (residency->mru) {
+        residency->mru->res_prev = composite;
+    }
+    residency->mru = composite;
+    if (!residency->lru) {
+        residency->lru = composite;
+    }
+    composite->resident = 1;
+    residency->count++;
+}
+
+/* Hand one figure's GPU allocations back to the allocator and drop it from the
+ * LRU. The figure itself lives on (its wire record is retained); a later
+ * render reacquires the slots via binder->finalize(). */
+static void residency_release_one(struct yetty_ydraw_gpu_residency *residency,
+                                  struct yetty_ydraw_composite *composite)
+{
+    if (composite->binder && composite->binder->ops->release_gpu) {
+        struct yetty_ycore_void_result rr = composite->binder->ops->release_gpu(composite->binder);
+        if (YETTY_IS_ERR(rr)) {
+            yetty_ycore_error_destroy(rr.error); /* best-effort — slot may already be gone */
+        }
+    }
+    residency_list_remove(residency, composite);
+}
+
+/* Evict from the LRU tail until the resident set fits the budget. The tail is
+ * always the least-recently-rendered figure, so with BUDGET far above the
+ * per-frame visible count this never releases a figure needed this frame. */
+static void residency_evict_to_budget(struct yetty_ydraw_gpu_residency *residency)
+{
+    while (residency->count > residency->budget && residency->lru) {
+        residency_release_one(residency, residency->lru);
+    }
+}
+
+/* Make `composite` the most-recently-used resident figure, ensuring its GPU
+ * resources are live. Called on every render and on create (eager binders).
+ * Returns an error only if reacquiring the GPU resources failed. */
+static struct yetty_ycore_void_result residency_touch(struct yetty_ydraw_gpu_residency *residency,
+                                                      struct yetty_ydraw_composite *composite)
+{
+    composite->residency = residency;
+
+    /* Rebuild the binder's GPU resources if they were previously released
+     * (off-screen). finalize() is a no-op when already finalized, so this is
+     * cheap on the hot path where the figure stayed resident. */
+    if (composite->binder && composite->binder->ops->finalize) {
+        struct yetty_ycore_void_result fr = composite->binder->ops->finalize(composite->binder);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "residency_touch: reacquire GPU resources");
+    }
+
+    if (composite->resident) {
+        residency_list_remove(residency, composite);
+    }
+    residency_list_push_front(residency, composite);
+    residency_evict_to_budget(residency);
+    return YETTY_OK_VOID();
+}
+
 //=============================================================================
 // Abstract factory internal structure
 //=============================================================================
@@ -24,6 +151,9 @@ struct yetty_ydraw_composite_factory {
     struct yetty_yevent_event_loop *event_loop;
     struct yetty_ydraw_concrete_factory *factories[MAX_CONCRETE_FACTORIES];
     uint32_t count;
+    /* Bounds how many minted figures stay GPU-resident at once. Every
+     * instance this factory creates back-points here for LRU bookkeeping. */
+    struct yetty_ydraw_gpu_residency residency;
 };
 
 //=============================================================================
@@ -45,6 +175,7 @@ struct yetty_ydraw_composite_factory_ptr_result yetty_ydraw_composite_factory_cr
     factory->target_format = target_format;
     factory->allocator = allocator;
     factory->event_loop = event_loop;
+    residency_init(&factory->residency, YETTY_YDRAW_GPU_RESIDENCY_BUDGET);
 
     return YETTY_OK(yetty_ydraw_composite_factory_ptr, factory);
 }
@@ -152,7 +283,27 @@ struct yetty_ydraw_composite_ptr_result yetty_ydraw_composite_factory_create_ins
     }
 
     // Delegate to concrete factory
-    return concrete->create_instance(concrete, buffer_data, size, rolling_row);
+    struct yetty_ydraw_composite_ptr_result inst_res =
+        concrete->create_instance(concrete, buffer_data, size, rolling_row);
+    if (YETTY_IS_ERR(inst_res)) {
+        return inst_res;
+    }
+
+    /* Register the fresh instance with the GPU residency LRU. create_instance
+     * finalises the binder eagerly, so a burst of ingests (a scrollback full
+     * of plots) would otherwise pin every figure's allocator slots at once.
+     * Registering here evicts the least-recently-used figures back down to the
+     * budget, bounding live GPU allocations regardless of scrollback depth. */
+    if (inst_res.value) {
+        struct yetty_ycore_void_result tr = residency_touch(&factory->residency, inst_res.value);
+        if (YETTY_IS_ERR(tr)) {
+            /* The binder was just finalised by create_instance, so the touch's
+             * reacquire is a no-op that cannot fail here; guard anyway and keep
+             * the instance — it reacquires on its next render. */
+            yetty_ycore_error_destroy(tr.error);
+        }
+    }
+    return inst_res;
 }
 
 //=============================================================================
@@ -207,6 +358,14 @@ void yetty_ydraw_composite_destroy(struct yetty_ydraw_composite *instance)
         return;
     }
 
+    /* Drop out of the GPU residency LRU before teardown so the manager never
+     * retains a dangling pointer. The binder (and its GPU slots, resident or
+     * released) is freed by the per-instance destroy below. */
+    if (instance->residency) {
+        residency_list_remove(instance->residency, instance);
+        instance->residency = NULL;
+    }
+
     /* Preferred path: dispatch through the per-instance vtable. The
      * factory is out of the runtime call path. */
     if (instance->ops && instance->ops->destroy) {
@@ -240,6 +399,18 @@ struct yetty_ycore_void_result yetty_ydraw_composite_render(struct yetty_ydraw_c
     if (!instance->render) {
         return YETTY_OK_VOID();
     }
+
+    /* This figure is on-screen: make it the most-recently-used resident and
+     * ensure its GPU resources are live (reacquired if it was released while
+     * off-screen). A figure that dropped off the LRU while scrolled away lands
+     * back here the moment it re-enters the pane, rebuilding its binder from
+     * its retained wire record. Skip for figures minted outside a residency
+     * (none today, but keep the wrapper self-contained). */
+    if (instance->residency) {
+        struct yetty_ycore_void_result tr = residency_touch(instance->residency, instance);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, tr, "composite_render: residency acquire");
+    }
+
     return instance->render(instance, target, x, y);
 }
 

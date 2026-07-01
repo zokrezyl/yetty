@@ -337,7 +337,7 @@ static struct yetty_ycore_buffer_result sg_assemble_glyph_shaders(
 /* Substitute the first occurrence of `marker` in `template` with `replacement`.
  * Returns a malloc'd NUL-terminated buffer; caller frees. */
 static char *sg_splice_marker(const char *template, size_t template_size, const char *marker,
-                             const char *replacement, size_t replacement_size, size_t *out_size)
+                              const char *replacement, size_t replacement_size, size_t *out_size)
 {
     size_t marker_len = strlen(marker);
     const char *found = NULL;
@@ -439,9 +439,10 @@ static const char *sg_template_wgsl(void)
 static inline struct yetty_yvterm_shader_glyph_layer *sg_layer_from_listener(
     struct yetty_yevent_event_listener *listener)
 {
-    return (struct yetty_yvterm_shader_glyph_layer *)((char *)listener -
-                                                      offsetof(struct yetty_yvterm_shader_glyph_layer,
-                                                               listener));
+    return (
+        struct yetty_yvterm_shader_glyph_layer *)((char *)listener -
+                                                  offsetof(struct yetty_yvterm_shader_glyph_layer,
+                                                           listener));
 }
 
 static void sg_timer_stop(struct yetty_yvterm_shader_glyph_layer *layer)
@@ -581,9 +582,9 @@ struct yetty_yvterm_shader_glyph_layer_ptr_result yetty_yvterm_shader_glyph_laye
     }
     const char *template = sg_template_wgsl();
     size_t spliced_size = 0;
-    char *spliced = sg_splice_marker(template, strlen(template), "// SHADER_GLYPHS_PLACEHOLDER",
-                                     (const char *)glyph_res.value.data, glyph_res.value.size,
-                                     &spliced_size);
+    char *spliced =
+        sg_splice_marker(template, strlen(template), "// SHADER_GLYPHS_PLACEHOLDER",
+                         (const char *)glyph_res.value.data, glyph_res.value.size, &spliced_size);
     free(glyph_res.value.data);
     if (!spliced) {
         layer->headless = 1;
@@ -621,8 +622,9 @@ struct yetty_yvterm_shader_glyph_layer_ptr_result yetty_yvterm_shader_glyph_laye
     layer->event_loop = context->event_loop;
     layer->listener.handler = sg_on_anim_tick;
     if (layer->event_loop && layer->event_loop->ops && layer->event_loop->ops->create_timer) {
-        int target_fps = config ? config->ops->get_int(config, "terminal/shader-glyph-layer/target-fps", 60)
-                                : 60;
+        int target_fps =
+            config ? config->ops->get_int(config, "terminal/shader-glyph-layer/target-fps", 60)
+                   : 60;
         if (target_fps < 1) {
             target_fps = 1;
         }

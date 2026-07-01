@@ -41,6 +41,11 @@ struct yetty_ydraw_composite;
 struct yetty_ydraw_target;
 struct yetty_ydraw_gpu_allocator;
 
+/* Bounds how many composites may hold live GPU resources at once, decoupling
+ * GPU residency from how deep a figure sits in scrollback. See the residency
+ * block in yetty_ydraw_composite and gpu-residency.c. */
+struct yetty_ydraw_gpu_residency;
+
 //=============================================================================
 // Per-instance vtable
 //
@@ -136,6 +141,21 @@ struct yetty_ydraw_composite {
      * partial initialisation. */
     struct yetty_yrender_gpu_resource_set *resource_set;
     struct yetty_yrender_gpu_resource_binder *binder;
+
+    /* GPU residency bookkeeping — a figure's binder holds real allocator slots
+     * (storage + uniform buffers, atlas textures), and a scrollback of 10k
+     * lines can hold far more figures than the allocator's slot budget. The
+     * residency manager (owned by the abstract factory) keeps only the most
+     * recently rendered figures GPU-resident: an intrusive LRU list threaded
+     * through res_prev/res_next, with `residency` back-pointing at the manager
+     * and `resident` marking membership. When a figure falls off the LRU tail
+     * its binder->release_gpu() hands the slots back; the next render()
+     * reacquires them via binder->finalize(). All fields zero on a fresh
+     * instance (every figure type callocs) → "not yet resident". */
+    struct yetty_ydraw_gpu_residency *residency;
+    struct yetty_ydraw_composite *res_prev;
+    struct yetty_ydraw_composite *res_next;
+    int resident;
 
     // Render to target at x,y (canvas provides x,y for scrolling)
     struct yetty_ycore_void_result (*render)(struct yetty_ydraw_composite *self,

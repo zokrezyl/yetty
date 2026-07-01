@@ -2172,7 +2172,10 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
             /* Local (scrolling-layer) bounds are already framebuffer pixels. */
             inst->content_scale = 1.0f;
         }
-        struct yetty_ycore_void_result fr = inst->render(inst, target, sx, sy);
+        /* Go through the generic wrapper (not inst->render directly) so the
+         * figure is marked GPU-resident and its binder reacquired if it was
+         * released while off the residency budget. */
+        struct yetty_ycore_void_result fr = yetty_ydraw_composite_render(inst, target, sx, sy);
         if (YETTY_IS_ERR(fr)) {
             ydebug("ygrid_render: figure instance render failed: %s", fr.error.msg);
             yetty_ycore_error_destroy(fr.error);

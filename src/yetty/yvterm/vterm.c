@@ -35,7 +35,7 @@
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterminal/terminal.h>
 #include <yetty/ytrace/ytrace.h>
-#include <yetty/yfont/shader-glyph.h>      /* shader-glyph codepoint table lookup */
+#include <yetty/yfont/shader-glyph.h> /* shader-glyph codepoint table lookup */
 #include <yetty/yvterm/grid.h>
 #include <yetty/yvterm/shader-glyph-pua.h> /* PUA-B codepoint helpers */
 #include <yetty/ywire/wire-statemachine.h>
