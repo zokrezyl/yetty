@@ -8,9 +8,15 @@
 # value into each target so the runtime asset-extract check can detect a
 # version change and re-extract.
 #
-# Algorithm: git short SHA (12 chars) + "-dirty" if the working tree has
-# uncommitted changes; falls back to a YYYYMMDDHHMMSS timestamp when .git
-# is absent (source tarball builds).
+# Algorithm: git short SHA (12 chars) + "-dirty" if TRACKED files differ
+# from HEAD; falls back to a YYYYMMDDHHMMSS timestamp when .git is absent
+# (source tarball builds).
+#
+# Untracked files are deliberately ignored (--untracked-files=no): CI stages
+# build inputs/outputs inside the checkout (downloaded rootfs artifacts,
+# per-platform staging dirs, generated files not under version control), and
+# those must NOT make a pristine release build report "-dirty". Only an actual
+# modification to a committed file means the source state differs from HEAD.
 function(yetty_compute_build_version)
     if(DEFINED CACHE{YETTY_BUILD_VERSION_STR})
         return()
@@ -28,6 +34,7 @@ function(yetty_compute_build_version)
             if(_rc EQUAL 0 AND _sha)
                 execute_process(
                     COMMAND "${GIT_EXECUTABLE}" -C "${YETTY_ROOT}" status --porcelain
+                            --untracked-files=no
                     OUTPUT_VARIABLE _dirty
                     OUTPUT_STRIP_TRAILING_WHITESPACE
                     ERROR_QUIET)
