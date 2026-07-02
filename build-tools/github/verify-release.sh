@@ -121,10 +121,15 @@ fi
 if [ -f yetty-windows.zip ]; then
     info "============ WINDOWS ============"
     mkdir -p windows && unzip -qo yetty-windows.zip -d windows
-    # Windows zip nests under yetty-windows/
+    # Windows zip nests under yetty-windows/ and ships exactly one artifact:
+    # yinstall.exe, the self-contained installer. It carries yetty, the
+    # companion tools, the DirectX DLLs, the demo tree and the VM runtime as
+    # an embedded payload, so there are no loose executables or demo/ dir to
+    # check here — just the installer itself.
     win_root="windows/yetty-windows"
     [ -d "$win_root" ] || win_root="windows"
-    check_desktop "$win_root" "Windows" "build-windows/Release" ".exe"
+    info "[Windows] Installer"
+    check_file "$win_root" "yinstall.exe" "yinstall installer"
 else
     info "============ WINDOWS: MISSING (yetty-windows.zip not in release) ============"
     ((ERRORS++)); ((CHECKS++))

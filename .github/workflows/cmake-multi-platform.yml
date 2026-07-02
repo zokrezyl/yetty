@@ -460,25 +460,28 @@ jobs:
         $StageDir = "${{ github.workspace }}/yetty-windows"
         New-Item -ItemType Directory -Force -Path $StageDir | Out-Null
 
-        $ExeDir = if (Test-Path "$BuildDir/Release/yetty.exe") { "$BuildDir/Release" } else { $BuildDir }
-        Get-ChildItem "$ExeDir/*.exe" -ErrorAction SilentlyContinue | Copy-Item -Destination $StageDir
-        Get-ChildItem "$ExeDir/*.dll" -ErrorAction SilentlyContinue | Copy-Item -Destination $StageDir
-
-        foreach ($DllName in @("dxil.dll", "d3dcompiler_47.dll")) {
-            if (-not (Test-Path "$StageDir/$DllName")) {
-                $SearchDirs = @(
-                    Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Directory -ErrorAction SilentlyContinue |
-                        Where-Object { $_.Name -match '^\d+\.' } | ForEach-Object { "$($_.FullName)\x64" }
-                    "C:\Program Files (x86)\Windows Kits\10\Redist\D3D\x64"
-                )
-                $Found = $SearchDirs | Where-Object { Test-Path "$_/$DllName" } | Sort-Object -Descending | Select-Object -First 1
-                if ($Found) { Copy-Item "$Found/$DllName" -Destination "$StageDir/$DllName" }
-            }
+        # The Windows release ships exactly one thing: yinstall.exe. It is the
+        # self-contained installer that carries the entire yetty product — the
+        # terminal, the companion tools, the DirectX runtime DLLs, shaders,
+        # fonts, config, the demo tree and the RISC-V VM runtime — as an
+        # embedded payload, and unpacks each piece to the right per-user
+        # location on first run. Nothing else belongs in the archive: shipping
+        # loose yetty.exe / DLLs / demos alongside it would just duplicate what
+        # is already inside yinstall. install.ps1 downloads this archive, finds
+        # yinstall.exe and runs it.
+        #
+        # Handle both the Ninja layout (tools/yinstall/yinstall.exe) and the VS
+        # multi-config layout (tools/yinstall/Release/yinstall.exe).
+        $YinstallExe = @(
+            "$BuildDir/tools/yinstall/yinstall.exe",
+            "$BuildDir/tools/yinstall/Release/yinstall.exe"
+        ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+        if (-not $YinstallExe) {
+            Write-Error "yinstall.exe not found under $BuildDir/tools/yinstall"
+            exit 1
         }
-
-        if (Test-Path "${{ github.workspace }}/demo") {
-            Copy-Item "${{ github.workspace }}/demo" -Destination $StageDir -Recurse -Force
-        }
+        Copy-Item $YinstallExe -Destination $StageDir
+        Write-Host "Staged $(Split-Path $YinstallExe -Leaf) ($([math]::Round((Get-Item $YinstallExe).Length/1MB,1)) MB)"
 
     - name: Upload Windows artifacts
       uses: actions/upload-artifact@v4
