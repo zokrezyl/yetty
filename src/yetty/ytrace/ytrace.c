@@ -41,7 +41,7 @@ static struct yetty_yplatform_ymutex *g_mutex = NULL;
 static bool g_initialized = false;
 
 /* Resolution state — see resolve_point_enabled(). */
-static bool g_all_enabled = false;           /* master: emit every point */
+static bool g_all_enabled = false; /* master: emit every point */
 static int g_floor_severity = YTRACE_FLOOR_DEFAULT;
 static bool g_level_rule_used[YTRACE_LEVEL_COUNT];
 static bool g_level_rule_enabled[YTRACE_LEVEL_COUNT];

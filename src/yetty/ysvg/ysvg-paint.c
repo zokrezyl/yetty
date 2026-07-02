@@ -29,6 +29,7 @@
 #include <yetty/ysdf/funcs.gen.h>
 #include <yetty/ysdf/types.gen.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ytrace/ytrace.h>
 
 #include <math.h>
 #include <stdint.h>
@@ -37,13 +38,19 @@
 
 #define YSVG_PATH_TOLERANCE 0.5f
 
+/* Bound on <use> chasing <use> (or a group of them) so a self-referential or
+ * mutually-referential document cannot recurse without end. */
+#define YSVG_USE_DEPTH_MAX 12
+
 struct ysvg_paint_state {
     struct yetty_ysvg_paint_ctx *ctx;
-    const struct yetty_ysvg_doc *doc; /* needed for CSS rule lookup */
+    const struct yetty_ysvg_doc *doc; /* needed for CSS + id/href lookup */
     struct yetty_ysvg_xform ctm;
     struct yetty_ysvg_style style;
     /* y cursor for stacking text lines when no explicit y attribute. */
     float text_y;
+    /* Depth of <use> expansion — cycle guard. */
+    int use_depth;
 };
 
 /*=============================================================================
@@ -75,6 +82,284 @@ static uint32_t resolve_color(const struct yetty_ysvg_paint *p, float opacity, f
         rgba = (rgba & 0xFFFFFF00u) | na;
     }
     return yetty_ysvg_rgba_to_abgr(rgba);
+}
+
+/* Would this paint contribute any visible pixels? Gates both fill and stroke
+ * emission so a `none` paint or a fully transparent one is skipped cleanly
+ * (the packed word alone can't be tested — a transparent non-black colour
+ * still packs to a non-zero word). */
+static int paint_visible(const struct yetty_ysvg_paint *p, float opacity, float prop_opacity)
+{
+    if (p->kind == YETTY_YSVG_PAINT_NONE) {
+        return 0;
+    }
+    float alpha = (float)(p->color & 0xFFu) / 255.0f * opacity * prop_opacity;
+    return alpha > 0.001f;
+}
+
+/*=============================================================================
+ * Reference resolution — id lookup, <use> targets, gradient paint servers
+ *
+ * Every node is reachable from doc->root via the child/sibling links, so a
+ * recursive tree search resolves `#id` references without touching the node
+ * arena. Documents here are small; a linear search per reference is fine.
+ *===========================================================================*/
+
+static const struct yetty_ysvg_node *find_node_by_id(const struct yetty_ysvg_node *node,
+                                                     const char *id, size_t id_len)
+{
+    if (!node) {
+        return NULL;
+    }
+    const struct yetty_ysvg_attr *a = yetty_ysvg_attr_find(node, YETTY_YSVG_ATTR_ID);
+    if (a && a->value_len == id_len && memcmp(a->value, id, id_len) == 0) {
+        return node;
+    }
+    for (struct yetty_ysvg_node *c = node->first_child; c; c = c->next_sibling) {
+        const struct yetty_ysvg_node *found = find_node_by_id(c, id, id_len);
+        if (found) {
+            return found;
+        }
+    }
+    return NULL;
+}
+
+/* Pull the value of `prop` out of an inline `style="..."` string, if present.
+ * Used for stops that carry `style="stop-color:#..."` instead of the
+ * presentation attribute. */
+static void find_style_value(const char *style, size_t len, const char *prop, const char **out_val,
+                             size_t *out_len)
+{
+    *out_val = NULL;
+    *out_len = 0;
+    if (!style) {
+        return;
+    }
+    size_t plen = strlen(prop);
+    for (size_t i = 0; i + plen <= len; i++) {
+        if (memcmp(style + i, prop, plen) != 0) {
+            continue;
+        }
+        if (i > 0) {
+            char before = style[i - 1];
+            if (before != ';' && before != ' ' && before != '\t' && before != '\n' &&
+                before != '\r' && before != '"' && before != '\'') {
+                continue;
+            }
+        }
+        size_t j = i + plen;
+        while (j < len && (style[j] == ' ' || style[j] == '\t')) {
+            j++;
+        }
+        if (j >= len || style[j] != ':') {
+            continue;
+        }
+        j++;
+        while (j < len && (style[j] == ' ' || style[j] == '\t')) {
+            j++;
+        }
+        size_t start = j;
+        while (j < len && style[j] != ';') {
+            j++;
+        }
+        size_t end = j;
+        while (end > start && (style[end - 1] == ' ' || style[end - 1] == '\t')) {
+            end--;
+        }
+        *out_val = style + start;
+        *out_len = end - start;
+        return;
+    }
+}
+
+/* Resolve one <stop>'s colour, folding stop-opacity into the alpha byte.
+ * Returns RGBA (0xRRGGBBAA). Reads presentation attrs first, then lets an
+ * inline `style=` override them. */
+static uint32_t read_stop_rgba(const struct yetty_ysvg_node *stop)
+{
+    uint32_t rgb = 0x000000FFu; /* default stop-color is black, opaque */
+    float stop_opacity = 1.0f;
+    const struct yetty_ysvg_attr *a;
+
+    if ((a = yetty_ysvg_attr_find(stop, YETTY_YSVG_ATTR_STOP_COLOR))) {
+        uint32_t parsed;
+        if (yetty_ysvg_parse_color(a->value, a->value_len, &parsed)) {
+            rgb = parsed;
+        }
+    }
+    if ((a = yetty_ysvg_attr_find(stop, YETTY_YSVG_ATTR_STOP_OPACITY))) {
+        stop_opacity = yetty_ysvg_parse_length(a->value, a->value_len, 1.0f, 1.0f);
+    }
+    if ((a = yetty_ysvg_attr_find(stop, YETTY_YSVG_ATTR_STYLE))) {
+        const char *val;
+        size_t vlen;
+        find_style_value(a->value, a->value_len, "stop-color", &val, &vlen);
+        if (val) {
+            uint32_t parsed;
+            if (yetty_ysvg_parse_color(val, vlen, &parsed)) {
+                rgb = parsed;
+            }
+        }
+        find_style_value(a->value, a->value_len, "stop-opacity", &val, &vlen);
+        if (val) {
+            stop_opacity = yetty_ysvg_parse_length(val, vlen, 1.0f, 1.0f);
+        }
+    }
+
+    float alpha = (float)(rgb & 0xFFu) * stop_opacity;
+    if (alpha < 0.0f) {
+        alpha = 0.0f;
+    }
+    if (alpha > 255.0f) {
+        alpha = 255.0f;
+    }
+    return (rgb & 0xFFFFFF00u) | (uint32_t)(alpha + 0.5f);
+}
+
+/* A gradient may carry its <stop>s directly, or inherit them from another
+ * gradient via xlink:href (Inkscape splits geometry and stops this way).
+ * Follow the href chain to the gradient that actually holds the stops. */
+static const struct yetty_ysvg_node *gradient_stops_node(const struct yetty_ysvg_doc *doc,
+                                                         const struct yetty_ysvg_node *grad,
+                                                         int depth)
+{
+    if (!grad || depth > 8) {
+        return NULL;
+    }
+    for (struct yetty_ysvg_node *c = grad->first_child; c; c = c->next_sibling) {
+        if (c->elem == YETTY_YSVG_ELEM_STOP) {
+            return grad;
+        }
+    }
+    const struct yetty_ysvg_attr *h = yetty_ysvg_attr_find(grad, YETTY_YSVG_ATTR_XLINK_HREF);
+    if (!h) {
+        h = yetty_ysvg_attr_find(grad, YETTY_YSVG_ATTR_HREF);
+    }
+    if (h && h->value_len > 1 && h->value[0] == '#') {
+        const struct yetty_ysvg_node *ref =
+            find_node_by_id(doc->root, h->value + 1, h->value_len - 1);
+        return gradient_stops_node(doc, ref, depth + 1);
+    }
+    return NULL;
+}
+
+/* Approximate a gradient paint server by a single solid colour: the mean of
+ * the stop ramp over offset [0,1] (piecewise-linear between stops, flat before
+ * the first / after the last). The SDF primitives can't paint a real gradient
+ * across an arbitrary shape, so this keeps gradient-filled artwork readable
+ * instead of blank. Returns 1 and writes *out_rgba on success. */
+static int resolve_gradient_color(const struct yetty_ysvg_doc *doc, const char *id, size_t id_len,
+                                  uint32_t *out_rgba)
+{
+    const struct yetty_ysvg_node *grad = find_node_by_id(doc->root, id, id_len);
+    if (!grad || (grad->elem != YETTY_YSVG_ELEM_LINEARGRADIENT &&
+                  grad->elem != YETTY_YSVG_ELEM_RADIALGRADIENT)) {
+        return 0;
+    }
+    const struct yetty_ysvg_node *stops_node = gradient_stops_node(doc, grad, 0);
+    if (!stops_node) {
+        return 0;
+    }
+
+    enum { YSVG_GRAD_MAX_STOPS = 64 };
+    float offset[YSVG_GRAD_MAX_STOPS];
+    float red[YSVG_GRAD_MAX_STOPS], green[YSVG_GRAD_MAX_STOPS];
+    float blue[YSVG_GRAD_MAX_STOPS], stop_alpha[YSVG_GRAD_MAX_STOPS];
+    size_t count = 0;
+    float last_offset = 0.0f;
+    for (struct yetty_ysvg_node *c = stops_node->first_child; c && count < YSVG_GRAD_MAX_STOPS;
+         c = c->next_sibling) {
+        if (c->elem != YETTY_YSVG_ELEM_STOP) {
+            continue;
+        }
+        float off = 0.0f;
+        const struct yetty_ysvg_attr *oa = yetty_ysvg_attr_find(c, YETTY_YSVG_ATTR_OFFSET);
+        if (oa) {
+            off = yetty_ysvg_parse_length(oa->value, oa->value_len, 1.0f, 0.0f);
+        }
+        if (off < 0.0f) {
+            off = 0.0f;
+        }
+        if (off > 1.0f) {
+            off = 1.0f;
+        }
+        if (off < last_offset) {
+            off = last_offset; /* enforce monotonic offsets */
+        }
+        last_offset = off;
+        uint32_t rgba = read_stop_rgba(c);
+        offset[count] = off;
+        red[count] = (float)((rgba >> 24) & 0xFFu);
+        green[count] = (float)((rgba >> 16) & 0xFFu);
+        blue[count] = (float)((rgba >> 8) & 0xFFu);
+        stop_alpha[count] = (float)(rgba & 0xFFu);
+        count++;
+    }
+    if (count == 0) {
+        return 0;
+    }
+    double mean_r = 0.0, mean_g = 0.0, mean_b = 0.0, mean_a = 0.0;
+    if (count == 1) {
+        mean_r = red[0];
+        mean_g = green[0];
+        mean_b = blue[0];
+        mean_a = stop_alpha[0];
+    } else {
+        /* Leading flat segment [0, offset[0]]. */
+        mean_r = red[0] * offset[0];
+        mean_g = green[0] * offset[0];
+        mean_b = blue[0] * offset[0];
+        mean_a = stop_alpha[0] * offset[0];
+        for (size_t i = 1; i < count; i++) {
+            float width = offset[i] - offset[i - 1];
+            mean_r += 0.5 * (red[i - 1] + red[i]) * width;
+            mean_g += 0.5 * (green[i - 1] + green[i]) * width;
+            mean_b += 0.5 * (blue[i - 1] + blue[i]) * width;
+            mean_a += 0.5 * (stop_alpha[i - 1] + stop_alpha[i]) * width;
+        }
+        /* Trailing flat segment [offset[last], 1]. */
+        float tail = 1.0f - offset[count - 1];
+        mean_r += red[count - 1] * tail;
+        mean_g += green[count - 1] * tail;
+        mean_b += blue[count - 1] * tail;
+        mean_a += stop_alpha[count - 1] * tail;
+    }
+    uint32_t out_r = (uint32_t)(mean_r + 0.5);
+    uint32_t out_g = (uint32_t)(mean_g + 0.5);
+    uint32_t out_b = (uint32_t)(mean_b + 0.5);
+    uint32_t out_a = (uint32_t)(mean_a + 0.5);
+    if (out_r > 255) {
+        out_r = 255;
+    }
+    if (out_g > 255) {
+        out_g = 255;
+    }
+    if (out_b > 255) {
+        out_b = 255;
+    }
+    if (out_a > 255) {
+        out_a = 255;
+    }
+    *out_rgba = (out_r << 24) | (out_g << 16) | (out_b << 8) | out_a;
+    return 1;
+}
+
+/* If `paint` is a url(#gradient) reference, bake it down to its representative
+ * solid colour in place. Non-url paints are left untouched. */
+static void resolve_url_paint(const struct yetty_ysvg_doc *doc, struct yetty_ysvg_paint *paint)
+{
+    if (paint->kind != YETTY_YSVG_PAINT_URL || !paint->url_id || paint->url_id_len == 0) {
+        return;
+    }
+    uint32_t color;
+    if (resolve_gradient_color(doc, paint->url_id, paint->url_id_len, &color)) {
+        paint->color = color;
+        ydebug("ysvg: gradient url(#%.*s) approximated as solid 0x%08x", (int)paint->url_id_len,
+               paint->url_id, color);
+    } else {
+        ywarn("ysvg: unresolved paint url(#%.*s) — using fallback colour", (int)paint->url_id_len,
+              paint->url_id);
+    }
 }
 
 /*=============================================================================
@@ -139,6 +424,65 @@ static struct yetty_ycore_void_result emit_segment(struct yetty_ysvg_paint_ctx *
     struct yetty_ycore_void_result r =
         yetty_ydraw_drawable_list_add_cmd_add_segment(ctx->buf, 0, 0, 0, color, width, &seg);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "ysvg: segment emit failed");
+    return YETTY_OK_VOID();
+}
+
+/*=============================================================================
+ * Polygon fill — triangulate each subpath and emit filled SDF triangles.
+ *===========================================================================*/
+
+static struct yetty_ycore_void_result emit_filled_subpaths(struct ysvg_paint_state *ps,
+                                                           const struct yetty_ysvg_path *path,
+                                                           uint32_t fill)
+{
+    /* Abutting triangles each anti-alias their shared edge to partial
+     * coverage, leaving a thin seam where the background bleeds through. For
+     * an opaque fill we hide those seams by stroking every triangle in its own
+     * fill colour: neighbouring strokes overlap the shared edge and repaint it
+     * solid. A translucent fill can't use this trick — overlapping strokes
+     * would double-blend into a darker seam — so it is drawn flat. The seam
+     * cover is in device pixels (vertices are already transformed). */
+    uint32_t seam_stroke = 0;
+    float seam_width = 0.0f;
+    if (((fill >> 24) & 0xFFu) >= 250u) {
+        seam_stroke = fill;
+        seam_width = 1.0f;
+    }
+
+    for (size_t i = 0; i < path->sub_count; i++) {
+        const struct yetty_ysvg_subpath *sp = &path->subs[i];
+        if (sp->count < 3) {
+            continue;
+        }
+        uint32_t *tris = NULL;
+        size_t tri_count = yetty_ysvg_triangulate(sp->points, sp->count, &tris);
+        if (tri_count == 0) {
+            ydebug("ysvg: fill triangulation skipped for subpath (%zu verts)", sp->count);
+            continue;
+        }
+        for (size_t t = 0; t < tri_count; t++) {
+            const struct yetty_ysvg_point *a = &sp->points[tris[t * 3 + 0]];
+            const struct yetty_ysvg_point *b = &sp->points[tris[t * 3 + 1]];
+            const struct yetty_ysvg_point *c = &sp->points[tris[t * 3 + 2]];
+            float ax, ay, bx, by, cx, cy;
+            yetty_ysvg_xform_point(&ps->ctm, a->x, a->y, &ax, &ay);
+            yetty_ysvg_xform_point(&ps->ctm, b->x, b->y, &bx, &by);
+            yetty_ysvg_xform_point(&ps->ctm, c->x, c->y, &cx, &cy);
+            struct yetty_ysdf_triangle geom = {.vertex_a_x = ax,
+                                               .vertex_a_y = ay,
+                                               .vertex_b_x = bx,
+                                               .vertex_b_y = by,
+                                               .vertex_c_x = cx,
+                                               .vertex_c_y = cy};
+            struct yetty_ycore_void_result r = yetty_ydraw_drawable_list_add_cmd_add_triangle(
+                ps->ctx->buf, 0, 0, fill, seam_stroke, seam_width, &geom);
+            if (YETTY_IS_ERR(r)) {
+                free(tris);
+                return r;
+            }
+        }
+        free(tris);
+    }
     return YETTY_OK_VOID();
 }
 
@@ -349,29 +693,27 @@ static struct yetty_ycore_void_result emit_points_shape(struct ysvg_paint_state 
     if (!yetty_ysvg_path_from_points(&path, a->value, a->value_len, closed != 0)) {
         return YETTY_ERR(yetty_ycore_void, "ysvg: polyline/polygon parse failed");
     }
-    uint32_t stroke = resolve_color(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity);
-    uint32_t fill = resolve_color(&ps->style.fill, ps->style.opacity, ps->style.fill_opacity);
-    float sw_scale = xform_avg_scale(&ps->ctm);
-    uint32_t color = 0;
-    float sw = 0.0f;
-    if (stroke != 0) {
-        color = stroke;
-        sw = ps->style.stroke_width * sw_scale;
-    } else if (fill != 0) {
-        /* No real polygon-fill primitive in the SDF set — approximate a
-         * filled polygon by tracing its perimeter in the fill colour. */
-        color = fill;
-        sw = sw_scale; /* one user unit, scaled to pixels */
-    }
-    if (color == 0) {
-        yetty_ysvg_path_destroy(&path);
-        return YETTY_OK_VOID();
-    }
-    for (size_t i = 0; i < path.sub_count; i++) {
-        struct yetty_ycore_void_result r = emit_subpath_segments(ps, &path.subs[i], color, sw);
+
+    /* Paint order: fill first, stroke on top (SVG semantics). A polyline is
+     * implicitly closed for the purpose of filling. */
+    if (paint_visible(&ps->style.fill, ps->style.opacity, ps->style.fill_opacity)) {
+        uint32_t fill = resolve_color(&ps->style.fill, ps->style.opacity, ps->style.fill_opacity);
+        struct yetty_ycore_void_result r = emit_filled_subpaths(ps, &path, fill);
         if (YETTY_IS_ERR(r)) {
             yetty_ysvg_path_destroy(&path);
             return r;
+        }
+    }
+    if (paint_visible(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity)) {
+        uint32_t stroke =
+            resolve_color(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity);
+        float sw = ps->style.stroke_width * xform_avg_scale(&ps->ctm);
+        for (size_t i = 0; i < path.sub_count; i++) {
+            struct yetty_ycore_void_result r = emit_subpath_segments(ps, &path.subs[i], stroke, sw);
+            if (YETTY_IS_ERR(r)) {
+                yetty_ysvg_path_destroy(&path);
+                return r;
+            }
         }
     }
     yetty_ysvg_path_destroy(&path);
@@ -393,27 +735,26 @@ static struct yetty_ycore_void_result emit_path(struct ysvg_paint_state *ps,
     if (!yetty_ysvg_path_flatten(&path, a->value, a->value_len, tol)) {
         return YETTY_ERR(yetty_ycore_void, "ysvg: path parse/flatten failed");
     }
-    uint32_t stroke = resolve_color(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity);
-    uint32_t fill = resolve_color(&ps->style.fill, ps->style.opacity, ps->style.fill_opacity);
-    float sw_scale = xform_avg_scale(&ps->ctm);
-    uint32_t color = 0;
-    float sw = 0.0f;
-    if (stroke != 0) {
-        color = stroke;
-        sw = ps->style.stroke_width * sw_scale;
-    } else if (fill != 0) {
-        color = fill;
-        sw = sw_scale;
-    }
-    if (color == 0) {
-        yetty_ysvg_path_destroy(&path);
-        return YETTY_OK_VOID();
-    }
-    for (size_t i = 0; i < path.sub_count; i++) {
-        struct yetty_ycore_void_result r = emit_subpath_segments(ps, &path.subs[i], color, sw);
+
+    /* Paint order: fill (triangulated) first, then stroke on top. */
+    if (paint_visible(&ps->style.fill, ps->style.opacity, ps->style.fill_opacity)) {
+        uint32_t fill = resolve_color(&ps->style.fill, ps->style.opacity, ps->style.fill_opacity);
+        struct yetty_ycore_void_result r = emit_filled_subpaths(ps, &path, fill);
         if (YETTY_IS_ERR(r)) {
             yetty_ysvg_path_destroy(&path);
             return r;
+        }
+    }
+    if (paint_visible(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity)) {
+        uint32_t stroke =
+            resolve_color(&ps->style.stroke, ps->style.opacity, ps->style.stroke_opacity);
+        float sw = ps->style.stroke_width * xform_avg_scale(&ps->ctm);
+        for (size_t i = 0; i < path.sub_count; i++) {
+            struct yetty_ycore_void_result r = emit_subpath_segments(ps, &path.subs[i], stroke, sw);
+            if (YETTY_IS_ERR(r)) {
+                yetty_ysvg_path_destroy(&path);
+                return r;
+            }
         }
     }
     yetty_ysvg_path_destroy(&path);
@@ -499,6 +840,53 @@ static struct yetty_ycore_void_result emit_text(struct ysvg_paint_state *ps,
  *===========================================================================*/
 
 static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
+                                           const struct yetty_ysvg_node *n);
+
+/* Paint a <use> element: instantiate the referenced subtree here, with the
+ * <use>'s cascaded style as the inherited context and its x/y as an extra
+ * translation. The <use>'s own transform is already folded into ps->ctm by
+ * walk() before we get here. */
+static struct yetty_ycore_void_result emit_use(struct ysvg_paint_state *ps,
+                                               const struct yetty_ysvg_node *n)
+{
+    if (ps->use_depth >= YSVG_USE_DEPTH_MAX) {
+        ywarn("ysvg: <use> nesting exceeds %d levels — skipping to break a cycle",
+              YSVG_USE_DEPTH_MAX);
+        return YETTY_OK_VOID();
+    }
+    const struct yetty_ysvg_attr *href = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_XLINK_HREF);
+    if (!href) {
+        href = yetty_ysvg_attr_find(n, YETTY_YSVG_ATTR_HREF);
+    }
+    if (!href || href->value_len < 2 || href->value[0] != '#') {
+        ywarn("ysvg: <use> without a local #id reference — skipped");
+        return YETTY_OK_VOID();
+    }
+    const struct yetty_ysvg_node *target =
+        find_node_by_id(ps->doc->root, href->value + 1, href->value_len - 1);
+    if (!target || target == n) {
+        ywarn("ysvg: <use> references missing id '%.*s'", (int)(href->value_len - 1),
+              href->value + 1);
+        return YETTY_OK_VOID();
+    }
+
+    struct ysvg_paint_state use_ctx = *ps;
+    use_ctx.use_depth = ps->use_depth + 1;
+    float ux = attr_float(n, YETTY_YSVG_ATTR_X, 0.0f);
+    float uy = attr_float(n, YETTY_YSVG_ATTR_Y, 0.0f);
+    if (ux != 0.0f || uy != 0.0f) {
+        struct yetty_ysvg_xform offset;
+        yetty_ysvg_xform_identity(&offset);
+        offset.e = ux;
+        offset.f = uy;
+        struct yetty_ysvg_xform composed;
+        yetty_ysvg_xform_multiply(&composed, &use_ctx.ctm, &offset);
+        use_ctx.ctm = composed;
+    }
+    return walk(&use_ctx, target);
+}
+
+static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
                                            const struct yetty_ysvg_node *n)
 {
     if (!n) {
@@ -507,6 +895,10 @@ static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
 
     struct ysvg_paint_state ps = *parent;
     yetty_ysvg_style_resolve(&ps.style, &parent->style, parent->doc, n);
+    /* Bake any url(#gradient) fill/stroke down to a representative solid so the
+     * shape emitters (which only understand colours) render it. */
+    resolve_url_paint(parent->doc, &ps.style.fill);
+    resolve_url_paint(parent->doc, &ps.style.stroke);
     compose_node_transform(&ps.ctm, &parent->ctm, n);
     ps.text_y = parent->text_y;
 
@@ -571,6 +963,13 @@ static struct yetty_ycore_void_result walk(struct ysvg_paint_state *parent,
         }
         break;
     }
+    case YETTY_YSVG_ELEM_USE:
+        /* <use> paints the referenced subtree itself; it has no renderable
+         * children of its own, so return rather than recurse. */
+        return emit_use(&ps, n);
+    case YETTY_YSVG_ELEM_IMAGE:
+        ywarn("ysvg: <image> element not rendered (embedded raster unsupported)");
+        return YETTY_OK_VOID();
     case YETTY_YSVG_ELEM_DEFS:
     case YETTY_YSVG_ELEM_TITLE:
     case YETTY_YSVG_ELEM_DESC:

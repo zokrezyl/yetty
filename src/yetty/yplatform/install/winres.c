@@ -148,8 +148,8 @@ struct yetty_ycore_void_result yetty_yplatform_install_add_to_user_path(
     }
 
     HKEY key;
-    LONG rc = RegCreateKeyExA(HKEY_CURRENT_USER, "Environment", 0, NULL, 0,
-                              KEY_READ | KEY_WRITE, NULL, &key, NULL);
+    LONG rc = RegCreateKeyExA(HKEY_CURRENT_USER, "Environment", 0, NULL, 0, KEY_READ | KEY_WRITE,
+                              NULL, &key, NULL);
     if (rc != ERROR_SUCCESS) {
         return YETTY_ERR(yetty_ycore_void, "add_to_user_path: cannot open HKCU\\Environment");
     }
@@ -202,8 +202,7 @@ struct yetty_ycore_void_result yetty_yplatform_install_add_to_user_path(
     if (type != REG_SZ && type != REG_EXPAND_SZ) {
         type = REG_EXPAND_SZ; /* never clobber PATH with a non-string type */
     }
-    rc = RegSetValueExA(key, "Path", 0, type, (const BYTE *)updated,
-                        (DWORD)(new_len + 1));
+    rc = RegSetValueExA(key, "Path", 0, type, (const BYTE *)updated, (DWORD)(new_len + 1));
     free(updated);
     RegCloseKey(key);
     if (rc != ERROR_SUCCESS) {
