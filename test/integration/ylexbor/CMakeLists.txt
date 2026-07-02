@@ -27,8 +27,6 @@ if(NOT TARGET qjs)
     return()
 endif()
 
-enable_testing()
-
 add_executable(ylexbor-wpt-runner
     wpt-runner.c
     # ytrace symbols are referenced by yetty_ydraw_core's drawable-list entry
@@ -76,8 +74,13 @@ foreach(page IN LISTS YLEXBOR_TEST_PAGES)
     )
     # Failing harness assertions surface as a non-zero exit code; the
     # TAP output is captured by ctest's --output-on-failure flag.
+    # Layer: integration (full HTML/CSS/JS pipeline through several local
+    # modules); domain: browser. SKIP_RETURN_CODE keeps the 77 convention for
+    # any page the runner declines to execute.
     set_tests_properties(ylexbor_wpt_${name} PROPERTIES
-        TIMEOUT 30
+        LABELS                  "integration;browser"
+        TIMEOUT                 30
+        SKIP_RETURN_CODE        77
         FAIL_REGULAR_EXPRESSION "^not ok"
     )
 endforeach()

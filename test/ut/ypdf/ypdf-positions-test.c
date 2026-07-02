@@ -83,6 +83,26 @@ static bool error_cb(struct _pdfio_file_s *f, const char *s, void *d)
     return true;
 }
 
+/* Parse a text span and normalise its geometry back to unscaled PDF-point
+ * space. The renderer multiplies every coordinate, font size, and spacing
+ * value by YETTY_YPDF_RENDER_SCALE (supersampling); the mutool ground truth in
+ * this test is in PDF points, so divide the scale out before comparing.
+ * Returns the underlying parse result (0 on success). */
+static int parse_span_unscaled(const uint32_t *prim,
+                               struct yetty_ydraw_text_drawable_list_view *out)
+{
+    int rc = yetty_ydraw_text_drawable_list_parse(prim, out);
+    if (rc == 0) {
+        const float scale = YETTY_YPDF_RENDER_SCALE;
+        out->x /= scale;
+        out->y /= scale;
+        out->font_size /= scale;
+        out->char_spacing /= scale;
+        out->word_spacing /= scale;
+    }
+    return rc;
+}
+
 /* True if `view->text` contains `needle` as a substring. text is NOT
  * NUL-terminated. */
 static int text_contains(const struct yetty_ydraw_text_drawable_list_view *view, const char *needle)
@@ -161,7 +181,7 @@ int main(void)
         uint32_t t = it.fw.data[0];
         if (t == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
             struct yetty_ydraw_text_drawable_list_view v;
-            if (yetty_ydraw_text_drawable_list_parse(it.fw.data, &v) == 0) {
+            if (parse_span_unscaled(it.fw.data, &v) == 0) {
                 if (dump_count++ < 320) {
                     char snippet[64];
                     size_t n = v.text_len < sizeof(snippet) - 1 ? v.text_len : sizeof(snippet) - 1;
@@ -327,7 +347,7 @@ int main(void)
         for (;;) {
             if (it3.fw.data[0] == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
                 struct yetty_ydraw_text_drawable_list_view v;
-                if (yetty_ydraw_text_drawable_list_parse(it3.fw.data, &v) == 0 && v.text_len > 0 &&
+                if (parse_span_unscaled(it3.fw.data, &v) == 0 && v.text_len > 0 &&
                     fabsf(v.y - ml->y) <= Y_TOL && fabsf(v.font_size - ml->font_size) <= SZ_TOL) {
                     found = 1;
                     if (v.x < ypdf_left) {
@@ -456,7 +476,7 @@ int main(void)
     for (;;) {
         if (it5.fw.data[0] == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
             struct yetty_ydraw_text_drawable_list_view v;
-            if (yetty_ydraw_text_drawable_list_parse(it5.fw.data, &v) == 0 && v.text_len > 0 &&
+            if (parse_span_unscaled(it5.fw.data, &v) == 0 && v.text_len > 0 &&
                 v.font_id >= 0 && v.font_id < MAX_FONTS_LOCAL && fonts[v.font_id]) {
                 struct yetty_yfont_font *f = fonts[v.font_id];
                 float cursor_x = v.x;
@@ -549,7 +569,7 @@ int main(void)
         for (;;) {
             if (dit.fw.data[0] == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
                 struct yetty_ydraw_text_drawable_list_view dv;
-                if (yetty_ydraw_text_drawable_list_parse(dit.fw.data, &dv) == 0 &&
+                if (parse_span_unscaled(dit.fw.data, &dv) == 0 &&
                     dv.text_len > 0 && dv.font_id >= 0 && dv.font_id < MAX_FONTS_LOCAL &&
                     fonts[dv.font_id]) {
                     int has_sma = 0;

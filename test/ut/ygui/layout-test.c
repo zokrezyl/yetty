@@ -10,14 +10,25 @@
  *   - Button widget composed on top of clickable
  *   - Label widget data slice access
  *   - Panel widget background defaults
+ *
+ * Assertions use the shared ytest.h harness so the checks stay live under
+ * Release/NDEBUG.
  */
 
 #include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/ydraw-core/drawable-list-registry.h>
+#include <yetty/ydraw-core/text-drawable-list.h>
+#include <yetty/ydraw/drawable-list-registry.h>
 #include <yetty/ygui/ygui.h>
+#include <yetty/ysdf/types.gen.h>
 
-#include <assert.h>
-#include <stdio.h>
+#include "ytest.h"
+
+#include <stdint.h>
 #include <string.h>
+
+/* Layout geometry rounds to the nearest pixel; half a pixel of slack. */
+#define LAYOUT_TOL 0.5f
 
 static struct yetty_ycore_rectangle rect(float minx, float miny, float maxx, float maxy)
 {
@@ -25,86 +36,77 @@ static struct yetty_ycore_rectangle rect(float minx, float miny, float maxx, flo
     return r;
 }
 
-static int approx_eq(float a, float b)
-{
-    float d = a - b;
-    if (d < 0) {
-        d = -d;
-    }
-    return d < 0.5f;
-}
-
-static void test_hbox_two_children(void)
+static void test_hbox_two_children(struct ytest *test)
 {
     struct yetty_yclass_object_ptr_result r =
         yetty_ygui_widget_new(yetty_ygui_hbox_class_get().value);
-    assert(YETTY_IS_OK(r));
+    YTEST_REQUIRE_OK(test, r);
     struct yetty_yclass_object *root = r.value;
 
     struct yetty_yclass_object_ptr_result rc1 =
         yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
-    assert(YETTY_IS_OK(rc1));
+    YTEST_REQUIRE_OK(test, rc1);
     struct yetty_yclass_object_ptr_result rc2 =
         yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value);
-    assert(YETTY_IS_OK(rc2));
+    YTEST_REQUIRE_OK(test, rc2);
 
     /* Set widths via layout. */
     struct yetty_ygui_layout_const_ptr_result layout1_res = yetty_ygui_widget_layout_get(rc1.value);
-    assert(YETTY_IS_OK(layout1_res));
+    YTEST_REQUIRE_OK(test, layout1_res);
     struct yetty_ygui_layout l1 = *layout1_res.value;
     l1.width = 30.0f;
     l1.height = 20.0f;
     yetty_ygui_widget_layout_set(rc1.value, &l1);
 
     struct yetty_ygui_layout_const_ptr_result layout2_res = yetty_ygui_widget_layout_get(rc2.value);
-    assert(YETTY_IS_OK(layout2_res));
+    YTEST_REQUIRE_OK(test, layout2_res);
     struct yetty_ygui_layout l2 = *layout2_res.value;
     l2.width = 50.0f;
     l2.height = 20.0f;
     yetty_ygui_widget_layout_set(rc2.value, &l2);
 
     struct yetty_ygui_layout_const_ptr_result root_layout_res = yetty_ygui_widget_layout_get(root);
-    assert(YETTY_IS_OK(root_layout_res));
+    YTEST_REQUIRE_OK(test, root_layout_res);
     struct yetty_ygui_layout lp = *root_layout_res.value;
     lp.gap = 5.0f;
     yetty_ygui_widget_layout_set(root, &lp);
 
     struct yetty_ycore_void_result lr = yetty_ygui_layout_compute(root, rect(0, 0, 200, 100));
-    assert(YETTY_IS_OK(lr));
+    YTEST_REQUIRE_OK(test, lr);
 
     /* Children appear in insertion order (yetty_ygui_add appends at
      * tail). rc1 first, then rc2. */
     struct yetty_yclass_object_ptr_result first_res = yetty_ygui_widget_first_child(root);
-    assert(YETTY_IS_OK(first_res));
+    YTEST_REQUIRE_OK(test, first_res);
     struct yetty_yclass_object *first = first_res.value;
     struct yetty_yclass_object_ptr_result second_res = yetty_ygui_widget_next_sibling(first);
-    assert(YETTY_IS_OK(second_res));
+    YTEST_REQUIRE_OK(test, second_res);
     struct yetty_yclass_object *second = second_res.value;
-    assert(first == rc1.value);
-    assert(second == rc2.value);
+    YTEST_CHECK(test, first == rc1.value);
+    YTEST_CHECK(test, second == rc2.value);
 
     struct yetty_ycore_rectangle_result r1_res = yetty_ygui_widget_rect(first);
-    assert(YETTY_IS_OK(r1_res));
+    YTEST_REQUIRE_OK(test, r1_res);
     struct yetty_ycore_rectangle r1 = r1_res.value;
     struct yetty_ycore_rectangle_result r2_res = yetty_ygui_widget_rect(second);
-    assert(YETTY_IS_OK(r2_res));
+    YTEST_REQUIRE_OK(test, r2_res);
     struct yetty_ycore_rectangle r2 = r2_res.value;
     /* rc1 (width 30) at x=0, then gap=5, then rc2 (width 50) at x=35. */
-    assert(approx_eq(r1.min.x, 0.0f));
-    assert(approx_eq(r1.max.x, 30.0f));
-    assert(approx_eq(r2.min.x, 35.0f));
-    assert(approx_eq(r2.max.x, 85.0f));
+    YTEST_CHECK_NEAR(test, r1.min.x, 0.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, r1.max.x, 30.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, r2.min.x, 35.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, r2.max.x, 85.0f, LAYOUT_TOL);
 
     yetty_ygui_widget_destroy(root);
 }
 
-static void test_vbox_flex_grow(void)
+static void test_vbox_flex_grow(struct ytest *test)
 {
     /* vbox 200 tall, three children. First has flex_grow=1, others=0
      * with explicit heights. Free space should land in the grow child. */
     struct yetty_yclass_object_ptr_result r =
         yetty_ygui_widget_new(yetty_ygui_vbox_class_get().value);
-    assert(YETTY_IS_OK(r));
+    YTEST_REQUIRE_OK(test, r);
     struct yetty_yclass_object *root = r.value;
 
     /* Append at tail: insertion order == layout order (c1, c2, c3). */
@@ -116,7 +118,7 @@ static void test_vbox_flex_grow(void)
         yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value).value;
 
     struct yetty_ygui_layout_const_ptr_result layout_c1_res = yetty_ygui_widget_layout_get(c1);
-    assert(YETTY_IS_OK(layout_c1_res));
+    YTEST_REQUIRE_OK(test, layout_c1_res);
     struct yetty_ygui_layout l = *layout_c1_res.value;
     l.height = 0.0f;
     l.flex_grow = 1.0f;
@@ -124,45 +126,45 @@ static void test_vbox_flex_grow(void)
     yetty_ygui_widget_layout_set(c1, &l);
 
     struct yetty_ygui_layout_const_ptr_result layout_c2_res = yetty_ygui_widget_layout_get(c2);
-    assert(YETTY_IS_OK(layout_c2_res));
+    YTEST_REQUIRE_OK(test, layout_c2_res);
     struct yetty_ygui_layout l2 = *layout_c2_res.value;
     l2.height = 40.0f;
     l2.width = 100.0f;
     yetty_ygui_widget_layout_set(c2, &l2);
 
     struct yetty_ygui_layout_const_ptr_result layout_c3_res = yetty_ygui_widget_layout_get(c3);
-    assert(YETTY_IS_OK(layout_c3_res));
+    YTEST_REQUIRE_OK(test, layout_c3_res);
     struct yetty_ygui_layout l3 = *layout_c3_res.value;
     l3.height = 60.0f;
     l3.width = 100.0f;
     yetty_ygui_widget_layout_set(c3, &l3);
 
     struct yetty_ycore_void_result lr = yetty_ygui_layout_compute(root, rect(0, 0, 200, 200));
-    assert(YETTY_IS_OK(lr));
+    YTEST_REQUIRE_OK(test, lr);
 
     struct yetty_ycore_rectangle_result rc1_res = yetty_ygui_widget_rect(c1);
-    assert(YETTY_IS_OK(rc1_res));
+    YTEST_REQUIRE_OK(test, rc1_res);
     struct yetty_ycore_rectangle rc1 = rc1_res.value;
     struct yetty_ycore_rectangle_result rc2_res = yetty_ygui_widget_rect(c2);
-    assert(YETTY_IS_OK(rc2_res));
+    YTEST_REQUIRE_OK(test, rc2_res);
     struct yetty_ycore_rectangle rc2 = rc2_res.value;
     struct yetty_ycore_rectangle_result rc3_res = yetty_ygui_widget_rect(c3);
-    assert(YETTY_IS_OK(rc3_res));
+    YTEST_REQUIRE_OK(test, rc3_res);
     struct yetty_ycore_rectangle rc3 = rc3_res.value;
 
     /* c1 absorbs the free space: 200 - (40 + 60) = 100. */
-    assert(approx_eq(rc1.max.y - rc1.min.y, 100.0f));
-    assert(approx_eq(rc2.max.y - rc2.min.y, 40.0f));
-    assert(approx_eq(rc3.max.y - rc3.min.y, 60.0f));
+    YTEST_CHECK_NEAR(test, rc1.max.y - rc1.min.y, 100.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, rc2.max.y - rc2.min.y, 40.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, rc3.max.y - rc3.min.y, 60.0f, LAYOUT_TOL);
     /* Stacked top-to-bottom in insertion order. */
-    assert(approx_eq(rc1.min.y, 0.0f));
-    assert(approx_eq(rc2.min.y, 100.0f));
-    assert(approx_eq(rc3.min.y, 140.0f));
+    YTEST_CHECK_NEAR(test, rc1.min.y, 0.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, rc2.min.y, 100.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, rc3.min.y, 140.0f, LAYOUT_TOL);
 
     yetty_ygui_widget_destroy(root);
 }
 
-static void test_padding(void)
+static void test_padding(struct ytest *test)
 {
     struct yetty_yclass_object *root =
         yetty_ygui_widget_new(yetty_ygui_hbox_class_get().value).value;
@@ -170,7 +172,7 @@ static void test_padding(void)
         yetty_ygui_widget_add(root, yetty_ygui_label_class_get().value).value;
 
     struct yetty_ygui_layout_const_ptr_result root_layout_res = yetty_ygui_widget_layout_get(root);
-    assert(YETTY_IS_OK(root_layout_res));
+    YTEST_REQUIRE_OK(test, root_layout_res);
     struct yetty_ygui_layout lp = *root_layout_res.value;
     lp.padding_left = 10;
     lp.padding_top = 20;
@@ -181,7 +183,7 @@ static void test_padding(void)
     yetty_ygui_widget_layout_set(root, &lp);
 
     struct yetty_ygui_layout_const_ptr_result child_layout_res = yetty_ygui_widget_layout_get(c);
-    assert(YETTY_IS_OK(child_layout_res));
+    YTEST_REQUIRE_OK(test, child_layout_res);
     struct yetty_ygui_layout lc = *child_layout_res.value;
     lc.width = 50;
     yetty_ygui_widget_layout_set(c, &lc);
@@ -189,20 +191,19 @@ static void test_padding(void)
     yetty_ygui_layout_compute(root, rect(0, 0, 200, 200));
 
     struct yetty_ycore_rectangle_result cr_res = yetty_ygui_widget_rect(c);
-    assert(YETTY_IS_OK(cr_res));
+    YTEST_REQUIRE_OK(test, cr_res);
     struct yetty_ycore_rectangle cr = cr_res.value;
     /* content origin: (10, 20). Child at (10, 20) width 50, height stretched
      * to content_h = 200 - 20 - 40 = 140. */
-    assert(approx_eq(cr.min.x, 10.0f));
-    assert(approx_eq(cr.min.y, 20.0f));
-    assert(approx_eq(cr.max.x, 60.0f));
-    assert(approx_eq(cr.max.y, 160.0f));
+    YTEST_CHECK_NEAR(test, cr.min.x, 10.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, cr.min.y, 20.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, cr.max.x, 60.0f, LAYOUT_TOL);
+    YTEST_CHECK_NEAR(test, cr.max.y, 160.0f, LAYOUT_TOL);
 
     yetty_ygui_widget_destroy(root);
 }
 
-/* Click callback test. */
-static int click_fired = 0;
+/* Click callback: bumps the counter handed through userdata. */
 static struct yetty_ycore_void_result on_click_cb(struct yetty_yclass_object *_yc_obj,
                                                   void *userdata)
 {
@@ -213,52 +214,52 @@ static struct yetty_ycore_void_result on_click_cb(struct yetty_yclass_object *_y
     return YETTY_OK_VOID();
 }
 
-static void test_clickable_state_machine(void)
+static void test_clickable_state_machine(struct ytest *test)
 {
     struct yetty_yclass_object *btn =
         yetty_ygui_widget_new(yetty_ygui_button_class_get().value).value;
-    assert(btn);
+    YTEST_REQUIRE_NOT_NULL(test, btn);
     yetty_ygui_button_set_label(btn, "OK");
     struct yetty_ycore_const_char_ptr_result label = yetty_ygui_button_get_label(btn);
-    assert(YETTY_IS_OK(label));
-    assert(strcmp(label.value, "OK") == 0);
+    YTEST_REQUIRE_OK(test, label);
+    YTEST_CHECK_STR_EQ(test, label.value, "OK");
 
-    click_fired = 0;
+    int click_fired = 0;
     struct yetty_ycore_void_result sr =
         yetty_ygui_clickable_on_click_set(btn, on_click_cb, &click_fired);
-    assert(YETTY_IS_OK(sr));
+    YTEST_REQUIRE_OK(test, sr);
 
     struct yetty_ycore_int_result pressed_before = yetty_ygui_clickable_is_pressed(btn);
-    assert(YETTY_IS_OK(pressed_before));
-    assert(!pressed_before.value);
+    YTEST_REQUIRE_OK(test, pressed_before);
+    YTEST_CHECK(test, !pressed_before.value);
     struct yetty_ycore_int_result pr =
         yetty_ygui_widget_on_press((struct yetty_yclass_object *)btn, 1, 1, 0);
-    assert(YETTY_IS_OK(pr));
-    assert(pr.value == 1);
+    YTEST_REQUIRE_OK(test, pr);
+    YTEST_CHECK_EQ_INT(test, pr.value, 1);
     struct yetty_ycore_int_result pressed_after = yetty_ygui_clickable_is_pressed(btn);
-    assert(YETTY_IS_OK(pressed_after));
-    assert(pressed_after.value);
-    assert(click_fired == 0); /* not yet — press alone doesn't fire */
+    YTEST_REQUIRE_OK(test, pressed_after);
+    YTEST_CHECK(test, pressed_after.value);
+    YTEST_CHECK_EQ_INT(test, click_fired, 0); /* not yet — press alone doesn't fire */
 
     struct yetty_ycore_int_result rr =
         yetty_ygui_widget_on_release((struct yetty_yclass_object *)btn, 1, 1, 0);
-    assert(YETTY_IS_OK(rr));
-    assert(rr.value == 1);
+    YTEST_REQUIRE_OK(test, rr);
+    YTEST_CHECK_EQ_INT(test, rr.value, 1);
     struct yetty_ycore_int_result pressed_released = yetty_ygui_clickable_is_pressed(btn);
-    assert(YETTY_IS_OK(pressed_released));
-    assert(!pressed_released.value);
-    assert(click_fired == 1);
+    YTEST_REQUIRE_OK(test, pressed_released);
+    YTEST_CHECK(test, !pressed_released.value);
+    YTEST_CHECK_EQ_INT(test, click_fired, 1);
 
     /* Release without prior press → no fire. */
     struct yetty_ycore_int_result rr2 =
         yetty_ygui_widget_on_release((struct yetty_yclass_object *)btn, 1, 1, 0);
-    assert(YETTY_IS_OK(rr2));
-    assert(click_fired == 1);
+    YTEST_REQUIRE_OK(test, rr2);
+    YTEST_CHECK_EQ_INT(test, click_fired, 1);
 
     yetty_ygui_widget_destroy(btn);
 }
 
-static void test_widget_paint_emits_real_prims(void)
+static void test_widget_paint_emits_real_prims(struct ytest *test)
 {
     /* Build a tree: panel (10,10)-(110,110) containing a label and a
      * button. Drive paint and verify real SDF prims + a TEXT_DRAWABLE_LIST
@@ -279,7 +280,7 @@ static void test_widget_paint_emits_real_prims(void)
 
     struct yetty_ydraw_drawable_list_result dlr =
         yetty_ydraw_drawable_list_config_buffer_create(NULL);
-    assert(YETTY_IS_OK(dlr));
+    YTEST_REQUIRE_OK(test, dlr);
     struct yetty_ygui_emit_ctx ctx = {
         .framework = NULL,
         .ygrid_drawable_list = dlr.value,
@@ -289,55 +290,58 @@ static void test_widget_paint_emits_real_prims(void)
     yetty_ygui_widget_paint((struct yetty_yclass_object *)label, &ctx);
     yetty_ygui_widget_paint((struct yetty_yclass_object *)btn, &ctx);
 
-    /* Walk the prims by type word — confirm: panel SDF_BOX (0x7FFFFFFE),
-     * label TEXT_DRAWABLE_LIST (0x40000002), button SDF_ROUNDED_BOX (0x7FFFFFF7)
-     * + another TEXT_DRAWABLE_LIST. */
-    size_t sz = yetty_ydraw_drawable_list_size(dlr.value);
-    const uint32_t *p = (const uint32_t *)yetty_ydraw_drawable_list_data(dlr.value);
-    int saw_box = 0, saw_rounded = 0, saw_text = 0;
-    size_t off = 0;
-    while (off + 4 <= sz) {
-        uint32_t type = p[off / 4];
-        if (type == 0x7FFFFFFEu) {
+    /* Walk the emitted prims with the drawable-list registry iterator — the
+     * drift-proof way, no hardcoded per-prim word counts. Confirm the panel
+     * background box, the button's rounded surface primitive, and the two
+     * TEXT_DRAWABLE_LIST entries (label text + button label) all landed.
+     *
+     * The button surface is a rounded box: an unpressed button paints a
+     * rounded LINEAR_GRADIENT_BOX, a pressed one a flat ROUNDED_BOX. Accept
+     * either so the check tracks the widget's intent, not its idle state. */
+    struct yetty_ydraw_drawable_list_registry_ptr_result reg_res =
+        yetty_ydraw_drawable_list_registry_create_default();
+    YTEST_REQUIRE_OK(test, reg_res);
+    struct yetty_ydraw_drawable_list_registry *reg = reg_res.value;
+
+    int saw_box = 0, saw_button_surface = 0, saw_text = 0;
+    struct yetty_ydraw_drawable_iter_result iter_res =
+        yetty_ydraw_drawable_list_drawable_first(dlr.value, reg);
+    YTEST_REQUIRE_OK(test, iter_res);
+    struct yetty_ydraw_drawable_iter iter = iter_res.value;
+    for (;;) {
+        uint32_t type = iter.fw.data[0];
+        if (type == YETTY_YSDF_BOX) {
             saw_box = 1;
-        }
-        if (type == 0x7FFFFFF7u) {
-            saw_rounded = 1;
-        }
-        if (type == 0x40000002u) {
+        } else if (type == YETTY_YSDF_ROUNDED_BOX || type == YETTY_YSDF_LINEAR_GRADIENT_BOX) {
+            saw_button_surface = 1;
+        } else if (type == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
             saw_text++;
         }
-        /* Word count differs per prim — for this assertion we walk by
-         * type-word locations using the known counts. SDF_BOX = 10
-         * words; SDF_ROUNDED_BOX = 13; TEXT_DRAWABLE_LIST is FAM with the size
-         * word right after the type word. */
-        if (type == 0x7FFFFFFEu) {
-            off += 10 * 4;
-        } else if (type == 0x7FFFFFF7u) {
-            off += 13 * 4;
-        } else if (type == 0x40000002u) {
-            /* TEXT_DRAWABLE_LIST: type | payload_size | payload (padded to 4) */
-            uint32_t payload_size = p[(off / 4) + 1];
-            off += 8 + ((payload_size + 3) & ~3u);
-        } else {
+        struct yetty_ydraw_drawable_iter_result next_res =
+            yetty_ydraw_drawable_list_drawable_next(dlr.value, reg, &iter);
+        if (YETTY_IS_ERR(next_res)) {
+            /* End of buffer is signalled as an error with no cause chain. */
+            yetty_ycore_error_destroy(next_res.error);
             break;
         }
+        iter = next_res.value;
     }
-    assert(saw_box);
-    assert(saw_rounded);
-    assert(saw_text >= 2);
+    YTEST_CHECK(test, saw_box);
+    YTEST_CHECK(test, saw_button_surface);
+    YTEST_CHECK(test, saw_text >= 2);
 
+    yetty_ydraw_drawable_list_registry_destroy(reg);
     yetty_ydraw_drawable_list_destroy(dlr.value);
     yetty_ygui_widget_destroy(panel);
 }
 
 int main(void)
 {
-    test_hbox_two_children();
-    test_vbox_flex_grow();
-    test_padding();
-    test_clickable_state_machine();
-    test_widget_paint_emits_real_prims();
-    puts("ygui-layout-test: OK");
-    return 0;
+    struct ytest test = ytest_begin("ygui_layout");
+    YTEST_RUN(&test, test_hbox_two_children);
+    YTEST_RUN(&test, test_vbox_flex_grow);
+    YTEST_RUN(&test, test_padding);
+    YTEST_RUN(&test, test_clickable_state_machine);
+    YTEST_RUN(&test, test_widget_paint_emits_real_prims);
+    return ytest_end(&test);
 }

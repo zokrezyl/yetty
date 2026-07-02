@@ -3,95 +3,77 @@
 # fail fast in CI instead of weeks later when someone notices the
 # Wikipedia page looks wrong.
 #
-# Runs as standalone C programs using ctest. Enable with
-# -DYETTY_ENABLE_FEATURE_TESTS=ON.
+# Headless C tests (no Chrome, no GPU, no network) → layer label `golden`,
+# domain `browser`. Registered through yetty_add_c_test(); the `workpool` shim
+# supplies ybrowser's async image-fetch worker-pool symbols.
 
-enable_testing()
-
-set(YBROWSER_TEST_SHIM_SOURCES
-    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    # ybrowser's async image fetch references the worker pool; it isn't its own
-    # library (consumers compile the source directly, as yrich does), so pull it
-    # in here. Its only deps — thread primitives — live in yetty_yplatform_core.
-    ${YETTY_ROOT}/src/yetty/yplatform/yworkpool/default.c
-)
-
-add_executable(ybrowser-layout-test
-    ybrowser-layout-test.c
-    ${YBROWSER_TEST_SHIM_SOURCES}
-)
-target_include_directories(ybrowser-layout-test PRIVATE
-    ${YETTY_ROOT}/include
-    ${YETTY_ROOT}/src
-)
-target_link_libraries(ybrowser-layout-test PRIVATE
-    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core m)
-add_test(NAME ybrowser_layout COMMAND ybrowser-layout-test)
+yetty_add_c_test(
+    NAME    ybrowser_layout
+    SOURCES ybrowser-layout-test.c
+    LIBS    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    SHIMS   trace workpool
+    LABELS  golden browser
+    TIMEOUT 30)
 
 # Wikipedia rendering test — loads the actual Photography page snapshot
-# (committed alongside this CMakeLists.txt) and asserts geometric facts
-# about its layout. This is the canonical regression net for the
-# user-reported "garbage glyphs / all images upper-left" bugs.
-add_executable(ybrowser-wikipedia-test
-    ybrowser-wikipedia-test.c
-    ${YBROWSER_TEST_SHIM_SOURCES}
-)
-target_include_directories(ybrowser-wikipedia-test PRIVATE
-    ${YETTY_ROOT}/include
-    ${YETTY_ROOT}/src
-)
-target_link_libraries(ybrowser-wikipedia-test PRIVATE
-    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core m)
-target_compile_definitions(ybrowser-wikipedia-test PRIVATE
-    YBROWSER_WIKI_PAGE=\"${CMAKE_CURRENT_SOURCE_DIR}/photography.html\"
-)
-add_test(NAME ybrowser_wikipedia COMMAND ybrowser-wikipedia-test)
+# (committed alongside this CMakeLists.txt) and asserts geometric facts about
+# its layout. The canonical regression net for the user-reported "garbage
+# glyphs / all images upper-left" bugs.
+yetty_add_c_test(
+    NAME    ybrowser_wikipedia
+    SOURCES ybrowser-wikipedia-test.c
+    LIBS    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    SHIMS   trace workpool
+    LABELS  golden browser
+    TIMEOUT 30)
+target_compile_definitions(ybrowser_wikipedia-test PRIVATE
+    YBROWSER_WIKI_PAGE=\"${CMAKE_CURRENT_SOURCE_DIR}/photography.html\")
 
-# ybrowser-inline-test — pins inline text behaviour (list markers, wrap,
-# UTF-8 safety, weight/italic/underline propagation). Exercises the new
-# yetty_ylexbor_test_box_info_at introspection helper.
-add_executable(ybrowser-inline-test
-    ybrowser-inline-test.c
-    ${YBROWSER_TEST_SHIM_SOURCES}
-)
-target_include_directories(ybrowser-inline-test PRIVATE
-    ${YETTY_ROOT}/include
-    ${YETTY_ROOT}/src
-)
-target_link_libraries(ybrowser-inline-test PRIVATE
-    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core m)
-add_test(NAME ybrowser_inline COMMAND ybrowser-inline-test)
+# Inline text behaviour (list markers, wrap, UTF-8 safety, weight/italic/
+# underline propagation) via the yetty_ylexbor_test_box_info_at helper.
+yetty_add_c_test(
+    NAME    ybrowser_inline
+    SOURCES ybrowser-inline-test.c
+    LIBS    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    SHIMS   trace workpool
+    LABELS  golden browser
+    TIMEOUT 30)
 
-# ybrowser-paint-test — pins the serialized ydraw drawable list ybrowser
-# emits (image bounds, text-decoration rects) with no Chrome and no GPU.
-add_executable(ybrowser-paint-test
-    ybrowser-paint-test.c
-    ${YBROWSER_TEST_SHIM_SOURCES}
-)
-target_include_directories(ybrowser-paint-test PRIVATE
-    ${YETTY_ROOT}/include
-    ${YETTY_ROOT}/src
-)
-target_link_libraries(ybrowser-paint-test PRIVATE
-    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core m)
-add_test(NAME ybrowser_paint COMMAND ybrowser-paint-test)
+# Pins the serialized ydraw drawable list ybrowser emits (image bounds,
+# text-decoration rects) with no Chrome and no GPU.
+yetty_add_c_test(
+    NAME    ybrowser_paint
+    SOURCES ybrowser-paint-test.c
+    LIBS    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    SHIMS   trace workpool
+    LABELS  golden browser
+    TIMEOUT 30)
 
-# Headless render-sanity smoke test — drives the ybrowser CLI fully headless
-# (no DISPLAY, no GPU) over a handful of real sites and asserts the laid-out
-# box count stays above a per-site floor. This is the standing net for the two
-# classes of regression that made real pages unusable: a content column
-# COLLAPSING to ~min-content (Wikipedia <main> → 15px), and a runaway
-# allocation OOMing the process (an unbounded inline-wrap loop on a trailing
-# <br>, or an uncapped brotli response buffer). It hits the network, so it
-# carries the "network" label (exclude with `ctest -LE network`) and a
-# generous timeout.
+# Python-driven suites that need the built ybrowser CLI. Both self-skip
+# (exit 77) when the binary is unavailable.
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
+    # Headless render-sanity smoke test over a handful of real sites: asserts
+    # the laid-out box count stays above a per-site floor. It hits the network,
+    # so it carries the "network" label (exclude with `ctest -LE network`) and
+    # a generous timeout.
     add_test(NAME ybrowser_render
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../render/run.py)
     set_tests_properties(ybrowser_render PROPERTIES
-        ENVIRONMENT "YBROWSER=$<TARGET_FILE:ybrowser>"
-        LABELS "network"
-        TIMEOUT 120)
-endif()
+        ENVIRONMENT      "YBROWSER=$<TARGET_FILE:ybrowser>"
+        LABELS           "network;browser"
+        TIMEOUT          120
+        SKIP_RETURN_CODE 77)
 
+    # WPT-shaped geometry suite: drives ybrowser --dump-boxes over the local
+    # fixtures under test/ybrowser/wpt and asserts post-layout box geometry.
+    # Fully offline and headless, so it stays in the fast lane; `make test-wpt`
+    # selects it via the `wpt` label.
+    add_test(NAME ybrowser_wpt
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../wpt/run.py)
+    set_tests_properties(ybrowser_wpt PROPERTIES
+        ENVIRONMENT      "YBROWSER=$<TARGET_FILE:ybrowser>"
+        LABELS           "golden;browser;wpt"
+        TIMEOUT          120
+        SKIP_RETURN_CODE 77)
+endif()

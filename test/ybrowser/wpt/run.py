@@ -40,6 +40,19 @@ TOL = 1.5
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 
+# Fixtures that are known to fail and are deliberately kept OUT of the
+# required-green lane, so a triaged regression does not make `make test-wpt`
+# ambiguous. Keep this EMPTY unless a failure is actively being tracked — each
+# entry silences a real failure, so it should be temporary and reference an
+# issue in the comment. Paths are relative to this directory, e.g.
+# "05-flexbox/gap.html".
+KNOWN_FAILURES = set()
+
+# ctest skip code — see docs/testing.md. Returned when the ybrowser binary is
+# not built (e.g. YETTY_ENABLE_FEATURE_YBROWSER=OFF) so the suite skips instead
+# of failing.
+SKIP_EXIT = 77
+
 
 def dump(path):
     """Run ybrowser, return {data-test-name: (x, y, w, h)}."""
@@ -152,10 +165,15 @@ def fmt(t):
 
 
 def main():
+    if not os.path.exists(YBROWSER):
+        print(f"SKIP: ybrowser binary not found at {YBROWSER}")
+        return SKIP_EXIT
+
     filters = sys.argv[1:]
     files = sorted(glob.glob(os.path.join(HERE, "**", "*.html"), recursive=True))
-    passed = failed = skipped = 0
+    passed = failed = skipped = xfailed = 0
     failures = []
+    unexpected_pass = []
     for f in files:
         if f.endswith("-ref.html"):
             continue
@@ -166,6 +184,17 @@ def main():
         if not is_test:
             skipped += 1
             continue
+        if rel in KNOWN_FAILURES:
+            # Kept out of the required-green tally either way. Surface an
+            # unexpected pass so the entry can be retired, but never let it
+            # fail the lane.
+            xfailed += 1
+            if fails:
+                print(f"XFAIL {rel}")
+            else:
+                unexpected_pass.append(rel)
+                print(f"XPASS {rel}  (now passing — remove from KNOWN_FAILURES)")
+            continue
         if fails:
             failed += 1
             failures.append((rel, fails))
@@ -173,11 +202,15 @@ def main():
         else:
             passed += 1
             print(f"PASS  {rel}")
-    print(f"\n=== {passed} passed, {failed} failed ===")
+    print(f"\n=== {passed} passed, {failed} failed, {xfailed} xfail, {skipped} skipped ===")
     for rel, fails in failures:
         print(f"\n--- {rel}")
         for line in fails:
             print(f"    {line}")
+    if unexpected_pass:
+        print("\nXPASS (retire from KNOWN_FAILURES):")
+        for rel in unexpected_pass:
+            print(f"    {rel}")
     return 1 if failed else 0
 
 
