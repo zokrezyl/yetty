@@ -125,6 +125,16 @@ struct yetty_yconfig_config {
 #define YETTY_YCONFIG_KEY_WEBSOCKET_URL "websocket/url"
 #define YETTY_YCONFIG_KEY_NET_RELAY "net/relay"
 
+/* Logging / tracing (ytrace) control. `log/floor` is the severity floor
+ * (trace|debug|info|warn|error|off); `log/all` is the master enable. The
+ * `log/levels`, `log/files`, `log/functions` subtrees hold per-level /
+ * per-file / per-function on|off rules keyed by name. */
+#define YETTY_YCONFIG_KEY_LOG_FLOOR "log/floor"
+#define YETTY_YCONFIG_KEY_LOG_ALL "log/all"
+#define YETTY_YCONFIG_KEY_LOG_LEVELS "log/levels"
+#define YETTY_YCONFIG_KEY_LOG_FILES "log/files"
+#define YETTY_YCONFIG_KEY_LOG_FUNCTIONS "log/functions"
+
 /* Create config. Resolves the platform directory layout itself via the
  * yplatform paths abstraction (yetty_yplatform_paths_create) — callers no
  * longer pass directories in. */

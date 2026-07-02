@@ -12,8 +12,18 @@ ROOT="$(cd "$DIR/../../.." && pwd)"
 YLESS="${YLESS:-$ROOT/build-desktop-ytrace-release/tools/yless/yless}"
 
 if [ ! -x "$YLESS" ]; then
-    echo "yless binary not found at $YLESS — set YLESS=path/to/yless" >&2
+    YLESS="$(command -v "${YLESS##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YLESS" ] || [ ! -x "$YLESS" ]; then
+    echo "yless binary not found in build dir or on \$PATH — set YLESS=path/to/yless" >&2
     exit 1
 fi
 
-exec "$YLESS" -x 16 -y 4 -w 48 -H 28 "$ROOT/test/ut/ypdf/pdf-sample.pdf"
+# all.sh exports YLESS_DURATION so the demo runs for a fixed time and exits on
+# its own (clearing the surface). Unset when run standalone → interactive (q).
+dur_args=()
+if [ -n "${YLESS_DURATION:-}" ]; then
+    dur_args=(--duration "$YLESS_DURATION")
+fi
+
+exec "$YLESS" "${dur_args[@]}" -x 16 -y 4 -w 48 -H 28 "$ROOT/test/ut/ypdf/pdf-sample.pdf"

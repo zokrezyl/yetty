@@ -15,11 +15,14 @@ ASSETS="$ROOT/demo/assets/ydiagram"
 PAUSE="${DEMO_PAUSE:-0}"
 
 if [ ! -x "$YDIAGRAM" ]; then
-    echo "ydiagram binary not found at $YDIAGRAM — set YDIAGRAM=path/to/ydiagram" >&2
+    YDIAGRAM="$(command -v "${YDIAGRAM##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YDIAGRAM" ] || [ ! -x "$YDIAGRAM" ]; then
+    echo "ydiagram binary not found in build dir or on \$PATH — set YDIAGRAM=path/to/ydiagram" >&2
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 # asset → one-line description
 show() {

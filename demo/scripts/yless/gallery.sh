@@ -15,8 +15,19 @@ ROOT="$(cd "$DIR/../../.." && pwd)"
 YLESS="${YLESS:-$ROOT/build-desktop-ytrace-release/tools/yless/yless}"
 
 if [ ! -x "$YLESS" ]; then
-    echo "yless binary not found at $YLESS — set YLESS=path/to/yless" >&2
+    YLESS="$(command -v "${YLESS##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YLESS" ] || [ ! -x "$YLESS" ]; then
+    echo "yless binary not found in build dir or on \$PATH — set YLESS=path/to/yless" >&2
     exit 1
+fi
+
+# all.sh exports YLESS_DURATION so each view runs for a fixed time and exits on
+# its own (advancing to the next). Unset when run standalone → fully
+# interactive: quit each view with q to advance.
+dur_args=()
+if [ -n "${YLESS_DURATION:-}" ]; then
+    dur_args=(--duration "$YLESS_DURATION")
 fi
 
 step() {
@@ -24,15 +35,15 @@ step() {
 }
 
 step "source code — whole pane"
-"$YLESS" "$ROOT/tools/yless/main.c"
+"$YLESS" "${dur_args[@]}" "$ROOT/tools/yless/main.c"
 
 step "svg — 48x24 box, top-left"
-"$YLESS" -x 0 -y 0 -w 48 -H 24 "$ROOT/demo/assets/svg/tiger.svg"
+"$YLESS" "${dur_args[@]}" -x 0 -y 0 -w 48 -H 24 "$ROOT/demo/assets/svg/tiger.svg"
 
 step "mermaid diagram — right-hand half"
-"$YLESS" -x 42 -w 38 "$ROOT/demo/assets/ydiagram/class-diagram.mmd"
+"$YLESS" "${dur_args[@]}" -x 42 -w 38 "$ROOT/demo/assets/ydiagram/class-diagram.mmd"
 
 step "pdf (page 1) — centred box"
-"$YLESS" -x 16 -y 4 -w 48 -H 28 "$ROOT/test/ut/ypdf/pdf-sample.pdf"
+"$YLESS" "${dur_args[@]}" -x 16 -y 4 -w 48 -H 28 "$ROOT/test/ut/ypdf/pdf-sample.pdf"
 
 printf '\n=== gallery done ===\n'

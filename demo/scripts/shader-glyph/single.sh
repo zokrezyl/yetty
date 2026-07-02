@@ -45,4 +45,4 @@ for r in 1 2 3 4; do
 done
 echo
 echo 'sleeping 30s — Ctrl+C to exit'
-sleep 30
+sleep "${DEMO_HOLD:-30}"

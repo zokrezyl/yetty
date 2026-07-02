@@ -25,11 +25,14 @@ YMESH="${YMESH:-$ROOT/build-desktop-ytrace-release/tools/ymesh/ymesh}"
 ASSET="${YMESH_ASSET:-$ROOT/demo/assets/ymesh/Duck.glb}"
 
 if [ ! -x "$YMESH" ]; then
-    echo "ymesh binary not found at $YMESH — set YMESH=path/to/ymesh" >&2
+    YMESH="$(command -v "${YMESH##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YMESH" ] || [ ! -x "$YMESH" ]; then
+    echo "ymesh binary not found in build dir or on \$PATH — set YMESH=path/to/ymesh" >&2
     exit 1
 fi
 if [ ! -f "$ASSET" ]; then
-    echo "asset not found at $ASSET — set YMESH_ASSET=path/to/file.glb" >&2
+    echo "asset not found in build dir or on \$PATH — set YMESH_ASSET=path/to/file.glb" >&2
     exit 1
 fi
 

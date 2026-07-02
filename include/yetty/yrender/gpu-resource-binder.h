@@ -18,6 +18,19 @@ struct yetty_yrender_gpu_resource_binder_ops {
     struct yetty_ycore_void_result (*submit)(struct yetty_yrender_gpu_resource_binder *self,
                                              const struct yetty_yrender_gpu_resource_set *rs);
     struct yetty_ycore_void_result (*finalize)(struct yetty_yrender_gpu_resource_binder *self);
+
+    /* Release the per-instance GPU allocations (storage buffer, uniform
+     * buffer, atlas textures, bind group) WITHOUT tearing down the binder
+     * itself. The submitted resource sets, compiled/external pipeline,
+     * shader module and quad vertex buffer are all retained, so a later
+     * finalize() rebuilds the freed GPU resources from the same CPU-side
+     * data. Idempotent: a no-op on an already-released binder.
+     *
+     * This is what lets a host bound GPU residency to the on-screen
+     * working set: an off-screen figure calls release_gpu to hand its
+     * allocator slots back, and reacquires them by calling finalize again
+     * the next time it renders. */
+    struct yetty_ycore_void_result (*release_gpu)(struct yetty_yrender_gpu_resource_binder *self);
     struct yetty_ycore_void_result (*update)(struct yetty_yrender_gpu_resource_binder *self);
     struct yetty_ycore_void_result (*bind)(struct yetty_yrender_gpu_resource_binder *self,
                                            WGPURenderPassEncoder pass, uint32_t group_index);

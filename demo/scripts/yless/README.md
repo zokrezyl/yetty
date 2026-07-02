@@ -18,6 +18,15 @@ Each script draws one content type into a chosen region (position/size in
 terminal cells, `-x -y -w -H`). Quit with `q` (or Ctrl-C / Esc) — the surface
 clears on exit.
 
+## Timed (unattended) runs
+
+`yless` takes `--duration <seconds>` (float): it shows the content for that
+long, then auto-exits and clears the surface — no keypress needed. This is how
+the demos run under `../all.sh`, which exports `YLESS_DURATION` (default 2s, set
+via `ALL_YLESS_DURATION`); each script passes it through as `--duration`. Run a
+script standalone (without `YLESS_DURATION` in the environment) and it stays
+fully interactive instead — page with the keys above and quit with `q`.
+
 | script | content | position |
 |---|---|---|
 | `code.sh`    | syntax-highlighted source | whole pane |

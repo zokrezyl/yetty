@@ -4,6 +4,9 @@ add_library(yetty_yvterm STATIC
     # yvterm's own SDF/glyph/text renderer for the raw ydraw records (ycat
     # PDF/SVG/markdown) stored on the grid ring. Standalone — does not use ygrid.
     sdf-layer.c
+    # Animated procedural "shader glyphs" for PUA-B cells. Plain-C sub-renderer
+    # owned by the vterm figure, like sdf-layer.
+    shader-glyph-layer.c
     # Module-level registration + RPC dispatch (yetty_yvterm_register lives here)
     # and the cross-class method tables. grid.c/vterm.c each only #include their
     # own <name>.gen.c at the foot, so these are compiled as standalone units —
@@ -27,6 +30,7 @@ target_link_libraries(yetty_yvterm PUBLIC
     yetty_ydraw_factory  # yetty_ydraw_composite_destroy (anchored composite teardown)
     yetty_ywire          # wire statemachine: default raw-bytes sink → libvterm
     yetty_yfont_core     # MSDF font + font cache: text render AND SDF-layer wire fonts
+    yetty_yfont_shader_glyph # PUA-B shader-glyph codepoint table (codepoint_exists)
     yetty_yrender        # gpu_resource_set / binder / font dispatcher (text + SDF layer)
     yetty_yplatform_core # SDF layer wire-font cache: cache dir + mkdir/file_exists
     webgpu               # wgpu* pipeline/buffers/draw for the text + SDF render

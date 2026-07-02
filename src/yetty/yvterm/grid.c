@@ -142,6 +142,11 @@ struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
     uint32_t cols;
     uint32_t base;
 
+    /* Scrollback depth: history rows retained above the visible screen. The
+     * line ring is sized visible_rows + scrollback_rows. Set once at create
+     * from config (scrollback/lines); a resize re-uses this same depth. */
+    uint32_t scrollback_rows;
+
     VTerm *vterm;
     VTermState *state;
 
@@ -217,10 +222,12 @@ static inline uint32_t pack_color(VTermColor color)
            (0xFFu << 24);
 }
 
-/* Lines retained above the visible screen for mouse-wheel / copy-mode
- * scrollback. The line ring is sized to visible_rows + this; rolled-off lines
- * stay in the ring as history (their GPU cells persist), and the oldest is
- * evicted only when the ring wraps. */
+/* Default scrollback depth (lines retained above the visible screen for
+ * mouse-wheel / copy-mode scrollback) used when no config value is supplied.
+ * The live depth is grid->scrollback_rows, set at create from the
+ * `scrollback/lines` config key; the line ring is sized visible_rows + that.
+ * Rolled-off lines stay in the ring as history (their GPU cells persist), and
+ * the oldest is evicted only when the ring wraps. */
 #define YVTERM_SCROLLBACK_ROWS 2000u
 
 /* Map a visible row [0, visible_rows) to its slot in the line ring. The ring
@@ -810,15 +817,17 @@ static struct yetty_ycore_void_result grid_alloc_lines(struct yetty_yvterm_grid 
 }
 
 static struct yetty_ycore_void_result grid_model_init(struct yetty_yvterm_grid *grid, uint32_t cols,
-                                                      uint32_t rows)
+                                                      uint32_t rows, uint32_t scrollback_rows)
 {
     grid->cols = cols;
     grid->visible_rows = rows;
+    /* Fall back to the built-in default when the caller passes 0 (no config). */
+    grid->scrollback_rows = scrollback_rows ? scrollback_rows : YVTERM_SCROLLBACK_ROWS;
 
     /* Allocate visible + scrollback lines; only the first `rows` are on screen,
      * the rest hold rolled-off history (see ring_slot / roll_up). */
     struct yetty_ycore_void_result lines_r =
-        grid_alloc_lines(grid, rows + YVTERM_SCROLLBACK_ROWS, cols);
+        grid_alloc_lines(grid, rows + grid->scrollback_rows, cols);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lines_r, "yvterm: grid_model_init alloc_lines");
 
     grid->vterm = vterm_new((int)rows, (int)cols);
@@ -939,7 +948,9 @@ static int reflow_gidx_to_slot(uint32_t gidx, uint32_t visible_top, uint32_t new
     }
     if (gidx < visible_top) {
         uint32_t back = visible_top - gidx;
-        if (back > YVTERM_SCROLLBACK_ROWS) {
+        /* The ring spans new_line_count = new_rows + scrollback, so anything
+         * deeper than (new_line_count - new_rows) history rows has aged out. */
+        if (back > new_line_count - new_rows) {
             return 0;
         }
         *out_slot = new_line_count - back;
@@ -1067,7 +1078,7 @@ static struct yetty_ycore_void_result grid_resize_altscreen(struct yetty_yvterm_
     tmp.default_fg = grid->default_fg;
     tmp.default_bg = grid->default_bg;
     struct yetty_ycore_void_result lines_r =
-        grid_alloc_lines(&tmp, rows + YVTERM_SCROLLBACK_ROWS, cols);
+        grid_alloc_lines(&tmp, rows + grid->scrollback_rows, cols);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, lines_r, "yvterm: grid_resize_altscreen alloc_lines");
     grid_blank_all_lines(&tmp);
 
@@ -1191,7 +1202,7 @@ static struct yetty_ycore_void_result grid_resize_reflow(struct yetty_yvterm_gri
 
     /* Bottom-align the content: the last new row sits on the last visible row, so
      * everything above it (older output and history) becomes scrollback. */
-    uint32_t new_line_count = new_rows + YVTERM_SCROLLBACK_ROWS;
+    uint32_t new_line_count = new_rows + grid->scrollback_rows;
     uint32_t visible_top = total_new > new_rows ? total_new - new_rows : 0u;
 
     struct yetty_yvterm_grid tmp = {0};
@@ -1306,7 +1317,8 @@ static struct yetty_ycore_void_result grid_model_resize(struct yetty_yvterm_grid
  *=========================================================================*/
 
 YETTY_ANNOTATE("expose")
-struct yetty_yclass_object_ptr_result yetty_yvterm_grid_make(uint32_t cols, uint32_t rows)
+struct yetty_yclass_object_ptr_result yetty_yvterm_grid_make(uint32_t cols, uint32_t rows,
+                                                             uint32_t scrollback_rows)
 {
     if (cols == 0 || rows == 0) {
         return YETTY_ERR(yetty_yclass_object_ptr, "yvterm grid_make: invalid size");
@@ -1325,7 +1337,8 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_grid_make(uint32_t cols, uint
         }
         return YETTY_ERR(yetty_yclass_object_ptr, "yvterm grid_make: from_obj", grid_res);
     }
-    struct yetty_ycore_void_result init_res = grid_model_init(grid_res.value, cols, rows);
+    struct yetty_ycore_void_result init_res =
+        grid_model_init(grid_res.value, cols, rows, scrollback_rows);
     if (YETTY_IS_ERR(init_res)) {
         struct yetty_ycore_void_result free_res = yetty_yclass_object_free(obj);
         if (YETTY_IS_ERR(free_res)) {

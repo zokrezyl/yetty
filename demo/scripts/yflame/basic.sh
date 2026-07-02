@@ -14,11 +14,14 @@ ASSETS="$ROOT/demo/assets/yflame"
 PAUSE="${DEMO_PAUSE:-0}"
 
 if [ ! -x "$YFLAME" ]; then
-    echo "yflame binary not found at $YFLAME — set YFLAME=path/to/yflame" >&2
+    YFLAME="$(command -v "${YFLAME##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YFLAME" ] || [ ! -x "$YFLAME" ]; then
+    echo "yflame binary not found in build dir or on \$PATH — set YFLAME=path/to/yflame" >&2
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 printf '=== yflame basics ===\n\n'
 p

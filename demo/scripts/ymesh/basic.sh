@@ -17,7 +17,10 @@ ASSETS="$ROOT/demo/assets/ymesh"
 PAUSE="${DEMO_PAUSE:-0.1}"
 
 if [ ! -x "$YMESH" ]; then
-    echo "ymesh binary not found at $YMESH — set YMESH=path/to/ymesh" >&2
+    YMESH="$(command -v "${YMESH##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YMESH" ] || [ ! -x "$YMESH" ]; then
+    echo "ymesh binary not found in build dir or on \$PATH — set YMESH=path/to/ymesh" >&2
     exit 1
 fi
 
@@ -28,7 +31,7 @@ fi
 # orbit/zoom viewer has its own demo in interactive.sh.
 ymesh() { "$YMESH" --once "$@"; }
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 printf '=== ymesh tool basics ===\n\n'
 p
@@ -59,4 +62,4 @@ ymesh -w 200 -H 200 "$ASSETS/Duck.glb"
 ymesh -w 200 -H 200 "$ASSETS/Avocado.glb"
 
 printf '\n=== done — holding open ===\n'
-sleep 600
+sleep "${DEMO_HOLD:-600}"

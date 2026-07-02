@@ -4,6 +4,7 @@
 #include <yetty/ycore/types.h>
 #include <yetty/yplatform/getopt.h>
 #include <yetty/yplatform/paths.h>
+#include <yetty/ytrace/ytrace.h>
 #include <yaml.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1206,6 +1207,11 @@ enum {
     OPT_POWERSHELL,
     OPT_PWSH,
     OPT_WSL,
+    OPT_LOG_FLOOR,
+    OPT_LOG_ALL,
+    OPT_LOG_LEVEL,
+    OPT_LOG_FILE,
+    OPT_LOG_FUNCTION,
 };
 
 static struct yetty_yplatform_option long_options[] = {
@@ -1241,6 +1247,11 @@ static struct yetty_yplatform_option long_options[] = {
     {"powershell", no_argument, 0, OPT_POWERSHELL},
     {"pwsh", no_argument, 0, OPT_PWSH},
     {"wsl", optional_argument, 0, OPT_WSL},
+    {"log-floor", required_argument, 0, OPT_LOG_FLOOR},
+    {"log-all", optional_argument, 0, OPT_LOG_ALL},
+    {"log-level", required_argument, 0, OPT_LOG_LEVEL},
+    {"log-file", required_argument, 0, OPT_LOG_FILE},
+    {"log-function", required_argument, 0, OPT_LOG_FUNCTION},
     {"help", no_argument, 0, 'h'},
     {0, 0, 0, 0}};
 
@@ -1301,6 +1312,13 @@ static void print_usage(FILE *out, const char *prog)
     fprintf(
         out,
         "      --wsl [DISTRO]                 Launch a WSL session (optionally a named distro)\n");
+    fprintf(out, "      --log-floor=LEVEL              Always emit this level and above: "
+                 "trace|debug|info|warn|error|off (default: warn)\n");
+    fprintf(out, "      --log-all[=0|1]               Emit all trace points (default: off)\n");
+    fprintf(out, "      --log-level=NAME[=on|off]     Per-level rule, e.g. --log-level=debug=off\n");
+    fprintf(out, "      --log-file=NAME[=on|off]      Per-file rule, e.g. --log-file=container.c\n");
+    fprintf(out,
+            "      --log-function=NAME[=on|off]  Per-function rule, e.g. --log-function=render\n");
     fprintf(out, "  -h, --help                         Show this help\n");
     fprintf(out, "\n");
     fprintf(out, "Session-mode flags are mutually exclusive:\n");
@@ -1315,6 +1333,36 @@ static void set_config(struct config_impl *impl, const char *path, const char *v
     if (parent) {
         node_set_value(parent, key, value);
     }
+}
+
+/* Set a "name=value" spec under `prefix`, i.e. write `prefix/name` = value.
+ * A bare "name" (no '=') means "on". Used by the repeatable --log-level /
+ * --log-file / --log-function flags. */
+static void set_pair_config(struct config_impl *impl, const char *prefix, const char *spec)
+{
+    if (!spec || !spec[0]) {
+        return;
+    }
+    char name[MAX_KEY_LEN];
+    const char *equals = strchr(spec, '=');
+    const char *value = "on";
+    if (equals) {
+        size_t name_len = (size_t)(equals - spec);
+        if (name_len >= sizeof(name)) {
+            name_len = sizeof(name) - 1;
+        }
+        memcpy(name, spec, name_len);
+        name[name_len] = '\0';
+        value = equals + 1;
+    } else {
+        snprintf(name, sizeof(name), "%s", spec);
+    }
+    if (!name[0]) {
+        return;
+    }
+    char path[MAX_KEY_LEN * 2];
+    snprintf(path, sizeof(path), "%s/%s", prefix, name);
+    set_config(impl, path, value);
 }
 
 /* Reject more than one session-mode flag in a single invocation.
@@ -1522,6 +1570,22 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             }
             break;
         }
+        case OPT_LOG_FLOOR:
+            set_config(impl, YETTY_YCONFIG_KEY_LOG_FLOOR, yetty_yplatform_optarg);
+            break;
+        case OPT_LOG_ALL:
+            set_config(impl, YETTY_YCONFIG_KEY_LOG_ALL,
+                       yetty_yplatform_optarg ? yetty_yplatform_optarg : "true");
+            break;
+        case OPT_LOG_LEVEL:
+            set_pair_config(impl, YETTY_YCONFIG_KEY_LOG_LEVELS, yetty_yplatform_optarg);
+            break;
+        case OPT_LOG_FILE:
+            set_pair_config(impl, YETTY_YCONFIG_KEY_LOG_FILES, yetty_yplatform_optarg);
+            break;
+        case OPT_LOG_FUNCTION:
+            set_pair_config(impl, YETTY_YCONFIG_KEY_LOG_FUNCTIONS, yetty_yplatform_optarg);
+            break;
         case 'h':
             print_usage(stdout, argv[0]);
             exit(0);
@@ -1530,6 +1594,60 @@ static void parse_cmdline(struct config_impl *impl, int argc, char *argv[])
             exit(1);
         }
     }
+}
+
+/* Parse an on/off/true/false/1/0/yes/no word to bool. */
+static bool config_parse_bool_word(const char *word, bool fallback)
+{
+    if (!word || !word[0]) {
+        return fallback;
+    }
+    if (strcasecmp(word, "on") == 0 || strcasecmp(word, "true") == 0 ||
+        strcasecmp(word, "yes") == 0 || strcmp(word, "1") == 0) {
+        return true;
+    }
+    if (strcasecmp(word, "off") == 0 || strcasecmp(word, "false") == 0 ||
+        strcasecmp(word, "no") == 0 || strcmp(word, "0") == 0) {
+        return false;
+    }
+    return fallback;
+}
+
+/* Apply the on/off rules under a `log/...` mapping node to ytrace via `apply`. */
+static void apply_log_rules(const struct yetty_yconfig_config *cfg, const char *prefix,
+                            void (*apply)(const char *, bool))
+{
+    int count = cfg->ops->get_child_count(cfg, prefix);
+    for (int i = 0; i < count; i++) {
+        const char *name = cfg->ops->get_child_key(cfg, prefix, i);
+        if (!name || !name[0]) {
+            continue;
+        }
+        char path[MAX_KEY_LEN * 2];
+        snprintf(path, sizeof(path), "%s/%s", prefix, name);
+        apply(name, config_parse_bool_word(cfg->ops->get_string(cfg, path, "on"), true));
+    }
+}
+
+/* Push the resolved `log/...` configuration into the ytrace facility. Only keys
+ * actually present override the built-in defaults and the YTRACE_* environment,
+ * so an unset config leaves ytrace's own defaults (floor = warn) in place. */
+static void apply_ytrace_config(struct config_impl *impl)
+{
+    const struct yetty_yconfig_config *cfg = &impl->base;
+
+    if (cfg->ops->has(cfg, YETTY_YCONFIG_KEY_LOG_FLOOR)) {
+        ytrace_set_floor_level(cfg->ops->get_string(cfg, YETTY_YCONFIG_KEY_LOG_FLOOR, "warn"));
+    }
+    if (cfg->ops->has(cfg, YETTY_YCONFIG_KEY_LOG_ALL)) {
+        ytrace_set_all_enabled(
+            config_parse_bool_word(cfg->ops->get_string(cfg, YETTY_YCONFIG_KEY_LOG_ALL, "off"),
+                                   false));
+    }
+
+    apply_log_rules(cfg, YETTY_YCONFIG_KEY_LOG_LEVELS, ytrace_set_level_enabled);
+    apply_log_rules(cfg, YETTY_YCONFIG_KEY_LOG_FILES, ytrace_set_file_enabled);
+    apply_log_rules(cfg, YETTY_YCONFIG_KEY_LOG_FUNCTIONS, ytrace_set_function_enabled);
 }
 
 /* Public create function */
@@ -1592,6 +1710,10 @@ struct yetty_yconfig_result yetty_yconfig_create(int argc, char *argv[])
     }
 
     parse_cmdline(impl, argc, argv);
+
+    /* Config file, then env, then CLI have now merged into the tree; push the
+     * resolved `log/...` settings into ytrace as early as possible. */
+    apply_ytrace_config(impl);
 
     return YETTY_OK(yetty_yconfig, &impl->base);
 }

@@ -14,11 +14,14 @@ ASSETS="$ROOT/demo/assets/ychart"
 PAUSE="${DEMO_PAUSE:-0}"
 
 if [ ! -x "$YCAT" ]; then
-    echo "ycat binary not found at $YCAT — set YCAT=path/to/ycat" >&2
+    YCAT="$(command -v "${YCAT##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YCAT" ] || [ ! -x "$YCAT" ]; then
+    echo "ycat binary not found in build dir or on \$PATH — set YCAT=path/to/ycat" >&2
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 # asset → one-line description
 show() {

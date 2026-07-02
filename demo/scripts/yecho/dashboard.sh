@@ -11,11 +11,14 @@ YECHO="${YECHO:-$ROOT/build-desktop-ytrace-release/tools/yecho/yecho}"
 PAUSE="${DEMO_PAUSE:-2}"
 
 if [ ! -x "$YECHO" ]; then
-    echo "yecho binary not found at $YECHO — set YECHO=path/to/yecho" >&2
+    YECHO="$(command -v "${YECHO##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YECHO" ] || [ ! -x "$YECHO" ]; then
+    echo "yecho binary not found in build dir or on \$PATH — set YECHO=path/to/yecho" >&2
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 # Header.
 "$YECHO" '@gem  {color=#FFE66D; style=bold: Yetty Status Dashboard}  @gem'
@@ -57,4 +60,4 @@ p
 "$YECHO" '{color=#888888: refreshed} @typing-dots'
 
 printf '\n=== done — holding open ===\n'
-sleep 600
+sleep "${DEMO_HOLD:-600}"

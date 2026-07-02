@@ -6,7 +6,7 @@
 
 DEMO_PAUSE=${DEMO_PAUSE:-3}
 
-p() { sleep "$DEMO_PAUSE"; }
+p() { [ "$DEMO_PAUSE" = 0 ] || sleep "$DEMO_PAUSE"; }
 
 # helper: print cell N times then newline
 row() {
@@ -67,4 +67,4 @@ printf '  Done     '; printf '\xf4\x80\x80\x8c'; printf '   rated\n'
 printf '\n'
 
 printf '=== showcase complete - holding open ===\n'
-sleep 600
+sleep "${DEMO_HOLD:-600}"

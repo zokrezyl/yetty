@@ -16,11 +16,14 @@ YPLOT="${YPLOT:-$ROOT/build-desktop-ytrace-release/tools/yplot/yplot}"
 PAUSE="${DEMO_PAUSE:-0}"
 
 if [ ! -x "$YPLOT" ]; then
-    echo "yplot binary not found at $YPLOT" >&2
+    YPLOT="$(command -v "${YPLOT##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YPLOT" ] || [ ! -x "$YPLOT" ]; then
+    echo "yplot binary not found in build dir or on \$PATH" >&2
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 printf '=== yplot — inverse hyperbolic functions ===\n\n'
 p

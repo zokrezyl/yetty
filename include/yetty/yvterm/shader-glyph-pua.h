@@ -5,11 +5,9 @@
  * occupy the high glyph-index range and are addressed by Supplementary
  * Private-Use-Area-B codepoints (U+100000..U+100FFF). These small inline
  * helpers convert between a cell's glyph_index, a shader local-id, and the
- * PUA codepoint — shared by the text layer (glyph resolver + selection
- * extraction) and the shader-glyph figure. Kept in its own header so it is a
- * leaf with no dependency on the figure's class API; the generated
- * shader-glyph-figure.h pulls it in (via an `include@` annotation) so existing
- * consumers that include the figure header keep seeing these helpers.
+ * PUA codepoint — shared by the vterm text renderer (glyph resolver) and the
+ * shader-glyph layer (shader-glyph-layer.c). Kept in its own leaf header with
+ * no dependency on any class API.
  */
 #ifndef YETTY_YVTERM_SHADER_GLYPH_PUA_H
 #define YETTY_YVTERM_SHADER_GLYPH_PUA_H

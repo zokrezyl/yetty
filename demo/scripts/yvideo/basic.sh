@@ -14,11 +14,14 @@ ASSETS="$ROOT/demo/assets/yvideo"
 PAUSE="${DEMO_PAUSE:-0}"
 
 if [ ! -x "$YVIDEO" ]; then
-    echo "yvideo binary not found at $YVIDEO — set YVIDEO=path/to/yvideo" >&2
+    YVIDEO="$(command -v "${YVIDEO##*/}" 2>/dev/null || true)"
+fi
+if [ -z "$YVIDEO" ] || [ ! -x "$YVIDEO" ]; then
+    echo "yvideo binary not found in build dir or on \$PATH — set YVIDEO=path/to/yvideo" >&2
     exit 1
 fi
 
-p() { sleep "$PAUSE"; }
+p() { [ "$PAUSE" = 0 ] || sleep "$PAUSE"; }
 
 printf '=== yvideo basics ===\n\n'
 p

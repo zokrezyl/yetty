@@ -89,7 +89,8 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_grid_create(struct yetty_ycla
 
 struct yetty_ycore_void_result yetty_yvterm_register(void);
 
-struct yetty_yclass_object_ptr_result yetty_yvterm_grid_make(uint32_t cols, uint32_t rows);
+struct yetty_yclass_object_ptr_result yetty_yvterm_grid_make(uint32_t cols, uint32_t rows,
+                                                             uint32_t scrollback_rows);
 struct yetty_ycore_void_result yetty_yvterm_grid_dispose(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yvterm_grid_set_pty_write(struct yetty_yclass_object *obj,
                                                                yetty_yvterm_grid_pty_write_fn fn,

@@ -14,7 +14,10 @@ YDOC="$PROJECT_ROOT/build-desktop-ytrace-release/tools/ydoc/ydoc"
 ASSET="$PROJECT_ROOT/demo/assets/yrich/ydoc/sample.ydoc.yaml"
 
 if [[ ! -x "$YDOC" ]]; then
-    echo "Error: ydoc not found at $YDOC" >&2
+    YDOC="$(command -v "${YDOC##*/}" 2>/dev/null || true)"
+fi
+if [[ -z "$YDOC" || ! -x "$YDOC" ]]; then
+    echo "Error: ydoc not found in build dir or on \$PATH" >&2
     echo "Build first: make build-desktop-ytrace-release" >&2
     exit 1
 fi
