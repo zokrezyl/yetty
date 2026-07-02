@@ -53,6 +53,40 @@ typedef void (*yetty_yplatform_install_asset_fn)(const char *name, const uint8_t
 struct yetty_ycore_void_result yetty_yplatform_install_foreach_asset(
     yetty_yplatform_install_asset_fn callback, void *userdata);
 
+/*
+ * Outcome of yetty_yplatform_install_add_to_user_path. Lets the caller word
+ * its message correctly: "added" vs "already there, open a new terminal" vs
+ * "not something we manage here" are three distinct user situations.
+ */
+enum yetty_yplatform_path_outcome {
+    /* Platform doesn't manage a persistent PATH from the installer (POSIX):
+     * PATH lives in the user's shell profile. Caller should advise manually. */
+    YETTY_YPLATFORM_PATH_UNSUPPORTED = 0,
+    /* `dir` was newly written to the persistent PATH. */
+    YETTY_YPLATFORM_PATH_ADDED = 1,
+    /* `dir` was already on the persistent PATH; nothing was written. */
+    YETTY_YPLATFORM_PATH_ALREADY_PRESENT = 2,
+};
+
+/*
+ * Ensure `dir` is on the user's persistent PATH. Platform-specific, so it
+ * lives beside the two asset backends rather than in the installer core:
+ *
+ *   - Windows → append `dir` to HKCU\Environment\Path (creating the value
+ *     if absent) and broadcast WM_SETTINGCHANGE so newly launched processes
+ *     see it. Sets *out_outcome to ADDED when it writes the registry, or
+ *     ALREADY_PRESENT when `dir` is already there (nothing written).
+ *   - POSIX   → no-op: PATH is owned by the user's shell profile, so the
+ *     installer only advises. Sets *out_outcome to UNSUPPORTED and returns
+ *     success — preserving the pre-existing advisory-note behaviour.
+ *
+ * Returns an error only on a genuine platform failure (e.g. a denied
+ * registry write); the caller then falls back to printing manual advice.
+ * `out_outcome` may be NULL if the caller doesn't care.
+ */
+struct yetty_ycore_void_result yetty_yplatform_install_add_to_user_path(
+    const char *dir, enum yetty_yplatform_path_outcome *out_outcome);
+
 #ifdef __cplusplus
 }
 #endif

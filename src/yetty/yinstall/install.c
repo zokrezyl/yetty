@@ -144,6 +144,38 @@ static const char *resolve_root(enum yetty_yinstall_destination destination,
     return "";
 }
 
+/* Compare two chars as path characters. When `ci` (Windows), fold case and
+ * treat '/' and '\\' as the same separator so mixed-style entries match. */
+static int path_char_eq(char a, char b, int ci)
+{
+    if (!ci) {
+        return a == b;
+    }
+    if (a == '/') {
+        a = '\\';
+    }
+    if (b == '/') {
+        b = '\\';
+    }
+    if (a >= 'A' && a <= 'Z') {
+        a = (char)(a - 'A' + 'a');
+    }
+    if (b >= 'A' && b <= 'Z') {
+        b = (char)(b - 'A' + 'a');
+    }
+    return a == b;
+}
+
+/* Length of `s` (capped at `len`) ignoring one trailing path separator, so
+ * "C:\dir\" and "C:\dir" compare equal. */
+static size_t trimmed_len(const char *s, size_t len)
+{
+    if (len > 0 && (s[len - 1] == '/' || s[len - 1] == '\\')) {
+        return len - 1;
+    }
+    return len;
+}
+
 /* Non-zero if `dir` is one of the entries of $PATH. Advisory only. */
 static int dir_on_path(const char *dir)
 {
@@ -152,15 +184,27 @@ static int dir_on_path(const char *dir)
         return 0;
     }
     /* PATH uses ';' on Windows (entries contain "C:\..."), ':' elsewhere.
-     * Detect from the string rather than a platform #ifdef. */
-    char separator = strchr(path, ';') ? ';' : ':';
-    size_t dir_len = strlen(dir);
+     * Detect from the string rather than a platform #ifdef. The same
+     * detection tells us to compare case-insensitively and separator-
+     * agnostically, which is how Windows resolves PATH. */
+    int windows = strchr(path, ';') != NULL;
+    char separator = windows ? ';' : ':';
+    size_t dir_len = trimmed_len(dir, strlen(dir));
     const char *cursor = path;
     while (*cursor) {
         const char *end = strchr(cursor, separator);
         size_t segment_len = end ? (size_t)(end - cursor) : strlen(cursor);
-        if (segment_len == dir_len && strncmp(cursor, dir, dir_len) == 0) {
-            return 1;
+        size_t seg_trimmed = trimmed_len(cursor, segment_len);
+        if (seg_trimmed == dir_len) {
+            size_t index = 0;
+            for (; index < dir_len; index++) {
+                if (!path_char_eq(cursor[index], dir[index], windows)) {
+                    break;
+                }
+            }
+            if (index == dir_len) {
+                return 1;
+            }
         }
         if (!end) {
             break;
@@ -435,7 +479,28 @@ struct yetty_ycore_void_result yetty_yinstall_run(const struct yetty_yinstall_op
     const char *bin_dir = paths->bin_dir_buf;
     printf("yetty is ready -- run:  %s/yetty\n", bin_dir);
     if (!dir_on_path(bin_dir)) {
-        printf("\nNote: %s is not on your PATH. Add it to run `yetty` directly.\n", bin_dir);
+        /* bin_dir isn't on the *current process* PATH. Try to persist it on
+         * the user's PATH. On Windows this writes HKCU\Environment and
+         * broadcasts the change; on POSIX it is a no-op (UNSUPPORTED) and we
+         * fall through to the advisory note, exactly as before. */
+        enum yetty_yplatform_path_outcome outcome = YETTY_YPLATFORM_PATH_UNSUPPORTED;
+        struct yetty_ycore_void_result path_res =
+            yetty_yplatform_install_add_to_user_path(bin_dir, &outcome);
+        if (YETTY_IS_ERR(path_res)) {
+            yetty_ycore_error_destroy(path_res.error);
+            printf("\nNote: %s is not on your PATH. Add it to run `yetty` directly.\n", bin_dir);
+        } else if (outcome == YETTY_YPLATFORM_PATH_ADDED) {
+            printf("\nAdded %s to your PATH. Open a new terminal for it to take effect.\n",
+                   bin_dir);
+        } else if (outcome == YETTY_YPLATFORM_PATH_ALREADY_PRESENT) {
+            /* Already persisted (e.g. a re-install) but not yet visible in this
+             * shell — tell the user to open a new terminal, not to add it. */
+            printf("\n%s is already on your PATH. Open a new terminal for it to take effect.\n",
+                   bin_dir);
+        } else {
+            /* UNSUPPORTED (POSIX): unchanged advisory note. */
+            printf("\nNote: %s is not on your PATH. Add it to run `yetty` directly.\n", bin_dir);
+        }
     }
 
     yetty_yplatform_paths_destroy(paths);

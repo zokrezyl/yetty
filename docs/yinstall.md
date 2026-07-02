@@ -158,9 +158,20 @@ resolver yetty itself uses), extended with a `BIN` root for the executables:
 | `CONFIG` (config files) | `~/.config/yetty` | `~/Library/Application Support/yetty` | `%APPDATA%\yetty` |
 
 `yinstall` honours the same environment overrides yetty respects
-(`XDG_*` on Linux, etc.). If `BIN` is not already on the user's `PATH`, the
-installer says so explicitly at the end rather than silently leaving a binary
-the shell can't find.
+(`XDG_*` on Linux, etc.). If `BIN` is not already on the user's `PATH`:
+
+- **Windows** — the installer appends `BIN` to the user's `PATH`
+  (`HKCU\Environment`) and broadcasts `WM_SETTINGCHANGE`, so a newly opened
+  terminal finds `yetty` directly. Shells editing `PATH` from a script is
+  awkward on Windows, so the installer does it for the user.
+- **Linux / macOS** — `PATH` is owned by the user's shell profile, so the
+  installer only says so explicitly at the end rather than silently leaving a
+  binary the shell can't find.
+
+On Windows the `BIN` payload also carries the DirectX shader-compiler DLLs
+(`dxcompiler`, `dxil`, `d3dcompiler_47`) that the GPU binaries load at
+runtime — they are not part of a stock Windows and must sit next to the
+`.exe`, so the installer lays them down alongside the executables.
 
 ---
 
