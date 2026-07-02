@@ -20,13 +20,18 @@ target_compile_definitions(ypdf_render-test PRIVATE
 # Verifies that text spans land at the positions a reference PDF renderer
 # (mutool stext) would compute. Catches the "all spans at same coordinate" bug
 # that surfaces when measure_text returns errors and text_matrix never advances.
+# asan-skip: this PDF resolves a system font through Fontconfig, whose
+# process-global config (FcInitLoadConfigAndFonts / FcConfigInit, reached from
+# resolve_pdf_font_via_fontconfig) is never FcFini()'d — a third-party global
+# cache LeakSanitizer flags. Excluded from the asan lane pending a decision on
+# owning Fontconfig teardown. (ypdf_render uses embedded fonts and stays clean.)
 yetty_add_c_test(
     NAME    ypdf_positions
     SOURCES ypdf-positions-test.c
     LIBS    yetty_ypdf yetty_ydraw yetty_ydraw_core yetty_yfont_core yetty_ycore
             yetty_yrender pdfio_lib yetty_yplatform_core
     SHIMS   trace
-    LABELS  golden
+    LABELS  golden asan-skip
     TIMEOUT 60)
 target_compile_definitions(ypdf_positions-test PRIVATE
     YPDF_TEST_PDF=\"${CMAKE_CURRENT_SOURCE_DIR}/pdf-sample.pdf\")
