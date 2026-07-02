@@ -1,14 +1,13 @@
 /*
  * ysvg-style.c — resolve the cascaded style for a single SVG element.
  *
- * SVG style comes from three places, in priority order:
- *   1. inline `style="prop:val;..."` attribute  (highest)
+ * SVG style comes from four places, resolved in ascending priority:
+ *   1. inherited from parent
  *   2. presentation attributes (`fill="red"`, `stroke-width="2"`, ...)
- *   3. inherited from parent
+ *   3. author CSS rules from <style> elements (ysvg-css.c selector engine)
+ *   4. inline `style="prop:val;..."` attribute  (highest)
  *
- * We do NOT support external/inline <style> CSS rules in this build —
- * that requires a selector engine. Inline style + presentation attrs
- * cover the bulk of SVG-in-the-wild content.
+ * !important declarations from CSS / inline win over everything else.
  */
 
 #include "ysvg-internal.h"

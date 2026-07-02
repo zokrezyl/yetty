@@ -1315,8 +1315,10 @@ static void print_usage(FILE *out, const char *prog)
     fprintf(out, "      --log-floor=LEVEL              Always emit this level and above: "
                  "trace|debug|info|warn|error|off (default: warn)\n");
     fprintf(out, "      --log-all[=0|1]               Emit all trace points (default: off)\n");
-    fprintf(out, "      --log-level=NAME[=on|off]     Per-level rule, e.g. --log-level=debug=off\n");
-    fprintf(out, "      --log-file=NAME[=on|off]      Per-file rule, e.g. --log-file=container.c\n");
+    fprintf(out,
+            "      --log-level=NAME[=on|off]     Per-level rule, e.g. --log-level=debug=off\n");
+    fprintf(out,
+            "      --log-file=NAME[=on|off]      Per-file rule, e.g. --log-file=container.c\n");
     fprintf(out,
             "      --log-function=NAME[=on|off]  Per-function rule, e.g. --log-function=render\n");
     fprintf(out, "  -h, --help                         Show this help\n");
@@ -1640,9 +1642,8 @@ static void apply_ytrace_config(struct config_impl *impl)
         ytrace_set_floor_level(cfg->ops->get_string(cfg, YETTY_YCONFIG_KEY_LOG_FLOOR, "warn"));
     }
     if (cfg->ops->has(cfg, YETTY_YCONFIG_KEY_LOG_ALL)) {
-        ytrace_set_all_enabled(
-            config_parse_bool_word(cfg->ops->get_string(cfg, YETTY_YCONFIG_KEY_LOG_ALL, "off"),
-                                   false));
+        ytrace_set_all_enabled(config_parse_bool_word(
+            cfg->ops->get_string(cfg, YETTY_YCONFIG_KEY_LOG_ALL, "off"), false));
     }
 
     apply_log_rules(cfg, YETTY_YCONFIG_KEY_LOG_LEVELS, ytrace_set_level_enabled);

@@ -461,6 +461,21 @@ int yetty_ysvg_path_from_points(struct yetty_ysvg_path *out, const char *pts, si
                                 bool closed);
 
 /*=============================================================================
+ * Polygon fill (ysvg-fill.c)
+ *
+ * The SDF primitive set has no arbitrary-polygon fill, so we triangulate a
+ * flattened subpath and emit one filled SDF triangle per resulting facet.
+ *===========================================================================*/
+
+/* Ear-clip a simple polygon `pts` (n vertices) into triangles. On success
+ * returns the triangle count and points `*out_indices` at a freshly malloc'd
+ * array of `3 * count` vertex indices into `pts` (caller frees). Returns 0 on
+ * a degenerate / self-intersecting / too-large polygon, leaving
+ * `*out_indices` NULL. Each subpath is triangulated independently, so a
+ * subpath that encodes a hole is filled solid rather than punched out. */
+size_t yetty_ysvg_triangulate(const struct yetty_ysvg_point *pts, size_t n, uint32_t **out_indices);
+
+/*=============================================================================
  * Color helpers
  *===========================================================================*/
 
