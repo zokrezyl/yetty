@@ -103,3 +103,21 @@ struct yetty_ycore_void_result yetty_yplatform_install_foreach_asset(
     current_bridge = NULL;
     return YETTY_OK_VOID();
 }
+
+/*
+ * POSIX no-op. On Linux/macOS the user's PATH is owned by their shell
+ * profile (~/.profile, ~/.zshrc, …), not a machine setting the installer
+ * can safely rewrite, so we leave it to the advisory note the installer
+ * already prints. Reports UNSUPPORTED and returns success — the installer
+ * then prints its manual PATH advice exactly as before. The Windows
+ * counterpart in winres.c does the real HKCU\Environment work.
+ */
+struct yetty_ycore_void_result yetty_yplatform_install_add_to_user_path(
+    const char *dir, enum yetty_yplatform_path_outcome *out_outcome)
+{
+    (void)dir;
+    if (out_outcome) {
+        *out_outcome = YETTY_YPLATFORM_PATH_UNSUPPORTED;
+    }
+    return YETTY_OK_VOID();
+}

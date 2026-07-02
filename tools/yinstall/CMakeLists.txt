@@ -46,27 +46,55 @@ function(yinstall_embed_executables TARGET)
         set(BROTLI_QUALITY 6)
     endif()
 
+    # The logical asset name must carry the platform executable suffix so the
+    # installed file is runnable: `bin/yetty.exe` on Windows, `bin/yetty`
+    # elsewhere. $<TARGET_FILE:exe> already produces the .exe binary; only its
+    # embedded *name* needed fixing (mirrors qemu_embed_runtime's .exe pick).
+    if(WIN32)
+        set(_exe_suffix ".exe")
+    else()
+        set(_exe_suffix "")
+    endif()
+
     set(_manifest "${CMAKE_CURRENT_BINARY_DIR}/yinstall_bin_manifest.h")
     set(_br_dir "${CMAKE_CURRENT_BINARY_DIR}/embed-bin")
     file(MAKE_DIRECTORY "${_br_dir}")
 
-    # Build-time brotli of each binary — common to both backends. The .br path
-    # is fixed; the input is $<TARGET_FILE:exe>, so the command reruns whenever
-    # the binary changes.
+    # Build-time brotli of each item — common to both backends. Each ARGN
+    # entry is either a build target (an executable we ship) or a literal
+    # file path (a runtime DLL the apps need next to them on Windows). The
+    # .br path is fixed and the input reruns whenever the source changes.
+    #
+    # `_pairs` carries the C-identifier-safe symbol and the *final* asset
+    # name (already suffixed for targets, basename for files), so the two
+    # backends below just emit cb("bin/<asset>", ...) verbatim.
     set(_br_files "")
-    set(_pairs "")  # "<safe>|<exe>" per binary
-    foreach(_exe ${ARGN})
-        string(MAKE_C_IDENTIFIER "${_exe}" _safe)
+    set(_pairs "")  # "<safe>|<asset>" per item
+    foreach(_item ${ARGN})
+        # Quote _item: literal DLL paths contain spaces and parentheses
+        # ("Program Files (x86)") that would otherwise split the if() args.
+        if(TARGET "${_item}")
+            set(_src "$<TARGET_FILE:${_item}>")
+            set(_asset "${_item}${_exe_suffix}")
+            string(MAKE_C_IDENTIFIER "${_item}" _safe)
+            add_dependencies(${TARGET} ${_item})
+        else()
+            # Literal file (e.g. a runtime DLL from the Windows SDK). The
+            # asset keeps the file's basename; the source may contain spaces
+            # ("Program Files (x86)"), so it stays quoted below.
+            set(_src "${_item}")
+            get_filename_component(_asset "${_item}" NAME)
+            string(MAKE_C_IDENTIFIER "${_asset}" _safe)
+        endif()
         set(_br "${_br_dir}/${_safe}.br")
         add_custom_command(
             OUTPUT "${_br}"
-            COMMAND "${BROTLI_EXECUTABLE}" -q ${BROTLI_QUALITY} -f -o "${_br}" "$<TARGET_FILE:${_exe}>"
-            DEPENDS ${_exe}
-            COMMENT "yinstall: compressing ${_exe}"
+            COMMAND "${BROTLI_EXECUTABLE}" -q ${BROTLI_QUALITY} -f -o "${_br}" "${_src}"
+            DEPENDS "${_src}"
+            COMMENT "yinstall: compressing ${_asset}"
             VERBATIM)
         list(APPEND _br_files "${_br}")
-        list(APPEND _pairs "${_safe}|${_exe}")
-        add_dependencies(${TARGET} ${_exe})
+        list(APPEND _pairs "${_safe}|${_asset}")
     endforeach()
 
     if(MSVC)
@@ -98,7 +126,7 @@ void register_bin_assets_c(bin_asset_callback_t cb)
         foreach(_pair ${_pairs})
             string(REPLACE "|" ";" _parts "${_pair}")
             list(GET _parts 0 _safe)
-            list(GET _parts 1 _exe)
+            list(GET _parts 1 _asset)
             string(TOUPPER "bin_${_safe}" _rcname)
             file(APPEND "${_rc}" "${_rcname} RCDATA \"${_br_dir}/${_safe}.br\"\n")
             file(APPEND "${_reg}"
@@ -108,7 +136,7 @@ void register_bin_assets_c(bin_asset_callback_t cb)
         res_global = LoadResource(module_handle, res_handle);
         if (res_global) {
             res_ptr = LockResource(res_global);
-            if (res_ptr && res_size) cb(\"bin/${_exe}\", (const uint8_t *)res_ptr, (size_t)res_size, 1);
+            if (res_ptr && res_size) cb(\"bin/${_asset}\", (const uint8_t *)res_ptr, (size_t)res_size, 1);
         }
     }
 ")
@@ -145,13 +173,13 @@ void register_bin_assets_c(bin_asset_callback_t cb);
         foreach(_pair ${_pairs})
             string(REPLACE "|" ";" _parts "${_pair}")
             list(GET _parts 0 _safe)
-            list(GET _parts 1 _exe)
+            list(GET _parts 1 _asset)
             set(_symbol "bin_${_safe}")
             string(APPEND _incbin_content "INCBIN(${_symbol}, \"${_br_dir}/${_safe}.br\");\n")
             string(APPEND _manifest_externs
                 "extern const unsigned char g${_symbol}Data[];\nextern const unsigned int g${_symbol}Size;\n")
             string(APPEND _manifest_calls
-                "    cb(\"bin/${_exe}\", g${_symbol}Data, (size_t)g${_symbol}Size, 1);\n")
+                "    cb(\"bin/${_asset}\", g${_symbol}Data, (size_t)g${_symbol}Size, 1);\n")
         endforeach()
 
         file(GENERATE OUTPUT "${_incbin_src}" CONTENT "${_incbin_content}")
@@ -214,7 +242,10 @@ target_link_libraries(yinstall PRIVATE
     Threads::Threads
 )
 if(WIN32)
-    target_link_libraries(yinstall PRIVATE advapi32)
+    # advapi32 → RegCreateKeyEx/RegSetValueEx (user PATH); user32 →
+    # SendMessageTimeout (WM_SETTINGCHANGE broadcast). Both used by the
+    # add-to-user-PATH step in winres.c.
+    target_link_libraries(yinstall PRIVATE advapi32 user32)
 endif()
 
 if(NOT MSVC)
@@ -282,6 +313,22 @@ foreach(_candidate ${_yinstall_exe_candidates})
         list(APPEND _yinstall_exes ${_candidate})
     endif()
 endforeach()
+
+# Windows runtime DLLs — yetty and the other GPU tools link against the
+# DirectX shader compiler (dxcompiler / dxil / d3dcompiler_47), which is NOT
+# part of a stock Windows and must sit next to the .exe. The yetty build
+# copies them beside its own binary at build time; the installer must carry
+# them into BIN so the *installed* apps launch too. Embed straight from the
+# resolved Windows SDK originals (present at configure time) — no dependency
+# on any target's POST_BUILD copy, and DLLs the SDK lacks are skipped.
+if(WIN32)
+    include(${YETTY_ROOT}/build-tools/yetty/dawn-runtime-dlls.cmake)
+    yetty_find_dawn_runtime_dlls(_yinstall_dawn_dlls)
+    if(_yinstall_dawn_dlls)
+        list(APPEND _yinstall_exes ${_yinstall_dawn_dlls})
+    endif()
+endif()
+
 if(_yinstall_exes)
     yinstall_embed_executables(yinstall ${_yinstall_exes})
 else()
