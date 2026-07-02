@@ -1,5 +1,5 @@
 #!/bin/bash
-# yless demo — a mermaid diagram (chart-like content) in the right-hand half.
+# yless demo — a mermaid class diagram (chart-like content) over the pane.
 #
 #   ./build-desktop-ytrace-release/yetty -e demo/scripts/yless/diagram.sh
 #
@@ -26,5 +26,5 @@ if [ -n "${YLESS_DURATION:-}" ]; then
     dur_args=(--duration "$YLESS_DURATION")
 fi
 
-# Right-hand half: start at column 42, span 38 cells wide.
-exec "$YLESS" "${dur_args[@]}" -x 42 -w 38 "$ROOT/demo/assets/ydiagram/class-diagram.mmd"
+# Whole pane: the diagram engraves at its natural size, anchored top-left.
+exec "$YLESS" "${dur_args[@]}" "$ROOT/demo/assets/ydiagram/class-diagram.mmd"
