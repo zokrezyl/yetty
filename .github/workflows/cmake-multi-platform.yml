@@ -969,6 +969,13 @@ jobs:
         cp ${{ env.BUILD_DIR }}/tinyemu.wasm site/
         cp -r ${{ env.BUILD_DIR }}/tinyemu-assets site/
         cp -r ${{ env.BUILD_DIR }}/yetty-assets site/
+        # Installer bootstrap scripts — served at yetty.dev/install.sh and
+        # yetty.dev/install.ps1. Each downloads the yinstall installer for the
+        # visitor's platform from the latest GitHub release and runs it:
+        #   curl -fsSL https://yetty.dev/install.sh | bash
+        #   irm https://yetty.dev/install.ps1 | iex
+        cp build-tools/install/install.sh site/
+        cp build-tools/install/install.ps1 site/
         du -sh site/* | sort -h
 
     - name: Upload WebAssembly artifacts
