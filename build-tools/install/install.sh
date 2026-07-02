@@ -27,6 +27,17 @@ readonly version="${YETTY_VERSION:-latest}"
 log() { printf 'yetty-install: %s\n' "$1" >&2; }
 die() { printf 'yetty-install: error: %s\n' "$1" >&2; exit 1; }
 
+# Scratch dir, cleaned up on exit. Declared at script scope (not inside main)
+# so the EXIT trap — which fires after main returns — can still see it under
+# `set -u`. Guarded with :- so an early exit before assignment is also safe.
+workdir=""
+cleanup() {
+    if [ -n "${workdir:-}" ] && [ -d "$workdir" ]; then
+        rm -rf "$workdir" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
 # Resolve the release asset name for this OS + architecture. The desktop
 # release ships one archive per (os, arch); each contains a single `yinstall`.
 resolve_asset() {
@@ -81,15 +92,11 @@ download() {
 main() {
     command -v tar >/dev/null 2>&1 || die "need tar on PATH to unpack the installer"
 
-    local asset url workdir archive installer
+    local asset url archive installer
     asset="$(resolve_asset)"
     url="$(resolve_url "$asset")"
 
     workdir="$(mktemp -d "${TMPDIR:-/tmp}/yetty-install.XXXXXX")"
-    # Best-effort cleanup; keep going on failure so an install error is what the
-    # user sees, not a cleanup error.
-    trap 'rm -rf "$workdir" 2>/dev/null || true' EXIT
-
     archive="${workdir}/${asset}"
 
     log "downloading ${asset} (${version}) from ${repo}"
