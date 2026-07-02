@@ -19,6 +19,26 @@ Pure C. WebGPU-rendered. FFI-first. Built around small composable modules.
 > **Status:** Early alpha. Many core paths are usable, but APIs and internals are
 > still changing quickly.
 
+## Install
+
+Linux and macOS:
+
+```bash
+curl -fsSL https://yetty.dev/install.sh | bash
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://yetty.dev/install.ps1 | iex
+```
+
+The script downloads the installer for your platform from the latest release
+and runs it; `yinstall` unpacks the terminal, its companion tools, and assets
+into the right per-OS locations. To install manually, grab a build from
+[Releases](https://github.com/zokrezyl/yetty/releases/latest) or see
+[docs/yinstall.md](docs/yinstall.md).
+
 ## What Yetty Is
 
 - **A terminal application**: VT/xterm terminal emulation, PTY backends, tabs,
