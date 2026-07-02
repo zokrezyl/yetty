@@ -26,7 +26,12 @@ runs:
       uses: actions/download-artifact@v4
       with:
         name: ${{ inputs.artifact-name }}
-        path: ${{ github.workspace }}/.rootfs-artifact
+        # Land OUTSIDE the checked-out repo. Downloading into
+        # $GITHUB_WORKSPACE leaves an untracked dir in the working tree,
+        # which `git status --porcelain` then reports — stamping the build
+        # version "-dirty" (the version resolver runs at configure time,
+        # after this action). $RUNNER_TEMP is per-job scratch off the tree.
+        path: ${{ runner.temp }}/rootfs-artifact
 
     - name: Stage into 3rdparty cache
       if: inputs.artifact-name != ''
@@ -39,5 +44,5 @@ runs:
         # when the version is already extracted (same as a regular
         # cache hit).
         mkdir -p "$HOME/.cache/yetty/3rdparty"
-        cp -v "$GITHUB_WORKSPACE/.rootfs-artifact"/yetty-rootfs-riscv-*.tar.gz \
+        cp -v "$RUNNER_TEMP/rootfs-artifact"/yetty-rootfs-riscv-*.tar.gz \
             "$HOME/.cache/yetty/3rdparty/"
