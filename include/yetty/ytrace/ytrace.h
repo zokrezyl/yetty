@@ -18,9 +18,22 @@
  *   ytrace_set_all_enabled(true);           // enable all trace points
  *   ytrace_set_level_enabled("trace", false); // disable by level
  *   ytrace_set_file_enabled("foo.c", true);   // enable by file
+ *   ytrace_set_floor_level("warn");           // levels >= floor always emit
  *
- * Environment:
- *   YTRACE_DEFAULT_ON=yes  - enable all trace points by default
+ * A trace point's on/off state is resolved from, in increasing priority:
+ * the "all" master flag, a per-level rule, a per-file rule, a per-function
+ * rule, and finally the severity floor. The floor is a hard minimum: any
+ * point whose level is at or above it is emitted no matter what the other
+ * rules say (pass "off" to disable the floor). This is why errors stay
+ * visible without turning tracing on globally. Rules registered via the
+ * setters persist and also apply to trace points registered afterwards.
+ *
+ * Environment (parsed once at init):
+ *   YTRACE_DEFAULT_ON=yes                  - enable all trace points
+ *   YTRACE_FLOOR=warn                      - severity floor (trace..error|off)
+ *   YTRACE_LEVELS=debug=off,info=on        - per-level rules
+ *   YTRACE_FILES=container.c=on            - per-file rules
+ *   YTRACE_FUNCTIONS=container_render=on   - per-function rules
  */
 
 #include <stdbool.h>
@@ -94,11 +107,21 @@ void ytrace_output(const char *level, const char *file, int line, const char *fu
 #endif
     ;
 
-/* Control functions */
+/* Control functions.
+ *
+ * The per-level/file/function rules persist: they are remembered and applied
+ * to trace points registered after the call, not only to existing ones. */
 void ytrace_set_all_enabled(bool enabled);
 void ytrace_set_level_enabled(const char *level, bool enabled);
 void ytrace_set_file_enabled(const char *file, bool enabled);
 void ytrace_set_function_enabled(const char *function, bool enabled);
+
+/* Set the severity floor. Any trace point whose level is at or above `level`
+ * is always emitted and cannot be disabled by the other rules. Accepts
+ * "trace" | "debug" | "info" | "warn" | "error", or "off" / "none" to remove
+ * the floor entirely. The default floor is "warn", so warnings and errors are
+ * logged even when tracing is otherwise off. */
+void ytrace_set_floor_level(const char *level);
 
 /* Query functions */
 size_t ytrace_get_point_count(void);
@@ -331,6 +354,10 @@ static inline void ytrace_set_function_enabled(const char *function, bool enable
 {
     (void)function;
     (void)enabled;
+}
+static inline void ytrace_set_floor_level(const char *level)
+{
+    (void)level;
 }
 static inline size_t ytrace_get_point_count(void)
 {
