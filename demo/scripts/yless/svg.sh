@@ -1,5 +1,5 @@
 #!/bin/bash
-# yless demo — an SVG drawing in a 48x24-cell box anchored at the top-left.
+# yless demo — an SVG drawing over the whole pane.
 #
 #   ./build-desktop-ytrace-release/yetty -e demo/scripts/yless/svg.sh
 #
@@ -25,4 +25,4 @@ if [ -n "${YLESS_DURATION:-}" ]; then
     dur_args=(--duration "$YLESS_DURATION")
 fi
 
-exec "$YLESS" "${dur_args[@]}" -x 0 -y 0 -w 48 -H 24 "$ROOT/demo/assets/svg/tiger.svg"
+exec "$YLESS" "${dur_args[@]}" "$ROOT/demo/assets/svg/tiger.svg"

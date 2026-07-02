@@ -1,10 +1,10 @@
 #!/bin/bash
-# yless demo — a PDF (first page) in a centred box.
+# yless demo — a PDF (first page) over the whole pane.
 #
 #   ./build-desktop-ytrace-release/yetty -e demo/scripts/yless/pdf.sh
 #
 # Quit with q (clears the surface). Multi-page merge into one tall figure is a
-# planned follow-up — this shows page 1.
+# planned follow-up — this shows page 1, centred on the pane.
 
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -26,4 +26,4 @@ if [ -n "${YLESS_DURATION:-}" ]; then
     dur_args=(--duration "$YLESS_DURATION")
 fi
 
-exec "$YLESS" "${dur_args[@]}" -x 16 -y 4 -w 48 -H 28 "$ROOT/test/ut/ypdf/pdf-sample.pdf"
+exec "$YLESS" "${dur_args[@]}" "$ROOT/test/ut/ypdf/pdf-sample.pdf"

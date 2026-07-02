@@ -51,14 +51,56 @@
  * Options
  *===========================================================================*/
 
+/* One position/size argument. `value` is a cell count, or a percentage of the
+ * pane along its axis when `is_percent`. `set` distinguishes an explicit 0 (or
+ * 0%) from "not given" so an unset width/height still means "to the edge". */
+struct yless_dim {
+    float value;
+    bool is_percent;
+    bool set;
+};
+
 struct yless_opts {
-    int x_cells;   /* origin column (cells); 0 = pane left */
-    int y_cells;   /* origin row (cells);    0 = pane top  */
-    int w_cells;   /* width  in cells; 0 = to right edge */
-    int h_cells;   /* height in cells; 0 = to bottom edge */
+    struct yless_dim origin_x; /* origin column; unset = pane left */
+    struct yless_dim origin_y; /* origin row;    unset = pane top  */
+    struct yless_dim width;    /* width;  unset = to right edge  */
+    struct yless_dim height;   /* height; unset = to bottom edge */
     float opacity; /* background opacity 0.0..1.0 (1.0 = opaque) */
     float duration_sec; /* auto-exit after this many seconds; 0 = run until quit */
 };
+
+/* Parse a geometry argument: a cell count, or "N%" as a percentage of the pane
+ * along its axis. Negative values are clamped to 0. */
+static struct yless_dim parse_dim(const char *arg)
+{
+    struct yless_dim dim = {.set = true};
+    size_t len = arg ? strlen(arg) : 0;
+    if (len > 0 && arg[len - 1] == '%') {
+        dim.is_percent = true;
+        dim.value = (float)atof(arg); /* atof stops at the '%' */
+    } else {
+        dim.value = (float)atoi(arg);
+    }
+    if (dim.value < 0.0f) {
+        dim.value = 0.0f;
+    }
+    return dim;
+}
+
+/* Resolve a geometry dimension to pixels. `axis_px` is the pane extent along
+ * this axis (width for x/w, height for y/h); `cell_px` is the cell size on that
+ * axis. An unset dimension yields `fallback_px`. */
+static float resolve_dim_px(const struct yless_dim *dim, float axis_px, float cell_px,
+                            float fallback_px)
+{
+    if (!dim->set) {
+        return fallback_px;
+    }
+    if (dim->is_percent) {
+        return dim->value / 100.0f * axis_px;
+    }
+    return dim->value * cell_px;
+}
 
 /* Brand near-black background (#0B1014), per the palette. RGB only — the
  * opacity flag supplies the alpha byte. */
@@ -85,11 +127,12 @@ static void usage(FILE *out, const char *prog)
             "diagrams, pdf (first page), and LilyPond scores (.ly — engraved with\n"
             "the Emmentaler music font).\n"
             "\n"
-            "Options (position/size are in terminal CELLS; default = whole pane):\n"
-            "  -x, --x=N        origin column   (default 0)\n"
-            "  -y, --y=N        origin row      (default 0)\n"
-            "  -w, --width=N    width in cells  (default: to right edge)\n"
-            "  -H, --height=N   height in cells (default: to bottom edge)\n"
+            "Options (position/size take terminal CELLS or a pane percentage\n"
+            "like 50%%; default = whole pane):\n"
+            "  -x, --x=N        origin column   (cells or %%; default 0)\n"
+            "  -y, --y=N        origin row      (cells or %%; default 0)\n"
+            "  -w, --width=N    width           (cells or %%; default: to right edge)\n"
+            "  -H, --height=N   height          (cells or %%; default: to bottom edge)\n"
             "  -a, --alpha=F    background opacity 0.0..1.0 (default 1.0 = opaque;\n"
             "                   0.0 = transparent, terminal text shows through)\n"
             "  -d, --duration=F run for F seconds, then auto-exit (clears the\n"
@@ -111,7 +154,7 @@ static void usage(FILE *out, const char *prog)
             "Examples:\n"
             "  %s main.c                 # page a source file, whole pane\n"
             "  %s -w 40 -H 20 a.svg      # an svg in a 40x20-cell box at the top-left\n"
-            "  %s -x 42 -w 38 b.pdf      # a pdf in the right-hand half\n"
+            "  %s -x 50%% -w 50%% b.pdf     # a pdf in the right-hand half\n"
             "  %s --duration 3 a.svg     # show for 3s, then exit (no keyboard needed)\n",
             prog, prog, prog, prog, prog);
 }
@@ -173,21 +216,83 @@ struct viewport {
 
 static struct viewport probe_viewport(void)
 {
-    /* yplatform exposes the terminal size in CELLS (portable). Pixels are
-     * approximated with a fixed cell size — good enough to place the figure;
-     * the server clips to the rect regardless. */
-    struct viewport vp = {.cell_w = 8, .cell_h = 16, .cols = 80};
-    int cols = 80, rows = 24;
-    (void)yetty_yplatform_term_get_size(&cols, &rows);
+    /* A `-e` child is forked with the default 80x24 / 0px winsize; the real
+     * grid and pane pixel area arrive shortly after (a resize + SIGWINCH once
+     * yetty lays the pane out — typically ~1s). Poll until the reported size
+     * stops changing so the figure fills the ACTUAL pane instead of a
+     * stale-default corner. The pixel fields (ws_xpixel/ws_ypixel) give the
+     * true cell size; without them (a plain terminal that doesn't report
+     * pixels) we settle on the cell counts and fall back to a nominal cell. */
+    int cols = 0, rows = 0, pixel_w = 0, pixel_h = 0;
+    int prev_cols = -1, prev_rows = -1, prev_pixel_w = -1, prev_pixel_h = -1;
+    int stable_reads = 0;
+    int waited_ms = 0;
+    const int poll_ms = 30;
+    const int settle_ms = 300;   /* size must hold this long to count as settled */
+    const int min_ramp_ms = 1200; /* the pane grows in steps for ~1s after spawn;
+                                    * don't trust a stable size before then, or we
+                                    * latch an early, smaller step of the ramp */
+    const int timeout_ms = 4000; /* hard cap so startup never hangs */
+    for (;;) {
+        int probe_cols = 0, probe_rows = 0, probe_pixel_w = 0, probe_pixel_h = 0;
+        if (yetty_yplatform_term_get_size_pixels(&probe_cols, &probe_rows, &probe_pixel_w,
+                                                 &probe_pixel_h) == 0 &&
+            probe_cols > 0 && probe_rows > 0) {
+            cols = probe_cols;
+            rows = probe_rows;
+            pixel_w = probe_pixel_w;
+            pixel_h = probe_pixel_h;
+            bool unchanged = probe_cols == prev_cols && probe_rows == prev_rows &&
+                             probe_pixel_w == prev_pixel_w && probe_pixel_h == prev_pixel_h;
+            stable_reads = unchanged ? stable_reads + 1 : 0;
+            prev_cols = probe_cols;
+            prev_rows = probe_rows;
+            prev_pixel_w = probe_pixel_w;
+            prev_pixel_h = probe_pixel_h;
+            /* A pixel area means we're under yetty, whose pane ramps up in
+             * steps for ~1s after spawn — wait past the ramp before trusting a
+             * stable reading. A terminal with no pixel area has a fixed size,
+             * so accept as soon as it stops changing. */
+            bool settled = stable_reads * poll_ms >= settle_ms;
+            int min_wait = (probe_pixel_w > 0 && probe_pixel_h > 0) ? min_ramp_ms : 0;
+            if (settled && waited_ms >= min_wait) {
+                break;
+            }
+        }
+        if (waited_ms >= timeout_ms) {
+            break;
+        }
+        yetty_yplatform_ytime_sleep_ms((unsigned)poll_ms);
+        waited_ms += poll_ms;
+    }
+
     if (cols <= 0) {
         cols = 80;
     }
     if (rows <= 0) {
         rows = 24;
     }
-    vp.cols = (uint32_t)cols;
-    vp.pixel_w = (float)(cols * (int)vp.cell_w);
-    vp.pixel_h = (float)(rows * (int)vp.cell_h);
+
+    struct viewport vp = {.cols = (uint32_t)cols};
+    if (pixel_w > 0 && pixel_h > 0) {
+        vp.pixel_w = (float)pixel_w;
+        vp.pixel_h = (float)pixel_h;
+        vp.cell_w = (uint32_t)(pixel_w / cols);
+        vp.cell_h = (uint32_t)(pixel_h / rows);
+    }
+    /* Nominal cell size when the terminal doesn't report pixels. */
+    if (vp.cell_w == 0) {
+        vp.cell_w = 8;
+    }
+    if (vp.cell_h == 0) {
+        vp.cell_h = 16;
+    }
+    if (vp.pixel_w <= 0.0f) {
+        vp.pixel_w = (float)(cols * (int)vp.cell_w);
+    }
+    if (vp.pixel_h <= 0.0f) {
+        vp.pixel_h = (float)(rows * (int)vp.cell_h);
+    }
     return vp;
 }
 
@@ -552,16 +657,16 @@ int main(int argc, char **argv)
     while ((c = yetty_yplatform_getopt_long(argc, argv, "x:y:w:H:a:d:h", long_opts, NULL)) != -1) {
         switch (c) {
         case 'x':
-            opts.x_cells = atoi(yetty_yplatform_optarg);
+            opts.origin_x = parse_dim(yetty_yplatform_optarg);
             break;
         case 'y':
-            opts.y_cells = atoi(yetty_yplatform_optarg);
+            opts.origin_y = parse_dim(yetty_yplatform_optarg);
             break;
         case 'w':
-            opts.w_cells = atoi(yetty_yplatform_optarg);
+            opts.width = parse_dim(yetty_yplatform_optarg);
             break;
         case 'H':
-            opts.h_cells = atoi(yetty_yplatform_optarg);
+            opts.height = parse_dim(yetty_yplatform_optarg);
             break;
         case 'a':
             opts.opacity = (float)atof(yetty_yplatform_optarg);
@@ -612,18 +717,36 @@ int main(int argc, char **argv)
 
     struct viewport vp = probe_viewport();
 
-    /* Resolve the viewport rect (cells → pixels), defaulting to the pane. */
-    float origin_x = (float)opts.x_cells * (float)vp.cell_w;
-    float origin_y = (float)opts.y_cells * (float)vp.cell_h;
-    float rect_w =
-        opts.w_cells > 0 ? (float)opts.w_cells * (float)vp.cell_w : vp.pixel_w - origin_x;
+    /* Resolve the viewport rect to pixels (cells or percent of the pane),
+     * defaulting to the whole pane, then clamp it inside the pane. */
+    float origin_x = resolve_dim_px(&opts.origin_x, vp.pixel_w, (float)vp.cell_w, 0.0f);
+    float origin_y = resolve_dim_px(&opts.origin_y, vp.pixel_h, (float)vp.cell_h, 0.0f);
+    float rect_w = resolve_dim_px(&opts.width, vp.pixel_w, (float)vp.cell_w, vp.pixel_w - origin_x);
     float rect_h =
-        opts.h_cells > 0 ? (float)opts.h_cells * (float)vp.cell_h : vp.pixel_h - origin_y;
+        resolve_dim_px(&opts.height, vp.pixel_h, (float)vp.cell_h, vp.pixel_h - origin_y);
+    if (rect_w > vp.pixel_w - origin_x) {
+        rect_w = vp.pixel_w - origin_x;
+    }
+    if (rect_h > vp.pixel_h - origin_y) {
+        rect_h = vp.pixel_h - origin_y;
+    }
+    if (rect_w < 0.0f) {
+        rect_w = 0.0f;
+    }
+    if (rect_h < 0.0f) {
+        rect_h = 0.0f;
+    }
+
+    /* Content wraps / rasterizes to the box width in whole cells. */
+    uint32_t width_cells = (uint32_t)(rect_w / (float)vp.cell_w);
+    if (width_cells == 0) {
+        width_cells = vp.cols;
+    }
 
     struct yetty_ycat_config cfg = {
         .cell_width = vp.cell_w,
         .cell_height = vp.cell_h,
-        .width_cells = opts.w_cells > 0 ? (uint32_t)opts.w_cells : vp.cols,
+        .width_cells = width_cells,
         .height_cells = 0,
     };
 

@@ -34,16 +34,18 @@ step() {
     printf '\n=== %s ===  (scroll: j/k Space/b g/G ; quit: q to advance)\n' "$1"
 }
 
+# Position/size use pane percentages so each box lands correctly whatever the
+# window size (a raw cell count assumes a fixed grid and drifts on resize).
 step "source code — whole pane"
 "$YLESS" "${dur_args[@]}" "$ROOT/tools/yless/main.c"
 
-step "svg — 48x24 box, top-left"
-"$YLESS" "${dur_args[@]}" -x 0 -y 0 -w 48 -H 24 "$ROOT/demo/assets/svg/tiger.svg"
+step "svg — left half"
+"$YLESS" "${dur_args[@]}" -x 4% -y 8% -w 46% -H 78% "$ROOT/demo/assets/svg/tiger.svg"
 
-step "mermaid diagram — right-hand half"
-"$YLESS" "${dur_args[@]}" -x 42 -w 38 "$ROOT/demo/assets/ydiagram/class-diagram.mmd"
+step "mermaid diagram — whole pane"
+"$YLESS" "${dur_args[@]}" "$ROOT/demo/assets/ydiagram/class-diagram.mmd"
 
-step "pdf (page 1) — centred box"
-"$YLESS" "${dur_args[@]}" -x 16 -y 4 -w 48 -H 28 "$ROOT/test/ut/ypdf/pdf-sample.pdf"
+step "pdf (page 1) — whole pane"
+"$YLESS" "${dur_args[@]}" "$ROOT/test/ut/ypdf/pdf-sample.pdf"
 
 printf '\n=== gallery done ===\n'

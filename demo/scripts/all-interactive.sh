@@ -19,9 +19,15 @@ export YLESS_DURATION="${ALL_YLESS_DURATION:-2}"   # yless demos self-exit after
 # (no </dev/null): yless needs it for its figure-attach handshake and self-exits
 # via YLESS_DURATION; the timeout is the hard backstop. stty sane repairs the
 # line discipline after a raw-mode pager.
+#
+# --foreground is REQUIRED here: without it GNU timeout runs the command in its
+# own background process group, so yless is no longer the terminal's foreground
+# process group and its TTY reads (the figure-attach handshake) fail silently —
+# the figure never attaches and the demo renders blank. --foreground keeps the
+# command in the shell's foreground group so it can read the PTY.
 run() {
     printf '\n===== %s =====\n' "$1"
-    timeout -k 2 "$CAP" bash "$DIR/$1" || true
+    timeout --foreground -k 2 "$CAP" bash "$DIR/$1" || true
     stty sane 2>/dev/null || true
 }
 

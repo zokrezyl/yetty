@@ -30,11 +30,13 @@ void yetty_yplatform_format_timestamp(char *buf, size_t bufsize)
              tv.tv_usec / 1000);
 }
 
-int yetty_yplatform_term_get_size(int *cols, int *rows)
+int yetty_yplatform_term_get_size_pixels(int *cols, int *rows, int *pixel_width,
+                                         int *pixel_height)
 {
     /* Probe stdout first, then stdin — interactive shells usually have
      * both, but a pipe on stdout (e.g. `yetty | tee`) shouldn't make us
-     * report (0, 0). */
+     * report (0, 0). ws_xpixel / ws_ypixel carry the pane pixel area when
+     * the terminal reports it (yetty populates them); they are 0 otherwise. */
     struct winsize ws = {0};
     int fds[] = {STDOUT_FILENO, STDIN_FILENO, STDERR_FILENO};
     for (size_t i = 0; i < sizeof(fds) / sizeof(fds[0]); i++) {
@@ -45,8 +47,19 @@ int yetty_yplatform_term_get_size(int *cols, int *rows)
             if (rows) {
                 *rows = ws.ws_row;
             }
+            if (pixel_width) {
+                *pixel_width = ws.ws_xpixel;
+            }
+            if (pixel_height) {
+                *pixel_height = ws.ws_ypixel;
+            }
             return 0;
         }
     }
     return -1;
+}
+
+int yetty_yplatform_term_get_size(int *cols, int *rows)
+{
+    return yetty_yplatform_term_get_size_pixels(cols, rows, NULL, NULL);
 }
