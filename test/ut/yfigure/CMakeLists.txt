@@ -13,3 +13,12 @@ yetty_add_c_test(
     SHIMS   trace platform_thread platform_term
     LABELS  contract wire
     TIMEOUT 30)
+
+# Container z-order / hit-test / dirty lifecycle (complements the wire test).
+yetty_add_c_test(
+    NAME    yfigure_container
+    SOURCES container-test.c
+    LIBS    yetty_yfigure yetty_yclass yetty_ydraw_core yetty_ycore
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract
+    TIMEOUT 30)

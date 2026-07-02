@@ -15,6 +15,12 @@ find_package(Threads REQUIRED)
 # yclass — the object/dispatch/RPC spine. Always built; no feature gate.
 add_subdirectory(ut/yclass)
 
+# ywire — OSC/DCS wire framing + codecs. Always built.
+add_subdirectory(ut/ywire)
+
+# ydraw-core — serialized draw-command layer. Always built.
+add_subdirectory(ut/ydraw-core)
+
 # Core unit / contract / golden C tests. Each is gated on the module feature it
 # exercises so a build with that module disabled does not try to link it.
 if(YETTY_ENABLE_FEATURE_YPDF)
