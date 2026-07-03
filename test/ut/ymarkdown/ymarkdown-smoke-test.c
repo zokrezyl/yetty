@@ -1,42 +1,33 @@
 /*
- * ymarkdown smoke test.
+ * ymarkdown golden test (#421 — promoted from a smoke test).
  *
- * Renders markdown into a ydraw buffer and asserts that the new block
- * constructs emit the right primitive families. The buffer holds bare SDF
- * prims (box = YETTY_YSDF_BOX, segment = YETTY_YSDF_SEGMENT) and TEXT_DRAWABLE_LIST
- * prims, each led by a u32 type tag — we scan the raw byte stream for those
- * tags rather than standing up a full drawable-list registry.
+ * Renders markdown into a ydraw buffer and pins which primitive families each
+ * block construct emits (SDF box = YETTY_YSDF_BOX, segment = YETTY_YSDF_SEGMENT,
+ * and TEXT_DRAWABLE_LIST spans, each led by a u32 type tag scanned from the raw
+ * byte stream), PLUS byte-exact determinism: the same markdown renders to
+ * identical bytes twice. Layout is fixed-geometry (no font metrics), so the
+ * output is deterministic and headless.
  */
-
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
 
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/ydraw-core/text-drawable-list.h>
 #include <yetty/ymarkdown/ymarkdown.h>
 #include <yetty/ysdf/types.gen.h>
 
-#define REQUIRE(cond, msg)                                                                         \
-    do {                                                                                           \
-        if (!(cond)) {                                                                             \
-            fprintf(stderr, "FAIL %s:%d: %s\n", __FILE__, __LINE__, msg);                          \
-            return 1;                                                                              \
-        }                                                                                          \
-    } while (0)
+#include "ytest.h"
 
-/* Count word-pattern occurrences of `tag` (host byte order) anywhere in the
- * byte stream. The tag values used here (0x7FFFFFFE/D, 0x40000002) do not
- * collide with the ASCII text, colours, or float coordinates in these inputs,
- * so a plain byte scan is a reliable proxy for "how many such prims". */
+#include <stdint.h>
+#include <string.h>
+
+/* Count host-byte-order occurrences of `tag` anywhere in the stream. The tag
+ * values (0x7FFFFFFE/D, TEXT_DRAWABLE_LIST) don't collide with the ASCII text,
+ * colours, or float coordinates in these inputs, so a byte scan is a reliable
+ * proxy for "how many such prims". */
 static size_t count_tag(const uint8_t *data, size_t size, uint32_t tag)
 {
     uint8_t pat[4];
     memcpy(pat, &tag, sizeof(pat));
     size_t n = 0;
-    if (size < sizeof(pat)) {
-        return 0;
-    }
     for (size_t i = 0; i + sizeof(pat) <= size; i++) {
         if (memcmp(data + i, pat, sizeof(pat)) == 0) {
             n++;
@@ -52,8 +43,8 @@ struct counts {
     size_t bytes;
 };
 
-/* Render `md` and tally the primitive families. Returns 0 on success. */
-static int render_counts(const char *md, struct counts *out)
+/* Render `md`; caller must destroy the returned buffer. */
+static struct yetty_ydraw_drawable_list *render_buf(struct ytest *test, const char *md)
 {
     struct yetty_ymarkdown_render_config cfg = {
         .cell_width = 8,
@@ -62,66 +53,76 @@ static int render_counts(const char *md, struct counts *out)
         .height_cells = 24,
     };
     struct yetty_ymarkdown_render_result r = yetty_ymarkdown_render(md, strlen(md), NULL, 0, &cfg);
-    if (YETTY_IS_ERR(r)) {
-        yetty_ycore_error_destroy(r.error);
-        return -1;
-    }
-    const uint8_t *data = yetty_ydraw_drawable_list_data(r.value.buffer);
-    size_t size = yetty_ydraw_drawable_list_size(r.value.buffer);
-    out->boxes = count_tag(data, size, (uint32_t)YETTY_YSDF_BOX);
-    out->segments = count_tag(data, size, (uint32_t)YETTY_YSDF_SEGMENT);
-    out->text_spans = count_tag(data, size, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST);
-    out->bytes = size;
-    yetty_ydraw_drawable_list_destroy(r.value.buffer);
-    return 0;
+    YTEST_REQUIRE_OK(test, r);
+    YTEST_REQUIRE_NOT_NULL(test, r.value.buffer);
+    return r.value.buffer;
 }
 
-int main(void)
+static struct counts render_counts(struct ytest *test, const char *md)
 {
-    struct counts c;
+    struct yetty_ydraw_drawable_list *buf = render_buf(test, md);
+    const uint8_t *data = yetty_ydraw_drawable_list_data(buf);
+    size_t size = yetty_ydraw_drawable_list_size(buf);
+    struct counts c = {
+        .boxes = count_tag(data, size, (uint32_t)YETTY_YSDF_BOX),
+        .segments = count_tag(data, size, (uint32_t)YETTY_YSDF_SEGMENT),
+        .text_spans = count_tag(data, size, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST),
+        .bytes = size,
+    };
+    yetty_ydraw_drawable_list_destroy(buf);
+    return c;
+}
 
-    /* 1. A plain paragraph: text spans only — no boxes, no segments. */
-    REQUIRE(render_counts("Just a plain paragraph with no markup.\n", &c) == 0, "plain render");
-    REQUIRE(c.bytes > 0, "plain buffer non-empty");
-    REQUIRE(c.text_spans >= 1, "plain emits a text span");
-    REQUIRE(c.segments == 0, "plain emits no segments");
-    REQUIRE(c.boxes == 0, "plain emits no boxes");
+/*---------------------------------------------------------------------------
+ * Each block construct emits the expected primitive families.
+ *-------------------------------------------------------------------------*/
+static void test_primitive_families(struct ytest *test)
+{
+    /* Plain paragraph: text spans only. */
+    struct counts plain = render_counts(test, "Just a plain paragraph with no markup.\n");
+    YTEST_CHECK(test, plain.bytes > 0);
+    YTEST_CHECK(test, plain.text_spans >= 1);
+    YTEST_CHECK_EQ_SIZE(test, plain.segments, 0u);
+    YTEST_CHECK_EQ_SIZE(test, plain.boxes, 0u);
 
-    /* 2. A 2x2 table draws a grid (3 horizontal + 3 vertical = 6 segments),
-     *    a header background box, and one text span per non-empty cell. */
-    REQUIRE(render_counts("| A | B |\n|---|---|\n| 1 | 2 |\n", &c) == 0, "table render");
-    REQUIRE(c.segments >= 6, "table emits grid segments");
-    REQUIRE(c.boxes >= 1, "table emits a header background box");
-    REQUIRE(c.text_spans >= 4, "table emits a text span per cell");
+    /* 2x2 table: grid segments (>=6), a header background box, a span per cell. */
+    struct counts table = render_counts(test, "| A | B |\n|---|---|\n| 1 | 2 |\n");
+    YTEST_CHECK(test, table.segments >= 6);
+    YTEST_CHECK(test, table.boxes >= 1);
+    YTEST_CHECK(test, table.text_spans >= 4);
 
-    /* 3. Column alignment markers parse without disturbing the grid. */
-    REQUIRE(render_counts("| L | C | R |\n|:--|:-:|--:|\n| 1 | 2 | 3 |\n", &c) == 0,
-            "aligned table render");
-    REQUIRE(c.segments >= 7, "3-col table emits >=7 grid segments"); /* 3 h + 4 v */
+    /* Alignment markers don't disturb the 3-col grid (3 h + 4 v = 7 segments). */
+    struct counts aligned = render_counts(test, "| L | C | R |\n|:--|:-:|--:|\n| 1 | 2 | 3 |\n");
+    YTEST_CHECK(test, aligned.segments >= 7);
 
-    /* 4. A fenced code block draws a background panel per line (>=2 boxes). */
-    REQUIRE(render_counts("```\nint x = 1;\nint y = 2;\n```\n", &c) == 0, "code render");
-    REQUIRE(c.boxes >= 2, "code block emits a panel per line");
-    REQUIRE(c.text_spans >= 2, "code block emits code text");
+    /* Fenced code block: a panel per line (>=2 boxes) + code text. */
+    struct counts code = render_counts(test, "```\nint x = 1;\nint y = 2;\n```\n");
+    YTEST_CHECK(test, code.boxes >= 2);
+    YTEST_CHECK(test, code.text_spans >= 2);
 
-    /* 5. A horizontal rule draws a filled bar (one box). */
-    REQUIRE(render_counts("above\n\n---\n\nbelow\n", &c) == 0, "hrule render");
-    REQUIRE(c.boxes >= 1, "hrule emits a bar box");
+    /* Horizontal rule: a filled bar (one box). */
+    struct counts hr = render_counts(test, "above\n\n---\n\nbelow\n");
+    YTEST_CHECK(test, hr.boxes >= 1);
 
-    /* 6. A blockquote draws an accent gutter bar (one box) plus its text. */
-    REQUIRE(render_counts("> quoted line\n", &c) == 0, "blockquote render");
-    REQUIRE(c.boxes >= 1, "blockquote emits a gutter bar");
-    REQUIRE(c.text_spans >= 1, "blockquote emits text");
+    /* Blockquote: a gutter bar box + text. */
+    struct counts quote = render_counts(test, "> quoted line\n");
+    YTEST_CHECK(test, quote.boxes >= 1);
+    YTEST_CHECK(test, quote.text_spans >= 1);
 
-    /* 7. Inline code still draws its tight background box. */
-    REQUIRE(render_counts("use the `printf` call\n", &c) == 0, "inline code render");
-    REQUIRE(c.boxes >= 1, "inline code emits a background box");
+    /* Inline code: a tight background box. */
+    struct counts inline_code = render_counts(test, "use the `printf` call\n");
+    YTEST_CHECK(test, inline_code.boxes >= 1);
 
-    /* 8. Strikethrough draws a line-through box over the struck text. */
-    REQUIRE(render_counts("this is ~~gone~~ now\n", &c) == 0, "strike render");
-    REQUIRE(c.boxes >= 1, "strikethrough emits a line box");
+    /* Strikethrough: a line-through box. */
+    struct counts strike = render_counts(test, "this is ~~gone~~ now\n");
+    YTEST_CHECK(test, strike.boxes >= 1);
+}
 
-    /* 9. The kitchen-sink document renders cleanly and is non-trivial. */
+/*---------------------------------------------------------------------------
+ * The kitchen-sink document renders non-trivially and byte-identically twice.
+ *-------------------------------------------------------------------------*/
+static void test_kitchen_sink_deterministic(struct ytest *test)
+{
     const char *all = "# Title\n"
                       "\n"
                       "Body with **bold**, *italic*, `code`, ~~strike~~ and a [link](http://x).\n"
@@ -139,11 +140,29 @@ int main(void)
                       "```\ncode block\n```\n"
                       "\n"
                       "---\n";
-    REQUIRE(render_counts(all, &c) == 0, "kitchen-sink render");
-    REQUIRE(c.bytes > 0, "kitchen-sink non-empty");
-    REQUIRE(c.segments >= 6, "kitchen-sink table grid present");
-    REQUIRE(c.text_spans >= 8, "kitchen-sink has plenty of text");
 
-    printf("OK: ymarkdown smoke test (table=%zu segs, code panels & quotes ok)\n", c.segments);
-    return 0;
+    struct yetty_ydraw_drawable_list *a = render_buf(test, all);
+    struct yetty_ydraw_drawable_list *b = render_buf(test, all);
+    size_t sa = yetty_ydraw_drawable_list_size(a);
+    size_t sb = yetty_ydraw_drawable_list_size(b);
+    YTEST_CHECK(test, sa > 0);
+    YTEST_REQUIRE_EQ_SIZE(test, sa, sb);
+    YTEST_CHECK_MEM_EQ(test, yetty_ydraw_drawable_list_data(a),
+                       yetty_ydraw_drawable_list_data(b), sa);
+
+    /* And it is structurally rich. */
+    const uint8_t *data = yetty_ydraw_drawable_list_data(a);
+    YTEST_CHECK(test, count_tag(data, sa, (uint32_t)YETTY_YSDF_SEGMENT) >= 6); /* table grid */
+    YTEST_CHECK(test, count_tag(data, sa, YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) >= 8);
+
+    yetty_ydraw_drawable_list_destroy(a);
+    yetty_ydraw_drawable_list_destroy(b);
+}
+
+int main(void)
+{
+    struct ytest test = ytest_begin("ymarkdown_golden");
+    YTEST_RUN(&test, test_primitive_families);
+    YTEST_RUN(&test, test_kitchen_sink_deterministic);
+    return ytest_end(&test);
 }

@@ -38,6 +38,11 @@ if(TARGET yetty_yclass)
     add_subdirectory(ut/yclass)
 endif()
 
+# yctl — external-control msgpack-RPC message layer (pure wire contract).
+if(TARGET yetty_yctl)
+    add_subdirectory(ut/yctl)
+endif()
+
 # ywire — OSC/DCS wire framing + codecs.
 if(TARGET yetty_ywire)
     add_subdirectory(ut/ywire)
@@ -51,6 +56,11 @@ endif()
 # yvterm — terminal-core grid model (libvterm-backed), headless.
 if(TARGET yetty_yvterm)
     add_subdirectory(ut/yvterm)
+endif()
+
+# yvnc — VNC capture protocol: pure tile-grid math + wire-format headers.
+if(TARGET yetty_vnc)
+    add_subdirectory(ut/yvnc)
 endif()
 
 # Parser/render modules — gated on their feature flag (which controls the target).

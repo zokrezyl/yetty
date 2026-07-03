@@ -14,4 +14,15 @@ if(Python3_Interpreter_FOUND)
         LABELS           "e2e;display;slow"
         TIMEOUT          120
         SKIP_RETURN_CODE 77)
+
+    # Headful render + capture + tile-diff (#424; also exercises the #425
+    # screenshot capture path). Renders content, screenshots two frames, and
+    # asserts they differ at tile granularity. Self-skips headless.
+    add_test(NAME e2e_render_tilediff
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/render-tilediff.py)
+    set_tests_properties(e2e_render_tilediff PROPERTIES
+        ENVIRONMENT      "YETTY=${CMAKE_BINARY_DIR}/yetty;YCTL=${YETTY_ROOT}/tools/yctl-client/yctl.py"
+        LABELS           "e2e;render;display;slow"
+        TIMEOUT          180
+        SKIP_RETURN_CODE 77)
 endif()
