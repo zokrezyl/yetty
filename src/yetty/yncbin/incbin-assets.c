@@ -161,6 +161,7 @@ static int mkdir_one(const char *path)
 {
     int rc = yetty_yplatform_mkdir(path);
     int saved_errno = errno;
+    (void)saved_errno; /* consumed only by the ydebug() calls below */
     if (rc == 0) {
         ydebug("mkdir_one: created '%s'", path);
         return 0;
