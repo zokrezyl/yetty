@@ -20,3 +20,13 @@ yetty_add_c_test(
     SHIMS   trace platform_thread platform_term
     LABELS  contract wire
     TIMEOUT 30)
+
+# Figure dirty-flag lifecycle + clear_local model (#419): fresh grid dirty, a
+# processed record re-dirties, clear_local empties and re-dirties.
+yetty_add_c_test(
+    NAME    ygrid_dirty
+    SOURCES dirty-test.c
+    LIBS    yetty_ygrid yetty_ydraw_factory yetty_ydraw_core yetty_ysdf yetty_yfigure yetty_ycore
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract
+    TIMEOUT 30)

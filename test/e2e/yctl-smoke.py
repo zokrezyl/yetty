@@ -22,6 +22,7 @@ import os
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -34,6 +35,40 @@ SKIP = 77
 def skip(reason):
     print(f"SKIP: {reason}")
     sys.exit(SKIP)
+
+
+def ensure_display():
+    """True if a display is usable, setting DISPLAY/WAYLAND_DISPLAY from a
+    discovered socket when the invoking environment didn't pass one through.
+    Only a box with NO display at all is a real headless skip."""
+    if os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"):
+        return True
+    xdg = os.environ.get("XDG_RUNTIME_DIR")
+    if xdg:
+        try:
+            for name in sorted(os.listdir(xdg)):
+                if name.startswith("wayland-") and not name.endswith(".lock"):
+                    os.environ["WAYLAND_DISPLAY"] = name
+                    return True
+        except OSError:
+            pass
+    xdir = "/tmp/.X11-unix"
+    uid = os.getuid()
+    try:
+        names = sorted(os.listdir(xdir))
+    except OSError:
+        names = []
+    for name in names:
+        if not (name.startswith("X") and name[1:].isdigit()):
+            continue
+        try:
+            if os.stat(os.path.join(xdir, name)).st_uid != uid:
+                continue
+        except OSError:
+            continue
+        os.environ["DISPLAY"] = ":" + name[1:]
+        return True
+    return False
 
 
 def yctl_runnable():
@@ -53,8 +88,8 @@ def free_port():
 
 
 def main():
-    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
-        skip("no DISPLAY/WAYLAND_DISPLAY — yetty needs a real surface")
+    if not ensure_display():
+        skip("no display available (no DISPLAY/WAYLAND, no owned X/Wayland socket)")
     if not os.path.exists(YETTY):
         skip(f"yetty binary not found at {YETTY}")
     if not os.path.exists(YCTL):
@@ -63,7 +98,8 @@ def main():
         skip(f"yctl client at {YCTL} is not runnable (interpreter/deps missing)")
 
     port = free_port()
-    log_path = os.path.join(HERE, "yctl-smoke.yetty.log")
+    log_fd, log_path = tempfile.mkstemp(prefix="yctl-smoke-", suffix=".yetty.log")
+    os.close(log_fd)  # reopen as a normal text stream below (never in the worktree)
     log = open(log_path, "w")
     env = dict(os.environ, YTRACE_DEFAULT_ON="yes")
     proc = subprocess.Popen([YETTY, "-r", str(port)], stdout=log, stderr=log, env=env, cwd=ROOT)

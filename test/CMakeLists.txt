@@ -16,9 +16,31 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/YettyTest.cmake)
 # here so subdirectories can list Threads::Threads in their LIBS.
 find_package(Threads REQUIRED)
 
+# ycore — foundational data structures (buffer, base64, hex colour, hash map,
+# error cause chain). Pure, headless.
+if(TARGET yetty_ycore)
+    add_subdirectory(ut/ycore)
+endif()
+
+# yexpr — expression parser (precedence, calls, buffer refs). Pure, headless.
+if(TARGET yetty_yexpr)
+    add_subdirectory(ut/yexpr)
+endif()
+
+# yrich — pure geometry/style helpers (document model needs a context, so it is
+# out of scope for the pure lane).
+if(TARGET yetty_yrich)
+    add_subdirectory(ut/yrich)
+endif()
+
 # yclass — the object/dispatch/RPC spine.
 if(TARGET yetty_yclass)
     add_subdirectory(ut/yclass)
+endif()
+
+# yctl — external-control msgpack-RPC message layer (pure wire contract).
+if(TARGET yetty_yctl)
+    add_subdirectory(ut/yctl)
 endif()
 
 # ywire — OSC/DCS wire framing + codecs.
@@ -34,6 +56,11 @@ endif()
 # yvterm — terminal-core grid model (libvterm-backed), headless.
 if(TARGET yetty_yvterm)
     add_subdirectory(ut/yvterm)
+endif()
+
+# yvnc — VNC capture protocol: pure tile-grid math + wire-format headers.
+if(TARGET yetty_vnc)
+    add_subdirectory(ut/yvnc)
 endif()
 
 # Parser/render modules — gated on their feature flag (which controls the target).

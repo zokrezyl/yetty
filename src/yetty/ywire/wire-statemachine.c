@@ -747,6 +747,19 @@ static struct yetty_ycore_void_result body_pump(struct yetty_ywire_wire_statemac
             sm->b64_carry[i] = (uint8_t)full[quartets * 4 + i];
         }
 
+        if (hit_terminator) {
+            /* The terminator bytes are already consumed (read_pos advanced
+             * past them in the batch loop). Record that the frame is
+             * terminated NOW, before decoding the payload: a payload decode
+             * error (e.g. a corrupt LZ4 stream) must not lose the framing
+             * boundary. If it did, the recovery drain-and-drop would keep
+             * scanning past this frame and swallow the FOLLOWING envelope. */
+            sm->terminator_seen = 1;
+            if (!sm->lz4_mode) {
+                sm->lz4_drain_done = 1;
+            }
+        }
+
         struct yetty_ycore_void_result pr = push_decoded(sm, decoded, decoded_n);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "wire_sm: push_decoded");
 
@@ -767,10 +780,6 @@ static struct yetty_ycore_void_result body_pump(struct yetty_ywire_wire_statemac
                 }
             }
             sm->b64_carry_n = 0;
-            sm->terminator_seen = 1;
-            if (!sm->lz4_mode) {
-                sm->lz4_drain_done = 1;
-            }
         }
     }
     return YETTY_OK_VOID();
@@ -1321,6 +1330,16 @@ static void sm_coro_entry(void *arg)
                     }
                     break;
                 }
+                /* No default input consumer registered. Raw bytes have nowhere
+                 * to go, so drop up to the next ESC. But if the ring is already
+                 * drained there is nothing to consume here: SCAN_RAW never
+                 * drains out_carry (only _read() does), so looping while
+                 * out_carry_avail() > 0 with no consumer would busy-loop
+                 * forever. Yield so process() returns and any buffered raw
+                 * bytes can be pulled via _read() (or dropped at destroy). */
+                if (sm->read_pos >= sm->write_pos) {
+                    goto wait_more;
+                }
                 while (sm->read_pos < sm->write_pos && ring_at(sm, sm->read_pos) != '\033') {
                     sm->read_pos++;
                 }
@@ -1339,6 +1358,21 @@ static void sm_coro_entry(void *arg)
                     sm->current_code = 0;
                     envelope_reset(sm);
                     sm->state = SCAN_OSC_CODE;
+                } else if (c == '\033') {
+                    /* Doubled ESC (ESC ESC …): the first ESC is a stray/aborted
+                     * sequence. Emit it as raw and re-hold THIS ESC (stay in
+                     * SCAN_AFTER_ESC) so it can still introduce the following
+                     * sequence — otherwise an envelope introduced right after a
+                     * dangling ESC (e.g. a truncated prior frame) is swallowed
+                     * as a raw ESC-pair and lost. */
+                    uint8_t esc = '\033';
+                    struct yetty_ycore_void_result r = out_carry_append(sm, &esc, 1);
+                    if (YETTY_IS_ERR(r)) {
+                        sm->sm_result = YETTY_ERR(yetty_ycore_void, "wire: raw esc", r);
+                        return;
+                    }
+                    sm->read_pos++;
+                    /* stay in SCAN_AFTER_ESC with this ESC held */
                 } else {
                     uint8_t emit[2] = {'\033', c};
                     struct yetty_ycore_void_result r = out_carry_append(sm, emit, 2);
@@ -1378,6 +1412,18 @@ static void sm_coro_entry(void *arg)
                         envelope_reset(sm);
                         break;
                     }
+                    /* A bare ESC that is not ST starts a NEW escape sequence.
+                     * The current envelope's code section is therefore
+                     * truncated/malformed; abandon it and reprocess this ESC as
+                     * a fresh introducer rather than swallowing it as a code
+                     * byte — swallowing it would desync (and drop) the envelope
+                     * that this ESC actually introduces. */
+                    sm->read_pos++;
+                    sm->state = SCAN_AFTER_ESC;
+                    sm->current_kind = WIRE_KIND_NONE;
+                    sm->current_code = 0;
+                    envelope_reset(sm);
+                    break;
                 }
                 sm->read_pos++;
                 /* End-of-code separator: `;` for OSC, the DCS final byte
@@ -1459,6 +1505,15 @@ static void sm_coro_entry(void *arg)
                         envelope_reset(sm);
                         break;
                     }
+                    /* Bare ESC (not ST) mid-args → new escape sequence. Abandon
+                     * this truncated envelope and reprocess the ESC as a fresh
+                     * introducer so the next envelope is not desynced. */
+                    sm->read_pos++;
+                    sm->state = SCAN_AFTER_ESC;
+                    sm->current_kind = WIRE_KIND_NONE;
+                    sm->current_code = 0;
+                    envelope_reset(sm);
+                    break;
                 }
                 sm->read_pos++;
                 if (c == ';') {
@@ -1500,8 +1555,13 @@ static void sm_coro_entry(void *arg)
                         sm->current_kind = WIRE_KIND_NONE;
                         sm->current_code = 0;
                         envelope_reset(sm);
+                        break;
                     }
-                    break;
+                    /* Ran out of ring input before the terminator. Nothing in
+                     * this drain-and-drop path consumes out_carry, so yield
+                     * rather than spin on out_carry_avail() > 0 with no more
+                     * input to make progress against. */
+                    goto wait_more;
                 }
 
                 struct handler_coro *hc = find_handler_coro(sm, sm->current_handler->userdata);
@@ -1537,6 +1597,18 @@ static void sm_coro_entry(void *arg)
                         ywarn("wire: handler coro for kind=0x%02x code=%d returned cleanly "
                               "(process_input was supposed to loop forever)",
                               (unsigned)sm->current_kind, sm->current_code);
+                    }
+                    /* Respawn the coro NOW so the NEXT envelope gets a live
+                     * handler. If we left it finished, the lazy respawn at the
+                     * top of the next envelope's body would fire and drop that
+                     * envelope's body — i.e. one valid envelope after every
+                     * handler error would be silently lost. */
+                    struct yetty_ycore_void_result respawn_res = respawn_handler_coro(hc);
+                    if (YETTY_IS_ERR(respawn_res)) {
+                        sm->sm_result = YETTY_ERR(
+                            yetty_ycore_void, "wire: respawn after mid-envelope exit failed",
+                            respawn_res);
+                        return;
                     }
                     sm->current_handler = NULL;
                     break;

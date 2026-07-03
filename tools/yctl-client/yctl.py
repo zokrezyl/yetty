@@ -602,6 +602,15 @@ if click:
 
     @cli.command()
     @click.pass_context
+    def shutdown(ctx):
+        """Tell yetty to stop its event loop and exit cleanly."""
+        async def _run():
+            async with RpcClient(ctx.obj["host"], ctx.obj["port"]) as client:
+                await client.shutdown()
+        run_async(_run())
+
+    @cli.command()
+    @click.pass_context
     def ui_tree(ctx):
         """Get UI tree."""
         async def _run():

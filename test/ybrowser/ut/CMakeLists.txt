@@ -22,6 +22,17 @@ yetty_add_c_test(
     LABELS  golden browser
     TIMEOUT 30)
 
+# DOM-model contract (#422): element attribute readback (id/class/href/data-*),
+# text-content survival through the box tree, tag/class counting. Deterministic,
+# offline — no geometry pinning, so labelled `contract` rather than `golden`.
+yetty_add_c_test(
+    NAME    ybrowser_dom
+    SOURCES ybrowser-dom-test.c
+    LIBS    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    SHIMS   trace workpool
+    LABELS  contract browser
+    TIMEOUT 30)
+
 # Wikipedia rendering test — loads the actual Photography page snapshot
 # (committed alongside this CMakeLists.txt) and asserts geometric facts about
 # its layout. The canonical regression net for the user-reported "garbage

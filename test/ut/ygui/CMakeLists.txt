@@ -40,3 +40,13 @@ yetty_add_c_test(
     SHIMS   trace platform_thread platform_term
     LABELS  unit
     TIMEOUT 30)
+
+# Widget behaviour + mixin composition beyond layout (#420): slider press→value,
+# draggable mixin sequence, clickable reused by radio/selectable, tabbar model.
+yetty_add_c_test(
+    NAME    ygui_behavior
+    SOURCES behavior-test.c
+    LIBS    yetty_ygui yetty_ycore yetty_ydraw_core
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract
+    TIMEOUT 30)
