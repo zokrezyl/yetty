@@ -845,6 +845,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                        (int)(cls_len > 60 ? 60 : cls_len),
                        (const char *)(cls ? cls : (const lxb_char_t *)""),
                        (int)(cstyle_len > 200 ? 200 : cstyle_len), cstyle);
+                (void)cls; /* consumed only by the ydebug() above */
             }
 
             /* Inline style attribute — used as a fallback when

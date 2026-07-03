@@ -511,6 +511,7 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(struct
     } else if (blen >= 5 && memcmp(bytes, "data:", 5) == 0) {
         fmt = "DATA-URI";
     }
+    (void)fmt; /* consumed only by the ydebug() calls below */
 
     uint32_t *pixels = NULL;
     int w = 0, h = 0;
@@ -1200,6 +1201,7 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                        i, b->x, b->y, b->w, b->h, b->fg.r, b->fg.g, b->fg.b, b->fg.a,
                        b->font_weight, b->font_italic ? " i" : "", b->underline ? " u" : "", n,
                        b->text);
+                (void)n; /* consumed only by the ydebug() above */
             }
             if (b->text == NULL || b->text_len == 0) {
                 break;
