@@ -98,12 +98,19 @@
       let pq0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0, 1.0);
       let pq1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0, 1.0);
       let pq2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0, 1.0);
-      let s = sign(e0.x * e2.y - e0.y * e2.x);
-      let d = min(min(
-          vec2<f32>(dot(pq0, pq0), s * (v0.x * e0.y - v0.y * e0.x)),
-          vec2<f32>(dot(pq1, pq1), s * (v1.x * e1.y - v1.y * e1.x))),
-          vec2<f32>(dot(pq2, pq2), s * (v2.x * e2.y - v2.y * e2.x)));
-      return -sqrt(d.x) * sign(d.y);
+      // Inside/outside from the three edge half-plane tests, not from a single
+      // global winding sign(e0 x e2): that cross product collapses toward zero
+      // for thin/degenerate slivers (common when tessellating curves at large
+      // scale), and its sign() then flips on rounding — inverting the SDF so
+      // the triangle fills its COMPLEMENT and paints solid cell-sized tiles.
+      // A point is inside iff it is on the same side of all three edges, which
+      // is winding-independent and robust to near-degenerate triangles.
+      let dist_sq = min(min(dot(pq0, pq0), dot(pq1, pq1)), dot(pq2, pq2));
+      let c0 = v0.x * e0.y - v0.y * e0.x;
+      let c1 = v1.x * e1.y - v1.y * e1.x;
+      let c2 = v2.x * e2.y - v2.y * e2.x;
+      let inside = (c0 >= 0.0 && c1 >= 0.0 && c2 >= 0.0) || (c0 <= 0.0 && c1 <= 0.0 && c2 <= 0.0);
+      return select(sqrt(dist_sq), -sqrt(dist_sq), inside);
   aabb:
     code: |
       float minx = fminf(fminf(geom[0], geom[2]), geom[4]);
