@@ -23,6 +23,22 @@ option(YETTY_TVOS "Build for tvOS" OFF)
 set(WEBGPU_BACKEND "dawn" CACHE STRING "WebGPU backend (wgpu or dawn)")
 set(TOYBOX_PATH "" CACHE PATH "Path to Toybox binary")
 
+# Log-level gating: compile-time strip of the ytrace()/ydebug() macros.
+# The yinfo build passes -DYTRACE_ENABLE_YTRACE=0 -DYTRACE_ENABLE_YDEBUG=0 to
+# drop the two verbose levels while keeping yinfo/ywarn/yerror compiled in.
+# These translate to the header's own switches (YTRACE_C_ENABLE_TRACE /
+# YTRACE_C_ENABLE_DEBUG in include/yetty/ytrace/ytrace.h). Define them for
+# every target (add_compile_definitions applies to this directory and every
+# subdirectory / include()d platform target added below).
+option(YTRACE_ENABLE_YTRACE "Compile in the ytrace() trace-level log macro" ON)
+option(YTRACE_ENABLE_YDEBUG "Compile in the ydebug() debug-level log macro" ON)
+if(NOT YTRACE_ENABLE_YTRACE)
+    add_compile_definitions(YTRACE_C_ENABLE_TRACE=0)
+endif()
+if(NOT YTRACE_ENABLE_YDEBUG)
+    add_compile_definitions(YTRACE_C_ENABLE_DEBUG=0)
+endif()
+
 # Include CPM — clear stale CPM_DIRECTORY if CPM.cmake moved to a new path
 # (CPM silently returns early when CPM_DIRECTORY != CMAKE_CURRENT_LIST_DIR)
 get_filename_component(_CPM_EXPECTED_DIR "${YETTY_ROOT}/build-tools/yetty" REALPATH)
