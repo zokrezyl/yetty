@@ -14,3 +14,15 @@ yetty_add_c_test(
     SHIMS   trace platform_thread platform_term
     LABELS  contract terminal wire
     TIMEOUT 30)
+
+# Terminal-state matrix (#418): BCE, wide-glyph spill, autowrap, tab stops,
+# cursor save/restore, insert/delete char, scroll-region isolation, extended
+# SGR, and the alt-screen non-restore characterization. Pure grid model — no
+# memory-PTY or wire statemachine.
+yetty_add_c_test(
+    NAME    yvterm_state_matrix
+    SOURCES state-matrix-test.c
+    LIBS    yetty_yvterm yetty_yclass yetty_ywire yetty_ycore
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract terminal
+    TIMEOUT 30)

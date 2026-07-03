@@ -349,13 +349,21 @@ static void blank_cell(struct yetty_yvterm_text_cell *cell, uint32_t fg, uint32_
     cell->flags = 0;
 }
 
-static void reset_line(struct yetty_yvterm_grid *grid, struct yetty_yvterm_line *line)
+/* Blank every cell of a line to the given fg/bg and release its rich content.
+ * reset_line() uses the terminal default; erase (BCE) passes the pen colours. */
+static void fill_line_blank(struct yetty_yvterm_grid *grid, struct yetty_yvterm_line *line,
+                            uint32_t fg, uint32_t bg)
 {
     for (uint32_t col = 0; col < grid->cols; ++col) {
-        blank_cell(&line->text_cells[col], grid->default_fg, grid->default_bg);
+        blank_cell(&line->text_cells[col], fg, bg);
     }
     clear_line_rich(line, grid->cols);
     line->continuation = 0;
+}
+
+static void reset_line(struct yetty_yvterm_grid *grid, struct yetty_yvterm_line *line)
+{
+    fill_line_blank(grid, line, grid->default_fg, grid->default_bg);
 }
 
 static void blank_line(struct yetty_yvterm_grid *grid, uint32_t row)
@@ -537,13 +545,21 @@ static int cb_erase(VTermRect rect, int selective, void *user)
     struct yetty_yvterm_grid *grid = user;
     (void)selective;
 
+    /* Background-colour erase (BCE): cleared cells take the current pen
+     * background (with reverse applied, mirroring cb_putglyph), not the
+     * terminal default. Colour-filling TUIs (vim, tmux, htop) set an SGR
+     * background and then erase to paint regions. When no SGR background is
+     * set, pen_bg == default_bg, so ordinary clears are unaffected. */
+    uint32_t erase_fg = grid->pen_reverse ? grid->pen_bg : grid->pen_fg;
+    uint32_t erase_bg = grid->pen_reverse ? grid->pen_fg : grid->pen_bg;
+
     int whole_screen = rect.start_row <= 0 && rect.start_col <= 0 &&
                        (uint32_t)rect.end_row >= grid->visible_rows &&
                        (uint32_t)rect.end_col >= grid->cols;
 
     if (whole_screen) {
         for (uint32_t row = 0; row < grid->visible_rows; ++row) {
-            reset_line(grid, line_at(grid, row));
+            fill_line_blank(grid, line_at(grid, row), erase_fg, erase_bg);
             mark_dirty_row(grid, row);
         }
         if (grid->clear_hook_fn) {
@@ -563,8 +579,7 @@ static int cb_erase(VTermRect rect, int selective, void *user)
             if (col < 0 || (uint32_t)col >= grid->cols) {
                 continue;
             }
-            blank_cell(cell_at(grid, (uint32_t)row, (uint32_t)col), grid->default_fg,
-                       grid->default_bg);
+            blank_cell(cell_at(grid, (uint32_t)row, (uint32_t)col), erase_fg, erase_bg);
         }
         /* Erasing cells on a row that anchors owned rich content invalidates
          * that content too — release it, mirroring cb_putglyph's anchor-line
