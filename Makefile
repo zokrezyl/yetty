@@ -304,6 +304,18 @@ test-network: build-desktop-ytrace-release ## Run only the network-labeled tests
 test-wpt: build-desktop-ytrace-release ## Run the ybrowser WPT geometry suite
 	PATH="$(SYSTEM_PATH)" ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) --output-on-failure -L 'wpt'
 
+.PHONY: test-render
+test-render: build-desktop-ytrace-release ## Run render/GPU tests (needs a display/GPU; nightly)
+	PATH="$(SYSTEM_PATH)" ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) --output-on-failure -L 'render'
+
+.PHONY: test-e2e
+test-e2e: build-desktop-ytrace-release ## Run launched-yetty / yctl E2E tests (needs a display; nightly)
+	PATH="$(SYSTEM_PATH)" ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) --output-on-failure -L 'e2e'
+
+.PHONY: test-nightly
+test-nightly: build-desktop-ytrace-release ## Run all non-fast lanes: network + wpt + render + e2e (E2E/render self-skip headless)
+	PATH="$(SYSTEM_PATH)" ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) --output-on-failure -L 'network|wpt|render|e2e'
+
 .PHONY: test-asan
 test-asan: build-desktop-ytrace-asan ## Run the deterministic test gate under ASAN
 	PATH="$(SYSTEM_PATH)" ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_ASAN) --output-on-failure -LE '$(CTEST_EXCLUDE_ASAN)'

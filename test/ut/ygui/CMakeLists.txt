@@ -30,3 +30,13 @@ yetty_add_c_test(
     SHIMS   trace platform_thread platform_term
     LABELS  contract
     TIMEOUT 30)
+
+# Layout matrix (justify/align/gap/flex/nested) + click-driven event state
+# machines (clickable, checkbox, toggle).
+yetty_add_c_test(
+    NAME    ygui_matrix
+    SOURCES matrix-test.c
+    LIBS    yetty_ygui yetty_ycore yetty_ydraw_core
+    SHIMS   trace platform_thread platform_term
+    LABELS  unit
+    TIMEOUT 30)

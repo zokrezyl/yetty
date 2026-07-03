@@ -47,6 +47,20 @@ if(YETTY_ENABLE_FEATURE_YMARKDOWN AND TARGET yetty_ymarkdown)
     add_subdirectory(ut/ymarkdown)
 endif()
 
+# Parser/render modules — golden parse/IR/ydraw tests, gated on their target.
+if(TARGET yetty_ychart)
+    add_subdirectory(ut/ychart)
+endif()
+if(TARGET yetty_ycircuit)
+    add_subdirectory(ut/ycircuit)
+endif()
+if(TARGET yetty_ymusic)
+    add_subdirectory(ut/ymusic)
+endif()
+if(TARGET yetty_ysvg)
+    add_subdirectory(ut/ysvg)
+endif()
+
 if(TARGET yetty_ygui)
     add_subdirectory(ut/ygui)
 endif()
@@ -68,3 +82,9 @@ endif()
 if(TARGET yetty_ylexbor)
     add_subdirectory(integration/ylexbor)
 endif()
+
+# E2E: launched-yetty + yctl smoke (nightly/manual; self-skips headless). The
+# yetty executable target is created after this file runs, so the e2e test
+# points at the build-dir binary path and its script self-skips if it is absent
+# rather than gating on if(TARGET yetty) here.
+add_subdirectory(e2e)

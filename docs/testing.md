@@ -48,6 +48,9 @@ Developer- and CI-facing targets:
 | `make test-network` | Explicitly run `network`-labeled tests. |
 | `make test-wpt` | The ybrowser WPT geometry suite. |
 | `make test-asan` | The sanitizer lane. |
+| `make test-render` | `render`/GPU tests (needs a display/GPU). Nightly/manual. |
+| `make test-e2e` | Launched-`yetty` + `yctl`-driven E2E tests (needs a display). Nightly/manual; self-skips headless. |
+| `make test-nightly` | All non-fast lanes at once: `network` + `wpt` + `render` + `e2e`. |
 
 `make test-fast` is defined as build-if-needed plus:
 
@@ -246,12 +249,19 @@ There is no separate per-PR Debug ctest lane: once the harness is NDEBUG-safe,
 Release tests are meaningful, and the ASAN lane provides the non-optimized
 diagnostic path better than a plain Debug lane would.
 
-**Nightly / manual:**
+**Nightly / manual** (`.woodpecker/nightly.yml`, cron + manual trigger only —
+never per-PR). It builds Release then runs `make test-nightly` (the union of the
+lanes below). On the headless Docker runner the `render`/`e2e` tests self-skip
+(ctest `SKIP_RETURN_CODE 77`); `network` + `wpt` execute. Run individual lanes
+locally with `make test-render` / `make test-e2e` / `make test-network` /
+`make test-wpt`.
 
 - ybrowser network render sanity (`network`)
 - broad WPT geometry sweep (`wpt`)
 - GPU render-diff / tile-diff (`gpu`, `render`)
-- `yctl`-driven E2E (`e2e`)
+- `yctl`-driven E2E: launched-`yetty` process startup → RPC bind → clean
+  shutdown (`e2e`, `display`, `slow`). `test/e2e/yctl-smoke.py`; self-skips when
+  there is no display or yetty binary.
 
 **Other platforms (Windows/macOS/webasm):** at minimum configure + build; then
 run the headless C tests that do not depend on unavailable platform pieces.
