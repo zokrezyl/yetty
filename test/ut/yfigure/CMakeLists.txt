@@ -22,3 +22,14 @@ yetty_add_c_test(
     SHIMS   trace platform_thread platform_term
     LABELS  contract
     TIMEOUT 30)
+
+# Model / hit-test / dirty-propagation matrix (#419): hidden fall-through,
+# hit after delete, rect-move tracking, and dirty propagating up to the
+# container on every child mutation.
+yetty_add_c_test(
+    NAME    yfigure_model
+    SOURCES model-test.c
+    LIBS    yetty_yfigure yetty_yclass yetty_ydraw_core yetty_ycore
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract
+    TIMEOUT 30)

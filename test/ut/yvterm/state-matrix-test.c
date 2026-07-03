@@ -202,14 +202,21 @@ static void test_bce(struct ytest *test)
 
     uint32_t default_bg = cell_at(test, grid, 0, 0)->bg;
 
-    /* Set red background, clear the whole line, then reset. */
-    feeds(test, grid, "\033[41m\033[2K\033[0m");
-    uint32_t erased_bg = cell_at(test, grid, 0, 5)->bg;
-    YTEST_CHECK(test, erased_bg != default_bg);
+    /* Capture the concrete packed colour a red background produces by writing a
+     * glyph with it — this is exactly what BCE must fill erased cells with. */
+    feeds(test, grid, "\033[41mX\033[0m");
+    uint32_t red_bg = cell_at(test, grid, 0, 0)->bg;
+    YTEST_CHECK(test, red_bg != default_bg);
 
-    /* A fresh line with default background is unaffected. */
-    feeds(test, grid, "\033[2;1H\033[2K");
-    YTEST_CHECK_EQ_SIZE(test, cell_at(test, grid, 1, 5)->bg, default_bg);
+    /* Set red background, clear the whole (second) line, then reset. The erased
+     * cells must carry the SAME red background as the written glyph, not the
+     * default. */
+    feeds(test, grid, "\033[2;1H\033[41m\033[2K\033[0m");
+    YTEST_CHECK_EQ_SIZE(test, cell_at(test, grid, 1, 5)->bg, red_bg);
+
+    /* A fresh line cleared with the default background is unaffected. */
+    feeds(test, grid, "\033[3;1H\033[2K");
+    YTEST_CHECK_EQ_SIZE(test, cell_at(test, grid, 2, 5)->bg, default_bg);
 
     yetty_yvterm_grid_dispose(grid);
 }
