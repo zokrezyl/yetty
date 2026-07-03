@@ -132,6 +132,11 @@ static struct yetty_ycore_int_result yetty_event_handler(
 
         ytime_start(full_frame);
 
+        /* Advance the shared animation clock once, before any pane/figure
+         * renders, so every time uniform sampled this frame observes the
+         * same value and effects stay phase-coherent across all shaders. */
+        yetty_yframework_frame_tick(yetty->runtime);
+
         /* Probe the yui scene-canvas BEFORE the panes draw. If yui has
          * pending chrome mutations (tab add/remove, dialog toggle,
          * statusbar update, menu open, splitter move) it'll paint over

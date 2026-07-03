@@ -76,9 +76,24 @@ struct yetty_yframework {
      * The struct is private to yframework.c; consumers only see this
      * pointer + the register_figure_factories entry point. */
     struct yetty_yframework_factory_state *factory_state;
+
+    /* Shared per-frame animation clock. Stamped once at the top of each
+     * render frame by yetty_yframework_frame_tick(), so every layer, figure
+     * and effect shader rendered in that frame writes the identical value
+     * into its own time uniform. Effects therefore stay phase-coherent
+     * across all shaders instead of each ticking from its own creation
+     * origin. Value is seconds since framework creation (zero-based). */
+    double frame_origin_sec; /* monotonic time captured at create        */
+    double frame_time_sec;   /* now - frame_origin_sec, updated per frame */
+    double frame_delta_sec;  /* seconds since the previous frame tick     */
 };
 
 YETTY_YRESULT_DECLARE(yetty_yframework_ptr, struct yetty_yframework *);
+
+/* Advance the shared per-frame animation clock. Call exactly once per frame,
+ * before any layer/figure renders, so all time uniforms sampled during the
+ * frame observe the same value. Safe to call with a NULL rt (no-op). */
+void yetty_yframework_frame_tick(struct yetty_yframework *rt);
 
 /* Build the runtime from a populated yplatform:platform object. On success the
  * returned pointer owns everything in the "owned" block above plus the

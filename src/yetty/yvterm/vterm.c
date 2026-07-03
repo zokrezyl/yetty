@@ -26,6 +26,7 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ycore/util.h>
 #include <yetty/yetty/yetty.h>
 #include <yetty/yfigure/figure.h>
 #include <yetty/yfont/ms-font.h>
@@ -84,9 +85,28 @@ struct vterm_uniforms {
     float visual_zoom_scale;
     float visual_zoom_offset_x;
     float visual_zoom_offset_y;
+    /* Shared animation clock, pointer positions, and the two OSC-driven effect
+     * selections (post-color + coordinate distortion), each index 0 = none
+     * with 6 params. Laid out to stay 16-byte aligned (160 bytes total). */
+    float time;
+    float mouse_x; /* pixels within the pane; falls back to the cursor centre */
+    float mouse_y;
+    uint32_t post_fx_index;
+    float post_fx_p0;
+    float post_fx_p1;
+    float post_fx_p2;
+    float post_fx_p3;
+    float post_fx_p4;
+    float post_fx_p5;
+    uint32_t coord_fx_index;
+    float coord_fx_p0;
+    float coord_fx_p1;
+    float coord_fx_p2;
+    float coord_fx_p3;
+    float coord_fx_p4;
+    float coord_fx_p5;
+    uint32_t pad_a;
     uint32_t pad_b;
-    uint32_t pad_c;
-    uint32_t pad_d;
 };
 
 /* `struct yetty_ydraw_composite` is forward-declared in grid.c and kept opaque
@@ -173,10 +193,29 @@ struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("include@yetty/ytermi
 
     /* ---- GPU text renderer (ported from poc/yvterm-new) ---- */
     /* Borrowed from the framework. */
+    struct yetty_yframework *runtime; /* shared animation clock (frame_time_sec) */
     WGPUDevice device;
     WGPUQueue queue;
     WGPUTextureFormat target_format;
     struct yetty_yfont_ms_font *font;
+
+    /* OSC-driven post-color effect for the (opaque) terminal text surface.
+     * index 0 = none; matches effects-lib.wgsl / the OSC protocol numbering. */
+    uint32_t post_fx_index;
+    float post_fx_params[6];
+    /* OSC-driven coordinate distortion (fisheye/barrel/swirl/…). index 0 = none. */
+    uint32_t coord_fx_index;
+    float coord_fx_params[6];
+    /* Live pointer position in pane-local pixels (set on mouse move). Until the
+     * pointer first enters the pane, the shader falls back to the cursor cell
+     * centre. Mouse-following effects (fisheye, magnify-mouse) use this. */
+    float mouse_local_x;
+    float mouse_local_y;
+    int have_mouse;
+    /* Combined shader source = effects-lib.wgsl (or a no-op stub) + the text
+     * shader. Owned; the shader module holds no reference after creation. */
+    char *combined_shader;
+    struct yetty_ycore_buffer effects_lib_code;
 
     /* Owned wgpu resources. */
     WGPUShaderModule shader_module;
@@ -257,7 +296,14 @@ static const char *vterm_text_wgsl(void)
         "    visual_zoom_scale: f32,\n"
         "    visual_zoom_offset_x: f32,\n"
         "    visual_zoom_offset_y: f32,\n"
-        "    pad_b: u32, pad_c: u32, pad_d: u32,\n"
+        "    time: f32, mouse_x: f32, mouse_y: f32,\n"
+        "    post_fx_index: u32,\n"
+        "    post_fx_p0: f32, post_fx_p1: f32, post_fx_p2: f32,\n"
+        "    post_fx_p3: f32, post_fx_p4: f32, post_fx_p5: f32,\n"
+        "    coord_fx_index: u32,\n"
+        "    coord_fx_p0: f32, coord_fx_p1: f32, coord_fx_p2: f32,\n"
+        "    coord_fx_p3: f32, coord_fx_p4: f32, coord_fx_p5: f32,\n"
+        "    pad_a: u32, pad_b: u32,\n"
         "};\n"
         "@group(0) @binding(0) var<storage, read> cells: array<u32>;\n"
         "@group(0) @binding(1) var<storage, read> glyph_meta: array<u32>;\n"
@@ -325,7 +371,17 @@ static const char *vterm_text_wgsl(void)
         "    let vz = max(uni.visual_zoom_scale, 0.0001);\n"
         "    let center = vec2<f32>(grid_w, grid_h) * 0.5;\n"
         "    let voff = vec2<f32>(uni.visual_zoom_offset_x, uni.visual_zoom_offset_y);\n"
-        "    let px = (in.grid_pixel - center) / vz + center + voff;\n"
+        "    var px = (in.grid_pixel - center) / vz + center + voff;\n"
+        /* Pointer positions in pane pixels: mouse (falls back to cursor) and
+         * the terminal cursor cell centre. */
+        "    let fx_cursor = vec2<f32>((f32(uni.cursor_col) + 0.5) * uni.cell_size.x,\n"
+        "                              (f32(uni.cursor_row) + 0.5) * uni.cell_size.y);\n"
+        "    let fx_mouse = vec2<f32>(uni.mouse_x, uni.mouse_y);\n"
+        /* Apply coordinate distortion after the zoom inversion. */
+        "    px = fx_coord_apply(uni.coord_fx_index, px, vec2<f32>(grid_w, grid_h),\n"
+        "                        uni.time, fx_mouse, fx_cursor,\n"
+        "                        uni.coord_fx_p0, uni.coord_fx_p1, uni.coord_fx_p2,\n"
+        "                        uni.coord_fx_p3, uni.coord_fx_p4, uni.coord_fx_p5);\n"
         "    if (px.x < 0.0 || px.y < 0.0 || px.x >= grid_w || px.y >= grid_h) {\n"
         "        return vec4<f32>(0.0,0.0,0.0,1.0);\n"
         "    }\n"
@@ -383,6 +439,15 @@ static const char *vterm_text_wgsl(void)
         "    var composed = mix(bg, fg, alpha);\n"
         "    if (is_cursor || selected) {\n"
         "        composed = mix(fg, bg, alpha);\n" /* inverted: fg fill, glyph punched in bg */
+        "    }\n"
+        /* Post-color effect over the opaque terminal surface. Shared clock in
+         * uni.time keeps animation in phase with every other shader. */
+        "    if (uni.post_fx_index != 0u) {\n"
+        "        let screen = uni.grid_size * uni.cell_size;\n"
+        "        composed = fx_post_apply(uni.post_fx_index, composed, in.grid_pixel, screen,\n"
+        "            uni.time, fx_mouse, fx_cursor, uni.cell_size,\n"
+        "            uni.post_fx_p0, uni.post_fx_p1, uni.post_fx_p2,\n"
+        "            uni.post_fx_p3, uni.post_fx_p4, uni.post_fx_p5);\n"
         "    }\n"
         "    return vec4<f32>(composed, 1.0);\n"
         "}\n";
@@ -470,11 +535,42 @@ static struct yetty_ycore_void_result vterm_ensure_row_scratch(struct yetty_yvte
     return YETTY_OK_VOID();
 }
 
+/* No-op effect fns used when effects-lib.wgsl is unavailable. Signatures MUST
+ * match effects-lib.wgsl so the text shader's calls still resolve. */
+static const char *vterm_fx_stub(void)
+{
+    static const char stub[] =
+        "fn fx_post_apply(index: u32, color: vec3<f32>, pixel: vec2<f32>, screen: vec2<f32>, "
+        "time: f32, mouse: vec2<f32>, cursor: vec2<f32>, cell: vec2<f32>, p0: f32, p1: f32, "
+        "p2: f32, p3: f32, p4: f32, p5: f32) -> vec3<f32> { return color; }\n"
+        "fn fx_coord_apply(index: u32, pixel: vec2<f32>, screen: vec2<f32>, time: f32, "
+        "mouse: vec2<f32>, cursor: vec2<f32>, p0: f32, p1: f32, p2: f32, p3: f32, p4: f32, "
+        "p5: f32) -> vec2<f32> { return pixel; }\n";
+    return stub;
+}
+
 static struct yetty_ycore_void_result vterm_create_pipeline(struct yetty_yvterm_vterm *vterm)
 {
+    /* Combined shader = effects library (or stub) + the text shader. */
+    const char *lib = (vterm->effects_lib_code.data && vterm->effects_lib_code.size > 0)
+                          ? (const char *)vterm->effects_lib_code.data
+                          : vterm_fx_stub();
+    const char *text = vterm_text_wgsl();
+    size_t lib_len = strlen(lib);
+    size_t text_len = strlen(text);
+    free(vterm->combined_shader);
+    vterm->combined_shader = malloc(lib_len + text_len + 2);
+    if (!vterm->combined_shader) {
+        return YETTY_ERR(yetty_ycore_void, "vterm: combined shader alloc");
+    }
+    memcpy(vterm->combined_shader, lib, lib_len);
+    vterm->combined_shader[lib_len] = '\n';
+    memcpy(vterm->combined_shader + lib_len + 1, text, text_len);
+    vterm->combined_shader[lib_len + 1 + text_len] = '\0';
+
     WGPUShaderSourceWGSL wgsl = {0};
     wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
-    wgsl.code = vterm_sv(vterm_text_wgsl());
+    wgsl.code = vterm_sv(vterm->combined_shader);
     WGPUShaderModuleDescriptor shader_desc = {0};
     shader_desc.nextInChain = &wgsl.chain;
     shader_desc.label = vterm_sv("yvterm text shader");
@@ -748,6 +844,7 @@ static struct yetty_ycore_void_result vterm_gpu_init(struct yetty_yvterm_vterm *
         return YETTY_OK_VOID();
     }
     struct yetty_yframework *runtime = context->runtime;
+    vterm->runtime = runtime;
     vterm->device = runtime->gpu.device;
     vterm->queue = runtime->gpu.queue;
     vterm->target_format = runtime->gpu.surface_format;
@@ -790,6 +887,22 @@ static struct yetty_ycore_void_result vterm_gpu_init(struct yetty_yvterm_vterm *
     struct pixel_size_result cell = vterm->font->ops->get_cell_size(vterm->font);
     if (YETTY_IS_OK(cell)) {
         vterm->cell_size = cell.value;
+    }
+
+    /* Load the effects library so vterm_create_pipeline can prepend it to the
+     * text shader. Non-fatal: a stub is used if the asset is absent (effects
+     * become no-ops but text still renders). */
+    if (shaders_dir && shaders_dir[0]) {
+        char fx_path[512];
+        snprintf(fx_path, sizeof(fx_path), "%s/effects-lib.wgsl", shaders_dir);
+        struct yetty_ycore_buffer_result fx = yetty_ycore_read_file(fx_path);
+        if (YETTY_IS_OK(fx)) {
+            vterm->effects_lib_code = fx.value;
+        } else {
+            ywarn("vterm: effects-lib.wgsl not loaded (%s) — effects disabled",
+                  fx.error.msg ? fx.error.msg : "read failed");
+            yetty_ycore_error_destroy(fx.error);
+        }
     }
 
     struct yetty_ycore_void_result pr = vterm_create_pipeline(vterm);
@@ -899,6 +1012,10 @@ static void vterm_gpu_destroy(struct yetty_yvterm_vterm *vterm)
         wgpuShaderModuleRelease(vterm->shader_module);
         vterm->shader_module = NULL;
     }
+    free(vterm->combined_shader);
+    vterm->combined_shader = NULL;
+    free(vterm->effects_lib_code.data);
+    vterm->effects_lib_code.data = NULL;
     free(vterm->row_scratch);
     vterm->row_scratch = NULL;
     vterm->row_scratch_cols = 0;
@@ -1025,6 +1142,32 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
         vterm->visual_zoom_scale > 0.0f ? vterm->visual_zoom_scale : 1.0f;
     vterm->uniforms.visual_zoom_offset_x = vterm->visual_zoom_offset_x;
     vterm->uniforms.visual_zoom_offset_y = vterm->visual_zoom_offset_y;
+    /* Shared animation clock + OSC-driven post-color effect selection. Every
+     * shader this frame reads the same frame_time_sec, so effects stay in
+     * phase across the text plane, ydraw layer and figures. */
+    vterm->uniforms.time = vterm->runtime ? (float)vterm->runtime->frame_time_sec : 0.0f;
+    vterm->uniforms.post_fx_index = vterm->post_fx_index;
+    vterm->uniforms.post_fx_p0 = vterm->post_fx_params[0];
+    vterm->uniforms.post_fx_p1 = vterm->post_fx_params[1];
+    vterm->uniforms.post_fx_p2 = vterm->post_fx_params[2];
+    vterm->uniforms.post_fx_p3 = vterm->post_fx_params[3];
+    vterm->uniforms.post_fx_p4 = vterm->post_fx_params[4];
+    vterm->uniforms.post_fx_p5 = vterm->post_fx_params[5];
+    vterm->uniforms.coord_fx_index = vterm->coord_fx_index;
+    vterm->uniforms.coord_fx_p0 = vterm->coord_fx_params[0];
+    vterm->uniforms.coord_fx_p1 = vterm->coord_fx_params[1];
+    vterm->uniforms.coord_fx_p2 = vterm->coord_fx_params[2];
+    vterm->uniforms.coord_fx_p3 = vterm->coord_fx_params[3];
+    vterm->uniforms.coord_fx_p4 = vterm->coord_fx_params[4];
+    vterm->uniforms.coord_fx_p5 = vterm->coord_fx_params[5];
+    /* Live pointer, or the cursor cell centre until the mouse first enters. */
+    if (vterm->have_mouse) {
+        vterm->uniforms.mouse_x = vterm->mouse_local_x;
+        vterm->uniforms.mouse_y = vterm->mouse_local_y;
+    } else {
+        vterm->uniforms.mouse_x = ((float)cursor_col + 0.5f) * vterm->cell_size.width;
+        vterm->uniforms.mouse_y = ((float)cursor_row + 0.5f) * vterm->cell_size.height;
+    }
     wgpuQueueWriteBuffer(vterm->queue, vterm->uniform_buffer, 0, &vterm->uniforms,
                          sizeof(struct vterm_uniforms));
 
@@ -1770,6 +1913,88 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_visual_zoom(struct yetty_y
     struct yetty_ycore_void_result dr = yetty_yfigure_figure_dirty_set(obj, 1);
     if (YETTY_IS_ERR(dr)) {
         yetty_ycore_error_destroy(dr.error);
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Set the OSC-driven post-color effect for the terminal text surface. index 0
+ * disables it; params are the 6 effect parameters (unused ones may be 0). */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_set_post_effect(struct yetty_yclass_object *obj,
+                                                                  uint32_t index, float p0, float p1,
+                                                                  float p2, float p3, float p4,
+                                                                  float p5)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm set_post_effect: from_obj");
+    struct yetty_yvterm_vterm *vterm = vterm_res.value;
+    vterm->post_fx_index = index;
+    vterm->post_fx_params[0] = p0;
+    vterm->post_fx_params[1] = p1;
+    vterm->post_fx_params[2] = p2;
+    vterm->post_fx_params[3] = p3;
+    vterm->post_fx_params[4] = p4;
+    vterm->post_fx_params[5] = p5;
+    vterm->view_dirty = 1;
+    struct yetty_ycore_void_result dr = yetty_yfigure_figure_dirty_set(obj, 1);
+    if (YETTY_IS_ERR(dr)) {
+        yetty_ycore_error_destroy(dr.error);
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Set the OSC-driven coordinate distortion for the terminal text surface.
+ * index 0 disables it; p0/p1 are strength and radius/aspect. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_set_coord_effect(struct yetty_yclass_object *obj,
+                                                                   uint32_t index, float p0, float p1,
+                                                                   float p2, float p3, float p4,
+                                                                   float p5)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm set_coord_effect: from_obj");
+    struct yetty_yvterm_vterm *vterm = vterm_res.value;
+    vterm->coord_fx_index = index;
+    vterm->coord_fx_params[0] = p0;
+    vterm->coord_fx_params[1] = p1;
+    vterm->coord_fx_params[2] = p2;
+    vterm->coord_fx_params[3] = p3;
+    vterm->coord_fx_params[4] = p4;
+    vterm->coord_fx_params[5] = p5;
+    vterm->view_dirty = 1;
+    struct yetty_ycore_void_result dr = yetty_yfigure_figure_dirty_set(obj, 1);
+    if (YETTY_IS_ERR(dr)) {
+        yetty_ycore_error_destroy(dr.error);
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Report the live pointer position (pane-local pixels) so mouse-following
+ * effects track it. Only forces a repaint while a coordinate effect is active
+ * — otherwise pointer motion must not drive frames. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_set_mouse(struct yetty_yclass_object *obj,
+                                                            float x, float y)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm set_mouse: from_obj");
+    struct yetty_yvterm_vterm *vterm = vterm_res.value;
+    vterm->mouse_local_x = x;
+    vterm->mouse_local_y = y;
+    vterm->have_mouse = 1;
+    if (vterm->coord_fx_index != 0u) {
+        vterm->view_dirty = 1;
+        struct yetty_ycore_void_result dr = yetty_yfigure_figure_dirty_set(obj, 1);
+        if (YETTY_IS_ERR(dr)) {
+            yetty_ycore_error_destroy(dr.error);
+        }
+        if (vterm->request_render_fn) {
+            struct yetty_ycore_void_result rr =
+                vterm->request_render_fn(vterm->request_render_userdata);
+            if (YETTY_IS_ERR(rr)) {
+                yetty_ycore_error_destroy(rr.error);
+            }
+        }
     }
     return YETTY_OK_VOID();
 }

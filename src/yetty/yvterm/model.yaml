@@ -234,6 +234,10 @@ classes:
         type: float
         get: false
         set: false
+      - name: runtime
+        type: "struct yetty_yframework *"
+        get: false
+        set: false
       - name: device
         type: int
         get: false
@@ -248,6 +252,42 @@ classes:
         set: false
       - name: font
         type: "struct yetty_yfont_ms_font *"
+        get: false
+        set: false
+      - name: post_fx_index
+        type: uint32_t
+        get: false
+        set: false
+      - name: post_fx_params
+        type: "float[6]"
+        get: false
+        set: false
+      - name: coord_fx_index
+        type: uint32_t
+        get: false
+        set: false
+      - name: coord_fx_params
+        type: "float[6]"
+        get: false
+        set: false
+      - name: mouse_local_x
+        type: float
+        get: false
+        set: false
+      - name: mouse_local_y
+        type: float
+        get: false
+        set: false
+      - name: have_mouse
+        type: int
+        get: false
+        set: false
+      - name: combined_shader
+        type: "char *"
+        get: false
+        set: false
+      - name: effects_lib_code
+        type: struct yetty_ycore_buffer
         get: false
         set: false
       - name: shader_module
@@ -1049,6 +1089,63 @@ exposed:
       - name: offset_y
         type: float
     doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_post_effect
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: uint32_t
+      - name: p0
+        type: float
+      - name: p1
+        type: float
+      - name: p2
+        type: float
+      - name: p3
+        type: float
+      - name: p4
+        type: float
+      - name: p5
+        type: float
+    doc: "/* Set the OSC-driven post-color effect for the terminal text surface. index 0
+ * disables it; params are the 6 effect parameters (unused ones may be 0). */"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_coord_effect
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: index
+        type: uint32_t
+      - name: p0
+        type: float
+      - name: p1
+        type: float
+      - name: p2
+        type: float
+      - name: p3
+        type: float
+      - name: p4
+        type: float
+      - name: p5
+        type: float
+    doc: "/* Set the OSC-driven coordinate distortion for the terminal text surface.
+ * index 0 disables it; p0/p1 are strength and radius/aspect. */"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_mouse
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+    doc: "/* Report the live pointer position (pane-local pixels) so mouse-following
+ * effects track it. Only forces a repaint while a coordinate effect is active
+ * — otherwise pointer motion must not drive frames. */"
 types:
   - name: pixel_size_result
     kind: result
@@ -1103,11 +1200,43 @@ types:
         type: float
       - name: visual_zoom_offset_y
         type: float
+      - name: time
+        type: float
+      - name: mouse_x
+        type: float
+      - name: mouse_y
+        type: float
+      - name: post_fx_index
+        type: uint32_t
+      - name: post_fx_p0
+        type: float
+      - name: post_fx_p1
+        type: float
+      - name: post_fx_p2
+        type: float
+      - name: post_fx_p3
+        type: float
+      - name: post_fx_p4
+        type: float
+      - name: post_fx_p5
+        type: float
+      - name: coord_fx_index
+        type: uint32_t
+      - name: coord_fx_p0
+        type: float
+      - name: coord_fx_p1
+        type: float
+      - name: coord_fx_p2
+        type: float
+      - name: coord_fx_p3
+        type: float
+      - name: coord_fx_p4
+        type: float
+      - name: coord_fx_p5
+        type: float
+      - name: pad_a
+        type: uint32_t
       - name: pad_b
-        type: uint32_t
-      - name: pad_c
-        type: uint32_t
-      - name: pad_d
         type: uint32_t
   - name: yetty_yclass_object_ptr_result
     kind: result
@@ -1121,6 +1250,15 @@ types:
             type: "struct yetty_yclass_object *"
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_ycore_buffer
+    kind: struct
+    fields:
+      - name: data
+        type: "uint8_t *"
+      - name: capacity
+        type: size_t
+      - name: size
+        type: size_t
   - name: yetty_ycore_const_uint32_ptr_result
     kind: result
     fields:
