@@ -108,6 +108,16 @@ rot.
 - **Domain labels, optional, for selection only** (never for gating): `browser`,
   `wpt`, `terminal`, `wire`, `rpc`.
 
+`asan-skip` is the last resort — it drops a whole test from the ASAN lane. A test
+that only trips LeakSanitizer on a **known third-party lifetime allocation**
+(e.g. Fontconfig's process-global config, or Lexbor/libcss engine internals)
+should instead **run** under ASAN with that specific leak family
+suppressed by `test/lsan.supp` (wired via `LSAN_OPTIONS` in `make test-asan`).
+That keeps the test exercising Yetty code — a new Yetty-owned leak still fails —
+while narrowly ignoring the documented third-party family. There are currently
+**no** `asan-skip` tests; see `test/lsan.supp` and issue #414 for the rationale
+behind each suppression.
+
 Gates:
 
 ```sh

@@ -7,19 +7,19 @@
 # domain `browser`. Registered through yetty_add_c_test(); the `workpool` shim
 # supplies ybrowser's async image-fetch worker-pool symbols.
 #
-# asan-skip: these exercise the libcss/Lexbor CSS+DOM stack, which leaks under
-# LeakSanitizer (css_select_style result sets, lxb_dom_document_css_init via
-# yetty_ylexbor_create, cb_node_classes). These are pre-existing third-party
-# lifetime leaks — this suite only inherited them by joining the label policy,
-# it did not introduce them. Excluded from the asan lane pending a dedicated
-# ybrowser/ylexbor lifetime cleanup.
+# These exercise the libcss/Lexbor CSS+DOM stack, which retains internal
+# lifetime state LeakSanitizer flags (css_select_style, lxb_dom_document_css_init
+# via yetty_ylexbor_create, cb_node_classes). The tests create+destroy their
+# instances and free select results; the leaks are third-party engine internals.
+# Suppressed narrowly via test/lsan.supp (issue #414) rather than asan-skipped,
+# so the tests still run under ASAN and catch any new Yetty-owned leak.
 
 yetty_add_c_test(
     NAME    ybrowser_layout
     SOURCES ybrowser-layout-test.c
     LIBS    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core
     SHIMS   trace workpool
-    LABELS  golden browser asan-skip
+    LABELS  golden browser
     TIMEOUT 30)
 
 # Wikipedia rendering test — loads the actual Photography page snapshot
@@ -31,7 +31,7 @@ yetty_add_c_test(
     SOURCES ybrowser-wikipedia-test.c
     LIBS    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core
     SHIMS   trace workpool
-    LABELS  golden browser asan-skip
+    LABELS  golden browser
     TIMEOUT 30)
 target_compile_definitions(ybrowser_wikipedia-test PRIVATE
     YBROWSER_WIKI_PAGE=\"${CMAKE_CURRENT_SOURCE_DIR}/photography.html\")
@@ -43,7 +43,7 @@ yetty_add_c_test(
     SOURCES ybrowser-inline-test.c
     LIBS    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core
     SHIMS   trace workpool
-    LABELS  golden browser asan-skip
+    LABELS  golden browser
     TIMEOUT 30)
 
 # Pins the serialized ydraw drawable list ybrowser emits (image bounds,
@@ -53,7 +53,7 @@ yetty_add_c_test(
     SOURCES ybrowser-paint-test.c
     LIBS    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core
     SHIMS   trace workpool
-    LABELS  golden browser asan-skip
+    LABELS  golden browser
     TIMEOUT 30)
 
 # Python-driven suites that need the built ybrowser CLI. Both self-skip

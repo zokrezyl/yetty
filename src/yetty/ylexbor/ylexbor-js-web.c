@@ -900,8 +900,10 @@ static JSValue js_getComputedStyle(JSContext *ctx, JSValueConst this_val, int ar
     }
     /* Return the same `style` proxy we use for el.style — JS code
 	 * that only reads inline-style values keeps working; reads of
-	 * properties not set in the inline style get "". */
-    return JS_DupValue(ctx, JS_GetPropertyStr(ctx, argv[0], "style"));
+	 * properties not set in the inline style get "". JS_GetPropertyStr
+	 * already returns an owned reference we transfer to the caller;
+	 * don't JS_DupValue it or the original reference leaks. */
+    return JS_GetPropertyStr(ctx, argv[0], "style");
 }
 
 /* ===========================================================================

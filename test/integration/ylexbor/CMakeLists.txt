@@ -78,12 +78,12 @@ foreach(page IN LISTS YLEXBOR_TEST_PAGES)
     # modules); domain: browser. SKIP_RETURN_CODE keeps the 77 convention for
     # any page the runner declines to execute.
     #
-    # asan-skip: the Lexbor/libcss CSS+DOM stack (lxb_dom_document_css_init,
-    # css_select_style) leaks under LeakSanitizer — a pre-existing third-party
-    # lifetime issue, not introduced by wiring these into the label policy.
-    # Excluded from the asan lane pending a ylexbor lifetime cleanup.
+    # The Lexbor/libcss CSS+DOM engine retains internal lifetime state
+    # (lxb_dom_document_css_init, css_select_style) that LeakSanitizer flags.
+    # That third-party family is suppressed narrowly via test/lsan.supp
+    # (issue #414) rather than asan-skipped, so these still run under ASAN.
     set_tests_properties(ylexbor_wpt_${name} PROPERTIES
-        LABELS                  "integration;browser;asan-skip"
+        LABELS                  "integration;browser"
         TIMEOUT                 30
         SKIP_RETURN_CODE        77
         FAIL_REGULAR_EXPRESSION "^not ok"

@@ -318,7 +318,11 @@ test-nightly: build-desktop-ytrace-release ## Run all non-fast lanes: network + 
 
 .PHONY: test-asan
 test-asan: build-desktop-ytrace-asan ## Run the deterministic test gate under ASAN
-	PATH="$(SYSTEM_PATH)" ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_ASAN) --output-on-failure -LE '$(CTEST_EXCLUDE_ASAN)'
+	# LSAN_OPTIONS points at test/lsan.supp so the documented third-party leak
+	# families (Fontconfig, Lexbor, libcss) are suppressed narrowly while the
+	# affected tests still run — see test/lsan.supp and issue #414.
+	PATH="$(SYSTEM_PATH)" LSAN_OPTIONS="suppressions=$(CURDIR)/test/lsan.supp:print_suppressions=0" \
+		ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_ASAN) --output-on-failure -LE '$(CTEST_EXCLUDE_ASAN)'
 
 .PHONY: test-desktop-ytrace-release
 test-desktop-ytrace-release: test-fast ## Deprecated alias for `make test-fast`
