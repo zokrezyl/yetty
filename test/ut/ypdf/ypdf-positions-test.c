@@ -476,8 +476,8 @@ int main(void)
     for (;;) {
         if (it5.fw.data[0] == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
             struct yetty_ydraw_text_drawable_list_view v;
-            if (parse_span_unscaled(it5.fw.data, &v) == 0 && v.text_len > 0 &&
-                v.font_id >= 0 && v.font_id < MAX_FONTS_LOCAL && fonts[v.font_id]) {
+            if (parse_span_unscaled(it5.fw.data, &v) == 0 && v.text_len > 0 && v.font_id >= 0 &&
+                v.font_id < MAX_FONTS_LOCAL && fonts[v.font_id]) {
                 struct yetty_yfont_font *f = fonts[v.font_id];
                 float cursor_x = v.x;
                 /* Walk UTF-8: decode each codepoint, advance the cursor
@@ -569,9 +569,8 @@ int main(void)
         for (;;) {
             if (dit.fw.data[0] == YETTY_YDRAW_TYPE_TEXT_DRAWABLE_LIST) {
                 struct yetty_ydraw_text_drawable_list_view dv;
-                if (parse_span_unscaled(dit.fw.data, &dv) == 0 &&
-                    dv.text_len > 0 && dv.font_id >= 0 && dv.font_id < MAX_FONTS_LOCAL &&
-                    fonts[dv.font_id]) {
+                if (parse_span_unscaled(dit.fw.data, &dv) == 0 && dv.text_len > 0 &&
+                    dv.font_id >= 0 && dv.font_id < MAX_FONTS_LOCAL && fonts[dv.font_id]) {
                     int has_sma = 0;
                     for (uint32_t k = 0; k + 3 <= dv.text_len; k++) {
                         if (dv.text[k] == 's' && dv.text[k + 1] == 'm' && dv.text[k + 2] == 'a') {

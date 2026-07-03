@@ -40,8 +40,7 @@ static void feed(struct ytest *test, struct yetty_yclass_object *grid, const cha
 static uint32_t cp_at(struct ytest *test, struct yetty_yclass_object *grid, uint32_t row,
                       uint32_t col)
 {
-    struct yetty_yvterm_text_cell_const_ptr_result cells =
-        yetty_yvterm_grid_line_cells(grid, row);
+    struct yetty_yvterm_text_cell_const_ptr_result cells = yetty_yvterm_grid_line_cells(grid, row);
     YTEST_REQUIRE_OK(test, cells);
     YTEST_REQUIRE_NOT_NULL(test, cells.value);
     return cells.value[col].codepoint;
@@ -51,8 +50,7 @@ static const struct yetty_yvterm_text_cell *cell_at(struct ytest *test,
                                                     struct yetty_yclass_object *grid, uint32_t row,
                                                     uint32_t col)
 {
-    struct yetty_yvterm_text_cell_const_ptr_result cells =
-        yetty_yvterm_grid_line_cells(grid, row);
+    struct yetty_yvterm_text_cell_const_ptr_result cells = yetty_yvterm_grid_line_cells(grid, row);
     YTEST_REQUIRE_OK(test, cells);
     YTEST_REQUIRE_NOT_NULL(test, cells.value);
     return &cells.value[col];
@@ -217,7 +215,9 @@ static void test_alt_screen(struct ytest *test)
     YTEST_CHECK(test, cp_at(test, grid, 0, 0) != 'p');
 
     /* Home the cursor, then write on the alt surface. */
-    feed(test, grid, "\033[H""ALT");
+    feed(test, grid,
+         "\033[H"
+         "ALT");
     YTEST_CHECK_EQ_INT(test, cp_at(test, grid, 0, 0), 'A');
     YTEST_CHECK_EQ_INT(test, cp_at(test, grid, 0, 1), 'L');
     YTEST_CHECK_EQ_INT(test, cp_at(test, grid, 0, 2), 'T');
@@ -299,8 +299,9 @@ static void test_dcs_osc_routing(struct ytest *test)
     YTEST_REQUIRE_OK(test, yetty_yvterm_grid_register_wire(grid, sm));
 
     struct route_cap cap = {0};
-    YTEST_REQUIRE_OK(test, yetty_ywire_wire_statemachine_register_buffered(
-                               sm, YETTY_YWIRE_ENVELOPE_DCS, 777, /*has_args=*/0, on_envelope, &cap));
+    YTEST_REQUIRE_OK(
+        test, yetty_ywire_wire_statemachine_register_buffered(sm, YETTY_YWIRE_ENVELOPE_DCS, 777,
+                                                              /*has_args=*/0, on_envelope, &cap));
 
     /* Build: raw "AB" + DCS(777,"fig") envelope + raw "CD". */
     const char *pre = "AB";

@@ -103,8 +103,8 @@ static inline void ytest__abort(struct ytest *test)
 __attribute__((format(printf, 6, 7)))
 #endif
 static inline int
-ytest__check(struct ytest *test, int passed, int fatal, const char *file, int line,
-             const char *fmt, ...)
+ytest__check(struct ytest *test, int passed, int fatal, const char *file, int line, const char *fmt,
+             ...)
 {
     test->checks++;
     if (passed) {
@@ -243,11 +243,11 @@ static inline struct ytest ytest_begin(const char *suite)
  *-------------------------------------------------------------------------*/
 #define YTEST_CHECK_EQ_SIZE(test_ptr, actual, expected)                                            \
     ((void)ytest__check((test_ptr), (size_t)(actual) == (size_t)(expected), 0, __FILE__, __LINE__, \
-                        "EQ_SIZE: %s == %s (%zu vs %zu)", #actual, #expected, (size_t)(actual),     \
+                        "EQ_SIZE: %s == %s (%zu vs %zu)", #actual, #expected, (size_t)(actual),    \
                         (size_t)(expected)))
 #define YTEST_REQUIRE_EQ_SIZE(test_ptr, actual, expected)                                          \
     ((void)ytest__check((test_ptr), (size_t)(actual) == (size_t)(expected), 1, __FILE__, __LINE__, \
-                        "EQ_SIZE: %s == %s (%zu vs %zu)", #actual, #expected, (size_t)(actual),     \
+                        "EQ_SIZE: %s == %s (%zu vs %zu)", #actual, #expected, (size_t)(actual),    \
                         (size_t)(expected)))
 
 /*---------------------------------------------------------------------------
@@ -255,11 +255,11 @@ static inline struct ytest ytest_begin(const char *suite)
  *-------------------------------------------------------------------------*/
 #define YTEST_CHECK_STR_EQ(test_ptr, actual, expected)                                             \
     ((void)ytest__check((test_ptr), ytest__str_eq((actual), (expected)), 0, __FILE__, __LINE__,    \
-                        "STR_EQ: %s == %s (\"%s\" vs \"%s\")", #actual, #expected,                  \
+                        "STR_EQ: %s == %s (\"%s\" vs \"%s\")", #actual, #expected,                 \
                         ytest__str_or_null(actual), ytest__str_or_null(expected)))
 #define YTEST_REQUIRE_STR_EQ(test_ptr, actual, expected)                                           \
     ((void)ytest__check((test_ptr), ytest__str_eq((actual), (expected)), 1, __FILE__, __LINE__,    \
-                        "STR_EQ: %s == %s (\"%s\" vs \"%s\")", #actual, #expected,                  \
+                        "STR_EQ: %s == %s (\"%s\" vs \"%s\")", #actual, #expected,                 \
                         ytest__str_or_null(actual), ytest__str_or_null(expected)))
 
 /*---------------------------------------------------------------------------
@@ -267,11 +267,11 @@ static inline struct ytest ytest_begin(const char *suite)
  *-------------------------------------------------------------------------*/
 #define YTEST_CHECK_MEM_EQ(test_ptr, actual, expected, len)                                        \
     ((void)ytest__check((test_ptr), memcmp((actual), (expected), (len)) == 0, 0, __FILE__,         \
-                        __LINE__, "MEM_EQ: %s == %s (%zu bytes)", #actual, #expected,               \
+                        __LINE__, "MEM_EQ: %s == %s (%zu bytes)", #actual, #expected,              \
                         (size_t)(len)))
 #define YTEST_REQUIRE_MEM_EQ(test_ptr, actual, expected, len)                                      \
     ((void)ytest__check((test_ptr), memcmp((actual), (expected), (len)) == 0, 1, __FILE__,         \
-                        __LINE__, "MEM_EQ: %s == %s (%zu bytes)", #actual, #expected,               \
+                        __LINE__, "MEM_EQ: %s == %s (%zu bytes)", #actual, #expected,              \
                         (size_t)(len)))
 
 /*---------------------------------------------------------------------------
@@ -279,11 +279,11 @@ static inline struct ytest ytest_begin(const char *suite)
  *-------------------------------------------------------------------------*/
 #define YTEST_CHECK_NEAR(test_ptr, actual, expected, tolerance)                                    \
     ((void)ytest__check((test_ptr), ytest__near((actual), (expected), (tolerance)), 0, __FILE__,   \
-                        __LINE__, "NEAR: %s ~= %s (%g vs %g, tol %g)", #actual, #expected,          \
+                        __LINE__, "NEAR: %s ~= %s (%g vs %g, tol %g)", #actual, #expected,         \
                         (double)(actual), (double)(expected), (double)(tolerance)))
 #define YTEST_REQUIRE_NEAR(test_ptr, actual, expected, tolerance)                                  \
     ((void)ytest__check((test_ptr), ytest__near((actual), (expected), (tolerance)), 1, __FILE__,   \
-                        __LINE__, "NEAR: %s ~= %s (%g vs %g, tol %g)", #actual, #expected,          \
+                        __LINE__, "NEAR: %s ~= %s (%g vs %g, tol %g)", #actual, #expected,         \
                         (double)(actual), (double)(expected), (double)(tolerance)))
 
 /*---------------------------------------------------------------------------
@@ -308,7 +308,7 @@ static inline struct ytest ytest_begin(const char *suite)
         if (YETTY_IS_OK(res)) {                                                                    \
             (void)ytest__check((test_ptr), 1, 0, __FILE__, __LINE__, "OK: %s", #res);              \
         } else {                                                                                   \
-            (void)ytest__check_ok((test_ptr), 0, (res).error, 0, __FILE__, __LINE__, #res);         \
+            (void)ytest__check_ok((test_ptr), 0, (res).error, 0, __FILE__, __LINE__, #res);        \
         }                                                                                          \
     } while (0)
 #define YTEST_REQUIRE_OK(test_ptr, res)                                                            \
@@ -316,23 +316,23 @@ static inline struct ytest ytest_begin(const char *suite)
         if (YETTY_IS_OK(res)) {                                                                    \
             (void)ytest__check((test_ptr), 1, 1, __FILE__, __LINE__, "OK: %s", #res);              \
         } else {                                                                                   \
-            (void)ytest__check_ok((test_ptr), 0, (res).error, 1, __FILE__, __LINE__, #res);         \
+            (void)ytest__check_ok((test_ptr), 0, (res).error, 1, __FILE__, __LINE__, #res);        \
         }                                                                                          \
     } while (0)
 #define YTEST_CHECK_ERR(test_ptr, res)                                                             \
     do {                                                                                           \
         if (YETTY_IS_ERR(res)) {                                                                   \
-            (void)ytest__check_err((test_ptr), 1, (res).error, 0, __FILE__, __LINE__, #res);        \
+            (void)ytest__check_err((test_ptr), 1, (res).error, 0, __FILE__, __LINE__, #res);       \
         } else {                                                                                   \
-            (void)ytest__check((test_ptr), 0, 0, __FILE__, __LINE__, "expected error: %s", #res);   \
+            (void)ytest__check((test_ptr), 0, 0, __FILE__, __LINE__, "expected error: %s", #res);  \
         }                                                                                          \
     } while (0)
 #define YTEST_REQUIRE_ERR(test_ptr, res)                                                           \
     do {                                                                                           \
         if (YETTY_IS_ERR(res)) {                                                                   \
-            (void)ytest__check_err((test_ptr), 1, (res).error, 1, __FILE__, __LINE__, #res);        \
+            (void)ytest__check_err((test_ptr), 1, (res).error, 1, __FILE__, __LINE__, #res);       \
         } else {                                                                                   \
-            (void)ytest__check((test_ptr), 0, 1, __FILE__, __LINE__, "expected error: %s", #res);   \
+            (void)ytest__check((test_ptr), 0, 1, __FILE__, __LINE__, "expected error: %s", #res);  \
         }                                                                                          \
     } while (0)
 

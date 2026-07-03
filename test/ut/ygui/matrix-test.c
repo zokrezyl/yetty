@@ -112,7 +112,7 @@ static void test_align(struct ytest *test)
 {
     const struct {
         enum yetty_ygui_flex_align align;
-        float child_h;   /* input cross size (0 = auto, so STRETCH can grow it) */
+        float child_h; /* input cross size (0 = auto, so STRETCH can grow it) */
         float min_y, height;
     } cases[] = {
         {YETTY_YGUI_ALIGN_START, 20.0f, 0.0f, 20.0f},
@@ -219,8 +219,8 @@ static void test_max_width_clamp(struct ytest *test)
     struct yetty_yclass_object *root = hbox(test);
     struct yetty_yclass_object *child = add_label(test, root, 0, 20);
     struct yetty_ygui_layout l = layout_of(test, child);
-    l.flex_grow = 1.0f;   /* would take all 300 */
-    l.max_width = 50.0f;  /* but capped here */
+    l.flex_grow = 1.0f;  /* would take all 300 */
+    l.max_width = 50.0f; /* but capped here */
     YTEST_REQUIRE_OK(test, yetty_ygui_widget_layout_set(child, &l));
     YTEST_REQUIRE_OK(test, yetty_ygui_layout_compute(root, rect(0, 0, 300, 100)));
 

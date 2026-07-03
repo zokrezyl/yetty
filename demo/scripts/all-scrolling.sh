@@ -100,6 +100,12 @@ run ysvg/gallery.sh
 run ythorvg/basic.sh
 run yvideo/basic.sh
 
+# Web pages rendered inline by yetty's two engines (NetSurf + lexbor). The
+# local-page renders are offline; each script's live-URL step degrades
+# gracefully when there is no network.
+run ynetsurf/basic.sh
+run ybrowser/basic.sh
+
 # BROKEN — yrich apps fail at construction (yclass dispatch_lookup: slot index
 # out of range). Re-enable once the yrich/yclass fix lands.
 # run yrich/ydoc/demo.sh

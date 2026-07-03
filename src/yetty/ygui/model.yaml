@@ -212,6 +212,10 @@ classes:
         type: "struct yetty_ygui_theme *"
         get: false
         set: false
+      - name: font
+        type: "struct yetty_yfont_font *"
+        get: false
+        set: false
       - name: dirty
         type: int
         get: false

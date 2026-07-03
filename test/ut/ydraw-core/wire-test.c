@@ -39,9 +39,11 @@ static struct yetty_ydraw_drawable_list_registry *make_registry(struct ytest *te
 
 static struct yetty_ysdf_box a_box(void)
 {
-    struct yetty_ysdf_box box = {
-        .center_x = 10.0f, .center_y = 20.0f, .half_width = 5.0f, .half_height = 6.0f,
-        .corner_radius = 0.0f};
+    struct yetty_ysdf_box box = {.center_x = 10.0f,
+                                 .center_y = 20.0f,
+                                 .half_width = 5.0f,
+                                 .half_height = 6.0f,
+                                 .corner_radius = 0.0f};
     return box;
 }
 
@@ -187,16 +189,15 @@ static size_t dump_commands(struct yetty_ydraw_drawable_list_registry *reg, cons
             break;
         }
         if (cmd.kind == YETTY_YDRAW_COMMAND_DELETE) {
-            written +=
-                (size_t)snprintf(out + written, out_cap - written, "DELETE id=%u\n", cmd.id);
+            written += (size_t)snprintf(out + written, out_cap - written, "DELETE id=%u\n", cmd.id);
         } else {
             uint32_t type = cmd.entry.data[0];
             if (type == YETTY_YDRAW_CMD_GROUP) {
                 written += (size_t)snprintf(out + written, out_cap - written,
                                             "CMD type=0x%08x id=%u\n", type, cmd.entry.data[1]);
             } else {
-                written += (size_t)snprintf(out + written, out_cap - written, "ADD type=0x%08x\n",
-                                            type);
+                written +=
+                    (size_t)snprintf(out + written, out_cap - written, "ADD type=0x%08x\n", type);
             }
         }
         off += parsed.value;
@@ -221,8 +222,8 @@ static void test_golden_dump(struct ytest *test)
     YTEST_REQUIRE_OK(test, yetty_ydraw_drawable_list_add_cmd_delete(buf, 7u));
 
     char dump[512];
-    dump_commands(reg, yetty_ydraw_drawable_list_data(buf),
-                  yetty_ydraw_drawable_list_size(buf), dump, sizeof(dump));
+    dump_commands(reg, yetty_ydraw_drawable_list_data(buf), yetty_ydraw_drawable_list_size(buf),
+                  dump, sizeof(dump));
 
     const char *golden = "ADD type=0x00000000\n"
                          "ADD type=0x7ffffffe\n"

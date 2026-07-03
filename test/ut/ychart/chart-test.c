@@ -37,8 +37,7 @@ static struct yetty_ydraw_drawable_list *render_csv(struct ytest *test)
 {
     struct yetty_ychart_chart chart;
     YTEST_REQUIRE_OK(test, yetty_ychart_chart_init(&chart));
-    struct yetty_ycore_void_result pr =
-        yetty_ychart_parse(k_csv, sizeof(k_csv) - 1, NULL, &chart);
+    struct yetty_ycore_void_result pr = yetty_ychart_parse(k_csv, sizeof(k_csv) - 1, NULL, &chart);
     YTEST_REQUIRE_OK(test, pr);
 
     struct yetty_ydraw_drawable_list_result buf =
@@ -84,8 +83,8 @@ static void test_deterministic(struct ytest *test)
     size_t sb = yetty_ydraw_drawable_list_size(b);
     YTEST_REQUIRE_EQ_SIZE(test, sa, sb);
     YTEST_CHECK(test, sa > 0);
-    YTEST_CHECK_MEM_EQ(test, yetty_ydraw_drawable_list_data(a),
-                       yetty_ydraw_drawable_list_data(b), sa);
+    YTEST_CHECK_MEM_EQ(test, yetty_ydraw_drawable_list_data(a), yetty_ydraw_drawable_list_data(b),
+                       sa);
     yetty_ydraw_drawable_list_destroy(a);
     yetty_ydraw_drawable_list_destroy(b);
 }

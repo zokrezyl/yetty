@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<!--
+  welcome.html — a self-contained page rendered by BOTH of yetty's web
+  engines: ynetsurf (NetSurf) and ybrowser (lexbor). Everything is inline
+  (no external CSS/JS/images) so the demo renders identically offline.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>yetty — the web, inside your terminal</title>
+<style>
+  body {
+    font-family: sans-serif;
+    background: #0B1014;
+    color: #E0E5E4;
+    margin: 0;
+    padding: 32px 40px;
+    line-height: 1.5;
+  }
+  h1 { color: #74C5A5; margin: 0 0 4px; font-size: 30px; }
+  h2 { color: #6BA892; border-bottom: 1px solid #364A47; padding-bottom: 4px; margin-top: 28px; }
+  .tag { color: #556162; font-size: 14px; margin: 0 0 20px; }
+  a { color: #74C5A5; }
+  code { background: #141A1F; color: #74C5A5; padding: 1px 5px; border-radius: 3px; }
+  ul { margin: 8px 0; }
+  li { margin: 3px 0; }
+  table { border-collapse: collapse; margin: 12px 0; width: 100%; }
+  th, td { border: 1px solid #364A47; padding: 6px 12px; text-align: left; }
+  th { background: #1E262C; color: #9FA7A8; }
+  td.on { color: #74C5A5; }
+  .card { background: #141A1F; border: 1px solid #364A47; border-radius: 6px; padding: 16px 20px; margin: 16px 0; }
+  .swatch { display: inline-block; width: 60px; height: 24px; border-radius: 3px; vertical-align: middle; margin-right: 8px; }
+</style>
+</head>
+<body>
+  <h1>yetty</h1>
+  <p class="tag">Terminal Unchained — a real HTML page, laid out and painted straight into the terminal's ydraw layer.</p>
+
+  <div class="card">
+    This page carries no external resources. The headings, the table,
+    the coloured swatches and this rounded card are all produced by the
+    engine's own CSS box model and rasteriser — the same one that scrolls
+    with your shell history.
+  </div>
+
+  <h2>Two engines, one surface</h2>
+  <ul>
+    <li><code>ynetsurf</code> — the NetSurf 3.11 layout engine.</li>
+    <li><code>ybrowser</code> — the lexbor DOM/CSS engine, with JS, timers and click dispatch.</li>
+  </ul>
+  <p>Both emit one <code>ydraw</code> OSC envelope per render, so a page
+     scrolls into the terminal exactly like <code>ycat</code> output —
+     or, interactively, becomes a Chrome-like pane you can click and type into.</p>
+
+  <h2>What renders inline</h2>
+  <table>
+    <tr><th>Feature</th><th>Text terminals</th><th>yetty</th></tr>
+    <tr><td>Styled text &amp; boxes</td><td>ANSI only</td><td class="on">full CSS</td></tr>
+    <tr><td>Tables &amp; flow layout</td><td>manual</td><td class="on">native</td></tr>
+    <tr><td>Images / SVG / PDF</td><td>—</td><td class="on">yes</td></tr>
+    <tr><td>Live web pages</td><td>—</td><td class="on">yes</td></tr>
+  </table>
+
+  <h2>Brand palette</h2>
+  <p>
+    <span class="swatch" style="background:#6BA892"></span> accent
+    <span class="swatch" style="background:#74C5A5"></span> bright
+    <span class="swatch" style="background:#1E262C"></span> surface
+    <span class="swatch" style="background:#E0E5E4"></span> text
+  </p>
+
+  <p class="tag">Rendered offline from <code>demo/assets/web/welcome.html</code>.
+     Point the same tools at <a href="https://example.com">a live URL</a> to browse the real web.</p>
+</body>
+</html>

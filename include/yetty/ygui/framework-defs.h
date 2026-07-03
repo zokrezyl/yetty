@@ -24,6 +24,7 @@ struct yetty_ydraw_drawable_list;
 struct yetty_yclass_object;
 struct yetty_ygui_theme;
 struct yetty_ygui_framework;
+struct yetty_yfont_font;
 
 #ifdef __cplusplus
 extern "C" {
@@ -36,6 +37,13 @@ extern "C" {
  * return). Each takes the framework yclass object.
  *---------------------------------------------------------------------------*/
 struct yetty_ygui_theme *yetty_ygui_framework_theme(struct yetty_yclass_object *obj);
+
+/* Borrowed measurement font (see the `font` field in the framework struct).
+ * yetty_ygui_framework_font returns NULL until the app calls set_font; widgets
+ * that measure text (textinput caret/click) then fall back to a fixed advance.
+ * The font is NOT owned — the app keeps ownership. */
+struct yetty_yfont_font *yetty_ygui_framework_font(struct yetty_yclass_object *obj);
+void yetty_ygui_framework_set_font(struct yetty_yclass_object *obj, struct yetty_yfont_font *font);
 
 void yetty_ygui_framework_viewport(struct yetty_yclass_object *obj, float *width_px,
                                    float *height_px);
