@@ -140,8 +140,8 @@ static void add_child(struct ytest *test, struct yetty_yclass_object *container,
 {
     struct yetty_ycore_rectangle rect = {{x, y}, {x + w, y + h}};
     struct yetty_ycore_buffer init = {0};
-    struct yetty_ycore_void_result r = yetty_yfigure_create_child(
-        container, yetty_yfigure_kind_token(STUB_KIND), id, rect, init);
+    struct yetty_ycore_void_result r =
+        yetty_yfigure_create_child(container, yetty_yfigure_kind_token(STUB_KIND), id, rect, init);
     YTEST_REQUIRE_OK(test, r);
 }
 
@@ -166,8 +166,7 @@ static void test_hit_test_basic(struct ytest *test)
     /* A point inside A only. */
     YTEST_CHECK_EQ_SIZE(test, hit_id(test, container, 25, 25), 1u);
     /* A point inside B only, with correct local coords. */
-    struct yetty_yfigure_hit_result hit_b =
-        yetty_yfigure_container_hit_test(container, 120, 130);
+    struct yetty_yfigure_hit_result hit_b = yetty_yfigure_container_hit_test(container, 120, 130);
     YTEST_REQUIRE_OK(test, hit_b);
     YTEST_CHECK_EQ_SIZE(test, hit_b.value.figure_id, 2u);
     YTEST_CHECK_NEAR(test, hit_b.value.local_x, 20.0f, 0.5f); /* 120 - 100 */

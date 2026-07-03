@@ -122,15 +122,14 @@ static void test_resolve_slot_equivalence(struct ytest *test)
     struct yetty_yclass_method_slot_result local =
         yetty_yclass_method_slot_get(YTRPC_DOMAIN, (yetty_yclass_method_id_t)ytrpc_poke);
     YTEST_REQUIRE_OK(test, local);
-    struct yetty_yclass_const_char_ptr_result qname =
-        yetty_yclass_method_slot_name(local.value);
+    struct yetty_yclass_const_char_ptr_result qname = yetty_yclass_method_slot_name(local.value);
     YTEST_REQUIRE_OK(test, qname);
     YTEST_REQUIRE_NOT_NULL(test, qname.value);
 
     uint8_t resp[8];
     uint32_t header = YETTY_YCLASS_RPC_HDR_MAKE(YETTY_YCLASS_RPC_OP_RESOLVE_SLOT, 0u);
-    struct yetty_ycore_size_result res = yetty_yclass_rpc_dispatch_one(
-        header, qname.value, strlen(qname.value), resp, sizeof(resp));
+    struct yetty_ycore_size_result res =
+        yetty_yclass_rpc_dispatch_one(header, qname.value, strlen(qname.value), resp, sizeof(resp));
     YTEST_REQUIRE_OK(test, res);
     YTEST_CHECK_EQ_SIZE(test, res.value, sizeof(uint32_t));
     uint32_t out = 0;
@@ -181,8 +180,7 @@ static void test_create_and_handle_resolve(struct ytest *test)
     YTEST_CHECK(test, obj->klass == widget_class_get());
 
     /* An unknown handle is rejected, not resolved to garbage. */
-    struct yetty_yclass_void_ptr_result bogus =
-        yetty_yclass_rpc_handle_resolve(handle + 0x100000u);
+    struct yetty_yclass_void_ptr_result bogus = yetty_yclass_rpc_handle_resolve(handle + 0x100000u);
     YTEST_CHECK_ERR(test, bogus);
 }
 
@@ -256,8 +254,7 @@ static void test_proxy_roundtrip(struct ytest *test)
     struct yetty_ycore_void_result session_destroy = yetty_yclass_rpc_session_destroy(session);
     YTEST_CHECK_OK(test, session_destroy);
     pthread_join(thread, NULL);
-    struct yetty_ycore_void_result server_destroy =
-        arg.transport->ops->destroy(arg.transport);
+    struct yetty_ycore_void_result server_destroy = arg.transport->ops->destroy(arg.transport);
     YTEST_CHECK_OK(test, server_destroy);
 }
 

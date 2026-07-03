@@ -14,18 +14,16 @@
 #include <stdint.h>
 #include <string.h>
 
-static const char k_svg[] =
-    "<svg viewBox=\"0 0 100 100\">"
-    "<rect x=\"10\" y=\"10\" width=\"40\" height=\"30\" fill=\"#3050ff\"/>"
-    "<circle cx=\"70\" cy=\"60\" r=\"20\" fill=\"#ff2020\"/>"
-    "<line x1=\"0\" y1=\"0\" x2=\"100\" y2=\"100\" stroke=\"#000000\"/>"
-    "</svg>";
+static const char k_svg[] = "<svg viewBox=\"0 0 100 100\">"
+                            "<rect x=\"10\" y=\"10\" width=\"40\" height=\"30\" fill=\"#3050ff\"/>"
+                            "<circle cx=\"70\" cy=\"60\" r=\"20\" fill=\"#ff2020\"/>"
+                            "<line x1=\"0\" y1=\"0\" x2=\"100\" y2=\"100\" stroke=\"#000000\"/>"
+                            "</svg>";
 
 static void test_valid_render_nonempty(struct ytest *test)
 {
     struct yetty_ysvg_render_config cfg = {0};
-    struct yetty_ysvg_render_result rr =
-        yetty_ysvg_render(k_svg, sizeof(k_svg) - 1, NULL, 0, &cfg);
+    struct yetty_ysvg_render_result rr = yetty_ysvg_render(k_svg, sizeof(k_svg) - 1, NULL, 0, &cfg);
     YTEST_REQUIRE_OK(test, rr);
     YTEST_REQUIRE_NOT_NULL(test, rr.value.buffer);
     YTEST_CHECK(test, yetty_ydraw_drawable_list_size(rr.value.buffer) > 0);
@@ -56,10 +54,8 @@ static void test_malformed_rejected(struct ytest *test)
 static void test_deterministic(struct ytest *test)
 {
     struct yetty_ysvg_render_config cfg = {0};
-    struct yetty_ysvg_render_result a =
-        yetty_ysvg_render(k_svg, sizeof(k_svg) - 1, NULL, 0, &cfg);
-    struct yetty_ysvg_render_result b =
-        yetty_ysvg_render(k_svg, sizeof(k_svg) - 1, NULL, 0, &cfg);
+    struct yetty_ysvg_render_result a = yetty_ysvg_render(k_svg, sizeof(k_svg) - 1, NULL, 0, &cfg);
+    struct yetty_ysvg_render_result b = yetty_ysvg_render(k_svg, sizeof(k_svg) - 1, NULL, 0, &cfg);
     YTEST_REQUIRE_OK(test, a);
     YTEST_REQUIRE_OK(test, b);
     size_t sa = yetty_ydraw_drawable_list_size(a.value.buffer);

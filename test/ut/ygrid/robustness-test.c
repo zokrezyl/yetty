@@ -51,8 +51,8 @@ static void add_box(struct ytest *test, struct yetty_ydraw_drawable_list *buf, f
 {
     struct yetty_ysdf_box box = {
         .center_x = x, .center_y = y, .half_width = 5, .half_height = 5, .corner_radius = 0};
-    struct yetty_ycore_void_result r = yetty_ydraw_drawable_list_add_cmd_add_box(
-        buf, 0, 0, 0xff00ff00u, 0, 0.0f, &box);
+    struct yetty_ycore_void_result r =
+        yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, 0, 0xff00ff00u, 0, 0.0f, &box);
     YTEST_REQUIRE_OK(test, r);
 }
 
@@ -101,8 +101,8 @@ static void test_malformed_then_recover(struct ytest *test)
      * grid is intact enough to dump. */
     struct yetty_ydraw_drawable_list *buf = make_buf(test);
     add_box(test, buf, 20, 20);
-    struct yetty_ycore_void_result good = feed_bytes(
-        grid, yetty_ydraw_drawable_list_data(buf), yetty_ydraw_drawable_list_size(buf));
+    struct yetty_ycore_void_result good =
+        feed_bytes(grid, yetty_ydraw_drawable_list_data(buf), yetty_ydraw_drawable_list_size(buf));
     YTEST_CHECK_OK(test, good);
     char *dump = dump_grid(test, grid);
     YTEST_CHECK_NOT_NULL(test, dump);

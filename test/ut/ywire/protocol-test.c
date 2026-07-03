@@ -51,9 +51,9 @@ static struct yetty_ycore_void_result on_env(void *userdata, enum yetty_ywire_en
     if (args && cap->args_len) {
         memcpy(cap->args, args, cap->args_len);
     }
-    cap->payload_ok = (payload_len == cap->expect_len) &&
-                      (payload_len == 0 ||
-                       (cap->expect && memcmp(payload, cap->expect, payload_len) == 0));
+    cap->payload_ok =
+        (payload_len == cap->expect_len) &&
+        (payload_len == 0 || (cap->expect && memcmp(payload, cap->expect, payload_len) == 0));
     return YETTY_OK_VOID();
 }
 
@@ -111,9 +111,9 @@ static void test_roundtrip_with_args(struct ytest *test)
     const uint8_t args[] = {0xDE, 0xAD, 0xBE, 0xEF};
     const char *payload = "the body";
     struct yetty_ycore_buffer env = {0};
-    struct yetty_ycore_void_result emit = yetty_ywire_emit(
-        YETTY_YWIRE_ENVELOPE_OSC, 7, /*has_args=*/1, /*compressed=*/0, args, sizeof(args), payload,
-        strlen(payload), &env);
+    struct yetty_ycore_void_result emit =
+        yetty_ywire_emit(YETTY_YWIRE_ENVELOPE_OSC, 7, /*has_args=*/1, /*compressed=*/0, args,
+                         sizeof(args), payload, strlen(payload), &env);
     YTEST_REQUIRE_OK(test, emit);
 
     struct cap cap = {.expect = (const uint8_t *)payload, .expect_len = strlen(payload)};

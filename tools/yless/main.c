@@ -65,8 +65,8 @@ struct yless_opts {
     struct yless_dim origin_y; /* origin row;    unset = pane top  */
     struct yless_dim width;    /* width;  unset = to right edge  */
     struct yless_dim height;   /* height; unset = to bottom edge */
-    float opacity; /* background opacity 0.0..1.0 (1.0 = opaque) */
-    float duration_sec; /* auto-exit after this many seconds; 0 = run until quit */
+    float opacity;             /* background opacity 0.0..1.0 (1.0 = opaque) */
+    float duration_sec;        /* auto-exit after this many seconds; 0 = run until quit */
 };
 
 /* Parse a geometry argument: a cell count, or "N%" as a percentage of the pane
@@ -228,11 +228,11 @@ static struct viewport probe_viewport(void)
     int stable_reads = 0;
     int waited_ms = 0;
     const int poll_ms = 30;
-    const int settle_ms = 300;   /* size must hold this long to count as settled */
+    const int settle_ms = 300;    /* size must hold this long to count as settled */
     const int min_ramp_ms = 1200; /* the pane grows in steps for ~1s after spawn;
                                     * don't trust a stable size before then, or we
                                     * latch an early, smaller step of the ramp */
-    const int timeout_ms = 4000; /* hard cap so startup never hangs */
+    const int timeout_ms = 4000;  /* hard cap so startup never hangs */
     for (;;) {
         int probe_cols = 0, probe_rows = 0, probe_pixel_w = 0, probe_pixel_h = 0;
         if (yetty_yplatform_term_get_size_pixels(&probe_cols, &probe_rows, &probe_pixel_w,
@@ -643,14 +643,10 @@ int main(int argc, char **argv)
     struct yless_opts opts = {.opacity = 1.0f};
 
     static const struct yetty_yplatform_option long_opts[] = {
-        {"x", required_argument, NULL, 'x'},
-        {"y", required_argument, NULL, 'y'},
-        {"width", required_argument, NULL, 'w'},
-        {"height", required_argument, NULL, 'H'},
-        {"alpha", required_argument, NULL, 'a'},
-        {"duration", required_argument, NULL, 'd'},
-        {"help", no_argument, NULL, 'h'},
-        {NULL, 0, NULL, 0},
+        {"x", required_argument, NULL, 'x'},     {"y", required_argument, NULL, 'y'},
+        {"width", required_argument, NULL, 'w'}, {"height", required_argument, NULL, 'H'},
+        {"alpha", required_argument, NULL, 'a'}, {"duration", required_argument, NULL, 'd'},
+        {"help", no_argument, NULL, 'h'},        {NULL, 0, NULL, 0},
     };
 
     int c;

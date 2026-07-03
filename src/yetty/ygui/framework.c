@@ -110,6 +110,14 @@ struct YETTY_ANNOTATE("class@ygui:framework") YETTY_ANNOTATE("include@yetty/ygui
      * yetty_ygui_framework_theme(framework). */
     struct yetty_ygui_theme *theme;
 
+    /* Borrowed measurement font — the same font the shared ygrid renders text
+     * with (font_id 0). Set by the app after framework_create so widgets (e.g.
+     * textinput) can place carets and hit-test clicks against real glyph
+     * advances instead of a fixed per-char approximation. NULL until set, in
+     * which case widgets fall back to the fixed advance. Not owned — no
+     * destroy. */
+    struct yetty_yfont_font *font;
+
     /* framework-level dirty flag. Cleared by emit. */
     int dirty;
 
@@ -482,6 +490,20 @@ struct yetty_ygui_theme *yetty_ygui_framework_theme(struct yetty_yclass_object *
 {
     struct yetty_ygui_framework *framework = framework_data(obj);
     return framework ? framework->theme : NULL;
+}
+
+struct yetty_yfont_font *yetty_ygui_framework_font(struct yetty_yclass_object *obj)
+{
+    struct yetty_ygui_framework *framework = framework_data(obj);
+    return framework ? framework->font : NULL;
+}
+
+void yetty_ygui_framework_set_font(struct yetty_yclass_object *obj, struct yetty_yfont_font *font)
+{
+    struct yetty_ygui_framework *framework = framework_data(obj);
+    if (framework) {
+        framework->font = font; /* borrowed — not owned */
+    }
 }
 
 YETTY_ANNOTATE("expose")

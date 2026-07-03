@@ -21,6 +21,7 @@ struct yetty_yclass_ptr_result yetty_ygui_textinput_class_get(void);
 struct yetty_ygui_textinput_ptr_result yetty_ygui_textinput_from(struct yetty_yclass_object *obj);
 
 #include <yetty/ydraw-core/drawable-list.h>
+#include <yetty/yfont/font.h>
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/primitive-widget.h>
 #include <yetty/ysdf/funcs.gen.h>
@@ -44,11 +45,85 @@ struct YETTY_ANNOTATE("class@ygui:textinput") YETTY_ANNOTATE("parent@ygui:primit
     size_t cursor; /* caret byte offset into text (0..text_len) */
 };
 
-/* Font metrics used for caret placement + click-to-position. Must match the
- * values used by the paint code below. */
+/* Font metrics used for caret placement + click-to-position. TEXTINPUT_CHAR_W
+ * is only the FALLBACK advance, used when no measurement font is wired into the
+ * framework; when one is present the caret and click hit-test measure the real
+ * glyphs so they line up exactly with the drawn text (see textinput_font). */
 #define TEXTINPUT_FONT_SIZE 14.0f
 #define TEXTINPUT_TEXT_PAD 10.0f
 #define TEXTINPUT_CHAR_W (TEXTINPUT_FONT_SIZE * 0.55f)
+
+/* The framework's measurement font (the same font the shared ygrid renders text
+ * with), or NULL when none is wired — then the callers fall back to CHAR_W. */
+static struct yetty_yfont_font *textinput_font(struct yetty_yclass_object *obj)
+{
+    struct yetty_yclass_object_ptr_result fw_res = yetty_ygui_widget_framework(obj);
+    if (YETTY_IS_ERR(fw_res)) {
+        yetty_ycore_error_destroy(fw_res.error);
+        return NULL;
+    }
+    return yetty_ygui_framework_font(fw_res.value);
+}
+
+/* Pixel width of the first `n` bytes of the field text at the field font size.
+ * Uses the real font when available so the caret sits between the drawn glyphs;
+ * else falls back to the fixed per-char advance. */
+static float textinput_prefix_width(struct yetty_yfont_font *font,
+                                    const struct yetty_ygui_textinput *d, size_t n)
+{
+    if (!d->text || n == 0) {
+        return 0.0f;
+    }
+    if (n > d->text_len) {
+        n = d->text_len;
+    }
+    if (font && font->ops && font->ops->measure_text) {
+        struct float_result mr = font->ops->measure_text(font, d->text, n, TEXTINPUT_FONT_SIZE);
+        if (YETTY_IS_OK(mr)) {
+            return mr.value;
+        }
+        yetty_ycore_error_destroy(mr.error);
+    }
+    return (float)n * TEXTINPUT_CHAR_W;
+}
+
+/* Byte index of the caret nearest text-relative x `rel` (0 = start of text).
+ * Walks real glyph advances so a click lands between the correct characters
+ * (including at the very end); falls back to the fixed advance. Field text is
+ * ASCII (handle_key only inserts 0x20..0x7e), so byte == codepoint here. */
+static size_t textinput_index_at_x(struct yetty_yfont_font *font,
+                                   const struct yetty_ygui_textinput *d, float rel)
+{
+    if (rel <= 0.0f || !d->text || d->text_len == 0) {
+        return 0;
+    }
+    if (font && font->ops && font->ops->get_advance) {
+        float acc = 0.0f;
+        for (size_t i = 0; i < d->text_len; i++) {
+            struct float_result ar = font->ops->get_advance(
+                font, (uint32_t)(unsigned char)d->text[i], TEXTINPUT_FONT_SIZE);
+            float adv = TEXTINPUT_CHAR_W;
+            if (YETTY_IS_OK(ar)) {
+                adv = ar.value;
+            } else {
+                yetty_ycore_error_destroy(ar.error);
+            }
+            if (rel < acc + adv * 0.5f) {
+                return i;
+            }
+            acc += adv;
+        }
+        return d->text_len;
+    }
+    long idx = (long)((rel / TEXTINPUT_CHAR_W) + 0.5f);
+    if (idx < 0) {
+        idx = 0;
+    }
+    if ((size_t)idx > d->text_len) {
+        idx = (long)d->text_len;
+    }
+    return (size_t)idx;
+}
 
 static struct yetty_ycore_void_result on_click_focus(struct yetty_yclass_object *yclass_obj,
                                                      void *userdata)
@@ -71,14 +146,7 @@ static struct yetty_ycore_void_result on_click_focus(struct yetty_yclass_object 
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "on_click_focus: rect");
     struct yetty_ycore_rectangle r = rect_res.value;
     float rel = px - (r.min.x + TEXTINPUT_TEXT_PAD);
-    long idx = (long)((rel / TEXTINPUT_CHAR_W) + 0.5f);
-    if (idx < 0) {
-        idx = 0;
-    }
-    if ((size_t)idx > d->text_len) {
-        idx = (long)d->text_len;
-    }
-    d->cursor = (size_t)idx;
+    d->cursor = textinput_index_at_x(textinput_font(obj), d, rel);
     return yetty_ygui_widget_set_dirty(obj);
 }
 
@@ -194,8 +262,9 @@ static struct yetty_ycore_void_result textinput_paint(struct yetty_yclass_object
         YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "textinput_paint: text");
     }
     if (d->focused) {
-        /* Caret — thin vertical bar at the cursor's character offset. */
-        float text_w = (float)d->cursor * TEXTINPUT_CHAR_W;
+        /* Caret — thin vertical bar at the cursor, measured against the real
+         * font so it sits between the drawn glyphs. */
+        float text_w = textinput_prefix_width(textinput_font(obj), d, d->cursor);
         struct yetty_ysdf_box geom = {
             .center_x = r.min.x + TEXTINPUT_TEXT_PAD + text_w + 1.0f,
             .center_y = r.min.y + h * 0.5f,

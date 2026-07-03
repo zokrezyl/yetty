@@ -2230,6 +2230,10 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, fr, "ybrowser standalone: framework_create");
         s->app.fw = fr.value;
+        /* Hand the framework the same font the ygrid renders text with (font_id
+         * 0) so widgets — the address bar in particular — place carets and map
+         * clicks against real glyph advances instead of a fixed approximation. */
+        yetty_ygui_framework_set_font(s->app.fw, s->font);
         struct yetty_ycore_void_result scr =
             yetty_ygui_framework_set_container_obj(s->app.fw, s->root_container);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, scr, "ybrowser standalone: set_container_obj");

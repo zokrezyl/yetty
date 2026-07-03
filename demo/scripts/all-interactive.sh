@@ -45,6 +45,18 @@ run ymesh/interactive.sh
 run ylottie/basic.sh
 run ylottie/frames.sh
 
+# --- demos that are NOT part of this single-window `-e` tour ----------------
+# These render when run DIRECTLY in a real yetty window, but not through the
+# scripted tour, so run them yourself:
+#
+#   demo/scripts/ytop/basic.sh          live monitor; renders in-terminal, but
+#                                        needs a real pane size the nested `-e`
+#                                        tour can't give it.
+#   demo/scripts/ybrowser/interactive.sh interactive browser; opens its OWN
+#                                        window (the in-terminal client path
+#                                        does not render its page embed yet).
+#   demo/scripts/yaudio/basic.sh         audio analyzer; opens its OWN window.
+
 # yctl demos drive a SEPARATE, already-running yetty over RPC (start it with
 # `yetty -r <port>`). Uncomment once that server is up.
 # run yctl/hello.sh

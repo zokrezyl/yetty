@@ -271,8 +271,7 @@ static void test_data_slice_zero_init(struct ytest *test)
     YTEST_REQUIRE_OK(test, obj_res);
     struct yetty_yclass_object *obj = obj_res.value;
 
-    struct yetty_yclass_void_ptr_result slice_res =
-        yetty_yclass_object_data(obj, base_class_get());
+    struct yetty_yclass_void_ptr_result slice_res = yetty_yclass_object_data(obj, base_class_get());
     YTEST_REQUIRE_OK(test, slice_res);
     struct base_data *data = slice_res.value;
     YTEST_REQUIRE_NOT_NULL(test, data);
@@ -296,10 +295,12 @@ static void test_data_slice_alignment_and_overlap(struct ytest *test)
     YTEST_REQUIRE_OK(test, obj_res);
     struct yetty_yclass_object *obj = obj_res.value;
 
-    struct yetty_yclass_void_ptr_result base_slice = yetty_yclass_object_data(obj, base_class_get());
+    struct yetty_yclass_void_ptr_result base_slice =
+        yetty_yclass_object_data(obj, base_class_get());
     struct yetty_yclass_void_ptr_result square_slice =
         yetty_yclass_object_data(obj, square_class_get());
-    struct yetty_yclass_void_ptr_result meta_slice = yetty_yclass_object_data(obj, meta_class_get());
+    struct yetty_yclass_void_ptr_result meta_slice =
+        yetty_yclass_object_data(obj, meta_class_get());
     YTEST_REQUIRE_OK(test, base_slice);
     YTEST_REQUIRE_OK(test, square_slice);
     YTEST_REQUIRE_OK(test, meta_slice);

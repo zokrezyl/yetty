@@ -125,8 +125,9 @@ static struct yetty_yclass_ptr_result stub_figure_class_get(void)
     return r;
 }
 
-static struct yetty_yfigure_figure_ptr_result stub_figure_factory(
-    struct yetty_ycore_rectangle rect, const struct yetty_context *ctx, void *user)
+static struct yetty_yfigure_figure_ptr_result stub_figure_factory(struct yetty_ycore_rectangle rect,
+                                                                  const struct yetty_context *ctx,
+                                                                  void *user)
 {
     (void)ctx;
     (void)user;
@@ -265,8 +266,7 @@ static void test_yimage_emit(struct ytest *test)
     struct yetty_yfigure_registry *registry = NULL;
     struct yetty_yclass_object *container = NULL;
     struct yetty_yclass_object *img = NULL;
-    struct yetty_yclass_object *engine =
-        make_engine_with_yimage(test, &registry, &container, &img);
+    struct yetty_yclass_object *engine = make_engine_with_yimage(test, &registry, &container, &img);
 
     struct yetty_ycore_void_result br =
         yetty_ygui_yimage_set_bytes(img, k_bmp_2x2, sizeof(k_bmp_2x2));
@@ -363,7 +363,8 @@ static void test_incremental_figure_skip(struct ytest *test)
         yetty_ygui_widget_add(scroll, yetty_ygui_label_class_get().value);
     YTEST_REQUIRE_OK(test, lr);
     struct yetty_yclass_object *label = lr.value;
-    struct yetty_ycore_void_result label_text_res = yetty_ygui_label_set_text(label, "page content");
+    struct yetty_ycore_void_result label_text_res =
+        yetty_ygui_label_set_text(label, "page content");
     YTEST_REQUIRE_OK(test, label_text_res);
     struct yetty_ygui_layout_const_ptr_result label_layout_res =
         yetty_ygui_widget_layout_get(label);
@@ -371,8 +372,7 @@ static void test_incremental_figure_skip(struct ytest *test)
     struct yetty_ygui_layout ll = *label_layout_res.value;
     ll.width = 180.0f;
     ll.height = 22.0f;
-    struct yetty_ycore_void_result label_layout_set_res =
-        yetty_ygui_widget_layout_set(label, &ll);
+    struct yetty_ycore_void_result label_layout_set_res = yetty_ygui_widget_layout_set(label, &ll);
     YTEST_REQUIRE_OK(test, label_layout_set_res);
 
     struct yetty_ycore_uint32_result scroll_id_res = yetty_ygui_widget_id(scroll);
@@ -421,8 +421,7 @@ static void test_yimage_emit_rejects_malformed(struct ytest *test)
     struct yetty_yfigure_registry *registry = NULL;
     struct yetty_yclass_object *container = NULL;
     struct yetty_yclass_object *img = NULL;
-    struct yetty_yclass_object *engine =
-        make_engine_with_yimage(test, &registry, &container, &img);
+    struct yetty_yclass_object *engine = make_engine_with_yimage(test, &registry, &container, &img);
 
     uint8_t garbage[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04};
     struct yetty_ycore_void_result br = yetty_ygui_yimage_set_bytes(img, garbage, sizeof(garbage));
