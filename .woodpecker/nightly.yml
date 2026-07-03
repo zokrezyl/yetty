@@ -1,0 +1,33 @@
+# Nightly / manual lane: the non-fast test lanes that are too slow, networked,
+# or display/GPU-dependent for the per-PR gate (see docs/testing.md §9).
+#
+# Runs on cron and on a manual trigger only — NOT on every push/PR. The E2E and
+# render tests self-skip (ctest SKIP_RETURN_CODE 77) on this headless Docker
+# runner; the network + WPT lanes actually execute here.
+labels:
+  platform: linux/amd64
+  backend: docker
+
+when:
+  - event: [cron, manual]
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      lfs: true
+
+steps:
+  # See android.yml for explanation.
+  fix-workspace-perms:
+    image: alpine
+    commands:
+      - chown -R 1000:1000 .
+
+  nightly:
+    image: yetty-build:latest
+    commands:
+      - git fetch --unshallow --tags 2>/dev/null || git fetch --tags
+      - make build-desktop-ytrace-release
+      # network + wpt run here; render + e2e self-skip without a display/GPU.
+      - make test-nightly

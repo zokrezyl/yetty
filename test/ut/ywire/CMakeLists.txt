@@ -8,3 +8,13 @@ yetty_add_c_test(
     SHIMS   trace platform_thread platform_term
     LABELS  contract wire
     TIMEOUT 30)
+
+# Malformed-stream + recovery hardening (#417): garbage framing, corrupt
+# base64/LZ4, chunk boundaries, desync detection, oversized args, yface boundary.
+yetty_add_c_test(
+    NAME    ywire_malformed
+    SOURCES malformed-test.c
+    LIBS    yetty_ywire yetty_yface yetty_ycore
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract wire
+    TIMEOUT 30)
