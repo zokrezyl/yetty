@@ -321,6 +321,21 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         }
     }
 
+    // Pointwise post-color effect (OSC-driven; index 0 = passthrough). Reads
+    // the shared frame clock so animation matches every other shader. Applied
+    // before premultiply so it acts on the straight (un-premultiplied) colour.
+    let fx_index = uniforms.ydraw_ydraw_post_fx_index;
+    if (fx_index != 0u) {
+        // The figure compositor has no pointer inputs — pass zero mouse/cursor.
+        result_color = fx_post_apply(
+            fx_index, result_color, input.grid_pixel, uniforms.ydraw_ydraw_view_size,
+            uniforms.ydraw_ydraw_time, vec2<f32>(0.0, 0.0), vec2<f32>(0.0, 0.0),
+            uniforms.ydraw_ydraw_cell_size,
+            uniforms.ydraw_ydraw_post_fx_p0, uniforms.ydraw_ydraw_post_fx_p1,
+            uniforms.ydraw_ydraw_post_fx_p2, uniforms.ydraw_ydraw_post_fx_p3,
+            uniforms.ydraw_ydraw_post_fx_p4, uniforms.ydraw_ydraw_post_fx_p5);
+    }
+
     // Output with premultiplied alpha for proper blending
     return vec4<f32>(result_color * result_alpha, result_alpha);
 }

@@ -140,6 +140,11 @@ struct yetty_yterminal_terminal {
     /* Same self-back-pointer trick for the YDRAW handler coroutine. */
     struct yetty_yterminal_terminal *ydraw_handler_self;
 
+    /* Same trick for the effect-OSC handler coroutines. One distinct
+     * self-pointer per effect class (pre/post/coord) so each OSC code gets its
+     * own coroutine rather than sharing. */
+    struct yetty_yterminal_terminal *effect_handler_self[3];
+
     /* Reusable read buffer handed back from terminal_pty_pipe_alloc.
      * Lazily allocated on the first read; freed in destroy. */
     char *pty_read_buf;
@@ -1061,6 +1066,88 @@ static struct yetty_ycore_void_result terminal_content_inset_process_input(
     }
 }
 
+/* Shader-effect OSC codes (mirror the poc protocol):
+ *   ESC ] 66666{7,8,9} ; INDEX:P0:P1:P2:P3:P4:P5 BEL
+ * 666667 = pre-effect (glyph, not yet applied), 666668 = post-color effect,
+ * 666669 = coordinate distortion (composite pass). INDEX 0 disables the class. */
+enum {
+    YETTY_OSC_CS_EFFECT_PRE = 666667,
+    YETTY_OSC_CS_EFFECT_POST = 666668,
+    YETTY_OSC_CS_EFFECT_COORD = 666669,
+};
+
+/* Read one effect envelope's text body, parse "INDEX:P0:...:P5", and apply. */
+static struct yetty_ycore_void_result terminal_effect_consume_envelope(
+    struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)
+{
+    int code = yetty_ywire_wire_statemachine_code(sm);
+    char payload[128];
+    size_t len = 0;
+    for (;;) {
+        uint8_t *dst = (uint8_t *)payload + len;
+        size_t room = (len < sizeof(payload) - 1) ? sizeof(payload) - 1 - len : 0;
+        uint8_t scratch[64];
+        struct yetty_ycore_size_result read_res =
+            room ? yetty_ywire_wire_statemachine_read(sm, dst, room)
+                 : yetty_ywire_wire_statemachine_read(sm, scratch, sizeof(scratch));
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, read_res, "terminal_effect: sm read");
+        if (read_res.value == 0) {
+            if (yetty_ywire_wire_statemachine_at_end(sm)) {
+                break;
+            }
+            yetty_yplatform_coro_yield();
+            continue;
+        }
+        if (room) {
+            len += read_res.value;
+        }
+    }
+    payload[len] = '\0';
+    ydebug("terminal_effect: code=%d raw_body_len=%zu body='%s'", code, len, payload);
+
+    /* Parse index + up to 6 colon-separated float params (missing → 0). */
+    uint32_t index = 0;
+    float params[6] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+    {
+        char *end = NULL;
+        index = (uint32_t)strtoul(payload, &end, 10);
+        for (int i = 0; i < 6 && end && *end == ':'; i++) {
+            params[i] = strtof(end + 1, &end);
+        }
+    }
+
+    if (code == YETTY_OSC_CS_EFFECT_POST) {
+        struct yetty_ycore_void_result sr =
+            yetty_yvterm_vterm_set_post_effect(terminal->grid, index, params[0], params[1],
+                                               params[2], params[3], params[4], params[5]);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "terminal_effect: set_post_effect");
+        ydebug("terminal_effect: post-effect index=%u p0=%.3f", index, (double)params[0]);
+    } else if (code == YETTY_OSC_CS_EFFECT_COORD) {
+        struct yetty_ycore_void_result sr =
+            yetty_yvterm_vterm_set_coord_effect(terminal->grid, index, params[0], params[1],
+                                                params[2], params[3], params[4], params[5]);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, sr, "terminal_effect: set_coord_effect");
+        ydebug("terminal_effect: coord-effect index=%u p0=%.3f", index, (double)params[0]);
+    } else {
+        /* Pre-effect (glyph substitution) not yet applied. */
+        ydebug("terminal_effect: OSC %d index=%u (pre-effect not yet applied)", code, index);
+    }
+    terminal->context.yetty_context.event_loop->ops->request_render(
+        terminal->context.yetty_context.event_loop);
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result terminal_effect_process_input(
+    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+{
+    struct yetty_yterminal_terminal *terminal = *(struct yetty_yterminal_terminal **)userdata;
+    for (;;) {
+        struct yetty_ycore_void_result r = terminal_effect_consume_envelope(terminal, sm);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_effect_process_input");
+        yetty_yplatform_coro_yield();
+    }
+}
+
 /* Ingest one YDRAW_BIN envelope into the scrolling rich-content ygrid. Records
  * are streamed via the drawable iterator and handed verbatim to the ygrid, which
  * rasterises SDF shapes, text-drawable-lists (with wire-shipped fonts), and
@@ -1978,6 +2065,22 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
         }
     }
     ydebug("terminal_create: ydraw handlers registered (CLEAR/BIN/OVERLAY)");
+
+    /* Shader-effect OSC handlers (pre/post/coord). Each code gets a distinct
+     * self-pointer so the SM spawns an independent coroutine per class. */
+    {
+        const int effect_codes[3] = {YETTY_OSC_CS_EFFECT_PRE, YETTY_OSC_CS_EFFECT_POST,
+                                     YETTY_OSC_CS_EFFECT_COORD};
+        for (size_t i = 0; i < 3; ++i) {
+            terminal->effect_handler_self[i] = terminal;
+            rr = yetty_ywire_wire_statemachine_register(
+                terminal->sm, YETTY_YWIRE_ENVELOPE_OSC, effect_codes[i], /*has_args=*/0,
+                terminal_effect_process_input, &terminal->effect_handler_self[i]);
+            YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, rr,
+                                "terminal_create: register effect handler");
+        }
+    }
+    ydebug("terminal_create: effect OSC handlers registered (666667/8/9)");
 
     /* This process is about to act as a yclass RPC / remote-object
      * server, so bring up the per-module discovery hooks explicitly.
@@ -2930,6 +3033,19 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
     case YETTY_YCORE_MOUSE_DRAG: {
         ydebug("terminal: MOUSE_MOVE win=(%.1f,%.1f) move_sub=%d", event->mouse.x, event->mouse.y,
                terminal->mouse_move_subscribed);
+
+        /* Feed the live pointer (pane-local pixels) to the text renderer so
+         * mouse-following shader effects track it. Independent of libvterm
+         * mouse-mode subscription — effects work even when the app isn't
+         * reading the mouse. The setter only forces a repaint when a coord
+         * effect is active. */
+        if (terminal->grid) {
+            struct yetty_ycore_void_result mouse_res = yetty_yvterm_vterm_set_mouse(
+                terminal->grid, event->mouse.x - view->bounds.x, event->mouse.y - view->bounds.y);
+            if (YETTY_IS_ERR(mouse_res)) {
+                yetty_ycore_error_destroy(mouse_res.error);
+            }
+        }
 
         /* Extend an in-flight selection. The platform's GLFW dispatcher
          * never synthesises MOUSE_DRAG — it only emits MOUSE_MOVE — so we

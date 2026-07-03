@@ -15,6 +15,7 @@
 #include <yetty/yframework/yframework.h>
 
 #include <yetty/yplatform/gpu-context.h>
+#include <yetty/yplatform/time.h>
 #include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event-loop.h>
@@ -98,6 +99,16 @@ struct yetty_ycore_void_result yetty_yframework_log_gpu_info(WGPUAdapter adapter
     yinfo("WebGPU adapter description:\n%s", desc);
     free(desc);
     return YETTY_OK_VOID();
+}
+
+void yetty_yframework_frame_tick(struct yetty_yframework *rt)
+{
+    if (!rt) {
+        return;
+    }
+    double previous_sec = rt->frame_time_sec;
+    rt->frame_time_sec = yetty_yplatform_ytime_monotonic_sec() - rt->frame_origin_sec;
+    rt->frame_delta_sec = rt->frame_time_sec - previous_sec;
 }
 
 /* Lifted verbatim from yetty/yetty.c init_webgpu(): request adapter +
@@ -472,6 +483,11 @@ struct yetty_yframework_ptr_result yetty_yframework_create(struct yetty_yclass_o
     rt->output_pipe = NULL;
     rt->clipboard = clipboard_res.value;
     rt->window_chrome = window_chrome_res.value;
+
+    /* Anchor the shared per-frame animation clock (zero-based from here). */
+    rt->frame_origin_sec = yetty_yplatform_ytime_monotonic_sec();
+    rt->frame_time_sec = 0.0;
+    rt->frame_delta_sec = 0.0;
 
     rt->gpu.app_gpu_context = *gpu;
 

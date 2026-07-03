@@ -173,7 +173,19 @@ struct ygrid_id_index_entry {
  * grid_size*cell_size = the content extent. When content == rect this is
  * the same value, so non-scrolling figures are unaffected. */
 #define U_VIEW_SIZE 8
-#define U_COUNT 9
+/* Shared animation clock (seconds since framework create) — written every
+ * frame from the framework's per-frame clock so every layer sees the same
+ * value. Feeds the pointwise post-color effect (effects-lib.wgsl). */
+#define U_TIME 9
+/* OSC-driven post-color effect selection: index (0 = none) + 6 params. */
+#define U_POST_FX_INDEX 10
+#define U_POST_FX_P0 11
+#define U_POST_FX_P1 12
+#define U_POST_FX_P2 13
+#define U_POST_FX_P3 14
+#define U_POST_FX_P4 15
+#define U_POST_FX_P5 16
+#define U_COUNT 17
 
 /*===========================================================================
  * The figure
@@ -258,6 +270,16 @@ struct YETTY_ANNOTATE("class@ygrid:grid") YETTY_ANNOTATE("parent@yfigure:figure"
     struct yetty_yrender_gpu_resource_set rs;
     struct yetty_yrender_gpu_resource_set sdf_lib_rs;
     struct yetty_ycore_buffer sdf_lib_code;
+    /* Child effects lib (effects-lib.wgsl) — pointwise post-color effect
+     * functions + fx_post_apply() dispatcher, merged into the layer shader.
+     * Present only when the lib file loaded at create; NULL-safe otherwise. */
+    struct yetty_yrender_gpu_resource_set effects_lib_rs;
+    struct yetty_ycore_buffer effects_lib_code;
+    int effects_lib_loaded;
+    /* Borrowed framework — read each frame for the shared animation clock
+     * (frame_time_sec) that feeds the effect time uniform. NULL in headless
+     * test mode, in which case the effect clock stays at 0. */
+    struct yetty_yframework *runtime;
     /* ydraw-layer.wgsl raw bytes, loaded from paths/shaders. Combined
      * shader = stub font dispatcher + this file. */
     struct yetty_ycore_buffer layer_shader_code;
@@ -1733,6 +1755,7 @@ static struct yetty_ycore_void_result ygrid_destroy(struct yetty_yfigure_figure 
     }
 
     free(g->sdf_lib_code.data);
+    free(g->effects_lib_code.data);
     free(g->layer_shader_code.data);
     free(g->combined_shader);
     free(g->grid_staging);
@@ -2008,6 +2031,10 @@ static struct yetty_ycore_void_result ygrid_render(struct yetty_yfigure_figure *
     g->rs.uniforms[U_CZ_OFF].vec2[0] = g->scroll_x;
     g->rs.uniforms[U_CZ_OFF].vec2[1] = g->scroll_y;
     g->rs.uniforms[U_PRIM_COUNT].u32 = g->prim_count;
+    /* Shared animation clock — same value across every shader this frame. */
+    if (g->runtime) {
+        g->rs.uniforms[U_TIME].f32 = (float)g->runtime->frame_time_sec;
+    }
     g->rs.pixel_size.width = w;
     g->rs.pixel_size.height = h;
 
@@ -2621,6 +2648,24 @@ static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
         (struct yetty_yrender_uniform){"ydraw_cell_zoom_off", YETTY_YRENDER_UNIFORM_VEC2};
     rs->uniforms[U_VIEW_SIZE] =
         (struct yetty_yrender_uniform){"ydraw_view_size", YETTY_YRENDER_UNIFORM_VEC2};
+    /* Shared clock + OSC-driven post-effect selection. Accessor names follow
+     * the same doubled-namespace rule: uniforms.ydraw_ydraw_time etc. */
+    rs->uniforms[U_TIME] =
+        (struct yetty_yrender_uniform){"ydraw_time", YETTY_YRENDER_UNIFORM_F32};
+    rs->uniforms[U_POST_FX_INDEX] =
+        (struct yetty_yrender_uniform){"ydraw_post_fx_index", YETTY_YRENDER_UNIFORM_U32};
+    rs->uniforms[U_POST_FX_P0] =
+        (struct yetty_yrender_uniform){"ydraw_post_fx_p0", YETTY_YRENDER_UNIFORM_F32};
+    rs->uniforms[U_POST_FX_P1] =
+        (struct yetty_yrender_uniform){"ydraw_post_fx_p1", YETTY_YRENDER_UNIFORM_F32};
+    rs->uniforms[U_POST_FX_P2] =
+        (struct yetty_yrender_uniform){"ydraw_post_fx_p2", YETTY_YRENDER_UNIFORM_F32};
+    rs->uniforms[U_POST_FX_P3] =
+        (struct yetty_yrender_uniform){"ydraw_post_fx_p3", YETTY_YRENDER_UNIFORM_F32};
+    rs->uniforms[U_POST_FX_P4] =
+        (struct yetty_yrender_uniform){"ydraw_post_fx_p4", YETTY_YRENDER_UNIFORM_F32};
+    rs->uniforms[U_POST_FX_P5] =
+        (struct yetty_yrender_uniform){"ydraw_post_fx_p5", YETTY_YRENDER_UNIFORM_F32};
 
     /* Defaults: no zoom; scroll (cz_off) and view_size are set per-frame
      * in render from the figure's rect + scroll offset. */
@@ -2633,6 +2678,14 @@ static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
     rs->uniforms[U_CZ_OFF].vec2[1] = 0.0f;
     rs->uniforms[U_VIEW_SIZE].vec2[0] = 0.0f;
     rs->uniforms[U_VIEW_SIZE].vec2[1] = 0.0f;
+    rs->uniforms[U_TIME].f32 = 0.0f;
+    rs->uniforms[U_POST_FX_INDEX].u32 = 0;
+    rs->uniforms[U_POST_FX_P0].f32 = 0.0f;
+    rs->uniforms[U_POST_FX_P1].f32 = 0.0f;
+    rs->uniforms[U_POST_FX_P2].f32 = 0.0f;
+    rs->uniforms[U_POST_FX_P3].f32 = 0.0f;
+    rs->uniforms[U_POST_FX_P4].f32 = 0.0f;
+    rs->uniforms[U_POST_FX_P5].f32 = 0.0f;
 }
 
 /* Load the raw ydraw-layer.wgsl bytes into layer_shader_code. The
@@ -2708,6 +2761,11 @@ static struct yetty_ycore_void_result rebuild_font_dispatcher(struct yetty_ygrid
      * (skipped slots fall through to the default). */
     size_t children_used = 0;
     grid->rs.children[children_used++] = &grid->sdf_lib_rs;
+    /* Effects lib defines fx_post_apply() used by the layer shader. Attach it
+     * (when loaded) before the fonts so its functions precede the parent. */
+    if (grid->effects_lib_loaded) {
+        grid->rs.children[children_used++] = &grid->effects_lib_rs;
+    }
     for (uint32_t slot = 0; slot < grid->font_count; slot++) {
         if (!font_rs[slot]) {
             continue;
@@ -2738,6 +2796,43 @@ static struct yetty_ycore_void_result load_sdf_lib(struct yetty_ygrid_grid *g,
     strncpy(g->sdf_lib_rs.namespace, "ysdf_lib", YETTY_YRENDER_NAME_MAX - 1);
     yetty_yrender_shader_code_set(&g->sdf_lib_rs.shader, (const char *)g->sdf_lib_code.data,
                                   g->sdf_lib_code.size);
+    return YETTY_OK_VOID();
+}
+
+/* Load the pointwise post-color effects library (effects-lib.wgsl) as a child
+ * resource set. The child is ALWAYS attached so the layer shader's
+ * fx_post_apply() call always resolves: if the file is missing we fall back to
+ * a built-in no-op definition (program-lifetime static string) so ygrid still
+ * compiles — effects are simply unavailable until the asset is present. */
+static struct yetty_ycore_void_result load_effects_lib(struct yetty_ygrid_grid *g,
+                                                       const struct yetty_context *context)
+{
+    /* No-op fallback — signature MUST match effects-lib.wgsl's fx_post_apply. */
+    static const char fx_stub_wgsl[] =
+        "fn fx_post_apply(index: u32, color: vec3<f32>, pixel: vec2<f32>, "
+        "screen: vec2<f32>, time: f32, p0: f32, p1: f32, p2: f32, p3: f32, "
+        "p4: f32, p5: f32) -> vec3<f32> { return color; }\n";
+
+    struct yetty_yconfig_config *config = context->runtime->config;
+    const char *shaders_dir = config->ops->get_string(config, "paths/shaders", "");
+    char path[512];
+    snprintf(path, sizeof(path), "%s/effects-lib.wgsl", shaders_dir);
+    struct yetty_ycore_buffer_result fr = yetty_ycore_read_file(path);
+    strncpy(g->effects_lib_rs.namespace, "fx_lib", YETTY_YRENDER_NAME_MAX - 1);
+    if (YETTY_IS_ERR(fr)) {
+        ywarn("ygrid: effects-lib.wgsl not loaded (%s) — post effects disabled",
+              fr.error.msg ? fr.error.msg : "read failed");
+        yetty_ycore_error_destroy(fr.error);
+        yetty_yrender_shader_code_set(&g->effects_lib_rs.shader, fx_stub_wgsl,
+                                      sizeof(fx_stub_wgsl) - 1);
+        g->effects_lib_loaded = 1; /* stub still defines the symbol */
+        return YETTY_OK_VOID();
+    }
+    g->effects_lib_code = fr.value;
+    yetty_yrender_shader_code_set(&g->effects_lib_rs.shader,
+                                  (const char *)g->effects_lib_code.data,
+                                  g->effects_lib_code.size);
+    g->effects_lib_loaded = 1;
     return YETTY_OK_VOID();
 }
 
@@ -2840,6 +2935,7 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
     g->grid_rows = grid_rows;
     g->content_scale = 1.0f;
     if (!headless) {
+        g->runtime = context->runtime;
         g->device = context->runtime->gpu.device;
         g->queue = context->runtime->gpu.queue;
         g->target_format = context->runtime->gpu.surface_format;
@@ -2953,6 +3049,12 @@ struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectang
         if (YETTY_IS_ERR(ls)) {
             (void)ygrid_destroy(base);
             return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: load_layer_shader", ls);
+        }
+        /* Non-fatal: leaves post effects disabled if the file is absent. */
+        struct yetty_ycore_void_result er = load_effects_lib(g, context);
+        if (YETTY_IS_ERR(er)) {
+            (void)ygrid_destroy(base);
+            return YETTY_ERR(yetty_ygrid_grid_ptr, "ygrid_create: load_effects_lib", er);
         }
         struct yetty_ycore_void_result br = build_binder(g);
         if (YETTY_IS_ERR(br)) {

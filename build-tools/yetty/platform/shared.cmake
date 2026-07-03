@@ -651,6 +651,10 @@ function(yetty_embed_assets TARGET)
     # rendered by the ygrid layer (ygrid.wgsl) + the vterm figure's inlined
     # text shader, so the old yvterm text-layer/ydraw-layer shaders are gone.
     file(COPY "${YETTY_ROOT}/src/yetty/ygrid/ygrid.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
+    # Pointwise post-color effects library — attached at runtime as a child
+    # resource set of the ygrid layer (and the vterm text shader); provides the
+    # fx_post_apply() the layer shaders call. See src/yetty/yshaders/effects-lib.wgsl.
+    file(COPY "${YETTY_ROOT}/src/yetty/yshaders/effects-lib.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/ymgui/ymgui-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     file(COPY "${YETTY_ROOT}/src/yetty/yterminal/background-layer.wgsl" DESTINATION "${EMBED_DATA_DIR}/shaders")
     # Generated SDF dispatcher + sdf_* functions — attached at runtime as a

@@ -37,7 +37,6 @@
 #include <yetty/yfont/shader-glyph.h>
 #include <yetty/yframework/yframework.h>
 #include <yetty/yplatform/fs.h>
-#include <yetty/yplatform/time.h>
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
@@ -78,8 +77,6 @@ struct yetty_yvterm_shader_glyph_layer {
     struct yetty_yrender_gpu_resource_set rs;
     struct yetty_yrender_gpu_resource_binder *binder;
     int binder_finalized;
-
-    double time_origin_sec; /* monotonic origin; time uniform = now - origin */
 
     /* Per-frame packed instance list (SG_INSTANCE_WORDS u32 per instance). */
     uint32_t *instances;
@@ -616,8 +613,6 @@ struct yetty_yvterm_shader_glyph_layer_ptr_result yetty_yvterm_shader_glyph_laye
     }
     layer->binder = br.value;
 
-    layer->time_origin_sec = yetty_yplatform_ytime_monotonic_sec();
-
     /* Animation co-driver timer (armed on the first frame that has glyphs). */
     layer->event_loop = context->event_loop;
     layer->listener.handler = sg_on_anim_tick;
@@ -709,8 +704,8 @@ struct yetty_ycore_void_result yetty_yvterm_shader_glyph_layer_render(
     layer->rs.uniforms[U_GRID_SIZE].vec2[1] = (float)rows;
     layer->rs.uniforms[U_CELL_SIZE].vec2[0] = cell_width;
     layer->rs.uniforms[U_CELL_SIZE].vec2[1] = cell_height;
-    layer->rs.uniforms[U_TIME].f32 =
-        (float)(yetty_yplatform_ytime_monotonic_sec() - layer->time_origin_sec);
+    /* Shared frame clock: identical value across every shader this frame. */
+    layer->rs.uniforms[U_TIME].f32 = (float)layer->context->runtime->frame_time_sec;
     layer->rs.uniforms[U_VZ_SCALE].f32 = visual_zoom_scale > 0.0f ? visual_zoom_scale : 1.0f;
     layer->rs.uniforms[U_VZ_OFF].vec2[0] = visual_zoom_off_x;
     layer->rs.uniforms[U_VZ_OFF].vec2[1] = visual_zoom_off_y;
