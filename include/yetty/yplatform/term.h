@@ -30,8 +30,7 @@ int yetty_yplatform_term_get_size(int *cols, int *rows);
  * terminal does not report a pixel size (e.g. a Win32 console). Any of the
  * output pointers may be NULL. Returns 0 on success, -1 if the size cannot be
  * determined (outputs left unchanged). */
-int yetty_yplatform_term_get_size_pixels(int *cols, int *rows, int *pixel_width,
-                                         int *pixel_height);
+int yetty_yplatform_term_get_size_pixels(int *cols, int *rows, int *pixel_width, int *pixel_height);
 
 #ifdef __cplusplus
 }
