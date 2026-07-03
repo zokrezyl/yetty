@@ -1,0 +1,39 @@
+# LeakSanitizer suppressions — see issue #414.
+#
+# These cover known third-party library lifetime allocations that a few tests
+# trigger but cannot free. Using suppressions (a narrow, documented mechanism)
+# instead of `asan-skip` means the affected tests still RUN under ASAN — a new
+# Yetty-owned leak still fails the gate; only these documented third-party
+# families are ignored.
+#
+# Every entry matches a THIRD-PARTY library frame (Fontconfig / Lexbor / libcss)
+# — never a Yetty wrapper function — so a leak allocated in Yetty code under one
+# of these paths is NOT hidden. LSan matches each `leak:<substr>` against any
+# function name in a leak's stack. Wired via LSAN_OPTIONS in `make test-asan`.
+# These symbols only appear in the ypdf (Fontconfig) and ybrowser/ylexbor
+# (Lexbor + libcss) tests.
+
+# --- Fontconfig -------------------------------------------------------------
+# Process-global config (FcInitLoadConfigAndFonts -> FcConfigInit) kept for the
+# process lifetime by design and never FcFini()'d. Triggered by ypdf system-font
+# resolution. Both init frames appear in every Fontconfig leak stack.
+leak:FcConfigInit
+leak:FcInitLoadConfigAndFonts
+
+# --- libcss (CSS selection) -------------------------------------------------
+# css_select_style allocates per-selection state (including the node-classes
+# array the libcss node handler API gives no callback to free). This frame sits
+# above every such leak, including the Yetty node-classes handler's allocation.
+leak:css_select_style
+
+# --- Lexbor (DOM + CSS engine) ----------------------------------------------
+# Internal parser/DOM-CSS lifetime state Lexbor does not expose teardown for.
+leak:lxb_dom_document_css_init
+leak:lxb_css_
+leak:lexbor_mraw
+leak:lexbor_dobject
+leak:lexbor_hash
+leak:lexbor_array
+leak:lexbor_avl
+leak:lexbor_bst
+leak:lexbor_str

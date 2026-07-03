@@ -4,29 +4,19 @@
 # ygrid_process_bytes and assert entity / prim state via the ygrid
 # ops->dump.
 
-enable_testing()
+yetty_add_c_test(
+    NAME    ygrid_wire
+    SOURCES ygrid-wire-test.c
+    LIBS    yetty_ygrid yetty_ydraw_factory yetty_ydraw_core yetty_ysdf yetty_yfigure yetty_ycore
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract wire
+    TIMEOUT 30)
 
-set(YGRID_TEST_SHIM_SOURCES
-    ${YETTY_ROOT}/src/yetty/ytrace/ytrace.c
-    ${YETTY_ROOT}/src/yetty/yplatform/thread/default.c
-    ${YETTY_ROOT}/src/yetty/yplatform/term/default.c
-)
-
-add_executable(ygrid-wire-test
-    ygrid-wire-test.c
-    ${YGRID_TEST_SHIM_SOURCES}
-)
-target_include_directories(ygrid-wire-test PRIVATE
-    ${YETTY_ROOT}/include
-    ${YETTY_ROOT}/src
-)
-target_link_libraries(ygrid-wire-test PRIVATE
-    yetty_ygrid
-    yetty_ydraw_factory
-    yetty_ydraw_core
-    yetty_ysdf
-    yetty_yfigure
-    yetty_ycore
-    m
-)
-add_test(NAME ygrid_wire COMMAND ygrid-wire-test)
+# Malformed-buffer recovery + dump stability (complements the wire goldens).
+yetty_add_c_test(
+    NAME    ygrid_robustness
+    SOURCES robustness-test.c
+    LIBS    yetty_ygrid yetty_ydraw_factory yetty_ydraw_core yetty_ysdf yetty_yfigure yetty_ycore
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract wire
+    TIMEOUT 30)

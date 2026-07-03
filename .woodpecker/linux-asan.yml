@@ -1,17 +1,34 @@
-# DISABLED: see linux.yml.
+# ASAN lane: build the sanitizer tree and run the deterministic test gate
+# under AddressSanitizer. Excludes network/gpu/display/slow and asan-skip
+# (see docs/testing.md §4/§9).
 labels:
   platform: linux/amd64
   backend: docker
 
 when:
   - event: [push, manual, pull_request, tag]
-    evaluate: 'false'
+
+clone:
+  git:
+    image: woodpeckerci/plugin-git
+    settings:
+      lfs: true
 
 steps:
-  build:
+  # See android.yml for explanation.
+  fix-workspace-perms:
+    image: alpine
+    commands:
+      - chown -R 1000:1000 .
+
+  test-asan:
     image: yetty-build:latest
     commands:
-      - git lfs install
-      - git lfs fetch
-      - git lfs checkout
-      - make build-desktop-ytrace-asan
+      # plugin-git makes a shallow, tagless clone; the 3rdparty version
+      # resolver in shared.cmake runs `git describe --tags HEAD`, which
+      # needs a yetty-X.Y.Z tag *reachable* from HEAD — both the depth
+      # and the missing tag refs must be repaired.
+      - git fetch --unshallow --tags 2>/dev/null || git fetch --tags
+      # test-asan configures + builds the asan tree, then runs ctest with the
+      # asan exclusion set.
+      - make test-asan

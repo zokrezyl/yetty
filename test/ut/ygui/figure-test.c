@@ -20,8 +20,8 @@
  *   - Malformed image bytes surface as a Result error from emit rather than
  *     being silently dropped.
  *
- * NDEBUG release builds elide assert(), so this test uses explicit if-error
- * checks instead.
+ * Assertions use the shared ytest.h harness so the checks stay live under
+ * Release/NDEBUG.
  */
 
 #include <yetty/ygui/ygui.h>
@@ -33,18 +33,11 @@
 /* Direct access to engine internals for assertions. */
 #include "yetty/ygui/internal.h"
 
-#include <stddef.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "ytest.h"
 
-#define CHECK(cond, label)                                                                         \
-    do {                                                                                           \
-        if (!(cond)) {                                                                             \
-            fprintf(stderr, "FAIL: %s (%s:%d)\n", label, __FILE__, __LINE__);                      \
-            exit(1);                                                                               \
-        }                                                                                          \
-    } while (0)
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
 
 /*===========================================================================
  * Stub figure: counts the bytes its process_bytes receives. Registered under
@@ -121,7 +114,9 @@ static struct yetty_yclass_ptr_result stub_figure_class_get(void)
          (yetty_yclass_impl_t)stub_figure_reset_content},
     };
     struct yetty_yclass_ptr_result parent_r = yetty_yfigure_figure_class_get();
-    CHECK(YETTY_IS_OK(parent_r), "stub_figure parent class");
+    if (YETTY_IS_ERR(parent_r)) {
+        return parent_r;
+    }
     struct yetty_yclass_ptr_result r =
         yetty_yclass_register(&desc, ops, sizeof(ops) / sizeof(ops[0]), parent_r.value, NULL, 0);
     if (YETTY_IS_OK(r)) {
@@ -152,26 +147,27 @@ static struct yetty_yfigure_figure_ptr_result stub_figure_factory(
 
 /* Build a registry that mints a stub figure for the chrome ygrid and for
  * the yimage widget kind. Caller frees. */
-static struct yetty_yfigure_registry *make_registry(void)
+static struct yetty_yfigure_registry *make_registry(struct ytest *test)
 {
     struct yetty_yfigure_registry_ptr_result r = yetty_yfigure_registry_create();
-    CHECK(YETTY_IS_OK(r), "registry_create");
+    YTEST_REQUIRE_OK(test, r);
     const char *const kinds[] = {"ygrid", "yimage"};
     for (size_t i = 0; i < sizeof(kinds) / sizeof(kinds[0]); i++) {
         struct yetty_ycore_void_result rr = yetty_yfigure_registry_register(
             r.value, yetty_yfigure_kind_token(kinds[i]), stub_figure_factory, NULL);
-        CHECK(YETTY_IS_OK(rr), "registry_register");
+        YTEST_REQUIRE_OK(test, rr);
     }
     return r.value;
 }
 
 /* Look up a minted stub figure by id and return its bytes_seen, or SIZE_MAX
  * if no child is bound to that id. */
-static size_t child_bytes_seen(struct yetty_yclass_object *container, uint32_t id)
+static size_t child_bytes_seen(struct ytest *test, struct yetty_yclass_object *container,
+                               uint32_t id)
 {
     struct yetty_yfigure_figure_ptr_result child_res =
         yetty_yfigure_container_find_child_by_id(container, id);
-    CHECK(YETTY_IS_OK(child_res), "find_child_by_id");
+    YTEST_REQUIRE_OK(test, child_res);
     if (!child_res.value) {
         return (size_t)-1;
     }
@@ -180,11 +176,11 @@ static size_t child_bytes_seen(struct yetty_yclass_object *container, uint32_t i
     return figure->bytes_seen;
 }
 
-static int child_present(struct yetty_yclass_object *container, uint32_t id)
+static int child_present(struct ytest *test, struct yetty_yclass_object *container, uint32_t id)
 {
     struct yetty_yfigure_figure_ptr_result child_res =
         yetty_yfigure_container_find_child_by_id(container, id);
-    CHECK(YETTY_IS_OK(child_res), "find_child_by_id");
+    YTEST_REQUIRE_OK(test, child_res);
     return child_res.value != NULL;
 }
 
@@ -218,39 +214,41 @@ static const uint8_t k_bmp_2x2[] = {
  * holds one 100x100 yimage. The container and registry are returned through
  * out-params; the caller owns and destroys all three. */
 static struct yetty_yclass_object *make_engine_with_yimage(
-    struct yetty_yfigure_registry **out_registry, struct yetty_yclass_object **out_container,
-    struct yetty_yclass_object **out_img)
+    struct ytest *test, struct yetty_yfigure_registry **out_registry,
+    struct yetty_yclass_object **out_container, struct yetty_yclass_object **out_img)
 {
-    struct yetty_yfigure_registry *registry = make_registry();
+    struct yetty_yfigure_registry *registry = make_registry(test);
     struct yetty_yclass_ctx yclass_ctx = {0};
     struct yetty_yclass_object_ptr_result cont_res = yetty_yfigure_container_create(&yclass_ctx);
-    CHECK(YETTY_IS_OK(cont_res), "container_create");
+    YTEST_REQUIRE_OK(test, cont_res);
     struct yetty_yclass_object *container = cont_res.value;
     struct yetty_ycore_rectangle container_rect = {{0, 0}, {800, 600}};
     yetty_yfigure_container_set_registry(container, registry);
     yetty_yfigure_container_set_rect(container, container_rect);
 
     struct yetty_yclass_object_ptr_result er = yetty_ygui_framework_create(NULL);
-    CHECK(YETTY_IS_OK(er), "engine_create");
+    YTEST_REQUIRE_OK(test, er);
     struct yetty_yclass_object *engine = er.value;
-    CHECK(YETTY_IS_OK(yetty_ygui_framework_set_container_obj(engine, container)),
-          "engine_set_container_obj");
+    struct yetty_ycore_void_result set_container_res =
+        yetty_ygui_framework_set_container_obj(engine, container);
+    YTEST_REQUIRE_OK(test, set_container_res);
 
     struct yetty_yclass_object_ptr_result rr =
         yetty_ygui_widget_new(yetty_ygui_panel_class_get().value);
-    CHECK(YETTY_IS_OK(rr), "add panel");
+    YTEST_REQUIRE_OK(test, rr);
     struct yetty_yclass_object *root = rr.value;
-    CHECK(YETTY_IS_OK(yetty_ygui_framework_set_root(engine, root)), "engine_set_root");
+    struct yetty_ycore_void_result set_root_res = yetty_ygui_framework_set_root(engine, root);
+    YTEST_REQUIRE_OK(test, set_root_res);
 
     struct yetty_yclass_object_ptr_result ir =
         yetty_ygui_widget_add(root, yetty_ygui_yimage_class_get().value);
-    CHECK(YETTY_IS_OK(ir), "add yimage");
+    YTEST_REQUIRE_OK(test, ir);
     struct yetty_yclass_object *img = ir.value;
 
     /* Give yimage an explicit width/height so the layout pass produces
      * a non-empty rect for emit_container to ship. */
     struct yetty_ygui_layout_const_ptr_result img_layout_res = yetty_ygui_widget_layout_get(img);
-    CHECK(YETTY_IS_OK(img_layout_res), "img layout_get");
+    YTEST_REQUIRE_OK(test, img_layout_res);
     struct yetty_ygui_layout l = *img_layout_res.value;
     l.width = 100.0f;
     l.height = 100.0f;
@@ -262,53 +260,53 @@ static struct yetty_yclass_object *make_engine_with_yimage(
     return engine;
 }
 
-static void test_yimage_emit(void)
+static void test_yimage_emit(struct ytest *test)
 {
     struct yetty_yfigure_registry *registry = NULL;
     struct yetty_yclass_object *container = NULL;
     struct yetty_yclass_object *img = NULL;
     struct yetty_yclass_object *engine =
-        make_engine_with_yimage(&registry, &container, &img);
+        make_engine_with_yimage(test, &registry, &container, &img);
 
     struct yetty_ycore_void_result br =
         yetty_ygui_yimage_set_bytes(img, k_bmp_2x2, sizeof(k_bmp_2x2));
-    CHECK(YETTY_IS_OK(br), "yimage_set_bytes");
+    YTEST_REQUIRE_OK(test, br);
 
     /* Emit and inspect the container's resulting figure tree. */
     struct yetty_ycore_void_result rer = yetty_ygui_framework_emit(engine);
-    CHECK(YETTY_IS_OK(rer), "engine_emit #1");
+    YTEST_REQUIRE_OK(test, rer);
 
     uint32_t ygrid_id = yetty_ygui_framework_ygrid_id(engine);
     struct yetty_ycore_uint32_result img_id_res = yetty_ygui_widget_id(img);
-    CHECK(YETTY_IS_OK(img_id_res), "img widget_id");
+    YTEST_REQUIRE_OK(test, img_id_res);
     uint32_t img_id = img_id_res.value;
 
     /* Pass 1 minted the chrome ygrid and the yimage child (the receiver IS
      * the root container — no synthetic engine container is created; the
      * panel has figure_kind=0 so its default emit_container is a no-op). */
-    CHECK(child_present(container, ygrid_id), "ygrid child minted");
-    CHECK(child_present(container, img_id), "yimage child minted");
+    YTEST_CHECK(test, child_present(test, container, ygrid_id));
+    YTEST_CHECK(test, child_present(test, container, img_id));
 
     /* Pass 2 applied the yimage's rendered drawable_list (CMD_ZERO + one
      * yimage prim) to its child as a body — the child saw non-zero bytes. */
-    size_t img_bytes = child_bytes_seen(container, img_id);
-    CHECK(img_bytes != (size_t)-1, "yimage child bound");
-    CHECK(img_bytes > 0, "yimage body applied to child");
+    size_t img_bytes = child_bytes_seen(test, container, img_id);
+    YTEST_CHECK(test, img_bytes != (size_t)-1);
+    YTEST_CHECK(test, img_bytes > 0);
 
     /* Second emit: ygrid already exists — emit sends SET_CHILD_RECT, not a
      * fresh CREATE_CHILD, so the container keeps the same single ygrid child. */
     rer = yetty_ygui_framework_emit(engine);
-    CHECK(YETTY_IS_OK(rer), "engine_emit #2");
-    CHECK(child_present(container, ygrid_id), "ygrid child still present after emit #2");
-    CHECK(child_present(container, img_id), "yimage child still present after emit #2");
+    YTEST_REQUIRE_OK(test, rer);
+    YTEST_CHECK(test, child_present(test, container, ygrid_id));
+    YTEST_CHECK(test, child_present(test, container, img_id));
 
     /* Destroy yimage — the engine queues a delete that drops the child from
      * the container on the next emit. */
     yetty_ygui_widget_destroy(img);
     rer = yetty_ygui_framework_emit(engine);
-    CHECK(YETTY_IS_OK(rer), "engine_emit #3");
-    CHECK(!child_present(container, img_id), "yimage child removed after destroy");
-    CHECK(child_present(container, ygrid_id), "ygrid child survives yimage destroy");
+    YTEST_REQUIRE_OK(test, rer);
+    YTEST_CHECK(test, !child_present(test, container, img_id));
+    YTEST_CHECK(test, child_present(test, container, ygrid_id));
 
     yetty_ygui_framework_destroy(engine);
     yetty_yfigure_destroy(container);
@@ -320,82 +318,95 @@ static void test_yimage_emit(void)
  * re-apply the body — the child keeps its last bytes. A subsequent content
  * change must re-apply it. This is what stops an unchanged page (a scrollarea
  * figure) from being re-serialized on every emit. */
-static void test_incremental_figure_skip(void)
+static void test_incremental_figure_skip(struct ytest *test)
 {
-    struct yetty_yfigure_registry *registry = make_registry();
+    struct yetty_yfigure_registry *registry = make_registry(test);
     /* The scrollarea promotes itself to a YGRID figure — already in the
      * registry above. The label inside it paints into that figure's body. */
     struct yetty_yclass_ctx yclass_ctx = {0};
     struct yetty_yclass_object_ptr_result cont_res = yetty_yfigure_container_create(&yclass_ctx);
-    CHECK(YETTY_IS_OK(cont_res), "skip: container_create");
+    YTEST_REQUIRE_OK(test, cont_res);
     struct yetty_yclass_object *container = cont_res.value;
     struct yetty_ycore_rectangle container_rect = {{0, 0}, {800, 600}};
     yetty_yfigure_container_set_registry(container, registry);
     yetty_yfigure_container_set_rect(container, container_rect);
 
     struct yetty_yclass_object_ptr_result er = yetty_ygui_framework_create(NULL);
-    CHECK(YETTY_IS_OK(er), "skip: framework_create");
+    YTEST_REQUIRE_OK(test, er);
     struct yetty_yclass_object *engine = er.value;
-    CHECK(YETTY_IS_OK(yetty_ygui_framework_set_container_obj(engine, container)),
-          "skip: set_container_obj");
+    struct yetty_ycore_void_result set_container_res =
+        yetty_ygui_framework_set_container_obj(engine, container);
+    YTEST_REQUIRE_OK(test, set_container_res);
 
     struct yetty_yclass_object_ptr_result rr =
         yetty_ygui_widget_new(yetty_ygui_panel_class_get().value);
-    CHECK(YETTY_IS_OK(rr), "skip: add panel");
+    YTEST_REQUIRE_OK(test, rr);
     struct yetty_yclass_object *root = rr.value;
-    CHECK(YETTY_IS_OK(yetty_ygui_framework_set_root(engine, root)), "skip: set_root");
+    struct yetty_ycore_void_result set_root_res = yetty_ygui_framework_set_root(engine, root);
+    YTEST_REQUIRE_OK(test, set_root_res);
 
     struct yetty_yclass_object_ptr_result sr =
         yetty_ygui_widget_add(root, yetty_ygui_scrollarea_class_get().value);
-    CHECK(YETTY_IS_OK(sr), "skip: add scrollarea");
+    YTEST_REQUIRE_OK(test, sr);
     struct yetty_yclass_object *scroll = sr.value;
     struct yetty_ygui_layout_const_ptr_result scroll_layout_res =
         yetty_ygui_widget_layout_get(scroll);
-    CHECK(YETTY_IS_OK(scroll_layout_res), "skip: scroll layout_get");
+    YTEST_REQUIRE_OK(test, scroll_layout_res);
     struct yetty_ygui_layout sl = *scroll_layout_res.value;
     sl.width = 200.0f;
     sl.height = 200.0f;
-    CHECK(YETTY_IS_OK(yetty_ygui_widget_layout_set(scroll, &sl)), "skip: scroll layout");
+    struct yetty_ycore_void_result scroll_layout_set_res =
+        yetty_ygui_widget_layout_set(scroll, &sl);
+    YTEST_REQUIRE_OK(test, scroll_layout_set_res);
 
     struct yetty_yclass_object_ptr_result lr =
         yetty_ygui_widget_add(scroll, yetty_ygui_label_class_get().value);
-    CHECK(YETTY_IS_OK(lr), "skip: add label");
+    YTEST_REQUIRE_OK(test, lr);
     struct yetty_yclass_object *label = lr.value;
-    CHECK(YETTY_IS_OK(yetty_ygui_label_set_text(label, "page content")), "skip: label text");
+    struct yetty_ycore_void_result label_text_res = yetty_ygui_label_set_text(label, "page content");
+    YTEST_REQUIRE_OK(test, label_text_res);
     struct yetty_ygui_layout_const_ptr_result label_layout_res =
         yetty_ygui_widget_layout_get(label);
-    CHECK(YETTY_IS_OK(label_layout_res), "skip: label layout_get");
+    YTEST_REQUIRE_OK(test, label_layout_res);
     struct yetty_ygui_layout ll = *label_layout_res.value;
     ll.width = 180.0f;
     ll.height = 22.0f;
-    CHECK(YETTY_IS_OK(yetty_ygui_widget_layout_set(label, &ll)), "skip: label layout");
+    struct yetty_ycore_void_result label_layout_set_res =
+        yetty_ygui_widget_layout_set(label, &ll);
+    YTEST_REQUIRE_OK(test, label_layout_set_res);
 
     struct yetty_ycore_uint32_result scroll_id_res = yetty_ygui_widget_id(scroll);
-    CHECK(YETTY_IS_OK(scroll_id_res), "skip: scroll widget_id");
+    YTEST_REQUIRE_OK(test, scroll_id_res);
     uint32_t scroll_id = scroll_id_res.value;
 
     /* Emit #1: scrollarea figure minted → body applied. */
-    CHECK(YETTY_IS_OK(yetty_ygui_framework_emit(engine)), "skip: emit #1");
-    size_t after1 = child_bytes_seen(container, scroll_id);
-    CHECK(after1 != (size_t)-1, "skip: scrollarea child minted");
-    CHECK(after1 > 0, "skip: emit #1 applies scrollarea figure body");
+    struct yetty_ycore_void_result emit1 = yetty_ygui_framework_emit(engine);
+    YTEST_REQUIRE_OK(test, emit1);
+    size_t after1 = child_bytes_seen(test, container, scroll_id);
+    YTEST_CHECK(test, after1 != (size_t)-1);
+    YTEST_CHECK(test, after1 > 0);
 
     /* Emit #2: nothing changed and the figure is minted → body skipped, so
      * the child's accumulated bytes do not grow. */
-    CHECK(YETTY_IS_OK(yetty_ygui_framework_emit(engine)), "skip: emit #2");
-    size_t after2 = child_bytes_seen(container, scroll_id);
-    CHECK(after2 == after1, "skip: emit #2 omits clean figure body");
+    struct yetty_ycore_void_result emit2 = yetty_ygui_framework_emit(engine);
+    YTEST_REQUIRE_OK(test, emit2);
+    size_t after2 = child_bytes_seen(test, container, scroll_id);
+    YTEST_CHECK_EQ_SIZE(test, after2, after1);
 
     /* A content change re-dirties the figure → it re-applies on next emit. */
-    CHECK(YETTY_IS_OK(yetty_ygui_label_set_text(label, "different content")), "skip: change text");
-    CHECK(YETTY_IS_OK(yetty_ygui_framework_emit(engine)), "skip: emit #3");
-    size_t after3 = child_bytes_seen(container, scroll_id);
-    CHECK(after3 > after2, "skip: emit #3 re-applies dirtied figure body");
+    struct yetty_ycore_void_result change_res =
+        yetty_ygui_label_set_text(label, "different content");
+    YTEST_REQUIRE_OK(test, change_res);
+    struct yetty_ycore_void_result emit3 = yetty_ygui_framework_emit(engine);
+    YTEST_REQUIRE_OK(test, emit3);
+    size_t after3 = child_bytes_seen(test, container, scroll_id);
+    YTEST_CHECK(test, after3 > after2);
 
     /* And once clean again, it is skipped once more. */
-    CHECK(YETTY_IS_OK(yetty_ygui_framework_emit(engine)), "skip: emit #4");
-    size_t after4 = child_bytes_seen(container, scroll_id);
-    CHECK(after4 == after3, "skip: emit #4 omits clean figure body");
+    struct yetty_ycore_void_result emit4 = yetty_ygui_framework_emit(engine);
+    YTEST_REQUIRE_OK(test, emit4);
+    size_t after4 = child_bytes_seen(test, container, scroll_id);
+    YTEST_CHECK_EQ_SIZE(test, after4, after3);
 
     yetty_ygui_framework_destroy(engine);
     yetty_yfigure_destroy(container);
@@ -405,21 +416,20 @@ static void test_incremental_figure_skip(void)
 /* Malformed image bytes must surface as a Result error from emit — not
  * be silently dropped or truncated. Exercises the strict-rejection path
  * in yimage_emit_body / yetty_yimage_render (issue #243 findings 4/5). */
-static void test_yimage_emit_rejects_malformed(void)
+static void test_yimage_emit_rejects_malformed(struct ytest *test)
 {
     struct yetty_yfigure_registry *registry = NULL;
     struct yetty_yclass_object *container = NULL;
     struct yetty_yclass_object *img = NULL;
     struct yetty_yclass_object *engine =
-        make_engine_with_yimage(&registry, &container, &img);
+        make_engine_with_yimage(test, &registry, &container, &img);
 
     uint8_t garbage[] = {0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x02, 0x03, 0x04};
     struct yetty_ycore_void_result br = yetty_ygui_yimage_set_bytes(img, garbage, sizeof(garbage));
-    CHECK(YETTY_IS_OK(br), "yimage_set_bytes (garbage)");
+    YTEST_REQUIRE_OK(test, br);
 
     struct yetty_ycore_void_result rer = yetty_ygui_framework_emit(engine);
-    CHECK(YETTY_IS_ERR(rer), "engine_emit rejects malformed image payload");
-    yetty_ycore_error_destroy(rer.error);
+    YTEST_CHECK_ERR(test, rer);
 
     yetty_ygui_framework_destroy(engine);
     yetty_yfigure_destroy(container);
@@ -428,9 +438,9 @@ static void test_yimage_emit_rejects_malformed(void)
 
 int main(void)
 {
-    test_yimage_emit();
-    test_incremental_figure_skip();
-    test_yimage_emit_rejects_malformed();
-    puts("ygui-figure-test: OK");
-    return 0;
+    struct ytest test = ytest_begin("ygui_figure");
+    YTEST_RUN(&test, test_yimage_emit);
+    YTEST_RUN(&test, test_incremental_figure_skip);
+    YTEST_RUN(&test, test_yimage_emit_rejects_malformed);
+    return ytest_end(&test);
 }

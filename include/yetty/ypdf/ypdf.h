@@ -21,6 +21,13 @@
 #include <yetty/ycore/result.h>
 #include <yetty/ydraw-core/drawable-list.h>
 
+/* Uniform render (supersampling) scale. Every emitted span coordinate, font
+ * size, spacing parameter, and the buffer's scene bounds are multiplied by
+ * this factor so PDF text rasterises crisply. The reported page dimensions
+ * (yetty_ypdf_render_output.max_width / .total_height) stay in unscaled PDF
+ * points — divide a scene coordinate by this to get back to PDF-point space. */
+#define YETTY_YPDF_RENDER_SCALE 1.5f
+
 /* Forward declare pdfio file (C API). */
 struct _pdfio_file_s;
 

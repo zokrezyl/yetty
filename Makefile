@@ -276,17 +276,60 @@ run-desktop-ytrace-debug: build-desktop-ytrace-debug ## Run desktop ytrace debug
 run-desktop-ytrace-release: build-desktop-ytrace-release ## Run desktop ytrace release build
 	./$(BUILD_DIR_DESKTOP_YTRACE_RELEASE)/yetty
 
+#=============================================================================
+# Test suite (CTest) — the deterministic gate. See docs/testing.md.
+#
+# `make test-fast` is the default local + CI gate: build the release tree, then
+# run every ctest except the environment-dependent lanes (network/gpu/display/
+# slow). The other targets select different label sets against the same tree.
+#=============================================================================
+
+# Label sets excluded from each lane (see docs/testing.md §4).
+CTEST_EXCLUDE_FAST := network|gpu|display|slow
+CTEST_EXCLUDE_ASAN := network|gpu|display|slow|asan-skip
+
+.PHONY: test-fast
+test-fast: build-desktop-ytrace-release ## Run the deterministic fast test gate (no network/gpu/display/slow)
+	PATH="$(SYSTEM_PATH)" ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) --output-on-failure -LE '$(CTEST_EXCLUDE_FAST)'
+
+.PHONY: test-all
+test-all: build-desktop-ytrace-release ## Run all local tests except live-network ones
+	PATH="$(SYSTEM_PATH)" ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) --output-on-failure -LE 'network'
+
+.PHONY: test-network
+test-network: build-desktop-ytrace-release ## Run only the network-labeled tests
+	PATH="$(SYSTEM_PATH)" ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) --output-on-failure -L 'network'
+
+.PHONY: test-wpt
+test-wpt: build-desktop-ytrace-release ## Run the ybrowser WPT geometry suite
+	PATH="$(SYSTEM_PATH)" ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) --output-on-failure -L 'wpt'
+
+.PHONY: test-render
+test-render: build-desktop-ytrace-release ## Run render/GPU tests (needs a display/GPU; nightly)
+	PATH="$(SYSTEM_PATH)" ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) --output-on-failure -L 'render'
+
+.PHONY: test-e2e
+test-e2e: build-desktop-ytrace-release ## Run launched-yetty / yctl E2E tests (needs a display; nightly)
+	PATH="$(SYSTEM_PATH)" ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) --output-on-failure -L 'e2e'
+
+.PHONY: test-nightly
+test-nightly: build-desktop-ytrace-release ## Run all non-fast lanes: network + wpt + render + e2e (E2E/render self-skip headless)
+	PATH="$(SYSTEM_PATH)" ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) --output-on-failure -L 'network|wpt|render|e2e'
+
+.PHONY: test-asan
+test-asan: build-desktop-ytrace-asan ## Run the deterministic test gate under ASAN
+	# LSAN_OPTIONS points at test/lsan.supp so the documented third-party leak
+	# families (Fontconfig, Lexbor, libcss) are suppressed narrowly while the
+	# affected tests still run — see test/lsan.supp and issue #414.
+	PATH="$(SYSTEM_PATH)" LSAN_OPTIONS="suppressions=$(CURDIR)/test/lsan.supp:print_suppressions=0" \
+		ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_ASAN) --output-on-failure -LE '$(CTEST_EXCLUDE_ASAN)'
+
 .PHONY: test-desktop-ytrace-release
-test-desktop-ytrace-release: ## Run desktop ytrace release tests
-	@if [ ! -f "$(BUILD_DIR_DESKTOP_YTRACE_RELEASE)/build.ninja" ]; then $(MAKE) config-desktop-ytrace-release; fi
-	PATH="$(SYSTEM_PATH)" $(CMAKE) --build $(BUILD_DIR_DESKTOP_YTRACE_RELEASE) --target yetty_tests $(CMAKE_PARALLEL)
-	./$(BUILD_DIR_DESKTOP_YTRACE_RELEASE)/test/ut/yetty_tests
+test-desktop-ytrace-release: test-fast ## Deprecated alias for `make test-fast`
 
 .PHONY: test-desktop-ytrace-debug
-test-desktop-ytrace-debug: ## Run desktop ytrace debug tests
-	@if [ ! -f "$(BUILD_DIR_DESKTOP_YTRACE_DEBUG)/build.ninja" ]; then $(MAKE) config-desktop-ytrace-debug; fi
-	PATH="$(SYSTEM_PATH)" $(CMAKE) --build $(BUILD_DIR_DESKTOP_YTRACE_DEBUG) --target yetty_tests $(CMAKE_PARALLEL)
-	./$(BUILD_DIR_DESKTOP_YTRACE_DEBUG)/test/ut/yetty_tests
+test-desktop-ytrace-debug: build-desktop-ytrace-debug ## Run the deterministic test gate on the debug build
+	PATH="$(SYSTEM_PATH)" ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_DEBUG) --output-on-failure -LE '$(CTEST_EXCLUDE_FAST)'
 
 #=============================================================================
 # Desktop - ytrace with ASAN
@@ -327,10 +370,8 @@ run-desktop-yinfo-release: build-desktop-yinfo-release ## Run desktop yinfo rele
 	./$(BUILD_DIR_DESKTOP_YINFO_RELEASE)/yetty
 
 .PHONY: test-desktop-yinfo-release
-test-desktop-yinfo-release: ## Run desktop yinfo release tests
-	@if [ ! -f "$(BUILD_DIR_DESKTOP_YINFO_RELEASE)/build.ninja" ]; then $(MAKE) config-desktop-yinfo-release; fi
-	PATH="$(SYSTEM_PATH)" $(CMAKE) --build $(BUILD_DIR_DESKTOP_YINFO_RELEASE) --target yetty_tests $(CMAKE_PARALLEL)
-	./$(BUILD_DIR_DESKTOP_YINFO_RELEASE)/test/ut/yetty_tests
+test-desktop-yinfo-release: build-desktop-yinfo-release ## Run the deterministic test gate on the yinfo release build
+	PATH="$(SYSTEM_PATH)" ctest --test-dir $(BUILD_DIR_DESKTOP_YINFO_RELEASE) --output-on-failure -LE '$(CTEST_EXCLUDE_FAST)'
 
 #=============================================================================
 # Linux cross-compile (aarch64 / riscv64) — host x86_64 → target Linux ARM64/RISC-V

@@ -305,8 +305,8 @@ test: _test-$(PLATFORM)
 .PHONY: _test-desktop
 _test-desktop:
 	@if [ ! -f "$(BUILD_DIR)/build.ninja" ]; then $(MAKE) -f Makefile.2 config PLATFORM=$(PLATFORM) LOGLEVEL=$(LOGLEVEL) BUILDTYPE=$(BUILDTYPE) USE_NIX=$(USE_NIX); fi
-	$(PATH_CMD) $(CMAKE) --build $(BUILD_DIR) --target yetty_tests $(CMAKE_PARALLEL)
-	./$(BUILD_DIR)/test/ut/yetty_tests
+	$(PATH_CMD) $(CMAKE) --build $(BUILD_DIR) $(CMAKE_PARALLEL)
+	$(PATH_CMD) ctest --test-dir $(BUILD_DIR) --output-on-failure -LE 'network|gpu|display|slow'
 
 .PHONY: _test-webasm _test-windows _test-ios _test-ios_x86_64
 _test-webasm _test-windows _test-ios _test-ios_x86_64:

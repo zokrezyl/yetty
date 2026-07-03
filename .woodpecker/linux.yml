@@ -27,3 +27,6 @@ steps:
       # and the missing tag refs must be repaired.
       - git fetch --unshallow --tags 2>/dev/null || git fetch --tags
       - make build-desktop-ytrace-release
+      # A green pipeline must mean the deterministic suite passed, not just
+      # that yetty built. Excludes network/gpu/display/slow (see docs/testing.md).
+      - make test-fast

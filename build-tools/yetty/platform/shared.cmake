@@ -444,26 +444,11 @@ add_subdirectory(${YETTY_ROOT}/src/yetty ${CMAKE_BINARY_DIR}/src/yetty)
 # (declared in src/yetty/yplatform/CMakeLists.txt). Tools link that lib
 # directly; the main yetty exec links it via platform/<plat>/cmake.cmake.
 
-# Unit tests (opt-in)
+# Unit tests (opt-in). The single test/CMakeLists.txt owns the helper and the
+# subdirectory list; see test/cmake/YettyTest.cmake.
 if(YETTY_ENABLE_FEATURE_TESTS)
     enable_testing()
-    if(YETTY_ENABLE_FEATURE_YPDF)
-        add_subdirectory(${YETTY_ROOT}/test/ut/ypdf ${CMAKE_BINARY_DIR}/test/ut/ypdf)
-    endif()
-    if(YETTY_ENABLE_FEATURE_YDIAGRAM)
-        add_subdirectory(${YETTY_ROOT}/test/ut/ydiagram ${CMAKE_BINARY_DIR}/test/ut/ydiagram)
-    endif()
-    if(YETTY_ENABLE_FEATURE_YMARKDOWN)
-        add_subdirectory(${YETTY_ROOT}/test/ut/ymarkdown ${CMAKE_BINARY_DIR}/test/ut/ymarkdown)
-    endif()
-    add_subdirectory(${YETTY_ROOT}/test/ut/ygui ${CMAKE_BINARY_DIR}/test/ut/ygui)
-    add_subdirectory(${YETTY_ROOT}/test/ut/yfigure ${CMAKE_BINARY_DIR}/test/ut/yfigure)
-    add_subdirectory(${YETTY_ROOT}/test/ut/ygrid ${CMAKE_BINARY_DIR}/test/ut/ygrid)
-    add_subdirectory(${YETTY_ROOT}/test/ybrowser/ut ${CMAKE_BINARY_DIR}/test/ybrowser/ut)
-    # Integration: ylexbor harness driver. Self-skips when QuickJS or
-    # the ylexbor target isn't built.
-    add_subdirectory(${YETTY_ROOT}/test/integration/ylexbor
-                     ${CMAKE_BINARY_DIR}/test/integration/ylexbor)
+    add_subdirectory(${YETTY_ROOT}/test ${CMAKE_BINARY_DIR}/test)
 endif()
 
 # Common include directories

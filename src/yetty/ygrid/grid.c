@@ -371,7 +371,7 @@ struct yetty_ygrid_factory_args {
 struct yetty_ygrid_grid_ptr_result yetty_ygrid_create(struct yetty_ycore_rectangle rect,
                                                       uint32_t grid_cols, uint32_t grid_rows,
                                                       const struct yetty_context *context);
-struct yetty_yfigure_figure_ptr_result yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid);
+struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid);
 struct yetty_ycore_void_result yetty_ygrid_add_record_local(struct yetty_ygrid_grid *grid,
                                                             const uint8_t *record_bytes,
                                                             size_t record_len);
@@ -3012,11 +3012,13 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory_impl(
     /* Mirror the coordinate mode onto the yfigure base so the owning
      * container's hit-test can re-origin (local) or pass through (absolute)
      * the cursor without reaching into ygrid-private state. */
-    struct yetty_yfigure_figure_ptr_result figure_res = yetty_ygrid_as_figure(gr.value);
-    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, figure_res, "ygrid_factory: as_figure");
+    struct yetty_yfigure_figure *figure = yetty_ygrid_as_figure(gr.value);
+    if (!figure) {
+        return YETTY_ERR(yetty_yfigure_figure_ptr, "ygrid_factory: as_figure returned NULL");
+    }
     {
         struct yetty_ycore_void_result drop_r = yetty_yfigure_figure_absolute_coords_set(
-            (struct yetty_yclass_object *)figure_res.value - 1, absolute_coords);
+            (struct yetty_yclass_object *)figure - 1, absolute_coords);
         YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, drop_r, "ygrid: absolute_coords");
     }
     if (user) {
@@ -3033,7 +3035,7 @@ static struct yetty_yfigure_figure_ptr_result ygrid_factory_impl(
             yetty_ygrid_set_composite_factory(gr.value, args->composite_factory);
         }
     }
-    return figure_res;
+    return YETTY_OK(yetty_yfigure_figure_ptr, figure);
 }
 
 /* KIND_YGRID figures (the chrome grid + ygui widgets promoted via
@@ -3071,15 +3073,21 @@ struct yetty_ycore_void_result yetty_ygrid_register_factory_for_kind(
     return yetty_yfigure_registry_register(registry, kind, ygrid_factory_for_kind, (void *)args);
 }
 
-struct yetty_yfigure_figure_ptr_result yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid)
+struct yetty_yfigure_figure *yetty_ygrid_as_figure(struct yetty_ygrid_grid *grid)
 {
     if (!grid) {
-        return YETTY_OK(yetty_yfigure_figure_ptr, NULL);
+        return NULL;
     }
     struct yetty_yclass_object_ptr_result obj_r = ygrid_obj_from_body(grid);
-    YETTY_RETURN_IF_ERR(yetty_yfigure_figure_ptr, obj_r, "yetty_ygrid_as_figure: obj_from_body");
+    if (YETTY_IS_ERR(obj_r)) {
+        /* Impossible for a real instance (see ygrid_obj_from_body); drop the
+         * error and report the absence with NULL, matching the plain-pointer
+         * contract the public header and every caller expect. */
+        yetty_ycore_error_destroy(obj_r.error);
+        return NULL;
+    }
     /* The figure base is the first slice — the object header + 1. */
-    return YETTY_OK(yetty_yfigure_figure_ptr, (struct yetty_yfigure_figure *)(obj_r.value + 1));
+    return (struct yetty_yfigure_figure *)(obj_r.value + 1);
 }
 
 /* Multiply one little-endian f32 wire word in place by `scale`. The

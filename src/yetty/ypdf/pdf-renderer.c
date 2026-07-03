@@ -50,8 +50,9 @@
  * on-screen font size equals the PDF's point size. Scaling every emitted
  * coordinate, font size and the page bounds by this factor enlarges the whole
  * page — text included — without reflowing, which is the only way to grow PDF
- * text. 1.5 = 50% larger. Adjust this one knob to change the zoom. */
-#define YPDF_RENDER_SCALE 1.5f
+ * text. 1.5 = 50% larger. Adjust this one knob (in the public header) to change
+ * the zoom. */
+#define YPDF_RENDER_SCALE YETTY_YPDF_RENDER_SCALE
 
 /*=============================================================================
  * Font tracking

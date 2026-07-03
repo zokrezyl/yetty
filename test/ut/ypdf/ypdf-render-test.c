@@ -96,8 +96,11 @@ int main(void)
 
     float sx = yetty_ydraw_drawable_list_scene_max_x(out->buffer);
     float sy = yetty_ydraw_drawable_list_scene_max_y(out->buffer);
-    REQUIRE(sx == out->max_width, "scene max_x mismatch");
-    REQUIRE(sy == out->total_height, "scene max_y mismatch");
+    /* Scene bounds are in render (supersampled) space; out->max_width and
+     * out->total_height stay in unscaled PDF points, so they differ by exactly
+     * the render scale (see YETTY_YPDF_RENDER_SCALE). */
+    REQUIRE(sx == out->max_width * YETTY_YPDF_RENDER_SCALE, "scene max_x mismatch");
+    REQUIRE(sy == out->total_height * YETTY_YPDF_RENDER_SCALE, "scene max_y mismatch");
 
     struct yetty_ydraw_drawable_list_registry_ptr_result rr =
         yetty_ydraw_drawable_list_registry_create_default();
