@@ -30,8 +30,7 @@ void yetty_yplatform_format_timestamp(char *buf, size_t bufsize)
              tv.tv_usec / 1000);
 }
 
-int yetty_yplatform_term_get_size_pixels(int *cols, int *rows, int *pixel_width,
-                                         int *pixel_height)
+int yetty_yplatform_term_get_size_pixels(int *cols, int *rows, int *pixel_width, int *pixel_height)
 {
     /* Probe stdout first, then stdin — interactive shells usually have
      * both, but a pipe on stdout (e.g. `yetty | tee`) shouldn't make us

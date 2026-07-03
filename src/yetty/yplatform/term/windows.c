@@ -52,8 +52,7 @@ int yetty_yplatform_term_get_size(int *cols, int *rows)
     return -1;
 }
 
-int yetty_yplatform_term_get_size_pixels(int *cols, int *rows, int *pixel_width,
-                                         int *pixel_height)
+int yetty_yplatform_term_get_size_pixels(int *cols, int *rows, int *pixel_width, int *pixel_height)
 {
     /* The Win32 console reports size in character cells only, never pixels. */
     if (pixel_width) {
