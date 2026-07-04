@@ -503,6 +503,23 @@ static struct yetty_ycore_int_result yetty_event_handler(
         yetty->window_width = (float)width;
         yetty->window_height = (float)height;
 
+        /* Adopt a remote-declared display density BEFORE the resize
+         * cascade below re-lays everything out. A yvnc viewer stamps its
+         * own content scale on the resize request so the frames we ship
+         * are laid out at the VIEWER's density; local platform resizes
+         * carry 0 here and leave the scale alone. Consumers pick the new
+         * value up on their own paths: tabbar chrome reads it live,
+         * yui refreshes its cached copy in yetty_yui_resize, terminals
+         * rescale their cell stride in terminal_apply_pane_geometry, and
+         * ygrid figures re-read it at record ingestion. */
+        float remote_scale = event->resize.content_scale;
+        if (remote_scale > 0.0f &&
+            remote_scale != yetty->runtime->gpu.app_gpu_context.content_scale) {
+            yinfo("yetty: content scale %.3f -> %.3f (remote viewer)",
+                  yetty->runtime->gpu.app_gpu_context.content_scale, remote_scale);
+            yetty->runtime->gpu.app_gpu_context.content_scale = remote_scale;
+        }
+
         /* Reconfigure surface via runtime helper — it also updates
          * runtime->gpu.app_gpu_context.surface_{width,height} so any
          * consumer reading those dimensions sees the post-resize size. */

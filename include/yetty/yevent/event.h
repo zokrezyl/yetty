@@ -176,6 +176,12 @@ struct yetty_ycore_event_set_focus {
 struct yetty_ycore_event_resize {
     float width;
     float height;
+    /* Display density (framebuffer px / logical px) of the output that
+     * requested this resize. 0 = producer has no opinion — the app keeps
+     * its current content scale (all local platform paths). A remote yvnc
+     * viewer stamps its own display's scale here so the server re-lays
+     * out text/chrome at the viewer's density, not its own. */
+    float content_scale;
 };
 
 struct yetty_ycore_event_poll {

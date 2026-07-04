@@ -56,10 +56,39 @@ static void on_frame_callback(void *userdata)
     }
 }
 
+/* The viewer's own display density. Sent with every resize so the server
+ * lays out text/chrome at OUR density instead of its display's — a 1x /
+ * headless server viewed on Retina would otherwise ship half-size content
+ * (and a 2x server on a 1x viewer, double-size). */
+static float vnc_viewer_content_scale(const struct yetty_yvnc_viewer *viewer)
+{
+    if (!viewer->context.runtime) {
+        return 1.0f;
+    }
+    float content_scale = viewer->context.runtime->gpu.app_gpu_context.content_scale;
+    return content_scale > 0.0f ? content_scale : 1.0f;
+}
+
 static void on_connected_callback(void *userdata)
 {
     struct yetty_yvnc_viewer *viewer = userdata;
     yinfo("VNC viewer: connected to %s:%d", viewer->host, viewer->port);
+
+    /* Layout usually ran before the TCP connect completed, so the resize
+     * from set_bounds never reached the server. Declare our size + display
+     * density now that the pipe is up; later set_bounds calls keep it
+     * current. Skip when we haven't been laid out yet — the first
+     * set_bounds will send it. */
+    struct yetty_yui_rect bounds = viewer->view.bounds;
+    if (bounds.w > 0.0f && bounds.h > 0.0f) {
+        struct yetty_ycore_void_result resize_res =
+            yetty_yvnc_client_send_resize(viewer->client, (uint16_t)bounds.w, (uint16_t)bounds.h,
+                                          vnc_viewer_content_scale(viewer));
+        if (YETTY_IS_ERR(resize_res)) {
+            ywarn("VNC viewer: initial resize failed: %s", resize_res.error.msg);
+            yetty_ycore_error_destroy(resize_res.error);
+        }
+    }
 }
 
 static void on_disconnected_callback(void *userdata)
@@ -209,10 +238,12 @@ static struct yetty_ycore_void_result vnc_viewer_view_set_bounds(struct yetty_yu
     struct yetty_yvnc_viewer *viewer = (struct yetty_yvnc_viewer *)view;
     viewer->view.bounds = bounds;
 
-    /* Resize VNC if connected */
+    /* Resize VNC if connected. Bounds are framebuffer pixels; the scale
+     * tells the server what density those pixels are viewed at. */
     if (viewer->client && yetty_yvnc_client_is_connected(viewer->client)) {
         struct yetty_ycore_void_result rr =
-            yetty_yvnc_client_send_resize(viewer->client, (uint16_t)bounds.w, (uint16_t)bounds.h);
+            yetty_yvnc_client_send_resize(viewer->client, (uint16_t)bounds.w, (uint16_t)bounds.h,
+                                          vnc_viewer_content_scale(viewer));
         if (YETTY_IS_ERR(rr)) {
             return YETTY_ERR(yetty_ycore_void, "vnc_viewer_view_set_bounds: send_resize failed",
                              rr);

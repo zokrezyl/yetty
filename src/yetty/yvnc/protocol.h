@@ -140,6 +140,13 @@ struct yetty_yvnc_vnc_char_with_mods_event {
 struct yetty_yvnc_vnc_resize_event {
     uint16_t width;
     uint16_t height;
+    /* Viewer display density (framebuffer px / logical px) in 8.8 fixed
+     * point: 256 = 1.0x, 512 = Retina 2x. 0 = the peer did not declare a
+     * scale (legacy 4-byte resize payload, or an unknown density) — the
+     * server keeps its current content scale in that case. Carried so
+     * the producer can render at the VIEWER's density instead of baking
+     * its own display's scale into the shipped framebuffer. */
+    uint16_t content_scale_x256;
 };
 
 struct yetty_yvnc_vnc_compression_config_event {
@@ -167,6 +174,26 @@ static inline uint16_t vnc_tiles_x(uint16_t width)
 static inline uint16_t vnc_tiles_y(uint16_t height)
 {
     return (height + VNC_TILE_SIZE - 1) / VNC_TILE_SIZE;
+}
+
+/* 8.8 fixed-point codec for resize_event.content_scale_x256. Non-positive
+ * scales encode to 0 ("undeclared"), and 0 decodes back to 0.0f so the
+ * receiver can distinguish "no opinion" from an actual 1.0x. */
+static inline uint16_t vnc_content_scale_to_wire(float content_scale)
+{
+    if (content_scale <= 0.0f) {
+        return 0;
+    }
+    float scaled = content_scale * 256.0f + 0.5f;
+    if (scaled > 65535.0f) {
+        return 65535;
+    }
+    return (uint16_t)scaled;
+}
+
+static inline float vnc_content_scale_from_wire(uint16_t wire_scale)
+{
+    return wire_scale ? (float)wire_scale / 256.0f : 0.0f;
 }
 
 #endif /* YETTY_YVNC_PROTOCOL_INTERNAL_H */

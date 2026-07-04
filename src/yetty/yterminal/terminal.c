@@ -115,6 +115,13 @@ struct yetty_yterminal_terminal {
      * detect a real change — track the applied size here instead. */
     float applied_w;
     float applied_h;
+    /* Content scale the current cell metrics were derived at. The runtime
+     * scale can change after creation (a yvnc viewer pushes its display
+     * density with a resize); terminal_apply_pane_geometry compares this
+     * against the runtime's live value and rescales the cell stride by
+     * the ratio, so text density follows the viewer's display without
+     * re-baking the font (MSDF glyphs stay crisp at any cell size). */
+    float layout_content_scale;
     /* Set by workspace_set_active via SET_FOCUS — true means this terminal
      * is the foreground view in its workspace AND the workspace is the
      * tabbar's active one. Layers can read this to switch cursor style
@@ -1664,6 +1671,17 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     terminal->cols = cols;
     terminal->rows = rows;
     terminal->context.yetty_context = *yetty_context;
+    /* Record the density the cell metrics are about to be derived at
+     * (vterm bakes font_size = config * content_scale at creation).
+     * apply_pane_geometry rescales the stride if this ever diverges
+     * from the runtime's live value. */
+    terminal->layout_content_scale = 1.0f;
+    if (yetty_context->runtime) {
+        float creation_scale = yetty_context->runtime->gpu.app_gpu_context.content_scale;
+        if (creation_scale > 0.0f) {
+            terminal->layout_content_scale = creation_scale;
+        }
+    }
 
     /* Validate event loop from context */
     if (!yetty_context->event_loop) {
@@ -2369,6 +2387,23 @@ static struct yetty_ycore_void_result terminal_apply_pane_geometry(
 
     float cell_w_target = cell.width > 0 ? cell.width : 10.0f;
     float cell_h_target = cell.height > 0 ? cell.height : 20.0f;
+
+    /* Track runtime content-scale changes (a yvnc viewer's display density
+     * arriving via resize): rescale the cell stride by the ratio between
+     * the live scale and the scale the current metrics were derived at.
+     * Same mechanism as the structural zoom — grid, PTY and glyph
+     * rendering all follow the cell size, and MSDF glyphs stay crisp. */
+    if (terminal->context.yetty_context.runtime) {
+        float live_scale =
+            terminal->context.yetty_context.runtime->gpu.app_gpu_context.content_scale;
+        if (live_scale > 0.0f && terminal->layout_content_scale > 0.0f &&
+            live_scale != terminal->layout_content_scale) {
+            float density_ratio = live_scale / terminal->layout_content_scale;
+            cell_w_target *= density_ratio;
+            cell_h_target *= density_ratio;
+            terminal->layout_content_scale = live_scale;
+        }
+    }
 
     /* Subtract the reserved insets; never let the content rect collapse below a
      * single cell in either axis (a client could reserve more than the pane). */
