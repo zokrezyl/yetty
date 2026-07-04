@@ -26,6 +26,8 @@
 #include <yetty/yfigure/wire.h>
 #include <yetty/ygrid/ygrid.h>
 #include <yetty/yconfig/config.h>
+#include <yetty/ycore/memstats.h>
+#include <yetty/ycore/types.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yfont/font.h>
 #include <yetty/yfont/msdf-font.h>
@@ -137,6 +139,13 @@ struct yetty_yui {
 
     /* Application statusbar — pinned to the bottom of the root vbox. */
     struct yetty_yclass_object *statusbar;
+
+    /* Periodic allocation-statistics refresh for the statusbar right
+     * label. timer_id stays -1 when the readout is unavailable (build
+     * without an instrumented allocator) or timer setup failed. */
+    struct yetty_yevent_event_listener memstats_listener;
+    yetty_yevent_timer_id memstats_timer_id;
+    char memstats_text[96]; /* last rendered text — skip redundant repaints */
 
     /* Connect dispatch — invoked from each dialog's "Connect" button. */
     yetty_yui_connect_cb connect_cb;
@@ -589,6 +598,142 @@ static struct yetty_ycore_void_result yui_build_gpu_dialog(struct yetty_yui *yui
     return YETTY_OK_VOID();
 }
 
+/*===========================================================================
+ * Statusbar allocation-statistics readout
+ *
+ * A 1 Hz event-loop timer samples the allocator (see
+ * <yetty/ycore/memstats.h>) and renders the numbers into the statusbar's
+ * right label. Builds without an instrumented allocator fail the probe
+ * sample at create time and never start the timer — the label keeps its
+ * static default.
+ *=========================================================================*/
+
+#define YUI_MEMSTATS_PERIOD_MS 1000
+
+static void yui_format_byte_size(uint64_t bytes, char *out, size_t out_size)
+{
+    const double kibibyte = 1024.0;
+    const double mebibyte = 1024.0 * 1024.0;
+    const double gibibyte = 1024.0 * 1024.0 * 1024.0;
+    double value = (double)bytes;
+    if (value >= gibibyte) {
+        snprintf(out, out_size, "%.2fG", value / gibibyte);
+    } else if (value >= mebibyte) {
+        snprintf(out, out_size, "%.1fM", value / mebibyte);
+    } else if (value >= kibibyte) {
+        snprintf(out, out_size, "%.0fK", value / kibibyte);
+    } else {
+        snprintf(out, out_size, "%uB", (unsigned)bytes);
+    }
+}
+
+/* Render a sample into the statusbar right label. Skips the repaint when
+ * the rounded text is unchanged so an idle app stays render-quiet. */
+static void yui_memstats_show(struct yetty_yui *yui, const struct yetty_ycore_memstats *stats)
+{
+    char allocated_str[16];
+    char peak_str[16];
+    char resident_str[16];
+    yui_format_byte_size(stats->allocated_bytes, allocated_str, sizeof(allocated_str));
+    yui_format_byte_size(stats->peak_allocated_bytes, peak_str, sizeof(peak_str));
+    yui_format_byte_size(stats->resident_bytes, resident_str, sizeof(resident_str));
+
+    char text[sizeof(yui->memstats_text)];
+    snprintf(text, sizeof(text), "heap %s  peak %s  rss %s", allocated_str, peak_str, resident_str);
+    if (strcmp(text, yui->memstats_text) == 0) {
+        return;
+    }
+    memcpy(yui->memstats_text, text, sizeof(text));
+
+    struct yetty_ycore_void_result set_res = yetty_yui_set_status_right(yui, text);
+    if (YETTY_IS_ERR(set_res)) {
+        yetty_ycore_error_destroy(set_res.error);
+        return;
+    }
+    if (yui->loop && yui->loop->ops->request_render) {
+        yui->loop->ops->request_render(yui->loop);
+    }
+}
+
+static struct yetty_ycore_int_result yui_memstats_on_timer(
+    struct yetty_yevent_event_listener *listener, const struct yetty_yui_event *event)
+{
+    struct yetty_yui *yui = container_of(listener, struct yetty_yui, memstats_listener);
+    if (event->type != YETTY_YCORE_TIMER || event->timer.timer_id != yui->memstats_timer_id) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    if (!yui->statusbar) {
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    struct yetty_ycore_memstats_result stats_res = yetty_ycore_memstats_sample();
+    if (YETTY_IS_ERR(stats_res)) {
+        yetty_ycore_error_destroy(stats_res.error);
+        return YETTY_OK(yetty_ycore_int, 0);
+    }
+    yui_memstats_show(yui, &stats_res.value);
+    return YETTY_OK(yetty_ycore_int, 1);
+}
+
+/* Best-effort: any failure leaves timer_id at -1 and the statusbar keeps
+ * its static right label. */
+static void yui_memstats_start(struct yetty_yui *yui)
+{
+    struct yetty_ycore_memstats_result probe_res = yetty_ycore_memstats_sample();
+    if (YETTY_IS_ERR(probe_res)) {
+        ydebug("yui_memstats_start: no allocator statistics: %s", probe_res.error.msg);
+        yetty_ycore_error_destroy(probe_res.error);
+        return;
+    }
+    struct yetty_yevent_event_loop *loop = yui->loop;
+    if (!loop) {
+        return;
+    }
+
+    struct yetty_yevent_timer_id_result timer_res = loop->ops->create_timer(loop);
+    if (YETTY_IS_ERR(timer_res)) {
+        ywarn("yui_memstats_start: create_timer: %s", timer_res.error.msg);
+        yetty_ycore_error_destroy(timer_res.error);
+        return;
+    }
+    yetty_yevent_timer_id timer_id = timer_res.value;
+    yui->memstats_listener.handler = yui_memstats_on_timer;
+
+    struct yetty_ycore_void_result setup_res =
+        loop->ops->config_timer(loop, timer_id, YUI_MEMSTATS_PERIOD_MS);
+    if (YETTY_IS_OK(setup_res)) {
+        setup_res = loop->ops->register_timer_listener(loop, timer_id, &yui->memstats_listener);
+    }
+    if (YETTY_IS_OK(setup_res)) {
+        setup_res = loop->ops->start_timer(loop, timer_id);
+    }
+    if (YETTY_IS_ERR(setup_res)) {
+        ywarn("yui_memstats_start: timer setup: %s", setup_res.error.msg);
+        yetty_ycore_error_destroy(setup_res.error);
+        yetty_ycore_error_destroy_safe(loop->ops->destroy_timer(loop, timer_id));
+        return;
+    }
+    yui->memstats_timer_id = timer_id;
+
+    /* Seed the label with the probe sample so the readout is visible
+     * before the first tick lands. */
+    yui_memstats_show(yui, &probe_res.value);
+}
+
+static void yui_memstats_stop(struct yetty_yui *yui)
+{
+    if (yui->memstats_timer_id < 0 || !yui->loop) {
+        return;
+    }
+    struct yetty_yevent_event_loop *loop = yui->loop;
+    if (loop->ops->deregister_timer_listener) {
+        yetty_ycore_error_destroy_safe(loop->ops->deregister_timer_listener(
+            loop, yui->memstats_timer_id, &yui->memstats_listener));
+    }
+    yetty_ycore_error_destroy_safe(loop->ops->stop_timer(loop, yui->memstats_timer_id));
+    yetty_ycore_error_destroy_safe(loop->ops->destroy_timer(loop, yui->memstats_timer_id));
+    yui->memstats_timer_id = -1;
+}
+
 struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context,
                                              uint32_t surface_w, uint32_t surface_h, float cell_w,
                                              float cell_h)
@@ -609,6 +754,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
     }
     yui->loop = context->event_loop;
     yui->ctx = context;
+    yui->memstats_timer_id = -1;
     yui->surface_w = (float)surface_w;
     yui->surface_h = (float)surface_h;
     yui->content_scale = context->runtime->gpu.app_gpu_context.content_scale;
@@ -844,6 +990,7 @@ struct yetty_yui_ptr_result yetty_yui_create(const struct yetty_context *context
             yetty_ycore_error_destroy_safe(yetty_ygui_widget_set_size(yui->statusbar, 0.0f, 22.0f));
             yetty_ycore_error_destroy_safe(yetty_ygui_statusbar_set_left(yui->statusbar, "Ready"));
             yetty_ycore_error_destroy_safe(yetty_ygui_statusbar_set_right(yui->statusbar, "yetty"));
+            yui_memstats_start(yui);
         }
 
         /* App / hamburger menu — drill-down popup reused across levels. */
@@ -944,6 +1091,8 @@ struct yetty_ycore_void_result yetty_yui_destroy(struct yetty_yui *yui)
         s_active_yui = NULL;
     }
     yui_active_unlock();
+
+    yui_memstats_stop(yui);
 
     if (yui->chrome) {
         struct yetty_ycore_void_result cr = yetty_ychrome_host_destroy(yui->chrome);
