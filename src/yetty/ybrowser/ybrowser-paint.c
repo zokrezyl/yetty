@@ -482,7 +482,7 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(struct
 		 * gstatic's faviconV2 endpoints return 404, several
 		 * image hot-link blockers return 403, and Cloudflare's
 		 * "verifying you are human" page returns 503. */
-        bytes = yetty_ylexbor_http_get_referer(url, r->base_url, &blen, &status);
+        bytes = yetty_ylexbor_http_get_referer(r->loader, url, r->base_url, &blen, &status);
     }
     if (!bytes || blen == 0 || (status != 0 && status != 200)) {
         ydebug("img FETCH FAIL status=%ld len=%zu url=%s", status, blen, url);
@@ -593,6 +593,8 @@ int yetty_ylexbor_fetch_one_pending_image(struct yetty_ylexbor *r)
 struct ylexbor_img_job {
     struct yetty_ylexbor *r;
     uint64_t generation; /* engine fetch_generation at submit; stale if changed */
+    struct yetty_ybrowser_loader *loader; /* borrowed from the engine; the engine
+                                           * outlives every job (destroy defers) */
     char *url;           /* owned */
     char *base_url;      /* owned copy — read on the worker thread */
     /* Filled by run() on the worker thread: */
@@ -608,7 +610,8 @@ static void img_job_run(void *ctx)
     struct ylexbor_img_job *job = ctx;
     long status = 0;
     size_t blen = 0;
-    char *bytes = yetty_ylexbor_http_get_referer(job->url, job->base_url, &blen, &status);
+    char *bytes = yetty_ylexbor_http_get_referer(job->loader, job->url, job->base_url, &blen,
+                                                  &status);
     if (!bytes || blen == 0 || (status != 0 && status != 200)) {
         free(bytes);
         job->failed = 1;
@@ -754,6 +757,7 @@ struct yetty_ycore_int_result yetty_ylexbor_start_image_fetch(struct yetty_ylexb
         }
         job->r = r;
         job->generation = r->fetch_generation;
+        job->loader = r->loader;
         job->url = url; /* ownership transferred to the job */
         job->base_url = r->base_url ? strdup(r->base_url) : NULL;
 
@@ -922,10 +926,9 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
             char **bodies = calloc(img_count, sizeof(*bodies));
             size_t *lens = calloc(img_count, sizeof(*lens));
             long *status = calloc(img_count, sizeof(*status));
-            int slot_to_cache_idx[1024];
             int n = 0;
             if (urls && bodies && lens && status) {
-                for (uint32_t i = 0; i < r->boxes.size && n < 1024; i++) {
+                for (uint32_t i = 0; i < r->boxes.size && n < (int)img_count; i++) {
                     struct yetty_ylexbor_box *b = &r->boxes.data[i];
                     if (b->kind != YL_BOX_INLINE_IMAGE || !b->element) {
                         continue;
@@ -958,11 +961,11 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                         continue;
                     }
                     urls[n] = u; /* transferred — freed below */
-                    slot_to_cache_idx[n] = -1;
                     n++;
                 }
                 if (n > 0) {
-                    yetty_ylexbor_http_get_many((const char *const *)urls, n, r->base_url,
+                    yetty_ylexbor_http_get_many(r->loader, (const char *const *)urls, n,
+                                                r->base_url,
                                                 /*concurrency=*/8, bodies, lens, status);
                     /* Insert fetched bytes into the cache, decoding
 					 * each in turn. Decode is fast enough that

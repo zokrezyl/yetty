@@ -78,7 +78,8 @@ static size_t fetch_write_cb(char *p, size_t sz, size_t n, void *ud)
  * Used to set base_url to the effective URL so that image src= references
  * resolve against the HTTPS origin — that pulls them over HTTP/2
  * multiplexing instead of HTTP/1.1 with 30+ TCP handshakes. */
-static char *slurp_url(const char *url, size_t *out_len, char **out_effective_url)
+static char *slurp_url(struct yetty_ybrowser_loader *loader, const char *url, size_t *out_len,
+                       char **out_effective_url)
 {
     CURL *c = curl_easy_init();
     if (c == NULL) {
@@ -89,12 +90,12 @@ static char *slurp_url(const char *url, size_t *out_len, char **out_effective_ur
         *out_effective_url = NULL;
     }
 
-    /* Attach the process-wide CURLSH so the TLS connection we open
-	 * here gets cached and reused by load_external_stylesheets and
-	 * the image-fetch path. Without this the page fetch's
-	 * connection to e.g. en.wikipedia.org is discarded immediately
-	 * after the easy_cleanup below, forcing CSS to re-handshake. */
-    void *share = yetty_ylexbor_curl_share();
+    /* Attach the loader's CURLSH so the TLS connection we open here
+	 * gets cached and reused by load_external_stylesheets and the
+	 * image-fetch path. Without this the page fetch's connection to
+	 * e.g. en.wikipedia.org is discarded immediately after the
+	 * easy_cleanup below, forcing CSS to re-handshake. */
+    void *share = yetty_ybrowser_loader_curl_share(loader);
     if (share) {
         curl_easy_setopt(c, CURLOPT_SHARE, share);
     }
@@ -173,10 +174,11 @@ static char *slurp_url(const char *url, size_t *out_len, char **out_effective_ur
     return b.data;
 }
 
-char *ybrowser_slurp_file(const char *path, size_t *out_len, char **out_effective_url)
+char *ybrowser_slurp_file(struct yetty_ybrowser_loader *loader, const char *path,
+                          size_t *out_len, char **out_effective_url)
 {
     if (ybrowser_looks_like_url(path)) {
-        return slurp_url(path, out_len, out_effective_url);
+        return slurp_url(loader, path, out_len, out_effective_url);
     }
     if (out_effective_url) {
         *out_effective_url = NULL;
@@ -420,10 +422,22 @@ int main(int argc, char **argv)
     if (ybrowser_looks_like_url(src)) {
         curl_global_init(CURL_GLOBAL_DEFAULT);
     }
+    /* One loader for the whole run — the page fetch below warms the
+	 * connection the engine then reuses for CSS/images. */
+    struct yetty_ybrowser_loader *loader = NULL;
+    {
+        struct yetty_ybrowser_loader_ptr_result loader_res = yetty_ybrowser_loader_create();
+        if (YETTY_IS_OK(loader_res)) {
+            loader = loader_res.value;
+        } else {
+            yetty_ycore_error_destroy(loader_res.error);
+        }
+    }
     size_t html_len = 0;
     char *effective_url = NULL;
-    char *html = ybrowser_slurp_file(src, &html_len, &effective_url);
+    char *html = ybrowser_slurp_file(loader, src, &html_len, &effective_url);
     if (html == NULL) {
+        (void)yetty_ybrowser_loader_destroy(loader);
         return 1;
     }
 
@@ -431,6 +445,7 @@ int main(int argc, char **argv)
         .viewport_width = width,
         .viewport_height = height,
         .default_font_size = font_size,
+        .loader = loader,
     };
     struct yetty_ylexbor_ptr_result r = yetty_ylexbor_create(&cfg);
     if (YETTY_IS_ERR(r)) {
@@ -519,6 +534,7 @@ int main(int argc, char **argv)
         fflush(stdout);
         yetty_ylexbor_destroy(yl);
         free(html);
+        (void)yetty_ybrowser_loader_destroy(loader);
         return 0;
     }
 
@@ -556,6 +572,7 @@ int main(int argc, char **argv)
         fflush(stdout);
         yetty_ylexbor_destroy(yl);
         free(html);
+        (void)yetty_ybrowser_loader_destroy(loader);
         return 0;
     }
 
@@ -584,6 +601,7 @@ int main(int argc, char **argv)
         fflush(stdout);
         yetty_ylexbor_destroy(yl);
         free(html);
+        (void)yetty_ybrowser_loader_destroy(loader);
         return 0;
     }
 
@@ -592,6 +610,7 @@ int main(int argc, char **argv)
     if (YETTY_IS_ERR(br)) {
         yetty_ylexbor_destroy(yl);
         free(html);
+        (void)yetty_ybrowser_loader_destroy(loader);
         return 1;
     }
     struct yetty_ydraw_drawable_list *buf = br.value;
@@ -601,6 +620,7 @@ int main(int argc, char **argv)
         yetty_ydraw_drawable_list_destroy(buf);
         yetty_ylexbor_destroy(yl);
         free(html);
+        (void)yetty_ybrowser_loader_destroy(loader);
         return 1;
     }
     const uint8_t *bytes = NULL;
@@ -615,5 +635,6 @@ int main(int argc, char **argv)
 
     yetty_ylexbor_destroy(yl);
     free(html);
+    (void)yetty_ybrowser_loader_destroy(loader);
     return 0;
 }

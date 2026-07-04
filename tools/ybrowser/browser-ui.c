@@ -211,6 +211,13 @@ struct app {
 	 * IMG_RENDER_DEBOUNCE_MS window (img_last_render_ms = last such repaint). */
     int img_dirty;
     double img_last_render_ms;
+
+    /* Shared network loader — one per app so the page prefetch, every
+	 * tab's engine, and the image workers all reuse the same connection
+	 * pool / TLS sessions / Alt-Svc cache. Owned; destroyed after every
+	 * engine is gone. NULL when creation failed (fetches still work,
+	 * just without reuse). */
+    struct yetty_ybrowser_loader *loader;
 };
 
 static inline void err_ok(struct yetty_ycore_void_result r)
@@ -513,7 +520,8 @@ static void cache_free(struct url_cache *c)
 
 /* Fetch `url`, preferring the cache. Always returns owned bytes (caller
  * frees *out and *out_eff); NULL on failure. Misses are fetched and cached. */
-static uint8_t *cache_fetch(struct url_cache *c, const char *url, size_t *out_len, char **out_eff)
+static uint8_t *cache_fetch(struct yetty_ybrowser_loader *loader, struct url_cache *c,
+                            const char *url, size_t *out_len, char **out_eff)
 {
     *out_len = 0;
     *out_eff = NULL;
@@ -534,7 +542,7 @@ static uint8_t *cache_fetch(struct url_cache *c, const char *url, size_t *out_le
     size_t len = 0;
     char *eff = NULL;
     double t_fetch = yetty_ylexbor_prof_now_ms();
-    char *raw = ybrowser_slurp_file(url, &len, &eff);
+    char *raw = ybrowser_slurp_file(loader, url, &len, &eff);
     yetty_ylexbor_prof("HTML fetch     %.0f ms  bytes=%zu  %.80s",
                        yetty_ylexbor_prof_now_ms() - t_fetch, len, url);
     if (!raw) {
@@ -604,6 +612,7 @@ static int tab_ensure_engine(struct app *a, struct tab *t)
         .viewport_width = a->viewport_w > 0 ? (int)a->viewport_w : 1024,
         .viewport_height = a->viewport_h > 0 ? (int)a->viewport_h : 768,
         .default_font_size = a->font_size,
+        .loader = a->loader,
     };
     struct yetty_ylexbor_ptr_result r = yetty_ylexbor_create(&cfg);
     if (YETTY_IS_ERR(r)) {
@@ -720,7 +729,7 @@ static void navigate(struct app *a, struct tab *t, char *url, int push_to_back)
 
     size_t len = 0;
     char *eff = NULL;
-    uint8_t *data = cache_fetch(&a->cache, url, &len, &eff);
+    uint8_t *data = cache_fetch(a->loader, &a->cache, url, &len, &eff);
     if (data) {
         const char *base = eff ? eff : (ybrowser_looks_like_url(url) ? url : NULL);
         tab_set_document(a, t, (const char *)data, len, base);
@@ -1572,6 +1581,14 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
     a.viewport_w = (float)viewport_w;
     a.viewport_h = (float)viewport_h;
     a.font_size = font_size > 0.0f ? font_size : 16.0f;
+    {
+        struct yetty_ybrowser_loader_ptr_result loader_res = yetty_ybrowser_loader_create();
+        if (YETTY_IS_OK(loader_res)) {
+            a.loader = loader_res.value;
+        } else {
+            yetty_ycore_error_destroy(loader_res.error);
+        }
+    }
 
     struct stdout_pty out = {0};
     out.base.ops = stdout_pty_ops();
@@ -1671,6 +1688,8 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
         tab_free(&a.tabs[i]);
     }
     cache_free(&a.cache);
+    (void)yetty_ybrowser_loader_destroy(a.loader);
+    a.loader = NULL;
     err_ok(yetty_ygui_framework_destroy(a.fw));
     if (yf) {
         yetty_yface_destroy(yf);
@@ -1771,7 +1790,8 @@ struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_
 static void *sa_prefetch_main(void *arg)
 {
     struct yetty_ybrowser_app *s = arg;
-    s->prefetch_data = ybrowser_slurp_file(s->prefetch_url, &s->prefetch_len, &s->prefetch_eff);
+    s->prefetch_data =
+        ybrowser_slurp_file(s->app.loader, s->prefetch_url, &s->prefetch_len, &s->prefetch_eff);
     return NULL;
 }
 
@@ -2311,6 +2331,8 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         tab_free(&s->app.tabs[i]);
     }
     cache_free(&s->app.cache);
+    (void)yetty_ybrowser_loader_destroy(s->app.loader);
+    s->app.loader = NULL;
     if (s->app.fw) {
         err_ok(yetty_ygui_framework_destroy(s->app.fw));
         s->app.fw = NULL;
@@ -2380,6 +2402,14 @@ int ybrowser_ui_run_standalone(const char *initial_url, float font_size, int no_
     struct yetty_ybrowser_app *s = app_data.value;
     s->app.running = 1;
     s->app.font_size = font_size > 0.0f ? font_size : 16.0f;
+    {
+        struct yetty_ybrowser_loader_ptr_result loader_res = yetty_ybrowser_loader_create();
+        if (YETTY_IS_OK(loader_res)) {
+            s->app.loader = loader_res.value;
+        } else {
+            yetty_ycore_error_destroy(loader_res.error);
+        }
+    }
     s->app.no_ui = no_ui;
     s->initial_url = initial_url;
 

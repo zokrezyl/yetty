@@ -54,128 +54,7 @@ static inline css_fixed float_to_fixed(float v)
  * already doing in code, just expressed as CSS so libcss can cascade
  * over it. CSS_ORIGIN_UA gives it the lowest precedence.
  * ===========================================================================*/
-/* Canonical browser defaults (matches NetSurf resources/default.css
- * for the common HTML5 tags). Critical that body's `margin: 8px` is
- * present so empty pages produce a visible body box; without it the
- * cascade reports margin:0 and the layout pass collapses the body to
- * zero height. */
-static const char UA_DEFAULT_CSS[] =
-    "html, body { display: block; }\n"
-    "body { margin: 8px; line-height: 1.33; }\n"
-    "div, section, article, aside, header, footer, nav, main, figcaption,"
-    " hgroup, address, blockquote, form, dd, dl, dt, fieldset { display: block; }\n"
-    /* `figure` needs an explicit display:block — libcss's compiled-in
-     * defaults report computed display as CSS_DISPLAY_TABLE (6) for
-     * <figure> without this rule. !important to override whatever the
-     * library's internal UA sheet declared. Without this our layout
-     * dispatches to layout_table on every <figure>, which scans for
-     * <tr> descendants, finds none, and returns h=0 — so the inner
-     * <img> stays at the memset-default (0,0), giving the
-     * "all images stacked at the upper-left" symptom. */
-    "figure { display: block !important; }\n"
-    "ul, ol { display: block; margin: 1em 0; padding-left: 40px; }\n"
-    "li { display: list-item; margin: 0; }\n"
-    "head, title, meta, link, script, style, template { display: none; }\n"
-    /* <noscript> intentionally rendered: this build runs with
-     * QuickJS off, so the no-JS fallbacks (often <img> versions of
-     * what JS would otherwise inject) ARE the page content. */
-    "noscript { display: block; }\n"
-    /* Embedded content we don't render — hide outright so the walker
-     * doesn't surface their text content (SVG <text>, MathML, etc.)
-     * as garbage at the top of the page. */
-    "svg, math, audio, video, object, embed, iframe, canvas { display: none; }\n"
-    "span, a, strong, b, em, i, cite, code, small, sub, sup, mark, ins, del,"
-    " s, u, kbd, samp, var, time, q, abbr, dfn { display: inline; }\n"
-    "br { display: inline; }\n"
-    "p { display: block; margin: 1em 0; }\n"
-    "pre { display: block; margin: 1em 0; white-space: pre; }\n"
-    /* Tables — minimal CSS 2.1 defaults. ybrowser's layout pass
-     * recognises CSS_DISPLAY_TABLE and walks the descendant <tr>
-     * elements to render cells side-by-side. */
-    "table { display: table; border-collapse: separate; border-spacing: 2px; }\n"
-    "thead, tbody, tfoot { display: table-row-group; }\n"
-    "tr { display: table-row; }\n"
-    "td, th { display: table-cell; padding: 2px; vertical-align: top; }\n"
-    "th { font-weight: bold; text-align: center; }\n"
-    "caption { display: table-caption; text-align: center; }\n"
-    "h1 { display: block; font-size: 2em;    font-weight: bold; margin: 0.67em 0; }\n"
-    "h2 { display: block; font-size: 1.5em;  font-weight: bold; margin: 0.83em 0; }\n"
-    "h3 { display: block; font-size: 1.17em; font-weight: bold; margin: 1em 0; }\n"
-    "h4 { display: block; font-size: 1em;    font-weight: bold; margin: 1.33em 0; }\n"
-    "h5 { display: block; font-size: 0.83em; font-weight: bold; margin: 1.67em 0; }\n"
-    "h6 { display: block; font-size: 0.67em; font-weight: bold; margin: 2.33em 0; }\n"
-    "strong, b { font-weight: bold; }\n"
-    "em, i, cite, dfn { font-style: italic; }\n"
-    "a { color: #00e; text-decoration: underline; }\n"
-    "hr { display: block; margin: 0.5em auto; border-top: 1px solid #888; }\n"
-    /* Only the HTML `hidden` attribute hides an element visually. NOTE:
-     * `aria-hidden="true"` and `role="presentation"` are ACCESSIBILITY hints
-     * — they remove an element from the a11y tree but DO NOT affect visual
-     * rendering (Chrome paints them normally). Mapping them to display:none
-     * wrongly drops visible content: e.g. Google News marks each story's
-     * thumbnail figure `aria-hidden="true" role="presentation"` (the headline
-     * conveys it to screen readers) yet still shows the image. Site-specific
-     * hidden-nav junk is handled by explicit selectors below, not by abusing
-     * these attributes. */
-    "[hidden] { display: none !important; }\n"
-    /* NOTE: Wikipedia's float helpers used to live here and were injected into
-     * EVERY page — floating any site's generic `.thumb`/`.floatright`/`.infobox`
-     * out of flow (a news card's thumbnail collapsed to 0x0). They now live in
-     * UA_WIKIPEDIA_CSS, applied only to MediaWiki pages (see
-     * yetty_ybrowser_libcss_apply_wikipedia_quirks). */
-    /* Wikipedia's hidden navigation: jump links, edit-section markers,
-     * collapsed nav modules, sidebar menus, footer, indicators,
-     * language-switcher etc. None of these contribute article content
-     * to a CSS-less / terminal renderer. `!important` because the
-     * loaded author CSS often overrides display via clip-path /
-     * positional tricks that look hidden in a real browser but render
-     * as visible text for us. The classic symptom without this rule is
-     * "Jump to content" leaking into the upper-left corner of every
-     * Wikipedia page. */
-    ".mw-jump-link, .mw-editsection, .navbox, .navbar, .vector-menu,"
-    " .vector-header, .mw-portlet, .mw-footer, .mw-indicators,"
-    " .mw-cite-backlink, .mw-cite-direction-marker, .mw-hidden,"
-    " #vector-toc-pinned-container, .vector-toc, .vector-page-tools,"
-    " .vector-appearance-landmark, .vector-language-button-container,"
-    " .mw-page-container-inner > .vector-column-start,"
-    " .mw-page-container-inner > .vector-column-end,"
-    " .vector-sticky-pinned-container, .vector-sitenotice-container,"
-    " .mw-footer-container, #footer, .vector-pinnable-header,"
-    " .skip-link, .visualClear"
-    " { display: none !important; }\n";
 
-/* Wikipedia/MediaWiki float helpers — applied ONLY to MediaWiki pages (see
- * yetty_ybrowser_libcss_apply_wikipedia_quirks, gated on `mw-` class markers).
- * These use generic class names (`.thumb`, `.floatright`, `.infobox`) that
- * collide with other sites, so they must never be global. MediaWiki ships them
- * in /w/load.php; offline / CSS-less we approximate the default-right float so
- * articles get a paragraph-with-sidebar layout instead of full-width images. */
-static const char UA_WIKIPEDIA_CSS[] =
-    "figure[typeof~=\"mw:File/Thumb\"], figure[typeof~=\"mw:File/Frame\"],"
-    " .mw-default-size, .thumb, .thumb.tright"
-    " { float: right; margin: 0 0 0.5em 0.8em; }\n"
-    ".mw-halign-right, .mw-floatright, .floatright, .infobox, table.infobox"
-    " { float: right; margin: 0 0 0.5em 0.8em; }\n"
-    ".mw-halign-left, .mw-floatleft, .floatleft, figure.mw-halign-left,"
-    " figure.mw-default-size.mw-halign-left, .thumb.tleft"
-    " { float: left; margin: 0 0.8em 0.5em 0; }\n"
-    ".mw-halign-center, figure.mw-halign-center,"
-    " figure.mw-default-size.mw-halign-center"
-    " { float: none; margin: 0.5em auto; }\n"
-    /* MediaWiki leans on `aria-hidden`/`role=presentation` to hide nav,
-	 * jump-links, and edit-section markers. Globally honouring those as
-	 * display:none is WRONG (they are accessibility hints, not visual ones —
-	 * it hid Google News' article-image figures), so the generic UA sheet no
-	 * longer does it. Re-apply it HERE, scoped to MediaWiki pages, where the
-	 * junk genuinely relies on it. */
-    "[aria-hidden=\"true\"], [role=\"presentation\"] { display: none !important; }\n"
-    /* Top-level `<nav>` on MediaWiki is boilerplate (site nav, breadcrumbs,
-	 * language switcher, edit tabs) that adds no article content. On a general
-	 * site, by contrast, a `<nav>` IS the primary menu and must render as Chrome
-	 * shows it — so this blanket hide is scoped to MediaWiki pages here rather
-	 * than living in the global UA sheet, where it suppressed every site's main
-	 * navigation. */
-    "nav { display: none !important; }\n";
 
 int yetty_ybrowser_libcss_apply_wikipedia_quirks(struct yetty_ylexbor *r)
 {
@@ -183,6 +62,38 @@ int yetty_ybrowser_libcss_apply_wikipedia_quirks(struct yetty_ylexbor *r)
         return 0;
     }
     r->wiki_quirks_applied = 1;
+    /* Wikipedia/MediaWiki float helpers — applied ONLY to MediaWiki pages (see
+     * yetty_ybrowser_libcss_apply_wikipedia_quirks, gated on `mw-` class markers).
+     * These use generic class names (`.thumb`, `.floatright`, `.infobox`) that
+     * collide with other sites, so they must never be global. MediaWiki ships them
+     * in /w/load.php; offline / CSS-less we approximate the default-right float so
+     * articles get a paragraph-with-sidebar layout instead of full-width images. */
+    static const char UA_WIKIPEDIA_CSS[] =
+        "figure[typeof~=\"mw:File/Thumb\"], figure[typeof~=\"mw:File/Frame\"],"
+        " .mw-default-size, .thumb, .thumb.tright"
+        " { float: right; margin: 0 0 0.5em 0.8em; }\n"
+        ".mw-halign-right, .mw-floatright, .floatright, .infobox, table.infobox"
+        " { float: right; margin: 0 0 0.5em 0.8em; }\n"
+        ".mw-halign-left, .mw-floatleft, .floatleft, figure.mw-halign-left,"
+        " figure.mw-default-size.mw-halign-left, .thumb.tleft"
+        " { float: left; margin: 0 0.8em 0.5em 0; }\n"
+        ".mw-halign-center, figure.mw-halign-center,"
+        " figure.mw-default-size.mw-halign-center"
+        " { float: none; margin: 0.5em auto; }\n"
+        /* MediaWiki leans on `aria-hidden`/`role=presentation` to hide nav,
+    	 * jump-links, and edit-section markers. Globally honouring those as
+    	 * display:none is WRONG (they are accessibility hints, not visual ones —
+    	 * it hid Google News' article-image figures), so the generic UA sheet no
+    	 * longer does it. Re-apply it HERE, scoped to MediaWiki pages, where the
+    	 * junk genuinely relies on it. */
+        "[aria-hidden=\"true\"], [role=\"presentation\"] { display: none !important; }\n"
+        /* Top-level `<nav>` on MediaWiki is boilerplate (site nav, breadcrumbs,
+    	 * language switcher, edit tabs) that adds no article content. On a general
+    	 * site, by contrast, a `<nav>` IS the primary menu and must render as Chrome
+    	 * shows it — so this blanket hide is scoped to MediaWiki pages here rather
+    	 * than living in the global UA sheet, where it suppressed every site's main
+    	 * navigation. */
+        "nav { display: none !important; }\n";
     return yetty_ybrowser_libcss_add_sheet(r, UA_WIKIPEDIA_CSS, sizeof(UA_WIKIPEDIA_CSS) - 1,
                                            CSS_ORIGIN_USER);
 }
@@ -761,46 +672,6 @@ static css_error cb_get_libcss_node_data(void *pw, void *node, void **data)
     return CSS_OK;
 }
 
-/* Vtable. Sizes/ABI must match css_select_handler exactly. */
-static const css_select_handler g_handler = {
-    .handler_version = CSS_SELECT_HANDLER_VERSION_1,
-    .node_name = cb_node_name,
-    .node_classes = cb_node_classes,
-    .node_id = cb_node_id,
-    .named_ancestor_node = cb_named_ancestor_node,
-    .named_parent_node = cb_named_parent_node,
-    .named_sibling_node = cb_named_sibling_node,
-    .named_generic_sibling_node = cb_named_generic_sibling_node,
-    .parent_node = cb_parent_node,
-    .sibling_node = cb_sibling_node,
-    .node_has_name = cb_node_has_name,
-    .node_has_class = cb_node_has_class,
-    .node_has_id = cb_node_has_id,
-    .node_has_attribute = cb_node_has_attribute,
-    .node_has_attribute_equal = cb_node_has_attribute_equal,
-    .node_has_attribute_dashmatch = cb_node_has_attribute_dashmatch,
-    .node_has_attribute_includes = cb_node_has_attribute_includes,
-    .node_has_attribute_prefix = cb_node_has_attribute_prefix,
-    .node_has_attribute_suffix = cb_node_has_attribute_suffix,
-    .node_has_attribute_substring = cb_node_has_attribute_substring,
-    .node_is_root = cb_node_is_root,
-    .node_count_siblings = cb_node_count_siblings,
-    .node_is_empty = cb_node_is_empty,
-    .node_is_link = cb_node_is_link,
-    .node_is_visited = cb_false,
-    .node_is_hover = cb_false,
-    .node_is_active = cb_false,
-    .node_is_focus = cb_false,
-    .node_is_enabled = cb_false,
-    .node_is_disabled = cb_false,
-    .node_is_checked = cb_false,
-    .node_is_target = cb_false,
-    .node_is_lang = cb_node_is_lang,
-    .node_presentational_hint = cb_node_presentational_hint,
-    .ua_default_for_property = cb_ua_default_for_property,
-    .set_libcss_node_data = cb_set_libcss_node_data,
-    .get_libcss_node_data = cb_get_libcss_node_data,
-};
 
 /* libcss requires a URL resolution callback at stylesheet_create time
  * (rejects with CSS_BADPARM otherwise). We don't resolve @import /
@@ -820,26 +691,57 @@ static css_error url_resolve(void *pw, const char *base, lwc_string *rel, lwc_st
  * Public lifecycle.
  * ===========================================================================*/
 
-static int g_lwc_initialised = 0;
-
 int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
 {
     if (r->libcss != NULL) {
         return 0;
     }
-    if (!g_lwc_initialised) {
-        /* lwc has no public init function in current versions — it
-         * lazily initialises its global hash. We still keep the flag
-         * to mirror the lifecycle idiom. */
-        g_lwc_initialised = 1;
-    }
-
     struct yetty_ybrowser_libcss *lc = calloc(1, sizeof(*lc));
     if (!lc) {
         return -1;
     }
     lc->r = r;
-    lc->handler = g_handler;
+    /* Vtable. Sizes/ABI must match css_select_handler exactly. */
+    static const css_select_handler select_handler = {
+        .handler_version = CSS_SELECT_HANDLER_VERSION_1,
+        .node_name = cb_node_name,
+        .node_classes = cb_node_classes,
+        .node_id = cb_node_id,
+        .named_ancestor_node = cb_named_ancestor_node,
+        .named_parent_node = cb_named_parent_node,
+        .named_sibling_node = cb_named_sibling_node,
+        .named_generic_sibling_node = cb_named_generic_sibling_node,
+        .parent_node = cb_parent_node,
+        .sibling_node = cb_sibling_node,
+        .node_has_name = cb_node_has_name,
+        .node_has_class = cb_node_has_class,
+        .node_has_id = cb_node_has_id,
+        .node_has_attribute = cb_node_has_attribute,
+        .node_has_attribute_equal = cb_node_has_attribute_equal,
+        .node_has_attribute_dashmatch = cb_node_has_attribute_dashmatch,
+        .node_has_attribute_includes = cb_node_has_attribute_includes,
+        .node_has_attribute_prefix = cb_node_has_attribute_prefix,
+        .node_has_attribute_suffix = cb_node_has_attribute_suffix,
+        .node_has_attribute_substring = cb_node_has_attribute_substring,
+        .node_is_root = cb_node_is_root,
+        .node_count_siblings = cb_node_count_siblings,
+        .node_is_empty = cb_node_is_empty,
+        .node_is_link = cb_node_is_link,
+        .node_is_visited = cb_false,
+        .node_is_hover = cb_false,
+        .node_is_active = cb_false,
+        .node_is_focus = cb_false,
+        .node_is_enabled = cb_false,
+        .node_is_disabled = cb_false,
+        .node_is_checked = cb_false,
+        .node_is_target = cb_false,
+        .node_is_lang = cb_node_is_lang,
+        .node_presentational_hint = cb_node_presentational_hint,
+        .ua_default_for_property = cb_ua_default_for_property,
+        .set_libcss_node_data = cb_set_libcss_node_data,
+        .get_libcss_node_data = cb_get_libcss_node_data,
+    };
+    lc->handler = select_handler;
 
     if (css_select_ctx_create(&lc->select_ctx) != CSS_OK) {
         free(lc);
@@ -875,6 +777,95 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
     r->libcss = lc;
 
     /* Bake in the UA defaults. */
+    /* Canonical browser defaults (matches NetSurf resources/default.css
+     * for the common HTML5 tags). Critical that body's `margin: 8px` is
+     * present so empty pages produce a visible body box; without it the
+     * cascade reports margin:0 and the layout pass collapses the body to
+     * zero height. */
+    static const char UA_DEFAULT_CSS[] =
+        "html, body { display: block; }\n"
+        "body { margin: 8px; line-height: 1.33; }\n"
+        "div, section, article, aside, header, footer, nav, main, figcaption,"
+        " hgroup, address, blockquote, form, dd, dl, dt, fieldset { display: block; }\n"
+        /* `figure` needs an explicit display:block — libcss's compiled-in
+         * defaults report computed display as CSS_DISPLAY_TABLE (6) for
+         * <figure> without this rule. !important to override whatever the
+         * library's internal UA sheet declared. Without this our layout
+         * dispatches to layout_table on every <figure>, which scans for
+         * <tr> descendants, finds none, and returns h=0 — so the inner
+         * <img> stays at the memset-default (0,0), giving the
+         * "all images stacked at the upper-left" symptom. */
+        "figure { display: block !important; }\n"
+        "ul, ol { display: block; margin: 1em 0; padding-left: 40px; }\n"
+        "li { display: list-item; margin: 0; }\n"
+        "head, title, meta, link, script, style, template { display: none; }\n"
+        /* <noscript> intentionally rendered: this build runs with
+         * QuickJS off, so the no-JS fallbacks (often <img> versions of
+         * what JS would otherwise inject) ARE the page content. */
+        "noscript { display: block; }\n"
+        /* Embedded content we don't render — hide outright so the walker
+         * doesn't surface their text content (SVG <text>, MathML, etc.)
+         * as garbage at the top of the page. */
+        "svg, math, audio, video, object, embed, iframe, canvas { display: none; }\n"
+        "span, a, strong, b, em, i, cite, code, small, sub, sup, mark, ins, del,"
+        " s, u, kbd, samp, var, time, q, abbr, dfn { display: inline; }\n"
+        "br { display: inline; }\n"
+        "p { display: block; margin: 1em 0; }\n"
+        "pre { display: block; margin: 1em 0; white-space: pre; }\n"
+        /* Tables — minimal CSS 2.1 defaults. ybrowser's layout pass
+         * recognises CSS_DISPLAY_TABLE and walks the descendant <tr>
+         * elements to render cells side-by-side. */
+        "table { display: table; border-collapse: separate; border-spacing: 2px; }\n"
+        "thead, tbody, tfoot { display: table-row-group; }\n"
+        "tr { display: table-row; }\n"
+        "td, th { display: table-cell; padding: 2px; vertical-align: top; }\n"
+        "th { font-weight: bold; text-align: center; }\n"
+        "caption { display: table-caption; text-align: center; }\n"
+        "h1 { display: block; font-size: 2em;    font-weight: bold; margin: 0.67em 0; }\n"
+        "h2 { display: block; font-size: 1.5em;  font-weight: bold; margin: 0.83em 0; }\n"
+        "h3 { display: block; font-size: 1.17em; font-weight: bold; margin: 1em 0; }\n"
+        "h4 { display: block; font-size: 1em;    font-weight: bold; margin: 1.33em 0; }\n"
+        "h5 { display: block; font-size: 0.83em; font-weight: bold; margin: 1.67em 0; }\n"
+        "h6 { display: block; font-size: 0.67em; font-weight: bold; margin: 2.33em 0; }\n"
+        "strong, b { font-weight: bold; }\n"
+        "em, i, cite, dfn { font-style: italic; }\n"
+        "a { color: #00e; text-decoration: underline; }\n"
+        "hr { display: block; margin: 0.5em auto; border-top: 1px solid #888; }\n"
+        /* Only the HTML `hidden` attribute hides an element visually. NOTE:
+         * `aria-hidden="true"` and `role="presentation"` are ACCESSIBILITY hints
+         * — they remove an element from the a11y tree but DO NOT affect visual
+         * rendering (Chrome paints them normally). Mapping them to display:none
+         * wrongly drops visible content: e.g. Google News marks each story's
+         * thumbnail figure `aria-hidden="true" role="presentation"` (the headline
+         * conveys it to screen readers) yet still shows the image. Site-specific
+         * hidden-nav junk is handled by explicit selectors below, not by abusing
+         * these attributes. */
+        "[hidden] { display: none !important; }\n"
+        /* NOTE: Wikipedia's float helpers used to live here and were injected into
+         * EVERY page — floating any site's generic `.thumb`/`.floatright`/`.infobox`
+         * out of flow (a news card's thumbnail collapsed to 0x0). They now live in
+         * UA_WIKIPEDIA_CSS, applied only to MediaWiki pages (see
+         * yetty_ybrowser_libcss_apply_wikipedia_quirks). */
+        /* Wikipedia's hidden navigation: jump links, edit-section markers,
+         * collapsed nav modules, sidebar menus, footer, indicators,
+         * language-switcher etc. None of these contribute article content
+         * to a CSS-less / terminal renderer. `!important` because the
+         * loaded author CSS often overrides display via clip-path /
+         * positional tricks that look hidden in a real browser but render
+         * as visible text for us. The classic symptom without this rule is
+         * "Jump to content" leaking into the upper-left corner of every
+         * Wikipedia page. */
+        ".mw-jump-link, .mw-editsection, .navbox, .navbar, .vector-menu,"
+        " .vector-header, .mw-portlet, .mw-footer, .mw-indicators,"
+        " .mw-cite-backlink, .mw-cite-direction-marker, .mw-hidden,"
+        " #vector-toc-pinned-container, .vector-toc, .vector-page-tools,"
+        " .vector-appearance-landmark, .vector-language-button-container,"
+        " .mw-page-container-inner > .vector-column-start,"
+        " .mw-page-container-inner > .vector-column-end,"
+        " .vector-sticky-pinned-container, .vector-sitenotice-container,"
+        " .mw-footer-container, #footer, .vector-pinnable-header,"
+        " .skip-link, .visualClear"
+        " { display: none !important; }\n";
     if (yetty_ybrowser_libcss_add_sheet(r, UA_DEFAULT_CSS, sizeof(UA_DEFAULT_CSS) - 1,
                                         CSS_ORIGIN_UA) != 0) {
         ydebug("libcss: UA stylesheet append failed");

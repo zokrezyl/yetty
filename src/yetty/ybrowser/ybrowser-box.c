@@ -52,29 +52,28 @@ struct yl_default_style {
 
 #define INHERIT_RGB 0xffffffffu
 
-static const struct yl_default_style YL_DEFAULT_INLINE = {
-    YL_DISP_INLINE, 1.0f, 0, -1, 0.0f, 0.0f, INHERIT_RGB, 0,
-};
-static const struct yl_default_style YL_DEFAULT_BLOCK = {
-    YL_DISP_BLOCK, 1.0f, 0, -1, 1.0f, 1.0f, INHERIT_RGB, 0,
-};
-
 /* Match lexbor tag IDs; values pulled from <lexbor/tag/const.h>. */
 static const struct yl_default_style *default_for(lxb_tag_id_t tag)
 {
-    static struct yl_default_style h1 = {YL_DISP_BLOCK, 2.00f, 700, -1, 0.67f, 0.67f, INHERIT_RGB};
-    static struct yl_default_style h2 = {YL_DISP_BLOCK, 1.50f, 700, -1, 0.83f, 0.83f, INHERIT_RGB};
-    static struct yl_default_style h3 = {YL_DISP_BLOCK, 1.17f, 700, -1, 1.00f, 1.00f, INHERIT_RGB};
-    static struct yl_default_style h4 = {YL_DISP_BLOCK, 1.00f, 700, -1, 1.33f, 1.33f, INHERIT_RGB};
-    static struct yl_default_style h5 = {YL_DISP_BLOCK, 0.83f, 700, -1, 1.67f, 1.67f, INHERIT_RGB};
-    static struct yl_default_style h6 = {YL_DISP_BLOCK, 0.67f, 700, -1, 2.33f, 2.33f, INHERIT_RGB};
+    static const struct yl_default_style YL_DEFAULT_INLINE = {
+        YL_DISP_INLINE, 1.0f, 0, -1, 0.0f, 0.0f, INHERIT_RGB, 0,
+    };
+    static const struct yl_default_style YL_DEFAULT_BLOCK = {
+        YL_DISP_BLOCK, 1.0f, 0, -1, 1.0f, 1.0f, INHERIT_RGB, 0,
+    };
+    static const struct yl_default_style h1 = {YL_DISP_BLOCK, 2.00f, 700, -1, 0.67f, 0.67f, INHERIT_RGB};
+    static const struct yl_default_style h2 = {YL_DISP_BLOCK, 1.50f, 700, -1, 0.83f, 0.83f, INHERIT_RGB};
+    static const struct yl_default_style h3 = {YL_DISP_BLOCK, 1.17f, 700, -1, 1.00f, 1.00f, INHERIT_RGB};
+    static const struct yl_default_style h4 = {YL_DISP_BLOCK, 1.00f, 700, -1, 1.33f, 1.33f, INHERIT_RGB};
+    static const struct yl_default_style h5 = {YL_DISP_BLOCK, 0.83f, 700, -1, 1.67f, 1.67f, INHERIT_RGB};
+    static const struct yl_default_style h6 = {YL_DISP_BLOCK, 0.67f, 700, -1, 2.33f, 2.33f, INHERIT_RGB};
 
-    static struct yl_default_style strong = {YL_DISP_INLINE, 1.0f, 700, -1, 0, 0, INHERIT_RGB, 0};
-    static struct yl_default_style em = {YL_DISP_INLINE, 1.0f, 0, 1, 0, 0, INHERIT_RGB, 0};
-    static struct yl_default_style anchor = {YL_DISP_INLINE, 1.0f, 0, -1, 0, 0, 0x0000eeu, 1};
-    static struct yl_default_style small_e = {YL_DISP_INLINE, 0.83f, 0, -1, 0, 0, INHERIT_RGB, 0};
-    static struct yl_default_style code_e = {YL_DISP_INLINE, 1.0f, 0, -1, 0, 0, 0x444444u, 0};
-    static struct yl_default_style none = {YL_DISP_NONE, 1.0f, 0, -1, 0, 0, INHERIT_RGB, 0};
+    static const struct yl_default_style strong = {YL_DISP_INLINE, 1.0f, 700, -1, 0, 0, INHERIT_RGB, 0};
+    static const struct yl_default_style em = {YL_DISP_INLINE, 1.0f, 0, 1, 0, 0, INHERIT_RGB, 0};
+    static const struct yl_default_style anchor = {YL_DISP_INLINE, 1.0f, 0, -1, 0, 0, 0x0000eeu, 1};
+    static const struct yl_default_style small_e = {YL_DISP_INLINE, 0.83f, 0, -1, 0, 0, INHERIT_RGB, 0};
+    static const struct yl_default_style code_e = {YL_DISP_INLINE, 1.0f, 0, -1, 0, 0, 0x444444u, 0};
+    static const struct yl_default_style none = {YL_DISP_NONE, 1.0f, 0, -1, 0, 0, INHERIT_RGB, 0};
 
     switch (tag) {
     case LXB_TAG_H1:
@@ -1655,21 +1654,6 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 					 * per <ul>. */
                     css_list_style = yetty_ybrowser_libcss_list_style_type(cs);
 
-                    /* `background-image: url(...)` — fetch the absolute
-					 * URL (resolved against the document base) and
-					 * stash on the block so paint can decode + emit. */
-                    {
-                        char *bg_rel = NULL;
-                        if (yetty_ybrowser_libcss_bg_image_url(cs, &bg_rel)) {
-                            char *bg_abs = yetty_ylexbor_resolve_url(r, bg_rel);
-                            if (bg_abs) {
-                                free(b->bg_image_url);
-                                b->bg_image_url = bg_abs;
-                            }
-                            free(bg_rel);
-                        }
-                    }
-
                     /* Don't carry currentColor border in further. */
                     yetty_ybrowser_libcss_release(cs);
                 }
@@ -2070,19 +2054,16 @@ struct yetty_ycore_void_result yetty_ylexbor_box_build(struct yetty_ylexbor *r)
         return YETTY_ERR(yetty_ycore_void, "ylexbor_box_build: null");
     }
 
-    /* Free per-box heap (segs + bg_image_url) from the previous build.
-	 * wrap_inline_box clears segs on consumption, but a relayout path
-	 * that skips painting (or aborts mid-build) leaves them owned by
-	 * the box, and bg_image_url is allocated fresh on every build —
-	 * resetting size to 0 without this loop leaks both. */
+    /* Free per-box heap (segs) from the previous build. wrap_inline_box
+	 * clears segs on consumption, but a relayout path that skips painting
+	 * (or aborts mid-build) leaves them owned by the box — resetting size
+	 * to 0 without this loop leaks them. */
     for (uint32_t i = 0; i < r->boxes.size; i++) {
         if (r->boxes.data[i].segs) {
             free(r->boxes.data[i].segs);
             r->boxes.data[i].segs = NULL;
             r->boxes.data[i].segs_count = 0;
         }
-        free(r->boxes.data[i].bg_image_url);
-        r->boxes.data[i].bg_image_url = NULL;
     }
     r->boxes.size = 0;
 

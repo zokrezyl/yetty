@@ -178,78 +178,192 @@ static size_t fetch_write_cb(char *p, size_t sz, size_t n, void *ud)
     return add;
 }
 
-char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_t *out_len,
-                                     long *out_status);
+char *yetty_ylexbor_http_get_referer(struct yetty_ybrowser_loader *loader, const char *url,
+                                     const char *referer, size_t *out_len, long *out_status);
 
-char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
+char *yetty_ylexbor_http_get(struct yetty_ybrowser_loader *loader, const char *url,
+                             size_t *out_len, long *out_status)
 {
-    return yetty_ylexbor_http_get_referer(url, NULL, out_len, out_status);
+    return yetty_ylexbor_http_get_referer(loader, url, NULL, out_len, out_status);
 }
 
-/* Process-wide shared connection / DNS / TLS-session cache. The image
- * fetch loop in ybrowser-paint.c makes ~30 sequential curl_easy_init()
- * calls to the same CDN host (upload.wikimedia.org); without a share
- * handle each call does a fresh TCP+TLS handshake (~100ms × 30 = ~3s
- * wasted). With the share, the second through Nth easy handle reuse
- * the live connection from the pool, dropping the per-image cost to
- * just the transfer time. Equivalent of Chrome's connection pool but
- * single-threaded sequential — true parallelism would need curl_multi
- * (deferred). Thread-safe via libcurl's CURL_LOCK_DATA_* — we add the
- * per-data-type lock callbacks because curl can be called from the
- * JS-worker thread for fetch()/XHR. */
-static CURLSH *g_curl_share = NULL;
 #include <pthread.h>
-static pthread_once_t g_curl_share_once = PTHREAD_ONCE_INIT;
-static pthread_mutex_t g_curl_share_locks[CURL_LOCK_DATA_LAST];
 
-static void share_lock_cb(CURL *h, curl_lock_data data, curl_lock_access access, void *ud)
+/* Network loader — the owner of everything fetch-related that outlives a
+ * single request. The share handle is the workhorse: the image fetch
+ * paths make ~30 curl_easy_init() calls to the same CDN host
+ * (upload.wikimedia.org); without a share each call does a fresh TCP+TLS
+ * handshake (~100ms × 30 = ~3s wasted). With it, the second through Nth
+ * easy handle reuse the live connection from the pool. Thread-safe via
+ * libcurl's CURL_LOCK_DATA_* lock callbacks — fetches also run on image
+ * worker threads and the JS thread. The Alt-Svc cache path lives here
+ * too so BOTH the sequential and the curl_multi paths get HTTP/3
+ * upgrades, and so no racy static path buffer is needed. */
+struct yetty_ybrowser_loader {
+    CURLSH *share; /* NULL when curl_share_init failed — fetches still work */
+    pthread_mutex_t share_locks[CURL_LOCK_DATA_LAST];
+    /* $XDG_CACHE_HOME/yetty/altsvc-cache (or $HOME/.cache/...). Empty
+	 * string when no cache dir could be derived. */
+    char altsvc_path[1024];
+};
+
+static void share_lock_cb(CURL *handle, curl_lock_data data, curl_lock_access access,
+                          void *userdata)
 {
-    (void)h;
+    (void)handle;
     (void)access;
-    (void)ud;
+    struct yetty_ybrowser_loader *loader = userdata;
     if (data < CURL_LOCK_DATA_LAST) {
-        pthread_mutex_lock(&g_curl_share_locks[data]);
+        pthread_mutex_lock(&loader->share_locks[data]);
     }
 }
-static void share_unlock_cb(CURL *h, curl_lock_data data, void *ud)
+static void share_unlock_cb(CURL *handle, curl_lock_data data, void *userdata)
 {
-    (void)h;
-    (void)ud;
+    (void)handle;
+    struct yetty_ybrowser_loader *loader = userdata;
     if (data < CURL_LOCK_DATA_LAST) {
-        pthread_mutex_unlock(&g_curl_share_locks[data]);
+        pthread_mutex_unlock(&loader->share_locks[data]);
     }
 }
-static void share_init_once(void)
+
+struct yetty_ybrowser_loader_ptr_result yetty_ybrowser_loader_create(void)
 {
+    struct yetty_ybrowser_loader *loader = calloc(1, sizeof(*loader));
+    if (loader == NULL) {
+        return YETTY_ERR(yetty_ybrowser_loader_ptr, "loader alloc");
+    }
     for (int i = 0; i < CURL_LOCK_DATA_LAST; i++) {
-        pthread_mutex_init(&g_curl_share_locks[i], NULL);
+        pthread_mutex_init(&loader->share_locks[i], NULL);
     }
-    g_curl_share = curl_share_init();
-    if (!g_curl_share) {
+    loader->share = curl_share_init();
+    if (loader->share) {
+        curl_share_setopt(loader->share, CURLSHOPT_LOCKFUNC, share_lock_cb);
+        curl_share_setopt(loader->share, CURLSHOPT_UNLOCKFUNC, share_unlock_cb);
+        curl_share_setopt(loader->share, CURLSHOPT_USERDATA, loader);
+        /* Share the four caches that matter for repeated same-host
+		 * fetches. CONNECT is the big one — keeps the TCP+TLS connection
+		 * alive across easy handle lifetimes. DNS and SSL_SESSION are
+		 * smaller wins but free. */
+        curl_share_setopt(loader->share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+        curl_share_setopt(loader->share, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
+#ifdef CURL_LOCK_DATA_CONNECT
+        curl_share_setopt(loader->share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+#endif
+        curl_share_setopt(loader->share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
+    }
+    /* Alt-Svc cache file — lets a second visit to an H3-capable origin
+	 * skip the H2 round and go straight to HTTP/3. Only when this build
+	 * of libcurl actually speaks H3. */
+#if defined(CURLOPT_ALTSVC) && defined(CURL_VERSION_HTTP3)
+    {
+        curl_version_info_data *version_info = curl_version_info(CURLVERSION_NOW);
+        if (version_info && (version_info->features & CURL_VERSION_HTTP3)) {
+            const char *xdg = getenv("XDG_CACHE_HOME");
+            const char *home = getenv("HOME");
+            if (xdg && *xdg) {
+                snprintf(loader->altsvc_path, sizeof(loader->altsvc_path),
+                         "%s/yetty/altsvc-cache", xdg);
+            } else if (home && *home) {
+                snprintf(loader->altsvc_path, sizeof(loader->altsvc_path),
+                         "%s/.cache/yetty/altsvc-cache", home);
+            }
+        }
+    }
+#endif
+    return YETTY_OK(yetty_ybrowser_loader_ptr, loader);
+}
+
+struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrowser_loader *loader)
+{
+    if (loader == NULL) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result res = YETTY_OK_VOID();
+    if (loader->share) {
+        CURLSHcode code = curl_share_cleanup(loader->share);
+        if (code != CURLSHE_OK) {
+            res = YETTY_ERR(yetty_ycore_void, "curl_share_cleanup failed");
+        }
+    }
+    for (int i = 0; i < CURL_LOCK_DATA_LAST; i++) {
+        pthread_mutex_destroy(&loader->share_locks[i]);
+    }
+    free(loader);
+    return res;
+}
+
+void *yetty_ybrowser_loader_curl_share(struct yetty_ybrowser_loader *loader)
+{
+    return loader ? loader->share : NULL;
+}
+
+/* Apply the loader-owned bits (share handle, Alt-Svc cache) to one easy
+ * handle. Shared by the sequential and curl_multi paths so both get
+ * connection reuse AND HTTP/3 upgrades. */
+static void loader_configure_easy(struct yetty_ybrowser_loader *loader, CURL *easy)
+{
+    if (!loader) {
         return;
     }
-    curl_share_setopt(g_curl_share, CURLSHOPT_LOCKFUNC, share_lock_cb);
-    curl_share_setopt(g_curl_share, CURLSHOPT_UNLOCKFUNC, share_unlock_cb);
-    /* Share the four caches that matter for sequential same-host
-	 * fetches. CONNECT is the big one — keeps the TCP+TLS connection
-	 * alive across easy handle lifetimes. DNS and SSL_SESSION are
-	 * smaller wins but free. */
-    curl_share_setopt(g_curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
-    curl_share_setopt(g_curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
-#ifdef CURL_LOCK_DATA_CONNECT
-    curl_share_setopt(g_curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+    if (loader->share) {
+        curl_easy_setopt(easy, CURLOPT_SHARE, loader->share);
+    }
+#ifdef CURLOPT_ALTSVC
+    if (loader->altsvc_path[0]) {
+        curl_easy_setopt(easy, CURLOPT_ALTSVC, loader->altsvc_path);
+        /* Permit h1/h2/h3 alternates. */
+#ifdef CURLALTSVC_H1
+        curl_easy_setopt(easy, CURLOPT_ALTSVC_CTRL,
+                         (long)(CURLALTSVC_H1 | CURLALTSVC_H2 | CURLALTSVC_H3));
 #endif
-    curl_share_setopt(g_curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
+    }
+#endif
 }
 
-void *yetty_ylexbor_curl_share(void)
+/* file:// — read directly since libcurl is often built without the FILE
+ * protocol. Used heavily by the WPT integration runner to load
+ * `<script src=...>` siblings of the test page, and by http_get_many for
+ * local stylesheet links. Returns a malloc'd NUL-terminated buffer;
+ * *out_status is 200 on success, 0 on failure. */
+static char *fetch_local_file(const char *url, size_t *out_len, long *out_status)
 {
-    pthread_once(&g_curl_share_once, share_init_once);
-    return g_curl_share;
+    if (out_len) {
+        *out_len = 0;
+    }
+    if (out_status) {
+        *out_status = 0;
+    }
+    const char *path = url + 7; /* past "file://" */
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return NULL;
+    }
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (sz < 0) {
+        fclose(f);
+        return NULL;
+    }
+    char *buf = malloc((size_t)sz + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+    size_t got = fread(buf, 1, (size_t)sz, f);
+    fclose(f);
+    buf[got] = '\0';
+    if (out_len) {
+        *out_len = got;
+    }
+    if (out_status) {
+        *out_status = 200;
+    }
+    return buf;
 }
 
-char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_t *out_len,
-                                     long *out_status)
+char *yetty_ylexbor_http_get_referer(struct yetty_ybrowser_loader *loader, const char *url,
+                                     const char *referer, size_t *out_len, long *out_status)
 {
     if (!url) {
         if (out_len) {
@@ -260,105 +374,21 @@ char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_
         }
         return NULL;
     }
-    /* file:// — handle directly since libcurl is often built without
-	 * the FILE protocol. Used heavily by the WPT integration runner
-	 * to load `<script src=...>` siblings of the test page. */
     if (strncmp(url, "file://", 7) == 0) {
-        const char *path = url + 7;
-        FILE *f = fopen(path, "rb");
-        if (!f) {
-            if (out_len) {
-                *out_len = 0;
-            }
-            if (out_status) {
-                *out_status = 0;
-            }
-            return NULL;
-        }
-        fseek(f, 0, SEEK_END);
-        long sz = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        if (sz < 0) {
-            fclose(f);
-            if (out_status) {
-                *out_status = 0;
-            }
-            return NULL;
-        }
-        char *buf = malloc((size_t)sz + 1);
-        if (!buf) {
-            fclose(f);
-            return NULL;
-        }
-        size_t got = fread(buf, 1, (size_t)sz, f);
-        fclose(f);
-        buf[got] = '\0';
-        if (out_len) {
-            *out_len = got;
-        }
-        if (out_status) {
-            *out_status = 200;
-        }
-        return buf;
+        return fetch_local_file(url, out_len, out_status);
     }
     CURL *c = curl_easy_init();
     if (!c) {
         return NULL;
     }
-    /* Attach the process-wide share handle so this easy handle reuses
-	 * the cached TCP+TLS connection, DNS resolution, and TLS session
-	 * from previous calls. First-touch initialization is one-shot via
-	 * pthread_once. */
-    pthread_once(&g_curl_share_once, share_init_once);
-    if (g_curl_share) {
-        curl_easy_setopt(c, CURLOPT_SHARE, g_curl_share);
-    }
+    /* Loader-owned bits: share handle (connection/DNS/TLS-session reuse)
+	 * and the Alt-Svc cache (HTTP/3 upgrade on revisit). */
+    loader_configure_easy(loader, c);
     struct fetch_buf b = {0};
     curl_easy_setopt(c, CURLOPT_URL, url);
     curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(c, CURLOPT_MAXREDIRS, 10L);
 
-    /* HTTP version negotiation. Letting libcurl pick (the default) gives
-	 * HTTP/2 over TLS via ALPN — fast on its own. For HTTP/3 we use the
-	 * Alt-Svc cache: servers advertise H3 via the Alt-Svc response
-	 * header on HTTP/2, libcurl persists the advert, and switches to
-	 * H3 on the NEXT request to that origin. No timeout penalty for
-	 * non-H3 hosts — unlike CURL_HTTP_VERSION_3 which forces H3 and
-	 * cannot downgrade. Alt-Svc cache file lives next to the user's
-	 * runtime dir; persists across runs so warm sessions skip the
-	 * H2-discovery round-trip. */
-#ifdef CURLOPT_ALTSVC
-    {
-        curl_version_info_data *vi = curl_version_info(CURLVERSION_NOW);
-        (void)vi;
-#ifdef CURL_VERSION_HTTP3
-        if (vi && (vi->features & CURL_VERSION_HTTP3)) {
-            /* Cache file: $XDG_CACHE_HOME/yetty/altsvc-cache or
-			 * $HOME/.cache/yetty/altsvc-cache. Created on first
-			 * advert, ignored on read failure. */
-            static char altsvc_path[1024];
-            if (altsvc_path[0] == '\0') {
-                const char *xdg = getenv("XDG_CACHE_HOME");
-                const char *home = getenv("HOME");
-                if (xdg && *xdg) {
-                    snprintf(altsvc_path, sizeof(altsvc_path), "%s/yetty/altsvc-cache", xdg);
-                } else if (home && *home) {
-                    snprintf(altsvc_path, sizeof(altsvc_path), "%s/.cache/yetty/altsvc-cache",
-                             home);
-                }
-            }
-            if (altsvc_path[0]) {
-                curl_easy_setopt(c, CURLOPT_ALTSVC, altsvc_path);
-                /* Restrict to h2→h3 and h3→h2 upgrades. */
-#ifdef CURLALTSVC_H1
-                curl_easy_setopt(c, CURLOPT_ALTSVC_CTRL,
-                                 (long)(CURLALTSVC_H1 | CURLALTSVC_H2 | CURLALTSVC_H3));
-#endif
-            }
-        }
-#endif
-    }
-#endif
     /* Send a standard Chrome User-Agent so CDNs treat us as a real
 	 * browser. Wikimedia's bot-throttling, news.google.com's image
 	 * gate, and several CloudFlare WAFs all behave very differently
@@ -429,13 +459,11 @@ char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_
 /* Configure one easy handle inside http_get_many with the same options
  * the sequential path uses. Extracted to avoid copy-paste drift. The
  * caller adds the curl_slist headers; we set everything else. */
-static void multi_configure_easy(CURL *c, const char *url, const char *referer, struct fetch_buf *b,
+static void multi_configure_easy(struct yetty_ybrowser_loader *loader, CURL *c, const char *url,
+                                 const char *referer, struct fetch_buf *b,
                                  struct curl_slist *headers)
 {
-    pthread_once(&g_curl_share_once, share_init_once);
-    if (g_curl_share) {
-        curl_easy_setopt(c, CURLOPT_SHARE, g_curl_share);
-    }
+    loader_configure_easy(loader, c);
     curl_easy_setopt(c, CURLOPT_URL, url);
     curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(c, CURLOPT_MAXREDIRS, 10L);
@@ -459,9 +487,9 @@ static void multi_configure_easy(CURL *c, const char *url, const char *referer, 
     }
 }
 
-void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *referer,
-                                 int concurrency, char **out_bodies, size_t *out_lens,
-                                 long *out_status)
+void yetty_ylexbor_http_get_many(struct yetty_ybrowser_loader *loader, const char *const *urls,
+                                 int n, const char *referer, int concurrency, char **out_bodies,
+                                 size_t *out_lens, long *out_status)
 {
     if (n <= 0) {
         return;
@@ -469,11 +497,14 @@ void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *ref
     if (concurrency < 1) {
         concurrency = 1;
     }
-    if (concurrency > n) {
-        concurrency = n;
-    }
     yetty_ylexbor_prof("    http_get_many START n=%d conc=%d", n, concurrency);
     double t_many = yetty_ylexbor_prof_now_ms();
+
+    for (int i = 0; i < n; i++) {
+        out_bodies[i] = NULL;
+        out_lens[i] = 0;
+        out_status[i] = 0;
+    }
 
     /* Build the shared header list once — same set used by the
 	 * sequential path. curl_multi shares this slist among handles. */
@@ -486,110 +517,124 @@ void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *ref
     headers = curl_slist_append(headers, "Sec-Fetch-Site: cross-site");
 
     /* Per-request scratch — one CURL*, one fetch_buf, one slot index.
-	 * Use a tag pointer (CURLOPT_PRIVATE) to recover the slot when a
-	 * handle finishes. */
-    struct slot {
-        CURL *c;
-        struct fetch_buf b;
+	 * A tag pointer (CURLOPT_PRIVATE) recovers the slot when a handle
+	 * finishes. */
+    struct fetch_slot {
+        CURL *easy;
+        struct fetch_buf buf;
         int idx;
-        int started;
-        int done;
     };
-    struct slot *slots = calloc((size_t)n, sizeof(*slots));
+    struct fetch_slot *slots = calloc((size_t)n, sizeof(*slots));
     if (!slots) {
         curl_slist_free_all(headers);
         return;
     }
-    for (int i = 0; i < n; i++) {
-        slots[i].idx = i;
-        out_bodies[i] = NULL;
-        out_lens[i] = 0;
-        out_status[i] = 0;
-    }
 
-    CURLM *mh = curl_multi_init();
-    if (!mh) {
+    CURLM *multi = curl_multi_init();
+    if (!multi) {
         curl_slist_free_all(headers);
         free(slots);
         return;
     }
-    /* HTTP/2 multiplexing — when the server speaks H2, all in-flight
-	 * requests to the same origin share ONE TCP+TLS connection. This
-	 * is the big win vs sequential easy-handle calls. */
-    curl_multi_setopt(mh, CURLMOPT_PIPELINING, (long)CURLPIPE_MULTIPLEX);
-    curl_multi_setopt(mh, CURLMOPT_MAX_TOTAL_CONNECTIONS, (long)concurrency);
-    curl_multi_setopt(mh, CURLMOPT_MAX_HOST_CONNECTIONS, (long)concurrency);
+    /* HTTP/2 multiplexing — when the server speaks H2, concurrent
+	 * requests to the same origin share ONE TCP+TLS connection as
+	 * parallel streams. ALL transfers are added up front so libcurl can
+	 * multiplex the lot; `concurrency` only caps CONNECTIONS per host
+	 * (the limit that matters for H1-only origins), not streams. An
+	 * earlier version windowed the transfers themselves to 8, which
+	 * capped an H2 connection at 8 streams and serialized 30+ same-
+	 * origin images into waves. */
+    curl_multi_setopt(multi, CURLMOPT_PIPELINING, (long)CURLPIPE_MULTIPLEX);
+    curl_multi_setopt(multi, CURLMOPT_MAX_HOST_CONNECTIONS, (long)concurrency);
+    curl_multi_setopt(multi, CURLMOPT_MAX_TOTAL_CONNECTIONS, (long)(4 * concurrency));
 
-    /* Prime the first `concurrency` requests. */
-    int next_to_start = 0;
-    int running_handles = 0;
-    while (next_to_start < n && next_to_start < concurrency) {
-        struct slot *s = &slots[next_to_start];
-        s->c = curl_easy_init();
-        if (!s->c) {
-            next_to_start++;
+    int added = 0;
+    for (int i = 0; i < n; i++) {
+        /* file:// — libcurl is often built without the FILE protocol;
+		 * serve those slots directly (WPT pages link local sheets). */
+        if (strncmp(urls[i], "file://", 7) == 0) {
+            out_bodies[i] = fetch_local_file(urls[i], &out_lens[i], &out_status[i]);
             continue;
         }
-        multi_configure_easy(s->c, urls[next_to_start], referer, &s->b, headers);
-        curl_easy_setopt(s->c, CURLOPT_PRIVATE, s);
-        curl_multi_add_handle(mh, s->c);
-        s->started = 1;
-        next_to_start++;
+        struct fetch_slot *slot = &slots[i];
+        slot->idx = i;
+        slot->easy = curl_easy_init();
+        if (!slot->easy) {
+            continue; /* slot stays failed (NULL body, status 0) */
+        }
+        multi_configure_easy(loader, slot->easy, urls[i], referer, &slot->buf, headers);
+        curl_easy_setopt(slot->easy, CURLOPT_PRIVATE, slot);
+        if (curl_multi_add_handle(multi, slot->easy) != CURLM_OK) {
+            curl_easy_cleanup(slot->easy);
+            slot->easy = NULL;
+            continue;
+        }
+        added++;
     }
 
-    do {
-        int numfds = 0;
-        curl_multi_perform(mh, &running_handles);
-        curl_multi_wait(mh, NULL, 0, 1000, &numfds);
+    /* Drive the transfers. Terminates when libcurl reports no running
+	 * handles — every added transfer has completed (there is no manual
+	 * "start the next one" step left to starve). curl_multi_poll (vs
+	 * _wait) actually sleeps when libcurl has no fds to watch — e.g.
+	 * during threaded-resolver DNS lookups — instead of returning
+	 * immediately and spinning this loop at 100% CPU. */
+    int running_handles = added;
+    while (running_handles > 0) {
+        CURLMcode mc = curl_multi_perform(multi, &running_handles);
+        if (mc != CURLM_OK) {
+            break;
+        }
+        if (running_handles > 0) {
+            int numfds = 0;
+            if (curl_multi_poll(multi, NULL, 0, 1000, &numfds) != CURLM_OK) {
+                break;
+            }
+        }
 
         /* Drain finished messages. */
         int msgs_left = 0;
         CURLMsg *m;
-        while ((m = curl_multi_info_read(mh, &msgs_left)) != NULL) {
+        while ((m = curl_multi_info_read(multi, &msgs_left)) != NULL) {
             if (m->msg != CURLMSG_DONE) {
                 continue;
             }
-            struct slot *s = NULL;
-            curl_easy_getinfo(m->easy_handle, CURLINFO_PRIVATE, &s);
-            if (!s) {
+            struct fetch_slot *slot = NULL;
+            curl_easy_getinfo(m->easy_handle, CURLINFO_PRIVATE, &slot);
+            if (!slot) {
                 continue;
             }
             long status = 0;
             curl_easy_getinfo(m->easy_handle, CURLINFO_RESPONSE_CODE, &status);
             if (m->data.result == CURLE_OK) {
-                if (s->b.data) {
-                    s->b.data[s->b.size] = 0;
+                if (slot->buf.data) {
+                    slot->buf.data[slot->buf.size] = 0;
                 }
-                out_bodies[s->idx] = s->b.data;
-                out_lens[s->idx] = s->b.size;
-                out_status[s->idx] = status;
+                out_bodies[slot->idx] = slot->buf.data;
+                out_lens[slot->idx] = slot->buf.size;
+                out_status[slot->idx] = status;
             } else {
-                free(s->b.data);
-                out_bodies[s->idx] = NULL;
-                out_lens[s->idx] = 0;
-                out_status[s->idx] = status;
+                free(slot->buf.data);
+                out_bodies[slot->idx] = NULL;
+                out_lens[slot->idx] = 0;
+                out_status[slot->idx] = status;
             }
-            curl_multi_remove_handle(mh, m->easy_handle);
+            slot->buf.data = NULL;
+            curl_multi_remove_handle(multi, m->easy_handle);
             curl_easy_cleanup(m->easy_handle);
-            s->c = NULL;
-            s->done = 1;
-
-            /* Start the next pending request. */
-            if (next_to_start < n) {
-                struct slot *ns = &slots[next_to_start];
-                ns->c = curl_easy_init();
-                if (ns->c) {
-                    multi_configure_easy(ns->c, urls[next_to_start], referer, &ns->b, headers);
-                    curl_easy_setopt(ns->c, CURLOPT_PRIVATE, ns);
-                    curl_multi_add_handle(mh, ns->c);
-                    ns->started = 1;
-                }
-                next_to_start++;
-            }
+            slot->easy = NULL;
         }
-    } while (running_handles > 0 || next_to_start < n);
+    }
 
-    curl_multi_cleanup(mh);
+    /* An early break (multi error) can leave transfers unfinished —
+	 * release their handles and buffers so nothing leaks. */
+    for (int i = 0; i < n; i++) {
+        if (slots[i].easy) {
+            curl_multi_remove_handle(multi, slots[i].easy);
+            curl_easy_cleanup(slots[i].easy);
+            free(slots[i].buf.data);
+        }
+    }
+    curl_multi_cleanup(multi);
     curl_slist_free_all(headers);
     free(slots);
     yetty_ylexbor_prof("    http_get_many DONE  %.0f ms (n=%d)",
@@ -598,8 +643,10 @@ void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *ref
 
 #else /* !YETTY_HAVE_CURL */
 
-char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
+char *yetty_ylexbor_http_get(struct yetty_ybrowser_loader *loader, const char *url,
+                             size_t *out_len, long *out_status)
 {
+    (void)loader;
     (void)url;
     if (out_len) {
         *out_len = 0;
@@ -610,10 +657,18 @@ char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
     return NULL;
 }
 
-void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *referer,
-                                 int concurrency, char **out_bodies, size_t *out_lens,
-                                 long *out_status)
+char *yetty_ylexbor_http_get_referer(struct yetty_ybrowser_loader *loader, const char *url,
+                                     const char *referer, size_t *out_len, long *out_status)
 {
+    (void)referer;
+    return yetty_ylexbor_http_get(loader, url, out_len, out_status);
+}
+
+void yetty_ylexbor_http_get_many(struct yetty_ybrowser_loader *loader, const char *const *urls,
+                                 int n, const char *referer, int concurrency, char **out_bodies,
+                                 size_t *out_lens, long *out_status)
+{
+    (void)loader;
     (void)urls;
     (void)referer;
     (void)concurrency;
@@ -624,8 +679,30 @@ void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *ref
     }
 }
 
-void *yetty_ylexbor_curl_share(void)
+/* Without libcurl there is nothing to own, but the lifecycle must still
+ * work so hosts can be compiled either way. */
+struct yetty_ybrowser_loader {
+    int unused;
+};
+
+struct yetty_ybrowser_loader_ptr_result yetty_ybrowser_loader_create(void)
 {
+    struct yetty_ybrowser_loader *loader = calloc(1, sizeof(*loader));
+    if (loader == NULL) {
+        return YETTY_ERR(yetty_ybrowser_loader_ptr, "loader alloc");
+    }
+    return YETTY_OK(yetty_ybrowser_loader_ptr, loader);
+}
+
+struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrowser_loader *loader)
+{
+    free(loader);
+    return YETTY_OK_VOID();
+}
+
+void *yetty_ybrowser_loader_curl_share(struct yetty_ybrowser_loader *loader)
+{
+    (void)loader;
     return NULL;
 }
 
@@ -1023,7 +1100,7 @@ static JSValue js_fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValue
 
     size_t blen = 0;
     long status = 0;
-    char *body = yetty_ylexbor_http_get(url, &blen, &status);
+    char *body = yetty_ylexbor_http_get(r ? r->loader : NULL, url, &blen, &status);
     free(url);
 
     if (!body) {
@@ -1046,147 +1123,213 @@ out:
 /* ===========================================================================
  * Storage — in-memory backing for localStorage / sessionStorage.
  *
- * One global map per kind. Crude string→string. "Storage event"
- * dispatch and quota are TODO; this just satisfies feature-detection.
+ * One engine-owned map per kind (see yetty_ylexbor.web_local_storage /
+ * .web_session_storage) so two documents never see each other's keys.
+ * Crude string→string. "Storage event" dispatch and quota are TODO;
+ * this just satisfies feature-detection. Freed by the engine destroy.
  * ===========================================================================*/
 
-struct kvent {
-    char *k, *v;
-};
-static struct kvent g_local[1024];
-static int g_local_n = 0;
-static struct kvent g_session[1024];
-static int g_session_n = 0;
-
-static int kv_find(struct kvent *arr, int n, const char *k)
+static int kv_find(const struct yetty_ylexbor_kv_store *store, const char *key)
 {
-    for (int i = 0; i < n; i++) {
-        if (strcmp(arr[i].k, k) == 0) {
+    for (int i = 0; i < store->count; i++) {
+        if (strcmp(store->items[i].key, key) == 0) {
             return i;
         }
     }
     return -1;
 }
 
-#define DEFINE_STORAGE(NAME, MAP, MAP_N)                                                           \
+static JSValue storage_get_item(JSContext *ctx, struct yetty_ylexbor_kv_store *store, int argc,
+                                JSValueConst *argv)
+{
+    if (!store || argc < 1) {
+        return JS_NULL;
+    }
+    const char *key = JS_ToCString(ctx, argv[0]);
+    if (!key) {
+        return JS_NULL;
+    }
+    int i = kv_find(store, key);
+    JS_FreeCString(ctx, key);
+    return i < 0 ? JS_NULL : JS_NewString(ctx, store->items[i].value);
+}
+
+static JSValue storage_set_item(JSContext *ctx, struct yetty_ylexbor_kv_store *store, int argc,
+                                JSValueConst *argv)
+{
+    if (!store || argc < 2) {
+        return JS_UNDEFINED;
+    }
+    const char *key = JS_ToCString(ctx, argv[0]);
+    const char *value = JS_ToCString(ctx, argv[1]);
+    if (!key || !value) {
+        if (key) {
+            JS_FreeCString(ctx, key);
+        }
+        if (value) {
+            JS_FreeCString(ctx, value);
+        }
+        return JS_UNDEFINED;
+    }
+    int i = kv_find(store, key);
+    if (i >= 0) {
+        free(store->items[i].value);
+        store->items[i].value = strdup(value);
+    } else {
+        if (store->count == store->cap) {
+            int new_cap = store->cap ? store->cap * 2 : 16;
+            struct yetty_ylexbor_kv_entry *items =
+                realloc(store->items, (size_t)new_cap * sizeof(*items));
+            if (!items) {
+                JS_FreeCString(ctx, key);
+                JS_FreeCString(ctx, value);
+                return JS_UNDEFINED;
+            }
+            store->items = items;
+            store->cap = new_cap;
+        }
+        store->items[store->count].key = strdup(key);
+        store->items[store->count].value = strdup(value);
+        store->count++;
+    }
+    JS_FreeCString(ctx, key);
+    JS_FreeCString(ctx, value);
+    return JS_UNDEFINED;
+}
+
+static JSValue storage_remove_item(JSContext *ctx, struct yetty_ylexbor_kv_store *store, int argc,
+                                   JSValueConst *argv)
+{
+    if (!store || argc < 1) {
+        return JS_UNDEFINED;
+    }
+    const char *key = JS_ToCString(ctx, argv[0]);
+    if (!key) {
+        return JS_UNDEFINED;
+    }
+    int i = kv_find(store, key);
+    JS_FreeCString(ctx, key);
+    if (i < 0) {
+        return JS_UNDEFINED;
+    }
+    free(store->items[i].key);
+    free(store->items[i].value);
+    memmove(&store->items[i], &store->items[i + 1],
+            (size_t)(store->count - i - 1) * sizeof(store->items[0]));
+    store->count--;
+    return JS_UNDEFINED;
+}
+
+static JSValue storage_clear(struct yetty_ylexbor_kv_store *store)
+{
+    if (!store) {
+        return JS_UNDEFINED;
+    }
+    for (int i = 0; i < store->count; i++) {
+        free(store->items[i].key);
+        free(store->items[i].value);
+    }
+    store->count = 0;
+    return JS_UNDEFINED;
+}
+
+static JSValue storage_key(JSContext *ctx, struct yetty_ylexbor_kv_store *store, int argc,
+                           JSValueConst *argv)
+{
+    if (!store || argc < 1) {
+        return JS_NULL;
+    }
+    int i = 0;
+    JS_ToInt32(ctx, &i, argv[0]);
+    if (i < 0 || i >= store->count) {
+        return JS_NULL;
+    }
+    return JS_NewString(ctx, store->items[i].key);
+}
+
+/* Thin JS-callback wrappers routing to the right engine-owned store. */
+static struct yetty_ylexbor_kv_store *local_store(JSContext *ctx)
+{
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    return r ? &r->web_local_storage : NULL;
+}
+
+static struct yetty_ylexbor_kv_store *session_store(JSContext *ctx)
+{
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    return r ? &r->web_session_storage : NULL;
+}
+
+#define DEFINE_STORAGE(NAME, STORE_FOR_CTX)                                                        \
     static JSValue js_##NAME##_getItem(JSContext *ctx, JSValueConst self, int argc,                \
                                        JSValueConst *argv)                                         \
     {                                                                                              \
         (void)self;                                                                                \
-        if (argc < 1)                                                                              \
-            return JS_NULL;                                                                        \
-        const char *k = JS_ToCString(ctx, argv[0]);                                                \
-        if (!k)                                                                                    \
-            return JS_NULL;                                                                        \
-        int i = kv_find(MAP, MAP_N, k);                                                            \
-        JS_FreeCString(ctx, k);                                                                    \
-        return i < 0 ? JS_NULL : JS_NewString(ctx, MAP[i].v);                                      \
+        return storage_get_item(ctx, STORE_FOR_CTX(ctx), argc, argv);                              \
     }                                                                                              \
     static JSValue js_##NAME##_setItem(JSContext *ctx, JSValueConst self, int argc,                \
                                        JSValueConst *argv)                                         \
     {                                                                                              \
         (void)self;                                                                                \
-        if (argc < 2)                                                                              \
-            return JS_UNDEFINED;                                                                   \
-        const char *k = JS_ToCString(ctx, argv[0]);                                                \
-        const char *v = JS_ToCString(ctx, argv[1]);                                                \
-        if (!k || !v) {                                                                            \
-            if (k)                                                                                 \
-                JS_FreeCString(ctx, k);                                                            \
-            if (v)                                                                                 \
-                JS_FreeCString(ctx, v);                                                            \
-            return JS_UNDEFINED;                                                                   \
-        }                                                                                          \
-        int i = kv_find(MAP, MAP_N, k);                                                            \
-        if (i >= 0) {                                                                              \
-            free(MAP[i].v);                                                                        \
-            MAP[i].v = strdup(v);                                                                  \
-        } else if (MAP_N < (int)(sizeof(MAP) / sizeof(MAP[0]))) {                                  \
-            MAP[MAP_N].k = strdup(k);                                                              \
-            MAP[MAP_N].v = strdup(v);                                                              \
-            MAP_N++;                                                                               \
-        }                                                                                          \
-        JS_FreeCString(ctx, k);                                                                    \
-        JS_FreeCString(ctx, v);                                                                    \
-        return JS_UNDEFINED;                                                                       \
+        return storage_set_item(ctx, STORE_FOR_CTX(ctx), argc, argv);                              \
     }                                                                                              \
     static JSValue js_##NAME##_removeItem(JSContext *ctx, JSValueConst self, int argc,             \
                                           JSValueConst *argv)                                      \
     {                                                                                              \
         (void)self;                                                                                \
-        if (argc < 1)                                                                              \
-            return JS_UNDEFINED;                                                                   \
-        const char *k = JS_ToCString(ctx, argv[0]);                                                \
-        if (!k)                                                                                    \
-            return JS_UNDEFINED;                                                                   \
-        int i = kv_find(MAP, MAP_N, k);                                                            \
-        JS_FreeCString(ctx, k);                                                                    \
-        if (i < 0)                                                                                 \
-            return JS_UNDEFINED;                                                                   \
-        free(MAP[i].k);                                                                            \
-        free(MAP[i].v);                                                                            \
-        memmove(&MAP[i], &MAP[i + 1], (MAP_N - i - 1) * sizeof(MAP[0]));                           \
-        MAP_N--;                                                                                   \
-        return JS_UNDEFINED;                                                                       \
+        return storage_remove_item(ctx, STORE_FOR_CTX(ctx), argc, argv);                           \
     }                                                                                              \
     static JSValue js_##NAME##_clear(JSContext *ctx, JSValueConst self, int argc,                  \
                                      JSValueConst *argv)                                           \
     {                                                                                              \
-        (void)ctx;                                                                                 \
         (void)self;                                                                                \
         (void)argc;                                                                                \
         (void)argv;                                                                                \
-        for (int i = 0; i < MAP_N; i++) {                                                          \
-            free(MAP[i].k);                                                                        \
-            free(MAP[i].v);                                                                        \
-        }                                                                                          \
-        MAP_N = 0;                                                                                 \
-        return JS_UNDEFINED;                                                                       \
+        return storage_clear(STORE_FOR_CTX(ctx));                                                  \
     }                                                                                              \
     static JSValue js_##NAME##_key(JSContext *ctx, JSValueConst self, int argc,                    \
                                    JSValueConst *argv)                                             \
     {                                                                                              \
         (void)self;                                                                                \
-        if (argc < 1)                                                                              \
-            return JS_NULL;                                                                        \
-        int i = 0;                                                                                 \
-        JS_ToInt32(ctx, &i, argv[0]);                                                              \
-        if (i < 0 || i >= MAP_N)                                                                   \
-            return JS_NULL;                                                                        \
-        return JS_NewString(ctx, MAP[i].k);                                                        \
+        return storage_key(ctx, STORE_FOR_CTX(ctx), argc, argv);                                   \
     }
 
-DEFINE_STORAGE(local, g_local, g_local_n)
-DEFINE_STORAGE(session, g_session, g_session_n)
+DEFINE_STORAGE(local, local_store)
+DEFINE_STORAGE(session, session_store)
 
 /* ===========================================================================
- * Cookie store — shared with document.cookie.
+ * Cookie store — backs document.cookie. Engine-owned so tabs/documents
+ * never leak cookies into each other; freed by the engine destroy.
  * ===========================================================================*/
-
-static char *g_cookie_string = NULL;
 
 static JSValue js_doc_cookie_get(JSContext *ctx, JSValueConst this_val)
 {
     (void)this_val;
-    return JS_NewString(ctx, g_cookie_string ? g_cookie_string : "");
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    const char *cookie = r && r->web_cookie_string ? r->web_cookie_string : "";
+    return JS_NewString(ctx, cookie);
 }
 static JSValue js_doc_cookie_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
 {
     (void)this_val;
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    if (!r) {
+        return JS_UNDEFINED;
+    }
     const char *s = JS_ToCString(ctx, val);
     if (!s) {
         return JS_UNDEFINED;
     }
     /* Append (real cookie semantics is way more complicated). */
-    if (!g_cookie_string) {
-        g_cookie_string = strdup(s);
+    if (!r->web_cookie_string) {
+        r->web_cookie_string = strdup(s);
     } else {
-        size_t a = strlen(g_cookie_string), b = strlen(s);
-        char *p = realloc(g_cookie_string, a + b + 3);
+        size_t old_len = strlen(r->web_cookie_string), add_len = strlen(s);
+        char *p = realloc(r->web_cookie_string, old_len + add_len + 3);
         if (p) {
             strcat(p, "; ");
             strcat(p, s);
-            g_cookie_string = p;
+            r->web_cookie_string = p;
         }
     }
     JS_FreeCString(ctx, s);
@@ -1293,21 +1436,6 @@ static void install_global_fn(JSContext *ctx, JSValue global, const char *name, 
 {
     JS_SetPropertyStr(ctx, global, name, JS_NewCFunction(ctx, fn, name, argc));
 }
-
-static const JSCFunctionListEntry local_funcs[] = {
-    JS_CFUNC_DEF("getItem", 1, js_local_getItem),
-    JS_CFUNC_DEF("setItem", 2, js_local_setItem),
-    JS_CFUNC_DEF("removeItem", 1, js_local_removeItem),
-    JS_CFUNC_DEF("clear", 0, js_local_clear),
-    JS_CFUNC_DEF("key", 1, js_local_key),
-};
-static const JSCFunctionListEntry session_funcs[] = {
-    JS_CFUNC_DEF("getItem", 1, js_session_getItem),
-    JS_CFUNC_DEF("setItem", 2, js_session_setItem),
-    JS_CFUNC_DEF("removeItem", 1, js_session_removeItem),
-    JS_CFUNC_DEF("clear", 0, js_session_clear),
-    JS_CFUNC_DEF("key", 1, js_session_key),
-};
 
 void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 {
@@ -1426,6 +1554,20 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
     JS_SetPropertyStr(ctx, global, "history", hist);
 
     /* Storage instances. */
+    static const JSCFunctionListEntry local_funcs[] = {
+        JS_CFUNC_DEF("getItem", 1, js_local_getItem),
+        JS_CFUNC_DEF("setItem", 2, js_local_setItem),
+        JS_CFUNC_DEF("removeItem", 1, js_local_removeItem),
+        JS_CFUNC_DEF("clear", 0, js_local_clear),
+        JS_CFUNC_DEF("key", 1, js_local_key),
+    };
+    static const JSCFunctionListEntry session_funcs[] = {
+        JS_CFUNC_DEF("getItem", 1, js_session_getItem),
+        JS_CFUNC_DEF("setItem", 2, js_session_setItem),
+        JS_CFUNC_DEF("removeItem", 1, js_session_removeItem),
+        JS_CFUNC_DEF("clear", 0, js_session_clear),
+        JS_CFUNC_DEF("key", 1, js_session_key),
+    };
     JSValue ls = JS_NewObject(ctx);
     JS_SetPropertyFunctionList(ctx, ls, local_funcs, sizeof(local_funcs) / sizeof(local_funcs[0]));
     JS_SetPropertyStr(ctx, global, "localStorage", ls);

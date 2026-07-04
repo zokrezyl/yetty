@@ -327,13 +327,6 @@ struct yetty_ylexbor_box {
     const char *marker_text;
     size_t marker_text_len;
 
-    /* Background image URL (resolved absolute), if any. Owned, freed
-	 * on document destroy. The paint pass uses
-	 * yetty_ylexbor_img_cache_get_or_load to fetch + decode, then
-	 * emits a yimage prim sized to the box BEFORE the bg_color (so
-	 * authors can layer a tint on top). */
-    char *bg_image_url;
-
     /* Style segments — only populated on the source INLINE_TEXT box
 	 * emitted by flush_inline. wrap_inline_box reads `segs[]` to
 	 * split each laid-out line into one painted sub-box per styled
@@ -394,7 +387,27 @@ struct yetty_ylexbor_customs {
  * (paint / layout / js) don't need its headers. */
 struct yetty_ybrowser_libcss;
 
+/* String→string map backing the JS localStorage / sessionStorage
+ * bindings. Grows on demand; owned by the engine and freed with it, so
+ * two engines (tabs) never see each other's keys. */
+struct yetty_ylexbor_kv_entry {
+    char *key;
+    char *value;
+};
+
+struct yetty_ylexbor_kv_store {
+    struct yetty_ylexbor_kv_entry *items;
+    int count, cap;
+};
+
 struct yetty_ylexbor {
+    /* Network loader (share handle, Alt-Svc cache). Either borrowed from
+	 * the host via config (owns_loader = 0) or created privately at
+	 * engine create (owns_loader = 1, destroyed with the engine). Never
+	 * NULL after a successful create when libcurl is compiled in. */
+    struct yetty_ybrowser_loader *loader;
+    int owns_loader;
+
     /* lexbor objects — owned. */
     lxb_html_document_t *document;
     lxb_css_parser_t *css_parser;
@@ -434,6 +447,22 @@ struct yetty_ylexbor {
     struct JSRuntime *js_rt;
     struct JSContext *js_ctx;
     int js_error_count; /* uncaught exceptions encountered */
+
+    /* JS web-storage + document.cookie backing. Engine-owned so each
+	 * document/tab gets its own map — these were process-wide once and
+	 * leaked keys and cookies across tabs. Freed on destroy. Persistence
+	 * across navigations (real localStorage semantics) arrives with the
+	 * loader/profile object. */
+    struct yetty_ylexbor_kv_store web_local_storage;
+    struct yetty_ylexbor_kv_store web_session_storage;
+    char *web_cookie_string;
+
+    /* Stylesheet-load tallies for the post-load debug line: external
+	 * sheets applied / failed, inline <style> blocks applied. Reset at
+	 * each load_html. */
+    int css_sheets_loaded;
+    int css_sheets_failed;
+    int css_sheets_inline;
     /* When set, paint does NOT fetch <img> URLs over the network — it
      * draws a placeholder for any not-yet-cached image and leaves the URL
      * pending. Keeps paint (which runs on the host render / event-loop
@@ -722,18 +751,22 @@ void yetty_ylexbor_js_dispatch_event_type(struct yetty_ylexbor *r, const char *t
 char *yetty_ylexbor_resolve_url(struct yetty_ylexbor *r, const char *href);
 
 /* Synchronous HTTP(S) fetch — used by the script loader and fetch()
- * binding. Returns body bytes (caller frees) and HTTP status. */
-char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status);
+ * binding. `loader` supplies the shared connection/DNS/TLS caches and
+ * the Alt-Svc file; NULL still works (no reuse). Returns body bytes
+ * (caller frees) and HTTP status. */
+char *yetty_ylexbor_http_get(struct yetty_ybrowser_loader *loader, const char *url,
+                             size_t *out_len, long *out_status);
 /* Variant that sends a Referer header — needed for many CDN image
  * endpoints that 403/404 fetches without it (gstatic, cloudflare WAFs,
  * news-site image proxies). */
-char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_t *out_len,
-                                     long *out_status);
+char *yetty_ylexbor_http_get_referer(struct yetty_ybrowser_loader *loader, const char *url,
+                                     const char *referer, size_t *out_len, long *out_status);
 
-/* Parallel HTTP(S) fetch — runs up to `concurrency` requests at once
- * via curl_multi (HTTP/2 multiplexing reuses one connection per origin,
- * cutting total wall-time vs N sequential easy-handle calls). All
- * requests share the global referer (typically the document URL).
+/* Parallel HTTP(S) fetch — all transfers run through one curl_multi
+ * (HTTP/2 multiplexing reuses one connection per origin, cutting total
+ * wall-time vs N sequential easy-handle calls); `concurrency` caps
+ * connections per host, not streams. All requests share the global
+ * referer (typically the document URL).
  *
  * For i in [0,n): on return, out_bodies[i] is malloc'd bytes (caller
  * frees) or NULL on failure; out_lens[i] is the body length; out_status[i]
@@ -741,9 +774,9 @@ char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_
  *
  * Used by ybrowser-paint to fetch every `<img>` URL on a page in one
  * batch before the synchronous decode/emit loop. */
-void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *referer,
-                                 int concurrency, char **out_bodies, size_t *out_lens,
-                                 long *out_status);
+void yetty_ylexbor_http_get_many(struct yetty_ybrowser_loader *loader, const char *const *urls,
+                                 int n, const char *referer, int concurrency, char **out_bodies,
+                                 size_t *out_lens, long *out_status);
 
 /* Dispatch a click event to the JS handlers attached to the element
  * whose box contains (x,y) in pane-local pixels. Returns 1 if a handler

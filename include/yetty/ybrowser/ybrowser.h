@@ -45,10 +45,28 @@ extern "C" {
 struct yetty_ylexbor;
 YETTY_YRESULT_DECLARE(yetty_ylexbor_ptr, struct yetty_ylexbor *);
 
+/* Network loader — owns everything fetch-related that outlives a single
+ * request: the libcurl share handle (connection pool + DNS + TLS-session
+ * caches), its locks, and the Alt-Svc (HTTP/3 upgrade) cache path. Create
+ * ONE per process and hand it to every engine via the config below so the
+ * page fetch, stylesheet fetches, and image fetches all reuse the same
+ * warm connections. An engine created without one makes its own (private
+ * connection pool — correct, just no cross-engine reuse). Destroy only
+ * after every engine using it is gone. */
+struct yetty_ybrowser_loader;
+YETTY_YRESULT_DECLARE(yetty_ybrowser_loader_ptr, struct yetty_ybrowser_loader *);
+
+struct yetty_ybrowser_loader_ptr_result yetty_ybrowser_loader_create(void);
+struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrowser_loader *loader);
+
 struct yetty_ylexbor_config {
     int viewport_width;      /* px */
     int viewport_height;     /* px (unused by current layout — content height is computed) */
     float default_font_size; /* px; falls back to 16 if 0 */
+    /* Optional shared network loader (see above). NULL → the engine
+	 * creates and owns a private one. Borrowed, never freed by the
+	 * engine when supplied. */
+    struct yetty_ybrowser_loader *loader;
 };
 
 struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_config *cfg);
@@ -103,17 +121,17 @@ struct yetty_ycore_void_result yetty_ylexbor_relayout(struct yetty_ylexbor *r);
  * Optional — if not set, only absolute URLs work. */
 struct yetty_ycore_void_result yetty_ylexbor_set_base_url(struct yetty_ylexbor *r, const char *url);
 
-/* Process-wide libcurl share handle (CURLSH*, returned as void* to keep
+/* The loader's libcurl share handle (CURLSH*, returned as void* to keep
  * the public header free of <curl/curl.h>). Use it from external
  * fetchers that go through their own `curl_easy_init()` so the
- * connection they open stays warm for subsequent yetty fetches:
- *     curl_easy_setopt(c, CURLOPT_SHARE, yetty_ylexbor_curl_share());
+ * connection they open stays warm for subsequent engine fetches:
+ *     curl_easy_setopt(c, CURLOPT_SHARE, yetty_ybrowser_loader_curl_share(loader));
  * Without this, the page fetch in tools/ybrowser/main.c opens a TLS
  * connection to e.g. en.wikipedia.org and immediately discards it —
  * then load_external_stylesheets has to re-handshake to the same host
  * for the CSS fetch (~100ms wasted). Returns NULL when libcurl isn't
- * compiled in. */
-void *yetty_ylexbor_curl_share(void);
+ * compiled in or loader is NULL. */
+void *yetty_ybrowser_loader_curl_share(struct yetty_ybrowser_loader *loader);
 
 /* Run any pending timers whose deadline has elapsed and drain Promise
  * microtasks. Returns milliseconds until the next timer fires (-1 if

@@ -62,12 +62,6 @@
  * via QuickJS finalizers — finalizer just clears our ref.
  * ===========================================================================*/
 
-static JSClassID class_node_id;
-static JSClassID class_element_id;
-static JSClassID class_document_id;
-static JSClassID class_classlist_id;
-static JSClassID class_style_id;
-
 static void node_finalizer(JSRuntime *rt, JSValue val)
 {
     (void)rt;
@@ -75,22 +69,58 @@ static void node_finalizer(JSRuntime *rt, JSValue val)
     /* lexbor owns the DOM tree; we don't free anything here. */
 }
 
-static JSClassDef class_node_def = {"Node", .finalizer = node_finalizer};
-static JSClassDef class_element_def = {"Element", .finalizer = node_finalizer};
-static JSClassDef class_document_def = {"Document", .finalizer = node_finalizer};
-static JSClassDef class_classlist_def = {"DOMTokenList", .finalizer = node_finalizer};
-static JSClassDef class_style_def = {"CSSStyleDeclaration", .finalizer = node_finalizer};
+#define WRAP_CACHE_BUCKETS 4096
+struct wrap_cache_entry {
+    void *key;
+    JSValue val;
+};
 
-/* yetty_ylexbor lives on the JSRuntime so handlers can find it. */
+#define MAX_LISTENERS 1024
+struct listener {
+    lxb_dom_element_t *el;
+    char type[32];
+    JSValue handler;
+};
+
+/* Per-runtime state parked on the JSRuntime opaque so every callback can
+ * reach it from `ctx`. One instance per engine — the wrap cache, listener
+ * pool, and class IDs were process-wide once, which aliased wrappers and
+ * listeners across engines (tabs). Allocated by dom_install, freed by
+ * js_destroy. NOTE: `r` must stay the first member — ybrowser-js-web.c
+ * reads this opaque through a `{ struct yetty_ylexbor *r; }` prefix view. */
 struct js_dom_state {
     struct yetty_ylexbor *r;
+
+    /* QuickJS class IDs — runtime-scoped (JS_NewClassID takes rt), so a
+	 * fresh runtime allocates a fresh set. */
+    JSClassID class_node_id;
+    JSClassID class_element_id;
+    JSClassID class_document_id;
+    JSClassID class_classlist_id;
+    JSClassID class_style_id;
+
+    /* lxb pointer → wrapper JSValue; see the wrapping comment below. */
+    struct wrap_cache_entry wrap_cache[WRAP_CACHE_BUCKETS];
+
+    /* addEventListener registrations (element may be NULL for
+	 * document/window-targeted listeners). */
+    struct listener listeners[MAX_LISTENERS];
+    int listener_count;
+
+    /* dispatchEvent re-entrancy guard — a handler that synchronously
+	 * re-dispatches its own event would recurse forever. */
+    int dispatch_depth;
 };
+
+static struct js_dom_state *dom_state(JSContext *ctx)
+{
+    return JS_GetRuntimeOpaque(JS_GetRuntime(ctx));
+}
 
 static struct yetty_ylexbor *runtime_ylex(JSContext *ctx)
 {
-    JSRuntime *rt = JS_GetRuntime(ctx);
-    struct js_dom_state *s = JS_GetRuntimeOpaque(rt);
-    return s ? s->r : NULL;
+    struct js_dom_state *state = dom_state(ctx);
+    return state ? state->r : NULL;
 }
 
 /* Mutator helper. Always paired with a DOM modification. */
@@ -119,17 +149,10 @@ static void mark_dirty(JSContext *ctx)
  * runtime destroy via yetty_ylexbor_js_dom_reset, releasing all the
  * dup'd refs so the wrappers can be GCed.
  *
- * The cache is process-static to match the class-ID lifetime — the
- * fork-per-test runner tears it down via dom_reset between runs, and
- * single-process callers (yetty itself) hit it once per element.
+ * The cache lives in the per-runtime js_dom_state, matching the class-ID
+ * lifetime — a fresh engine (tab, or the fork-per-test runner) starts
+ * with an empty cache instead of aliasing another engine's wrappers.
  * ===========================================================================*/
-
-#define WRAP_CACHE_BUCKETS 4096
-struct wrap_cache_entry {
-    void *key;
-    JSValue val;
-};
-static struct wrap_cache_entry g_wrap_cache[WRAP_CACHE_BUCKETS];
 
 static size_t wrap_hash(void *p)
 {
@@ -142,17 +165,18 @@ static size_t wrap_hash(void *p)
 
 static JSValue wrap_cache_lookup(JSContext *ctx, void *key)
 {
-    if (!key) {
+    struct js_dom_state *state = dom_state(ctx);
+    if (!key || !state) {
         return JS_UNDEFINED;
     }
     size_t h = wrap_hash(key);
     for (size_t i = 0; i < WRAP_CACHE_BUCKETS; i++) {
         size_t idx = (h + i) & (WRAP_CACHE_BUCKETS - 1);
-        if (!g_wrap_cache[idx].key) {
+        if (!state->wrap_cache[idx].key) {
             return JS_UNDEFINED;
         }
-        if (g_wrap_cache[idx].key == key) {
-            return JS_DupValue(ctx, g_wrap_cache[idx].val);
+        if (state->wrap_cache[idx].key == key) {
+            return JS_DupValue(ctx, state->wrap_cache[idx].val);
         }
     }
     return JS_UNDEFINED;
@@ -160,15 +184,16 @@ static JSValue wrap_cache_lookup(JSContext *ctx, void *key)
 
 static void wrap_cache_insert(JSContext *ctx, void *key, JSValueConst v)
 {
-    if (!key) {
+    struct js_dom_state *state = dom_state(ctx);
+    if (!key || !state) {
         return;
     }
     size_t h = wrap_hash(key);
     for (size_t i = 0; i < WRAP_CACHE_BUCKETS; i++) {
         size_t idx = (h + i) & (WRAP_CACHE_BUCKETS - 1);
-        if (!g_wrap_cache[idx].key || g_wrap_cache[idx].key == key) {
-            g_wrap_cache[idx].key = key;
-            g_wrap_cache[idx].val = JS_DupValue(ctx, v);
+        if (!state->wrap_cache[idx].key || state->wrap_cache[idx].key == key) {
+            state->wrap_cache[idx].key = key;
+            state->wrap_cache[idx].val = JS_DupValue(ctx, v);
             return;
         }
     }
@@ -178,11 +203,15 @@ static void wrap_cache_insert(JSContext *ctx, void *key, JSValueConst v)
 
 static void wrap_cache_clear(JSContext *ctx)
 {
+    struct js_dom_state *state = dom_state(ctx);
+    if (!state) {
+        return;
+    }
     for (size_t i = 0; i < WRAP_CACHE_BUCKETS; i++) {
-        if (g_wrap_cache[i].key) {
-            JS_FreeValue(ctx, g_wrap_cache[i].val);
-            g_wrap_cache[i].key = NULL;
-            g_wrap_cache[i].val = JS_UNDEFINED;
+        if (state->wrap_cache[i].key) {
+            JS_FreeValue(ctx, state->wrap_cache[i].val);
+            state->wrap_cache[i].key = NULL;
+            state->wrap_cache[i].val = JS_UNDEFINED;
         }
     }
 }
@@ -196,7 +225,7 @@ static JSValue wrap_element(JSContext *ctx, lxb_dom_element_t *el)
     if (!JS_IsUndefined(cached)) {
         return cached;
     }
-    JSValue v = JS_NewObjectClass(ctx, class_element_id);
+    JSValue v = JS_NewObjectClass(ctx, dom_state(ctx)->class_element_id);
     JS_SetOpaque(v, el);
     wrap_cache_insert(ctx, el, v);
     return v;
@@ -211,15 +240,19 @@ static JSValue wrap_document(JSContext *ctx, lxb_html_document_t *doc)
     if (!JS_IsUndefined(cached)) {
         return cached;
     }
-    JSValue v = JS_NewObjectClass(ctx, class_document_id);
+    JSValue v = JS_NewObjectClass(ctx, dom_state(ctx)->class_document_id);
     JS_SetOpaque(v, doc);
     wrap_cache_insert(ctx, doc, v);
     return v;
 }
 
-static lxb_dom_element_t *unwrap_element(JSValueConst this_val)
+static lxb_dom_element_t *unwrap_element(JSContext *ctx, JSValueConst this_val)
 {
-    void *p = JS_GetOpaque(this_val, class_element_id);
+    struct js_dom_state *state = dom_state(ctx);
+    if (!state) {
+        return NULL;
+    }
+    void *p = JS_GetOpaque(this_val, state->class_element_id);
     if (p) {
         return (lxb_dom_element_t *)p;
     }
@@ -228,21 +261,29 @@ static lxb_dom_element_t *unwrap_element(JSValueConst this_val)
     return NULL;
 }
 
-static lxb_html_document_t *unwrap_document(JSValueConst this_val)
+static lxb_html_document_t *unwrap_document(JSContext *ctx, JSValueConst this_val)
 {
-    void *p = JS_GetOpaque(this_val, class_document_id);
+    struct js_dom_state *state = dom_state(ctx);
+    if (!state) {
+        return NULL;
+    }
+    void *p = JS_GetOpaque(this_val, state->class_document_id);
     return p ? (lxb_html_document_t *)p : NULL;
 }
 
 /* Walk-up to find the lxb_dom_node_t this JSValue represents (Element
  * or Document). Returns NULL if neither. */
-static lxb_dom_node_t *unwrap_node(JSValueConst this_val)
+static lxb_dom_node_t *unwrap_node(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *e = JS_GetOpaque(this_val, class_element_id);
+    struct js_dom_state *state = dom_state(ctx);
+    if (!state) {
+        return NULL;
+    }
+    lxb_dom_element_t *e = JS_GetOpaque(this_val, state->class_element_id);
     if (e) {
         return lxb_dom_interface_node(e);
     }
-    lxb_html_document_t *d = JS_GetOpaque(this_val, class_document_id);
+    lxb_html_document_t *d = JS_GetOpaque(this_val, dom_state(ctx)->class_document_id);
     if (d) {
         return lxb_dom_interface_node(d);
     }
@@ -345,7 +386,7 @@ static JSValue js_el_getAttribute(JSContext *ctx, JSValueConst this_val, int arg
     if (argc < 1) {
         return JS_NULL;
     }
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_NULL;
     }
@@ -384,7 +425,7 @@ static JSValue js_el_setAttribute(JSContext *ctx, JSValueConst this_val, int arg
     if (argc < 2) {
         return JS_UNDEFINED;
     }
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -410,7 +451,7 @@ static JSValue js_el_removeAttribute(JSContext *ctx, JSValueConst this_val, int 
     if (argc < 1) {
         return JS_UNDEFINED;
     }
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -439,7 +480,7 @@ static JSValue js_el_hasAttribute(JSContext *ctx, JSValueConst this_val, int arg
     if (argc < 1) {
         return JS_FALSE;
     }
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_FALSE;
     }
@@ -466,8 +507,8 @@ static JSValue js_el_appendChild(JSContext *ctx, JSValueConst this_val, int argc
     if (argc < 1) {
         return JS_UNDEFINED;
     }
-    lxb_dom_node_t *parent = unwrap_node(this_val);
-    lxb_dom_node_t *child = unwrap_node(argv[0]);
+    lxb_dom_node_t *parent = unwrap_node(ctx, this_val);
+    lxb_dom_node_t *child = unwrap_node(ctx, argv[0]);
     if (!parent || !child) {
         return JS_UNDEFINED;
     }
@@ -503,7 +544,7 @@ static JSValue js_el_removeChild(JSContext *ctx, JSValueConst this_val, int argc
     if (argc < 1) {
         return JS_UNDEFINED;
     }
-    lxb_dom_node_t *child = unwrap_node(argv[0]);
+    lxb_dom_node_t *child = unwrap_node(ctx, argv[0]);
     if (!child) {
         return JS_UNDEFINED;
     }
@@ -540,7 +581,7 @@ static lxb_dom_node_t *coerce_to_node(JSContext *ctx, JSValueConst v, lxb_dom_do
     if (JS_IsNull(v) || JS_IsUndefined(v)) {
         return NULL;
     }
-    lxb_dom_node_t *n = unwrap_node(v);
+    lxb_dom_node_t *n = unwrap_node(ctx, v);
     if (n) {
         return n;
     }
@@ -579,7 +620,7 @@ static void detach(lxb_dom_node_t *n)
  * replaceWith(): insert all args in `this`'s position, then remove `this`. */
 static JSValue js_el_before(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    lxb_dom_node_t *self = unwrap_node(this_val);
+    lxb_dom_node_t *self = unwrap_node(ctx, this_val);
     if (!self || !self->parent) {
         return JS_UNDEFINED;
     }
@@ -601,7 +642,7 @@ static JSValue js_el_before(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
 static JSValue js_el_after(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    lxb_dom_node_t *self = unwrap_node(this_val);
+    lxb_dom_node_t *self = unwrap_node(ctx, this_val);
     if (!self || !self->parent) {
         return JS_UNDEFINED;
     }
@@ -629,7 +670,7 @@ static JSValue js_el_after(JSContext *ctx, JSValueConst this_val, int argc, JSVa
 static JSValue js_el_replaceWith(JSContext *ctx, JSValueConst this_val, int argc,
                                  JSValueConst *argv)
 {
-    lxb_dom_node_t *self = unwrap_node(this_val);
+    lxb_dom_node_t *self = unwrap_node(ctx, this_val);
     if (!self || !self->parent) {
         return JS_UNDEFINED;
     }
@@ -654,7 +695,7 @@ static JSValue js_el_replaceWith(JSContext *ctx, JSValueConst this_val, int argc
  * append(): insert each arg as last child of parent. */
 static JSValue js_el_prepend(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    lxb_dom_node_t *parent = unwrap_node(this_val);
+    lxb_dom_node_t *parent = unwrap_node(ctx, this_val);
     if (!parent) {
         return JS_UNDEFINED;
     }
@@ -681,7 +722,7 @@ static JSValue js_el_prepend(JSContext *ctx, JSValueConst this_val, int argc, JS
 
 static JSValue js_el_append(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    lxb_dom_node_t *parent = unwrap_node(this_val);
+    lxb_dom_node_t *parent = unwrap_node(ctx, this_val);
     if (!parent) {
         return JS_UNDEFINED;
     }
@@ -715,15 +756,15 @@ static JSValue js_el_insertBefore(JSContext *ctx, JSValueConst this_val, int arg
     if (argc < 1) {
         return JS_UNDEFINED;
     }
-    lxb_dom_node_t *parent = unwrap_node(this_val);
-    lxb_dom_node_t *node = unwrap_node(argv[0]);
+    lxb_dom_node_t *parent = unwrap_node(ctx, this_val);
+    lxb_dom_node_t *node = unwrap_node(ctx, argv[0]);
     if (!parent || !node) {
         return JS_UNDEFINED;
     }
     if (node_would_cycle(parent, node)) {
         return JS_DupValue(ctx, argv[0]);
     }
-    lxb_dom_node_t *ref = (argc >= 2) ? unwrap_node(argv[1]) : NULL;
+    lxb_dom_node_t *ref = (argc >= 2) ? unwrap_node(ctx, argv[1]) : NULL;
     /* Detach from the current parent first — lexbor's insert paths assume an
      * unlinked node (see appendChild). */
     if (node->parent) {
@@ -748,9 +789,9 @@ static JSValue js_el_replaceChild(JSContext *ctx, JSValueConst this_val, int arg
     if (argc < 2) {
         return JS_UNDEFINED;
     }
-    lxb_dom_node_t *parent = unwrap_node(this_val);
-    lxb_dom_node_t *node = unwrap_node(argv[0]);
-    lxb_dom_node_t *old = unwrap_node(argv[1]);
+    lxb_dom_node_t *parent = unwrap_node(ctx, this_val);
+    lxb_dom_node_t *node = unwrap_node(ctx, argv[0]);
+    lxb_dom_node_t *old = unwrap_node(ctx, argv[1]);
     if (!parent || !node || !old || old->parent != parent) {
         return JS_UNDEFINED;
     }
@@ -773,7 +814,7 @@ static JSValue js_el_querySelector(JSContext *ctx, JSValueConst this_val, int ar
     if (argc < 1) {
         return JS_NULL;
     }
-    lxb_dom_node_t *root = unwrap_node(this_val);
+    lxb_dom_node_t *root = unwrap_node(ctx, this_val);
     if (!root) {
         return JS_NULL;
     }
@@ -798,7 +839,7 @@ static JSValue js_el_querySelectorAll(JSContext *ctx, JSValueConst this_val, int
     if (argc < 1) {
         return JS_NewArray(ctx);
     }
-    lxb_dom_node_t *root = unwrap_node(this_val);
+    lxb_dom_node_t *root = unwrap_node(ctx, this_val);
     if (!root) {
         return JS_NewArray(ctx);
     }
@@ -829,7 +870,7 @@ static JSValue js_el_getElementsByTagName(JSContext *ctx, JSValueConst this_val,
     if (argc < 1) {
         return JS_NewArray(ctx);
     }
-    lxb_dom_node_t *root = unwrap_node(this_val);
+    lxb_dom_node_t *root = unwrap_node(ctx, this_val);
     if (!root) {
         return JS_NewArray(ctx);
     }
@@ -859,7 +900,7 @@ static JSValue js_el_getElementsByClassName(JSContext *ctx, JSValueConst this_va
     if (argc < 1) {
         return JS_NewArray(ctx);
     }
-    lxb_dom_node_t *root = unwrap_node(this_val);
+    lxb_dom_node_t *root = unwrap_node(ctx, this_val);
     if (!root) {
         return JS_NewArray(ctx);
     }
@@ -907,7 +948,7 @@ static JSValue js_el_getElementsByName(JSContext *ctx, JSValueConst this_val, in
     if (argc < 1) {
         return JS_NewArray(ctx);
     }
-    lxb_dom_node_t *root = unwrap_node(this_val);
+    lxb_dom_node_t *root = unwrap_node(ctx, this_val);
     if (!root) {
         return JS_NewArray(ctx);
     }
@@ -959,7 +1000,7 @@ static JSValue js_doc_getElementById(JSContext *ctx, JSValueConst this_val, int 
     if (argc < 1) {
         return JS_NULL;
     }
-    lxb_html_document_t *doc = unwrap_document(this_val);
+    lxb_html_document_t *doc = unwrap_document(ctx, this_val);
     if (!doc) {
         return JS_NULL;
     }
@@ -1071,7 +1112,7 @@ static JSValue js_doc_createElement(JSContext *ctx, JSValueConst this_val, int a
     if (argc < 1) {
         return JS_NULL;
     }
-    lxb_html_document_t *doc = unwrap_document(this_val);
+    lxb_html_document_t *doc = unwrap_document(ctx, this_val);
     if (!doc) {
         return JS_NULL;
     }
@@ -1109,7 +1150,7 @@ static JSValue js_doc_createElementNS(JSContext *ctx, JSValueConst this_val, int
     if (argc < 2) {
         return JS_NULL;
     }
-    lxb_html_document_t *doc = unwrap_document(this_val);
+    lxb_html_document_t *doc = unwrap_document(ctx, this_val);
     if (!doc) {
         return JS_NULL;
     }
@@ -1204,7 +1245,7 @@ static JSValue wrap_node_any(JSContext *ctx, lxb_dom_node_t *n)
     if (!JS_IsUndefined(cached)) {
         return cached;
     }
-    JSValue v = JS_NewObjectClass(ctx, class_element_id);
+    JSValue v = JS_NewObjectClass(ctx, dom_state(ctx)->class_element_id);
     JS_SetOpaque(v, n); /* opaque is the node, not interface_element */
     wrap_cache_insert(ctx, n, v);
     return v;
@@ -1216,7 +1257,7 @@ static JSValue js_doc_createTextNode(JSContext *ctx, JSValueConst this_val, int 
     if (argc < 1) {
         return JS_NULL;
     }
-    lxb_html_document_t *htmldoc = unwrap_document(this_val);
+    lxb_html_document_t *htmldoc = unwrap_document(ctx, this_val);
     if (!htmldoc) {
         return JS_NULL;
     }
@@ -1249,7 +1290,7 @@ static JSValue js_doc_createDocumentFragment(JSContext *ctx, JSValueConst this_v
 static JSValue js_doc_createComment(JSContext *ctx, JSValueConst this_val, int argc,
                                     JSValueConst *argv)
 {
-    lxb_html_document_t *htmldoc = unwrap_document(this_val);
+    lxb_html_document_t *htmldoc = unwrap_document(ctx, this_val);
     if (!htmldoc) {
         return JS_NULL;
     }
@@ -1391,7 +1432,7 @@ static void collect_text(lxb_dom_node_t *n, char **buf, size_t *len, size_t *cap
 
 static JSValue js_el_textContent_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     if (!n) {
         return JS_NULL;
     }
@@ -1409,7 +1450,7 @@ static JSValue js_el_textContent_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_el_textContent_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
 {
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     if (!n) {
         return JS_UNDEFINED;
     }
@@ -1449,7 +1490,7 @@ static lxb_status_t innerhtml_cb(const lxb_char_t *data, size_t len, void *vctx)
 
 static JSValue js_el_innerHTML_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     if (!n) {
         return JS_NewString(ctx, "");
     }
@@ -1467,7 +1508,7 @@ static JSValue js_el_innerHTML_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_el_innerHTML_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
 {
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     if (!n) {
         return JS_UNDEFINED;
     }
@@ -1495,7 +1536,7 @@ static JSValue js_el_innerHTML_set(JSContext *ctx, JSValueConst this_val, JSValu
 
 static JSValue js_el_outerHTML_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     if (!n) {
         return JS_NewString(ctx, "");
     }
@@ -1513,9 +1554,9 @@ static JSValue js_el_outerHTML_get(JSContext *ctx, JSValueConst this_val)
  * deleteData / replaceData / substringData mutators. Only meaningful
  * when the underlying lxb_dom_node_t is Text, Comment, or
  * ProcessingInstruction. */
-static lxb_dom_character_data_t *as_chardata(JSValueConst v)
+static lxb_dom_character_data_t *as_chardata(JSContext *ctx, JSValueConst v)
 {
-    lxb_dom_node_t *n = unwrap_node(v);
+    lxb_dom_node_t *n = unwrap_node(ctx, v);
     if (!n) {
         return NULL;
     }
@@ -1528,7 +1569,7 @@ static lxb_dom_character_data_t *as_chardata(JSValueConst v)
 
 static JSValue js_cd_data_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_character_data_t *cd = as_chardata(this_val);
+    lxb_dom_character_data_t *cd = as_chardata(ctx, this_val);
     if (!cd) {
         return JS_UNDEFINED;
     }
@@ -1574,7 +1615,7 @@ static int chardata_splice(lxb_dom_character_data_t *cd, size_t offset, size_t c
 
 static JSValue js_cd_data_set(JSContext *ctx, JSValueConst this_val, JSValueConst v)
 {
-    lxb_dom_character_data_t *cd = as_chardata(this_val);
+    lxb_dom_character_data_t *cd = as_chardata(ctx, this_val);
     if (!cd) {
         return JS_UNDEFINED;
     }
@@ -1591,7 +1632,7 @@ static JSValue js_cd_data_set(JSContext *ctx, JSValueConst this_val, JSValueCons
 
 static JSValue js_cd_length_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_character_data_t *cd = as_chardata(this_val);
+    lxb_dom_character_data_t *cd = as_chardata(ctx, this_val);
     if (!cd) {
         return JS_NewInt32(ctx, 0);
     }
@@ -1603,7 +1644,7 @@ static JSValue js_cd_appendData(JSContext *ctx, JSValueConst this_val, int argc,
     if (argc < 1) {
         return JS_UNDEFINED;
     }
-    lxb_dom_character_data_t *cd = as_chardata(this_val);
+    lxb_dom_character_data_t *cd = as_chardata(ctx, this_val);
     if (!cd) {
         return JS_UNDEFINED;
     }
@@ -1623,7 +1664,7 @@ static JSValue js_cd_insertData(JSContext *ctx, JSValueConst this_val, int argc,
     if (argc < 2) {
         return JS_UNDEFINED;
     }
-    lxb_dom_character_data_t *cd = as_chardata(this_val);
+    lxb_dom_character_data_t *cd = as_chardata(ctx, this_val);
     if (!cd) {
         return JS_UNDEFINED;
     }
@@ -1648,7 +1689,7 @@ static JSValue js_cd_deleteData(JSContext *ctx, JSValueConst this_val, int argc,
     if (argc < 2) {
         return JS_UNDEFINED;
     }
-    lxb_dom_character_data_t *cd = as_chardata(this_val);
+    lxb_dom_character_data_t *cd = as_chardata(ctx, this_val);
     if (!cd) {
         return JS_UNDEFINED;
     }
@@ -1672,7 +1713,7 @@ static JSValue js_cd_replaceData(JSContext *ctx, JSValueConst this_val, int argc
     if (argc < 3) {
         return JS_UNDEFINED;
     }
-    lxb_dom_character_data_t *cd = as_chardata(this_val);
+    lxb_dom_character_data_t *cd = as_chardata(ctx, this_val);
     if (!cd) {
         return JS_UNDEFINED;
     }
@@ -1702,7 +1743,7 @@ static JSValue js_cd_substringData(JSContext *ctx, JSValueConst this_val, int ar
     if (argc < 2) {
         return JS_NewString(ctx, "");
     }
-    lxb_dom_character_data_t *cd = as_chardata(this_val);
+    lxb_dom_character_data_t *cd = as_chardata(ctx, this_val);
     if (!cd) {
         return JS_NewString(ctx, "");
     }
@@ -1724,7 +1765,7 @@ static JSValue js_cd_substringData(JSContext *ctx, JSValueConst this_val, int ar
 /* tagName — uppercase per WebAPI. */
 static JSValue js_el_tagName_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -1746,7 +1787,7 @@ static JSValue js_el_tagName_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_el_id_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_NewString(ctx, "");
     }
@@ -1760,7 +1801,7 @@ static JSValue js_el_id_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_el_id_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
 {
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -1776,7 +1817,7 @@ static JSValue js_el_id_set(JSContext *ctx, JSValueConst this_val, JSValueConst 
 
 static JSValue js_el_className_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_NewString(ctx, "");
     }
@@ -1790,7 +1831,7 @@ static JSValue js_el_className_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_el_className_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
 {
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -1819,7 +1860,7 @@ static JSValue js_el_className_set(JSContext *ctx, JSValueConst this_val, JSValu
 static JSValue idl_attr_get(JSContext *ctx, JSValueConst this_val, const char *attr, size_t alen,
                             int urlish)
 {
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_NewString(ctx, "");
     }
@@ -1850,7 +1891,7 @@ static JSValue idl_attr_get(JSContext *ctx, JSValueConst this_val, const char *a
 static JSValue idl_attr_set(JSContext *ctx, JSValueConst this_val, JSValueConst val,
                             const char *attr, size_t alen)
 {
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -1885,13 +1926,13 @@ static JSValue idl_attr_set(JSContext *ctx, JSValueConst this_val, JSValueConst 
  * === 9) ...` is the canonical "is this a document?" check). */
 static JSValue js_el_nodeType_get(JSContext *ctx, JSValueConst this_val)
 {
-    if (JS_GetOpaque(this_val, class_document_id)) {
+    if (JS_GetOpaque(this_val, dom_state(ctx)->class_document_id)) {
         return JS_NewInt32(ctx, 9);
     }
     /* The element-class wrapper carries any non-Document node — Element,
 	 * Text, Comment, ProcessingInstruction. Read the actual lexbor type
 	 * so .nodeType returns the spec-correct value. */
-    lxb_dom_node_t *n = (lxb_dom_node_t *)JS_GetOpaque(this_val, class_element_id);
+    lxb_dom_node_t *n = (lxb_dom_node_t *)JS_GetOpaque(this_val, dom_state(ctx)->class_element_id);
     if (!n) {
         return JS_NewInt32(ctx, 0);
     }
@@ -1917,10 +1958,10 @@ static JSValue js_el_nodeType_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_el_nodeName_get(JSContext *ctx, JSValueConst this_val)
 {
-    if (JS_GetOpaque(this_val, class_document_id)) {
+    if (JS_GetOpaque(this_val, dom_state(ctx)->class_document_id)) {
         return JS_NewString(ctx, "#document");
     }
-    lxb_dom_node_t *n = (lxb_dom_node_t *)JS_GetOpaque(this_val, class_element_id);
+    lxb_dom_node_t *n = (lxb_dom_node_t *)JS_GetOpaque(this_val, dom_state(ctx)->class_element_id);
     if (n) {
         if (n->type == LXB_DOM_NODE_TYPE_TEXT) {
             return JS_NewString(ctx, "#text");
@@ -1932,7 +1973,7 @@ static JSValue js_el_nodeName_get(JSContext *ctx, JSValueConst this_val)
             return JS_NewString(ctx, "#document-fragment");
         }
     }
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_NewString(ctx, "");
     }
@@ -1956,10 +1997,10 @@ static JSValue js_el_nodeName_get(JSContext *ctx, JSValueConst this_val)
  * spec. */
 static JSValue js_el_ownerDocument_get(JSContext *ctx, JSValueConst this_val)
 {
-    if (JS_GetOpaque(this_val, class_document_id)) {
+    if (JS_GetOpaque(this_val, dom_state(ctx)->class_document_id)) {
         return JS_NULL;
     }
-    if (!JS_GetOpaque(this_val, class_element_id)) {
+    if (!JS_GetOpaque(this_val, dom_state(ctx)->class_element_id)) {
         return JS_NULL;
     }
     struct yetty_ylexbor *r = runtime_ylex(ctx);
@@ -1986,7 +2027,7 @@ IDL_ATTR(target, "target", 0)
 
 static JSValue js_el_parentElement_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     if (!n) {
         return JS_NULL;
     }
@@ -2002,7 +2043,7 @@ static JSValue js_el_parentElement_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_el_firstElementChild_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     if (!n) {
         return JS_NULL;
     }
@@ -2020,27 +2061,27 @@ static JSValue js_el_firstElementChild_get(JSContext *ctx, JSValueConst this_val
  * undefined, then `.checked` threw, aborting the whole jquery module. */
 static JSValue js_el_firstChild_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     return (n && n->first_child) ? wrap_node_any(ctx, n->first_child) : JS_NULL;
 }
 static JSValue js_el_lastChild_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     return (n && n->last_child) ? wrap_node_any(ctx, n->last_child) : JS_NULL;
 }
 static JSValue js_el_nextSibling_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     return (n && n->next) ? wrap_node_any(ctx, n->next) : JS_NULL;
 }
 static JSValue js_el_previousSibling_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     return (n && n->prev) ? wrap_node_any(ctx, n->prev) : JS_NULL;
 }
 static JSValue js_el_parentNode_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     return (n && n->parent) ? wrap_node_any(ctx, n->parent) : JS_NULL;
 }
 /* childNodes — a live-ish NodeList approximated by a JS array (has .length and
@@ -2049,7 +2090,7 @@ static JSValue js_el_parentNode_get(JSContext *ctx, JSValueConst this_val)
 static JSValue js_el_childNodes_get(JSContext *ctx, JSValueConst this_val)
 {
     JSValue arr = JS_NewArray(ctx);
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     uint32_t i = 0;
     if (n) {
         for (lxb_dom_node_t *c = n->first_child; c; c = c->next) {
@@ -2061,7 +2102,7 @@ static JSValue js_el_childNodes_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_el_nextElementSibling_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     if (!n) {
         return JS_NULL;
     }
@@ -2075,7 +2116,7 @@ static JSValue js_el_nextElementSibling_get(JSContext *ctx, JSValueConst this_va
 
 static JSValue js_el_children_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     JSValue arr = JS_NewArray(ctx);
     if (!n) {
         return arr;
@@ -2181,7 +2222,7 @@ static JSValue style_method_getPropertyValue(JSContext *ctx, JSValueConst this_v
     if (argc < 1) {
         return JS_NewString(ctx, "");
     }
-    lxb_dom_element_t *el = JS_GetOpaque(this_val, class_style_id);
+    lxb_dom_element_t *el = JS_GetOpaque(this_val, dom_state(ctx)->class_style_id);
     if (!el) {
         return JS_NewString(ctx, "");
     }
@@ -2226,7 +2267,7 @@ static JSValue style_method_setProperty(JSContext *ctx, JSValueConst this_val, i
     if (argc < 2) {
         return JS_UNDEFINED;
     }
-    lxb_dom_element_t *el = JS_GetOpaque(this_val, class_style_id);
+    lxb_dom_element_t *el = JS_GetOpaque(this_val, dom_state(ctx)->class_style_id);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -2336,7 +2377,7 @@ static JSValue style_get_property(JSContext *ctx, JSValueConst obj, JSAtom prop,
                                   JSValueConst receiver)
 {
     (void)receiver;
-    lxb_dom_element_t *el = JS_GetOpaque(obj, class_style_id);
+    lxb_dom_element_t *el = JS_GetOpaque(obj, dom_state(ctx)->class_style_id);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -2403,7 +2444,7 @@ static int style_set_property(JSContext *ctx, JSValueConst obj, JSAtom prop, JSV
 {
     (void)receiver;
     (void)flags;
-    lxb_dom_element_t *el = JS_GetOpaque(obj, class_style_id);
+    lxb_dom_element_t *el = JS_GetOpaque(obj, dom_state(ctx)->class_style_id);
     if (!el) {
         JS_ThrowTypeError(ctx, "no element");
         return -1;
@@ -2511,18 +2552,14 @@ static int style_set_property(JSContext *ctx, JSValueConst obj, JSAtom prop, JSV
     return 1; /* property set */
 }
 
-static JSClassExoticMethods style_exotic = {
-    .get_property = style_get_property,
-    .set_property = style_set_property,
-};
 
 static JSValue js_el_style_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
-    JSValue v = JS_NewObjectClass(ctx, class_style_id);
+    JSValue v = JS_NewObjectClass(ctx, dom_state(ctx)->class_style_id);
     JS_SetOpaque(v, el);
     return v;
 }
@@ -2575,7 +2612,7 @@ static JSValue js_classlist_contains(JSContext *ctx, JSValueConst this_val, int 
     if (argc < 1) {
         return JS_FALSE;
     }
-    lxb_dom_element_t *el = JS_GetOpaque(this_val, class_classlist_id);
+    lxb_dom_element_t *el = JS_GetOpaque(this_val, dom_state(ctx)->class_classlist_id);
     if (!el) {
         return JS_FALSE;
     }
@@ -2593,7 +2630,7 @@ static JSValue js_classlist_contains(JSContext *ctx, JSValueConst this_val, int 
 
 static JSValue js_classlist_add(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
-    lxb_dom_element_t *el = JS_GetOpaque(this_val, class_classlist_id);
+    lxb_dom_element_t *el = JS_GetOpaque(this_val, dom_state(ctx)->class_classlist_id);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -2639,7 +2676,7 @@ static JSValue js_classlist_add(JSContext *ctx, JSValueConst this_val, int argc,
 static JSValue js_classlist_remove(JSContext *ctx, JSValueConst this_val, int argc,
                                    JSValueConst *argv)
 {
-    lxb_dom_element_t *el = JS_GetOpaque(this_val, class_classlist_id);
+    lxb_dom_element_t *el = JS_GetOpaque(this_val, dom_state(ctx)->class_classlist_id);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -2760,7 +2797,7 @@ static int classlist_count_tokens(const char *list, size_t llen, const char **ou
 
 static JSValue js_classlist_length_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *el = JS_GetOpaque(this_val, class_classlist_id);
+    lxb_dom_element_t *el = JS_GetOpaque(this_val, dom_state(ctx)->class_classlist_id);
     if (!el) {
         return JS_NewInt32(ctx, 0);
     }
@@ -2775,7 +2812,7 @@ static JSValue js_classlist_length_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_classlist_value_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *el = JS_GetOpaque(this_val, class_classlist_id);
+    lxb_dom_element_t *el = JS_GetOpaque(this_val, dom_state(ctx)->class_classlist_id);
     if (!el) {
         return JS_NewString(ctx, "");
     }
@@ -2789,7 +2826,7 @@ static JSValue js_classlist_value_get(JSContext *ctx, JSValueConst this_val)
 
 static JSValue js_classlist_value_set(JSContext *ctx, JSValueConst this_val, JSValueConst v)
 {
-    lxb_dom_element_t *el = JS_GetOpaque(this_val, class_classlist_id);
+    lxb_dom_element_t *el = JS_GetOpaque(this_val, dom_state(ctx)->class_classlist_id);
     if (!el) {
         return JS_UNDEFINED;
     }
@@ -2810,7 +2847,7 @@ static JSValue js_classlist_item(JSContext *ctx, JSValueConst this_val, int argc
     if (argc < 1) {
         return JS_NULL;
     }
-    lxb_dom_element_t *el = JS_GetOpaque(this_val, class_classlist_id);
+    lxb_dom_element_t *el = JS_GetOpaque(this_val, dom_state(ctx)->class_classlist_id);
     if (!el) {
         return JS_NULL;
     }
@@ -2858,7 +2895,7 @@ static JSValue js_classlist_replace(JSContext *ctx, JSValueConst this_val, int a
         JS_FreeCString(ctx, nw);
         return JS_EXCEPTION;
     }
-    lxb_dom_element_t *el = JS_GetOpaque(this_val, class_classlist_id);
+    lxb_dom_element_t *el = JS_GetOpaque(this_val, dom_state(ctx)->class_classlist_id);
     if (!el) {
         JS_FreeCString(ctx, o);
         JS_FreeCString(ctx, nw);
@@ -2932,26 +2969,25 @@ static JSValue js_classlist_toString(JSContext *ctx, JSValueConst this_val, int 
     return js_classlist_value_get(ctx, this_val);
 }
 
-static const JSCFunctionListEntry classlist_funcs[] = {
-    JS_CFUNC_DEF("add", 1, js_classlist_add),
-    JS_CFUNC_DEF("remove", 1, js_classlist_remove),
-    JS_CFUNC_DEF("toggle", 1, js_classlist_toggle),
-    JS_CFUNC_DEF("contains", 1, js_classlist_contains),
-    JS_CFUNC_DEF("item", 1, js_classlist_item),
-    JS_CFUNC_DEF("replace", 2, js_classlist_replace),
-    JS_CFUNC_DEF("supports", 1, js_classlist_supports),
-    JS_CFUNC_DEF("toString", 0, js_classlist_toString),
-    JS_CGETSET_DEF("length", js_classlist_length_get, NULL),
-    JS_CGETSET_DEF("value", js_classlist_value_get, js_classlist_value_set),
-};
-
 static JSValue js_el_classList_get(JSContext *ctx, JSValueConst this_val)
 {
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    static const JSCFunctionListEntry classlist_funcs[] = {
+        JS_CFUNC_DEF("add", 1, js_classlist_add),
+        JS_CFUNC_DEF("remove", 1, js_classlist_remove),
+        JS_CFUNC_DEF("toggle", 1, js_classlist_toggle),
+        JS_CFUNC_DEF("contains", 1, js_classlist_contains),
+        JS_CFUNC_DEF("item", 1, js_classlist_item),
+        JS_CFUNC_DEF("replace", 2, js_classlist_replace),
+        JS_CFUNC_DEF("supports", 1, js_classlist_supports),
+        JS_CFUNC_DEF("toString", 0, js_classlist_toString),
+        JS_CGETSET_DEF("length", js_classlist_length_get, NULL),
+        JS_CGETSET_DEF("value", js_classlist_value_get, js_classlist_value_set),
+    };
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_UNDEFINED;
     }
-    JSValue v = JS_NewObjectClass(ctx, class_classlist_id);
+    JSValue v = JS_NewObjectClass(ctx, dom_state(ctx)->class_classlist_id);
     JS_SetOpaque(v, el);
     JS_SetPropertyFunctionList(ctx, v, classlist_funcs,
                                sizeof(classlist_funcs) / sizeof(classlist_funcs[0]));
@@ -2960,40 +2996,33 @@ static JSValue js_el_classList_get(JSContext *ctx, JSValueConst this_val)
 
 /* ===========================================================================
  * Event listener storage — hidden array property on the JS wrapper.
- * Wrapper objects are minted fresh per call though, so we use a global
- * map: lxb_dom_element_t* → array of (type, handler) pairs.
+ * Wrapper objects are minted fresh per call though, so we use a
+ * per-runtime map (js_dom_state.listeners): lxb_dom_element_t* → array
+ * of (type, handler) pairs.
  * ===========================================================================*/
-
-#define MAX_LISTENERS 1024
-struct listener {
-    lxb_dom_element_t *el;
-    char type[32];
-    JSValue handler;
-};
-static struct listener g_listeners[MAX_LISTENERS];
-static int g_listener_count = 0;
 
 static JSValue js_el_addEventListener(JSContext *ctx, JSValueConst this_val, int argc,
                                       JSValueConst *argv)
 {
-    if (argc < 2) {
+    struct js_dom_state *state = dom_state(ctx);
+    if (!state || argc < 2) {
         return JS_UNDEFINED;
     }
     /* Accept Element (target=el) and Document/window (target=NULL,
 	 * receives global events like DOMContentLoaded/load). */
-    lxb_dom_element_t *el = unwrap_element(this_val);
-    if (g_listener_count >= MAX_LISTENERS) {
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
+    if (state->listener_count >= MAX_LISTENERS) {
         return JS_UNDEFINED;
     }
     const char *type = JS_ToCString(ctx, argv[0]);
     if (!type) {
         return JS_UNDEFINED;
     }
-    struct listener *L = &g_listeners[g_listener_count++];
-    L->el = el; /* may be NULL for document/window listeners */
-    strncpy(L->type, type, sizeof(L->type) - 1);
-    L->type[sizeof(L->type) - 1] = '\0';
-    L->handler = JS_DupValue(ctx, argv[1]);
+    struct listener *entry = &state->listeners[state->listener_count++];
+    entry->el = el; /* may be NULL for document/window listeners */
+    strncpy(entry->type, type, sizeof(entry->type) - 1);
+    entry->type[sizeof(entry->type) - 1] = '\0';
+    entry->handler = JS_DupValue(ctx, argv[1]);
     JS_FreeCString(ctx, type);
     return JS_UNDEFINED;
 }
@@ -3023,11 +3052,11 @@ static JSValue js_el_contains_stub(JSContext *ctx, JSValueConst this_val, int ar
         return JS_FALSE;
     }
     /* Best-effort: walk argv[0]'s parent chain looking for `this`. */
-    void *self_p = JS_GetOpaque(this_val, class_element_id);
+    void *self_p = JS_GetOpaque(this_val, dom_state(ctx)->class_element_id);
     if (!self_p) {
-        self_p = JS_GetOpaque(this_val, class_document_id);
+        self_p = JS_GetOpaque(this_val, dom_state(ctx)->class_document_id);
     }
-    void *other_p = JS_GetOpaque(argv[0], class_element_id);
+    void *other_p = JS_GetOpaque(argv[0], dom_state(ctx)->class_element_id);
     if (!self_p || !other_p) {
         return JS_FALSE;
     }
@@ -3057,7 +3086,7 @@ static JSValue js_el_hasChildNodes_stub(JSContext *ctx, JSValueConst this_val, i
     (void)ctx;
     (void)argc;
     (void)argv;
-    lxb_dom_node_t *n = unwrap_node(this_val);
+    lxb_dom_node_t *n = unwrap_node(ctx, this_val);
     return JS_NewBool(ctx, n && n->first_child != NULL);
 }
 
@@ -3066,7 +3095,7 @@ static JSValue js_el_hasAttributes_stub(JSContext *ctx, JSValueConst this_val, i
 {
     (void)argc;
     (void)argv;
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_FALSE;
     }
@@ -3078,7 +3107,7 @@ static JSValue js_el_getAttributeNames_stub(JSContext *ctx, JSValueConst this_va
 {
     (void)argc;
     (void)argv;
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     JSValue arr = JS_NewArray(ctx);
     if (!el) {
         return arr;
@@ -3097,7 +3126,7 @@ static JSValue js_el_getAttributeNames_stub(JSContext *ctx, JSValueConst this_va
 static JSValue js_el_cloneNode_stub(JSContext *ctx, JSValueConst this_val, int argc,
                                     JSValueConst *argv)
 {
-    lxb_dom_node_t *self = unwrap_node(this_val);
+    lxb_dom_node_t *self = unwrap_node(ctx, this_val);
     if (!self) {
         return JS_DupValue(ctx, this_val);
     }
@@ -3124,7 +3153,7 @@ static JSValue js_el_getBoundingClientRect(JSContext *ctx, JSValueConst this_val
     (void)argv;
     float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
     struct yetty_ylexbor *r = runtime_ylex(ctx);
-    lxb_dom_node_t *node = unwrap_node(this_val);
+    lxb_dom_node_t *node = unwrap_node(ctx, this_val);
     if (r != NULL && node != NULL && node->type == LXB_DOM_NODE_TYPE_ELEMENT) {
         lxb_dom_element_t *el = lxb_dom_interface_element(node);
         float min_x = 0.0f, min_y = 0.0f, max_x = 0.0f, max_y = 0.0f;
@@ -3196,10 +3225,13 @@ static JSValue js_el_dispatchEvent(JSContext *ctx, JSValueConst this_val, int ar
     if (argc < 1) {
         return JS_TRUE;
     }
+    struct js_dom_state *state = dom_state(ctx);
+    if (!state) {
+        return JS_TRUE;
+    }
     /* Re-entrancy guard: a handler that synchronously re-dispatches the event
 	 * it is handling would recurse forever and freeze the page. Cap nesting. */
-    static int dispatch_depth = 0;
-    if (dispatch_depth > 32) {
+    if (state->dispatch_depth > 32) {
         return JS_TRUE;
     }
     JSValue type_v = JS_GetPropertyStr(ctx, argv[0], "type");
@@ -3208,19 +3240,19 @@ static JSValue js_el_dispatchEvent(JSContext *ctx, JSValueConst this_val, int ar
     if (type == NULL) {
         return JS_TRUE;
     }
-    dispatch_depth++;
-    lxb_dom_element_t *el = unwrap_element(this_val); /* NULL for document/window */
+    state->dispatch_depth++;
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val); /* NULL for document/window */
     JS_SetPropertyStr(ctx, (JSValue)argv[0], "target", JS_DupValue(ctx, this_val));
     JS_SetPropertyStr(ctx, (JSValue)argv[0], "currentTarget", JS_DupValue(ctx, this_val));
     /* Snapshot the count: a handler may addEventListener during dispatch and
 	 * those new listeners must not fire for this same event. */
-    int snapshot = g_listener_count;
+    int snapshot = state->listener_count;
     for (int i = 0; i < snapshot; i++) {
-        if (g_listeners[i].el != el || strcmp(g_listeners[i].type, type) != 0) {
+        if (state->listeners[i].el != el || strcmp(state->listeners[i].type, type) != 0) {
             continue;
         }
         JSValueConst call_args[] = {argv[0]};
-        JSValue ret = JS_Call(ctx, g_listeners[i].handler, this_val, 1, call_args);
+        JSValue ret = JS_Call(ctx, state->listeners[i].handler, this_val, 1, call_args);
         if (JS_IsException(ret)) {
             JSValue exc = JS_GetException(ctx);
             JS_FreeValue(ctx, exc);
@@ -3229,7 +3261,7 @@ static JSValue js_el_dispatchEvent(JSContext *ctx, JSValueConst this_val, int ar
         }
     }
     JS_FreeCString(ctx, type);
-    dispatch_depth--;
+    state->dispatch_depth--;
     JSValue dp = JS_GetPropertyStr(ctx, argv[0], "defaultPrevented");
     int prevented = JS_ToBool(ctx, dp);
     JS_FreeValue(ctx, dp);
@@ -3279,7 +3311,7 @@ static JSValue js_el_toggleAttr_stub(JSContext *ctx, JSValueConst this_val, int 
     if (argc < 1) {
         return JS_FALSE;
     }
-    lxb_dom_element_t *el = unwrap_element(this_val);
+    lxb_dom_element_t *el = unwrap_element(ctx, this_val);
     if (!el) {
         return JS_FALSE;
     }
@@ -3390,137 +3422,6 @@ static JSValue js_doc_implementation_get(JSContext *ctx, JSValueConst this_val)
     return obj;
 }
 
-static const JSCFunctionListEntry document_funcs[] = {
-    JS_CFUNC_DEF("getElementById", 1, js_doc_getElementById),
-    JS_CFUNC_DEF("getElementsByTagName", 1, js_el_getElementsByTagName),
-    JS_CFUNC_DEF("getElementsByClassName", 1, js_el_getElementsByClassName),
-    JS_CFUNC_DEF("getElementsByName", 1, js_el_getElementsByName),
-    JS_CFUNC_DEF("querySelector", 1, js_el_querySelector),
-    JS_CFUNC_DEF("querySelectorAll", 1, js_el_querySelectorAll),
-    JS_CFUNC_DEF("createElement", 1, js_doc_createElement),
-    JS_CFUNC_DEF("createElementNS", 2, js_doc_createElementNS),
-    JS_CFUNC_DEF("createTextNode", 1, js_doc_createTextNode),
-    JS_CFUNC_DEF("createDocumentFragment", 0, js_doc_createDocumentFragment),
-    JS_CFUNC_DEF("createComment", 1, js_doc_createComment),
-    JS_CFUNC_DEF("addEventListener", 2, js_el_addEventListener),
-    JS_CFUNC_DEF("dispatchEvent", 1, js_el_dispatchEvent),
-    JS_CFUNC_DEF("removeEventListener", 2, js_el_undef_stub),
-    /* Same node-mutation surface as Element so document.prepend()
-	 * etc. work — github's stylesheet injector calls
-	 * `e.head.prepend(t)` first then falls back to `e.prepend(t)` if
-	 * `e instanceof Document` is false (which it is for us, since
-	 * our document object isn't an instance of the JS Document
-	 * constructor). */
-    JS_CFUNC_DEF("prepend", 1, js_el_appendChild),
-    JS_CFUNC_DEF("append", 1, js_el_appendChild),
-    JS_CFUNC_DEF("appendChild", 1, js_el_appendChild),
-    JS_CFUNC_DEF("removeChild", 1, js_el_removeChild),
-    JS_CFUNC_DEF("contains", 1, js_el_contains_stub),
-    JS_CGETSET_DEF("nodeType", js_el_nodeType_get, NULL),
-    JS_CGETSET_DEF("nodeName", js_el_nodeName_get, NULL),
-    JS_CGETSET_DEF("ownerDocument", js_el_ownerDocument_get, NULL),
-    JS_CGETSET_DEF("implementation", js_doc_implementation_get, NULL),
-};
-
-static const JSCFunctionListEntry element_funcs[] = {
-    JS_CFUNC_DEF("getAttribute", 1, js_el_getAttribute),
-    JS_CFUNC_DEF("setAttribute", 2, js_el_setAttribute),
-    JS_CFUNC_DEF("removeAttribute", 1, js_el_removeAttribute),
-    JS_CFUNC_DEF("hasAttribute", 1, js_el_hasAttribute),
-    JS_CFUNC_DEF("appendChild", 1, js_el_appendChild),
-    JS_CFUNC_DEF("removeChild", 1, js_el_removeChild),
-    JS_CFUNC_DEF("querySelector", 1, js_el_querySelector),
-    JS_CFUNC_DEF("querySelectorAll", 1, js_el_querySelectorAll),
-    JS_CFUNC_DEF("getElementsByTagName", 1, js_el_getElementsByTagName),
-    JS_CFUNC_DEF("getElementsByClassName", 1, js_el_getElementsByClassName),
-    JS_CFUNC_DEF("addEventListener", 2, js_el_addEventListener),
-    /* ChildNode/ParentNode mutators that legitimately share the
-	 * appendChild path (single-arg insertion). The spec's full
-	 * variadic signature degrades to the single-node case under
-	 * production code 99% of the time. */
-    JS_CFUNC_DEF("prepend", 1, js_el_prepend),
-    JS_CFUNC_DEF("append", 1, js_el_append),
-    JS_CFUNC_DEF("insertBefore", 2, js_el_insertBefore),
-    JS_CFUNC_DEF("replaceChild", 2, js_el_replaceChild),
-    JS_CFUNC_DEF("replaceWith", 1, js_el_replaceWith),
-    JS_CFUNC_DEF("before", 1, js_el_before),
-    JS_CFUNC_DEF("after", 1, js_el_after),
-    JS_CFUNC_DEF("remove", 0, js_el_removeChild),
-    JS_CFUNC_DEF("closest", 1, js_el_querySelector),
-    /* Predicates / accessors that need a typed return. We give them
-	 * a tiny dedicated stub each below so they don't masquerade as
-	 * mutators. */
-    JS_CFUNC_DEF("contains", 1, js_el_contains_stub),
-    JS_CFUNC_DEF("matches", 1, js_el_matches_stub),
-    JS_CFUNC_DEF("hasChildNodes", 0, js_el_hasChildNodes_stub),
-    JS_CFUNC_DEF("hasAttributes", 0, js_el_hasAttributes_stub),
-    JS_CFUNC_DEF("getAttributeNames", 0, js_el_getAttributeNames_stub),
-    JS_CFUNC_DEF("cloneNode", 1, js_el_cloneNode_stub),
-    JS_CFUNC_DEF("getBoundingClientRect", 0, js_el_getBoundingClientRect),
-    JS_CFUNC_DEF("getClientRects", 0, js_el_clientRects_stub),
-    /* True no-ops — return undefined. */
-    JS_CFUNC_DEF("scrollIntoView", 0, js_el_undef_stub),
-    JS_CFUNC_DEF("focus", 0, js_el_undef_stub),
-    JS_CFUNC_DEF("blur", 0, js_el_undef_stub),
-    JS_CFUNC_DEF("click", 0, js_el_undef_stub),
-    JS_CFUNC_DEF("normalize", 0, js_el_undef_stub),
-    JS_CFUNC_DEF("dispatchEvent", 1, js_el_dispatchEvent),
-    JS_CFUNC_DEF("removeEventListener", 2, js_el_undef_stub),
-    JS_CFUNC_DEF("toggleAttribute", 1, js_el_toggleAttr_stub),
-    JS_CGETSET_DEF("textContent", js_el_textContent_get, js_el_textContent_set),
-    JS_CGETSET_DEF("innerHTML", js_el_innerHTML_get, js_el_innerHTML_set),
-    JS_CGETSET_DEF("outerHTML", js_el_outerHTML_get, NULL),
-    /* CharacterData (Text/Comment) — `data` and `length` plus the
-	 * appendData/insertData/deleteData/replaceData/substringData
-	 * mutators. as_chardata() in each guards element-only nodes. */
-    JS_CGETSET_DEF("data", js_cd_data_get, js_cd_data_set),
-    JS_CGETSET_DEF("length", js_cd_length_get, NULL),
-    JS_CFUNC_DEF("appendData", 1, js_cd_appendData),
-    JS_CFUNC_DEF("insertData", 2, js_cd_insertData),
-    JS_CFUNC_DEF("deleteData", 2, js_cd_deleteData),
-    JS_CFUNC_DEF("replaceData", 3, js_cd_replaceData),
-    JS_CFUNC_DEF("substringData", 2, js_cd_substringData),
-    JS_CGETSET_DEF("tagName", js_el_tagName_get, NULL),
-    JS_CGETSET_DEF("id", js_el_id_get, js_el_id_set),
-    JS_CGETSET_DEF("className", js_el_className_get, js_el_className_set),
-    JS_CGETSET_DEF("parentElement", js_el_parentElement_get, NULL),
-    JS_CGETSET_DEF("firstElementChild", js_el_firstElementChild_get, NULL),
-    JS_CGETSET_DEF("firstChild", js_el_firstChild_get, NULL),
-    JS_CGETSET_DEF("lastChild", js_el_lastChild_get, NULL),
-    JS_CGETSET_DEF("nextSibling", js_el_nextSibling_get, NULL),
-    JS_CGETSET_DEF("previousSibling", js_el_previousSibling_get, NULL),
-    JS_CGETSET_DEF("parentNode", js_el_parentNode_get, NULL),
-    JS_CGETSET_DEF("childNodes", js_el_childNodes_get, NULL),
-    JS_CGETSET_DEF("nextElementSibling", js_el_nextElementSibling_get, NULL),
-    JS_CGETSET_DEF("children", js_el_children_get, NULL),
-    JS_CGETSET_DEF("style", js_el_style_get, NULL),
-    JS_CGETSET_DEF("classList", js_el_classList_get, NULL),
-    JS_CGETSET_DEF("nodeType", js_el_nodeType_get, NULL),
-    JS_CGETSET_DEF("nodeName", js_el_nodeName_get, NULL),
-    JS_CGETSET_DEF("ownerDocument", js_el_ownerDocument_get, NULL),
-    /* `delegate` — Turbo's custom-element wiring does
-	 *   Object.getPrototypeOf(el.delegate)
-	 * during boot. Returning an empty object lets that walk through.
-	 * Same for the few other "library-private slot" reads modern
-	 * frameworks make on elements. */
-    JS_CGETSET_DEF("delegate", js_el_delegate_get, NULL),
-    JS_CGETSET_DEF("dataset", js_el_empty_obj_get, NULL),
-    JS_CGETSET_DEF("content", js_el_content_get, NULL),
-    JS_CGETSET_DEF("elements", js_el_elements_get, NULL),
-    JS_CGETSET_DEF("src", js_el_src_get, js_el_src_set),
-    JS_CGETSET_DEF("href", js_el_href_get, js_el_href_set),
-    JS_CGETSET_DEF("action", js_el_action_get, js_el_action_set),
-    JS_CGETSET_DEF("name", js_el_name_get, js_el_name_set),
-    JS_CGETSET_DEF("value", js_el_value_get, js_el_value_set),
-    JS_CGETSET_DEF("type", js_el_type_get, js_el_type_set),
-    JS_CGETSET_DEF("alt", js_el_alt_get, js_el_alt_set),
-    JS_CGETSET_DEF("title", js_el_title_get, js_el_title_set),
-    JS_CGETSET_DEF("placeholder", js_el_placeholder_get, js_el_placeholder_set),
-    JS_CGETSET_DEF("method", js_el_method_get, js_el_method_set),
-    JS_CGETSET_DEF("rel", js_el_rel_get, js_el_rel_set),
-    JS_CGETSET_DEF("target", js_el_target_get, js_el_target_set),
-};
-
 void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
 {
     JSContext *ctx = (JSContext *)r->js_ctx;
@@ -3537,27 +3438,170 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
     }
     state->r = r;
 
-    /* Class IDs (one-time). */
-    if (class_node_id == 0) {
-        JS_NewClassID(rt, &class_node_id);
-        JS_NewClassID(rt, &class_element_id);
-        JS_NewClassID(rt, &class_document_id);
-        JS_NewClassID(rt, &class_classlist_id);
-        JS_NewClassID(rt, &class_style_id);
-        class_style_def.exotic = &style_exotic;
+    /* Class IDs — once per runtime; a fresh state starts them at 0.
+	 * The defs are copied by JS_NewClass; only the exotic-methods
+	 * pointer is retained, so that one must have program lifetime
+	 * (static const — QuickJS never writes through it). */
+    static const JSClassExoticMethods style_exotic_methods = {
+        .get_property = style_get_property,
+        .set_property = style_set_property,
+    };
+    if (state->class_node_id == 0) {
+        JS_NewClassID(rt, &state->class_node_id);
+        JS_NewClassID(rt, &state->class_element_id);
+        JS_NewClassID(rt, &state->class_document_id);
+        JS_NewClassID(rt, &state->class_classlist_id);
+        JS_NewClassID(rt, &state->class_style_id);
     }
-    JS_NewClass(rt, class_node_id, &class_node_def);
-    JS_NewClass(rt, class_element_id, &class_element_def);
-    JS_NewClass(rt, class_document_id, &class_document_def);
-    JS_NewClass(rt, class_classlist_id, &class_classlist_def);
-    JS_NewClass(rt, class_style_id, &class_style_def);
+    const JSClassDef class_node_def = {"Node", .finalizer = node_finalizer};
+    const JSClassDef class_element_def = {"Element", .finalizer = node_finalizer};
+    const JSClassDef class_document_def = {"Document", .finalizer = node_finalizer};
+    const JSClassDef class_classlist_def = {"DOMTokenList", .finalizer = node_finalizer};
+    const JSClassDef class_style_def = {"CSSStyleDeclaration",
+                                        .finalizer = node_finalizer,
+                                        .exotic =
+                                            (JSClassExoticMethods *)&style_exotic_methods};
+    JS_NewClass(rt, state->class_node_id, &class_node_def);
+    JS_NewClass(rt, state->class_element_id, &class_element_def);
+    JS_NewClass(rt, state->class_document_id, &class_document_def);
+    JS_NewClass(rt, state->class_classlist_id, &class_classlist_def);
+    JS_NewClass(rt, state->class_style_id, &class_style_def);
 
+    static const JSCFunctionListEntry element_funcs[] = {
+        JS_CFUNC_DEF("getAttribute", 1, js_el_getAttribute),
+        JS_CFUNC_DEF("setAttribute", 2, js_el_setAttribute),
+        JS_CFUNC_DEF("removeAttribute", 1, js_el_removeAttribute),
+        JS_CFUNC_DEF("hasAttribute", 1, js_el_hasAttribute),
+        JS_CFUNC_DEF("appendChild", 1, js_el_appendChild),
+        JS_CFUNC_DEF("removeChild", 1, js_el_removeChild),
+        JS_CFUNC_DEF("querySelector", 1, js_el_querySelector),
+        JS_CFUNC_DEF("querySelectorAll", 1, js_el_querySelectorAll),
+        JS_CFUNC_DEF("getElementsByTagName", 1, js_el_getElementsByTagName),
+        JS_CFUNC_DEF("getElementsByClassName", 1, js_el_getElementsByClassName),
+        JS_CFUNC_DEF("addEventListener", 2, js_el_addEventListener),
+        /* ChildNode/ParentNode mutators that legitimately share the
+    	 * appendChild path (single-arg insertion). The spec's full
+    	 * variadic signature degrades to the single-node case under
+    	 * production code 99% of the time. */
+        JS_CFUNC_DEF("prepend", 1, js_el_prepend),
+        JS_CFUNC_DEF("append", 1, js_el_append),
+        JS_CFUNC_DEF("insertBefore", 2, js_el_insertBefore),
+        JS_CFUNC_DEF("replaceChild", 2, js_el_replaceChild),
+        JS_CFUNC_DEF("replaceWith", 1, js_el_replaceWith),
+        JS_CFUNC_DEF("before", 1, js_el_before),
+        JS_CFUNC_DEF("after", 1, js_el_after),
+        JS_CFUNC_DEF("remove", 0, js_el_removeChild),
+        JS_CFUNC_DEF("closest", 1, js_el_querySelector),
+        /* Predicates / accessors that need a typed return. We give them
+    	 * a tiny dedicated stub each below so they don't masquerade as
+    	 * mutators. */
+        JS_CFUNC_DEF("contains", 1, js_el_contains_stub),
+        JS_CFUNC_DEF("matches", 1, js_el_matches_stub),
+        JS_CFUNC_DEF("hasChildNodes", 0, js_el_hasChildNodes_stub),
+        JS_CFUNC_DEF("hasAttributes", 0, js_el_hasAttributes_stub),
+        JS_CFUNC_DEF("getAttributeNames", 0, js_el_getAttributeNames_stub),
+        JS_CFUNC_DEF("cloneNode", 1, js_el_cloneNode_stub),
+        JS_CFUNC_DEF("getBoundingClientRect", 0, js_el_getBoundingClientRect),
+        JS_CFUNC_DEF("getClientRects", 0, js_el_clientRects_stub),
+        /* True no-ops — return undefined. */
+        JS_CFUNC_DEF("scrollIntoView", 0, js_el_undef_stub),
+        JS_CFUNC_DEF("focus", 0, js_el_undef_stub),
+        JS_CFUNC_DEF("blur", 0, js_el_undef_stub),
+        JS_CFUNC_DEF("click", 0, js_el_undef_stub),
+        JS_CFUNC_DEF("normalize", 0, js_el_undef_stub),
+        JS_CFUNC_DEF("dispatchEvent", 1, js_el_dispatchEvent),
+        JS_CFUNC_DEF("removeEventListener", 2, js_el_undef_stub),
+        JS_CFUNC_DEF("toggleAttribute", 1, js_el_toggleAttr_stub),
+        JS_CGETSET_DEF("textContent", js_el_textContent_get, js_el_textContent_set),
+        JS_CGETSET_DEF("innerHTML", js_el_innerHTML_get, js_el_innerHTML_set),
+        JS_CGETSET_DEF("outerHTML", js_el_outerHTML_get, NULL),
+        /* CharacterData (Text/Comment) — `data` and `length` plus the
+    	 * appendData/insertData/deleteData/replaceData/substringData
+    	 * mutators. as_chardata() in each guards element-only nodes. */
+        JS_CGETSET_DEF("data", js_cd_data_get, js_cd_data_set),
+        JS_CGETSET_DEF("length", js_cd_length_get, NULL),
+        JS_CFUNC_DEF("appendData", 1, js_cd_appendData),
+        JS_CFUNC_DEF("insertData", 2, js_cd_insertData),
+        JS_CFUNC_DEF("deleteData", 2, js_cd_deleteData),
+        JS_CFUNC_DEF("replaceData", 3, js_cd_replaceData),
+        JS_CFUNC_DEF("substringData", 2, js_cd_substringData),
+        JS_CGETSET_DEF("tagName", js_el_tagName_get, NULL),
+        JS_CGETSET_DEF("id", js_el_id_get, js_el_id_set),
+        JS_CGETSET_DEF("className", js_el_className_get, js_el_className_set),
+        JS_CGETSET_DEF("parentElement", js_el_parentElement_get, NULL),
+        JS_CGETSET_DEF("firstElementChild", js_el_firstElementChild_get, NULL),
+        JS_CGETSET_DEF("firstChild", js_el_firstChild_get, NULL),
+        JS_CGETSET_DEF("lastChild", js_el_lastChild_get, NULL),
+        JS_CGETSET_DEF("nextSibling", js_el_nextSibling_get, NULL),
+        JS_CGETSET_DEF("previousSibling", js_el_previousSibling_get, NULL),
+        JS_CGETSET_DEF("parentNode", js_el_parentNode_get, NULL),
+        JS_CGETSET_DEF("childNodes", js_el_childNodes_get, NULL),
+        JS_CGETSET_DEF("nextElementSibling", js_el_nextElementSibling_get, NULL),
+        JS_CGETSET_DEF("children", js_el_children_get, NULL),
+        JS_CGETSET_DEF("style", js_el_style_get, NULL),
+        JS_CGETSET_DEF("classList", js_el_classList_get, NULL),
+        JS_CGETSET_DEF("nodeType", js_el_nodeType_get, NULL),
+        JS_CGETSET_DEF("nodeName", js_el_nodeName_get, NULL),
+        JS_CGETSET_DEF("ownerDocument", js_el_ownerDocument_get, NULL),
+        /* `delegate` — Turbo's custom-element wiring does
+    	 *   Object.getPrototypeOf(el.delegate)
+    	 * during boot. Returning an empty object lets that walk through.
+    	 * Same for the few other "library-private slot" reads modern
+    	 * frameworks make on elements. */
+        JS_CGETSET_DEF("delegate", js_el_delegate_get, NULL),
+        JS_CGETSET_DEF("dataset", js_el_empty_obj_get, NULL),
+        JS_CGETSET_DEF("content", js_el_content_get, NULL),
+        JS_CGETSET_DEF("elements", js_el_elements_get, NULL),
+        JS_CGETSET_DEF("src", js_el_src_get, js_el_src_set),
+        JS_CGETSET_DEF("href", js_el_href_get, js_el_href_set),
+        JS_CGETSET_DEF("action", js_el_action_get, js_el_action_set),
+        JS_CGETSET_DEF("name", js_el_name_get, js_el_name_set),
+        JS_CGETSET_DEF("value", js_el_value_get, js_el_value_set),
+        JS_CGETSET_DEF("type", js_el_type_get, js_el_type_set),
+        JS_CGETSET_DEF("alt", js_el_alt_get, js_el_alt_set),
+        JS_CGETSET_DEF("title", js_el_title_get, js_el_title_set),
+        JS_CGETSET_DEF("placeholder", js_el_placeholder_get, js_el_placeholder_set),
+        JS_CGETSET_DEF("method", js_el_method_get, js_el_method_set),
+        JS_CGETSET_DEF("rel", js_el_rel_get, js_el_rel_set),
+        JS_CGETSET_DEF("target", js_el_target_get, js_el_target_set),
+    };
     /* Element prototype — methods + accessors via JS_CGETSET_DEF. */
     JSValue el_proto = JS_NewObject(ctx);
     JS_SetPropertyFunctionList(ctx, el_proto, element_funcs,
                                sizeof(element_funcs) / sizeof(element_funcs[0]));
-    JS_SetClassProto(ctx, class_element_id, el_proto);
+    JS_SetClassProto(ctx, state->class_element_id, el_proto);
 
+    static const JSCFunctionListEntry document_funcs[] = {
+        JS_CFUNC_DEF("getElementById", 1, js_doc_getElementById),
+        JS_CFUNC_DEF("getElementsByTagName", 1, js_el_getElementsByTagName),
+        JS_CFUNC_DEF("getElementsByClassName", 1, js_el_getElementsByClassName),
+        JS_CFUNC_DEF("getElementsByName", 1, js_el_getElementsByName),
+        JS_CFUNC_DEF("querySelector", 1, js_el_querySelector),
+        JS_CFUNC_DEF("querySelectorAll", 1, js_el_querySelectorAll),
+        JS_CFUNC_DEF("createElement", 1, js_doc_createElement),
+        JS_CFUNC_DEF("createElementNS", 2, js_doc_createElementNS),
+        JS_CFUNC_DEF("createTextNode", 1, js_doc_createTextNode),
+        JS_CFUNC_DEF("createDocumentFragment", 0, js_doc_createDocumentFragment),
+        JS_CFUNC_DEF("createComment", 1, js_doc_createComment),
+        JS_CFUNC_DEF("addEventListener", 2, js_el_addEventListener),
+        JS_CFUNC_DEF("dispatchEvent", 1, js_el_dispatchEvent),
+        JS_CFUNC_DEF("removeEventListener", 2, js_el_undef_stub),
+        /* Same node-mutation surface as Element so document.prepend()
+    	 * etc. work — github's stylesheet injector calls
+    	 * `e.head.prepend(t)` first then falls back to `e.prepend(t)` if
+    	 * `e instanceof Document` is false (which it is for us, since
+    	 * our document object isn't an instance of the JS Document
+    	 * constructor). */
+        JS_CFUNC_DEF("prepend", 1, js_el_appendChild),
+        JS_CFUNC_DEF("append", 1, js_el_appendChild),
+        JS_CFUNC_DEF("appendChild", 1, js_el_appendChild),
+        JS_CFUNC_DEF("removeChild", 1, js_el_removeChild),
+        JS_CFUNC_DEF("contains", 1, js_el_contains_stub),
+        JS_CGETSET_DEF("nodeType", js_el_nodeType_get, NULL),
+        JS_CGETSET_DEF("nodeName", js_el_nodeName_get, NULL),
+        JS_CGETSET_DEF("ownerDocument", js_el_ownerDocument_get, NULL),
+        JS_CGETSET_DEF("implementation", js_doc_implementation_get, NULL),
+    };
     /* Document inherits from Element-ish prototype + extra methods.
 	 * We give it the *same* methods as Element so document.querySelector
 	 * works directly (not via the Element prototype chain since we
@@ -3565,7 +3609,7 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
     JSValue doc_proto = JS_NewObject(ctx);
     JS_SetPropertyFunctionList(ctx, doc_proto, document_funcs,
                                sizeof(document_funcs) / sizeof(document_funcs[0]));
-    JS_SetClassProto(ctx, class_document_id, doc_proto);
+    JS_SetClassProto(ctx, state->class_document_id, doc_proto);
 
     /* globalThis.document */
     JSValue global = JS_GetGlobalObject(ctx);
@@ -3642,7 +3686,11 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
 
 int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
 {
-    if (!r || !r->js_ctx || g_listener_count == 0) {
+    if (!r || !r->js_ctx || !r->js_rt) {
+        return 0;
+    }
+    struct js_dom_state *state = JS_GetRuntimeOpaque((JSRuntime *)r->js_rt);
+    if (!state || state->listener_count == 0) {
         return 0;
     }
 
@@ -3670,11 +3718,11 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
             continue;
         }
         lxb_dom_element_t *el = lxb_dom_interface_element(n);
-        for (int i = 0; i < g_listener_count; i++) {
-            if (g_listeners[i].el != el) {
+        for (int i = 0; i < state->listener_count; i++) {
+            if (state->listeners[i].el != el) {
                 continue;
             }
-            if (strcmp(g_listeners[i].type, "click") != 0) {
+            if (strcmp(state->listeners[i].type, "click") != 0) {
                 continue;
             }
             JSValue ev = JS_NewObject(ctx);
@@ -3684,7 +3732,7 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y)
             JS_SetPropertyStr(ctx, ev, "clientX", JS_NewFloat64(ctx, x));
             JS_SetPropertyStr(ctx, ev, "clientY", JS_NewFloat64(ctx, y));
             JSValueConst args[] = {ev};
-            JSValue ret = JS_Call(ctx, g_listeners[i].handler, JS_UNDEFINED, 1, args);
+            JSValue ret = JS_Call(ctx, state->listeners[i].handler, JS_UNDEFINED, 1, args);
             if (JS_IsException(ret)) {
                 JSValue ex = JS_GetException(ctx);
                 const char *m = JS_ToCString(ctx, ex);
@@ -3723,21 +3771,17 @@ void yetty_ylexbor_js_dom_reset(struct yetty_ylexbor *r)
 	 * QuickJS asserts on leaked objects at JS_FreeRuntime. */
     if (r && r->js_ctx) {
         wrap_cache_clear((JSContext *)r->js_ctx);
-    } else {
-        /* No live ctx (e.g. very early failure path) — best-effort
-		 * zero so a re-install starts from a clean slate. */
-        for (size_t i = 0; i < WRAP_CACHE_BUCKETS; i++) {
-            g_wrap_cache[i].key = NULL;
-            g_wrap_cache[i].val = JS_UNDEFINED;
+    }
+    /* Listener handler refs are owned by the dying context — the pool
+	 * dies with the js_dom_state that js_destroy frees right after
+	 * this, so only the count needs resetting for the re-install path. */
+    if (r && r->js_rt) {
+        struct js_dom_state *state = JS_GetRuntimeOpaque((JSRuntime *)r->js_rt);
+        if (state) {
+            state->listener_count = 0;
+            memset(state->listeners, 0, sizeof(state->listeners));
         }
     }
-    g_listener_count = 0;
-    memset(g_listeners, 0, sizeof(g_listeners));
-    class_node_id = 0;
-    class_element_id = 0;
-    class_document_id = 0;
-    class_classlist_id = 0;
-    class_style_id = 0;
 }
 
 /* ===========================================================================
@@ -3757,6 +3801,10 @@ void yetty_ylexbor_js_dispatch_event_type(struct yetty_ylexbor *r, const char *t
         return;
     }
     JSContext *ctx = (JSContext *)r->js_ctx;
+    struct js_dom_state *state = dom_state(ctx);
+    if (!state) {
+        return;
+    }
     lxb_dom_element_t *only = (lxb_dom_element_t *)target_element_ptr_or_null;
 
     /* Default target for global events (load, DOMContentLoaded) is
@@ -3766,11 +3814,11 @@ void yetty_ylexbor_js_dispatch_event_type(struct yetty_ylexbor *r, const char *t
     JSValue doc_target = JS_GetPropertyStr(ctx, global, "document");
     JS_FreeValue(ctx, global);
 
-    for (int i = 0; i < g_listener_count; i++) {
-        if (only && g_listeners[i].el != only) {
+    for (int i = 0; i < state->listener_count; i++) {
+        if (only && state->listeners[i].el != only) {
             continue;
         }
-        if (strcmp(g_listeners[i].type, type) != 0) {
+        if (strcmp(state->listeners[i].type, type) != 0) {
             continue;
         }
         JSValue ev = JS_NewObject(ctx);
@@ -3785,7 +3833,7 @@ void yetty_ylexbor_js_dispatch_event_type(struct yetty_ylexbor *r, const char *t
         JS_SetPropertyStr(ctx, ev, "srcElement", JS_DupValue(ctx, tgt));
         JS_FreeValue(ctx, tgt);
         JSValueConst args[] = {ev};
-        JSValue ret = JS_Call(ctx, g_listeners[i].handler, JS_UNDEFINED, 1, args);
+        JSValue ret = JS_Call(ctx, state->listeners[i].handler, JS_UNDEFINED, 1, args);
         if (JS_IsException(ret)) {
             JSValue ex = JS_GetException(ctx);
             const char *m = JS_ToCString(ctx, ex);

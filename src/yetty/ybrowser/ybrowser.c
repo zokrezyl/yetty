@@ -55,8 +55,6 @@ static void box_vec_clear(struct yetty_ylexbor_box_vec *v)
             v->data[i].segs = NULL;
             v->data[i].segs_count = 0;
         }
-        free(v->data[i].bg_image_url);
-        v->data[i].bg_image_url = NULL;
     }
     v->size = 0;
 }
@@ -65,11 +63,21 @@ static void box_vec_destroy(struct yetty_ylexbor_box_vec *v)
 {
     for (uint32_t i = 0; i < v->size; i++) {
         free(v->data[i].segs);
-        free(v->data[i].bg_image_url);
     }
     free(v->data);
     v->data = NULL;
     v->size = v->cap = 0;
+}
+
+static void kv_store_destroy(struct yetty_ylexbor_kv_store *store)
+{
+    for (int i = 0; i < store->count; i++) {
+        free(store->items[i].key);
+        free(store->items[i].value);
+    }
+    free(store->items);
+    store->items = NULL;
+    store->count = store->cap = 0;
 }
 
 /* ===========================================================================
@@ -159,11 +167,39 @@ float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size,
  * Public lifecycle
  * ===========================================================================*/
 
+/* Unwind a partially-constructed engine on a create failure — releases
+ * the private loader (if one was made) and the engine allocation. */
+static void create_fail_cleanup(struct yetty_ylexbor *r)
+{
+    if (r->owns_loader) {
+        struct yetty_ycore_void_result loader_res = yetty_ybrowser_loader_destroy(r->loader);
+        if (YETTY_IS_ERR(loader_res)) {
+            yetty_ycore_error_destroy(loader_res.error);
+        }
+    }
+    free(r);
+}
+
 struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_config *cfg)
 {
     struct yetty_ylexbor *r = calloc(1, sizeof(*r));
     if (r == NULL) {
         return YETTY_ERR(yetty_ylexbor_ptr, "ylexbor alloc");
+    }
+
+    /* Network loader: borrow the host's (shared connection pool across
+	 * engines) or create a private one. */
+    if (cfg && cfg->loader) {
+        r->loader = cfg->loader;
+        r->owns_loader = 0;
+    } else {
+        struct yetty_ybrowser_loader_ptr_result loader_res = yetty_ybrowser_loader_create();
+        if (YETTY_IS_ERR(loader_res)) {
+            free(r);
+            return YETTY_ERR(yetty_ylexbor_ptr, "ylexbor_create: loader", loader_res);
+        }
+        r->loader = loader_res.value;
+        r->owns_loader = 1;
     }
 
     r->viewport_w = cfg && cfg->viewport_width > 0 ? cfg->viewport_width : 1024;
@@ -172,12 +208,12 @@ struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_
 
     r->document = lxb_html_document_create();
     if (r->document == NULL) {
-        free(r);
+        create_fail_cleanup(r);
         return YETTY_ERR(yetty_ylexbor_ptr, "html_document_create");
     }
     if (lxb_style_init(r->document) != LXB_STATUS_OK) {
         lxb_html_document_destroy(r->document);
-        free(r);
+        create_fail_cleanup(r);
         return YETTY_ERR(yetty_ylexbor_ptr, "lxb_style_init");
     }
 
@@ -187,7 +223,7 @@ struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_
             lxb_css_parser_destroy(r->css_parser, true);
         }
         lxb_html_document_destroy(r->document);
-        free(r);
+        create_fail_cleanup(r);
         return YETTY_ERR(yetty_ylexbor_ptr, "css_parser_init");
     }
 
@@ -219,6 +255,15 @@ struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *
     yetty_ylexbor_grid_classes_free(r);
     free(r->text_chunks);
     free(r->base_url);
+    kv_store_destroy(&r->web_local_storage);
+    kv_store_destroy(&r->web_session_storage);
+    free(r->web_cookie_string);
+    if (r->owns_loader) {
+        struct yetty_ycore_void_result loader_res = yetty_ybrowser_loader_destroy(r->loader);
+        if (YETTY_IS_ERR(loader_res)) {
+            yetty_ycore_error_destroy(loader_res.error);
+        }
+    }
     for (int i = 0; i < r->img_cache_count; i++) {
         free(r->img_cache[i].url);
         free(r->img_cache[i].pixels);
@@ -304,8 +349,6 @@ void *yetty_ylexbor_internal_get_js_ctx(struct yetty_ylexbor *r)
 {
     return r ? r->js_ctx : NULL;
 }
-
-static int g_css_loaded = 0, g_css_failed = 0, g_css_inline = 0;
 
 /* One CSS source to apply. EITHER `inline_body` is set (an inline
  * <style> block — body is owned, will be freed after add_css) OR `url`
@@ -458,7 +501,8 @@ static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_yle
                     j++;
                 }
             }
-            yetty_ylexbor_http_get_many((const char *const *)fetch_urls, ext_n, r->base_url,
+            yetty_ylexbor_http_get_many(r->loader, (const char *const *)fetch_urls, ext_n,
+                                        r->base_url,
                                         /*concurrency=*/8, bodies, lens, status);
         }
     }
@@ -489,10 +533,10 @@ static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_yle
                         yetty_ycore_error_destroy(ar.error);
                     }
                 } else {
-                    g_css_loaded++;
+                    r->css_sheets_loaded++;
                 }
             } else {
-                g_css_failed++;
+                r->css_sheets_failed++;
             }
             if (slot >= 0) {
                 free(bodies[slot]);
@@ -509,7 +553,7 @@ static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_yle
                     yetty_ycore_error_destroy(ar.error);
                 }
             } else {
-                g_css_inline++;
+                r->css_sheets_inline++;
             }
             free(e->inline_body);
         }
@@ -539,6 +583,9 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     /* Invalidate any in-flight async image jobs from the previous document —
      * their done() will find a mismatched generation and discard. */
     r->fetch_generation++;
+    r->css_sheets_loaded = 0;
+    r->css_sheets_failed = 0;
+    r->css_sheets_inline = 0;
 
     yetty_ylexbor_prof("load_html START  html_bytes=%zu", html_len);
     double t_phase = yetty_ylexbor_prof_now_ms();
@@ -594,8 +641,8 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     yetty_ylexbor_prof("  run scripts    %.0f ms", yetty_ylexbor_prof_now_ms() - t_phase);
     t_phase = yetty_ylexbor_prof_now_ms();
 
-    ydebug("css sheets ext=%d inline=%d failed=%d customs=%d", g_css_loaded, g_css_inline,
-           g_css_failed, r->customs.size);
+    ydebug("css sheets ext=%d inline=%d failed=%d customs=%d", r->css_sheets_loaded,
+           r->css_sheets_inline, r->css_sheets_failed, r->customs.size);
     for (int i = 0; i < r->customs.size; i++) {
         ydebug("css   %s = %s", r->customs.data[i].name, r->customs.data[i].value);
     }

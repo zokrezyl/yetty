@@ -99,12 +99,10 @@ static void console_print(JSContext *ctx, const char *level, int argc, JSValueCo
     /* Also mirror to stderr when YBROWSER_JS_CONSOLE is set — the ybrowser
      * tool enables this in its standalone (own-window) mode so page JS
      * errors are visible for debugging, while leaving it off under
-     * `yetty -e` (where stderr → the PTY would corrupt the OSC stream). */
-    static int to_stderr = -1;
-    if (to_stderr < 0) {
-        to_stderr = getenv("YBROWSER_JS_CONSOLE") != NULL;
-    }
-    if (to_stderr) {
+     * `yetty -e` (where stderr → the PTY would corrupt the OSC stream).
+     * getenv-per-call on purpose: console output is not hot, and caching
+     * the answer would need a static variable. */
+    if (getenv("YBROWSER_JS_CONSOLE") != NULL) {
         fprintf(stderr, "[js:%s] %s\n", level, buf);
         fflush(stderr);
     }
@@ -125,14 +123,13 @@ DEFINE_CONSOLE_FN(debug, "debug")
 DEFINE_CONSOLE_FN(warn, "warn")
 DEFINE_CONSOLE_FN(error, "error")
 
-static const JSCFunctionListEntry console_funcs[] = {
-    JS_CFUNC_DEF("log", 1, js_console_log),     JS_CFUNC_DEF("info", 1, js_console_info),
-    JS_CFUNC_DEF("debug", 1, js_console_debug), JS_CFUNC_DEF("warn", 1, js_console_warn),
-    JS_CFUNC_DEF("error", 1, js_console_error),
-};
-
 static void install_console(JSContext *ctx)
 {
+    static const JSCFunctionListEntry console_funcs[] = {
+        JS_CFUNC_DEF("log", 1, js_console_log),     JS_CFUNC_DEF("info", 1, js_console_info),
+        JS_CFUNC_DEF("debug", 1, js_console_debug), JS_CFUNC_DEF("warn", 1, js_console_warn),
+        JS_CFUNC_DEF("error", 1, js_console_error),
+    };
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue console = JS_NewObject(ctx);
     JS_SetPropertyFunctionList(ctx, console, console_funcs,
@@ -452,7 +449,7 @@ static void run_scripts_recursive(struct yetty_ylexbor *r, JSContext *ctx, lxb_d
                 }
                 size_t blen = 0;
                 long status = 0;
-                char *body = yetty_ylexbor_http_get(url, &blen, &status);
+                char *body = yetty_ylexbor_http_get(r->loader, url, &blen, &status);
                 if (body && status >= 200 && status < 300) {
                     eval_buf(r, ctx, body, blen, url);
                 } else {
