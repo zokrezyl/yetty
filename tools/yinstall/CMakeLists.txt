@@ -355,6 +355,15 @@ if(WIN32)
     if(_yinstall_dawn_dlls)
         list(APPEND _yinstall_exes ${_yinstall_dawn_dlls})
     endif()
+
+    # Mesa lavapipe ICD + Vulkan loader: the software-Vulkan fallback that
+    # yframework prefers over WARP when no hardware adapter exists (Windows
+    # ships neither a Vulkan loader nor any software Vulkan driver).
+    include(${YETTY_ROOT}/build-tools/yetty/mesa-lavapipe.cmake)
+    yetty_find_lavapipe_runtime_files(_yinstall_lavapipe_files)
+    if(_yinstall_lavapipe_files)
+        list(APPEND _yinstall_exes ${_yinstall_lavapipe_files})
+    endif()
 endif()
 
 list(REMOVE_DUPLICATES _yinstall_exes)

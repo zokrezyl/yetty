@@ -111,6 +111,141 @@ void yetty_yframework_frame_tick(struct yetty_yframework *rt)
     rt->frame_delta_sec = rt->frame_time_sec - previous_sec;
 }
 
+/* ------------------------------------------------------------------ *
+ * Adapter / backend selection
+ *
+ * The default is unchanged: Dawn auto-picks the OS-best backend (D3D12 on
+ * Windows, Metal on macOS, Vulkan on Linux) and the highest-performance
+ * HARDWARE adapter. That is exactly what every real GPU wants and it is
+ * left alone. Two opt-in adjustments sit on top, neither of which touches
+ * the real-GPU path:
+ *
+ *   1. $YETTY_WEBGPU_BACKEND=<d3d11|d3d12|vulkan|metal|opengl|opengles>
+ *      forces a specific backend. Handy on VMs whose virtual GPU only
+ *      accelerates an older API. Unset / "auto" => Dawn auto-picks.
+ *   2. If Dawn returns a CPU/software adapter (its WARP fallback) — which
+ *      happens on VMware/Hyper-V whose virtual GPU advertises D3D12 but
+ *      can't create a real D3D12 device — retry once on D3D11, which those
+ *      GPUs DO accelerate. A real GPU never returns a CPU adapter, so this
+ *      branch is inert on real hardware.
+ * ------------------------------------------------------------------ */
+
+/* ASCII case-insensitive equality (no locale/ctype dependency). */
+static int yframework_ci_eq(const char *a, const char *b)
+{
+    for (; *a && *b; a++, b++) {
+        char ca = *a, cb = *b;
+        if (ca >= 'A' && ca <= 'Z') {
+            ca = (char)(ca - 'A' + 'a');
+        }
+        if (cb >= 'A' && cb <= 'Z') {
+            cb = (char)(cb - 'A' + 'a');
+        }
+        if (ca != cb) {
+            return 0;
+        }
+    }
+    return *a == *b;
+}
+
+/* Map $YETTY_WEBGPU_BACKEND to a WGPUBackendType. Returns
+ * WGPUBackendType_Undefined when unset or unrecognised — which tells Dawn to
+ * auto-pick, i.e. the default behaviour on every real GPU. */
+static WGPUBackendType yframework_env_backend(void)
+{
+    const char *b = getenv("YETTY_WEBGPU_BACKEND");
+    if (!b || !*b || yframework_ci_eq(b, "auto")) {
+        return WGPUBackendType_Undefined;
+    }
+    if (yframework_ci_eq(b, "d3d11") || yframework_ci_eq(b, "dx11")) {
+        return WGPUBackendType_D3D11;
+    }
+    if (yframework_ci_eq(b, "d3d12") || yframework_ci_eq(b, "dx12")) {
+        return WGPUBackendType_D3D12;
+    }
+    if (yframework_ci_eq(b, "vulkan") || yframework_ci_eq(b, "vk")) {
+        return WGPUBackendType_Vulkan;
+    }
+    if (yframework_ci_eq(b, "metal")) {
+        return WGPUBackendType_Metal;
+    }
+    if (yframework_ci_eq(b, "opengl") || yframework_ci_eq(b, "gl")) {
+        return WGPUBackendType_OpenGL;
+    }
+    if (yframework_ci_eq(b, "opengles") || yframework_ci_eq(b, "gles")) {
+        return WGPUBackendType_OpenGLES;
+    }
+    ywarn("yframework: unknown YETTY_WEBGPU_BACKEND='%s'; letting Dawn auto-pick", b);
+    return WGPUBackendType_Undefined;
+}
+
+/* Non-zero if `adapter` is a software rasterizer (Dawn's WARP fallback).
+ *
+ * Two signals, because Dawn's D3D12 WARP adapter is inconsistent: it reports
+ * adapterType as IntegratedGPU (not CPU!), but always carries Microsoft's
+ * software-renderer PCI vendor ID 0x1414. No real GPU uses 0x1414 (NVIDIA
+ * 0x10DE, AMD 0x1002, Intel 0x8086, VMware 0x15AD, Qualcomm 0x17CB…), so this
+ * never false-positives on real hardware. */
+#define YFRAMEWORK_VENDOR_MICROSOFT_SOFTWARE 0x1414u
+
+static int yframework_adapter_is_software(WGPUAdapter adapter)
+{
+    if (!adapter) {
+        return 0;
+    }
+    WGPUAdapterInfo info = {0};
+    if (wgpuAdapterGetInfo(adapter, &info) != WGPUStatus_Success) {
+        return 0; /* unknown → assume it's fine, don't second-guess */
+    }
+    int is_software = (info.adapterType == WGPUAdapterType_CPU) ||
+                      (info.vendorID == YFRAMEWORK_VENDOR_MICROSOFT_SOFTWARE);
+    wgpuAdapterInfoFreeMembers(info);
+    return is_software;
+}
+
+/* Non-zero if `adapter` is specifically WARP (vendor 0x1414). Unlike
+ * yframework_adapter_is_software this stays zero for bundled lavapipe
+ * (Mesa, vendor 0x10005, adapterType CPU) — a software adapter we *want*:
+ * its LLVM JIT is much faster than WARP for yetty's workload, so the
+ * recovery chain must not try to recover from it. */
+static int yframework_adapter_is_warp(WGPUAdapter adapter)
+{
+    if (!adapter) {
+        return 0;
+    }
+    WGPUAdapterInfo info = {0};
+    if (wgpuAdapterGetInfo(adapter, &info) != WGPUStatus_Success) {
+        return 0;
+    }
+    int is_warp = (info.vendorID == YFRAMEWORK_VENDOR_MICROSOFT_SOFTWARE);
+    wgpuAdapterInfoFreeMembers(info);
+    return is_warp;
+}
+
+
+/* Request an adapter synchronously. Native Dawn fires the callback inline
+ * during the request; the emscripten path spins the loop. Returns NULL on
+ * failure (e.g. a forced backend that isn't compiled in). */
+static WGPUAdapter yframework_request_adapter(WGPUInstance instance,
+                                              const WGPURequestAdapterOptions *opts)
+{
+    WGPUAdapter adapter = NULL;
+    int ready = 0;
+    WGPURequestAdapterCallbackInfo cb = {0};
+    cb.mode = WGPUCallbackMode_AllowSpontaneous;
+    cb.callback = yetty_ywebgpu_adapter_request_callback;
+    cb.userdata1 = &adapter;
+    cb.userdata2 = &ready;
+    wgpuInstanceRequestAdapter(instance, opts, cb);
+#ifdef __EMSCRIPTEN__
+    while (!ready) {
+        emscripten_sleep(0);
+    }
+#endif
+    (void)ready;
+    return adapter;
+}
+
 /* Lifted verbatim from yetty/yetty.c init_webgpu(): request adapter +
  * device + queue, pick surface format and present mode from caps + config,
  * configure the surface, build the GPU allocator and MSDF generator,
@@ -125,29 +260,89 @@ static struct yetty_ycore_void_result init_gpu(struct yetty_yframework *rt, WGPU
     }
     ydebug("yframework: instance=%p surface=%p", (void *)instance, (void *)surface);
 
-    /* Adapter. */
+    /* Adapter. Default (Undefined backend) = Dawn auto-picks the OS-best
+     * backend + best hardware adapter — untouched for real GPUs. */
+    WGPUBackendType forced_backend = yframework_env_backend();
     WGPURequestAdapterOptions adapter_opts = {0};
     adapter_opts.compatibleSurface = surface; /* NULL OK for headless */
     adapter_opts.powerPreference = WGPUPowerPreference_HighPerformance;
-
-    int adapter_ready = 0;
-    WGPURequestAdapterCallbackInfo adapter_cb = {0};
-    adapter_cb.mode = WGPUCallbackMode_AllowSpontaneous;
-    adapter_cb.callback = yetty_ywebgpu_adapter_request_callback;
-    adapter_cb.userdata1 = &rt->gpu.adapter;
-    adapter_cb.userdata2 = &adapter_ready;
+    adapter_opts.backendType = forced_backend;
+    if (forced_backend != WGPUBackendType_Undefined) {
+        yinfo("yframework: YETTY_WEBGPU_BACKEND=%s forces the WebGPU backend",
+              getenv("YETTY_WEBGPU_BACKEND"));
+    }
+    /* Dawn's GL physical devices only exist at the Compatibility feature
+     * level (PhysicalDeviceGL::SupportsFeatureLevel); the zero-initialized
+     * featureLevel means Core, which silently filters GL out of adapter
+     * discovery. Requesting Compatibility is required, not optional, for
+     * the GL backends. */
+    if (forced_backend == WGPUBackendType_OpenGL ||
+        forced_backend == WGPUBackendType_OpenGLES) {
+        adapter_opts.featureLevel = WGPUFeatureLevel_Compatibility;
+    }
 
     ydebug("yframework: requesting adapter");
-    wgpuInstanceRequestAdapter(instance, &adapter_opts, adapter_cb);
+    rt->gpu.adapter = yframework_request_adapter(instance, &adapter_opts);
 
-#ifdef __EMSCRIPTEN__
-    while (!adapter_ready) {
-        emscripten_sleep(0);
+    /* If a forced backend yields nothing (e.g. not compiled in / unavailable),
+     * don't brick startup — fall back to auto-select. */
+    if (!rt->gpu.adapter && forced_backend != WGPUBackendType_Undefined) {
+        ywarn("yframework: forced backend produced no adapter; falling back to auto-select");
+        forced_backend = WGPUBackendType_Undefined;
+        adapter_opts.backendType = WGPUBackendType_Undefined;
+        rt->gpu.adapter = yframework_request_adapter(instance, &adapter_opts);
     }
-#endif
     if (!rt->gpu.adapter) {
         return YETTY_ERR(yetty_ycore_void, "yframework: adapter request failed");
     }
+
+    /* Auto-recover from a software (WARP) fallback on Windows: VMware/Hyper-V
+     * virtual GPUs advertise D3D12 but can't create a real D3D12 device, so
+     * Dawn hands back the CPU WARP rasterizer (very slow). Those GPUs DO
+     * accelerate D3D11 — retry once there and keep it only if it's real
+     * hardware. Guarded on getting a CPU adapter AND no user-forced backend,
+     * so real GPUs (which never return CPU) never enter here. */
+#if defined(_WIN32)
+    if (forced_backend == WGPUBackendType_Undefined &&
+        yframework_adapter_is_software(rt->gpu.adapter)) {
+        ywarn("yframework: WebGPU selected a software (WARP) adapter — the GPU has no "
+              "usable D3D12 device; retrying on D3D11 for hardware acceleration");
+        WGPURequestAdapterOptions d3d11_opts = adapter_opts;
+        d3d11_opts.backendType = WGPUBackendType_D3D11;
+        WGPUAdapter d3d11_adapter = yframework_request_adapter(instance, &d3d11_opts);
+        if (d3d11_adapter && !yframework_adapter_is_software(d3d11_adapter)) {
+            wgpuAdapterRelease(rt->gpu.adapter); /* drop WARP; use the D3D11 GPU */
+            rt->gpu.adapter = d3d11_adapter;
+            yinfo("yframework: switched to a hardware D3D11 adapter");
+        } else {
+            if (d3d11_adapter) {
+                wgpuAdapterRelease(d3d11_adapter); /* still software → try Vulkan */
+            }
+            /* No hardware D3D11 either. Last stop before settling for WARP:
+             * Vulkan. Stock Windows has no Vulkan driver at all, but yetty
+             * bundles Mesa lavapipe (registered with the loader by
+             * yetty_yplatform_vulkan_register_bundled_driver at instance
+             * creation), whose LLVM JIT renders yetty much faster than
+             * WARP. A hardware Vulkan ICD, if one exists, outranks
+             * lavapipe in this request too. */
+            WGPURequestAdapterOptions vk_opts = adapter_opts;
+            vk_opts.backendType = WGPUBackendType_Vulkan;
+            WGPUAdapter vk_adapter = yframework_request_adapter(instance, &vk_opts);
+            if (vk_adapter && !yframework_adapter_is_warp(vk_adapter)) {
+                wgpuAdapterRelease(rt->gpu.adapter); /* drop WARP; use Vulkan */
+                rt->gpu.adapter = vk_adapter;
+                yinfo("yframework: switched to a Vulkan adapter (bundled lavapipe "
+                      "or a hardware ICD) instead of WARP");
+            } else {
+                if (vk_adapter) {
+                    wgpuAdapterRelease(vk_adapter);
+                }
+                ywarn("yframework: no Vulkan adapter available either; staying on "
+                      "WARP (rendering stays CPU-bound)");
+            }
+        }
+    }
+#endif
 
     /* Best-effort: GPU info logging is diagnostic-only — degraded
      * GPUs may not surface a description string but the rest of init

@@ -34,6 +34,7 @@
 #include <yetty/yconfig/config.h>
 #include <yetty/yevent/event.h>
 #include <yetty/yplatform/gpu-context.h>
+#include <yetty/yplatform/vulkan-driver.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/yplatform/platform.h>
 #include <yetty/yplatform/thread.h>
@@ -304,6 +305,11 @@ static struct yetty_ycore_void_result glfw_platform_run(struct yetty_yclass_obje
         dawn_toggles.enabledToggles = dawn_enabled_toggles;
         instance_desc.nextInChain = &dawn_toggles.chain;
     }
+
+    /* Register the bundled software Vulkan driver (Windows: Mesa lavapipe;
+     * no-op elsewhere) before the instance exists — the Vulkan loader
+     * latches its driver list on first initialization. */
+    yetty_yplatform_vulkan_register_bundled_driver();
 
     WGPUInstance instance = wgpuCreateInstance(&instance_desc);
     if (!instance) {

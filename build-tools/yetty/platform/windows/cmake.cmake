@@ -247,6 +247,12 @@ if(WIN32)
     else()
         message(WARNING "Could not find dxcompiler.dll in Windows SDK")
     endif()
+
+    # --- Mesa lavapipe + Vulkan loader (software-Vulkan fallback) ---
+    # Bundled so yframework's adapter recovery can beat WARP on GPUs with no
+    # usable D3D12/Vulkan device (VMware/Hyper-V); see mesa-lavapipe.cmake.
+    include(${YETTY_ROOT}/build-tools/yetty/mesa-lavapipe.cmake)
+    yetty_copy_lavapipe_runtime_files(yetty)
 endif()
 
 # Verify all required assets are present

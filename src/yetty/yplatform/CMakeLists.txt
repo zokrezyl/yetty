@@ -36,6 +36,7 @@ if(WIN32)
         ipc-socket/windows.c
         tty/windows.c
         io/windows.c
+        vulkan-driver/windows.c
     )
 else()
     set(_core_per_os
@@ -48,6 +49,7 @@ else()
         ipc-socket/default.c
         tty/default.c
         io/default.c
+        vulkan-driver/default.c
     )
 endif()
 
