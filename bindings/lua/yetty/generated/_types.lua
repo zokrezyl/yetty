@@ -78,9 +78,25 @@ struct vterm_uniforms {
   float visual_zoom_scale;
   float visual_zoom_offset_x;
   float visual_zoom_offset_y;
+  float time;
+  float mouse_x;
+  float mouse_y;
+  uint32_t post_fx_index;
+  float post_fx_p0;
+  float post_fx_p1;
+  float post_fx_p2;
+  float post_fx_p3;
+  float post_fx_p4;
+  float post_fx_p5;
+  uint32_t coord_fx_index;
+  float coord_fx_p0;
+  float coord_fx_p1;
+  float coord_fx_p2;
+  float coord_fx_p3;
+  float coord_fx_p4;
+  float coord_fx_p5;
+  uint32_t pad_a;
   uint32_t pad_b;
-  uint32_t pad_c;
-  uint32_t pad_d;
 };
 struct yetty_context {
   struct yetty_yframework *runtime;

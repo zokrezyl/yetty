@@ -19,3 +19,13 @@ yetty_add_c_test(
     SHIMS   trace platform_thread platform_term
     LABELS  contract rpc
     TIMEOUT 30)
+
+# Endpoint selection (#438): side-channel fd pair via YETTY_YWIRE_SIDE_CHANNEL
+# vs in-band fallback, with loud failure on malformed/stale specs.
+yetty_add_c_test(
+    NAME    yclass_transport_env
+    SOURCES transport-env-test.c
+    LIBS    yetty_yclass yetty_ycore
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract
+    TIMEOUT 30)

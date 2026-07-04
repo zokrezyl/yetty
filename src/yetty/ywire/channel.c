@@ -34,6 +34,12 @@ struct yetty_ycore_size_result yetty_ywire_channel_write(struct yetty_ywire_chan
     if (!channel) {
         return YETTY_ERR(yetty_ycore_size, "ywire_channel_write: NULL channel");
     }
+    if (!channel->in_use) {
+        return YETTY_ERR(yetty_ycore_size, "ywire_channel_write: channel is closed (released)");
+    }
+    if (channel->eof_requested || channel->close_requested || channel->close_rcvd) {
+        return YETTY_ERR(yetty_ycore_size, "ywire_channel_write: channel is half-closed/closing");
+    }
     if (len == 0) {
         return YETTY_OK(yetty_ycore_size, 0);
     }
@@ -64,6 +70,14 @@ struct yetty_ycore_void_result yetty_ywire_channel_flush(struct yetty_ywire_chan
     if (!channel || !channel->connection) {
         return YETTY_ERR(yetty_ycore_void, "ywire_channel_flush: NULL channel");
     }
+    if (channel->kind == YETTY_YWIRE_CHANNEL_KIND_DYNAMIC) {
+        /* Dynamic lane: mark everything coalesced so far as wire-eligible and
+         * let the connection's fair scheduler chunk it out — one large flush
+         * must not head-of-line-block the other channels, and DATA beyond the
+         * peer's window stays here until credit comes back. */
+        channel->flush_mark = channel->outbuf.size;
+        return yetty_ywire_connection_pump_outbound(channel->connection);
+    }
     if (channel->outbuf.size == 0) {
         return YETTY_OK_VOID();
     }
@@ -77,13 +91,14 @@ struct yetty_ycore_void_result yetty_ywire_channel_flush(struct yetty_ywire_chan
                                       &framed);
     } else if (channel->wire_code >= 0) {
         /* Envelope lane (rpc): one DCS/OSC envelope carrying the coalesced
-         * frame bytes. */
+         * frame bytes. The host-side receiver's contract is one envelope = one
+         * rpc frame, so this lane is never chunked. */
         build = yetty_ywire_emit(channel->wire_kind, channel->wire_code, channel->has_args,
                                  channel->connection->compressed, NULL, 0, channel->outbuf.data,
                                  channel->outbuf.size, &framed);
     } else {
-        /* Input/dynamic lanes have no outbound framing in this stage — drop the
-         * coalesced bytes rather than emit a malformed frame. */
+        /* The input lane has no outbound framing — drop the coalesced bytes
+         * rather than emit a malformed frame. */
         yetty_ycore_buffer_clear(&channel->outbuf);
         return YETTY_OK_VOID();
     }
@@ -100,7 +115,9 @@ struct yetty_ycore_void_result yetty_ywire_channel_flush(struct yetty_ywire_chan
     return YETTY_OK_VOID();
 }
 
-/* Hand out from inbuf, reclaiming space once fully drained. */
+/* Hand out from inbuf, reclaiming space once fully drained. Draining is what
+ * grants the peer new flow-control credit on a dynamic channel — and what
+ * releases the slot of a channel whose close handshake already finished. */
 static size_t channel_take(struct yetty_ywire_channel *channel, void *buf, size_t max)
 {
     if (channel->inbuf_off >= channel->inbuf.size) {
@@ -113,6 +130,15 @@ static size_t channel_take(struct yetty_ywire_channel *channel, void *buf, size_
     if (channel->inbuf_off >= channel->inbuf.size) {
         yetty_ycore_buffer_clear(&channel->inbuf);
         channel->inbuf_off = 0;
+    }
+    if (channel->kind == YETTY_YWIRE_CHANNEL_KIND_DYNAMIC) {
+        struct yetty_ycore_void_result credit_res = yetty_ywire_connection_grant_credit(channel, n);
+        if (YETTY_IS_ERR(credit_res)) {
+            /* The drain itself succeeded; a failed credit grant only delays the
+             * peer and the next drain retries. Absorb. */
+            yetty_ycore_error_destroy(credit_res.error);
+        }
+        yetty_ywire_connection_maybe_release(channel);
     }
     return n;
 }
@@ -176,6 +202,78 @@ struct yetty_ycore_void_result yetty_ywire_channel_set_raw_sink(struct yetty_ywi
     channel->raw_sink = sink;
     channel->sink_user = user;
     return YETTY_OK_VOID();
+}
+
+/*===========================================================================
+ * Dynamic-channel lifecycle
+ *=========================================================================*/
+
+struct yetty_ycore_void_result yetty_ywire_channel_set_event_cb(struct yetty_ywire_channel *channel,
+                                                                yetty_ywire_channel_event_cb cb,
+                                                                void *user)
+{
+    if (!channel) {
+        return YETTY_ERR(yetty_ycore_void, "ywire_channel_set_event_cb: NULL channel");
+    }
+    channel->event_cb = cb;
+    channel->event_user = user;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ywire_channel_send_eof(struct yetty_ywire_channel *channel)
+{
+    if (!channel || !channel->connection) {
+        return YETTY_ERR(yetty_ycore_void, "ywire_channel_send_eof: NULL channel");
+    }
+    if (channel->kind != YETTY_YWIRE_CHANNEL_KIND_DYNAMIC) {
+        return YETTY_ERR(yetty_ycore_void, "ywire_channel_send_eof: not a dynamic channel");
+    }
+    if (channel->eof_requested) {
+        return YETTY_OK_VOID(); /* idempotent */
+    }
+    /* Implicit flush: everything written so far is sealed under the EOF, which
+     * the scheduler emits only once this pending data has drained. */
+    channel->flush_mark = channel->outbuf.size;
+    channel->eof_requested = 1;
+    return yetty_ywire_connection_pump_outbound(channel->connection);
+}
+
+struct yetty_ycore_void_result yetty_ywire_channel_close(struct yetty_ywire_channel *channel)
+{
+    if (!channel || !channel->connection) {
+        return YETTY_ERR(yetty_ycore_void, "ywire_channel_close: NULL channel");
+    }
+    if (channel->kind != YETTY_YWIRE_CHANNEL_KIND_DYNAMIC) {
+        return YETTY_ERR(yetty_ycore_void, "ywire_channel_close: not a dynamic channel");
+    }
+    if (channel->close_requested) {
+        return YETTY_OK_VOID(); /* idempotent */
+    }
+    /* Close is immediate, not graceful: pending outbound is discarded so a
+     * window-blocked channel cannot wedge the teardown. For a graceful end,
+     * send_eof() first and close on the peer's CLOSED/REMOTE_EOF echo. */
+    channel->outbuf_off = channel->outbuf.size;
+    channel->flush_mark = channel->outbuf.size;
+    channel->close_requested = 1;
+    return yetty_ywire_connection_pump_outbound(channel->connection);
+}
+
+int64_t yetty_ywire_channel_send_window(const struct yetty_ywire_channel *channel)
+{
+    return channel ? channel->send_window : 0;
+}
+
+int yetty_ywire_channel_remote_eof(const struct yetty_ywire_channel *channel)
+{
+    return channel ? channel->remote_eof : 1;
+}
+
+size_t yetty_ywire_channel_pending_out(const struct yetty_ywire_channel *channel)
+{
+    if (!channel) {
+        return 0;
+    }
+    return channel->outbuf.size - channel->outbuf_off;
 }
 
 /*===========================================================================

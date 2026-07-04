@@ -25,4 +25,14 @@ if(Python3_Interpreter_FOUND)
         LABELS           "e2e;render;display;slow"
         TIMEOUT          180
         SKIP_RETURN_CODE 77)
+
+    # Generated Python connection facade against the real libyetty_ffi.so
+    # (#439): dynamic channels, flow control, chunking, asyncio driver.
+    # Headless; self-skips when the FFI PIC build tree is absent.
+    add_test(NAME e2e_ffi_connection_smoke
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/ffi-connection-smoke.py)
+    set_tests_properties(e2e_ffi_connection_smoke PROPERTIES
+        LABELS           "e2e;ffi"
+        TIMEOUT          60
+        SKIP_RETURN_CODE 77)
 endif()

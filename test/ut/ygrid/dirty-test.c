@@ -60,8 +60,8 @@ static void feed_box(struct ytest *test, struct yetty_ygrid_grid *grid, float x,
 
     struct yetty_ysdf_box box = {
         .center_x = x, .center_y = y, .half_width = 5, .half_height = 5, .corner_radius = 0};
-    YTEST_REQUIRE_OK(test,
-                     yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, 0, 0xff00ff00u, 0, 0.0f, &box));
+    YTEST_REQUIRE_OK(
+        test, yetty_ydraw_drawable_list_add_cmd_add_box(buf, 0, 0, 0xff00ff00u, 0, 0.0f, &box));
     YTEST_REQUIRE_OK(test, yetty_yfigure_process_bytes(grid_obj(grid),
                                                        yetty_ydraw_drawable_list_data(buf),
                                                        yetty_ydraw_drawable_list_size(buf)));

@@ -47,4 +47,13 @@
  */
 #define YETTY_DCS_YCLASS_RPC 800000
 
+/*
+ * ywire connection-layer channel messages (SSH connection-layer analog).
+ * Bidirectional. args = the 16-byte channel wire header
+ * (msg, channel_id, window, reserved — little-endian u32 each); payload =
+ * DATA chunk bytes (empty for the control messages). See
+ * <yetty/ywire/channel.h> for the message set and window semantics.
+ */
+#define YETTY_DCS_YWIRE_CHANNEL 800001
+
 #endif /* YETTY_YTERMINAL_DCS_CODES_H */

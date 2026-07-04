@@ -34,12 +34,12 @@ static void test_parse_request(struct ytest *test)
 {
     /* [0, msgid=42, channel=0, "run", 7] */
     const uint8_t wire[] = {
-        0x95,                      /* fixarray 5 */
-        0x00,                      /* type = REQUEST */
-        0x2a,                      /* msgid = 42 */
-        0x00,                      /* channel = 0 */
-        0xa3, 'r', 'u', 'n',       /* method "run" */
-        0x07,                      /* params = fixint 7 */
+        0x95,                /* fixarray 5 */
+        0x00,                /* type = REQUEST */
+        0x2a,                /* msgid = 42 */
+        0x00,                /* channel = 0 */
+        0xa3, 'r', 'u', 'n', /* method "run" */
+        0x07,                /* params = fixint 7 */
     };
     size_t consumed = 0;
     struct yetty_rpc_message_result r = yetty_yctl_message_parse(wire, sizeof(wire), &consumed);
@@ -64,11 +64,11 @@ static void test_parse_notification(struct ytest *test)
 {
     /* [2, channel=0, "shutdown", nil] */
     const uint8_t wire[] = {
-        0x94,                                          /* fixarray 4 */
-        0x02,                                          /* type = NOTIFICATION */
-        0x00,                                          /* channel = 0 */
-        0xa8, 's', 'h', 'u', 't', 'd', 'o', 'w', 'n',  /* method "shutdown" */
-        0xc0,                                          /* params = nil */
+        0x94,                                         /* fixarray 4 */
+        0x02,                                         /* type = NOTIFICATION */
+        0x00,                                         /* channel = 0 */
+        0xa8, 's', 'h', 'u', 't', 'd', 'o', 'w', 'n', /* method "shutdown" */
+        0xc0,                                         /* params = nil */
     };
     size_t consumed = 0;
     struct yetty_rpc_message_result r = yetty_yctl_message_parse(wire, sizeof(wire), &consumed);
@@ -128,23 +128,24 @@ static void test_malformed(struct ytest *test)
     size_t consumed = 0;
 
     const uint8_t not_array[] = {0x07}; /* a bare int, not an array */
-    YTEST_CHECK(test, YETTY_IS_ERR(yetty_yctl_message_parse(not_array, sizeof(not_array), &consumed)));
+    YTEST_CHECK(test,
+                YETTY_IS_ERR(yetty_yctl_message_parse(not_array, sizeof(not_array), &consumed)));
 
     const uint8_t empty_array[] = {0x90}; /* fixarray 0 */
-    YTEST_CHECK(test,
-                YETTY_IS_ERR(yetty_yctl_message_parse(empty_array, sizeof(empty_array), &consumed)));
+    YTEST_CHECK(
+        test, YETTY_IS_ERR(yetty_yctl_message_parse(empty_array, sizeof(empty_array), &consumed)));
 
     const uint8_t type_not_int[] = {0x91, 0xa1, 'x'}; /* [ "x" ] */
-    YTEST_CHECK(
-        test, YETTY_IS_ERR(yetty_yctl_message_parse(type_not_int, sizeof(type_not_int), &consumed)));
+    YTEST_CHECK(test, YETTY_IS_ERR(
+                          yetty_yctl_message_parse(type_not_int, sizeof(type_not_int), &consumed)));
 
     const uint8_t short_request[] = {0x93, 0x00, 0x2a, 0x00}; /* request needs 5 elems */
-    YTEST_CHECK(test, YETTY_IS_ERR(
-                          yetty_yctl_message_parse(short_request, sizeof(short_request), &consumed)));
+    YTEST_CHECK(test, YETTY_IS_ERR(yetty_yctl_message_parse(short_request, sizeof(short_request),
+                                                            &consumed)));
 
     const uint8_t unknown_type[] = {0x91, 0x09}; /* [ 9 ] — unknown message type */
-    YTEST_CHECK(test,
-                YETTY_IS_ERR(yetty_yctl_message_parse(unknown_type, sizeof(unknown_type), &consumed)));
+    YTEST_CHECK(test, YETTY_IS_ERR(
+                          yetty_yctl_message_parse(unknown_type, sizeof(unknown_type), &consumed)));
 
     /* [0, 42, 0, 7, nil] — method is an int, not a string */
     const uint8_t bad_method[] = {0x95, 0x00, 0x2a, 0x00, 0x07, 0xc0};
@@ -161,7 +162,8 @@ static void test_partial_frame(struct ytest *test)
     /* fixarray 5 declared, only the type element present. */
     const uint8_t partial[] = {0x95, 0x00};
     size_t consumed = 123;
-    struct yetty_rpc_message_result r = yetty_yctl_message_parse(partial, sizeof(partial), &consumed);
+    struct yetty_rpc_message_result r =
+        yetty_yctl_message_parse(partial, sizeof(partial), &consumed);
     YTEST_REQUIRE_OK(test, r);
     YTEST_CHECK_EQ_SIZE(test, consumed, 0u); /* incomplete → wait for more */
 }
@@ -173,9 +175,20 @@ static void test_streaming(struct ytest *test)
 {
     const uint8_t stream[] = {
         /* [2, 0, "a", nil] */
-        0x94, 0x02, 0x00, 0xa1, 'a', 0xc0,
+        0x94,
+        0x02,
+        0x00,
+        0xa1,
+        'a',
+        0xc0,
         /* [2, 0, "bb", nil] */
-        0x94, 0x02, 0x00, 0xa2, 'b', 'b', 0xc0,
+        0x94,
+        0x02,
+        0x00,
+        0xa2,
+        'b',
+        'b',
+        0xc0,
     };
     size_t off = 0;
 

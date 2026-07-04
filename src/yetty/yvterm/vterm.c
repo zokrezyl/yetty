@@ -1921,9 +1921,9 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_visual_zoom(struct yetty_y
  * disables it; params are the 6 effect parameters (unused ones may be 0). */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_set_post_effect(struct yetty_yclass_object *obj,
-                                                                  uint32_t index, float p0, float p1,
-                                                                  float p2, float p3, float p4,
-                                                                  float p5)
+                                                                  uint32_t index, float p0,
+                                                                  float p1, float p2, float p3,
+                                                                  float p4, float p5)
 {
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm set_post_effect: from_obj");
@@ -1947,9 +1947,9 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_post_effect(struct yetty_y
  * index 0 disables it; p0/p1 are strength and radius/aspect. */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_set_coord_effect(struct yetty_yclass_object *obj,
-                                                                   uint32_t index, float p0, float p1,
-                                                                   float p2, float p3, float p4,
-                                                                   float p5)
+                                                                   uint32_t index, float p0,
+                                                                   float p1, float p2, float p3,
+                                                                   float p4, float p5)
 {
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm set_coord_effect: from_obj");

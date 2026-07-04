@@ -144,8 +144,8 @@ static void add_child(struct ytest *test, struct yetty_yclass_object *container,
 {
     struct yetty_ycore_rectangle rect = {{x, y}, {x + w, y + h}};
     struct yetty_ycore_buffer init = {0};
-    struct yetty_ycore_void_result r = yetty_yfigure_create_child(
-        container, yetty_yfigure_kind_token(STUB_KIND), id, rect, init);
+    struct yetty_ycore_void_result r =
+        yetty_yfigure_create_child(container, yetty_yfigure_kind_token(STUB_KIND), id, rect, init);
     YTEST_REQUIRE_OK(test, r);
 }
 
@@ -179,8 +179,8 @@ static void test_hit_test_empty_and_miss(struct ytest *test)
 
     YTEST_CHECK_EQ_SIZE(test, hit_id(test, container, 10, 10), 0u); /* empty */
 
-    add_child(test, container, 1, 0, 0, 40, 40); /* small corner child */
-    YTEST_CHECK_EQ_SIZE(test, hit_id(test, container, 20, 20), 1u); /* inside */
+    add_child(test, container, 1, 0, 0, 40, 40);                      /* small corner child */
+    YTEST_CHECK_EQ_SIZE(test, hit_id(test, container, 20, 20), 1u);   /* inside */
     YTEST_CHECK_EQ_SIZE(test, hit_id(test, container, 150, 150), 0u); /* outside */
 
     yetty_yfigure_destroy(container);

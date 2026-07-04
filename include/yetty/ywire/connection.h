@@ -32,6 +32,7 @@ extern "C" {
 
 struct yetty_ywire_channel;
 struct yetty_ywire_connection;
+struct yetty_ywire_wire_statemachine;
 
 YETTY_YRESULT_DECLARE(yetty_ywire_connection_ptr, struct yetty_ywire_connection *);
 
@@ -48,9 +49,67 @@ typedef void (*yetty_ywire_resize_cb)(void *user, int width_px, int height_px, i
 struct yetty_ywire_connection_ptr_result yetty_ywire_connection_create(
     struct yetty_yclass_transport_reactor reactor, int compressed);
 
+/* Ships one already-encoded envelope toward the peer. The host terminal wraps
+ * its PTY-master write path in this (same shape as the RPC DCS server's emit
+ * callback). Must write all `n` bytes (blocking as needed). */
+typedef struct yetty_ycore_void_result (*yetty_ywire_connection_writer_fn)(const uint8_t *bytes,
+                                                                           size_t n, void *user);
+
+/* HOST-SIDE (acceptor) attach: run the connection layer over a BORROWED
+ * statemachine — the host terminal's own demux — instead of owning the byte
+ * stream. Registers ONLY the dynamic-channel message handler
+ * (DCS YETTY_DCS_YWIRE_CHANNEL); every other code keeps whatever handler its
+ * owner installed. Outbound envelopes (CLOSE replies, WINDOW_ADJUST grants,
+ * DATA from host-side channel writes) go straight through `writer`.
+ *
+ * Differences from create():
+ *   - acceptor role by default (dynamic ids odd; the client side is the
+ *     initiator);
+ *   - no well-known channels — channel() returns NULL for rpc/input/raw;
+ *   - the reactor seam is inert: fd()/out_fd() return -1, want_write()/
+ *     is_eof() return 0, pump_readable()/enable_raw_mode() fail (the SM's
+ *     owner feeds bytes; process() fires the handler), pump_writable() only
+ *     runs the outbound scheduler;
+ *   - with no accept callback every OPEN is answered with CLOSE — a
+ *     deterministic rejection instead of a silent drop.
+ *
+ * Lifetimes: `sm`, `writer`, and `writer_user` are borrowed and must outlive
+ * the connection; destroy the connection only AFTER the statemachine it was
+ * attached to is destroyed (the SM's registered handler points at it) — the
+ * same contract as the RPC DCS server. */
+struct yetty_ywire_connection_ptr_result yetty_ywire_connection_attach(
+    struct yetty_ywire_wire_statemachine *sm, yetty_ywire_connection_writer_fn writer,
+    void *writer_user, int compressed);
+
 /* The channel for a well-known or dynamic id, or NULL if not open. */
 struct yetty_ywire_channel *yetty_ywire_connection_channel(
     struct yetty_ywire_connection *connection, uint32_t channel_id);
+
+/*===========================================================================
+ * Dynamic channels (SSH CHANNEL_OPEN analog — see channel.h for semantics)
+ *=========================================================================*/
+
+/* Fired during pump when the peer OPENs a channel. Attach sinks/event cb to
+ * `channel` here. Return non-zero to accept; zero refuses (a CLOSE goes back
+ * and the slot is released). With no callback set every OPEN is refused. */
+typedef int (*yetty_ywire_accept_cb)(void *user, struct yetty_ywire_channel *channel);
+
+struct yetty_ycore_void_result yetty_ywire_connection_set_accept_cb(
+    struct yetty_ywire_connection *connection, yetty_ywire_accept_cb cb, void *user);
+
+/* Dynamic-channel id parity. Exactly one peer of a connection must be the
+ * acceptor (odd id offsets); the creator defaults to initiator (even). Call
+ * before the first open_channel(). */
+struct yetty_ycore_void_result yetty_ywire_connection_set_role(
+    struct yetty_ywire_connection *connection, int acceptor);
+
+/* Open a dynamic channel: allocate the next local id, emit OPEN, and return
+ * the channel ready for write()/flush() (optimistic open — a peer rejection
+ * arrives later as a CLOSED event). `initial_recv_window` overrides
+ * YETTY_YWIRE_CHANNEL_WINDOW_DEFAULT for the peer→local direction; 0 keeps the
+ * default. */
+struct yetty_ywire_channel_ptr_result yetty_ywire_connection_open_channel(
+    struct yetty_ywire_connection *connection, uint32_t initial_recv_window);
 
 /*===========================================================================
  * Reactor seam — forwarded down to the transport. Register fd()/out_fd() with

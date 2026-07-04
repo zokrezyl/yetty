@@ -1605,9 +1605,9 @@ static void sm_coro_entry(void *arg)
                      * handler error would be silently lost. */
                     struct yetty_ycore_void_result respawn_res = respawn_handler_coro(hc);
                     if (YETTY_IS_ERR(respawn_res)) {
-                        sm->sm_result = YETTY_ERR(
-                            yetty_ycore_void, "wire: respawn after mid-envelope exit failed",
-                            respawn_res);
+                        sm->sm_result =
+                            YETTY_ERR(yetty_ycore_void,
+                                      "wire: respawn after mid-envelope exit failed", respawn_res);
                         return;
                     }
                     sm->current_handler = NULL;

@@ -49,12 +49,9 @@
 #include <yetty/yimage/yimage-gen.h>
 #include <yetty/yplatform/fs.h>
 #include <yetty/yplatform/paths.h>
-#include <yetty/yplatform/pty.h>
-#include <yetty/yplatform/ycoroutine.h>
 #include <yetty/yplot/yplot-gen.h>
 #include <yetty/yterminal/client-input.h>
 #include <yetty/ytrace/ytrace.h>
-#include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplot/yplot.h>
 
 #include "embedded-assets.h"
@@ -97,14 +94,6 @@
 
 #ifdef YETTY_YGUI_HAS_UV
 #include <uv.h>
-#endif
-
-/* Client mode (the only consumer of these POSIX TTY headers) is gated on
- * YETTY_YGUI_HAS_UV, which is off on Windows — keep the includes off there
- * too so the standalone-only build compiles under MSVC. */
-#ifndef _WIN32
-#include <sys/ioctl.h>
-#include <termios.h>
 #endif
 
 /*=============================================================================
@@ -3080,120 +3069,31 @@ static int on_key(struct yetty_yclass_object *engine, uint32_t key, int mods, vo
 }
 
 /*=============================================================================
- * CLIENT MODE — STDOUT-wrapping pty + stdin poll + SIGWINCH + libuv loop.
+ * CLIENT MODE — a yetty_ywire_connection over the terminal fd pair.
  *
- * This is the boilerplate that bridges a real terminal to ygui. Lives
- * in ygreeter (not in ygui) because it's deployment glue.
+ * The connection's transport (yetty_yclass_transport_pty; the side-channel fd
+ * pair instead when YETTY_YWIRE_SIDE_CHANNEL is set) is the sole owner of
+ * STDIN/STDOUT: it owns terminal raw-mode (the echo-loop fix), the ordered
+ * non-blocking writer, and the fd()/pump() reactor seam the libuv loop
+ * drives. Figure/chrome RPC rides the rpc channel; forwarded mouse + pane
+ * resize arrive on the input channel; raw keystrokes on the raw channel.
+ * Lives in ygreeter (not in ygui) because it's deployment glue.
  *===========================================================================*/
 
 #ifdef YETTY_YGUI_HAS_UV
 
+#include <yetty/yclass/transport-pty.h>
 #include <yetty/ytrace/ytrace.h>
-
-struct stdout_pty {
-    struct yetty_platform_pty base;
-    uv_pipe_t pipe;
-};
-
-struct stdout_write {
-    uv_write_t req;
-    char *data;
-};
-
-static void on_write_done(uv_write_t *req, int status)
-{
-    struct stdout_write *w = (struct stdout_write *)req;
-    if (status != 0) {
-        yerror("ygreeter client: uv_write status=%d (%s)", status, uv_strerror(status));
-    }
-    free(w->data);
-    free(w);
-}
-
-static struct yetty_ycore_size_result stdout_pty_write(struct yetty_platform_pty *self,
-                                                       const char *data, size_t len)
-{
-    struct stdout_pty *p = (struct stdout_pty *)self;
-    if (len == 0) {
-        return YETTY_OK(yetty_ycore_size, 0);
-    }
-    struct stdout_write *w = (struct stdout_write *)calloc(1, sizeof(*w));
-    if (!w) {
-        return YETTY_ERR(yetty_ycore_size, "stdout_pty_write: calloc req");
-    }
-    w->data = (char *)malloc(len);
-    if (!w->data) {
-        free(w);
-        return YETTY_ERR(yetty_ycore_size, "stdout_pty_write: malloc data");
-    }
-    memcpy(w->data, data, len);
-    uv_buf_t buf = uv_buf_init(w->data, (unsigned)len);
-    int rc = uv_write(&w->req, (uv_stream_t *)&p->pipe, &buf, 1, on_write_done);
-    if (rc != 0) {
-        free(w->data);
-        free(w);
-        return YETTY_ERR(yetty_ycore_size, "stdout_pty_write: uv_write submit");
-    }
-    return YETTY_OK(yetty_ycore_size, len);
-}
-
-static struct yetty_ycore_size_result stdout_pty_read(struct yetty_platform_pty *self, char *buf,
-                                                      size_t max_len)
-{
-    (void)self;
-    (void)buf;
-    (void)max_len;
-    return YETTY_OK(yetty_ycore_size, 0);
-}
-
-static struct yetty_ycore_void_result stdout_pty_no_op(struct yetty_platform_pty *self)
-{
-    (void)self;
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result stdout_pty_resize(struct yetty_platform_pty *self,
-                                                        uint32_t cols, uint32_t rows, uint32_t pw,
-                                                        uint32_t ph)
-{
-    (void)self;
-    (void)cols;
-    (void)rows;
-    (void)pw;
-    (void)ph;
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_platform_pty_pipe_source *stdout_pty_pipe_source(struct yetty_platform_pty *s)
-{
-    (void)s;
-    return NULL;
-}
-
-static const struct yetty_platform_pty_ops *stdout_pty_ops_get(void)
-{
-    static const struct yetty_platform_pty_ops ops = {
-        .destroy = stdout_pty_no_op,
-        .read = stdout_pty_read,
-        .write = stdout_pty_write,
-        .resize = stdout_pty_resize,
-        .stop = stdout_pty_no_op,
-        .pipe_source = stdout_pty_pipe_source,
-    };
-    return &ops;
-}
+#include <yetty/ywire/channel.h>
+#include <yetty/ywire/connection.h>
 
 struct client_state {
     uv_loop_t loop;
     uv_poll_t stdin_poll;
     uv_signal_t sigwinch;
     uv_prepare_t prep;
-    struct stdout_pty out;
-    /* Async-delivery PTY shim for stdin — bytes arrive via the libuv
-     * poll callback and get fed into the wire SM with _feed; the SM
-     * itself never reads through this PTY. */
-    struct yetty_platform_pty stdin_pty;
-    struct yetty_ywire_wire_statemachine *wire_sm;
+    struct yetty_yclass_transport_pty *transport; /* sole owner of the fd pair */
+    struct yetty_ywire_connection *conn;          /* multiplexed link */
     struct app *app;
     int running;
 #ifdef YETTY_YGREETER_HAS_CHROME
@@ -3212,148 +3112,18 @@ struct client_state {
 };
 
 /*-----------------------------------------------------------------------------
- * STDIN raw-mode — when the host yetty writes OSC 700000 mouse envelopes
- * to the PTY master, the slave's tty driver in cooked/ECHO mode echoes
- * those bytes back to the master. yetty then re-reads them, sees ESC
- * pretty-printed as "^[" (caret notation), can't parse them as envelopes,
- * and renders the garbage as visible text. cfmakeraw turns ECHO off.
+ * Raw channel sink — bytes outside any envelope are real keyboard input from
+ * the controlling terminal. Forward them to ygui's input decoder verbatim (it
+ * understands CSI arrow sequences + ASCII). Raw-mode ownership (the cooked-tty
+ * echo-loop fix) lives in the connection's transport now.
  *---------------------------------------------------------------------------*/
-static struct termios ygreeter_saved_tty;
-static int ygreeter_tty_fd = -1;       /* fd whose termios we mutated */
-static int ygreeter_tty_owned_fd = -1; /* fd we opened ourselves (close on restore) */
-
-static void ygreeter_tty_restore(void)
-{
-    if (ygreeter_tty_fd >= 0) {
-        tcsetattr(ygreeter_tty_fd, TCSANOW, &ygreeter_saved_tty);
-        ygreeter_tty_fd = -1;
-    }
-    if (ygreeter_tty_owned_fd >= 0) {
-        close(ygreeter_tty_owned_fd);
-        ygreeter_tty_owned_fd = -1;
-    }
-}
-
-/* Disable ECHO+ICANON on the controlling terminal. Critical for any
- * yetty-hosted client: the host writes OSC mouse envelopes to the PTY
- * master, and a cooked-mode slave tty echoes the ESC bytes back as
- * "^[" (ECHOCTL caret notation). The echoed bytes loop into yetty's
- * own master read, and libvterm displays the OSC payload as visible
- * "^[]700000;;<base64>^[\" garbage at the prompt.
- *
- * STDIN may not be the controlling tty in every launch path (login(1)
- * variants, su, redirected stdin). Fall back to /dev/tty so the raw-
- * mode setup still applies even when stdin is a pipe/socket. */
-static int ygreeter_tty_raw(void)
-{
-    int fd = STDIN_FILENO;
-    if (!isatty(fd)) {
-        fd = open("/dev/tty", O_RDWR | O_NOCTTY);
-        if (fd < 0) {
-            return -1;
-        }
-        ygreeter_tty_owned_fd = fd;
-    }
-    if (tcgetattr(fd, &ygreeter_saved_tty) < 0) {
-        goto fail;
-    }
-    struct termios raw = ygreeter_saved_tty;
-    cfmakeraw(&raw);
-    raw.c_cc[VMIN] = 0;
-    raw.c_cc[VTIME] = 0;
-    if (tcsetattr(fd, TCSANOW, &raw) < 0) {
-        goto fail;
-    }
-    ygreeter_tty_fd = fd;
-    atexit(ygreeter_tty_restore);
-    return 0;
-fail:
-    if (ygreeter_tty_owned_fd >= 0) {
-        close(ygreeter_tty_owned_fd);
-        ygreeter_tty_owned_fd = -1;
-    }
-    return -1;
-}
-
-/*-----------------------------------------------------------------------------
- * Stdin PTY shim — placeholder ops the wire SM holds. All async-delivery:
- * bytes arrive via yetty_ywire_wire_statemachine_feed() from libuv's
- * stdin poll. The SM never calls .read.
- *---------------------------------------------------------------------------*/
-static struct yetty_ycore_size_result stdin_pty_read(struct yetty_platform_pty *self, char *buf,
-                                                     size_t n)
-{
-    (void)self;
-    (void)buf;
-    (void)n;
-    return YETTY_OK(yetty_ycore_size, 0);
-}
-static struct yetty_ycore_size_result stdin_pty_write(struct yetty_platform_pty *self,
-                                                      const char *data, size_t n)
-{
-    (void)self;
-    (void)data;
-    return YETTY_OK(yetty_ycore_size, n);
-}
-static struct yetty_ycore_void_result stdin_pty_noop(struct yetty_platform_pty *self)
-{
-    (void)self;
-    return YETTY_OK_VOID();
-}
-static struct yetty_ycore_void_result stdin_pty_resize(struct yetty_platform_pty *self,
-                                                       uint32_t cols, uint32_t rows, uint32_t pw,
-                                                       uint32_t ph)
-{
-    (void)self;
-    (void)cols;
-    (void)rows;
-    (void)pw;
-    (void)ph;
-    return YETTY_OK_VOID();
-}
-static struct yetty_platform_pty_pipe_source *stdin_pty_pipe_source(struct yetty_platform_pty *s)
-{
-    (void)s;
-    return NULL;
-}
-static const struct yetty_platform_pty_ops *stdin_pty_ops_get(void)
-{
-    static const struct yetty_platform_pty_ops ops = {
-        .destroy = stdin_pty_noop,
-        .read = stdin_pty_read,
-        .write = stdin_pty_write,
-        .resize = stdin_pty_resize,
-        .stop = stdin_pty_noop,
-        .pipe_source = stdin_pty_pipe_source,
-    };
-    return &ops;
-}
-
-/*-----------------------------------------------------------------------------
- * Wire SM default sink — bytes outside any OSC envelope are real
- * keyboard input from the controlling terminal. Forward them to ygui's
- * input decoder verbatim (it understands CSI arrow sequences + ASCII).
- *---------------------------------------------------------------------------*/
-static struct yetty_ycore_void_result client_default_sink(void *userdata,
-                                                          struct yetty_ywire_wire_statemachine *sm)
+static void client_raw_sink(void *userdata, const uint8_t *bytes, size_t n)
 {
     struct client_state *cs = (struct client_state *)userdata;
-    uint8_t buf[256];
-    for (;;) {
-        struct yetty_ycore_size_result rr =
-            yetty_ywire_wire_statemachine_read(sm, buf, sizeof(buf));
-        if (YETTY_IS_ERR(rr)) {
-            return YETTY_ERR(yetty_ycore_void, "default_sink: read", rr);
-        }
-        if (rr.value == 0) {
-            /* SM expects this coro to loop forever — never return. */
-            continue;
-        }
-        struct yetty_ycore_void_result fr =
-            yetty_ygui_framework_feed_input(cs->app->engine, (const char *)buf, rr.value);
-        if (YETTY_IS_ERR(fr)) {
-            yetty_ycore_error_destroy(fr.error);
-        }
+    struct yetty_ycore_void_result fr =
+        yetty_ygui_framework_feed_input(cs->app->engine, (const char *)bytes, n);
+    if (YETTY_IS_ERR(fr)) {
+        yetty_ycore_error_destroy(fr.error);
     }
 }
 
@@ -3451,123 +3221,98 @@ static int client_chrome_consume_mouse(struct client_state *cs,
 }
 #endif
 
-static struct yetty_ycore_void_result client_mouse_handler(void *userdata,
-                                                           struct yetty_ywire_wire_statemachine *sm)
-{
-    /* userdata is cs.app (distinct from set_default's &cs — the SM
-     * dedupes handler coros by userdata pointer, so reusing &cs would
-     * make both registrations share a single coro running whichever fn
-     * was registered first). */
-    struct app *app = (struct app *)userdata;
-    for (;;) {
-        struct yetty_client_input_mouse msg;
-        size_t got = 0;
-        while (got < sizeof(msg)) {
-            struct yetty_ycore_size_result rr =
-                yetty_ywire_wire_statemachine_read(sm, ((uint8_t *)&msg) + got, sizeof(msg) - got);
-            if (YETTY_IS_ERR(rr)) {
-                return YETTY_ERR(yetty_ycore_void, "mouse: read", rr);
-            }
-            if (rr.value == 0) {
-                /* Envelope ended — _read returns 0 immediately without
-                 * yielding when terminator_seen + empty. Break out. */
-                break;
-            }
-            got += rr.value;
-        }
-        if (got == sizeof(msg) && msg.magic == YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
-            /* ygreeter's UI (tabs/buttons) gets first refusal; only events it
-             * does not consume fall through to the window chrome — mirrors the
-             * standalone client-first / chrome-fallback ordering, so the chrome
-             * caption never steals a tab click. */
-            int ygui_consumed = 0;
-            switch (msg.kind) {
-            case YETTY_YMGUI_INPUT_MOUSE_BUTTON: {
-                struct yetty_ycore_int_result feed_result = yetty_ygui_framework_feed_mouse_button(
-                    app->engine, msg.x, msg.y, msg.button, msg.pressed, 0);
-                ygui_consumed = YETTY_IS_OK(feed_result) && feed_result.value;
-                if (YETTY_IS_ERR(feed_result)) {
-                    yetty_ycore_error_destroy(feed_result.error);
-                }
-                break;
-            }
-            case YETTY_YMGUI_INPUT_MOUSE_POS: {
-                struct yetty_ycore_int_result feed_result =
-                    yetty_ygui_framework_feed_mouse_motion(app->engine, msg.x, msg.y);
-                ygui_consumed = YETTY_IS_OK(feed_result) && feed_result.value;
-                if (YETTY_IS_ERR(feed_result)) {
-                    yetty_ycore_error_destroy(feed_result.error);
-                }
-                break;
-            }
-            default:
-                break;
-            }
-#ifdef YETTY_YGREETER_HAS_CHROME
-            if (!ygui_consumed) {
-                client_chrome_consume_mouse(app->client, &msg);
-            }
-#endif
-        }
-        /* Yield AFTER each envelope (or partial-read failure) so the SM
-         * scanner can transition out of SCAN_OSC_BODY and dispatch the
-         * next envelope. Without this, _read keeps returning 0 immediately
-         * (terminator_seen + empty out_carry) and the handler coro
-         * burns CPU without ever letting the scanner re-run. */
-        yetty_yplatform_coro_yield();
-    }
-}
-
 /*-----------------------------------------------------------------------------
- * Resize handler — the hosting yetty emits the pane pixel size as an OSC
- * envelope (YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE) on the mouse-subscribe
- * rising edge and on every window resize. Over the telnet/guest transport
- * (--temu / --qemu) this is the ONLY size signal — TIOCGWINSZ carries no
- * pixels there — so without applying it the framework stays at its 800x600
- * default and renders in a small corner. Apply it to the viewport.
+ * Input channel sink — the hosting yetty forwards pointer events and the pane
+ * pixel size as client-input OSC envelopes; the connection demuxes them onto
+ * the input channel and fires this sink once per decoded envelope.
+ *
+ * Resize matters beyond SIGWINCH: over the telnet/guest transport
+ * (--temu / --qemu) the RESIZE envelope is the ONLY size signal — TIOCGWINSZ
+ * carries no pixels there — so without applying it the framework stays at its
+ * 800x600 default and renders in a small corner.
  *---------------------------------------------------------------------------*/
-static struct yetty_ycore_void_result client_resize_handler(
-    void *userdata, struct yetty_ywire_wire_statemachine *sm)
+static void client_input_sink(void *userdata, int wire_code, const uint8_t *args, size_t args_len,
+                              const uint8_t *payload, size_t payload_len)
 {
-    /* userdata is &cs.app (a struct app **) — distinct from cs.app (mouse
-     * handler) and &cs (default sink) so the SM spawns a separate coro. */
-    struct app *app = *(struct app **)userdata;
-    for (;;) {
-        struct yetty_client_input_resize msg;
-        size_t got = 0;
-        while (got < sizeof(msg)) {
-            struct yetty_ycore_size_result rr =
-                yetty_ywire_wire_statemachine_read(sm, ((uint8_t *)&msg) + got, sizeof(msg) - got);
-            if (YETTY_IS_ERR(rr)) {
-                return YETTY_ERR(yetty_ycore_void, "resize: read", rr);
-            }
-            if (rr.value == 0) {
-                break;
-            }
-            got += rr.value;
+    (void)args;
+    (void)args_len;
+    struct client_state *cs = (struct client_state *)userdata;
+    struct app *app = cs->app;
+
+    if (wire_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE ||
+        wire_code == YETTY_OSC_SC_CLIENT_INPUT_MOUSE) {
+        if (payload_len < sizeof(struct yetty_client_input_mouse)) {
+            return;
         }
-        if (got == sizeof(msg) && msg.magic == YETTY_CLIENT_INPUT_RESIZE_MAGIC &&
-            msg.width > 0.0f && msg.height > 0.0f) {
-            struct yetty_ycore_void_result r =
-                yetty_ygui_framework_set_viewport(app->engine, msg.width, msg.height);
-            if (YETTY_IS_ERR(r)) {
-                yetty_ycore_error_destroy(r.error);
+        const struct yetty_client_input_mouse *msg =
+            (const struct yetty_client_input_mouse *)payload;
+        if (msg->magic != YETTY_CLIENT_INPUT_MOUSE_MAGIC) {
+            return;
+        }
+        /* ygreeter's UI (tabs/buttons) gets first refusal; only events it
+         * does not consume fall through to the window chrome — mirrors the
+         * standalone client-first / chrome-fallback ordering, so the chrome
+         * caption never steals a tab click. */
+        int ygui_consumed = 0;
+        switch (msg->kind) {
+        case YETTY_YMGUI_INPUT_MOUSE_BUTTON: {
+            struct yetty_ycore_int_result feed_result = yetty_ygui_framework_feed_mouse_button(
+                app->engine, msg->x, msg->y, msg->button, msg->pressed, 0);
+            ygui_consumed = YETTY_IS_OK(feed_result) && feed_result.value;
+            if (YETTY_IS_ERR(feed_result)) {
+                yetty_ycore_error_destroy(feed_result.error);
             }
-            yetty_ygui_framework_mark_dirty(app->engine);
+            break;
+        }
+        case YETTY_YMGUI_INPUT_MOUSE_POS: {
+            struct yetty_ycore_int_result feed_result =
+                yetty_ygui_framework_feed_mouse_motion(app->engine, msg->x, msg->y);
+            ygui_consumed = YETTY_IS_OK(feed_result) && feed_result.value;
+            if (YETTY_IS_ERR(feed_result)) {
+                yetty_ycore_error_destroy(feed_result.error);
+            }
+            break;
+        }
+        default:
+            break;
+        }
 #ifdef YETTY_YGREETER_HAS_CHROME
-            /* Event-loop coroutine boundary: a transient chrome-sync failure
-             * must not kill the resize handler, so surface it to the trace log
-             * and free the chain rather than tearing the coro down. */
-            struct yetty_ycore_void_result chrome_sync_result =
-                client_chrome_sync(app->client, msg.width, msg.height);
-            if (YETTY_IS_ERR(chrome_sync_result)) {
-                ywarn("ygreeter client: chrome sync (resize) failed: %s",
-                      chrome_sync_result.error.msg);
-                yetty_ycore_error_destroy(chrome_sync_result.error);
-            }
-#endif
+        if (!ygui_consumed) {
+            client_chrome_consume_mouse(app->client, msg);
         }
-        yetty_yplatform_coro_yield();
+#else
+        (void)ygui_consumed;
+#endif
+        return;
+    }
+
+    if (wire_code == YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE ||
+        wire_code == YETTY_OSC_SC_CLIENT_INPUT_RESIZE) {
+        if (payload_len < sizeof(struct yetty_client_input_resize)) {
+            return;
+        }
+        const struct yetty_client_input_resize *msg =
+            (const struct yetty_client_input_resize *)payload;
+        if (msg->magic != YETTY_CLIENT_INPUT_RESIZE_MAGIC || msg->width <= 0.0f ||
+            msg->height <= 0.0f) {
+            return;
+        }
+        struct yetty_ycore_void_result r =
+            yetty_ygui_framework_set_viewport(app->engine, msg->width, msg->height);
+        if (YETTY_IS_ERR(r)) {
+            yetty_ycore_error_destroy(r.error);
+        }
+        yetty_ygui_framework_mark_dirty(app->engine);
+#ifdef YETTY_YGREETER_HAS_CHROME
+        /* Event-loop callback boundary: a transient chrome-sync failure must
+         * not kill input handling — surface it to the trace log and move on. */
+        struct yetty_ycore_void_result chrome_sync_result =
+            client_chrome_sync(app->client, msg->width, msg->height);
+        if (YETTY_IS_ERR(chrome_sync_result)) {
+            ywarn("ygreeter client: chrome sync (resize) failed: %s", chrome_sync_result.error.msg);
+            yetty_ycore_error_destroy(chrome_sync_result.error);
+        }
+#endif
     }
 }
 
@@ -3579,22 +3324,17 @@ static struct yetty_ycore_void_result client_resize_handler(
  *---------------------------------------------------------------------------*/
 static struct yetty_ycore_void_result client_enable_mouse_forwarding(struct client_state *cs)
 {
+    /* The raw channel tmux-wraps verbatim control bytes on flush, so the
+     * card-mouse enable survives a multiplexer. */
+    struct yetty_ywire_channel *raw =
+        yetty_ywire_connection_channel(cs->conn, YETTY_YWIRE_CHANNEL_RAW);
+    if (!raw) {
+        return YETTY_ERR(yetty_ycore_void, "client_enable_mouse_forwarding: no raw channel");
+    }
     static const char enable[] = "\033[?1500h\033[?1501h";
-    /* tmux-wrap so the card-mouse enable survives a multiplexer (tmux drops
-     * unknown private DEC modes otherwise). Verbatim when not under tmux. */
-    struct yetty_ycore_buffer seq = {0};
-    struct yetty_ycore_void_result wrap = yetty_ywire_tmux_wrap(enable, sizeof(enable) - 1, &seq);
-    if (YETTY_IS_ERR(wrap)) {
-        yetty_ycore_buffer_destroy(&seq);
-        return YETTY_ERR(yetty_ycore_void, "client_enable_mouse_forwarding: wrap", wrap);
-    }
-    struct yetty_ycore_size_result wr =
-        cs->out.base.ops->write(&cs->out.base, (const char *)seq.data, seq.size);
-    yetty_ycore_buffer_destroy(&seq);
-    if (YETTY_IS_ERR(wr)) {
-        return YETTY_ERR(yetty_ycore_void, "client_enable_mouse_forwarding: write", wr);
-    }
-    return YETTY_OK_VOID();
+    struct yetty_ycore_size_result wr = yetty_ywire_channel_write(raw, enable, sizeof(enable) - 1);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wr, "client_enable_mouse_forwarding: write");
+    return yetty_ywire_channel_flush(raw);
 }
 
 static void client_stop(struct app *app)
@@ -3604,65 +3344,71 @@ static void client_stop(struct app *app)
     }
 }
 
+/* Drain any queued outbound bytes (non-blocking). */
+static void client_pump_out(struct client_state *cs)
+{
+    struct yetty_ycore_size_result r = yetty_ywire_connection_pump_writable(cs->conn);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
+}
+
 static void client_stdin_cb(uv_poll_t *handle, int status, int events)
 {
     struct client_state *cs = (struct client_state *)handle->data;
     if (status < 0 || !(events & UV_READABLE)) {
         return;
     }
-    char buf[1024];
-    ssize_t n = read(STDIN_FILENO, buf, sizeof(buf));
-    if (n > 0) {
-        /* Push bytes into the wire SM. Envelopes (mouse / key / resize
-         * forwarded by the hosting yetty) dispatch to their registered
-         * handlers; non-envelope bytes (real keystrokes typed at the
-         * tty) flow through the default sink to framework_feed_input. */
-        if (cs->wire_sm) {
-            yetty_ywire_wire_statemachine_feed(cs->wire_sm, buf, (size_t)n);
-            struct yetty_ycore_void_result pr = yetty_ywire_wire_statemachine_process(cs->wire_sm);
-            if (YETTY_IS_ERR(pr)) {
-                yetty_ycore_error_destroy(pr.error);
-            }
-        } else {
-            struct yetty_ycore_void_result r =
-                yetty_ygui_framework_feed_input(cs->app->engine, buf, (size_t)n);
-            if (YETTY_IS_ERR(r)) {
-                yetty_ycore_error_destroy(r.error);
-            }
-        }
-    } else if (n == 0 && !isatty(STDIN_FILENO)) {
-        /* Real EOF only when stdin is not a tty. With raw mode VMIN=0
-         * VTIME=0, read() returns 0 routinely when no data is available. */
+    /* The connection is the single reader: it reads the fd, demuxes, and
+     * routes each lane to its channel — rpc bytes buffer for the transport
+     * adapter, forwarded mouse/resize fires the input sink, raw keystrokes
+     * fire the raw sink. */
+    struct yetty_ycore_size_result r = yetty_ywire_connection_pump_readable(cs->conn);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
+    client_pump_out(cs);
+    if (yetty_ywire_connection_is_eof(cs->conn)) {
         cs->running = 0;
     }
 }
 
-static void client_pickup_winsz(struct client_state *cs)
+/* Resize callback — the connection reads TIOCGWINSZ and hands us the geometry;
+ * inject it as the framework viewport (pixel fields are 0 over transports that
+ * report no pixel size — the RESIZE envelope covers those). */
+static void client_resize_cb(void *user, int width_px, int height_px, int cols, int rows)
 {
-    struct winsize ws;
-    if (ioctl(STDIN_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_xpixel > 0 && ws.ws_ypixel > 0) {
-        struct yetty_ycore_void_result r = yetty_ygui_framework_set_viewport(
-            cs->app->engine, (float)ws.ws_xpixel, (float)ws.ws_ypixel);
-        if (YETTY_IS_ERR(r)) {
-            yetty_ycore_error_destroy(r.error);
-        }
-#ifdef YETTY_YGREETER_HAS_CHROME
-        /* uv signal/callback boundary — surface + free, don't swallow. */
-        struct yetty_ycore_void_result chrome_sync_result =
-            client_chrome_sync(cs, (float)ws.ws_xpixel, (float)ws.ws_ypixel);
-        if (YETTY_IS_ERR(chrome_sync_result)) {
-            yetty_ycore_error_print(stderr, "ygreeter client: chrome sync (winsz)",
-                                    chrome_sync_result.error);
-            yetty_ycore_error_destroy(chrome_sync_result.error);
-        }
-#endif
+    (void)cols;
+    (void)rows;
+    struct client_state *cs = (struct client_state *)user;
+    if (width_px <= 0 || height_px <= 0) {
+        return;
     }
+    struct yetty_ycore_void_result r =
+        yetty_ygui_framework_set_viewport(cs->app->engine, (float)width_px, (float)height_px);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
+#ifdef YETTY_YGREETER_HAS_CHROME
+    /* uv signal/callback boundary — surface + free, don't swallow. */
+    struct yetty_ycore_void_result chrome_sync_result =
+        client_chrome_sync(cs, (float)width_px, (float)height_px);
+    if (YETTY_IS_ERR(chrome_sync_result)) {
+        yetty_ycore_error_print(stderr, "ygreeter client: chrome sync (winsz)",
+                                chrome_sync_result.error);
+        yetty_ycore_error_destroy(chrome_sync_result.error);
+    }
+#endif
 }
 
 static void client_sigwinch_cb(uv_signal_t *handle, int signum)
 {
     (void)signum;
-    client_pickup_winsz((struct client_state *)handle->data);
+    struct client_state *cs = (struct client_state *)handle->data;
+    struct yetty_ycore_void_result r = yetty_ywire_connection_pickup_winsize(cs->conn);
+    if (YETTY_IS_ERR(r)) {
+        yetty_ycore_error_destroy(r.error);
+    }
 }
 
 static void client_prep_cb(uv_prepare_t *handle)
@@ -3695,6 +3441,7 @@ static void client_prep_cb(uv_prepare_t *handle)
         }
 #endif
     }
+    client_pump_out(cs);
     if (!cs->running) {
         uv_stop(handle->loop);
     }
@@ -3708,18 +3455,44 @@ static void client_close_cb(uv_handle_t *h)
 static int run_client_mode(void)
 {
     struct client_state cs = {0};
-    /* Raw mode BEFORE any write — otherwise the first OSC envelope we
-     * emit gets echoed back by the slave tty driver and ends up rendered
-     * as visible "^[" text in the host yetty's display. */
-    ygreeter_tty_raw();
-    if (uv_loop_init(&cs.loop) != 0) {
-        fprintf(stderr, "ygreeter client: uv_loop_init failed\n");
+
+    /* The connection's transport is the sole owner of STDIN/STDOUT (or of the
+     * side-channel fd pair when YETTY_YWIRE_SIDE_CHANNEL is set). Raw mode runs
+     * BEFORE any write — otherwise the first OSC envelope we emit gets echoed
+     * back by the slave tty driver and ends up rendered as visible "^[" text
+     * in the host yetty's display. destroy restores the termios. */
+    struct yetty_yclass_transport_pty_ptr_result tr =
+        yetty_yclass_transport_pty_create_from_env(STDIN_FILENO, STDOUT_FILENO);
+    if (YETTY_IS_ERR(tr)) {
+        yetty_ycore_error_print(stderr, "ygreeter client: transport create", tr.error);
+        yetty_ycore_error_destroy(tr.error);
         return 1;
     }
-    cs.out.base.ops = stdout_pty_ops_get();
-    if (uv_pipe_init(&cs.loop, &cs.out.pipe, 0) != 0 ||
-        uv_pipe_open(&cs.out.pipe, STDOUT_FILENO) != 0) {
-        fprintf(stderr, "ygreeter client: stdout pipe init failed\n");
+    cs.transport = tr.value;
+    {
+        struct yetty_ycore_void_result raw_res =
+            yetty_yclass_transport_pty_enable_raw_mode(cs.transport);
+        if (YETTY_IS_ERR(raw_res)) {
+            ywarn("ygreeter client: enable_raw_mode failed: %s", raw_res.error.msg);
+            yetty_ycore_error_destroy(raw_res.error);
+        }
+    }
+    {
+        struct yetty_ywire_connection_ptr_result cr = yetty_ywire_connection_create(
+            yetty_yclass_transport_pty_reactor(cs.transport), /*compressed=*/1);
+        if (YETTY_IS_ERR(cr)) {
+            yetty_ycore_error_print(stderr, "ygreeter client: connection_create", cr.error);
+            yetty_ycore_error_destroy(cr.error);
+            struct yetty_ycore_void_result td = yetty_yclass_transport_pty_destroy(cs.transport);
+            if (YETTY_IS_ERR(td)) {
+                yetty_ycore_error_destroy(td.error);
+            }
+            return 1;
+        }
+        cs.conn = cr.value;
+    }
+    if (uv_loop_init(&cs.loop) != 0) {
+        fprintf(stderr, "ygreeter client: uv_loop_init failed\n");
         return 1;
     }
 
@@ -3740,18 +3513,26 @@ static int run_client_mode(void)
     cs.running = 1;
 
 #ifdef YETTY_YGREETER_HAS_CHROME
-    /* Attach to the hosting yetty's root figure container over the yclass-RPC
-     * DCS transport, so the window chrome (backdrop + caption) can be driven
-     * onto the host's pane via the typed stubs. read_fd = our stdin (RPC
-     * responses from the terminal), write_fd = our stdout (RPC requests to the
-     * terminal); compressed=1 (base64+lz4). The attach handshake reads stdin
-     * synchronously ONCE — it MUST run here, before libuv's stdin poll takes
+    /* Attach to the hosting yetty's root figure container over the connection's
+     * rpc channel (the yclass RPC session rides a channel-backed transport
+     * adapter — nothing but the connection ever touches the fds), so the window
+     * chrome (backdrop + caption) can be driven onto the host's pane via the
+     * typed stubs. The attach handshake reads the fd synchronously through the
+     * connection's blocking pump — it MUST run here, before libuv's poll takes
      * the fd over below. The chrome host itself is created lazily once we know
-     * the pane pixel size (client_chrome_sync, driven from the resize handler /
-     * winsize pickup). */
+     * the pane pixel size (client_chrome_sync, driven from the resize path). */
     {
-        struct yetty_yfigure_producer_session_ptr_result session_result =
-            yetty_yfigure_producer_attach(STDIN_FILENO, STDOUT_FILENO, /*compressed=*/1);
+        struct yetty_ywire_channel *rpc_channel =
+            yetty_ywire_connection_channel(cs.conn, YETTY_YWIRE_CHANNEL_RPC);
+        struct yetty_yfigure_producer_session_ptr_result session_result;
+        struct yetty_yclass_transport_ptr_result rpc_transport =
+            yetty_ywire_channel_transport(rpc_channel);
+        if (YETTY_IS_OK(rpc_transport)) {
+            session_result = yetty_yfigure_producer_attach_transport(rpc_transport.value);
+        } else {
+            session_result = YETTY_ERR(yetty_yfigure_producer_session_ptr,
+                                       "ygreeter client: rpc channel transport", rpc_transport);
+        }
         if (YETTY_IS_OK(session_result)) {
             cs.chrome_session = session_result.value;
             cs.chrome_container = yetty_yfigure_producer_session_container(cs.chrome_session);
@@ -3781,41 +3562,27 @@ static int run_client_mode(void)
         return 1;
     }
 
-    /* Wire SM on stdin — parses OSC envelopes the hosting yetty pushes
-     * us (mouse/key/resize), with a default sink for verbatim keystrokes. */
-    cs.stdin_pty.ops = stdin_pty_ops_get();
-    struct yetty_ywire_wire_statemachine_ptr_result smr =
-        yetty_ywire_wire_statemachine_create(&cs.stdin_pty);
-    if (YETTY_IS_ERR(smr)) {
-        yetty_ycore_error_print(stderr, "ygreeter client: wire_sm_create", smr.error);
-        yetty_ycore_error_destroy(smr.error);
-        return 1;
-    }
-    cs.wire_sm = smr.value;
+    /* Route inbound lanes: raw keystrokes → input decoder; forwarded
+     * mouse/resize envelopes → the input sink; TIOCGWINSZ geometry → the
+     * resize callback. The connection's demux replaces the hand-rolled wire
+     * SM + per-envelope coroutine handlers this file used to carry. */
     {
-        struct yetty_ycore_void_result rd =
-            yetty_ywire_wire_statemachine_set_default(cs.wire_sm, client_default_sink, &cs);
-        if (YETTY_IS_ERR(rd)) {
-            yetty_ycore_error_destroy(rd.error);
+        struct yetty_ywire_channel *raw =
+            yetty_ywire_connection_channel(cs.conn, YETTY_YWIRE_CHANNEL_RAW);
+        struct yetty_ywire_channel *input =
+            yetty_ywire_connection_channel(cs.conn, YETTY_YWIRE_CHANNEL_INPUT);
+        struct yetty_ycore_void_result rs =
+            yetty_ywire_channel_set_raw_sink(raw, client_raw_sink, &cs);
+        if (YETTY_IS_ERR(rs)) {
+            yetty_ycore_error_destroy(rs.error);
         }
-    }
-    {
-        /* Distinct userdata from set_default — see comment in
-         * client_mouse_handler above. cs.app is a different pointer than
-         * &cs, so get_or_spawn_handler_coro creates a separate coro. */
-        struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
-            cs.wire_sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE,
-            /*has_args=*/1, client_mouse_handler, cs.app);
-        if (YETTY_IS_ERR(rr)) {
-            yetty_ycore_error_destroy(rr.error);
+        struct yetty_ycore_void_result is =
+            yetty_ywire_channel_set_envelope_sink(input, client_input_sink, &cs);
+        if (YETTY_IS_ERR(is)) {
+            yetty_ycore_error_destroy(is.error);
         }
-    }
-    {
-        /* Pane pixel size from the host. Distinct userdata (&cs.app) so the
-         * SM gives this its own handler coro, separate from mouse + sink. */
-        struct yetty_ycore_void_result rr = yetty_ywire_wire_statemachine_register(
-            cs.wire_sm, YETTY_YWIRE_ENVELOPE_OSC, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE,
-            /*has_args=*/1, client_resize_handler, &cs.app);
+        struct yetty_ycore_void_result rr =
+            yetty_ywire_connection_set_resize_cb(cs.conn, client_resize_cb, &cs);
         if (YETTY_IS_ERR(rr)) {
             yetty_ycore_error_destroy(rr.error);
         }
@@ -3829,8 +3596,13 @@ static int run_client_mode(void)
         }
     }
 
-    client_pickup_winsz(&cs);
-    if (uv_poll_init(&cs.loop, &cs.stdin_poll, STDIN_FILENO) == 0) {
+    {
+        struct yetty_ycore_void_result wr = yetty_ywire_connection_pickup_winsize(cs.conn);
+        if (YETTY_IS_ERR(wr)) {
+            yetty_ycore_error_destroy(wr.error);
+        }
+    }
+    if (uv_poll_init(&cs.loop, &cs.stdin_poll, yetty_ywire_connection_fd(cs.conn)) == 0) {
         cs.stdin_poll.data = &cs;
         uv_poll_start(&cs.stdin_poll, UV_READABLE, client_stdin_cb);
     }
@@ -3872,22 +3644,25 @@ static int run_client_mode(void)
      * modes 1500/1501 live in the host yetty's terminal state, not ours —
      * if we leave them set, the shell that reclaims this pane keeps
      * receiving OSC mouse envelopes, and its cooked-mode tty echoes the
-     * ESC bytes back as visible "^[" garbage. A blocking write straight to
-     * the fd: the uv loop has stopped, so the async stdout pipe can no
-     * longer flush, but the bytes still sit in the PTY for yetty to parse
-     * after we're gone. */
+     * ESC bytes back as visible "^[" garbage. The raw-channel flush queues
+     * the (tmux-wrapped) bytes; the loop has stopped, so force them onto the
+     * wire with the transport's blocking flush. */
     {
         static const char disable_fwd[] = "\033[?1500l\033[?1501l";
-        struct yetty_ycore_buffer seq = {0};
-        struct yetty_ycore_void_result wrap_result =
-            yetty_ywire_tmux_wrap(disable_fwd, sizeof(disable_fwd) - 1, &seq);
-        if (YETTY_IS_OK(wrap_result)) {
-            ssize_t fwd_n = write(STDOUT_FILENO, (const char *)seq.data, seq.size);
-            (void)fwd_n;
+        struct yetty_ywire_channel *raw =
+            yetty_ywire_connection_channel(cs.conn, YETTY_YWIRE_CHANNEL_RAW);
+        struct yetty_ycore_size_result fwd_write =
+            yetty_ywire_channel_write(raw, disable_fwd, sizeof(disable_fwd) - 1);
+        if (YETTY_IS_ERR(fwd_write)) {
+            teardown_result = yetty_ycore_void_chain(
+                teardown_result,
+                (struct yetty_ycore_void_result){.ok = 0, .error = fwd_write.error});
         } else {
-            teardown_result = yetty_ycore_void_chain(teardown_result, wrap_result);
+            teardown_result =
+                yetty_ycore_void_chain(teardown_result, yetty_ywire_channel_flush(raw));
         }
-        yetty_ycore_buffer_destroy(&seq);
+        teardown_result = yetty_ycore_void_chain(
+            teardown_result, yetty_yclass_transport_pty_flush_blocking(cs.transport));
     }
 
     /* Tell the host to destroy our remote figure containers, otherwise it
@@ -3904,21 +3679,17 @@ static int run_client_mode(void)
     uv_close((uv_handle_t *)&cs.stdin_poll, client_close_cb);
     uv_close((uv_handle_t *)&cs.sigwinch, client_close_cb);
     uv_close((uv_handle_t *)&cs.prep, client_close_cb);
-    uv_close((uv_handle_t *)&cs.out.pipe, client_close_cb);
     uv_run(&cs.loop, UV_RUN_NOWAIT);
 
-    if (cs.wire_sm) {
-        teardown_result = yetty_ycore_void_chain(teardown_result,
-                                                 yetty_ywire_wire_statemachine_destroy(cs.wire_sm));
-        cs.wire_sm = NULL;
-    }
     teardown_result =
         yetty_ycore_void_chain(teardown_result, yetty_ygui_framework_destroy(app.engine));
 #ifdef YETTY_YGREETER_HAS_CHROME
     /* Every figure clear (chrome delete_child + framework clear_all) has now
      * been emitted onto the host, and the framework is torn down — so it is
      * finally safe to detach the shared RPC session, which frees the root-
-     * container proxy and destroys the transport. Must be the LAST use of it. */
+     * container proxy and destroys the channel-backed transport adapter. Must
+     * be the LAST use of the session, and must precede connection_destroy
+     * (the adapter borrows the rpc channel). */
     if (cs.chrome_session) {
         teardown_result = yetty_ycore_void_chain(teardown_result,
                                                  yetty_yfigure_producer_detach(cs.chrome_session));
@@ -3926,8 +3697,17 @@ static int run_client_mode(void)
         cs.chrome_container = NULL;
     }
 #endif
+    /* The figure clears above were queued through the non-blocking writer —
+     * force the tail onto the wire before the transport goes away. */
+    teardown_result = yetty_ycore_void_chain(
+        teardown_result, yetty_yclass_transport_pty_flush_blocking(cs.transport));
+    /* Connection before transport: the connection borrows the transport's
+     * reactor view. Destroying the transport restores the terminal raw mode. */
+    teardown_result =
+        yetty_ycore_void_chain(teardown_result, yetty_ywire_connection_destroy(cs.conn));
+    teardown_result =
+        yetty_ycore_void_chain(teardown_result, yetty_yclass_transport_pty_destroy(cs.transport));
     uv_loop_close(&cs.loop);
-    ygreeter_tty_restore();
 
     /* Root of the client path: surface the whole teardown chain to the trace
      * log (stderr would pollute the host PTY) and free it. */

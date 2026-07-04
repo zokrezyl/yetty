@@ -147,8 +147,8 @@ static void test_kitchen_sink_deterministic(struct ytest *test)
     size_t sb = yetty_ydraw_drawable_list_size(b);
     YTEST_CHECK(test, sa > 0);
     YTEST_REQUIRE_EQ_SIZE(test, sa, sb);
-    YTEST_CHECK_MEM_EQ(test, yetty_ydraw_drawable_list_data(a),
-                       yetty_ydraw_drawable_list_data(b), sa);
+    YTEST_CHECK_MEM_EQ(test, yetty_ydraw_drawable_list_data(a), yetty_ydraw_drawable_list_data(b),
+                       sa);
 
     /* And it is structurally rich. */
     const uint8_t *data = yetty_ydraw_drawable_list_data(a);

@@ -30,6 +30,7 @@
 #include <yetty/yterminal/dcs-codes.h>
 #include <yetty/yterminal/dcs-codes.h>
 #include <yetty/yclass/rpc-dcs-server.h>
+#include <yetty/ywire/connection.h>
 #include <yetty/ywire/wire-statemachine.h>
 #include <yetty/yplatform/ycoroutine.h>
 #include <yetty/ydraw-factory/composite-factory.h>
@@ -135,6 +136,11 @@ struct yetty_yterminal_terminal {
     /* yclass-RPC DCS server state attached to `sm`. The SM borrows it
      * (handler userdata); we own it and free it after the SM is gone. */
     struct yetty_yclass_rpc_dcs_server *dcs_rpc_server;
+
+    /* Host-side connection layer attached to `sm` (acceptor of dynamic ywire
+     * channels opened by in-pane clients). Same borrow contract as the RPC
+     * server: destroyed only after the SM is gone. */
+    struct yetty_ywire_connection *channel_host;
 
     /* Distinct userdata for the content-inset wire handler. The SM dedups
      * handler coroutines by userdata pointer (one coro per pointer, running
@@ -2144,6 +2150,22 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_create(
     }
     ydebug("terminal_create: yclass-rpc DCS handler registered (code=%d)", YETTY_DCS_YCLASS_RPC);
 
+    /* Host-side connection layer — the acceptor of dynamic ywire channels
+     * (DCS YETTY_DCS_YWIRE_CHANNEL) opened by in-pane clients. Rides the same
+     * statemachine and the same PTY-master writer as the RPC server. With no
+     * accept callback registered every OPEN is answered with CLOSE, so a
+     * client probing for a host service gets a deterministic rejection
+     * instead of a credit-starved hang; in-terminal services claim channels
+     * via yetty_yterminal_terminal_channel_host() + set_accept_cb. */
+    {
+        struct yetty_ywire_connection_ptr_result hr = yetty_ywire_connection_attach(
+            terminal->sm, terminal_dcs_emit_response, terminal, /*compressed=*/0);
+        YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, hr,
+                            "terminal_create: connection_attach for YWIRE_CHANNEL");
+        terminal->channel_host = hr.value;
+    }
+    ydebug("terminal_create: ywire channel host registered (code=%d)", YETTY_DCS_YWIRE_CHANNEL);
+
     /* Designate the root container as this server's root object so remote
      * producers (subprocess figure tools) can obtain a proxy to it via
      * RPC_OP_GET_ROOT and drive it with the typed yclass stubs. rpc_init
@@ -2259,6 +2281,22 @@ struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
      * safe to free now that the SM is destroyed. */
     yetty_yclass_rpc_dcs_server_destroy(terminal->dcs_rpc_server);
     terminal->dcs_rpc_server = NULL;
+
+    /* Same borrow contract for the channel host (attach-mode connection —
+     * it does not own the SM, so destroying it here only frees channels). */
+    {
+        struct yetty_ycore_void_result r = yetty_ywire_connection_destroy(terminal->channel_host);
+        if (YETTY_IS_ERR(r)) {
+            yerror("terminal_destroy: channel host destroy failed: %s", r.error.msg);
+            if (!have_err) {
+                first_err = r;
+                have_err = true;
+            } else {
+                yetty_ycore_error_destroy(r.error);
+            }
+        }
+        terminal->channel_host = NULL;
+    }
 
     if (terminal->context.pty && terminal->context.pty->ops &&
         terminal->context.pty->ops->destroy) {
@@ -2483,6 +2521,12 @@ struct yetty_ywire_wire_statemachine *yetty_yterminal_terminal_wire_sm(
     struct yetty_yterminal_terminal *terminal)
 {
     return terminal ? terminal->sm : NULL;
+}
+
+struct yetty_ywire_connection *yetty_yterminal_terminal_channel_host(
+    struct yetty_yterminal_terminal *terminal)
+{
+    return terminal ? terminal->channel_host : NULL;
 }
 
 static struct yetty_ycore_void_result terminal_view_destroy(struct yetty_yui_view *view)

@@ -52,8 +52,7 @@ static const struct yetty_yvterm_text_cell *cell_at(struct ytest *test,
                                                     struct yetty_yclass_object *grid, uint32_t row,
                                                     uint32_t col)
 {
-    struct yetty_yvterm_text_cell_const_ptr_result cells =
-        yetty_yvterm_grid_line_cells(grid, row);
+    struct yetty_yvterm_text_cell_const_ptr_result cells = yetty_yvterm_grid_line_cells(grid, row);
     YTEST_REQUIRE_OK(test, cells);
     YTEST_REQUIRE_NOT_NULL(test, cells.value);
     return &cells.value[col];
@@ -130,7 +129,9 @@ static void test_wide_glyph(struct ytest *test)
     uint32_t row, col;
 
     /* U+4E00 (一), East-Asian wide, UTF-8 E4 B8 80. */
-    feeds(test, grid, "\xe4\xb8\x80" "Z");
+    feeds(test, grid,
+          "\xe4\xb8\x80"
+          "Z");
     const struct yetty_yvterm_text_cell *head = cell_at(test, grid, 0, 0);
     const struct yetty_yvterm_text_cell *spill = cell_at(test, grid, 0, 1);
     YTEST_CHECK_EQ_INT(test, head->codepoint, 0x4E00);

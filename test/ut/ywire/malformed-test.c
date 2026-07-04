@@ -42,17 +42,16 @@ static struct yetty_ycore_void_result on_env(void *userdata, enum yetty_ywire_en
     cap->calls++;
     cap->code = code;
     cap->payload_len = payload_len;
-    cap->payload_ok = (payload_len == cap->expect_len) &&
-                      (payload_len == 0 ||
-                       (cap->expect && memcmp(payload, cap->expect, payload_len) == 0));
+    cap->payload_ok =
+        (payload_len == cap->expect_len) &&
+        (payload_len == 0 || (cap->expect && memcmp(payload, cap->expect, payload_len) == 0));
     return YETTY_OK_VOID();
 }
 
 static struct yetty_ywire_wire_statemachine *make_sm(struct ytest *test, struct cap *cap,
                                                      int has_args)
 {
-    struct yetty_ywire_wire_statemachine_ptr_result sm =
-        yetty_ywire_wire_statemachine_create(NULL);
+    struct yetty_ywire_wire_statemachine_ptr_result sm = yetty_ywire_wire_statemachine_create(NULL);
     YTEST_REQUIRE_OK(test, sm);
     YTEST_REQUIRE_OK(test, yetty_ywire_wire_statemachine_set_envelope_default_buffered(
                                sm.value, has_args, on_env, cap));
@@ -74,9 +73,9 @@ static struct yetty_ycore_buffer emit_osc(struct ytest *test, int code, int comp
                                           const void *body, size_t body_len)
 {
     struct yetty_ycore_buffer env = {0};
-    struct yetty_ycore_void_result r = yetty_ywire_emit(YETTY_YWIRE_ENVELOPE_OSC, code,
-                                                        /*has_args=*/0, compressed, NULL, 0, body,
-                                                        body_len, &env);
+    struct yetty_ycore_void_result r =
+        yetty_ywire_emit(YETTY_YWIRE_ENVELOPE_OSC, code,
+                         /*has_args=*/0, compressed, NULL, 0, body, body_len, &env);
     YTEST_REQUIRE_OK(test, r);
     return env;
 }
@@ -304,9 +303,8 @@ static void test_oversized_args_recover(struct ytest *test)
     /* Recovery: a valid has_args envelope is delivered. */
     uint8_t args[2] = {0xAB, 0xCD};
     struct yetty_ycore_buffer env = {0};
-    struct yetty_ycore_void_result r =
-        yetty_ywire_emit(YETTY_YWIRE_ENVELOPE_OSC, 8, /*has_args=*/1, 0, args, sizeof(args), "yo",
-                         2, &env);
+    struct yetty_ycore_void_result r = yetty_ywire_emit(YETTY_YWIRE_ENVELOPE_OSC, 8, /*has_args=*/1,
+                                                        0, args, sizeof(args), "yo", 2, &env);
     YTEST_REQUIRE_OK(test, r);
     cap.expect = (const uint8_t *)"yo";
     cap.expect_len = 2;
@@ -371,14 +369,13 @@ static void test_yface_mixed_stream(struct ytest *test)
     n += env.size;
     memcpy(buf + n, " world", 6);
     n += 6;
-    struct yetty_ycore_void_result fed =
-        yetty_yface_feed_bytes(yf.value, (const char *)buf, n);
+    struct yetty_ycore_void_result fed = yetty_yface_feed_bytes(yf.value, (const char *)buf, n);
     YTEST_REQUIRE_OK(test, fed);
 
     YTEST_CHECK_EQ_INT(test, cap.osc_calls, 1);
     YTEST_CHECK_EQ_INT(test, cap.last_code, 77);
     YTEST_CHECK(test, cap.payload_ok);
-    YTEST_CHECK(test, cap.raw_calls > 0);  /* the "hello "/" world" text */
+    YTEST_CHECK(test, cap.raw_calls > 0); /* the "hello "/" world" text */
     YTEST_CHECK(test, cap.raw_total >= 12);
 
     yetty_ycore_buffer_destroy(&env);
