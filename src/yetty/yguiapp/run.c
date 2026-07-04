@@ -143,6 +143,13 @@ struct yetty_ycore_void_result yetty_yguiapp_build_root_body(struct yetty_yclass
 struct yetty_yguiapp_client {
     uv_loop_t loop;
     uv_poll_t stdin_poll;
+    /* Writable-interest poll on the connection's out fd — armed only while
+     * connection_want_write() reports queued outbound bytes, so a multi-MB
+     * figure body drains at wire speed instead of 64 KB per 33 ms frame tick
+     * (#457). */
+    uv_poll_t out_poll;
+    int out_poll_inited;
+    int out_poll_armed;
     uv_signal_t sigwinch;
     uv_prepare_t prep;
     uv_timer_t frame_timer;                       /* keeps the loop ticking so prep drains output */
@@ -250,13 +257,38 @@ static struct yetty_ycore_void_result yguiapp_client_enable_mouse_forwarding(
     return yetty_ywire_channel_flush(raw);
 }
 
-/* Drain any queued outbound bytes (non-blocking). */
+static void yguiapp_client_out_poll_cb(uv_poll_t *handle, int status, int events);
+
+/* Drain any queued outbound bytes (non-blocking), then keep the loop's
+ * writable interest in sync with the queue: armed while bytes remain,
+ * disarmed once empty so an idle app doesn't spin on a writable tty. */
 static void yguiapp_client_pump_out(struct yetty_yguiapp_client *cs)
 {
     struct yetty_ycore_size_result r = yetty_ywire_connection_pump_writable(cs->conn);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
     }
+    if (!cs->out_poll_inited) {
+        return;
+    }
+    int want_write = yetty_ywire_connection_want_write(cs->conn);
+    if (want_write && !cs->out_poll_armed) {
+        if (uv_poll_start(&cs->out_poll, UV_WRITABLE, yguiapp_client_out_poll_cb) == 0) {
+            cs->out_poll_armed = 1;
+        }
+    } else if (!want_write && cs->out_poll_armed) {
+        uv_poll_stop(&cs->out_poll);
+        cs->out_poll_armed = 0;
+    }
+}
+
+static void yguiapp_client_out_poll_cb(uv_poll_t *handle, int status, int events)
+{
+    struct yetty_yguiapp_client *cs = (struct yetty_yguiapp_client *)handle->data;
+    if (status < 0 || !(events & UV_WRITABLE)) {
+        return;
+    }
+    yguiapp_client_pump_out(cs);
 }
 
 static void yguiapp_client_stdin_cb(uv_poll_t *handle, int status, int events)
@@ -470,6 +502,17 @@ struct yetty_ycore_void_result yetty_yguiapp_run_terminal(struct yetty_yclass_ob
         goto fail;
     }
 
+    /* Writable-interest poll (see the struct comment) — armed on demand by
+     * yguiapp_client_pump_out. Non-fatal if the fd can't be polled: output
+     * then degrades to the frame-timer drain cadence. */
+    uvrc = uv_poll_init(&cs.loop, &cs.out_poll, yetty_ywire_connection_out_fd(cs.conn));
+    if (uvrc == 0) {
+        cs.out_poll.data = &cs;
+        cs.out_poll_inited = 1;
+    } else {
+        ywarn("yguiapp client: out-fd poll init failed — writes drain on the frame tick");
+    }
+
     /* SIGWINCH is optional — a resize just won't be picked up live. */
     uvrc = uv_signal_init(&cs.loop, &cs.sigwinch);
     if (uvrc == 0) {
@@ -524,6 +567,10 @@ fail:
         if (stdin_inited) {
             uv_poll_stop(&cs.stdin_poll);
             uv_close((uv_handle_t *)&cs.stdin_poll, yguiapp_client_close_cb);
+        }
+        if (cs.out_poll_inited) {
+            uv_poll_stop(&cs.out_poll);
+            uv_close((uv_handle_t *)&cs.out_poll, yguiapp_client_close_cb);
         }
         if (sigwinch_inited) {
             uv_signal_stop(&cs.sigwinch);

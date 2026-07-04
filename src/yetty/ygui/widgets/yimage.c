@@ -37,6 +37,15 @@ struct yetty_ygui_yimage_ptr_result yetty_ygui_yimage_from(struct yetty_yclass_o
 struct YETTY_ANNOTATE("class@ygui:yimage") YETTY_ANNOTATE("parent@ygui:widget") yetty_ygui_yimage {
     uint8_t *bytes;
     size_t len;
+    /* Body-emission gate (#457). The dirty flag fires for paint reasons too
+     * (hover enter/leave marks widgets dirty), but the figure BODY — the full
+     * decoded image as a drawable_list, megabytes on the wire — only needs
+     * re-shipping when the content or the baked-in bounds changed.
+     * content_generation is bumped by set_bytes; emitted_* record what the
+     * last emitted body was built from. */
+    uint64_t content_generation;
+    uint64_t emitted_generation;
+    struct yetty_ycore_rectangle emitted_rect;
 };
 
 YETTY_ANNOTATE("override@ygui:yimage:constructor")
@@ -51,6 +60,9 @@ static struct yetty_ycore_void_result yimage_constructor(struct yetty_yclass_obj
     struct yetty_ygui_yimage *d = d_dr.value;
     d->bytes = NULL;
     d->len = 0;
+    d->content_generation = 1; /* differs from emitted_generation=0 → first emit ships */
+    d->emitted_generation = 0;
+    memset(&d->emitted_rect, 0, sizeof(d->emitted_rect));
     return YETTY_OK_VOID();
 }
 
@@ -108,6 +120,22 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_objec
     struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "yimage_emit_body: rect");
     struct yetty_ycore_rectangle r = rect_res.value;
+    struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yimage_emit_body: id");
+    /* Emission gate (#457): the dirty flag also fires for pure paint reasons
+     * (hover churn), but the receiver already holds this exact body when the
+     * content generation and the baked-in bounds are unchanged since the last
+     * emit AND the figure's mint was committed by an earlier successful flush.
+     * Without this gate every hover transition re-rendered and re-shipped the
+     * full multi-MB body, ballooning the wire queue until the app appeared
+     * frozen. (After a FAILED flush the mint stays uncommitted, so first-body
+     * delivery is never skipped; a failed flush is surfaced as an emit error
+     * and the client treats the link as broken.) */
+    if (d->emitted_generation == d->content_generation && d->emitted_rect.min.x == r.min.x &&
+        d->emitted_rect.min.y == r.min.y && d->emitted_rect.max.x == r.max.x &&
+        d->emitted_rect.max.y == r.max.y && yetty_ygui_emit_child_committed(ctx, id_res.value)) {
+        return YETTY_OK_VOID();
+    }
     struct yetty_yimage_render_config cfg = {
         /* Absolute widget rect — see yplot.c (producer figure is absolute in
          * the ygui chrome, content scaled by content_scale). */
@@ -171,16 +199,15 @@ static struct yetty_ycore_void_result yimage_emit_body(struct yetty_yclass_objec
             memcpy(combined, zbytes, zsize);
         }
         memcpy(combined + zsize, bytes, size);
-        struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
-        if (YETTY_IS_ERR(id_res)) {
-            free(combined);
-            yetty_ydraw_drawable_list_destroy(zl);
-            yetty_ydraw_drawable_list_destroy(dl);
-            return YETTY_ERR(yetty_ycore_void, "yimage_emit_body: id", id_res);
-        }
         er = yetty_ygui_emit_figure_body(ctx, id_res.value, combined, (uint32_t)total);
         free(combined);
         yetty_ydraw_drawable_list_destroy(zl);
+        if (YETTY_IS_OK(er)) {
+            /* Latch what the receiver now holds — the gate above skips the
+             * next emit unless content or bounds move past this point. */
+            d->emitted_generation = d->content_generation;
+            d->emitted_rect = r;
+        }
     }
     yetty_ydraw_drawable_list_destroy(dl);
     return er;
@@ -207,6 +234,7 @@ struct yetty_ycore_void_result yetty_ygui_yimage_set_bytes(struct yetty_yclass_o
         memcpy(d->bytes, bytes, len);
         d->len = len;
     }
+    d->content_generation++; /* new content — the emit gate must re-ship the body */
     return yetty_ygui_widget_set_dirty(obj);
 }
 

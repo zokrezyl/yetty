@@ -3090,6 +3090,14 @@ static int on_key(struct yetty_yclass_object *engine, uint32_t key, int mods, vo
 struct client_state {
     uv_loop_t loop;
     uv_poll_t stdin_poll;
+    /* Writable-interest poll on the connection's out fd — armed only while
+     * connection_want_write() reports queued outbound bytes. Without it a
+     * multi-MB figure body drains 64 KB per INBOUND loop wakeup (the loop
+     * sleeps between host events), which is what stretched one image upload
+     * into minutes (#457). */
+    uv_poll_t out_poll;
+    int out_poll_inited;
+    int out_poll_armed;
     uv_signal_t sigwinch;
     uv_prepare_t prep;
     struct yetty_yclass_transport_pty *transport; /* sole owner of the fd pair */
@@ -3344,13 +3352,39 @@ static void client_stop(struct app *app)
     }
 }
 
-/* Drain any queued outbound bytes (non-blocking). */
+static void client_out_poll_cb(uv_poll_t *handle, int status, int events);
+
+/* Drain any queued outbound bytes (non-blocking), then keep the loop's
+ * writable interest in sync with the queue: armed while bytes remain (so the
+ * next drain happens the moment the PTY can take more — full wire speed),
+ * disarmed once empty (so an idle app doesn't spin on a writable tty). */
 static void client_pump_out(struct client_state *cs)
 {
     struct yetty_ycore_size_result r = yetty_ywire_connection_pump_writable(cs->conn);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
     }
+    if (!cs->out_poll_inited) {
+        return;
+    }
+    int want_write = yetty_ywire_connection_want_write(cs->conn);
+    if (want_write && !cs->out_poll_armed) {
+        if (uv_poll_start(&cs->out_poll, UV_WRITABLE, client_out_poll_cb) == 0) {
+            cs->out_poll_armed = 1;
+        }
+    } else if (!want_write && cs->out_poll_armed) {
+        uv_poll_stop(&cs->out_poll);
+        cs->out_poll_armed = 0;
+    }
+}
+
+static void client_out_poll_cb(uv_poll_t *handle, int status, int events)
+{
+    struct client_state *cs = (struct client_state *)handle->data;
+    if (status < 0 || !(events & UV_WRITABLE)) {
+        return;
+    }
+    client_pump_out(cs);
 }
 
 static void client_stdin_cb(uv_poll_t *handle, int status, int events)
@@ -3606,6 +3640,15 @@ static int run_client_mode(void)
         cs.stdin_poll.data = &cs;
         uv_poll_start(&cs.stdin_poll, UV_READABLE, client_stdin_cb);
     }
+    /* Writable-interest poll (see client_state) — armed on demand by
+     * client_pump_out. Non-fatal if the fd can't be polled: output then
+     * degrades to draining on inbound wakeups. */
+    if (uv_poll_init(&cs.loop, &cs.out_poll, yetty_ywire_connection_out_fd(cs.conn)) == 0) {
+        cs.out_poll.data = &cs;
+        cs.out_poll_inited = 1;
+    } else {
+        ywarn("ygreeter client: out-fd poll init failed — writes drain on inbound wakeups only");
+    }
     if (uv_signal_init(&cs.loop, &cs.sigwinch) == 0) {
         cs.sigwinch.data = &cs;
         uv_signal_start(&cs.sigwinch, client_sigwinch_cb, SIGWINCH);
@@ -3674,6 +3717,10 @@ static int run_client_mode(void)
         yetty_ycore_void_chain(teardown_result, yetty_ygui_framework_clear(app.engine));
 
     uv_poll_stop(&cs.stdin_poll);
+    if (cs.out_poll_inited) {
+        uv_poll_stop(&cs.out_poll);
+        uv_close((uv_handle_t *)&cs.out_poll, client_close_cb);
+    }
     uv_signal_stop(&cs.sigwinch);
     uv_prepare_stop(&cs.prep);
     uv_close((uv_handle_t *)&cs.stdin_poll, client_close_cb);

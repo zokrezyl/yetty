@@ -1933,6 +1933,18 @@ classes:
         type: size_t
         get: false
         set: false
+      - name: content_generation
+        type: uint64_t
+        get: false
+        set: false
+      - name: emitted_generation
+        type: uint64_t
+        get: false
+        set: false
+      - name: emitted_rect
+        type: struct yetty_ycore_rectangle
+        get: false
+        set: false
     ops:
       - slot: constructor
         slot_domain: ygui
@@ -2458,6 +2470,18 @@ classes:
         set: false
       - name: len
         type: size_t
+        get: false
+        set: false
+      - name: content_generation
+        type: uint64_t
+        get: false
+        set: false
+      - name: emitted_generation
+        type: uint64_t
+        get: false
+        set: false
+      - name: emitted_rect
+        type: struct yetty_ycore_rectangle
         get: false
         set: false
     ops:
