@@ -921,45 +921,49 @@ static struct yetty_ycore_void_result render_yplot_block(struct render_state *rs
         u.colors[i] = palette[i];
     }
 
-    /* Parse the content with yexpr's plot syntax (handles f=expr; @f.color=...). */
+    /* Parse the content with yexpr's plot syntax (handles f=expr; @f.color=...).
+     * The node arena stays on this frame; the parsed AST points into it and is
+     * consumed by the compile below. */
     const char *content = span->text ? span->text : "";
     size_t content_len = strlen(content);
-    struct yetty_yexpr_plot_parse_result pr = yetty_yexpr_parse_plot(content, content_len);
+    struct yetty_yexpr_arena expr_arena;
+    struct yetty_yexpr_plot_expr_result pr =
+        yetty_yexpr_parse_plot(content, content_len, &expr_arena);
     if (YETTY_IS_ERR(pr)) {
         return YETTY_ERR(yetty_ycore_void, "plot parse failed", pr);
     }
 
     /* Inline ranges from the source override yecho's xrange=/yrange= attrs
      * (the source is closer to the author's intent). */
-    if (pr.value.plot.has_x_range) {
-        u.x_min = pr.value.plot.x_min;
-        u.x_max = pr.value.plot.x_max;
+    if (pr.value.has_x_range) {
+        u.x_min = pr.value.x_min;
+        u.x_max = pr.value.x_max;
     }
-    if (pr.value.plot.has_y_range) {
-        u.y_min = pr.value.plot.y_min;
-        u.y_max = pr.value.plot.y_max;
+    if (pr.value.has_y_range) {
+        u.y_min = pr.value.y_min;
+        u.y_max = pr.value.y_max;
     }
-    if (pr.value.plot.has_view) {
-        u.x_min = pr.value.plot.view_x_min;
-        u.x_max = pr.value.plot.view_x_max;
-        u.y_min = pr.value.plot.view_y_min;
-        u.y_max = pr.value.plot.view_y_max;
+    if (pr.value.has_view) {
+        u.x_min = pr.value.view_x_min;
+        u.x_max = pr.value.view_x_max;
+        u.y_min = pr.value.view_y_min;
+        u.y_max = pr.value.view_y_max;
     }
 
-    u.function_count = pr.value.plot.def_count;
+    u.function_count = pr.value.def_count;
     if (u.function_count > 8) {
         u.function_count = 8;
     }
 
     /* Apply per-plot color attrs. plot_attr names like "color" reference
      * the plot definition's index by matching plot_name against def name. */
-    for (uint32_t i = 0; i < pr.value.plot.attr_count; i++) {
-        const struct yetty_yexpr_plot_attr *attr = &pr.value.plot.attrs[i];
+    for (uint32_t i = 0; i < pr.value.attr_count; i++) {
+        const struct yetty_yexpr_plot_attr *attr = &pr.value.attrs[i];
         if (strcmp(attr->attr_name, "color") != 0) {
             continue;
         }
         for (uint32_t j = 0; j < u.function_count; j++) {
-            if (strcmp(pr.value.plot.defs[j].name, attr->plot_name) == 0) {
+            if (strcmp(pr.value.defs[j].name, attr->plot_name) == 0) {
                 uint32_t c;
                 if (parse_hex_color(attr->value, &c)) {
                     u.colors[j] = c;
@@ -970,7 +974,7 @@ static struct yetty_ycore_void_result render_yplot_block(struct render_state *rs
     }
 
     /* Compile to bytecode. */
-    struct yetty_yfsvm_program_result prog = yetty_yfsvm_compile_multi(&pr.value.plot);
+    struct yetty_yfsvm_program_result prog = yetty_yfsvm_compile_multi(&pr.value);
     if (YETTY_IS_ERR(prog)) {
         return YETTY_ERR(yetty_ycore_void, "yfsvm_compile_multi failed", prog);
     }
@@ -988,7 +992,7 @@ static struct yetty_ycore_void_result render_yplot_block(struct render_state *rs
     /* Buffer declarations from source → wire data buffers. Inline values
      * stream through as-is; size-only declarations get zero-filled scratch
      * (rendered as a flat baseline until streamed). */
-    uint32_t decl_count = pr.value.plot.buffer_count;
+    uint32_t decl_count = pr.value.buffer_count;
     if (decl_count > 8) {
         decl_count = 8;
     }
@@ -996,7 +1000,7 @@ static struct yetty_ycore_void_result render_yplot_block(struct render_state *rs
     float *zero_fill = NULL;
     size_t zero_fill_total = 0;
     for (uint32_t i = 0; i < decl_count; i++) {
-        const struct yetty_yexpr_plot_buffer *d = &pr.value.plot.buffers[i];
+        const struct yetty_yexpr_plot_buffer *d = &pr.value.buffers[i];
         if (d->inline_count == 0 && d->size > 0) {
             zero_fill_total += d->size;
         }
@@ -1009,7 +1013,7 @@ static struct yetty_ycore_void_result render_yplot_block(struct render_state *rs
     }
     size_t zf_off = 0;
     for (uint32_t i = 0; i < decl_count; i++) {
-        const struct yetty_yexpr_plot_buffer *d = &pr.value.plot.buffers[i];
+        const struct yetty_yexpr_plot_buffer *d = &pr.value.buffers[i];
         if (d->inline_count > 0) {
             wire_bufs[i].samples = d->inline_values;
             wire_bufs[i].count = d->inline_count;

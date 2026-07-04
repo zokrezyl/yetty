@@ -223,12 +223,13 @@ static int compile_reference(double freq, uint32_t *bc_buf, size_t bc_cap)
     if (n <= 0 || n >= (int)sizeof expr) {
         return -1;
     }
-    struct yetty_yexpr_plot_parse_result pr = yetty_yexpr_parse_plot(expr, (size_t)n);
+    struct yetty_yexpr_arena expr_arena;
+    struct yetty_yexpr_plot_expr_result pr = yetty_yexpr_parse_plot(expr, (size_t)n, &expr_arena);
     if (YETTY_IS_ERR(pr)) {
         yetty_ycore_error_destroy(pr.error);
         return -1;
     }
-    struct yetty_yfsvm_program_result prog = yetty_yfsvm_compile_multi(&pr.value.plot);
+    struct yetty_yfsvm_program_result prog = yetty_yfsvm_compile_multi(&pr.value);
     if (YETTY_IS_ERR(prog)) {
         yetty_ycore_error_destroy(prog.error);
         return -1;

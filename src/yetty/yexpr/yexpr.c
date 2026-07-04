@@ -879,62 +879,73 @@ static int add_plot_def(struct yetty_yexpr_parser *p, struct yetty_yexpr_plot_ex
  * Public API
  *===========================================================================*/
 
-struct yetty_yexpr_parse_result yetty_yexpr_parse(const char *source, size_t len)
+struct yetty_yexpr_node_ptr_result yetty_yexpr_parse(const char *source, size_t len,
+                                                     struct yetty_yexpr_arena *arena)
 {
     if (!source) {
-        return YETTY_ERR(yetty_yexpr_parse, "source is NULL");
+        return YETTY_ERR(yetty_yexpr_node_ptr, "source is NULL");
+    }
+    if (!arena) {
+        return YETTY_ERR(yetty_yexpr_node_ptr, "arena is NULL");
     }
 
-    struct yetty_yexpr_parse_output res = {0};
-    struct yetty_yexpr_parser p = {0};
-    lexer_init(&p.lex, source, len);
-    p.arena = &res.arena;
-    parser_advance(&p);
+    arena->count = 0;
 
-    res.root = parse_expr(&p);
-    if (!res.root || p.error) {
-        return YETTY_ERR(yetty_yexpr_parse, p.error ? p.error : "parse failed");
+    struct yetty_yexpr_parser parser = {0};
+    lexer_init(&parser.lex, source, len);
+    parser.arena = arena;
+    parser_advance(&parser);
+
+    struct yetty_yexpr_node *root = parse_expr(&parser);
+    if (!root || parser.error) {
+        return YETTY_ERR(yetty_yexpr_node_ptr, parser.error ? parser.error : "parse failed");
     }
 
-    return YETTY_OK(yetty_yexpr_parse, res);
+    return YETTY_OK(yetty_yexpr_node_ptr, root);
 }
 
-struct yetty_yexpr_plot_parse_result yetty_yexpr_parse_plot(const char *source, size_t len)
+struct yetty_yexpr_plot_expr_result yetty_yexpr_parse_plot(const char *source, size_t len,
+                                                           struct yetty_yexpr_arena *arena)
 {
     if (!source) {
-        return YETTY_ERR(yetty_yexpr_plot_parse, "source is NULL");
+        return YETTY_ERR(yetty_yexpr_plot_expr, "source is NULL");
+    }
+    if (!arena) {
+        return YETTY_ERR(yetty_yexpr_plot_expr, "arena is NULL");
     }
 
-    struct yetty_yexpr_plot_parse_output res = {0};
-    struct yetty_yexpr_parser p = {0};
-    lexer_init(&p.lex, source, len);
-    p.arena = &res.arena;
-    parser_advance(&p);
+    arena->count = 0;
 
-    while (!parser_check(&p, YETTY_YEXPR_TOK_EOF) && !p.error) {
+    struct yetty_yexpr_plot_expr plot = {0};
+    struct yetty_yexpr_parser parser = {0};
+    lexer_init(&parser.lex, source, len);
+    parser.arena = arena;
+    parser_advance(&parser);
+
+    while (!parser_check(&parser, YETTY_YEXPR_TOK_EOF) && !parser.error) {
         /* Skip semicolons */
-        while (parser_match(&p, YETTY_YEXPR_TOK_SEMICOLON)) {
+        while (parser_match(&parser, YETTY_YEXPR_TOK_SEMICOLON)) {
             ;
         }
-        if (parser_check(&p, YETTY_YEXPR_TOK_EOF)) {
+        if (parser_check(&parser, YETTY_YEXPR_TOK_EOF)) {
             break;
         }
 
-        if (parser_check(&p, YETTY_YEXPR_TOK_AT)) {
+        if (parser_check(&parser, YETTY_YEXPR_TOK_AT)) {
             /* Plot attribute: @name.attr = value */
-            if (parse_plot_attr(&p, &res.plot) < 0) {
+            if (parse_plot_attr(&parser, &plot) < 0) {
                 break;
             }
-        } else if (parser_check(&p, YETTY_YEXPR_TOK_IDENTIFIER)) {
+        } else if (parser_check(&parser, YETTY_YEXPR_TOK_IDENTIFIER)) {
             /* Could be: name=buffer   (declaration)
              *           name=A..B     (x/y domain or generic range)
              *           name=expr     (function definition)
              *           bare expression */
-            const char *name = p.current.start;
-            size_t name_len = p.current.len;
-            parser_advance(&p);
+            const char *name = parser.current.start;
+            size_t name_len = parser.current.len;
+            parser_advance(&parser);
 
-            if (parser_match(&p, YETTY_YEXPR_TOK_EQUALS)) {
+            if (parser_match(&parser, YETTY_YEXPR_TOK_EQUALS)) {
                 char name_buf[YETTY_YEXPR_MAX_NAME_LEN];
                 size_t copy_len = name_len < sizeof(name_buf) - 1 ? name_len : sizeof(name_buf) - 1;
                 memcpy(name_buf, name, copy_len);
@@ -942,13 +953,13 @@ struct yetty_yexpr_plot_parse_result yetty_yexpr_parse_plot(const char *source, 
 
                 /* `name = buffer` — buffer-input declaration. The bare
                  * identifier "buffer" is the discriminator. */
-                if (parser_check(&p, YETTY_YEXPR_TOK_IDENTIFIER) && p.current.len == 6 &&
-                    memcmp(p.current.start, "buffer", 6) == 0) {
-                    parser_advance(&p);
-                    if (!plot_buffer_find_or_create(&p, &res.plot, name_buf)) {
+                if (parser_check(&parser, YETTY_YEXPR_TOK_IDENTIFIER) && parser.current.len == 6 &&
+                    memcmp(parser.current.start, "buffer", 6) == 0) {
+                    parser_advance(&parser);
+                    if (!plot_buffer_find_or_create(&parser, &plot, name_buf)) {
                         break;
                     }
-                    parser_match(&p, YETTY_YEXPR_TOK_SEMICOLON);
+                    parser_match(&parser, YETTY_YEXPR_TOK_SEMICOLON);
                     continue;
                 }
 
@@ -959,75 +970,75 @@ struct yetty_yexpr_plot_parse_result yetty_yexpr_parse_plot(const char *source, 
                     /* Look ahead: only commit to range parsing if a `..`
                      * follows the first unary value. Otherwise this is a
                      * plain `x = expr` def (rare but legal). */
-                    size_t saved_pos = p.lex.pos;
-                    struct yetty_yexpr_token saved_cur = p.current;
-                    uint32_t saved_arena = res.arena.count;
+                    size_t saved_pos = parser.lex.pos;
+                    struct yetty_yexpr_token saved_cur = parser.current;
+                    uint32_t saved_arena = arena->count;
 
                     float lo, hi;
-                    if (parse_range_value(&p, &lo, &hi)) {
+                    if (parse_range_value(&parser, &lo, &hi)) {
                         if (is_x) {
-                            res.plot.x_min = lo;
-                            res.plot.x_max = hi;
-                            res.plot.has_x_range = 1;
+                            plot.x_min = lo;
+                            plot.x_max = hi;
+                            plot.has_x_range = 1;
                         } else {
-                            res.plot.y_min = lo;
-                            res.plot.y_max = hi;
-                            res.plot.has_y_range = 1;
+                            plot.y_min = lo;
+                            plot.y_max = hi;
+                            plot.has_y_range = 1;
                         }
-                        parser_match(&p, YETTY_YEXPR_TOK_SEMICOLON);
+                        parser_match(&parser, YETTY_YEXPR_TOK_SEMICOLON);
                         continue;
                     }
                     /* Roll back to try as a regular expression. */
-                    p.lex.pos = saved_pos;
-                    p.current = saved_cur;
-                    res.arena.count = saved_arena;
-                    p.error = NULL;
+                    parser.lex.pos = saved_pos;
+                    parser.current = saved_cur;
+                    arena->count = saved_arena;
+                    parser.error = NULL;
                 }
 
                 /* Named definition: name = expr */
-                struct yetty_yexpr_node *expr = parse_expr(&p);
+                struct yetty_yexpr_node *expr = parse_expr(&parser);
                 if (!expr) {
                     break;
                 }
-                if (add_plot_def(&p, &res.plot, name_buf, expr) < 0) {
+                if (add_plot_def(&parser, &plot, name_buf, expr) < 0) {
                     break;
                 }
             } else {
                 /* Bare expression */
-                struct yetty_yexpr_node *expr = parse_bare_expr_from_ident(&p, name, name_len);
+                struct yetty_yexpr_node *expr = parse_bare_expr_from_ident(&parser, name, name_len);
                 if (!expr) {
                     break;
                 }
                 char auto_name[YETTY_YEXPR_MAX_NAME_LEN];
-                snprintf(auto_name, sizeof(auto_name), "plot%u", res.plot.def_count + 1);
-                if (add_plot_def(&p, &res.plot, auto_name, expr) < 0) {
+                snprintf(auto_name, sizeof(auto_name), "plot%u", plot.def_count + 1);
+                if (add_plot_def(&parser, &plot, auto_name, expr) < 0) {
                     break;
                 }
             }
-        } else if (parser_check(&p, YETTY_YEXPR_TOK_NUMBER) ||
-                   parser_check(&p, YETTY_YEXPR_TOK_LPAREN) ||
-                   parser_check(&p, YETTY_YEXPR_TOK_MINUS)) {
+        } else if (parser_check(&parser, YETTY_YEXPR_TOK_NUMBER) ||
+                   parser_check(&parser, YETTY_YEXPR_TOK_LPAREN) ||
+                   parser_check(&parser, YETTY_YEXPR_TOK_MINUS)) {
             /* Bare expression starting with number/paren/unary */
-            struct yetty_yexpr_node *expr = parse_expr(&p);
+            struct yetty_yexpr_node *expr = parse_expr(&parser);
             if (!expr) {
                 break;
             }
             char auto_name[YETTY_YEXPR_MAX_NAME_LEN];
-            snprintf(auto_name, sizeof(auto_name), "plot%u", res.plot.def_count + 1);
-            if (add_plot_def(&p, &res.plot, auto_name, expr) < 0) {
+            snprintf(auto_name, sizeof(auto_name), "plot%u", plot.def_count + 1);
+            if (add_plot_def(&parser, &plot, auto_name, expr) < 0) {
                 break;
             }
         } else {
-            p.error = "expected plot definition or expression";
+            parser.error = "expected plot definition or expression";
             break;
         }
 
-        parser_match(&p, YETTY_YEXPR_TOK_SEMICOLON);
+        parser_match(&parser, YETTY_YEXPR_TOK_SEMICOLON);
     }
 
-    if (p.error) {
-        return YETTY_ERR(yetty_yexpr_plot_parse, p.error);
+    if (parser.error) {
+        return YETTY_ERR(yetty_yexpr_plot_expr, parser.error);
     }
 
-    return YETTY_OK(yetty_yexpr_plot_parse, res);
+    return YETTY_OK(yetty_yexpr_plot_expr, plot);
 }

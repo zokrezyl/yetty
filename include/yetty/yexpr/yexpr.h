@@ -159,29 +159,31 @@ struct yetty_yexpr_plot_expr {
  * Parse results
  *===========================================================================*/
 
-struct yetty_yexpr_parse_output {
-    struct yetty_yexpr_arena arena;
-    struct yetty_yexpr_node *root;
-};
-
-YETTY_YRESULT_DECLARE(yetty_yexpr_parse, struct yetty_yexpr_parse_output);
-
-struct yetty_yexpr_plot_parse_output {
-    struct yetty_yexpr_arena arena;
-    struct yetty_yexpr_plot_expr plot;
-};
-
-YETTY_YRESULT_DECLARE(yetty_yexpr_plot_parse, struct yetty_yexpr_plot_parse_output);
+YETTY_YRESULT_DECLARE(yetty_yexpr_node_ptr, struct yetty_yexpr_node *);
+YETTY_YRESULT_DECLARE(yetty_yexpr_plot_expr, struct yetty_yexpr_plot_expr);
 
 /*=============================================================================
  * API
+ *
+ * Both parsers allocate every AST node out of a caller-provided arena: the
+ * returned root pointer and all child links point into *arena, so the AST
+ * stays valid exactly as long as the arena does — no destroy call is needed.
+ * The arena is reset on entry and does not need to be initialised. It is
+ * plain value storage: keep it (stack or embedded) wherever the AST must
+ * remain dereferenceable, and never copy structs holding node pointers past
+ * the arena's lifetime.
  *===========================================================================*/
 
-/* Parse a single expression: "sin(x) + cos(x)" */
-struct yetty_yexpr_parse_result yetty_yexpr_parse(const char *source, size_t len);
+/* Parse a single expression: "sin(x) + cos(x)". Returns the AST root,
+ * owned by *arena. */
+struct yetty_yexpr_node_ptr_result yetty_yexpr_parse(const char *source, size_t len,
+                                                     struct yetty_yexpr_arena *arena);
 
-/* Parse multi-plot expression: "f = sin(x); g = cos(x); @f.color = #FF0000" */
-struct yetty_yexpr_plot_parse_result yetty_yexpr_parse_plot(const char *source, size_t len);
+/* Parse multi-plot expression: "f = sin(x); g = cos(x); @f.color = #FF0000".
+ * The returned plot struct is value data except defs[].expression, which
+ * point into *arena. */
+struct yetty_yexpr_plot_expr_result yetty_yexpr_parse_plot(const char *source, size_t len,
+                                                           struct yetty_yexpr_arena *arena);
 
 #ifdef __cplusplus
 }

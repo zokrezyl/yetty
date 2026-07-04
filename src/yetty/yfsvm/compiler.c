@@ -625,12 +625,11 @@ struct yetty_yfsvm_program_result yetty_yfsvm_compile(const struct yetty_yexpr_n
 
 struct yetty_yfsvm_program_result yetty_yfsvm_compile_expr(const char *source, size_t len)
 {
-    struct yetty_yexpr_parse_result parse_res = yetty_yexpr_parse(source, len);
-    if (YETTY_IS_ERR(parse_res)) {
-        return YETTY_ERR(yetty_yfsvm_program, parse_res.error.msg);
-    }
+    struct yetty_yexpr_arena expr_arena;
+    struct yetty_yexpr_node_ptr_result parse_res = yetty_yexpr_parse(source, len, &expr_arena);
+    YETTY_RETURN_IF_ERR(yetty_yfsvm_program, parse_res, "expression parse failed");
 
-    return yetty_yfsvm_compile(parse_res.value.root);
+    return yetty_yfsvm_compile(parse_res.value);
 }
 
 struct yetty_yfsvm_program_result yetty_yfsvm_compile_multi(
@@ -676,12 +675,12 @@ struct yetty_yfsvm_program_result yetty_yfsvm_compile_multi(
 
 struct yetty_yfsvm_program_result yetty_yfsvm_compile_multi_expr(const char *source, size_t len)
 {
-    struct yetty_yexpr_plot_parse_result parse_res = yetty_yexpr_parse_plot(source, len);
-    if (YETTY_IS_ERR(parse_res)) {
-        return YETTY_ERR(yetty_yfsvm_program, parse_res.error.msg);
-    }
+    struct yetty_yexpr_arena expr_arena;
+    struct yetty_yexpr_plot_expr_result parse_res =
+        yetty_yexpr_parse_plot(source, len, &expr_arena);
+    YETTY_RETURN_IF_ERR(yetty_yfsvm_program, parse_res, "plot expression parse failed");
 
-    return yetty_yfsvm_compile_multi(&parse_res.value.plot);
+    return yetty_yfsvm_compile_multi(&parse_res.value);
 }
 
 uint32_t yetty_yfsvm_program_serialize(const struct yetty_yfsvm_program *prog, uint32_t *buf,
