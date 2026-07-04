@@ -96,7 +96,6 @@
 #include <uv.h>
 #endif
 
-
 /*=============================================================================
  * Tab descriptors — mirrors the main-branch ygreeter layout:
  *   ┌──────────────────────────────────────────────────────────┐
@@ -3310,8 +3309,7 @@ static void client_input_sink(void *userdata, int wire_code, const uint8_t *args
         struct yetty_ycore_void_result chrome_sync_result =
             client_chrome_sync(app->client, msg->width, msg->height);
         if (YETTY_IS_ERR(chrome_sync_result)) {
-            ywarn("ygreeter client: chrome sync (resize) failed: %s",
-                  chrome_sync_result.error.msg);
+            ywarn("ygreeter client: chrome sync (resize) failed: %s", chrome_sync_result.error.msg);
             yetty_ycore_error_destroy(chrome_sync_result.error);
         }
 #endif
@@ -3386,8 +3384,8 @@ static void client_resize_cb(void *user, int width_px, int height_px, int cols, 
     if (width_px <= 0 || height_px <= 0) {
         return;
     }
-    struct yetty_ycore_void_result r = yetty_ygui_framework_set_viewport(
-        cs->app->engine, (float)width_px, (float)height_px);
+    struct yetty_ycore_void_result r =
+        yetty_ygui_framework_set_viewport(cs->app->engine, (float)width_px, (float)height_px);
     if (YETTY_IS_ERR(r)) {
         yetty_ycore_error_destroy(r.error);
     }

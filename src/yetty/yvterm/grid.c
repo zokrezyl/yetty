@@ -410,8 +410,7 @@ static void blank_cell(struct yetty_yvterm_text_cell *cell, uint32_t fg, uint32_
  * reset_line() uses the terminal default; erase (BCE) passes the pen colours.
  * cols is explicit (not grid->cols) because resize builds rings at the NEW
  * width while the grid still carries the old one. */
-static void fill_line_blank(struct yetty_yvterm_line *line, uint32_t cols, uint32_t fg,
-                            uint32_t bg)
+static void fill_line_blank(struct yetty_yvterm_line *line, uint32_t cols, uint32_t fg, uint32_t bg)
 {
     for (uint32_t col = 0; col < cols; ++col) {
         blank_cell(&line->text_cells[col], fg, bg);
@@ -941,12 +940,10 @@ static struct yetty_ycore_void_result grid_model_init(struct yetty_yvterm_grid *
     struct yetty_ycore_void_result primary_res =
         screen_alloc_lines(&grid->primary, rows + grid->scrollback_rows, cols);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, primary_res, "yvterm: grid_model_init primary ring");
-    struct yetty_ycore_void_result alternate_res =
-        screen_alloc_lines(&grid->alternate, rows, cols);
+    struct yetty_ycore_void_result alternate_res = screen_alloc_lines(&grid->alternate, rows, cols);
     if (YETTY_IS_ERR(alternate_res)) {
         screen_free_lines(&grid->primary);
-        return YETTY_ERR(yetty_ycore_void, "yvterm: grid_model_init alternate ring",
-                         alternate_res);
+        return YETTY_ERR(yetty_ycore_void, "yvterm: grid_model_init alternate ring", alternate_res);
     }
 
     grid->vterm = vterm_new((int)rows, (int)cols);

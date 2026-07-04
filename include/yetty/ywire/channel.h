@@ -80,10 +80,10 @@ enum yetty_ywire_channel_kind {
  * dynamic channels. The well-known channels are implicit DATA on a pre-opened
  * id and never appear on this code. */
 enum yetty_ywire_channel_msg {
-    YETTY_YWIRE_CHANNEL_MSG_OPEN = 1,          /* window = opener's recv window (0 = default) */
-    YETTY_YWIRE_CHANNEL_MSG_DATA = 2,          /* payload = one chunk of channel bytes */
-    YETTY_YWIRE_CHANNEL_MSG_EOF = 3,           /* half-close, sender will write no more */
-    YETTY_YWIRE_CHANNEL_MSG_CLOSE = 4,         /* teardown (or OPEN rejection); answered with CLOSE */
+    YETTY_YWIRE_CHANNEL_MSG_OPEN = 1,  /* window = opener's recv window (0 = default) */
+    YETTY_YWIRE_CHANNEL_MSG_DATA = 2,  /* payload = one chunk of channel bytes */
+    YETTY_YWIRE_CHANNEL_MSG_EOF = 3,   /* half-close, sender will write no more */
+    YETTY_YWIRE_CHANNEL_MSG_CLOSE = 4, /* teardown (or OPEN rejection); answered with CLOSE */
     YETTY_YWIRE_CHANNEL_MSG_WINDOW_ADJUST = 5, /* window = credit delta granted to the peer */
 };
 
@@ -141,8 +141,9 @@ struct yetty_ycore_void_result yetty_ywire_channel_set_raw_sink(struct yetty_ywi
  *=========================================================================*/
 
 /* Lifecycle notifications (REMOTE_EOF / CLOSED). */
-struct yetty_ycore_void_result yetty_ywire_channel_set_event_cb(
-    struct yetty_ywire_channel *channel, yetty_ywire_channel_event_cb cb, void *user);
+struct yetty_ycore_void_result yetty_ywire_channel_set_event_cb(struct yetty_ywire_channel *channel,
+                                                                yetty_ywire_channel_event_cb cb,
+                                                                void *user);
 
 /* Half-close the local→remote direction: flush pending outbound, then emit
  * EOF. Further writes fail; the remote→local direction stays open. */

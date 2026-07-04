@@ -60,9 +60,10 @@ static void test_cell_addressing(struct ytest *test)
     YTEST_CHECK(test, !yetty_yrich_cell_addr_eq(a, diff_col));
 
     /* Range B2:D5 (rows 1..4, cols 1..3), inclusive on both ends. */
-    struct yetty_yrich_cell_range range = {.start = {.row = 1, .col = 1}, .end = {.row = 4, .col = 3}};
+    struct yetty_yrich_cell_range range = {.start = {.row = 1, .col = 1},
+                                           .end = {.row = 4, .col = 3}};
     struct yetty_yrich_cell_addr inside = {.row = 2, .col = 2};
-    struct yetty_yrich_cell_addr top_left = {.row = 1, .col = 1};   /* inclusive start */
+    struct yetty_yrich_cell_addr top_left = {.row = 1, .col = 1};     /* inclusive start */
     struct yetty_yrich_cell_addr bottom_right = {.row = 4, .col = 3}; /* inclusive end */
     struct yetty_yrich_cell_addr outside = {.row = 5, .col = 3};
 

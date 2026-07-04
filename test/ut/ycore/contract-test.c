@@ -80,9 +80,8 @@ static void check_b64_roundtrip(struct ytest *test, const uint8_t *data, size_t 
     YTEST_CHECK_EQ_SIZE(test, enc.value.size, ((len + 2) / 3) * 4);
 
     uint8_t out[512];
-    size_t decoded =
-        yetty_ycore_base64_decode((const char *)enc.value.data, enc.value.size, (char *)out,
-                                  sizeof(out));
+    size_t decoded = yetty_ycore_base64_decode((const char *)enc.value.data, enc.value.size,
+                                               (char *)out, sizeof(out));
     YTEST_CHECK_EQ_SIZE(test, decoded, len);
     if (len > 0) {
         YTEST_CHECK(test, memcmp(out, data, len) == 0);

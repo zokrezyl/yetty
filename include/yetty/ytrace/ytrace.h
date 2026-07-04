@@ -299,8 +299,8 @@ void ytime_timer_reset_all(void);
         ytime_timer_observe(&_ytime_timer_##name, #name, __FILE__, __LINE__, __func__,             \
                             _ytime_elapsed_ms_);                                                   \
         ydebug(#name ": %.3f ms  (avg %.3f ms, min %.3f, max %.3f, n=%llu)", _ytime_elapsed_ms_,   \
-              _ytime_timer_##name.avg_ms, _ytime_timer_##name.min_ms, _ytime_timer_##name.max_ms,  \
-              (unsigned long long)_ytime_timer_##name.count);                                      \
+               _ytime_timer_##name.avg_ms, _ytime_timer_##name.min_ms, _ytime_timer_##name.max_ms, \
+               (unsigned long long)_ytime_timer_##name.count);                                     \
     } while (0)
 
 /* Generic log macro with explicit level */

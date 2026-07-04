@@ -55,9 +55,11 @@ static int link_up(struct ytest *test, struct link *link, int compressed)
     YTEST_REQUIRE_OK(test, transport_b_res);
     link->b.transport = transport_b_res.value;
 
-    struct yetty_ycore_void_result raw_a = yetty_yclass_transport_pty_enable_raw_mode(link->a.transport);
+    struct yetty_ycore_void_result raw_a =
+        yetty_yclass_transport_pty_enable_raw_mode(link->a.transport);
     YTEST_REQUIRE_OK(test, raw_a);
-    struct yetty_ycore_void_result raw_b = yetty_yclass_transport_pty_enable_raw_mode(link->b.transport);
+    struct yetty_ycore_void_result raw_b =
+        yetty_yclass_transport_pty_enable_raw_mode(link->b.transport);
     YTEST_REQUIRE_OK(test, raw_b);
 
     struct yetty_ywire_connection_ptr_result connection_a_res = yetty_ywire_connection_create(
@@ -69,7 +71,8 @@ static int link_up(struct ytest *test, struct link *link, int compressed)
     YTEST_REQUIRE_OK(test, connection_b_res);
     link->b.connection = connection_b_res.value;
 
-    struct yetty_ycore_void_result role_res = yetty_ywire_connection_set_role(link->b.connection, 1);
+    struct yetty_ycore_void_result role_res =
+        yetty_ywire_connection_set_role(link->b.connection, 1);
     YTEST_REQUIRE_OK(test, role_res);
     return 1;
 }
@@ -463,8 +466,10 @@ static void test_chunking_and_fair_interleaving(struct ytest *test)
     struct yetty_ywire_channel *ping_receiver = accept_second.channel;
 
     struct arrival_log log = {0};
-    struct arrival_sink bulk_sink = {.log = &log, .channel_id = yetty_ywire_channel_id(bulk_channel)};
-    struct arrival_sink ping_sink = {.log = &log, .channel_id = yetty_ywire_channel_id(ping_channel)};
+    struct arrival_sink bulk_sink = {.log = &log,
+                                     .channel_id = yetty_ywire_channel_id(bulk_channel)};
+    struct arrival_sink ping_sink = {.log = &log,
+                                     .channel_id = yetty_ywire_channel_id(ping_channel)};
     cb_res = yetty_ywire_channel_set_raw_sink(bulk_receiver, on_arrival, &bulk_sink);
     YTEST_REQUIRE_OK(test, cb_res);
     cb_res = yetty_ywire_channel_set_raw_sink(ping_receiver, on_arrival, &ping_sink);
@@ -477,7 +482,8 @@ static void test_chunking_and_fair_interleaving(struct ytest *test)
     uint8_t *bulk = malloc(bulk_len);
     YTEST_REQUIRE(test, bulk != NULL);
     memset(bulk, 0xAB, bulk_len);
-    struct yetty_ycore_size_result write_res = yetty_ywire_channel_write(bulk_channel, bulk, bulk_len);
+    struct yetty_ycore_size_result write_res =
+        yetty_ywire_channel_write(bulk_channel, bulk, bulk_len);
     YTEST_REQUIRE_OK(test, write_res);
     struct yetty_ycore_void_result flush_res = yetty_ywire_channel_flush(bulk_channel);
     YTEST_REQUIRE_OK(test, flush_res);
@@ -551,7 +557,8 @@ static void test_well_known_lanes_regression(struct ytest *test)
     YTEST_REQUIRE_OK(test, flush_res);
     pump(test, &link);
     char received[64] = {0};
-    struct yetty_ycore_size_result read_res = yetty_ywire_channel_read(b_rpc, received, sizeof(received));
+    struct yetty_ycore_size_result read_res =
+        yetty_ywire_channel_read(b_rpc, received, sizeof(received));
     YTEST_REQUIRE_OK(test, read_res);
     YTEST_CHECK_EQ_INT(test, (int)read_res.value, (int)sizeof(rpc_frame));
     YTEST_CHECK(test, memcmp(received, rpc_frame, sizeof(rpc_frame)) == 0);

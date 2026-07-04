@@ -2650,8 +2650,7 @@ static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
         (struct yetty_yrender_uniform){"ydraw_view_size", YETTY_YRENDER_UNIFORM_VEC2};
     /* Shared clock + OSC-driven post-effect selection. Accessor names follow
      * the same doubled-namespace rule: uniforms.ydraw_ydraw_time etc. */
-    rs->uniforms[U_TIME] =
-        (struct yetty_yrender_uniform){"ydraw_time", YETTY_YRENDER_UNIFORM_F32};
+    rs->uniforms[U_TIME] = (struct yetty_yrender_uniform){"ydraw_time", YETTY_YRENDER_UNIFORM_F32};
     rs->uniforms[U_POST_FX_INDEX] =
         (struct yetty_yrender_uniform){"ydraw_post_fx_index", YETTY_YRENDER_UNIFORM_U32};
     rs->uniforms[U_POST_FX_P0] =
@@ -2829,8 +2828,7 @@ static struct yetty_ycore_void_result load_effects_lib(struct yetty_ygrid_grid *
         return YETTY_OK_VOID();
     }
     g->effects_lib_code = fr.value;
-    yetty_yrender_shader_code_set(&g->effects_lib_rs.shader,
-                                  (const char *)g->effects_lib_code.data,
+    yetty_yrender_shader_code_set(&g->effects_lib_rs.shader, (const char *)g->effects_lib_code.data,
                                   g->effects_lib_code.size);
     g->effects_lib_loaded = 1;
     return YETTY_OK_VOID();

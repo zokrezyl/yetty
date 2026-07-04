@@ -38,9 +38,9 @@
  *=========================================================================*/
 
 struct ywire_channel_wire_header {
-    uint32_t msg;        /* enum yetty_ywire_channel_msg */
+    uint32_t msg; /* enum yetty_ywire_channel_msg */
     uint32_t channel_id;
-    uint32_t window;     /* OPEN: opener's recv window; WINDOW_ADJUST: delta */
+    uint32_t window; /* OPEN: opener's recv window; WINDOW_ADJUST: delta */
     uint32_t reserved;
 };
 
@@ -235,8 +235,8 @@ static struct yetty_ywire_channel *find_free_slot(struct yetty_ywire_connection 
     return NULL;
 }
 
-static struct yetty_ycore_void_result on_channel_open(struct yetty_ywire_connection *connection,
-                                                      const struct ywire_channel_wire_header *header)
+static struct yetty_ycore_void_result on_channel_open(
+    struct yetty_ywire_connection *connection, const struct ywire_channel_wire_header *header)
 {
     if (header->channel_id < YETTY_YWIRE_CHANNEL_DYNAMIC_BASE ||
         yetty_ywire_connection_channel(connection, header->channel_id)) {
@@ -251,11 +251,11 @@ static struct yetty_ycore_void_result on_channel_open(struct yetty_ywire_connect
                                                    header->channel_id, 0);
     }
     init_dynamic_channel(channel, connection, header->channel_id,
-                         /*send_window=*/header->window ? (int64_t)header->window
-                                                        : (int64_t)YETTY_YWIRE_CHANNEL_WINDOW_DEFAULT,
+                         /*send_window=*/header->window
+                             ? (int64_t)header->window
+                             : (int64_t)YETTY_YWIRE_CHANNEL_WINDOW_DEFAULT,
                          /*recv_window_initial=*/(int64_t)YETTY_YWIRE_CHANNEL_WINDOW_DEFAULT);
-    int accepted = connection->accept_cb &&
-                   connection->accept_cb(connection->accept_user, channel);
+    int accepted = connection->accept_cb && connection->accept_cb(connection->accept_user, channel);
     if (!accepted) {
         memset(channel, 0, sizeof(*channel));
         return yetty_ywire_connection_send_control(connection, YETTY_YWIRE_CHANNEL_MSG_CLOSE,
@@ -364,8 +364,8 @@ static struct yetty_ycore_size_result emit_one(struct yetty_ywire_connection *co
         return YETTY_OK(yetty_ycore_size, 0);
     }
 
-    size_t chunk = pending < YETTY_YWIRE_CHANNEL_CHUNK_MAX ? pending
-                                                           : YETTY_YWIRE_CHANNEL_CHUNK_MAX;
+    size_t chunk =
+        pending < YETTY_YWIRE_CHANNEL_CHUNK_MAX ? pending : YETTY_YWIRE_CHANNEL_CHUNK_MAX;
     if (channel->send_window >= 0 && (int64_t)chunk > channel->send_window) {
         chunk = (size_t)channel->send_window;
     }
@@ -373,18 +373,16 @@ static struct yetty_ycore_size_result emit_one(struct yetty_ywire_connection *co
         return YETTY_OK(yetty_ycore_size, 0); /* window-blocked — WINDOW_ADJUST will wake us */
     }
 
-    struct ywire_channel_wire_header header = {.msg = YETTY_YWIRE_CHANNEL_MSG_DATA,
-                                               .channel_id = channel->id,
-                                               .window = 0,
-                                               .reserved = 0};
+    struct ywire_channel_wire_header header = {
+        .msg = YETTY_YWIRE_CHANNEL_MSG_DATA, .channel_id = channel->id, .window = 0, .reserved = 0};
     uint8_t header_bytes[YETTY_YWIRE_CHANNEL_WIRE_HEADER_LEN];
     wire_header_encode(&header, header_bytes);
 
     struct yetty_ycore_buffer framed = {0};
-    struct yetty_ycore_void_result build = yetty_ywire_emit(
-        YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YWIRE_CHANNEL, /*has_args=*/1, connection->compressed,
-        header_bytes, sizeof(header_bytes), channel->outbuf.data + channel->outbuf_off, chunk,
-        &framed);
+    struct yetty_ycore_void_result build =
+        yetty_ywire_emit(YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YWIRE_CHANNEL, /*has_args=*/1,
+                         connection->compressed, header_bytes, sizeof(header_bytes),
+                         channel->outbuf.data + channel->outbuf_off, chunk, &framed);
     if (YETTY_IS_ERR(build)) {
         yetty_ycore_buffer_destroy(&framed);
         return YETTY_ERR(yetty_ycore_size, "ywire emit_one: emit DATA", build);
@@ -633,9 +631,9 @@ struct yetty_ywire_channel_ptr_result yetty_ywire_connection_open_channel(
 
     init_dynamic_channel(channel, connection, id,
                          /*send_window=*/(int64_t)YETTY_YWIRE_CHANNEL_WINDOW_DEFAULT,
-                         /*recv_window_initial=*/initial_recv_window
-                             ? (int64_t)initial_recv_window
-                             : (int64_t)YETTY_YWIRE_CHANNEL_WINDOW_DEFAULT);
+                         /*recv_window_initial=*/
+                             initial_recv_window ? (int64_t)initial_recv_window
+                                                 : (int64_t)YETTY_YWIRE_CHANNEL_WINDOW_DEFAULT);
 
     struct yetty_ycore_void_result open_res = yetty_ywire_connection_send_control(
         connection, YETTY_YWIRE_CHANNEL_MSG_OPEN, id, initial_recv_window);

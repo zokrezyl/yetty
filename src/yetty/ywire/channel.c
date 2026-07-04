@@ -132,8 +132,7 @@ static size_t channel_take(struct yetty_ywire_channel *channel, void *buf, size_
         channel->inbuf_off = 0;
     }
     if (channel->kind == YETTY_YWIRE_CHANNEL_KIND_DYNAMIC) {
-        struct yetty_ycore_void_result credit_res =
-            yetty_ywire_connection_grant_credit(channel, n);
+        struct yetty_ycore_void_result credit_res = yetty_ywire_connection_grant_credit(channel, n);
         if (YETTY_IS_ERR(credit_res)) {
             /* The drain itself succeeded; a failed credit grant only delays the
              * peer and the next drain retries. Absorb. */
@@ -209,8 +208,9 @@ struct yetty_ycore_void_result yetty_ywire_channel_set_raw_sink(struct yetty_ywi
  * Dynamic-channel lifecycle
  *=========================================================================*/
 
-struct yetty_ycore_void_result yetty_ywire_channel_set_event_cb(
-    struct yetty_ywire_channel *channel, yetty_ywire_channel_event_cb cb, void *user)
+struct yetty_ycore_void_result yetty_ywire_channel_set_event_cb(struct yetty_ywire_channel *channel,
+                                                                yetty_ywire_channel_event_cb cb,
+                                                                void *user)
 {
     if (!channel) {
         return YETTY_ERR(yetty_ycore_void, "ywire_channel_set_event_cb: NULL channel");
