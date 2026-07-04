@@ -345,6 +345,9 @@ static struct yetty_ycore_void_result emit_create_envelope(const struct opts *o,
 static struct yetty_ycore_void_result emit_update_envelope(int plot_id, const float *samples,
                                                            int count)
 {
+    if (count <= 0 || (size_t)count > (SIZE_MAX - 12u) / sizeof(float)) {
+        return YETTY_ERR(yetty_ycore_void, "update envelope: invalid count");
+    }
     size_t payload_size = 12u + (size_t)count * sizeof(float);
     uint8_t *payload = malloc(payload_size);
     if (!payload) {
@@ -402,7 +405,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    float *samples = malloc((size_t)o.window_samples * sizeof(float));
+    float *samples = calloc((size_t)o.window_samples, sizeof(float));
     if (!samples) {
         fprintf(stderr, "audio-source: out of memory\n");
         return 1;
