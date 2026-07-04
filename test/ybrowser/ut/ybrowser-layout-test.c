@@ -276,11 +276,18 @@ static void test_flex_space_between_auto_basis(void)
         return;
     }
 
-    /* Each item should be at least font_size wide so its content fits
-     * horizontally. The fallback path gives each 1/3 of the container. */
-    ASSERT_TRUE("logo wider than one glyph", logo.w > 32.0f);
-    ASSERT_TRUE("nav wider than one glyph", nav.w > 32.0f);
-    ASSERT_TRUE("user wider than one glyph", user.w > 32.0f);
+    /* Auto-basis items under a distributing justify-content are content-
+     * sized — Chrome shrink-to-fits them. (The old even-split heuristic
+     * gave every item 1/3 of the row, which made space-between a no-op.)
+     * Each item is a short word: a couple of glyphs wide, nowhere near
+     * the 300px+ even-split share. */
+    ASSERT_TRUE("logo content-sized", logo.w > 16.0f && logo.w < 120.0f);
+    ASSERT_TRUE("nav content-sized", nav.w > 16.0f && nav.w < 120.0f);
+    ASSERT_TRUE("user content-sized", user.w > 16.0f && user.w < 120.0f);
+    /* space-between: first item at the left edge, last item flush right,
+     * middle item strictly between them. */
+    ASSERT_TRUE("last item flush right", user.x + user.w > 900.0f);
+    ASSERT_TRUE("middle item sits between", nav.x > logo.x + logo.w && nav.x + nav.w < user.x);
 
     yetty_ylexbor_destroy(yl);
 }

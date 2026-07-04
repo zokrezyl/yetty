@@ -352,8 +352,8 @@ void *yetty_ylexbor_internal_get_js_ctx(struct yetty_ylexbor *r)
 
 /* One CSS source to apply. EITHER `inline_body` is set (an inline
  * <style> block — body is owned, will be freed after add_css) OR `url`
- * is set (external <link>; after the parallel-fetch step, body[i] /
- * len[i] / status[i] in the parent arrays carry the fetched response).
+ * is set (external <link>; after the parallel-fetch step, the matching
+ * slot in the response array carries the fetched body).
  * Document order across the two types is preserved by appending to a
  * single list during the DOM walk — CSS cascade specificity depends
  * on source order, so we must apply inline + external in the order
@@ -474,36 +474,37 @@ static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_yle
             ext_n++;
         }
     }
-    char **fetch_urls = NULL;
-    char **bodies = NULL;
-    size_t *lens = NULL;
-    long *status = NULL;
+    struct yetty_ybrowser_request *fetch_requests = NULL;
+    struct yetty_ybrowser_response *fetch_responses = NULL;
     int *slot_to_entry = NULL;
     if (ext_n > 0) {
-        fetch_urls = calloc((size_t)ext_n, sizeof(*fetch_urls));
-        bodies = calloc((size_t)ext_n, sizeof(*bodies));
-        lens = calloc((size_t)ext_n, sizeof(*lens));
-        status = calloc((size_t)ext_n, sizeof(*status));
+        fetch_requests = calloc((size_t)ext_n, sizeof(*fetch_requests));
+        fetch_responses = calloc((size_t)ext_n, sizeof(*fetch_responses));
         slot_to_entry = calloc((size_t)ext_n, sizeof(*slot_to_entry));
-        if (!fetch_urls || !bodies || !lens || !status || !slot_to_entry) {
-            free(fetch_urls);
-            free(bodies);
-            free(lens);
-            free(status);
+        if (!fetch_requests || !fetch_responses || !slot_to_entry) {
+            free(fetch_requests);
+            free(fetch_responses);
             free(slot_to_entry);
+            fetch_requests = NULL;
+            fetch_responses = NULL;
+            slot_to_entry = NULL;
             ext_n = 0;
         } else {
             int j = 0;
             for (int i = 0; i < cc.count; i++) {
                 if (cc.items[i].is_external) {
-                    fetch_urls[j] = cc.items[i].url;
+                    fetch_requests[j].url = cc.items[i].url;
+                    fetch_requests[j].kind = YETTY_YBROWSER_REQUEST_STYLE;
+                    fetch_requests[j].referer = r->base_url;
                     slot_to_entry[j] = i;
                     j++;
                 }
             }
-            yetty_ylexbor_http_get_many(r->loader, (const char *const *)fetch_urls, ext_n,
-                                        r->base_url,
-                                        /*concurrency=*/8, bodies, lens, status);
+            struct yetty_ycore_void_result many_res = yetty_ybrowser_fetch_many(
+                r->loader, fetch_requests, ext_n, fetch_responses, /*host_connection_cap=*/8);
+            if (YETTY_IS_ERR(many_res)) {
+                yetty_ycore_error_destroy(many_res.error);
+            }
         }
     }
 
@@ -522,9 +523,11 @@ static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_yle
                     break;
                 }
             }
-            if (slot >= 0 && bodies[slot] && status[slot] >= 200 && status[slot] < 300) {
+            struct yetty_ybrowser_response *response = slot >= 0 ? &fetch_responses[slot] : NULL;
+            if (response && response->body && response->status >= 200 &&
+                response->status < 300) {
                 struct yetty_ycore_void_result ar =
-                    yetty_ylexbor_add_css(r, bodies[slot], lens[slot]);
+                    yetty_ylexbor_add_css(r, response->body, response->body_len);
                 if (YETTY_IS_ERR(ar)) {
                     if (YETTY_IS_OK(apply_res)) {
                         apply_res =
@@ -538,8 +541,8 @@ static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_yle
             } else {
                 r->css_sheets_failed++;
             }
-            if (slot >= 0) {
-                free(bodies[slot]);
+            if (response) {
+                yetty_ybrowser_response_dispose(response);
             }
             free(e->url);
         } else {
@@ -558,10 +561,8 @@ static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_yle
             free(e->inline_body);
         }
     }
-    free(fetch_urls);
-    free(bodies);
-    free(lens);
-    free(status);
+    free(fetch_requests);
+    free(fetch_responses);
     free(slot_to_entry);
     free(cc.items);
     return apply_res;
@@ -673,6 +674,17 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css(struct yetty_ylexbor *r, co
         return YETTY_ERR(yetty_ycore_void, "ylexbor_add_css: null");
     }
 
+    /* Expand `flex: …` shorthands into longhands FIRST — libcss parses
+	 * flex-grow/-shrink/-basis but not the shorthand, and stylesheets are
+	 * where real pages set flex. The rewritten copy (when any expansion
+	 * happened) feeds every consumer below: scanners, libcss, lexbor. */
+    size_t expanded_len = 0;
+    char *expanded_css = yetty_ylexbor_css_expand_flex(css, css_len, &expanded_len);
+    if (expanded_css != NULL) {
+        css = expanded_css;
+        css_len = expanded_len;
+    }
+
     /* Pre-scan for `:root { --x: y; }` etc. before lexbor parses,
 	 * so var() lookups see the latest definitions. */
     yetty_ylexbor_css_vars_scan(r, css, css_len);
@@ -681,21 +693,26 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css(struct yetty_ylexbor *r, co
      * tracks. */
     yetty_ylexbor_css_scan_grid_content_width(r, css, css_len);
     yetty_ylexbor_css_scan_grid_templates(r, css, css_len);
+    yetty_ylexbor_css_scan_grid_spans(r, css, css_len);
+    yetty_ylexbor_css_scan_flex_gaps(r, css, css_len);
 
     /* Also push the same CSS through libcss so its cascade sees it. */
     (void)yetty_ybrowser_libcss_add_sheet(r, css, css_len, CSS_ORIGIN_AUTHOR);
 
     lxb_css_stylesheet_t *sheet = lxb_css_stylesheet_create(NULL);
     if (sheet == NULL) {
+        free(expanded_css);
         return YETTY_ERR(yetty_ycore_void, "stylesheet_create");
     }
     lxb_status_t s =
         lxb_css_stylesheet_parse(sheet, r->css_parser, (const lxb_char_t *)css, css_len);
     if (s != LXB_STATUS_OK) {
         lxb_css_stylesheet_destroy(sheet, true);
+        free(expanded_css);
         return YETTY_ERR(yetty_ycore_void, "stylesheet_parse");
     }
     s = lxb_html_document_stylesheet_attach(r->document, sheet);
+    free(expanded_css);
     if (s != LXB_STATUS_OK) {
         lxb_css_stylesheet_destroy(sheet, true);
         return YETTY_ERR(yetty_ycore_void, "stylesheet_attach");

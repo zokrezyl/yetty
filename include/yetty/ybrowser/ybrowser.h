@@ -59,6 +59,75 @@ YETTY_YRESULT_DECLARE(yetty_ybrowser_loader_ptr, struct yetty_ybrowser_loader *)
 struct yetty_ybrowser_loader_ptr_result yetty_ybrowser_loader_create(void);
 struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrowser_loader *loader);
 
+/* ---- Request / response objects ------------------------------------------
+ * A fetch is described by a request object and produces a response object.
+ * The request's `kind` drives the wire shape (Accept / Sec-Fetch-* headers)
+ * — content-negotiating CDNs and WAFs serve different representations per
+ * kind, so a stylesheet fetched "as an image" gets the wrong bytes. The
+ * response accumulates decorations (decoded image pixels today) on its way
+ * to the render end of the pipeline. */
+
+enum yetty_ybrowser_request_kind {
+    YETTY_YBROWSER_REQUEST_DOCUMENT, /* top-level page navigation */
+    YETTY_YBROWSER_REQUEST_STYLE,    /* <link rel=stylesheet> */
+    YETTY_YBROWSER_REQUEST_SCRIPT,   /* external <script src> */
+    YETTY_YBROWSER_REQUEST_IMAGE,    /* <img> / background image */
+    YETTY_YBROWSER_REQUEST_XHR,      /* JS fetch() / XMLHttpRequest */
+};
+
+struct yetty_ybrowser_request {
+    const char *url; /* required; borrowed */
+    enum yetty_ybrowser_request_kind kind;
+    const char *referer; /* document URL, or NULL */
+
+    /* fetch()/XHR extras — leave NULL/0 for a plain GET. */
+    const char *method; /* "POST", "PUT", …; NULL/"GET" for GET */
+    const char *body;   /* request body; copied by the fetcher */
+    size_t body_len;
+    const char *const *extra_headers; /* "Name: value" strings */
+    int extra_header_count;
+
+    /* Cancellation. When cancel_generation is non-NULL, the transfer
+	 * aborts at the next received chunk once *cancel_generation no
+	 * longer equals generation (the engine bumps its counter on
+	 * navigation). NULL → not cancellable. */
+    uint64_t generation;
+    const uint64_t *cancel_generation;
+};
+
+struct yetty_ybrowser_response {
+    long status; /* HTTP status; 200 for file://; 0 on transport failure */
+    char *body;  /* malloc'd, NUL-terminated; NULL on failure */
+    size_t body_len;
+    char *effective_url; /* post-redirect URL; may be NULL */
+    char *content_type;  /* Content-Type header value; may be NULL */
+
+    /* Decorations — attached by pipeline stages after the transfer,
+	 * consumed at render time. */
+    uint32_t *image_pixels; /* RGBA8, row-major */
+    int image_width, image_height;
+};
+
+/* Free every owned member and zero the struct. Safe on NULL and on an
+ * already-disposed response. */
+void yetty_ybrowser_response_dispose(struct yetty_ybrowser_response *response);
+
+/* Synchronous single fetch. The result is an error only for setup-level
+ * failures (bad arguments, out of memory, curl init); network and HTTP
+ * failures are data — inspect response->status / ->body. */
+struct yetty_ycore_void_result yetty_ybrowser_fetch(struct yetty_ybrowser_loader *loader,
+                                                    const struct yetty_ybrowser_request *request,
+                                                    struct yetty_ybrowser_response *response);
+
+/* Parallel batch fetch through one curl_multi: requests to the same
+ * H2 origin multiplex over a single connection; `host_connection_cap`
+ * bounds CONNECTIONS per host (matters for H1-only origins), not
+ * streams. Failed slots come back zeroed (status 0, NULL body). */
+struct yetty_ycore_void_result
+yetty_ybrowser_fetch_many(struct yetty_ybrowser_loader *loader,
+                          const struct yetty_ybrowser_request *requests, int count,
+                          struct yetty_ybrowser_response *responses, int host_connection_cap);
+
 struct yetty_ylexbor_config {
     int viewport_width;      /* px */
     int viewport_height;     /* px (unused by current layout — content height is computed) */
@@ -180,6 +249,12 @@ struct yetty_ycore_void_result yetty_ylexbor_run_deferred_scripts(struct yetty_y
  * call it once per frame from the host loop to stream a page's images in
  * without ever blocking for the whole set at once. */
 int yetty_ylexbor_fetch_one_pending_image(struct yetty_ylexbor *r);
+
+/* Batch variant: fetch up to `max_count` pending images in one parallel
+ * HTTP/2-multiplexed batch. Returns how many were processed (0 = page
+ * fully loaded). Prefer this over the one-at-a-time call when the host
+ * pumps per frame. */
+int yetty_ylexbor_fetch_pending_images(struct yetty_ylexbor *r, int max_count);
 
 struct yetty_yplatform_yworkpool;
 

@@ -1281,13 +1281,29 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         /* Flex `gap` (stored in grid_col_gap — a box is flex OR
 						 * grid, never both). libcss in this tree models only the
 						 * legacy multicol column-gap, so read the modern `gap`/
-						 * `column-gap` shorthand from the inline style. */
+						 * `column-gap` shorthand from the inline style, falling
+						 * back to the author-stylesheet flex-gap table scanned by
+						 * add_css (`.cards { display:flex; gap:16px }`). */
                         {
                             size_t gs_len = 0;
                             const lxb_char_t *gs = lxb_dom_element_get_attribute(
                                 el, (const lxb_char_t *)"style", 5, &gs_len);
                             if (gs && gs_len > 0) {
                                 float gap = yetty_ylexbor_css_inline_gap((const char *)gs, gs_len);
+                                if (gap > 0.0f) {
+                                    b->grid_col_gap = gap;
+                                }
+                            }
+                            if (b->grid_col_gap <= 0.0f) {
+                                size_t gap_cls_len = 0;
+                                const lxb_char_t *gap_cls = lxb_dom_element_get_attribute(
+                                    el, (const lxb_char_t *)"class", 5, &gap_cls_len);
+                                size_t tag_len = 0;
+                                const lxb_char_t *tag_name =
+                                    lxb_dom_element_local_name(el, &tag_len);
+                                float gap = yetty_ylexbor_flex_gap_lookup(
+                                    r, (const char *)gap_cls, gap_cls_len, (const char *)tag_name,
+                                    tag_len);
                                 if (gap > 0.0f) {
                                     b->grid_col_gap = gap;
                                 }
@@ -1525,18 +1541,25 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                             }
                         }
                     }
-                    /* No inline span? Responsive design systems (github's Primer
-					 * Brand) encode the grid-column span in the CLASS name
-					 * (`Grid__column--medium-span-7`); resolve it for the current
-					 * viewport width. Without this every card in github's 12-col
-					 * grid defaults to one column and the sections stack. */
+                    /* No inline span? Try the author-stylesheet span table
+					 * first (`.tile.feature { grid-column: span 2 }` — libcss has
+					 * no grid support, so add_css text-scans these), then the
+					 * responsive design systems (github's Primer Brand) that
+					 * encode the span in the CLASS name
+					 * (`Grid__column--medium-span-7`), resolved for the current
+					 * viewport width. Without these every card in a 12-col grid
+					 * defaults to one column and the sections stack. */
                     if (b->grid_col_span == 0) {
                         size_t cls_len2 = 0;
                         const lxb_char_t *cls2 = lxb_dom_element_get_attribute(
                             el, (const lxb_char_t *)"class", 5, &cls_len2);
                         if (cls2 != NULL && cls_len2 > 0) {
-                            int span = grid_span_from_classes((const char *)cls2, cls_len2,
+                            int span = yetty_ylexbor_grid_span_class_lookup(r, (const char *)cls2,
+                                                                            cls_len2);
+                            if (span < 1) {
+                                span = grid_span_from_classes((const char *)cls2, cls_len2,
                                                               r->viewport_w, YL_GRID_MAX_TRACKS);
+                            }
                             if (span >= 1) {
                                 b->grid_col_span = (uint8_t)span;
                             }

@@ -81,6 +81,28 @@ struct yl_grid_class {
     float row_gap;
 };
 
+/* A class-scoped `grid-column: span N` parsed from the author CSS
+ * (`.tile.feature { grid-column: span 2 }`). Inline-style span and
+ * span-in-class-name (Primer) are handled at box-build; this table covers
+ * the stylesheet-rule case libcss doesn't surface (no grid support). Keyed
+ * by the LAST class of a classes-only selector chain. */
+struct yl_grid_span_class {
+    char *cls; /* owned; freed on document replace */
+    uint8_t span;
+};
+
+/* A `gap`/`column-gap` on a flex container from the author CSS
+ * (`.cards { display:flex; gap:16px }`, `header nav { display:flex;
+ * gap:24px }`). libcss in this tree models only the legacy multicol
+ * column-gap, so these are text-scanned like the grid tables. Keyed by
+ * the LAST simple selector: a class (match_tag=0) or a bare tag name
+ * (match_tag=1). */
+struct yl_flex_gap_class {
+    char *key; /* owned; freed on document replace */
+    uint8_t match_tag;
+    float col_gap;
+};
+
 /* CSS `position` values. Mirrors the subset of CSS_POSITION_* the layout
  * pass acts on; STICKY collapses to RELATIVE until proper sticky tracking
  * exists. */
@@ -500,6 +522,18 @@ struct yetty_ylexbor {
     int grid_class_count;
     int grid_class_cap;
 
+    /* Class-scoped `grid-column: span N` rules from author CSS (see
+     * yetty_ylexbor_css_scan_grid_spans). Freed with grid_classes. */
+    struct yl_grid_span_class *grid_span_classes;
+    int grid_span_class_count;
+    int grid_span_class_cap;
+
+    /* Flex-container gaps from author CSS (see
+     * yetty_ylexbor_css_scan_flex_gaps). Freed with grid_classes. */
+    struct yl_flex_gap_class *flex_gap_classes;
+    int flex_gap_class_count;
+    int flex_gap_class_cap;
+
     /* Set once the MediaWiki float-helper stylesheet has been injected for a
      * MediaWiki page (see yetty_ybrowser_libcss_apply_wikipedia_quirks). Those
      * helpers use generic class names and so must NOT apply to other sites. */
@@ -641,6 +675,35 @@ void yetty_ylexbor_css_scan_grid_content_width(struct yetty_ylexbor *r, const ch
  * (`.cls{display:grid;grid-template-columns:…;column-gap/gap/grid-gap:…}`) and
  * record them in r->grid_classes for box-build to look up by class name.
  * Cheap substring pass; safe to call per sheet. */
+/* Scan author CSS for class-scoped `grid-column: span N` declarations
+ * (selector must be a chain of classes, e.g. `.tile.feature`; keyed by the
+ * last class). Consumed at box-build for grid items whose span isn't set
+ * inline or encoded in a class name. */
+void yetty_ylexbor_css_scan_grid_spans(struct yetty_ylexbor *r, const char *css_source,
+                                       size_t css_len);
+
+/* Resolve a span for an element's class attribute against the scanned
+ * span table. Returns the span (1..YL_GRID_MAX_TRACKS) or 0. */
+int yetty_ylexbor_grid_span_class_lookup(struct yetty_ylexbor *r, const char *class_attr,
+                                         size_t class_len);
+
+/* Scan author CSS for `gap`/`column-gap` on display:flex rules. */
+void yetty_ylexbor_css_scan_flex_gaps(struct yetty_ylexbor *r, const char *css_source,
+                                      size_t css_len);
+
+/* Resolve a flex gap for an element (by class attribute, then tag name)
+ * against the scanned table. Returns the gap in px, or 0. */
+float yetty_ylexbor_flex_gap_lookup(struct yetty_ylexbor *r, const char *class_attr,
+                                    size_t class_len, const char *tag_name, size_t tag_len);
+
+/* Expand every `flex: …` shorthand declaration in `css_source` into its
+ * longhands (flex-grow / flex-shrink / flex-basis). libcss in this tree
+ * parses the longhands but not the shorthand, and real pages set flex
+ * almost exclusively via the stylesheet shorthand. Returns a malloc'd
+ * rewritten stylesheet (caller frees, *out_len set) or NULL when nothing
+ * needed expanding. */
+char *yetty_ylexbor_css_expand_flex(const char *css_source, size_t css_len, size_t *out_len);
+
 void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *css_source,
                                            size_t len);
 
@@ -750,33 +813,11 @@ void yetty_ylexbor_js_dispatch_event_type(struct yetty_ylexbor *r, const char *t
  * the returned string. Returns NULL on failure. */
 char *yetty_ylexbor_resolve_url(struct yetty_ylexbor *r, const char *href);
 
-/* Synchronous HTTP(S) fetch — used by the script loader and fetch()
- * binding. `loader` supplies the shared connection/DNS/TLS caches and
- * the Alt-Svc file; NULL still works (no reuse). Returns body bytes
- * (caller frees) and HTTP status. */
-char *yetty_ylexbor_http_get(struct yetty_ybrowser_loader *loader, const char *url,
-                             size_t *out_len, long *out_status);
-/* Variant that sends a Referer header — needed for many CDN image
- * endpoints that 403/404 fetches without it (gstatic, cloudflare WAFs,
- * news-site image proxies). */
-char *yetty_ylexbor_http_get_referer(struct yetty_ybrowser_loader *loader, const char *url,
-                                     const char *referer, size_t *out_len, long *out_status);
-
-/* Parallel HTTP(S) fetch — all transfers run through one curl_multi
- * (HTTP/2 multiplexing reuses one connection per origin, cutting total
- * wall-time vs N sequential easy-handle calls); `concurrency` caps
- * connections per host, not streams. All requests share the global
- * referer (typically the document URL).
- *
- * For i in [0,n): on return, out_bodies[i] is malloc'd bytes (caller
- * frees) or NULL on failure; out_lens[i] is the body length; out_status[i]
- * is the HTTP status. Pre-allocate the three output arrays to length n.
- *
- * Used by ybrowser-paint to fetch every `<img>` URL on a page in one
- * batch before the synchronous decode/emit loop. */
-void yetty_ylexbor_http_get_many(struct yetty_ybrowser_loader *loader, const char *const *urls,
-                                 int n, const char *referer, int concurrency, char **out_bodies,
-                                 size_t *out_lens, long *out_status);
+/* Publish decoded RGBA pixels onto the loader's resource cache entry for
+ * `url` (copies), so the next navigation reuses the decode as well as
+ * the bytes. No-op when the entry is gone or libcurl is compiled out. */
+void yetty_ybrowser_loader_cache_put_pixels(struct yetty_ybrowser_loader *loader, const char *url,
+                                            const uint32_t *pixels, int width, int height);
 
 /* Dispatch a click event to the JS handlers attached to the element
  * whose box contains (x,y) in pane-local pixels. Returns 1 if a handler

@@ -416,17 +416,49 @@ static int is_tracking_script_url(const char *url)
     return 0;
 }
 
-static void run_scripts_recursive(struct yetty_ylexbor *r, JSContext *ctx, lxb_dom_node_t *node)
+/* One <script> to execute, in document order. EITHER `url` is set (an
+ * external script — after the parallel-fetch step the matching response
+ * carries its body) OR `inline_body` is set. Execution order is the
+ * collected order in both cases — only the FETCHING is parallel. */
+struct script_entry {
+    char *url;         /* owned; external script when non-NULL */
+    char *inline_body; /* owned when url == NULL */
+    size_t inline_len;
+};
+
+struct script_collect {
+    struct script_entry *items;
+    int count, cap;
+};
+
+static void script_collect_push(struct script_collect *collect, struct script_entry entry)
+{
+    if (collect->count == collect->cap) {
+        int new_cap = collect->cap ? collect->cap * 2 : 8;
+        struct script_entry *items =
+            realloc(collect->items, (size_t)new_cap * sizeof(*items));
+        if (!items) {
+            free(entry.url);
+            free(entry.inline_body);
+            return;
+        }
+        collect->items = items;
+        collect->cap = new_cap;
+    }
+    collect->items[collect->count++] = entry;
+}
+
+/* DOM walk — append every runnable <script> (external or inline) to the
+ * collect list in document order. */
+static void collect_scripts_recursive(struct yetty_ylexbor *r, lxb_dom_node_t *node,
+                                      struct script_collect *collect)
 {
     for (lxb_dom_node_t *c = node->first_child; c != NULL; c = c->next) {
         if (c->type == LXB_DOM_NODE_TYPE_ELEMENT && c->local_name == LXB_TAG_SCRIPT) {
-
             lxb_dom_element_t *el = lxb_dom_interface_element(c);
             if (!is_js_script_type(el)) {
                 continue;
             }
-
-            /* External script: fetch + eval. */
             size_t srclen = 0;
             const lxb_char_t *src_attr =
                 lxb_dom_element_get_attribute(el, (const lxb_char_t *)"src", 3, &srclen);
@@ -447,32 +479,105 @@ static void run_scripts_recursive(struct yetty_ylexbor *r, JSContext *ctx, lxb_d
                     free(url);
                     continue;
                 }
-                size_t blen = 0;
-                long status = 0;
-                char *body = yetty_ylexbor_http_get(r->loader, url, &blen, &status);
-                if (body && status >= 200 && status < 300) {
-                    eval_buf(r, ctx, body, blen, url);
-                } else {
-                    ydebug("js script-load %s status=%ld", url, status);
-                }
-                free(body);
-                free(url);
+                struct script_entry entry = {.url = url};
+                script_collect_push(collect, entry);
                 continue;
             }
-
-            /* Inline script. */
             size_t slen = 0;
-            char *src = collect_script_text(c, &slen);
-            if (src) {
-                eval_buf(r, ctx, src, slen, "<inline>");
-                free(src);
+            char *inline_src = collect_script_text(c, &slen);
+            if (inline_src) {
+                struct script_entry entry = {.inline_body = inline_src, .inline_len = slen};
+                script_collect_push(collect, entry);
             }
             continue; /* don't recurse into <script> children */
         }
         if (c->first_child) {
-            run_scripts_recursive(r, ctx, c);
+            collect_scripts_recursive(r, c, collect);
         }
     }
+}
+
+/* Two-phase script run — same shape as the stylesheet loader:
+ *   1) DOM walk → collect external + inline scripts in document order.
+ *   2) Parallel-fetch every external URL (one HTTP/2-multiplexed batch
+ *      instead of one blocking round-trip per script).
+ *   3) Evaluate in collected order, so execution semantics match the
+ *      sequential fetch exactly. */
+static void run_collected_scripts(struct yetty_ylexbor *r, JSContext *ctx, lxb_dom_node_t *node)
+{
+    struct script_collect collect = {0};
+    collect_scripts_recursive(r, node, &collect);
+    if (collect.count == 0) {
+        return;
+    }
+
+    int external_count = 0;
+    for (int i = 0; i < collect.count; i++) {
+        if (collect.items[i].url) {
+            external_count++;
+        }
+    }
+    struct yetty_ybrowser_request *fetch_requests = NULL;
+    struct yetty_ybrowser_response *fetch_responses = NULL;
+    int *entry_to_slot = NULL; /* collect index → response slot, -1 for inline */
+    if (external_count > 0) {
+        fetch_requests = calloc((size_t)external_count, sizeof(*fetch_requests));
+        fetch_responses = calloc((size_t)external_count, sizeof(*fetch_responses));
+        entry_to_slot = calloc((size_t)collect.count, sizeof(*entry_to_slot));
+        if (fetch_requests && fetch_responses && entry_to_slot) {
+            int slot = 0;
+            for (int i = 0; i < collect.count; i++) {
+                if (collect.items[i].url) {
+                    fetch_requests[slot].url = collect.items[i].url;
+                    fetch_requests[slot].kind = YETTY_YBROWSER_REQUEST_SCRIPT;
+                    fetch_requests[slot].referer = r->base_url;
+                    entry_to_slot[i] = slot;
+                    slot++;
+                } else {
+                    entry_to_slot[i] = -1;
+                }
+            }
+            struct yetty_ycore_void_result many_res =
+                yetty_ybrowser_fetch_many(r->loader, fetch_requests, external_count,
+                                          fetch_responses, /*host_connection_cap=*/8);
+            if (YETTY_IS_ERR(many_res)) {
+                yetty_ycore_error_destroy(many_res.error);
+            }
+        } else {
+            free(fetch_requests);
+            free(fetch_responses);
+            free(entry_to_slot);
+            fetch_requests = NULL;
+            fetch_responses = NULL;
+            entry_to_slot = NULL;
+        }
+    }
+
+    for (int i = 0; i < collect.count; i++) {
+        struct script_entry *entry = &collect.items[i];
+        if (entry->url) {
+            struct yetty_ybrowser_response *response =
+                entry_to_slot ? &fetch_responses[entry_to_slot[i]] : NULL;
+            if (response && response->body && response->status >= 200 &&
+                response->status < 300) {
+                eval_buf(r, ctx, response->body, response->body_len, entry->url);
+            } else {
+                ydebug("js script-load %s status=%ld", entry->url,
+                       response ? response->status : 0L);
+            }
+            if (response) {
+                yetty_ybrowser_response_dispose(response);
+            }
+            free(entry->url);
+        } else {
+            eval_buf(r, ctx, entry->inline_body, entry->inline_len, "<inline>");
+            free(entry->inline_body);
+        }
+    }
+    free(fetch_requests);
+    free(fetch_responses);
+    free(entry_to_slot);
+    free(collect.items);
 }
 
 struct yetty_ycore_void_result yetty_ylexbor_js_run_inline_scripts(struct yetty_ylexbor *r)
@@ -491,7 +596,7 @@ struct yetty_ycore_void_result yetty_ylexbor_js_run_all_scripts(struct yetty_yle
         return ir;
     }
 
-    run_scripts_recursive(r, (JSContext *)r->js_ctx, lxb_dom_interface_node(r->document));
+    run_collected_scripts(r, (JSContext *)r->js_ctx, lxb_dom_interface_node(r->document));
 
     /* Fire DOMContentLoaded + load on document — many SPAs gate boot
 	 * on these. We synthesise both right after script execution

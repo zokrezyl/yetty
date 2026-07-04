@@ -223,6 +223,11 @@ struct app {
 static inline void err_ok(struct yetty_ycore_void_result r)
 {
     if (YETTY_IS_ERR(r)) {
+        /* Deliberately-tolerated failures still deserve a trace line —
+		 * a silent swallow here cost a day of debugging a black pane. */
+        char chain[512];
+        yetty_ycore_error_snprint(chain, sizeof(chain), r.error);
+        ydebug("ybrowser: tolerated error: %s", chain);
         yetty_ycore_error_destroy(r.error);
     }
 }
@@ -285,62 +290,6 @@ static void reload(struct app *a);
 static void sync_active_ui(struct app *a);
 static void render_active(struct app *a);
 static int build_ui(struct app *a);
-
-/* ===========================================================================
- * Output bridge — the framework writes OSC envelopes here; we blocking-
- * write them to stdout and flush after each emit.
- * ===========================================================================*/
-struct stdout_pty {
-    struct yetty_platform_pty base;
-};
-
-static struct yetty_ycore_size_result so_write(struct yetty_platform_pty *self, const char *data,
-                                               size_t len)
-{
-    (void)self;
-    if (len) {
-        fwrite(data, 1, len, stdout);
-    }
-    return YETTY_OK(yetty_ycore_size, len);
-}
-static struct yetty_ycore_size_result so_read(struct yetty_platform_pty *self, char *buf, size_t n)
-{
-    (void)self;
-    (void)buf;
-    (void)n;
-    return YETTY_OK(yetty_ycore_size, 0);
-}
-static struct yetty_ycore_void_result so_noop(struct yetty_platform_pty *self)
-{
-    (void)self;
-    return YETTY_OK_VOID();
-}
-static struct yetty_ycore_void_result so_resize(struct yetty_platform_pty *self, uint32_t c,
-                                                uint32_t r, uint32_t pw, uint32_t ph)
-{
-    (void)self;
-    (void)r;
-    (void)pw;
-    (void)ph;
-    return YETTY_OK_VOID();
-}
-static struct yetty_platform_pty_pipe_source *so_pipe(struct yetty_platform_pty *self)
-{
-    (void)self;
-    return NULL;
-}
-static const struct yetty_platform_pty_ops *stdout_pty_ops(void)
-{
-    static const struct yetty_platform_pty_ops ops = {
-        .destroy = so_noop,
-        .read = so_read,
-        .write = so_write,
-        .resize = so_resize,
-        .stop = so_noop,
-        .pipe_source = so_pipe,
-    };
-    return &ops;
-}
 
 /* ===========================================================================
  * History stacks.
@@ -1093,9 +1042,10 @@ static int pump_active(struct app *a)
             if (yetty_ylexbor_images_in_flight(t->engine) > 0 || a->img_dirty) {
                 wait_ms = 0;
             }
-        } else if (yetty_ylexbor_fetch_one_pending_image(t->engine)) {
-            /* In-yetty client (no pool): stream one image per pump, blocking
-             * only for that single image. */
+        } else if (yetty_ylexbor_fetch_pending_images(t->engine, 4) > 0) {
+            /* In-yetty client (no pool): stream a small parallel batch per
+             * pump — one multiplexed round-trip for four images instead of
+             * one blocking round-trip for one. */
             t->needs_render = 1;
             a->pending_render = 1;
             wait_ms = 0;
@@ -1590,8 +1540,6 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
         }
     }
 
-    struct stdout_pty out = {0};
-    out.base.ops = stdout_pty_ops();
     struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
     if (YETTY_IS_ERR(fr)) {
         fprintf(stderr, "ybrowser: framework_create: %s\n", fr.error.msg);
@@ -1604,6 +1552,27 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
     a.fw = fr.value;
     err_ok(yetty_ygui_framework_set_viewport(a.fw, (float)viewport_w, (float)viewport_h));
     yetty_ygui_framework_set_key_cb(a.fw, key_cb, &a);
+
+    /* Attach to the host yetty's root figure container over the yclass-RPC
+	 * DCS transport (stdin = responses, stdout = requests). The handshake
+	 * reads stdin synchronously ONCE — it must run before this loop starts
+	 * consuming stdin, and after raw mode is on (a cooked tty would echo the
+	 * handshake bytes back through the parser). Without the attach the
+	 * framework has no container and every emit fails with "no container" —
+	 * the pane stays black while the client happily renders into the void. */
+    {
+        struct yetty_ycore_void_result attach_res =
+            yetty_ygui_framework_attach(a.fw, STDIN_FILENO, STDOUT_FILENO, /*compressed=*/1);
+        if (YETTY_IS_ERR(attach_res)) {
+            fprintf(stderr, "ybrowser: framework_attach: %s\n", attach_res.error.msg);
+            yetty_ycore_error_destroy(attach_res.error);
+            err_ok(yetty_ygui_framework_destroy(a.fw));
+            if (raw_ok) {
+                tcsetattr(STDIN_FILENO, TCSANOW, &saved);
+            }
+            return 1;
+        }
+    }
 
     if (build_ui(&a) < 0) {
         err_ok(yetty_ygui_framework_destroy(a.fw));

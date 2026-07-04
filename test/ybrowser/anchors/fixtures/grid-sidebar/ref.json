@@ -1,0 +1,319 @@
+{
+ "anchors": {
+  "a0000": {
+   "display": "block",
+   "parent": null,
+   "rect": [
+    8,
+    8,
+    1184,
+    400.8
+   ],
+   "tag": "body"
+  },
+  "a0001": {
+   "display": "grid",
+   "parent": "a0000",
+   "rect": [
+    8,
+    8,
+    1184,
+    400.8
+   ],
+   "tag": "div"
+  },
+  "a0002": {
+   "display": "block",
+   "parent": "a0001",
+   "rect": [
+    28,
+    8,
+    220,
+    400.8
+   ],
+   "tag": "aside"
+  },
+  "a0003": {
+   "display": "block",
+   "parent": "a0002",
+   "rect": [
+    40,
+    20,
+    196,
+    155
+   ],
+   "tag": "ul"
+  },
+  "a0004": {
+   "display": "list-item",
+   "parent": "a0003",
+   "rect": [
+    40,
+    20,
+    196,
+    31
+   ],
+   "tag": "li"
+  },
+  "a0005": {
+   "display": "list-item",
+   "parent": "a0003",
+   "rect": [
+    40,
+    51,
+    196,
+    31
+   ],
+   "tag": "li"
+  },
+  "a0006": {
+   "display": "list-item",
+   "parent": "a0003",
+   "rect": [
+    40,
+    82,
+    196,
+    31
+   ],
+   "tag": "li"
+  },
+  "a0007": {
+   "display": "list-item",
+   "parent": "a0003",
+   "rect": [
+    40,
+    113,
+    196,
+    31
+   ],
+   "tag": "li"
+  },
+  "a0008": {
+   "display": "list-item",
+   "parent": "a0003",
+   "rect": [
+    40,
+    144,
+    196,
+    31
+   ],
+   "tag": "li"
+  },
+  "a0009": {
+   "display": "block",
+   "parent": "a0001",
+   "rect": [
+    268,
+    8,
+    904,
+    400.8
+   ],
+   "tag": "div"
+  },
+  "a0010": {
+   "display": "block",
+   "parent": "a0009",
+   "rect": [
+    268,
+    8,
+    904,
+    28
+   ],
+   "tag": "h2"
+  },
+  "a0011": {
+   "display": "block",
+   "parent": "a0009",
+   "rect": [
+    268,
+    55.9,
+    904,
+    46
+   ],
+   "tag": "div"
+  },
+  "a0012": {
+   "display": "grid",
+   "parent": "a0009",
+   "rect": [
+    268,
+    119.9,
+    904,
+    288.9
+   ],
+   "tag": "div"
+  },
+  "a0013": {
+   "display": "block",
+   "parent": "a0012",
+   "rect": [
+    268,
+    119.9,
+    598,
+    137.4
+   ],
+   "tag": "div"
+  },
+  "a0014": {
+   "display": "block",
+   "parent": "a0013",
+   "rect": [
+    281,
+    151.6,
+    572,
+    22
+   ],
+   "tag": "h3"
+  },
+  "a0015": {
+   "display": "block",
+   "parent": "a0013",
+   "rect": [
+    281,
+    192.3,
+    572,
+    36
+   ],
+   "tag": "p"
+  },
+  "a0016": {
+   "display": "block",
+   "parent": "a0012",
+   "rect": [
+    880,
+    119.9,
+    292,
+    137.4
+   ],
+   "tag": "div"
+  },
+  "a0017": {
+   "display": "block",
+   "parent": "a0016",
+   "rect": [
+    893,
+    151.6,
+    266,
+    22
+   ],
+   "tag": "h3"
+  },
+  "a0018": {
+   "display": "block",
+   "parent": "a0016",
+   "rect": [
+    893,
+    192.3,
+    266,
+    18
+   ],
+   "tag": "p"
+  },
+  "a0019": {
+   "display": "block",
+   "parent": "a0012",
+   "rect": [
+    268,
+    271.3,
+    292,
+    137.4
+   ],
+   "tag": "div"
+  },
+  "a0020": {
+   "display": "block",
+   "parent": "a0019",
+   "rect": [
+    281,
+    303.1,
+    266,
+    22
+   ],
+   "tag": "h3"
+  },
+  "a0021": {
+   "display": "block",
+   "parent": "a0019",
+   "rect": [
+    281,
+    343.8,
+    266,
+    36
+   ],
+   "tag": "p"
+  },
+  "a0022": {
+   "display": "block",
+   "parent": "a0012",
+   "rect": [
+    574,
+    271.3,
+    292,
+    137.4
+   ],
+   "tag": "div"
+  },
+  "a0023": {
+   "display": "block",
+   "parent": "a0022",
+   "rect": [
+    587,
+    303.1,
+    266,
+    22
+   ],
+   "tag": "h3"
+  },
+  "a0024": {
+   "display": "block",
+   "parent": "a0022",
+   "rect": [
+    587,
+    343.8,
+    266,
+    18
+   ],
+   "tag": "p"
+  },
+  "a0025": {
+   "display": "block",
+   "parent": "a0012",
+   "rect": [
+    880,
+    271.3,
+    292,
+    137.4
+   ],
+   "tag": "div"
+  },
+  "a0026": {
+   "display": "block",
+   "parent": "a0025",
+   "rect": [
+    893,
+    303.1,
+    266,
+    22
+   ],
+   "tag": "h3"
+  },
+  "a0027": {
+   "display": "block",
+   "parent": "a0025",
+   "rect": [
+    893,
+    343.8,
+    266,
+    36
+   ],
+   "tag": "p"
+  }
+ },
+ "meta": {
+  "budget_ms": 4000,
+  "chrome": "Google Chrome 150.0.7871.46",
+  "doc_height": 757,
+  "fixture": "fixture.html",
+  "width": 1200
+ }
+}

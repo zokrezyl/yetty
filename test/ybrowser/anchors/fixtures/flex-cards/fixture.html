@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<title>flex-cards</title>
+<style>
+  body { font-family: sans-serif; }
+  header { display: flex; justify-content: space-between; align-items: center;
+           padding: 12px 24px; background: #202830; color: #e8e8e8; }
+  header .logo { font-size: 22px; font-weight: bold; }
+  header nav { display: flex; gap: 24px; }
+  header nav a { color: #c0c8d0; text-decoration: none; }
+  main { padding: 0 24px; }
+  .cards { display: flex; gap: 16px; margin-top: 24px; }
+  .card { flex: 1; border: 1px solid #ccc; padding: 16px; }
+  .card h3 { margin-top: 0; }
+  .wide { flex: 2; }
+  footer { margin-top: 32px; padding: 16px 24px; background: #eee; }
+</style>
+</head>
+<body data-test="a0000">
+<header data-test="a0001">
+  <div class="logo" data-test="a0002">Vendor Nine</div>
+  <nav data-test="a0003">
+    <a href="#" data-test="a0004">Alpha</a>
+    <a href="#" data-test="a0005">Beryl</a>
+    <a href="#" data-test="a0006">Cedar</a>
+    <a href="#" data-test="a0007">Delta</a>
+  </nav>
+</header>
+<main data-test="a0008">
+  <h1 data-test="a0009">Placeholder headline over two clauses, neither of them short</h1>
+  <p data-test="a0010">Opening paragraph with enough filler words to wrap across several lines
+     at any sensible viewport width, because wrapped inline text is where the
+     row model earns its keep and single-line paragraphs prove nothing much.</p>
+  <div class="cards" data-test="a0011">
+    <div class="card" data-test="a0012">
+      <h3 data-test="a0013">First card</h3>
+      <p data-test="a0014">Body copy for the first card, long enough to wrap at least once
+         inside a third-width column.</p>
+    </div>
+    <div class="card wide" data-test="a0015">
+      <h3 data-test="a0016">Second card, double width</h3>
+      <p data-test="a0017">This card takes two shares of the row via flex-grow, so its width
+         must come out roughly double that of its siblings.</p>
+    </div>
+    <div class="card" data-test="a0018">
+      <h3 data-test="a0019">Third card</h3>
+      <p data-test="a0020">Short body.</p>
+    </div>
+  </div>
+</main>
+<footer data-test="a0021">
+  <p data-test="a0022">Footer line, one sentence of filler to give the footer real height.</p>
+</footer>
+
+
+
+
+</body></html>

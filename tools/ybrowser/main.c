@@ -46,132 +46,53 @@ int ybrowser_looks_like_url(const char *s)
     return strncmp(s, "http://", 7) == 0 || strncmp(s, "https://", 8) == 0;
 }
 
-struct fetch_buf {
-    char *data;
-    size_t size, cap;
-};
-
-static size_t fetch_write_cb(char *p, size_t sz, size_t n, void *ud)
-{
-    struct fetch_buf *b = ud;
-    size_t add = sz * n;
-    if (b->size + add + 1 > b->cap) {
-        size_t nc = b->cap ? b->cap * 2 : 16384;
-        while (nc < b->size + add + 1) {
-            nc *= 2;
-        }
-        char *np = realloc(b->data, nc);
-        if (np == NULL) {
-            return 0; /* signals curl to abort */
-        }
-        b->data = np;
-        b->cap = nc;
-    }
-    memcpy(b->data + b->size, p, add);
-    b->size += add;
-    return add;
-}
-
 /* Out-param: caller-owned char* gets filled with the post-redirect URL
  * (e.g. http://wikipedia.org/wiki/Photography → https://en.wikipedia.org/
  * wiki/Photography). NULL passes through. The caller frees with free().
  * Used to set base_url to the effective URL so that image src= references
  * resolve against the HTTPS origin — that pulls them over HTTP/2
- * multiplexing instead of HTTP/1.1 with 30+ TCP handshakes. */
+ * multiplexing instead of HTTP/1.1 with 30+ TCP handshakes.
+ *
+ * Goes through the shared fetch layer (kind = DOCUMENT), so the page
+ * request carries browser-shape navigation headers, the transfer obeys
+ * the same size/speed guards as every other fetch, and the TLS
+ * connection it opens stays warm in the loader for the CSS/image
+ * fetches that follow. */
 static char *slurp_url(struct yetty_ybrowser_loader *loader, const char *url, size_t *out_len,
                        char **out_effective_url)
 {
-    CURL *c = curl_easy_init();
-    if (c == NULL) {
-        return NULL;
-    }
-    struct fetch_buf b = {0};
     if (out_effective_url) {
         *out_effective_url = NULL;
     }
-
-    /* Attach the loader's CURLSH so the TLS connection we open here
-	 * gets cached and reused by load_external_stylesheets and the
-	 * image-fetch path. Without this the page fetch's connection to
-	 * e.g. en.wikipedia.org is discarded immediately after the
-	 * easy_cleanup below, forcing CSS to re-handshake. */
-    void *share = yetty_ybrowser_loader_curl_share(loader);
-    if (share) {
-        curl_easy_setopt(c, CURLOPT_SHARE, share);
-    }
-
-    curl_easy_setopt(c, CURLOPT_URL, url);
-    curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(c, CURLOPT_MAXREDIRS, 10L);
-    /* Send a standard Chrome UA. Bot-looking UAs ("ybrowser/0.1")
-	 * cause sites like Wikipedia and news.google.com to serve a
-	 * stripped-down legacy/no-JS page that hides images behind sprite
-	 * tricks or replaces <img src> with text labels. The image-fetch
-	 * path in ybrowser-js-web.c already sends Chrome 120; align the
-	 * page-fetch UA so the *whole* document looks like a real browser
-	 * to the origin. YETTY_USER_AGENT env var overrides for ops who
-	 * need bot-identifying UAs (ToS compliance, scraping budgets). */
-    const char *ua = getenv("YETTY_USER_AGENT");
-    if (!ua || !*ua) {
-        ua = "Mozilla/5.0 (X11; Linux x86_64) "
-             "AppleWebKit/537.36 (KHTML, like Gecko) "
-             "Chrome/120.0.0.0 Safari/537.36";
-    }
-    curl_easy_setopt(c, CURLOPT_USERAGENT, ua);
-    curl_easy_setopt(c, CURLOPT_TIMEOUT, 30L);
-    curl_easy_setopt(c, CURLOPT_CONNECTTIMEOUT, 10L);
-    /* Empty string = "advertise every encoding curl was built with"
-	 * (gzip + brotli for our prebuilt). curl decompresses for us. */
-    curl_easy_setopt(c, CURLOPT_ACCEPT_ENCODING, "");
-    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, fetch_write_cb);
-    curl_easy_setopt(c, CURLOPT_WRITEDATA, &b);
-    /* Send a browser-shape Accept header. Without an Accept header,
-	 * Wikipedia's caching tier sometimes returns the lightweight bot
-	 * variant of pages. */
-    struct curl_slist *headers = NULL;
-    headers = curl_slist_append(
-        headers, "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
-    headers = curl_slist_append(headers, "Accept-Language: en-US,en;q=0.9");
-    if (headers) {
-        curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
-    }
-
-    CURLcode rc = curl_easy_perform(c);
-    long http_status = 0;
-    curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &http_status);
-
-    if (rc != CURLE_OK) {
-        fprintf(stderr, "ybrowser: fetch %s failed: %s\n", url, curl_easy_strerror(rc));
-        curl_easy_cleanup(c);
-        if (headers) {
-            curl_slist_free_all(headers);
-        }
-        free(b.data);
+    struct yetty_ybrowser_request request = {
+        .url = url,
+        .kind = YETTY_YBROWSER_REQUEST_DOCUMENT,
+    };
+    struct yetty_ybrowser_response response = {0};
+    struct yetty_ycore_void_result fetch_res = yetty_ybrowser_fetch(loader, &request, &response);
+    if (YETTY_IS_ERR(fetch_res)) {
+        fprintf(stderr, "ybrowser: fetch %s failed: %s\n", url, fetch_res.error.msg);
+        yetty_ycore_error_destroy(fetch_res.error);
         return NULL;
     }
-    if (http_status >= 400) {
-        fprintf(stderr, "ybrowser: %s -> HTTP %ld\n", url, http_status);
+    if (!response.body) {
+        fprintf(stderr, "ybrowser: fetch %s failed\n", url);
+        yetty_ybrowser_response_dispose(&response);
+        return NULL;
+    }
+    if (response.status >= 400) {
+        fprintf(stderr, "ybrowser: %s -> HTTP %ld\n", url, response.status);
         /* Render the body anyway — error pages are HTML too. */
     }
-    /* Capture the effective URL after redirect chain so the caller
-	 * can pin base_url to the actual HTTPS origin (not the http://
-	 * the user typed). Without this, protocol-relative image URLs
-	 * like //upload.wikimedia.org/... resolve to http://, which
-	 * forces HTTP/1.1 and 30+ fresh TCP handshakes per page. */
-    if (out_effective_url) {
-        char *eff = NULL;
-        curl_easy_getinfo(c, CURLINFO_EFFECTIVE_URL, &eff);
-        if (eff && *eff) {
-            *out_effective_url = strdup(eff);
-        }
+    if (out_effective_url && response.effective_url) {
+        *out_effective_url = response.effective_url;
+        response.effective_url = NULL; /* ownership to the caller */
     }
-    curl_easy_cleanup(c);
-    if (headers) {
-        curl_slist_free_all(headers);
-    }
-
-    *out_len = b.size;
-    return b.data;
+    *out_len = response.body_len;
+    char *body = response.body;
+    response.body = NULL; /* ownership to the caller */
+    yetty_ybrowser_response_dispose(&response);
+    return body;
 }
 
 char *ybrowser_slurp_file(struct yetty_ybrowser_loader *loader, const char *path,

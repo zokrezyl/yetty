@@ -1420,7 +1420,7 @@ float yetty_ylexbor_css_inline_gap(const char *style, size_t len)
 
 void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
 {
-    if (r == NULL || r->grid_classes == NULL) {
+    if (r == NULL) {
         return;
     }
     for (int e = 0; e < r->grid_class_count; e++) {
@@ -1430,6 +1430,20 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
     r->grid_classes = NULL;
     r->grid_class_count = 0;
     r->grid_class_cap = 0;
+    for (int e = 0; e < r->grid_span_class_count; e++) {
+        free(r->grid_span_classes[e].cls);
+    }
+    free(r->grid_span_classes);
+    r->grid_span_classes = NULL;
+    r->grid_span_class_count = 0;
+    r->grid_span_class_cap = 0;
+    for (int e = 0; e < r->flex_gap_class_count; e++) {
+        free(r->flex_gap_classes[e].key);
+    }
+    free(r->flex_gap_classes);
+    r->flex_gap_classes = NULL;
+    r->flex_gap_class_count = 0;
+    r->flex_gap_class_cap = 0;
 }
 
 const struct yl_grid_class *yetty_ylexbor_grid_class_lookup(struct yetty_ylexbor *r,
@@ -1460,4 +1474,608 @@ const struct yl_grid_class *yetty_ylexbor_grid_class_lookup(struct yetty_ylexbor
         }
     }
     return NULL;
+}
+
+void yetty_ylexbor_css_scan_grid_spans(struct yetty_ylexbor *r, const char *src, size_t len)
+{
+    if (r == NULL || src == NULL || len < 14) {
+        return;
+    }
+    static const char needle[] = "grid-column:";
+    const size_t nlen = sizeof(needle) - 1;
+    for (size_t i = 0; i + nlen < len; i++) {
+        if (memcmp(src + i, needle, nlen) != 0) {
+            continue;
+        }
+        if (!grid_media_active_at(src, len, i, (float)r->viewport_w)) {
+            continue;
+        }
+        /* Value must be a `span N` placement (`span 2`, `auto / span 2`).
+         * Line indexes / named lines are handled elsewhere. */
+        size_t val_start = i + nlen;
+        size_t val_end = val_start;
+        while (val_end < len && src[val_end] != ';' && src[val_end] != '}') {
+            val_end++;
+        }
+        int span = 0;
+        for (size_t k = val_start; k + 4 <= val_end; k++) {
+            if (strncasecmp(src + k, "span", 4) == 0) {
+                size_t d = k + 4;
+                while (d < val_end && (src[d] == ' ' || src[d] == '\t')) {
+                    d++;
+                }
+                if (d < val_end && src[d] >= '0' && src[d] <= '9') {
+                    span = atoi(src + d);
+                }
+                break;
+            }
+        }
+        if (span < 1 || span > YL_GRID_MAX_TRACKS) {
+            continue;
+        }
+        /* Enclosing rule's selector. Same walk as the template scanner,
+         * but a chain of classes (`.tile.feature`) is accepted — the rule
+         * is keyed by the LAST class in the chain. */
+        size_t brace = i;
+        while (brace > 0 && src[brace] != '{') {
+            brace--;
+        }
+        if (src[brace] != '{') {
+            continue;
+        }
+        size_t sel_end = brace;
+        size_t sel_start = brace;
+        while (sel_start > 0 && src[sel_start - 1] != '}' && src[sel_start - 1] != '{' &&
+               src[sel_start - 1] != ';') {
+            sel_start--;
+        }
+        for (;;) {
+            while (sel_start < sel_end && (src[sel_start] == ' ' || src[sel_start] == '\n' ||
+                                           src[sel_start] == '\t' || src[sel_start] == '\r')) {
+                sel_start++;
+            }
+            if (sel_start + 1 < sel_end && src[sel_start] == '/' && src[sel_start + 1] == '*') {
+                sel_start += 2;
+                while (sel_start + 1 < sel_end &&
+                       !(src[sel_start] == '*' && src[sel_start + 1] == '/')) {
+                    sel_start++;
+                }
+                sel_start += 2;
+                continue;
+            }
+            break;
+        }
+        /* Walk the class chain; remember the last class token. */
+        size_t last_cls_start = 0, last_cls_end = 0;
+        size_t pos = sel_start;
+        while (pos < sel_end && src[pos] == '.') {
+            size_t cls_start = pos + 1;
+            size_t cls_end = cls_start;
+            while (cls_end < sel_end) {
+                unsigned char ch = (unsigned char)src[cls_end];
+                if (ch == '\\' && cls_end + 1 < sel_end) {
+                    cls_end += 2;
+                } else if (isalnum(ch) || ch == '-' || ch == '_') {
+                    cls_end++;
+                } else {
+                    break;
+                }
+            }
+            if (cls_end == cls_start) {
+                break;
+            }
+            last_cls_start = cls_start;
+            last_cls_end = cls_end;
+            pos = cls_end;
+        }
+        if (last_cls_end == 0) {
+            continue;
+        }
+        /* Reject anything after the class chain (descendants, elements). */
+        {
+            size_t t = pos;
+            while (t < sel_end && (src[t] == ' ' || src[t] == '\n')) {
+                t++;
+            }
+            if (t != sel_end) {
+                continue;
+            }
+        }
+        char cls[64];
+        grid_cls_copy_unescape(src + last_cls_start, last_cls_end - last_cls_start, cls,
+                               sizeof(cls));
+        int dup = 0;
+        for (int e = 0; e < r->grid_span_class_count; e++) {
+            if (strcmp(r->grid_span_classes[e].cls, cls) == 0) {
+                dup = 1;
+                break;
+            }
+        }
+        if (dup) {
+            continue;
+        }
+        if (r->grid_span_class_count == r->grid_span_class_cap) {
+            int cap = r->grid_span_class_cap ? r->grid_span_class_cap * 2 : 8;
+            struct yl_grid_span_class *grown =
+                realloc(r->grid_span_classes, (size_t)cap * sizeof(struct yl_grid_span_class));
+            if (!grown) {
+                return;
+            }
+            r->grid_span_classes = grown;
+            r->grid_span_class_cap = cap;
+        }
+        struct yl_grid_span_class *entry = &r->grid_span_classes[r->grid_span_class_count];
+        entry->cls = strdup(cls);
+        if (!entry->cls) {
+            return;
+        }
+        entry->span = (uint8_t)span;
+        r->grid_span_class_count++;
+    }
+}
+
+int yetty_ylexbor_grid_span_class_lookup(struct yetty_ylexbor *r, const char *class_attr,
+                                         size_t class_len)
+{
+    if (r == NULL || class_attr == NULL || r->grid_span_class_count == 0) {
+        return 0;
+    }
+    size_t i = 0;
+    while (i < class_len) {
+        while (i < class_len && (class_attr[i] == ' ' || class_attr[i] == '\t')) {
+            i++;
+        }
+        size_t start = i;
+        while (i < class_len && class_attr[i] != ' ' && class_attr[i] != '\t') {
+            i++;
+        }
+        size_t tlen = i - start;
+        if (tlen == 0) {
+            continue;
+        }
+        for (int e = 0; e < r->grid_span_class_count; e++) {
+            const char *cls = r->grid_span_classes[e].cls;
+            if (strlen(cls) == tlen && strncmp(cls, class_attr + start, tlen) == 0) {
+                return r->grid_span_classes[e].span;
+            }
+        }
+    }
+    return 0;
+}
+
+void yetty_ylexbor_css_scan_flex_gaps(struct yetty_ylexbor *r, const char *src, size_t len)
+{
+    if (r == NULL || src == NULL || len < 16) {
+        return;
+    }
+    static const char needle[] = "display";
+    const size_t nlen = sizeof(needle) - 1;
+    for (size_t i = 0; i + nlen < len; i++) {
+        if (memcmp(src + i, needle, nlen) != 0) {
+            continue;
+        }
+        /* `display : flex` (any spacing); also matches inline-flex via the
+         * substring — both lay out as our flex row. */
+        size_t p = i + nlen;
+        while (p < len && (src[p] == ' ' || src[p] == '\t')) {
+            p++;
+        }
+        if (p >= len || src[p] != ':') {
+            continue;
+        }
+        p++;
+        size_t val_end = p;
+        while (val_end < len && src[val_end] != ';' && src[val_end] != '}') {
+            val_end++;
+        }
+        int is_flex = 0;
+        for (size_t k = p; k + 4 <= val_end; k++) {
+            if (strncasecmp(src + k, "flex", 4) == 0) {
+                is_flex = 1;
+                break;
+            }
+        }
+        if (!is_flex) {
+            continue;
+        }
+        if (!grid_media_active_at(src, len, i, (float)r->viewport_w)) {
+            continue;
+        }
+        /* Gap from the same block. */
+        size_t brace = i;
+        while (brace > 0 && src[brace] != '{') {
+            brace--;
+        }
+        if (src[brace] != '{') {
+            continue;
+        }
+        size_t block_end = brace + 1;
+        int depth = 1;
+        while (block_end < len && depth > 0) {
+            if (src[block_end] == '{') {
+                depth++;
+            } else if (src[block_end] == '}') {
+                depth--;
+            }
+            block_end++;
+        }
+        const char *block = src + brace;
+        size_t blen = block_end - brace;
+        float col_gap = grid_find_len(block, blen, "column-gap", 0);
+        if (col_gap < 0.0f) {
+            col_gap = grid_find_len(block, blen, "gap", 1);
+        }
+        if (col_gap < 0.0f) {
+            col_gap = grid_find_len(block, blen, "gap", 0);
+        }
+        if (col_gap <= 0.0f) {
+            continue;
+        }
+        /* Selector: take the LAST simple selector — a class chain keyed by
+         * its last class, or a bare tag name (`header nav` → nav). */
+        size_t sel_end = brace;
+        size_t sel_start = brace;
+        while (sel_start > 0 && src[sel_start - 1] != '}' && src[sel_start - 1] != '{' &&
+               src[sel_start - 1] != ';') {
+            sel_start--;
+        }
+        /* Trim trailing whitespace, then scan back to the last whitespace to
+         * isolate the final simple selector. */
+        while (sel_end > sel_start &&
+               (src[sel_end - 1] == ' ' || src[sel_end - 1] == '\n' ||
+                src[sel_end - 1] == '\t' || src[sel_end - 1] == '\r')) {
+            sel_end--;
+        }
+        size_t simple_start = sel_end;
+        while (simple_start > sel_start) {
+            char prev = src[simple_start - 1];
+            if (prev == ' ' || prev == '\n' || prev == '\t' || prev == '\r' || prev == '>' ||
+                prev == '+' || prev == '~' || prev == ',') {
+                break;
+            }
+            simple_start--;
+        }
+        if (simple_start >= sel_end) {
+            continue;
+        }
+        char key[64];
+        uint8_t match_tag = 0;
+        if (src[simple_start] == '.') {
+            /* Class chain — last class wins. */
+            size_t last_cls_start = 0, last_cls_end = 0;
+            size_t pos = simple_start;
+            while (pos < sel_end && src[pos] == '.') {
+                size_t cls_start = pos + 1;
+                size_t cls_end = cls_start;
+                while (cls_end < sel_end) {
+                    unsigned char ch = (unsigned char)src[cls_end];
+                    if (ch == '\\' && cls_end + 1 < sel_end) {
+                        cls_end += 2;
+                    } else if (isalnum(ch) || ch == '-' || ch == '_') {
+                        cls_end++;
+                    } else {
+                        break;
+                    }
+                }
+                if (cls_end == cls_start) {
+                    break;
+                }
+                last_cls_start = cls_start;
+                last_cls_end = cls_end;
+                pos = cls_end;
+            }
+            if (last_cls_end == 0 || pos != sel_end) {
+                continue;
+            }
+            grid_cls_copy_unescape(src + last_cls_start, last_cls_end - last_cls_start, key,
+                                   sizeof(key));
+        } else {
+            /* Bare tag name only (nav, header, ul, …) — no #id, :pseudo,
+             * [attr] complexity. */
+            size_t t = simple_start;
+            while (t < sel_end && isalnum((unsigned char)src[t])) {
+                t++;
+            }
+            if (t != sel_end || sel_end - simple_start >= sizeof(key)) {
+                continue;
+            }
+            memcpy(key, src + simple_start, sel_end - simple_start);
+            key[sel_end - simple_start] = '\0';
+            match_tag = 1;
+        }
+        int dup = 0;
+        for (int e = 0; e < r->flex_gap_class_count; e++) {
+            if (r->flex_gap_classes[e].match_tag == match_tag &&
+                strcmp(r->flex_gap_classes[e].key, key) == 0) {
+                dup = 1;
+                break;
+            }
+        }
+        if (dup) {
+            continue;
+        }
+        if (r->flex_gap_class_count == r->flex_gap_class_cap) {
+            int cap = r->flex_gap_class_cap ? r->flex_gap_class_cap * 2 : 8;
+            struct yl_flex_gap_class *grown =
+                realloc(r->flex_gap_classes, (size_t)cap * sizeof(struct yl_flex_gap_class));
+            if (!grown) {
+                return;
+            }
+            r->flex_gap_classes = grown;
+            r->flex_gap_class_cap = cap;
+        }
+        struct yl_flex_gap_class *entry = &r->flex_gap_classes[r->flex_gap_class_count];
+        entry->key = strdup(key);
+        if (!entry->key) {
+            return;
+        }
+        entry->match_tag = match_tag;
+        entry->col_gap = col_gap;
+        r->flex_gap_class_count++;
+    }
+}
+
+float yetty_ylexbor_flex_gap_lookup(struct yetty_ylexbor *r, const char *class_attr,
+                                    size_t class_len, const char *tag_name, size_t tag_len)
+{
+    if (r == NULL || r->flex_gap_class_count == 0) {
+        return 0.0f;
+    }
+    if (class_attr != NULL) {
+        size_t i = 0;
+        while (i < class_len) {
+            while (i < class_len && (class_attr[i] == ' ' || class_attr[i] == '\t')) {
+                i++;
+            }
+            size_t start = i;
+            while (i < class_len && class_attr[i] != ' ' && class_attr[i] != '\t') {
+                i++;
+            }
+            size_t tlen = i - start;
+            if (tlen == 0) {
+                continue;
+            }
+            for (int e = 0; e < r->flex_gap_class_count; e++) {
+                const struct yl_flex_gap_class *entry = &r->flex_gap_classes[e];
+                if (!entry->match_tag && strlen(entry->key) == tlen &&
+                    strncmp(entry->key, class_attr + start, tlen) == 0) {
+                    return entry->col_gap;
+                }
+            }
+        }
+    }
+    if (tag_name != NULL && tag_len > 0) {
+        for (int e = 0; e < r->flex_gap_class_count; e++) {
+            const struct yl_flex_gap_class *entry = &r->flex_gap_classes[e];
+            if (entry->match_tag && strlen(entry->key) == tag_len &&
+                strncasecmp(entry->key, tag_name, tag_len) == 0) {
+                return entry->col_gap;
+            }
+        }
+    }
+    return 0.0f;
+}
+
+/*===========================================================================
+ * `flex` shorthand expansion — libcss parses the longhands only.
+ *=========================================================================*/
+
+struct flex_expand_out {
+    char *data;
+    size_t size, cap;
+};
+
+static int flex_expand_append(struct flex_expand_out *out, const char *bytes, size_t count)
+{
+    if (out->size + count + 1 > out->cap) {
+        size_t new_cap = out->cap ? out->cap * 2 : 4096;
+        while (new_cap < out->size + count + 1) {
+            new_cap *= 2;
+        }
+        char *grown = realloc(out->data, new_cap);
+        if (!grown) {
+            return -1;
+        }
+        out->data = grown;
+        out->cap = new_cap;
+    }
+    memcpy(out->data + out->size, bytes, count);
+    out->size += count;
+    return 0;
+}
+
+/* A bare CSS <number> — digits with an optional sign / decimal point and
+ * no unit. Distinguishes grow/shrink factors from a flex-basis length. */
+static int flex_token_is_number(const char *token, size_t token_len)
+{
+    size_t k = 0;
+    int digits = 0;
+    if (k < token_len && (token[k] == '+' || token[k] == '-')) {
+        k++;
+    }
+    for (; k < token_len; k++) {
+        if (token[k] >= '0' && token[k] <= '9') {
+            digits = 1;
+            continue;
+        }
+        if (token[k] == '.') {
+            continue;
+        }
+        return 0;
+    }
+    return digits;
+}
+
+char *yetty_ylexbor_css_expand_flex(const char *src, size_t len, size_t *out_len)
+{
+    if (src == NULL || len < 6 || out_len == NULL) {
+        return NULL;
+    }
+    struct flex_expand_out out = {0};
+    size_t copied = 0;
+    int changed = 0;
+    for (size_t i = 0; i + 5 <= len; i++) {
+        if (strncasecmp(src + i, "flex", 4) != 0) {
+            continue;
+        }
+        /* Property position: the previous non-whitespace char must open a
+         * declaration ('{' or ';'). Excludes `display:flex` (previous is
+         * ':'), `.flex` selectors ('.'), and `-webkit-flex` ('-'). */
+        int at_decl_start = 1;
+        for (size_t back = i; back > 0;) {
+            char prev = src[back - 1];
+            if (prev == ' ' || prev == '\t' || prev == '\n' || prev == '\r') {
+                back--;
+                continue;
+            }
+            at_decl_start = (prev == '{' || prev == ';');
+            break;
+        }
+        if (!at_decl_start) {
+            continue;
+        }
+        /* Next non-whitespace after the name must be ':'. */
+        size_t after_name = i + 4;
+        while (after_name < len &&
+               (src[after_name] == ' ' || src[after_name] == '\t' || src[after_name] == '\n')) {
+            after_name++;
+        }
+        if (after_name >= len || src[after_name] != ':') {
+            continue;
+        }
+        size_t val_start = after_name + 1;
+        size_t val_end = val_start;
+        while (val_end < len && src[val_end] != ';' && src[val_end] != '}') {
+            val_end++;
+        }
+        /* Split off a trailing `!important`. */
+        size_t effective_end = val_end;
+        int important = 0;
+        for (size_t k = val_start; k + 10 <= val_end; k++) {
+            if (src[k] == '!' && strncasecmp(src + k + 1, "important", 9) == 0) {
+                important = 1;
+                effective_end = k;
+                break;
+            }
+        }
+        /* Tokenize (up to 3 value tokens). */
+        char tokens[3][40];
+        size_t token_lens[3] = {0};
+        int token_count = 0;
+        int parse_failed = 0;
+        for (size_t k = val_start; k < effective_end;) {
+            while (k < effective_end &&
+                   (src[k] == ' ' || src[k] == '\t' || src[k] == '\n' || src[k] == '\r')) {
+                k++;
+            }
+            size_t tok_start = k;
+            while (k < effective_end && src[k] != ' ' && src[k] != '\t' && src[k] != '\n' &&
+                   src[k] != '\r') {
+                k++;
+            }
+            size_t tok_len = k - tok_start;
+            if (tok_len == 0) {
+                continue;
+            }
+            if (token_count == 3 || tok_len >= sizeof(tokens[0])) {
+                parse_failed = 1;
+                break;
+            }
+            memcpy(tokens[token_count], src + tok_start, tok_len);
+            tokens[token_count][tok_len] = '\0';
+            token_lens[token_count] = tok_len;
+            token_count++;
+        }
+        if (parse_failed || token_count == 0) {
+            continue;
+        }
+        /* Values we can't model — leave the declaration untouched. */
+        int unsupported = 0;
+        for (int t = 0; t < token_count; t++) {
+            if (strcasecmp(tokens[t], "inherit") == 0 || strcasecmp(tokens[t], "unset") == 0 ||
+                strcasecmp(tokens[t], "revert") == 0 || strncasecmp(tokens[t], "var(", 4) == 0 ||
+                strcasecmp(tokens[t], "content") == 0) {
+                unsupported = 1;
+                break;
+            }
+        }
+        if (unsupported) {
+            continue;
+        }
+        const char *grow = NULL;
+        const char *shrink = NULL;
+        const char *basis = NULL;
+        if (token_count == 1 && strcasecmp(tokens[0], "none") == 0) {
+            grow = "0";
+            shrink = "0";
+            basis = "auto";
+        } else if (token_count == 1 && strcasecmp(tokens[0], "auto") == 0) {
+            grow = "1";
+            shrink = "1";
+            basis = "auto";
+        } else if (token_count == 1 && strcasecmp(tokens[0], "initial") == 0) {
+            grow = "0";
+            shrink = "1";
+            basis = "auto";
+        } else {
+            int bad = 0;
+            for (int t = 0; t < token_count; t++) {
+                if (flex_token_is_number(tokens[t], token_lens[t])) {
+                    if (!grow) {
+                        grow = tokens[t];
+                    } else if (!shrink) {
+                        shrink = tokens[t];
+                    } else {
+                        bad = 1;
+                    }
+                } else {
+                    if (!basis) {
+                        basis = tokens[t];
+                    } else {
+                        bad = 1;
+                    }
+                }
+            }
+            if (bad || (!grow && !basis)) {
+                continue;
+            }
+            if (grow && !shrink) {
+                shrink = "1";
+            }
+            if (grow && !basis) {
+                basis = "0%";
+            }
+            if (!grow) { /* `flex: 300px` → 1 1 300px */
+                grow = "1";
+                shrink = "1";
+            }
+        }
+        char replacement[192];
+        const char *suffix = important ? " !important" : "";
+        int written = snprintf(replacement, sizeof(replacement),
+                               "flex-grow:%s%s;flex-shrink:%s%s;flex-basis:%s%s", grow, suffix,
+                               shrink, suffix, basis, suffix);
+        if (written < 0 || (size_t)written >= sizeof(replacement)) {
+            continue;
+        }
+        if (flex_expand_append(&out, src + copied, i - copied) != 0 ||
+            flex_expand_append(&out, replacement, (size_t)written) != 0) {
+            free(out.data);
+            return NULL;
+        }
+        copied = val_end; /* the source's ';' or '}' terminator is kept */
+        changed = 1;
+        i = val_end - 1;
+    }
+    if (!changed) {
+        free(out.data);
+        return NULL;
+    }
+    if (flex_expand_append(&out, src + copied, len - copied) != 0) {
+        free(out.data);
+        return NULL;
+    }
+    out.data[out.size] = '\0';
+    *out_len = out.size;
+    return out.data;
 }
