@@ -62,11 +62,7 @@ struct yetty_yvterm_text_cell_const_ptr_result {
     } ;
 };
 
-/* The unified terminal grid — the yclass data block. visible row N maps to:
- *
- *     lines[(base + N) % visible_rows]
- *
- * Whole-screen scroll advances base and reuses rolled-off line slots. */
+/* The unified terminal grid — the yclass data block. */
 struct yetty_yclass_ptr_result yetty_yvterm_grid_class_get(void);
 
 /* Data-block handle — opaque outside the owning .c. The struct
@@ -97,9 +93,10 @@ struct yetty_ycore_void_result yetty_yvterm_grid_feed(struct yetty_yclass_object
 struct yetty_ycore_void_result yetty_yvterm_grid_resize(struct yetty_yclass_object *obj, uint32_t cols, uint32_t rows);
 struct yetty_ycore_int_result yetty_yvterm_grid_is_dirty(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yvterm_grid_cursor(struct yetty_yclass_object *obj, uint32_t *out_row, uint32_t *out_col, uint32_t *out_visible);
-/* Absolute row at the top of the screen (rows scrolled off so far). The cursor's
- * absolute output row is this + the visible cursor row — used to place anchored
- * rich content on the rolling-row scroll. */
+/* Absolute row at the top of the ACTIVE screen (rows scrolled off so far). The
+ * cursor's absolute output row is this + the visible cursor row — used to place
+ * anchored rich content on the rolling-row scroll. Each screen carries its own
+ * origin; the alternate one restarts at 0 on every entry. */
 struct yetty_ycore_uint32_result yetty_yvterm_grid_scroll_origin(struct yetty_yclass_object *obj);
 struct yetty_ycore_uint32_result yetty_yvterm_grid_append_primitive(struct yetty_yclass_object *obj, uint32_t row, const uint32_t *words, uint32_t word_count);
 struct yetty_ycore_uint32_result yetty_yvterm_grid_attach_composite(struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_composite *composite);
@@ -156,11 +153,16 @@ struct yetty_ycore_const_uint32_ptr_result yetty_yvterm_grid_slot_primitive_word
 /* Current selection rectangle (raw anchor/head; the renderer normalises to a
  * reading-order stream). active=0 → no selection. */
 struct yetty_ycore_void_result yetty_yvterm_grid_selection(struct yetty_yclass_object *obj, int *out_active, uint32_t *out_anchor_row, uint32_t *out_anchor_col, uint32_t *out_head_row, uint32_t *out_head_col);
-/* Renderer has consumed the model; drop every dirty flag. */
+/* Renderer has consumed the model; drop every dirty flag (both screens — a
+ * dormant ring's stale flags would otherwise fire a spurious full repaint on
+ * the next switch, which mark_dirty_all re-arms anyway). */
 struct yetty_ycore_void_result yetty_yvterm_grid_clear_dirty(struct yetty_yclass_object *obj);
-/* Raw ring-slot accessors (slot in [0, line_count)) for the text upload, which
- * is slot-indexed so the shader's root_row=base gives O(1) scroll. Distinct from
- * the visible-row accessors above (which resolve the ring). */
+/* Raw ring-slot accessors (slot in [0, slot_count)) for the text upload, which
+ * is slot-indexed so the shader's root_row=base gives O(1) scroll. Distinct
+ * from the visible-row accessors above (which resolve the ring). Slots address
+ * the ACTIVE screen's ring; its size changes when the alternate screen toggles
+ * (primary: visible + scrollback, alternate: visible only), so the renderer
+ * re-queries slot_count each pass. */
 struct yetty_ycore_uint32_result yetty_yvterm_grid_slot_count(struct yetty_yclass_object *obj);
 struct yetty_yvterm_text_cell_const_ptr_result yetty_yvterm_grid_slot_cells(struct yetty_yclass_object *obj, uint32_t slot);
 struct yetty_ycore_int_result yetty_yvterm_grid_slot_dirty(struct yetty_yclass_object *obj, uint32_t slot);

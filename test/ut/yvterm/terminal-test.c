@@ -191,18 +191,10 @@ static void test_scrollback(struct ytest *test)
 
 /*---------------------------------------------------------------------------
  * Alt screen. Entering (?1049h) sets the alt-screen mode and clears the visible
- * surface; content written there lands on it.
- *
- * NOTE on primary/alt restore: yvterm does NOT call
- * vterm_screen_enable_altscreen (grep: only libvterm's own t/harness.c does),
- * so libvterm keeps a single screen buffer and yvterm's grid stores cells in one
- * rolling-row ring (src/yetty/yvterm/grid.c:139) while tracking only the
- * `alt_screen` mode flag (grid.c:164). As a result ?1049l does NOT restore the
- * primary buffer content — the alt content persists. Whether that is a bug or a
- * deliberate limitation of the O(1) rolling-row scrollback model is a product
- * decision, so this test pins only the two behaviours that are unambiguously
- * correct (mode entry clears the surface; writes land) and does NOT assert a
- * restore in either direction, to avoid cementing unresolved behaviour.
+ * surface; content written there lands on it. This smoke test covers entry
+ * only; the full enter/scroll/exit-restore contract (primary contents and
+ * cursor come back on ?1049l, alt scrolls stay out of the primary scrollback)
+ * lives in state-matrix-test.c (test_alt_screen_restore).
  *-------------------------------------------------------------------------*/
 static void test_alt_screen(struct ytest *test)
 {

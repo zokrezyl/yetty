@@ -8,8 +8,10 @@
  * cb_movecursor) translate libvterm's state into the rolling-row cell ring:
  * background-colour erase (BCE), wide-glyph spill, autowrap, tab stops, cursor
  * save/restore, in-line insert/delete, and scroll-region isolation vs
- * scrollback. It also pins the KNOWN alt-screen non-restore behaviour as an
- * explicit characterization test (see test_alt_screen_no_restore).
+ * scrollback. It also covers the dual-buffer alternate-screen contract: entry
+ * presents a cleared alternate ring, alt scrolls never touch the primary ring,
+ * and exit switches back to the untouched primary — contents, scrollback
+ * origin, and cursor (see test_alt_screen_restore).
  *
  * Every failure names the input escape stream and the expected terminal state.
  * Anything already covered by terminal-test.c (basic ingestion, CUP/CR/LF/CUU/
@@ -313,29 +315,50 @@ static void test_sgr_extended(struct ytest *test)
 }
 
 /*---------------------------------------------------------------------------
- * Alt-screen non-restore — CHARACTERIZATION of a known limitation.
- *
- * yvterm does not call vterm_screen_enable_altscreen, so there is a single
- * rolling-row buffer: entering the alt screen clears the surface, and EXITING
- * it (?1049l) does NOT restore the primary content. This test pins that current
- * behaviour deliberately so any future move to a restoring alt-screen model is a
- * conscious, visible change to this assertion — it is NOT an endorsement that
- * non-restore is the desired end state (that remains a product decision).
+ * Alt-screen dual buffers (?1049h / ?1049l): the primary and alternate screens
+ * are separate rings. Entering the alternate screen presents a cleared surface
+ * and writes land on it; the alternate ring has no scrollback and its OWN
+ * rolling origin (fresh per entry); exiting switches back to the untouched
+ * primary — contents, scrollback origin, and (for mode 1049) the saved cursor.
  *-------------------------------------------------------------------------*/
-static void test_alt_screen_no_restore(struct ytest *test)
+static void test_alt_screen_restore(struct ytest *test)
 {
-    struct yetty_yclass_object *grid = make_grid(test, 80, 24, 0);
+    struct yetty_yclass_object *grid = make_grid(test, 80, 24, 100);
+    uint32_t row, col;
 
-    feeds(test, grid, "\033[1;1Hprimary");
-    YTEST_REQUIRE_EQ_INT(test, cp_at(test, grid, 0, 0), 'p');
+    /* Scroll real primary history first: 30 lines on a 24-row screen push
+     * several rows into scrollback. */
+    for (int line = 0; line < 30; ++line) {
+        feeds(test, grid, "history\r\n");
+    }
+    uint32_t origin_before = scroll_origin(test, grid);
+    YTEST_REQUIRE(test, origin_before > 0);
 
-    feeds(test, grid, "\033[?1049h\033[1;1HALT"); /* enter alt (clears), write */
+    feeds(test, grid, "\033[1;1HPRIM"); /* marker on the visible top row */
+    YTEST_REQUIRE_EQ_INT(test, cp_at(test, grid, 0, 0), 'P');
+
+    feeds(test, grid, "\033[?1049h"); /* enter alt: a cleared surface */
+    YTEST_CHECK(test, cp_at(test, grid, 0, 0) == 0 || cp_at(test, grid, 0, 0) == ' ');
+    /* The alternate screen's rolling origin is its own and starts fresh. */
+    YTEST_CHECK_EQ_SIZE(test, scroll_origin(test, grid), 0);
+
+    feeds(test, grid, "\033[1;1HALT"); /* writes land on the alt surface */
     YTEST_CHECK_EQ_INT(test, cp_at(test, grid, 0, 0), 'A');
 
-    feeds(test, grid, "\033[?1049l"); /* exit alt */
-    /* Known limitation: primary "primary" is NOT restored; the single-buffer
-     * content persists (cell 0 is not 'p'). */
-    YTEST_CHECK(test, cp_at(test, grid, 0, 0) != 'p');
+    /* A whole-screen scroll inside the alt screen advances only the ALT
+     * origin (in-place ring rotation, nothing retained). */
+    feeds(test, grid, "\033[24;1H\n");
+    YTEST_CHECK_EQ_SIZE(test, scroll_origin(test, grid), 1);
+
+    feeds(test, grid, "\033[?1049l"); /* exit alt: back to the primary ring */
+    YTEST_CHECK_EQ_INT(test, cp_at(test, grid, 0, 0), 'P');
+    YTEST_CHECK_EQ_INT(test, cp_at(test, grid, 0, 3), 'M');
+    /* Primary scrollback survived the alt session untouched. */
+    YTEST_CHECK_EQ_SIZE(test, scroll_origin(test, grid), origin_before);
+    /* Mode 1049 also saves/restores the cursor: back to just after "PRIM". */
+    cursor_of(test, grid, &row, &col);
+    YTEST_CHECK_EQ_SIZE(test, row, 0);
+    YTEST_CHECK_EQ_SIZE(test, col, 4);
 
     yetty_yvterm_grid_dispose(grid);
 }
@@ -352,6 +375,6 @@ int main(void)
     YTEST_RUN(&test, test_insert_delete_char);
     YTEST_RUN(&test, test_scroll_region);
     YTEST_RUN(&test, test_sgr_extended);
-    YTEST_RUN(&test, test_alt_screen_no_restore);
+    YTEST_RUN(&test, test_alt_screen_restore);
     return ytest_end(&test);
 }
