@@ -94,11 +94,12 @@ static void yplot_init_base_uniforms(const struct yetty_yplot_render_config *con
  * wants buffer curves). `bc_buf` / `bc_cap` is a caller-owned scratch
  * area for the serialized yfsvm program. The parsed plot expression is
  * also handed back to the caller in `*out_plot` so it can synthesise
- * data buffers from `name=buffer` declarations. */
+ * data buffers from `name=buffer` declarations; `expr_arena` is the
+ * caller-owned node arena the parsed AST points into. */
 static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
     const char *source, size_t source_len, const struct yetty_yplot_render_config *config,
     uint32_t *bc_buf, uint32_t bc_cap, struct yetty_yplot_uniforms *u, uint32_t *out_bc_len,
-    struct yetty_yexpr_plot_parse_output *out_plot)
+    struct yetty_yexpr_arena *expr_arena, struct yetty_yexpr_plot_expr *out_plot)
 {
     yplot_init_base_uniforms(config, u);
 
@@ -112,7 +113,7 @@ static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
     }
 
     /* Parse expression(s) using yexpr's plot-syntax. */
-    struct yetty_yexpr_plot_parse_result pr = yetty_yexpr_parse_plot(source, source_len);
+    struct yetty_yexpr_plot_expr_result pr = yetty_yexpr_parse_plot(source, source_len, expr_arena);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pr, "yplot: expression parse failed");
     if (out_plot) {
         *out_plot = pr.value;
@@ -122,34 +123,34 @@ static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
      * @view= viewport currently rebinds the static domain — the shader
      * doesn't yet animate zoom from this, but the override still gives
      * a useful initial framing for the first frame. */
-    if (pr.value.plot.has_x_range) {
-        u->x_min = pr.value.plot.x_min;
-        u->x_max = pr.value.plot.x_max;
+    if (pr.value.has_x_range) {
+        u->x_min = pr.value.x_min;
+        u->x_max = pr.value.x_max;
     }
-    if (pr.value.plot.has_y_range) {
-        u->y_min = pr.value.plot.y_min;
-        u->y_max = pr.value.plot.y_max;
+    if (pr.value.has_y_range) {
+        u->y_min = pr.value.y_min;
+        u->y_max = pr.value.y_max;
     }
-    if (pr.value.plot.has_view) {
-        u->x_min = pr.value.plot.view_x_min;
-        u->x_max = pr.value.plot.view_x_max;
-        u->y_min = pr.value.plot.view_y_min;
-        u->y_max = pr.value.plot.view_y_max;
+    if (pr.value.has_view) {
+        u->x_min = pr.value.view_x_min;
+        u->x_max = pr.value.view_x_max;
+        u->y_min = pr.value.view_y_min;
+        u->y_max = pr.value.view_y_max;
     }
 
-    u->function_count = pr.value.plot.def_count;
+    u->function_count = pr.value.def_count;
     if (u->function_count > 8) {
         u->function_count = 8;
     }
 
     /* Per-plot @<name>.color overrides. */
-    for (uint32_t i = 0; i < pr.value.plot.attr_count; i++) {
-        const struct yetty_yexpr_plot_attr *attr = &pr.value.plot.attrs[i];
+    for (uint32_t i = 0; i < pr.value.attr_count; i++) {
+        const struct yetty_yexpr_plot_attr *attr = &pr.value.attrs[i];
         if (strcmp(attr->attr_name, "color") != 0) {
             continue;
         }
         for (uint32_t j = 0; j < u->function_count; j++) {
-            if (strcmp(pr.value.plot.defs[j].name, attr->plot_name) == 0) {
+            if (strcmp(pr.value.defs[j].name, attr->plot_name) == 0) {
                 uint32_t c;
                 if (parse_hex_color(attr->value, &c)) {
                     u->colors[j] = c;
@@ -162,7 +163,7 @@ static struct yetty_ycore_void_result yplot_build_uniforms_and_bytecode(
     /* Compile to bytecode. The compile_multi entry threads the plot
      * expression's buffer table into the codegen so f(x) calls resolve
      * to LOAD_S against the buffer's slot. */
-    struct yetty_yfsvm_program_result prog = yetty_yfsvm_compile_multi(&pr.value.plot);
+    struct yetty_yfsvm_program_result prog = yetty_yfsvm_compile_multi(&pr.value);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, prog, "yplot: yfsvm compile failed");
 
     /* Tell the receiver to subscribe to the animation timer when the
@@ -246,11 +247,12 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
     struct yetty_yplot_uniforms u;
     uint32_t bc_buf[1024];
     uint32_t bc_len = 0;
-    struct yetty_yexpr_plot_parse_output parsed = {0};
+    struct yetty_yexpr_arena expr_arena;
+    struct yetty_yexpr_plot_expr parsed = {0};
 
     struct yetty_ycore_void_result ub = yplot_build_uniforms_and_bytecode(
         source, len, config, bc_buf, (uint32_t)(sizeof bc_buf / sizeof bc_buf[0]), &u, &bc_len,
-        &parsed);
+        &expr_arena, &parsed);
     YETTY_RETURN_IF_ERR(yetty_ydraw_drawable_list, ub, "yplot: uniforms/bytecode build failed");
 
     /* Buffer slots come from TWO sources, layered in this order so that
@@ -258,7 +260,7 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
      *   1) declarations from source (`f=buffer; @f.size=N; @f.values=…`)
      *      — slot index == declaration order, matching compiler's LOAD_S idx
      *   2) caller-supplied data buffers via the API — appended after */
-    uint32_t decl_count = parsed.plot.buffer_count;
+    uint32_t decl_count = parsed.buffer_count;
     if (decl_count > 8) {
         decl_count = 8;
     }
@@ -280,7 +282,7 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
 
         /* First pass: how much zero-fill do we need? */
         for (uint32_t i = 0; i < decl_count; i++) {
-            const struct yetty_yexpr_plot_buffer *d = &parsed.plot.buffers[i];
+            const struct yetty_yexpr_plot_buffer *d = &parsed.buffers[i];
             if (d->inline_count == 0 && d->size > 0) {
                 zero_fill_total += d->size;
             }
@@ -298,7 +300,7 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_with_buffers(
         /* Second pass: populate wire entries for declarations. */
         size_t zf_off = 0;
         for (uint32_t i = 0; i < decl_count; i++) {
-            const struct yetty_yexpr_plot_buffer *d = &parsed.plot.buffers[i];
+            const struct yetty_yexpr_plot_buffer *d = &parsed.buffers[i];
             if (d->inline_count > 0) {
                 wire_bufs[i].samples = d->inline_values;
                 wire_bufs[i].count = d->inline_count;
