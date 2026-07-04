@@ -3304,6 +3304,21 @@ struct yetty_ycore_void_result yetty_ygrid_add_record_local(struct yetty_ygrid_g
     struct yetty_ycore_void_result gr = grow_bytes(grid, record_len);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, gr, "ygrid_add_record: grow_bytes");
 
+    /* The host's content scale can change at runtime — a yvnc viewer
+     * pushes its display density with its resize request and the app
+     * adopts it before re-laying out. Coordinates are scaled at ingestion,
+     * so re-read the current value here: the chrome producer repaints
+     * (clear + re-emit) on that resize and its fresh records land at the
+     * viewer's density. Prims and the render-time rect scaling both
+     * follow content_scale, so refreshing only at ingestion keeps them
+     * consistent with each other. */
+    if (grid->runtime) {
+        float runtime_scale = grid->runtime->gpu.app_gpu_context.content_scale;
+        if (runtime_scale > 0.0f) {
+            grid->content_scale = runtime_scale;
+        }
+    }
+
     uint32_t record_offset = (uint32_t)grid->bytes_len;
     memcpy(grid->bytes + grid->bytes_len, record_bytes, record_len);
     grid->bytes_len += record_len;

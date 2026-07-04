@@ -449,12 +449,17 @@ static void hid_on_char(struct yetty_yvnc_server *server, uint32_t codepoint, ui
     hid_push_event(server, &ev);
 }
 
-static void hid_on_resize(struct yetty_yvnc_server *server, uint16_t width, uint16_t height)
+static void hid_on_resize(struct yetty_yvnc_server *server, uint16_t width, uint16_t height,
+                          float content_scale)
 {
     struct yetty_yui_event ev = {0};
     ev.type = YETTY_YCORE_RESIZE;
     ev.resize.width = (float)width;
     ev.resize.height = (float)height;
+    /* Viewer-declared display density; 0 when the peer didn't send one.
+     * The app-level RESIZE handler adopts a positive value as the new
+     * content scale before re-laying out at width x height. */
+    ev.resize.content_scale = content_scale;
     hid_push_event(server, &ev);
 }
 
@@ -1155,7 +1160,14 @@ static void dispatch_input(struct yetty_yvnc_server *server,
     case YETTY_YVNC_VNC_INPUT_RESIZE:
         if (hdr->data_size >= sizeof(struct yetty_yvnc_vnc_resize_event)) {
             const struct yetty_yvnc_vnc_resize_event *msg = (const void *)data;
-            hid_on_resize(server, msg->width, msg->height);
+            hid_on_resize(server, msg->width, msg->height,
+                          vnc_content_scale_from_wire(msg->content_scale_x256));
+        } else if (hdr->data_size >= 2 * sizeof(uint16_t)) {
+            /* Legacy peer: width+height only, no scale field. Honor the
+             * resize and leave the content scale untouched (0). */
+            uint16_t legacy_dims[2];
+            memcpy(legacy_dims, data, sizeof(legacy_dims));
+            hid_on_resize(server, legacy_dims[0], legacy_dims[1], 0.0f);
         }
         break;
 

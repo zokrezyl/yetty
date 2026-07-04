@@ -2364,8 +2364,19 @@ struct yetty_ycore_float_result yetty_yui_statusbar_height(const struct yetty_yu
     /* The statusbar is a ygui chrome widget laid out in logical pixels;
      * its height feeds the terminal workspace layout, which works in
      * framebuffer pixels. Convert back up so the reserved strip matches
-     * the statusbar's physical (receiver-scaled) render height. */
+     * the statusbar's physical (receiver-scaled) render height. Prefer
+     * the runtime's live scale over the cached copy: the app-level
+     * RESIZE handler queries this height after adopting a remote
+     * viewer's density but before yetty_yui_resize refreshes the cache,
+     * and the strip must be reserved at the height the statusbar will
+     * actually repaint at. */
     float scale = yui->content_scale > 0.0f ? yui->content_scale : 1.0f;
+    if (yui->ctx && yui->ctx->runtime) {
+        float runtime_scale = yui->ctx->runtime->gpu.app_gpu_context.content_scale;
+        if (runtime_scale > 0.0f) {
+            scale = runtime_scale;
+        }
+    }
     struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(yui->statusbar);
     YETTY_RETURN_IF_ERR(yetty_ycore_float, rect_res, "statusbar_height: widget_rect");
     struct yetty_ycore_rectangle r = rect_res.value;
@@ -2708,6 +2719,17 @@ struct yetty_ycore_void_result yetty_yui_resize(struct yetty_yui *yui, uint32_t 
     }
     yui->surface_w = (float)surface_w;
     yui->surface_h = (float)surface_h;
+    /* The runtime's content scale can change between resizes — a yvnc
+     * viewer pushes its display density with its resize request and the
+     * app-level handler adopts it before cascading here. Refresh the
+     * cached copy so the logical viewport below and all pointer /
+     * splitter scaling stay consistent with the new density. */
+    if (yui->ctx && yui->ctx->runtime) {
+        float runtime_scale = yui->ctx->runtime->gpu.app_gpu_context.content_scale;
+        if (runtime_scale > 0.0f) {
+            yui->content_scale = runtime_scale;
+        }
+    }
     if (yui->chrome) {
         struct yetty_ycore_void_result cr =
             yetty_ychrome_host_resized(yui->chrome, (float)surface_w, (float)surface_h);

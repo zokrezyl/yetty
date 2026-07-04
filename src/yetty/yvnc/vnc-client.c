@@ -1299,13 +1299,14 @@ struct yetty_ycore_void_result yetty_yvnc_client_send_char_with_mods(
 }
 
 struct yetty_ycore_void_result yetty_yvnc_client_send_resize(struct yetty_yvnc_client *client,
-                                                             uint16_t width, uint16_t height)
+                                                             uint16_t width, uint16_t height,
+                                                             float content_scale)
 {
     if (!client) {
         return YETTY_ERR(yetty_ycore_void, "null client");
     }
 
-    ydebug("VNC client send resize: %ux%u", width, height);
+    ydebug("VNC client send resize: %ux%u scale=%.3f", width, height, content_scale);
 
     struct yetty_yvnc_vnc_input_header hdr = {0};
     hdr.type = YETTY_YVNC_VNC_INPUT_RESIZE;
@@ -1314,6 +1315,7 @@ struct yetty_ycore_void_result yetty_yvnc_client_send_resize(struct yetty_yvnc_c
     struct yetty_yvnc_vnc_resize_event msg = {0};
     msg.width = width;
     msg.height = height;
+    msg.content_scale_x256 = vnc_content_scale_to_wire(content_scale);
 
     uint8_t buf[sizeof(hdr) + sizeof(msg)];
     memcpy(buf, &hdr, sizeof(hdr));

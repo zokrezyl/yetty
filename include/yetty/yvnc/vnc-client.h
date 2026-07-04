@@ -83,8 +83,13 @@ struct yetty_ycore_void_result yetty_yvnc_client_send_key_up(struct yetty_yvnc_c
                                                              uint8_t mods);
 struct yetty_ycore_void_result yetty_yvnc_client_send_char_with_mods(
     struct yetty_yvnc_client *client, uint32_t codepoint, uint8_t mods);
+/* Ask the server to re-render at width x height framebuffer pixels laid out
+ * at the viewer's display density. content_scale is the viewer's HiDPI
+ * factor (framebuffer px / logical px, e.g. 2.0 on Retina); pass <= 0 to
+ * leave the server's current content scale untouched. */
 struct yetty_ycore_void_result yetty_yvnc_client_send_resize(struct yetty_yvnc_client *client,
-                                                             uint16_t width, uint16_t height);
+                                                             uint16_t width, uint16_t height,
+                                                             float content_scale);
 struct yetty_ycore_void_result yetty_yvnc_client_send_frame_ack(struct yetty_yvnc_client *client);
 struct yetty_ycore_void_result yetty_vnc_client_send_compression_config(
     struct yetty_yvnc_client *client, int force_raw, uint8_t quality, int always_full,
