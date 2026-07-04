@@ -139,11 +139,13 @@ typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int clic
  *     lines[(base + N) % line_count]
  *
  * Whole-screen scroll advances base and reuses rolled-off line slots. The
- * primary ring is sized visible_rows + scrollback_rows, so rolled-off lines
- * stay addressable as history. The alternate ring is sized visible_rows
- * exactly: full-screen apps own their surface and have no scrollback, so its
- * roll rotates in place and retains nothing — and the primary ring (screen AND
- * history) is simply never touched while the alternate screen is active. */
+ * primary ring starts small and grows exponentially toward visible_rows +
+ * scrollback_rows as scrollback fills (screen_grow_ring), so rolled-off lines
+ * stay addressable as history without pre-committing the configured maximum.
+ * The alternate ring is sized visible_rows exactly: full-screen apps own their
+ * surface and have no scrollback, so its roll rotates in place and retains
+ * nothing — and the primary ring (screen AND history) is simply never touched
+ * while the alternate screen is active. */
 struct yetty_yvterm_screen {
     struct yetty_yvterm_line *lines;
     uint32_t line_count;
@@ -167,9 +169,10 @@ struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
     uint32_t visible_rows;
     uint32_t cols;
 
-    /* Scrollback depth: history rows retained above the visible screen. The
-     * line ring is sized visible_rows + scrollback_rows. Set once at create
-     * from config (scrollback/lines); a resize re-uses this same depth. */
+    /* Scrollback depth: the MAXIMUM history rows retained above the visible
+     * screen. The primary ring grows lazily toward visible_rows + this as
+     * scrollback fills. Set once at create from config (scrollback/lines); a
+     * resize re-uses this same depth. */
     uint32_t scrollback_rows;
 
     VTerm *vterm;
@@ -248,6 +251,13 @@ static inline uint32_t pack_color(VTermColor color)
  * Rolled-off lines stay in the ring as history (their GPU cells persist), and
  * the oldest is evicted only when the ring wraps. */
 #define YVTERM_SCROLLBACK_ROWS 2000u
+
+/* Initial history capacity of the primary ring. The ring grows exponentially
+ * (doubling in screen_grow_ring) toward visible_rows + scrollback_rows as
+ * scrollback actually fills. A fresh terminal must NOT pre-commit the
+ * configured maximum: a 100k-line scrollback config was eagerly allocating
+ * (and blanking) ~400 MiB per grid at create. */
+#define YVTERM_SCROLLBACK_INITIAL_ROWS 256u
 
 /* The live screen buffer: the alternate ring while the alt-screen mode is on,
  * the primary ring otherwise. All libvterm callbacks and the visible-row /
@@ -463,6 +473,76 @@ static void grid_sync_continuation(struct yetty_yvterm_grid *grid)
     }
 }
 
+/* Grow the primary ring so the next rolled-off rows land in fresh slots
+ * instead of recycling live history. Doubles the ring (clamped to the
+ * immediate need and to visible_rows + scrollback_rows). The surviving lines
+ * are re-laid-out in LOGICAL order — oldest history at slot 0, visible rows
+ * after it, base = history — so the fresh tail slots sit logically after the
+ * newest line and the ring stays unwrapped until it is full again. Line
+ * structs move by value; their owned buffers (cells/arena/composites) travel
+ * with them. Best-effort: on allocation failure the ring is left untouched
+ * and the caller recycles the oldest history line exactly as before. */
+static void screen_grow_ring(struct yetty_yvterm_grid *grid, struct yetty_yvterm_screen *screen,
+                             uint32_t needed_history)
+{
+    uint32_t visible = grid->visible_rows;
+    uint32_t max_line_count = visible + grid->scrollback_rows;
+    uint32_t old_count = screen->line_count;
+    if (old_count >= max_line_count) {
+        return;
+    }
+    if (needed_history > grid->scrollback_rows) {
+        needed_history = grid->scrollback_rows;
+    }
+    uint32_t new_count = old_count > (UINT32_MAX / 2u) ? max_line_count : old_count * 2u;
+    if (new_count < visible + needed_history) {
+        new_count = visible + needed_history;
+    }
+    if (new_count > max_line_count) {
+        new_count = max_line_count;
+    }
+    if (new_count <= old_count) {
+        return;
+    }
+
+    struct yetty_yvterm_line *new_lines = calloc(new_count, sizeof(*new_lines));
+    if (!new_lines) {
+        return;
+    }
+    /* Allocate the fresh tail slots first so a failure backs out before any
+     * existing line has moved. */
+    for (uint32_t slot = old_count; slot < new_count; ++slot) {
+        new_lines[slot].text_cells = calloc(grid->cols, sizeof(struct yetty_yvterm_text_cell));
+        if (!new_lines[slot].text_cells) {
+            for (uint32_t undo = old_count; undo < slot; ++undo) {
+                free(new_lines[undo].text_cells);
+            }
+            free(new_lines);
+            return;
+        }
+        fill_line_blank(&new_lines[slot], grid->cols, grid->default_fg, grid->default_bg);
+    }
+
+    /* Unwrap: logical index 0 is the oldest retained history line; the ring
+     * bijection (base + logical − hist) mod old_count visits every old slot
+     * exactly once, so allocated-but-unused slots (a ring that grew before
+     * filling) carry over after the visible block. */
+    uint32_t capacity = old_count - visible;
+    uint32_t hist = screen->total_scrolled < capacity ? screen->total_scrolled : capacity;
+    for (uint32_t logical = 0; logical < old_count; ++logical) {
+        int64_t slot =
+            ((int64_t)screen->base + (int64_t)logical - (int64_t)hist) % (int64_t)old_count;
+        if (slot < 0) {
+            slot += old_count;
+        }
+        new_lines[logical] = screen->lines[slot];
+    }
+    free(screen->lines);
+    screen->lines = new_lines;
+    screen->line_count = new_count;
+    screen->base = hist;
+}
+
 /* O(1) whole-screen scroll-up of the ACTIVE screen. The rolled-off top lines
  * are NOT blanked — they stay in the ring as scrollback history (their GPU
  * cells persist for the scrolled-back view). Instead the freshly-exposed
@@ -482,6 +562,19 @@ static void roll_up(struct yetty_yvterm_grid *grid, uint32_t count)
     }
     if (count > grid->visible_rows) {
         count = grid->visible_rows;
+    }
+
+    /* Primary ring only: when this roll would recycle history and the ring is
+     * below its configured maximum, grow it instead (lazy scrollback). The
+     * alternate ring never grows — it is visible-only by design. */
+    if (screen == &grid->primary) {
+        uint32_t capacity = screen->line_count - grid->visible_rows;
+        uint64_t needed = (uint64_t)screen->total_scrolled + count;
+        if (needed > capacity) {
+            uint32_t needed_history =
+                needed > grid->scrollback_rows ? grid->scrollback_rows : (uint32_t)needed;
+            screen_grow_ring(grid, screen, needed_history);
+        }
     }
     for (uint32_t step = 0; step < count; ++step) {
         uint32_t slot = screen->base + grid->visible_rows + step;
@@ -934,11 +1027,15 @@ static struct yetty_ycore_void_result grid_model_init(struct yetty_yvterm_grid *
     /* Fall back to the built-in default when the caller passes 0 (no config). */
     grid->scrollback_rows = scrollback_rows ? scrollback_rows : YVTERM_SCROLLBACK_ROWS;
 
-    /* Primary ring: visible + scrollback lines; only the first `rows` are on
-     * screen, the rest hold rolled-off history (see screen_ring_slot /
-     * roll_up). Alternate ring: visible lines only — no scrollback. */
+    /* Primary ring: visible lines plus a small initial history capacity; the
+     * ring grows exponentially toward visible + scrollback_rows as scrollback
+     * actually fills (screen_grow_ring, driven from roll_up). Alternate ring:
+     * visible lines only — no scrollback. */
+    uint32_t initial_history = grid->scrollback_rows < YVTERM_SCROLLBACK_INITIAL_ROWS
+                                   ? grid->scrollback_rows
+                                   : YVTERM_SCROLLBACK_INITIAL_ROWS;
     struct yetty_ycore_void_result primary_res =
-        screen_alloc_lines(&grid->primary, rows + grid->scrollback_rows, cols);
+        screen_alloc_lines(&grid->primary, rows + initial_history, cols);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, primary_res, "yvterm: grid_model_init primary ring");
     struct yetty_ycore_void_result alternate_res = screen_alloc_lines(&grid->alternate, rows, cols);
     if (YETTY_IS_ERR(alternate_res)) {
@@ -1312,9 +1409,13 @@ static struct yetty_ycore_void_result screen_resize_reflow(struct yetty_yvterm_g
     }
 
     /* Bottom-align the content: the last new row sits on the last visible row, so
-     * everything above it (older output and history) becomes scrollback. */
-    uint32_t new_line_count = new_rows + grid->scrollback_rows;
+     * everything above it (older output and history) becomes scrollback. Size
+     * the new ring to the content actually retained, not the configured
+     * maximum — the ring re-grows lazily on the next roll (screen_grow_ring). */
     uint32_t visible_top = total_new > new_rows ? total_new - new_rows : 0u;
+    uint32_t kept_history =
+        visible_top < grid->scrollback_rows ? visible_top : grid->scrollback_rows;
+    uint32_t new_line_count = new_rows + kept_history;
 
     struct yetty_yvterm_screen tmp = {0};
     struct yetty_ycore_void_result lines_res = screen_alloc_lines(&tmp, new_line_count, new_cols);

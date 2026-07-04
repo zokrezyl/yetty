@@ -4,6 +4,10 @@ include(${CMAKE_CURRENT_LIST_DIR}/../variables-defaults.cmake)
 set(YETTY_ENABLE_LIB_GLFW  OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_LIBCO OFF CACHE BOOL "" FORCE)
 
+# emscripten owns the wasm malloc (dlmalloc/emmalloc baked into its libc);
+# a statically linked mimalloc cannot interpose it there.
+set(YETTY_ENABLE_LIB_MIMALLOC OFF CACHE BOOL "" FORCE)
+
 # WebAssembly uses in-process TinyEMU — no external QEMU binary.
 set(YETTY_ENABLE_LIB_QEMU        OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_QEMU_BINARY OFF CACHE BOOL "" FORCE)
