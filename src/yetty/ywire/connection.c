@@ -162,6 +162,23 @@ void yetty_ywire_connection_maybe_release(struct yetty_ywire_channel *channel)
     memset(channel, 0, sizeof(*channel));
 }
 
+/* Ship one already-framed envelope toward the peer. Attach mode hands it
+ * straight to the borrowed writer (which writes it whole); owned mode queues
+ * on the reactor transport and pumps what the non-blocking writer takes now. */
+static struct yetty_ycore_void_result connection_ship(struct yetty_ywire_connection *connection,
+                                                      const uint8_t *bytes, size_t n)
+{
+    if (connection->writer) {
+        return connection->writer(bytes, n, connection->writer_user);
+    }
+    struct yetty_yclass_transport_reactor *reactor = &connection->reactor;
+    struct yetty_ycore_void_result queue_res = reactor->ops->queue(reactor->userdata, bytes, n);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, queue_res, "ywire connection_ship: queue");
+    struct yetty_ycore_size_result pump_res = reactor->ops->pump_writable(reactor->userdata);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, pump_res, "ywire connection_ship: pump_writable");
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ycore_void_result yetty_ywire_connection_send_control(
     struct yetty_ywire_connection *connection, enum yetty_ywire_channel_msg msg,
     uint32_t channel_id, uint32_t window)
@@ -179,13 +196,9 @@ struct yetty_ycore_void_result yetty_ywire_connection_send_control(
         yetty_ycore_buffer_destroy(&framed);
         return YETTY_ERR(yetty_ycore_void, "ywire_connection_send_control: emit", build);
     }
-    struct yetty_yclass_transport_reactor *reactor = &connection->reactor;
-    struct yetty_ycore_void_result queue_res =
-        reactor->ops->queue(reactor->userdata, framed.data, framed.size);
+    struct yetty_ycore_void_result ship_res = connection_ship(connection, framed.data, framed.size);
     yetty_ycore_buffer_destroy(&framed);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, queue_res, "ywire_connection_send_control: queue");
-    struct yetty_ycore_size_result pump_res = reactor->ops->pump_writable(reactor->userdata);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, pump_res, "ywire_connection_send_control: pump");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ship_res, "ywire_connection_send_control: ship");
     return YETTY_OK_VOID();
 }
 
@@ -387,11 +400,18 @@ static struct yetty_ycore_size_result emit_one(struct yetty_ywire_connection *co
         yetty_ycore_buffer_destroy(&framed);
         return YETTY_ERR(yetty_ycore_size, "ywire emit_one: emit DATA", build);
     }
-    struct yetty_yclass_transport_reactor *reactor = &connection->reactor;
-    struct yetty_ycore_void_result queue_res =
-        reactor->ops->queue(reactor->userdata, framed.data, framed.size);
+    struct yetty_ycore_void_result ship_res;
+    if (connection->writer) {
+        /* Attach mode: hand the whole chunk envelope to the host writer. */
+        ship_res = connection->writer(framed.data, framed.size, connection->writer_user);
+    } else {
+        /* Owned mode: queue only — pump_outbound drains the transport once
+         * per pump, after the fair round has been assembled. */
+        ship_res = connection->reactor.ops->queue(connection->reactor.userdata, framed.data,
+                                                  framed.size);
+    }
     yetty_ycore_buffer_destroy(&framed);
-    YETTY_RETURN_IF_ERR(yetty_ycore_size, queue_res, "ywire emit_one: queue");
+    YETTY_RETURN_IF_ERR(yetty_ycore_size, ship_res, "ywire emit_one: ship");
 
     channel->outbuf_off += chunk;
     if (channel->send_window >= 0) {
@@ -428,7 +448,7 @@ struct yetty_ycore_void_result yetty_ywire_connection_pump_outbound(
     }
     /* Rotate the start slot so no channel is structurally first every pump. */
     connection->outbound_cursor = (connection->outbound_cursor + 1) % YETTY_YWIRE_CHANNEL_MAX;
-    if (queued > 0) {
+    if (queued > 0 && connection->reactor.ops) {
         struct yetty_ycore_size_result pump_res =
             connection->reactor.ops->pump_writable(connection->reactor.userdata);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, pump_res, "ywire pump_outbound: pump_writable");
@@ -479,6 +499,7 @@ struct yetty_ywire_connection_ptr_result yetty_ywire_connection_create(
         return YETTY_ERR(yetty_ywire_connection_ptr, "ywire_connection_create: sm_create", sm_res);
     }
     connection->sm = sm_res.value;
+    connection->sm_owned = 1;
 
     connection->chan_rpc = &connection->channels[0];
     connection->chan_input = &connection->channels[1];
@@ -555,7 +576,9 @@ struct yetty_ycore_void_result yetty_ywire_connection_destroy(
         return YETTY_OK_VOID();
     }
     struct yetty_ycore_void_result result = YETTY_OK_VOID();
-    if (connection->sm) {
+    /* Attach mode borrows the SM — its owner destroys it (before this call,
+     * per the attach contract, since its handler points back at us). */
+    if (connection->sm && connection->sm_owned) {
         struct yetty_ycore_void_result sm_res =
             yetty_ywire_wire_statemachine_destroy(connection->sm);
         if (YETTY_IS_ERR(sm_res)) {
@@ -569,6 +592,43 @@ struct yetty_ycore_void_result yetty_ywire_connection_destroy(
     /* reactor is borrowed — the creator owns and destroys the transport. */
     free(connection);
     return result;
+}
+
+/*===========================================================================
+ * Host-side attach (acceptor over a borrowed statemachine — see connection.h)
+ *=========================================================================*/
+
+struct yetty_ywire_connection_ptr_result yetty_ywire_connection_attach(
+    struct yetty_ywire_wire_statemachine *sm, yetty_ywire_connection_writer_fn writer,
+    void *writer_user, int compressed)
+{
+    if (!sm || !writer) {
+        return YETTY_ERR(yetty_ywire_connection_ptr, "ywire_connection_attach: NULL sm/writer");
+    }
+    struct yetty_ywire_connection *connection = calloc(1, sizeof(*connection));
+    if (!connection) {
+        return YETTY_ERR(yetty_ywire_connection_ptr, "ywire_connection_attach: calloc");
+    }
+    connection->sm = sm;
+    connection->sm_owned = 0;
+    connection->writer = writer;
+    connection->writer_user = writer_user;
+    connection->compressed = compressed ? 1 : 0;
+    /* The host is the acceptor by convention: its dynamic ids take the odd
+     * offsets, the in-pane client keeps the even ones. */
+    connection->role_acceptor = 1;
+
+    /* Only the connection-layer lane — the SM owner's other handlers (rpc
+     * server, ydraw, text default sink) stay untouched. */
+    struct yetty_ycore_void_result channel_reg = yetty_ywire_wire_statemachine_register_buffered(
+        sm, YETTY_YWIRE_ENVELOPE_DCS, YETTY_DCS_YWIRE_CHANNEL, /*has_args=*/1, on_channel_envelope,
+        connection);
+    if (YETTY_IS_ERR(channel_reg)) {
+        free(connection);
+        return YETTY_ERR(yetty_ywire_connection_ptr, "ywire_connection_attach: register channel",
+                         channel_reg);
+    }
+    return YETTY_OK(yetty_ywire_connection_ptr, connection);
 }
 
 /*===========================================================================
@@ -651,17 +711,29 @@ struct yetty_ywire_channel_ptr_result yetty_ywire_connection_open_channel(
 
 int yetty_ywire_connection_fd(struct yetty_ywire_connection *connection)
 {
-    return connection ? connection->reactor.ops->fd(connection->reactor.userdata) : -1;
+    if (!connection || !connection->reactor.ops) {
+        return -1; /* attach mode: the SM's owner owns the fd */
+    }
+    return connection->reactor.ops->fd(connection->reactor.userdata);
 }
 
 int yetty_ywire_connection_out_fd(struct yetty_ywire_connection *connection)
 {
-    return connection ? connection->reactor.ops->out_fd(connection->reactor.userdata) : -1;
+    if (!connection || !connection->reactor.ops) {
+        return -1;
+    }
+    return connection->reactor.ops->out_fd(connection->reactor.userdata);
 }
 
 int yetty_ywire_connection_want_write(struct yetty_ywire_connection *connection)
 {
     if (!connection) {
+        return 0;
+    }
+    if (!connection->reactor.ops) {
+        /* Attach mode ships synchronously through the writer; the only bytes
+         * that can linger are window-blocked, and those wake on the peer's
+         * WINDOW_ADJUST (an inbound event), not on writability. */
         return 0;
     }
     if (connection->reactor.ops->want_write(connection->reactor.userdata)) {
@@ -689,7 +761,13 @@ int yetty_ywire_connection_want_write(struct yetty_ywire_connection *connection)
 
 int yetty_ywire_connection_is_eof(struct yetty_ywire_connection *connection)
 {
-    return connection ? connection->reactor.ops->is_eof(connection->reactor.userdata) : 1;
+    if (!connection) {
+        return 1;
+    }
+    if (!connection->reactor.ops) {
+        return 0; /* attach mode: link liveness belongs to the SM's owner */
+    }
+    return connection->reactor.ops->is_eof(connection->reactor.userdata);
 }
 
 struct yetty_ycore_void_result yetty_ywire_connection_enable_raw_mode(
@@ -697,6 +775,10 @@ struct yetty_ycore_void_result yetty_ywire_connection_enable_raw_mode(
 {
     if (!connection) {
         return YETTY_ERR(yetty_ycore_void, "ywire_connection_enable_raw_mode: NULL connection");
+    }
+    if (!connection->reactor.ops) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "ywire_connection_enable_raw_mode: attach mode owns no fd");
     }
     return connection->reactor.ops->enable_raw_mode(connection->reactor.userdata);
 }
@@ -711,6 +793,9 @@ struct yetty_ycore_size_result yetty_ywire_connection_pump_writable(
      * readiness drains channel backlogs and not just already-framed bytes. */
     struct yetty_ycore_void_result outbound_res = yetty_ywire_connection_pump_outbound(connection);
     YETTY_RETURN_IF_ERR(yetty_ycore_size, outbound_res, "ywire_connection_pump_writable: outbound");
+    if (!connection->reactor.ops) {
+        return YETTY_OK(yetty_ycore_size, 0); /* attach mode ships through the writer */
+    }
     return connection->reactor.ops->pump_writable(connection->reactor.userdata);
 }
 
@@ -731,6 +816,11 @@ struct yetty_ycore_size_result yetty_ywire_connection_pump_readable(
 {
     if (!connection) {
         return YETTY_ERR(yetty_ycore_size, "ywire_connection_pump_readable: NULL connection");
+    }
+    if (!connection->reactor.ops) {
+        return YETTY_ERR(yetty_ycore_size,
+                         "ywire_connection_pump_readable: attach mode — the statemachine's "
+                         "owner feeds it; process() fires the channel handler");
     }
     struct yetty_yclass_transport_reactor *reactor = &connection->reactor;
     size_t total = 0;
@@ -755,8 +845,8 @@ struct yetty_ycore_size_result yetty_ywire_connection_pump_readable(
  * a short read as a failed handshake. */
 int yetty_ywire_connection_pump_blocking_once(struct yetty_ywire_connection *connection)
 {
-    if (!connection) {
-        return 0;
+    if (!connection || !connection->reactor.ops) {
+        return 0; /* attach mode: no fd to block on — host consumers use sinks */
     }
     struct yetty_yclass_transport_reactor *reactor = &connection->reactor;
     if (reactor->ops->is_eof(reactor->userdata)) {
@@ -825,7 +915,7 @@ struct yetty_ycore_void_result yetty_ywire_connection_pickup_winsize(
     if (!connection) {
         return YETTY_ERR(yetty_ycore_void, "ywire_connection_pickup_winsize: NULL connection");
     }
-    if (!connection->on_resize) {
+    if (!connection->on_resize || !connection->reactor.ops) {
         return YETTY_OK_VOID();
     }
 #ifndef _WIN32

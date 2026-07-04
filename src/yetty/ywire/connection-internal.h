@@ -92,7 +92,17 @@ struct yetty_ywire_channel {
 };
 
 struct yetty_ywire_connection {
-    struct yetty_yclass_transport_reactor reactor; /* borrowed fd owner */
+    /* Byte path. Exactly one of the two shapes is active:
+     *   - owned mode (create):  `reactor.ops` set — the connection owns its
+     *     statemachine and queues outbound on the reactor transport.
+     *   - attach mode (attach): `writer` set, `reactor.ops` NULL — the
+     *     statemachine is BORROWED (its owner feeds it) and outbound envelopes
+     *     are handed straight to the writer (the host terminal's PTY-master
+     *     write path). */
+    struct yetty_yclass_transport_reactor reactor; /* borrowed fd owner (owned mode) */
+    yetty_ywire_connection_writer_fn writer;       /* outbound ship (attach mode) */
+    void *writer_user;
+    int sm_owned;
     int compressed;
 
     struct yetty_ywire_wire_statemachine *sm; /* inbound demux */

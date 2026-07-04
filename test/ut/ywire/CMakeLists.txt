@@ -29,3 +29,14 @@ yetty_add_c_test(
     SHIMS   trace platform_thread platform_term
     LABELS  contract wire
     TIMEOUT 30)
+
+# Host-side connection layer (#455): attach-mode acceptor over a borrowed
+# statemachine (the terminal's shape) against an owned-mode client —
+# default rejection, accept/echo, host-initiated channels, credit grants.
+yetty_add_c_test(
+    NAME    ywire_host_connection
+    SOURCES host-connection-test.c
+    LIBS    yetty_yclass yetty_ywire yetty_ycore
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract wire
+    TIMEOUT 30)

@@ -17,6 +17,7 @@ struct yetty_yterminal_terminal;
 struct yetty_yrender_terminal_layer;
 struct yetty_yterminal_layer_ops;
 struct yetty_ywire_wire_statemachine;
+struct yetty_ywire_connection;
 struct yetty_yevent_event_loop;
 struct yetty_platform_pty;
 struct yetty_yui_view;
@@ -287,6 +288,16 @@ struct yetty_yterminal_terminal *yetty_yterminal_terminal_from_view(struct yetty
  * terminal — same lifetime). NULL when terminal is NULL. Used by the
  * yui debug window to pull rolling envelope traffic stats. */
 struct yetty_ywire_wire_statemachine *yetty_yterminal_terminal_wire_sm(
+    struct yetty_yterminal_terminal *terminal);
+
+/* Borrowed accessor for the terminal's host-side connection layer (the
+ * acceptor of dynamic ywire channels opened by in-pane clients — attach-mode
+ * yetty_ywire_connection over the terminal's statemachine). In-terminal
+ * services register an accept callback on it to consume channels
+ * (yetty_ywire_connection_set_accept_cb) or open host-initiated channels
+ * toward the client; with no callback every OPEN is answered with CLOSE.
+ * NULL when terminal is NULL. */
+struct yetty_ywire_connection *yetty_yterminal_terminal_channel_host(
     struct yetty_yterminal_terminal *terminal);
 
 struct yetty_ycore_void_result yetty_yterminal_terminal_resize_grid(
