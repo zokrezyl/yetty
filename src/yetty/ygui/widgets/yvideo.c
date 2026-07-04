@@ -23,6 +23,12 @@ struct yetty_ygui_yvideo_ptr_result yetty_ygui_yvideo_from(struct yetty_yclass_o
 struct YETTY_ANNOTATE("class@ygui:yvideo") YETTY_ANNOTATE("parent@ygui:widget") yetty_ygui_yvideo {
     uint8_t *bytes;
     size_t len;
+    /* Body-emission gate (#457) — same contract as yimage: the body (the
+     * whole MP4 wrapped in a drawable_list, plus a full demux to build it)
+     * only re-ships when content or baked-in bounds changed. */
+    uint64_t content_generation;
+    uint64_t emitted_generation;
+    struct yetty_ycore_rectangle emitted_rect;
 };
 
 YETTY_ANNOTATE("override@ygui:yvideo:constructor")
@@ -37,6 +43,9 @@ static struct yetty_ycore_void_result ctor(struct yetty_yclass_object *yclass_ob
     struct yetty_ygui_yvideo *d = d_dr.value;
     d->bytes = NULL;
     d->len = 0;
+    d->content_generation = 1; /* differs from emitted_generation=0 → first emit ships */
+    d->emitted_generation = 0;
+    memset(&d->emitted_rect, 0, sizeof(d->emitted_rect));
     return YETTY_OK_VOID();
 }
 
@@ -84,6 +93,16 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_object *ycla
     struct yetty_ycore_rectangle_result rect_res = yetty_ygui_widget_rect(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "yvideo_emit_body: rect");
     struct yetty_ycore_rectangle r = rect_res.value;
+    struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, id_res, "yvideo_emit_body: id");
+    /* Emission gate (#457) — see yimage_emit_body: skip the multi-MB body
+     * (and the full MP4 demux building it) when the receiver already holds
+     * this exact content at these exact bounds. */
+    if (d->emitted_generation == d->content_generation && d->emitted_rect.min.x == r.min.x &&
+        d->emitted_rect.min.y == r.min.y && d->emitted_rect.max.x == r.max.x &&
+        d->emitted_rect.max.y == r.max.y && yetty_ygui_emit_child_committed(ctx, id_res.value)) {
+        return YETTY_OK_VOID();
+    }
     struct yetty_yvideo_render_config cfg = {
         /* Absolute widget rect — see yplot.c (producer figure is absolute in
          * the ygui chrome, content scaled by content_scale). */
@@ -142,16 +161,15 @@ static struct yetty_ycore_void_result emit_body(struct yetty_yclass_object *ycla
             memcpy(combined, zbytes, zsize);
         }
         memcpy(combined + zsize, bytes, size);
-        struct yetty_ycore_uint32_result id_res = yetty_ygui_widget_id(obj);
-        if (YETTY_IS_ERR(id_res)) {
-            free(combined);
-            yetty_ydraw_drawable_list_destroy(zl);
-            yetty_ydraw_drawable_list_destroy(dl);
-            return YETTY_ERR(yetty_ycore_void, "yvideo_emit_body: id", id_res);
-        }
         er = yetty_ygui_emit_figure_body(ctx, id_res.value, combined, (uint32_t)total);
         free(combined);
         yetty_ydraw_drawable_list_destroy(zl);
+        if (YETTY_IS_OK(er)) {
+            /* Latch what the receiver now holds — the gate above skips the
+             * next emit unless content or bounds move past this point. */
+            d->emitted_generation = d->content_generation;
+            d->emitted_rect = r;
+        }
     }
     yetty_ydraw_drawable_list_destroy(dl);
     return er;
@@ -178,6 +196,7 @@ struct yetty_ycore_void_result yetty_ygui_yvideo_set_bytes(struct yetty_yclass_o
         memcpy(d->bytes, bytes, len);
         d->len = len;
     }
+    d->content_generation++; /* new content — the emit gate must re-ship the body */
     return yetty_ygui_widget_set_dirty(obj);
 }
 

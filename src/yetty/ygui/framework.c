@@ -395,6 +395,17 @@ static int figure_is_minted(const struct yetty_ygui_framework *framework, uint32
     return 0;
 }
 
+int yetty_ygui_emit_child_committed(const struct yetty_ygui_emit_ctx *ctx, uint32_t child_id)
+{
+    /* Committed set only — mints staged this tick don't count, so a widget
+     * whose CREATE_CHILD is still in flight (or was discarded by a failed
+     * flush) never skips its body emission. */
+    if (!ctx || !ctx->framework) {
+        return 0;
+    }
+    return figure_is_minted(ctx->framework, child_id);
+}
+
 /* Variant that also consults the in-flight emit's staged set. Used by
  * emit-time callers so a child minted earlier in the same tick isn't
  * re-CREATEd within that tick (and so a flush failure doesn't leave a

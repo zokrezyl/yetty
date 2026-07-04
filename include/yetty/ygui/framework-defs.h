@@ -143,6 +143,13 @@ struct yetty_ygui_emit_ctx {
     int fig_clip_active;
 };
 
+/* True when the receiver already holds `child_id` from a PREVIOUS successful
+ * flush (the committed mint set). Mints staged in the in-flight tick do NOT
+ * count. Body-emitting widgets use this to skip re-shipping an unchanged body:
+ * committed + unchanged content + unchanged rect ⇒ the receiver's copy is
+ * already current (see yimage/yvideo emit_body). */
+int yetty_ygui_emit_child_committed(const struct yetty_ygui_emit_ctx *ctx, uint32_t child_id);
+
 struct yetty_ycore_void_result yetty_ygui_emit_create_child(
     struct yetty_ygui_emit_ctx *ctx, uint32_t child_id, uint32_t kind, float min_x, float min_y,
     float max_x, float max_y, const uint8_t *init_payload, uint32_t init_payload_bytes);
