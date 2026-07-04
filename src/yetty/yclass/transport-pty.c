@@ -506,3 +506,48 @@ struct yetty_yclass_transport_pty_ptr_result yetty_yclass_transport_pty_create(i
     transport->fd_out_flags = -1;
     return YETTY_OK(yetty_yclass_transport_pty_ptr, transport);
 }
+
+/* Parse "<fd_in>,<fd_out>" — two non-negative decimal fds, nothing else. */
+static int parse_side_channel_spec(const char *spec, int *fd_in_out, int *fd_out_out)
+{
+    char *after_first = NULL;
+    long parsed_in = strtol(spec, &after_first, 10);
+    if (after_first == spec || *after_first != ',' || parsed_in < 0 || parsed_in > 65535) {
+        return 0;
+    }
+    const char *second = after_first + 1;
+    char *after_second = NULL;
+    long parsed_out = strtol(second, &after_second, 10);
+    if (after_second == second || *after_second != '\0' || parsed_out < 0 || parsed_out > 65535) {
+        return 0;
+    }
+    *fd_in_out = (int)parsed_in;
+    *fd_out_out = (int)parsed_out;
+    return 1;
+}
+
+struct yetty_yclass_transport_pty_ptr_result yetty_yclass_transport_pty_create_from_env(
+    int fallback_fd_in, int fallback_fd_out)
+{
+    const char *spec = getenv(YETTY_YWIRE_SIDE_CHANNEL_ENV);
+    if (!spec || !*spec) {
+        return yetty_yclass_transport_pty_create(fallback_fd_in, fallback_fd_out);
+    }
+    int side_fd_in = -1;
+    int side_fd_out = -1;
+    if (!parse_side_channel_spec(spec, &side_fd_in, &side_fd_out)) {
+        return YETTY_ERR(yetty_yclass_transport_pty_ptr,
+                         "transport_pty_create_from_env: malformed " YETTY_YWIRE_SIDE_CHANNEL_ENV
+                         " (expected \"<fd_in>,<fd_out>\")");
+    }
+#ifndef _WIN32
+    /* The fds must actually be open in this process — a stale variable
+     * inherited from an unrelated parent must fail loudly, not half-work. */
+    if (fcntl(side_fd_in, F_GETFD) < 0 || fcntl(side_fd_out, F_GETFD) < 0) {
+        return YETTY_ERR(yetty_yclass_transport_pty_ptr,
+                         "transport_pty_create_from_env: " YETTY_YWIRE_SIDE_CHANNEL_ENV
+                         " names fds that are not open in this process");
+    }
+#endif
+    return yetty_yclass_transport_pty_create(side_fd_in, side_fd_out);
+}

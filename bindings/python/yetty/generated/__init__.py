@@ -1,4 +1,5 @@
 """GENERATED package — do not edit."""
+from . import connection as connection
 from . import yapp as yapp
 from . import ychrome as ychrome
 from . import ycircuit as ycircuit

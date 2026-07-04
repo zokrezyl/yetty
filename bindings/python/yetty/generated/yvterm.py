@@ -52,10 +52,10 @@ class Vterm(_yfigure.Figure):
         obj = cls()
         return obj.init_result
 
-def grid_make(cols: int, rows: int) -> _rt.Result[Any]:
+def grid_make(cols: int, rows: int, scrollback_rows: int) -> _rt.Result[Any]:
     """Call `yetty_yvterm_grid_make`."""
-    _fn = _rt.cfn("yetty_yvterm_grid_make", _t.yetty_yclass_object_ptr_result, [c_uint32, c_uint32])
-    res = _fn(cols, rows)
+    _fn = _rt.cfn("yetty_yvterm_grid_make", _t.yetty_yclass_object_ptr_result, [c_uint32, c_uint32, c_uint32])
+    res = _fn(cols, rows, scrollback_rows)
     return _rt.result_from_c(res)
 
 def grid_dispose(obj: Any) -> _rt.Result[None]:
@@ -410,5 +410,23 @@ def vterm_set_visual_zoom(obj: Any, scale: float, offset_x: float, offset_y: flo
     """Call `yetty_yvterm_vterm_set_visual_zoom`."""
     _fn = _rt.cfn("yetty_yvterm_vterm_set_visual_zoom", _t.yetty_ycore_void_result, [c_void_p, c_float, c_float, c_float])
     res = _fn(_rt.handle(obj), scale, offset_x, offset_y)
+    return _rt.result_from_c(res)
+
+def vterm_set_post_effect(obj: Any, index: int, p0: float, p1: float, p2: float, p3: float, p4: float, p5: float) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_set_post_effect`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_set_post_effect", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_float, c_float, c_float, c_float, c_float, c_float])
+    res = _fn(_rt.handle(obj), index, p0, p1, p2, p3, p4, p5)
+    return _rt.result_from_c(res)
+
+def vterm_set_coord_effect(obj: Any, index: int, p0: float, p1: float, p2: float, p3: float, p4: float, p5: float) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_set_coord_effect`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_set_coord_effect", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_float, c_float, c_float, c_float, c_float, c_float])
+    res = _fn(_rt.handle(obj), index, p0, p1, p2, p3, p4, p5)
+    return _rt.result_from_c(res)
+
+def vterm_set_mouse(obj: Any, x: float, y: float) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_set_mouse`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_set_mouse", _t.yetty_ycore_void_result, [c_void_p, c_float, c_float])
+    res = _fn(_rt.handle(obj), x, y)
     return _rt.result_from_c(res)
 

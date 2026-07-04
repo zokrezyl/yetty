@@ -18,3 +18,14 @@ yetty_add_c_test(
     SHIMS   trace platform_thread platform_term
     LABELS  contract wire
     TIMEOUT 30)
+
+# Connection layer (#435/#436/#437): two connections back-to-back over pipes —
+# dynamic-channel OPEN/DATA/EOF/CLOSE handshake, flow-control windows +
+# WINDOW_ADJUST credit, DATA chunking + fair interleaving, well-known lanes.
+yetty_add_c_test(
+    NAME    ywire_connection
+    SOURCES connection-test.c
+    LIBS    yetty_yclass yetty_ywire yetty_ycore
+    SHIMS   trace platform_thread platform_term
+    LABELS  contract wire
+    TIMEOUT 30)

@@ -7,6 +7,14 @@
  * yetty_ywire_connection multiplexer rides; the connection forwards fd()/pump()
  * straight down to it.
  *
+ * Despite the name, the transport is fd-AGNOSTIC and doubles as the generic
+ * reactor backend for any byte-stream fd pair — pipe, socketpair, unix/tcp
+ * socket. Every tty-specific step self-disables on a non-tty fd (raw-mode
+ * termios are skipped, a 0-byte read means real EOF instead of "VMIN=0, nothing
+ * buffered"), leaving exactly the queue/pump/want_write contract. This is what
+ * makes the side-channel endpoint (create_from_env below) the same code path
+ * as the in-band single-PTY mux.
+ *
  * Single reader, single writer: only this object calls read()/write() on the
  * fds, which is what makes "two readers tearing frames on a PTY" structurally
  * impossible once consumers ride channels above the connection.
@@ -31,6 +39,18 @@ YETTY_YRESULT_DECLARE(yetty_yclass_transport_pty_ptr, struct yetty_yclass_transp
  * carries outbound (STDOUT_FILENO). Both borrowed. */
 struct yetty_yclass_transport_pty_ptr_result yetty_yclass_transport_pty_create(int fd_in,
                                                                                int fd_out);
+
+/* Endpoint selection with the side-channel escape hatch (the SSH "multiplex
+ * only when constrained to one connection" model): when the embedder/host
+ * passed a dedicated fd pair via YETTY_YWIRE_SIDE_CHANNEL ("<fd_in>,<fd_out>",
+ * fds inherited open across exec — the LISTEN_FDS convention), the transport
+ * rides that pair and the terminal byte stream is left alone; otherwise it
+ * falls back to the given fds (in-band single-PTY muxing). A set-but-malformed
+ * or stale-fd variable is a configuration error and fails loudly rather than
+ * silently degrading to in-band. */
+#define YETTY_YWIRE_SIDE_CHANNEL_ENV "YETTY_YWIRE_SIDE_CHANNEL"
+struct yetty_yclass_transport_pty_ptr_result yetty_yclass_transport_pty_create_from_env(
+    int fallback_fd_in, int fallback_fd_out);
 
 /* The embedded base vtable (send = queue, recv = recv_blocking, flush =
  * flush_blocking) for code that wants a plain yetty_yclass_transport. */

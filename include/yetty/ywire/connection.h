@@ -53,6 +53,32 @@ struct yetty_ywire_channel *yetty_ywire_connection_channel(
     struct yetty_ywire_connection *connection, uint32_t channel_id);
 
 /*===========================================================================
+ * Dynamic channels (SSH CHANNEL_OPEN analog — see channel.h for semantics)
+ *=========================================================================*/
+
+/* Fired during pump when the peer OPENs a channel. Attach sinks/event cb to
+ * `channel` here. Return non-zero to accept; zero refuses (a CLOSE goes back
+ * and the slot is released). With no callback set every OPEN is refused. */
+typedef int (*yetty_ywire_accept_cb)(void *user, struct yetty_ywire_channel *channel);
+
+struct yetty_ycore_void_result yetty_ywire_connection_set_accept_cb(
+    struct yetty_ywire_connection *connection, yetty_ywire_accept_cb cb, void *user);
+
+/* Dynamic-channel id parity. Exactly one peer of a connection must be the
+ * acceptor (odd id offsets); the creator defaults to initiator (even). Call
+ * before the first open_channel(). */
+struct yetty_ycore_void_result yetty_ywire_connection_set_role(
+    struct yetty_ywire_connection *connection, int acceptor);
+
+/* Open a dynamic channel: allocate the next local id, emit OPEN, and return
+ * the channel ready for write()/flush() (optimistic open — a peer rejection
+ * arrives later as a CLOSED event). `initial_recv_window` overrides
+ * YETTY_YWIRE_CHANNEL_WINDOW_DEFAULT for the peer→local direction; 0 keeps the
+ * default. */
+struct yetty_ywire_channel_ptr_result yetty_ywire_connection_open_channel(
+    struct yetty_ywire_connection *connection, uint32_t initial_recv_window);
+
+/*===========================================================================
  * Reactor seam — forwarded down to the transport. Register fd()/out_fd() with
  * the host loop; call the pumps on readiness.
  *=========================================================================*/

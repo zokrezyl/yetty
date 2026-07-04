@@ -336,13 +336,15 @@ struct yetty_ycore_void_result yetty_yguiapp_run_terminal(struct yetty_yclass_ob
         goto fail;                                                                                 \
     } while (0)
 
-    /* The connection's transport owns STDIN/STDOUT. Raw mode runs BEFORE any OSC
+    /* The connection's transport owns STDIN/STDOUT — or, when the host passed a
+     * dedicated side channel (YETTY_YWIRE_SIDE_CHANNEL), that fd pair instead,
+     * leaving the terminal byte stream alone. Raw mode runs BEFORE any OSC
      * write — the first thing the host might echo back is the ?1500/?1501 enable,
      * and a cooked tty would loop that echo through libvterm. */
     struct yetty_yclass_transport_pty_ptr_result tr =
-        yetty_yclass_transport_pty_create(STDIN_FILENO, STDOUT_FILENO);
+        yetty_yclass_transport_pty_create_from_env(STDIN_FILENO, STDOUT_FILENO);
     if (YETTY_IS_ERR(tr)) {
-        return YETTY_ERR(yetty_ycore_void, "yguiapp client: transport_pty_create", tr);
+        return YETTY_ERR(yetty_ycore_void, "yguiapp client: transport_pty_create_from_env", tr);
     }
     cs.transport = tr.value;
 
@@ -547,6 +549,15 @@ fail:
         struct yetty_ycore_void_result dr = yetty_ygui_framework_destroy(cs.engine);
         if (YETTY_IS_ERR(dr)) {
             yetty_ycore_error_destroy(dr.error);
+        }
+    }
+    if (cs.transport) {
+        /* The framework teardown queued its figure clears through the
+         * non-blocking writer — force the tail onto the wire before the
+         * transport goes away. */
+        struct yetty_ycore_void_result fl = yetty_yclass_transport_pty_flush_blocking(cs.transport);
+        if (YETTY_IS_ERR(fl)) {
+            yetty_ycore_error_destroy(fl.error);
         }
     }
     if (cs.conn) {
