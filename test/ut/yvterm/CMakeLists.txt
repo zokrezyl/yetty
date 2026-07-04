@@ -17,7 +17,7 @@ yetty_add_c_test(
 
 # Terminal-state matrix (#418): BCE, wide-glyph spill, autowrap, tab stops,
 # cursor save/restore, insert/delete char, scroll-region isolation, extended
-# SGR, and the alt-screen non-restore characterization. Pure grid model — no
+# SGR, and the alt-screen enter/restore contract. Pure grid model — no
 # memory-PTY or wire statemachine.
 yetty_add_c_test(
     NAME    yvterm_state_matrix

@@ -2,7 +2,8 @@
  * grid.c — the unified terminal model as a yclass class: class@yvterm:grid.
  *
  * This class owns the ONE CPU-side terminal truth: text cells, per-cell rich
- * refs, and anchored primitive/composite storage on a scrolling line ring, plus
+ * refs, and anchored primitive/composite storage on two scrolling line rings —
+ * the primary screen (with scrollback) and the alternate screen — plus
  * the libvterm State machine that drives it and the keyboard/PTY I/O. The
  * renderer (class@yvterm:vterm, a yfigure) composes a grid instance and reads it
  * through the exposed cell type + the bulk accessor methods at the foot of this
@@ -130,17 +131,41 @@ typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int clic
                                                                         int move_enabled,
                                                                         void *userdata);
 
-/* The unified terminal grid — the yclass data block. visible row N maps to:
+/* One screen buffer: a rolling ring of lines plus its scroll state. The grid
+ * owns TWO of these — the primary screen and the alternate screen — and its
+ * `alt_screen` flag selects which one is live. Visible row N of a screen maps
+ * to:
  *
- *     lines[(base + N) % visible_rows]
+ *     lines[(base + N) % line_count]
  *
- * Whole-screen scroll advances base and reuses rolled-off line slots. */
-struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
+ * Whole-screen scroll advances base and reuses rolled-off line slots. The
+ * primary ring is sized visible_rows + scrollback_rows, so rolled-off lines
+ * stay addressable as history. The alternate ring is sized visible_rows
+ * exactly: full-screen apps own their surface and have no scrollback, so its
+ * roll rotates in place and retains nothing — and the primary ring (screen AND
+ * history) is simply never touched while the alternate screen is active. */
+struct yetty_yvterm_screen {
     struct yetty_yvterm_line *lines;
     uint32_t line_count;
+    uint32_t base;
+
+    /* Absolute count of rows scrolled off the top of THIS screen — its
+     * rolling-row origin. The top of the screen is at absolute row
+     * `total_scrolled`; the cursor's absolute row is `total_scrolled +
+     * cursor_row`. Anchored rich content (the ydraw ygrid) uses this to scroll
+     * in lockstep with the text. */
+    uint32_t total_scrolled;
+};
+
+/* The unified terminal grid — the yclass data block. */
+struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
+    /* The two screen buffers; `alt_screen` picks the active one. Both always
+     * share the grid-global cols/visible_rows. */
+    struct yetty_yvterm_screen primary;
+    struct yetty_yvterm_screen alternate;
+
     uint32_t visible_rows;
     uint32_t cols;
-    uint32_t base;
 
     /* Scrollback depth: history rows retained above the visible screen. The
      * line ring is sized visible_rows + scrollback_rows. Set once at create
@@ -188,12 +213,6 @@ struct YETTY_ANNOTATE("class@yvterm:grid") yetty_yvterm_grid {
     uint32_t selection_head_col;
 
     int has_dirty;
-
-    /* Absolute count of rows scrolled off the top — the rolling-row origin. The
-     * top of the screen is at absolute row `total_scrolled`; the cursor's
-     * absolute row is `total_scrolled + cursor_row`. Anchored rich content (the
-     * ydraw ygrid) uses this to scroll in lockstep with the text. */
-    uint32_t total_scrolled;
 };
 
 /* Result wrapper for the grid handle. Declared here (this TU does not include
@@ -230,24 +249,39 @@ static inline uint32_t pack_color(VTermColor color)
  * the oldest is evicted only when the ring wraps. */
 #define YVTERM_SCROLLBACK_ROWS 2000u
 
-/* Map a visible row [0, visible_rows) to its slot in the line ring. The ring
- * spans line_count = visible_rows + scrollback, so the modulo is over the FULL
- * ring (not visible_rows) — that is what keeps rolled-off history addressable. */
-static inline uint32_t ring_slot(const struct yetty_yvterm_grid *grid, uint32_t row)
+/* The live screen buffer: the alternate ring while the alt-screen mode is on,
+ * the primary ring otherwise. All libvterm callbacks and the visible-row /
+ * raw-slot accessors resolve through this. */
+static inline struct yetty_yvterm_screen *active_screen(struct yetty_yvterm_grid *grid)
 {
-    if (!grid->line_count) {
+    return grid->alt_screen ? &grid->alternate : &grid->primary;
+}
+
+/* Map a visible row [0, visible_rows) to its slot in a screen's line ring. The
+ * primary ring spans line_count = visible_rows + scrollback, so the modulo is
+ * over the FULL ring (not visible_rows) — that is what keeps rolled-off
+ * history addressable. (The alternate ring has line_count == visible_rows.) */
+static inline uint32_t screen_ring_slot(const struct yetty_yvterm_screen *screen, uint32_t row)
+{
+    if (!screen->line_count) {
         return row;
     }
-    uint32_t slot = grid->base + row;
-    while (slot >= grid->line_count) {
-        slot -= grid->line_count;
+    uint32_t slot = screen->base + row;
+    while (slot >= screen->line_count) {
+        slot -= screen->line_count;
     }
     return slot;
 }
 
+static inline struct yetty_yvterm_line *screen_line_at(struct yetty_yvterm_screen *screen,
+                                                       uint32_t row)
+{
+    return &screen->lines[screen_ring_slot(screen, row)];
+}
+
 static inline struct yetty_yvterm_line *line_at(struct yetty_yvterm_grid *grid, uint32_t row)
 {
-    return &grid->lines[ring_slot(grid, row)];
+    return screen_line_at(active_screen(grid), row);
 }
 
 static inline struct yetty_yvterm_text_cell *cell_at(struct yetty_yvterm_grid *grid, uint32_t row,
@@ -338,6 +372,29 @@ static void clear_line_rich(struct yetty_yvterm_line *line, uint32_t cols)
     line->rich_span_rows = 0;
 }
 
+/* Destroy a line's owned rich content AND free its backing arrays. Unlike
+ * clear_line_rich (which keeps the arrays for reuse), this is for lines whose
+ * backing is going away or is about to be replaced by pointer-move. */
+static void release_line_rich(struct yetty_yvterm_line *line)
+{
+    for (uint32_t i = 0; i < line->composite_count; ++i) {
+        destroy_composite(line->composites[i]);
+    }
+    free(line->composites);
+    line->composites = NULL;
+    line->composite_count = 0;
+    line->composite_capacity = 0;
+    free(line->primitives);
+    line->primitives = NULL;
+    line->primitive_count = 0;
+    line->primitive_capacity = 0;
+    free(line->arena);
+    line->arena = NULL;
+    line->arena_count = 0;
+    line->arena_capacity = 0;
+    line->rich_span_rows = 0;
+}
+
 static void blank_cell(struct yetty_yvterm_text_cell *cell, uint32_t fg, uint32_t bg)
 {
     cell->glyph_index = 0;
@@ -350,25 +407,22 @@ static void blank_cell(struct yetty_yvterm_text_cell *cell, uint32_t fg, uint32_
 }
 
 /* Blank every cell of a line to the given fg/bg and release its rich content.
- * reset_line() uses the terminal default; erase (BCE) passes the pen colours. */
-static void fill_line_blank(struct yetty_yvterm_grid *grid, struct yetty_yvterm_line *line,
-                            uint32_t fg, uint32_t bg)
+ * reset_line() uses the terminal default; erase (BCE) passes the pen colours.
+ * cols is explicit (not grid->cols) because resize builds rings at the NEW
+ * width while the grid still carries the old one. */
+static void fill_line_blank(struct yetty_yvterm_line *line, uint32_t cols, uint32_t fg,
+                            uint32_t bg)
 {
-    for (uint32_t col = 0; col < grid->cols; ++col) {
+    for (uint32_t col = 0; col < cols; ++col) {
         blank_cell(&line->text_cells[col], fg, bg);
     }
-    clear_line_rich(line, grid->cols);
+    clear_line_rich(line, cols);
     line->continuation = 0;
 }
 
 static void reset_line(struct yetty_yvterm_grid *grid, struct yetty_yvterm_line *line)
 {
-    fill_line_blank(grid, line, grid->default_fg, grid->default_bg);
-}
-
-static void blank_line(struct yetty_yvterm_grid *grid, uint32_t row)
-{
-    reset_line(grid, line_at(grid, row));
+    fill_line_blank(line, grid->cols, grid->default_fg, grid->default_bg);
 }
 
 static void mark_dirty_row(struct yetty_yvterm_grid *grid, uint32_t row)
@@ -382,8 +436,11 @@ static void mark_dirty_row(struct yetty_yvterm_grid *grid, uint32_t row)
 
 static void mark_dirty_all(struct yetty_yvterm_grid *grid)
 {
-    for (uint32_t i = 0; i < grid->line_count; ++i) {
-        grid->lines[i].dirty = 1;
+    for (uint32_t i = 0; i < grid->primary.line_count; ++i) {
+        grid->primary.lines[i].dirty = 1;
+    }
+    for (uint32_t i = 0; i < grid->alternate.line_count; ++i) {
+        grid->alternate.lines[i].dirty = 1;
     }
     grid->has_dirty = 1;
 }
@@ -407,33 +464,38 @@ static void grid_sync_continuation(struct yetty_yvterm_grid *grid)
     }
 }
 
-/* O(1) whole-screen scroll-up. The rolled-off top lines are NOT blanked — they
- * stay in the ring as scrollback history (their GPU cells persist for the
- * scrolled-back view). Instead the freshly-exposed bottom rows are blanked.
- * Because line_count = visible_rows + scrollback, slot (base + visible_rows)
- * aliases the oldest history slot, so blanking it there naturally evicts the
- * oldest line and reuses it as the new blank bottom. Advancing base moves the
- * whole view down by one row over the ring. */
+/* O(1) whole-screen scroll-up of the ACTIVE screen. The rolled-off top lines
+ * are NOT blanked — they stay in the ring as scrollback history (their GPU
+ * cells persist for the scrolled-back view). Instead the freshly-exposed
+ * bottom rows are blanked. On the primary ring (line_count = visible_rows +
+ * scrollback) slot (base + visible_rows) aliases the oldest history slot, so
+ * blanking it there naturally evicts the oldest line and reuses it as the new
+ * blank bottom. On the alternate ring (line_count == visible_rows) the same
+ * arithmetic blanks the line rolling off the top and reuses it as the new
+ * bottom — an in-place rotation that retains nothing, which is exactly the
+ * no-scrollback alternate-screen semantics. Advancing base moves the whole
+ * view down by one row over the ring. */
 static void roll_up(struct yetty_yvterm_grid *grid, uint32_t count)
 {
-    if (grid->visible_rows == 0 || grid->line_count == 0) {
+    struct yetty_yvterm_screen *screen = active_screen(grid);
+    if (grid->visible_rows == 0 || screen->line_count == 0) {
         return;
     }
     if (count > grid->visible_rows) {
         count = grid->visible_rows;
     }
     for (uint32_t step = 0; step < count; ++step) {
-        uint32_t slot = grid->base + grid->visible_rows + step;
-        while (slot >= grid->line_count) {
-            slot -= grid->line_count;
+        uint32_t slot = screen->base + grid->visible_rows + step;
+        while (slot >= screen->line_count) {
+            slot -= screen->line_count;
         }
-        reset_line(grid, &grid->lines[slot]);
-        grid->lines[slot].dirty = 1;
+        reset_line(grid, &screen->lines[slot]);
+        screen->lines[slot].dirty = 1;
     }
-    grid->base += count;
-    grid->total_scrolled += count; /* rolling-row origin advances with scroll */
-    while (grid->base >= grid->line_count) {
-        grid->base -= grid->line_count;
+    screen->base += count;
+    screen->total_scrolled += count; /* rolling-row origin advances with scroll */
+    while (screen->base >= screen->line_count) {
+        screen->base -= screen->line_count;
     }
     grid->has_dirty = 1;
 }
@@ -559,7 +621,7 @@ static int cb_erase(VTermRect rect, int selective, void *user)
 
     if (whole_screen) {
         for (uint32_t row = 0; row < grid->visible_rows; ++row) {
-            fill_line_blank(grid, line_at(grid, row), erase_fg, erase_bg);
+            fill_line_blank(line_at(grid, row), grid->cols, erase_fg, erase_bg);
             mark_dirty_row(grid, row);
         }
         if (grid->clear_hook_fn) {
@@ -599,8 +661,10 @@ static int cb_scrollrect(VTermRect rect, int downward, int rightward, void *user
     struct yetty_yvterm_grid *grid = user;
     int whole_width = rect.start_col == 0 && (uint32_t)rect.end_col == grid->cols;
     int whole_height = rect.start_row == 0 && (uint32_t)rect.end_row == grid->visible_rows;
-    /* The common whole-screen scroll-up is O(1): advance the ring. Everything
-     * else decomposes through the unified move/erase callbacks. */
+    /* The common whole-screen scroll-up is O(1): advance the active ring. On
+     * the alternate ring (sized visible_rows) this rotates in place — no
+     * history retained, and the primary ring is untouched. Everything else
+     * decomposes through the unified move/erase callbacks. */
     if (rightward == 0 && downward > 0 && whole_width && whole_height) {
         roll_up(grid, (uint32_t)downward);
         return 1;
@@ -676,6 +740,27 @@ static int cb_settermprop(VTermProp prop, VTermValue *val, void *user)
         mark_dirty_row(grid, grid->cursor_row);
         break;
     case VTERM_PROP_ALTSCREEN:
+        /* Flip which of the two rings is live. The primary ring (screen and
+         * scrollback) is never touched while the alternate one is active, so
+         * exit is a pure switch-back — nothing to restore. On entry the ring
+         * starts fresh (libvterm erases the whole screen right after this
+         * callback returns, and that erase lands on the now-active alternate
+         * ring); on exit the alternate ring's rich content is dropped
+         * eagerly so composites don't sit on a dormant surface. Only
+         * transitions act, in case the prop is re-asserted without a state
+         * change (?47/?1047/?1049 overlap). The cursor is saved/restored by
+         * libvterm itself for mode 1049. */
+        if (val->boolean && !grid->alt_screen) {
+            grid->alternate.base = 0;
+            grid->alternate.total_scrolled = 0;
+        } else if (!val->boolean && grid->alt_screen) {
+            for (uint32_t slot = 0; slot < grid->alternate.line_count; ++slot) {
+                clear_line_rich(&grid->alternate.lines[slot], grid->cols);
+            }
+        }
+        if ((val->boolean ? 1 : 0) != grid->alt_screen) {
+            grid->selection_active = 0;
+        }
         grid->alt_screen = val->boolean ? 1 : 0;
         mark_dirty_all(grid);
         break;
@@ -743,9 +828,13 @@ static int cb_resize(int rows, int cols, VTermStateFields *fields, void *user)
              * cursor below, so a stale-but-valid buffer is the safer failure. */
             continue;
         }
-        if (bufidx == 0 && grid && !grid->alt_screen) {
+        if (bufidx == 0 && grid) {
+            /* Buffer 0 is the PRIMARY lineinfo — mirror from the primary ring
+             * regardless of which screen is active (the primary reflows on
+             * every resize, alt-screen sessions included). */
             for (int row = 0; row < safe_rows && (uint32_t)row < grid->visible_rows; ++row) {
-                resized[row].continuation = line_at(grid, (uint32_t)row)->continuation ? 1u : 0u;
+                resized[row].continuation =
+                    screen_line_at(&grid->primary, (uint32_t)row)->continuation ? 1u : 0u;
             }
         }
         free(fields->lineinfos[bufidx]);
@@ -794,41 +883,48 @@ static const VTermStateCallbacks *grid_state_callbacks(void)
  * Grid model lifecycle — the model lives embedded in the vterm object.
  *=========================================================================*/
 
-static void grid_free_lines(struct yetty_yvterm_grid *grid)
+static void screen_free_lines(struct yetty_yvterm_screen *screen)
 {
-    if (!grid->lines) {
+    if (!screen->lines) {
         return;
     }
-    for (uint32_t line = 0; line < grid->line_count; ++line) {
-        struct yetty_yvterm_line *current = &grid->lines[line];
-        for (uint32_t i = 0; i < current->composite_count; ++i) {
-            destroy_composite(current->composites[i]);
-        }
+    for (uint32_t line = 0; line < screen->line_count; ++line) {
+        struct yetty_yvterm_line *current = &screen->lines[line];
+        release_line_rich(current);
         free(current->text_cells);
-        free(current->primitives);
-        free(current->arena);
-        free(current->composites);
     }
-    free(grid->lines);
-    grid->lines = NULL;
+    free(screen->lines);
+    screen->lines = NULL;
+    screen->line_count = 0;
 }
 
-static struct yetty_ycore_void_result grid_alloc_lines(struct yetty_yvterm_grid *grid,
-                                                       uint32_t rows, uint32_t cols)
+static struct yetty_ycore_void_result screen_alloc_lines(struct yetty_yvterm_screen *screen,
+                                                         uint32_t line_count, uint32_t cols)
 {
-    grid->lines = calloc(rows, sizeof(struct yetty_yvterm_line));
-    if (!grid->lines) {
+    screen->lines = calloc(line_count, sizeof(struct yetty_yvterm_line));
+    if (!screen->lines) {
         return YETTY_ERR(yetty_ycore_void, "yvterm: line array allocation failed");
     }
-    grid->line_count = rows;
-    for (uint32_t line = 0; line < rows; ++line) {
-        grid->lines[line].text_cells = calloc(cols, sizeof(struct yetty_yvterm_text_cell));
-        if (!grid->lines[line].text_cells) {
-            grid_free_lines(grid);
+    screen->line_count = line_count;
+    for (uint32_t line = 0; line < line_count; ++line) {
+        screen->lines[line].text_cells = calloc(cols, sizeof(struct yetty_yvterm_text_cell));
+        if (!screen->lines[line].text_cells) {
+            screen_free_lines(screen);
             return YETTY_ERR(yetty_ycore_void, "yvterm: line allocation failed");
         }
     }
     return YETTY_OK_VOID();
+}
+
+/* Blank every line of a ring at the given width with the terminal default
+ * colours. Explicit cols/fg/bg because resize builds rings at the new width
+ * before the grid's own fields are committed. */
+static void screen_blank_all(struct yetty_yvterm_screen *screen, uint32_t cols, uint32_t fg,
+                             uint32_t bg)
+{
+    for (uint32_t slot = 0; slot < screen->line_count; ++slot) {
+        fill_line_blank(&screen->lines[slot], cols, fg, bg);
+    }
 }
 
 static struct yetty_ycore_void_result grid_model_init(struct yetty_yvterm_grid *grid, uint32_t cols,
@@ -839,15 +935,24 @@ static struct yetty_ycore_void_result grid_model_init(struct yetty_yvterm_grid *
     /* Fall back to the built-in default when the caller passes 0 (no config). */
     grid->scrollback_rows = scrollback_rows ? scrollback_rows : YVTERM_SCROLLBACK_ROWS;
 
-    /* Allocate visible + scrollback lines; only the first `rows` are on screen,
-     * the rest hold rolled-off history (see ring_slot / roll_up). */
-    struct yetty_ycore_void_result lines_r =
-        grid_alloc_lines(grid, rows + grid->scrollback_rows, cols);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, lines_r, "yvterm: grid_model_init alloc_lines");
+    /* Primary ring: visible + scrollback lines; only the first `rows` are on
+     * screen, the rest hold rolled-off history (see screen_ring_slot /
+     * roll_up). Alternate ring: visible lines only — no scrollback. */
+    struct yetty_ycore_void_result primary_res =
+        screen_alloc_lines(&grid->primary, rows + grid->scrollback_rows, cols);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, primary_res, "yvterm: grid_model_init primary ring");
+    struct yetty_ycore_void_result alternate_res =
+        screen_alloc_lines(&grid->alternate, rows, cols);
+    if (YETTY_IS_ERR(alternate_res)) {
+        screen_free_lines(&grid->primary);
+        return YETTY_ERR(yetty_ycore_void, "yvterm: grid_model_init alternate ring",
+                         alternate_res);
+    }
 
     grid->vterm = vterm_new((int)rows, (int)cols);
     if (!grid->vterm) {
-        grid_free_lines(grid);
+        screen_free_lines(&grid->primary);
+        screen_free_lines(&grid->alternate);
         return YETTY_ERR(yetty_ycore_void, "yvterm: vterm_new failed");
     }
     vterm_set_utf8(grid->vterm, 1);
@@ -865,9 +970,8 @@ static struct yetty_ycore_void_result grid_model_init(struct yetty_yvterm_grid *
     grid->pen_bg = grid->default_bg;
     grid->cursor_visible = 1u;
 
-    for (uint32_t row = 0; row < rows; ++row) {
-        blank_line(grid, row);
-    }
+    screen_blank_all(&grid->primary, cols, grid->default_fg, grid->default_bg);
+    screen_blank_all(&grid->alternate, cols, grid->default_fg, grid->default_bg);
     mark_dirty_all(grid);
     return YETTY_OK_VOID();
 }
@@ -879,7 +983,8 @@ static void grid_model_teardown(struct yetty_yvterm_grid *grid)
         grid->vterm = NULL;
         grid->state = NULL;
     }
-    grid_free_lines(grid);
+    screen_free_lines(&grid->primary);
+    screen_free_lines(&grid->alternate);
 }
 
 /*===========================================================================
@@ -916,21 +1021,14 @@ static uint32_t line_used_cols(const struct yetty_yvterm_line *line, uint32_t co
 /* Ring line for a row measured from the visible top, where `row` may be negative
  * to address retained scrollback history (row -1 is the line just above the
  * screen). The modulo spans the full ring so history slots resolve correctly. */
-static struct yetty_yvterm_line *line_at_signed(struct yetty_yvterm_grid *grid, int row)
+static struct yetty_yvterm_line *screen_line_at_signed(struct yetty_yvterm_screen *screen, int row)
 {
-    int64_t count = (int64_t)grid->line_count;
-    int64_t slot = ((int64_t)grid->base + row) % count;
+    int64_t count = (int64_t)screen->line_count;
+    int64_t slot = ((int64_t)screen->base + row) % count;
     if (slot < 0) {
         slot += count;
     }
-    return &grid->lines[slot];
-}
-
-static void grid_blank_all_lines(struct yetty_yvterm_grid *grid)
-{
-    for (uint32_t slot = 0; slot < grid->line_count; ++slot) {
-        reset_line(grid, &grid->lines[slot]);
-    }
+    return &screen->lines[slot];
 }
 
 /* One physical source row feeding the reflow, paired with whether it continues
@@ -1078,73 +1176,74 @@ static struct yetty_ycore_void_result merge_line_rich(struct yetty_yvterm_line *
     return YETTY_OK_VOID();
 }
 
-/* Alt-screen resize: full-screen apps own their redraw and have neither
- * scrollback nor soft-wrap, so there is nothing to reflow. Preserve the
- * overlapping top-left rectangle to avoid a blank flash; the app repaints the
- * rest on the SIGWINCH it gets from the PTY resize. */
-static struct yetty_ycore_void_result grid_resize_altscreen(struct yetty_yvterm_grid *grid,
-                                                            uint32_t cols, uint32_t rows)
-{
-    uint32_t old_cols = grid->cols;
-    uint32_t old_rows = grid->visible_rows;
-
-    struct yetty_yvterm_grid tmp = {0};
-    tmp.cols = cols;
-    tmp.default_fg = grid->default_fg;
-    tmp.default_bg = grid->default_bg;
-    struct yetty_ycore_void_result lines_r =
-        grid_alloc_lines(&tmp, rows + grid->scrollback_rows, cols);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, lines_r, "yvterm: grid_resize_altscreen alloc_lines");
-    grid_blank_all_lines(&tmp);
-
-    uint32_t copy_rows = old_rows < rows ? old_rows : rows;
-    uint32_t copy_cols = old_cols < cols ? old_cols : cols;
-    for (uint32_t row = 0; row < copy_rows; ++row) {
-        struct yetty_yvterm_text_cell *dst = tmp.lines[row].text_cells;
-        for (uint32_t col = 0; col < copy_cols; ++col) {
-            dst[col] = *cell_at(grid, row, col);
-        }
-    }
-
-    grid_free_lines(grid);
-    grid->lines = tmp.lines;
-    grid->line_count = tmp.line_count;
-    grid->cols = cols;
-    grid->visible_rows = rows;
-    grid->base = 0;
-    grid->total_scrolled = 0;
-    if (grid->cursor_row >= rows) {
-        grid->cursor_row = rows - 1u;
-    }
-    if (grid->cursor_col >= cols) {
-        grid->cursor_col = cols - 1u;
-    }
-    grid->selection_active = 0;
-
-    vterm_set_size(grid->vterm, (int)rows, (int)cols);
-    mark_dirty_all(grid);
-    return YETTY_OK_VOID();
-}
-
-static struct yetty_ycore_void_result grid_resize_reflow(struct yetty_yvterm_grid *grid,
+/* Rectangle-copy resize of the alternate ring: full-screen apps own their
+ * redraw and have neither scrollback nor soft-wrap, so there is nothing to
+ * reflow. Preserve the overlapping top-left rectangle to avoid a blank flash;
+ * the app repaints the rest on the SIGWINCH it gets from the PTY resize. The
+ * ring stays visible-only (new_rows lines); scroll state resets. Rich content
+ * on the old ring goes down with it — an alternate surface is repainted
+ * wholesale anyway. Does NOT commit grid-global dims/cursor — the caller
+ * (grid_model_resize) does, once BOTH rings are resized. */
+static struct yetty_ycore_void_result screen_resize_rect(struct yetty_yvterm_grid *grid,
+                                                         struct yetty_yvterm_screen *screen,
                                                          uint32_t new_cols, uint32_t new_rows)
 {
     uint32_t old_cols = grid->cols;
     uint32_t old_rows = grid->visible_rows;
-    uint32_t scrollback_cap = grid->line_count - grid->visible_rows;
-    uint32_t hist = grid->total_scrolled < scrollback_cap ? grid->total_scrolled : scrollback_cap;
+
+    struct yetty_yvterm_screen tmp = {0};
+    struct yetty_ycore_void_result lines_res = screen_alloc_lines(&tmp, new_rows, new_cols);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, lines_res, "yvterm: screen_resize_rect alloc_lines");
+    screen_blank_all(&tmp, new_cols, grid->default_fg, grid->default_bg);
+
+    uint32_t copy_rows = old_rows < new_rows ? old_rows : new_rows;
+    uint32_t copy_cols = old_cols < new_cols ? old_cols : new_cols;
+    for (uint32_t row = 0; row < copy_rows; ++row) {
+        struct yetty_yvterm_text_cell *dst = tmp.lines[row].text_cells;
+        const struct yetty_yvterm_text_cell *src = screen_line_at(screen, row)->text_cells;
+        for (uint32_t col = 0; col < copy_cols; ++col) {
+            dst[col] = src[col];
+        }
+        tmp.lines[row].dirty = 1;
+    }
+
+    screen_free_lines(screen);
+    *screen = tmp;
+    return YETTY_OK_VOID();
+}
+
+/* Reflow-resize a screen's ring (in practice: the primary — the alternate is
+ * rectangle-copied). inout_cursor_row/inout_cursor_col carry the screen's
+ * cursor through the re-wrap by its absolute offset within its logical line;
+ * pass NULL for both when reflowing the DORMANT primary during an alt-screen
+ * session — its cursor lives in libvterm's saved state (restored and clamped
+ * on ?1049l), so there is nothing to track and nothing is written back. Does
+ * NOT commit grid-global dims/cursor and does NOT resize libvterm — the caller
+ * (grid_model_resize) does, once BOTH rings are resized. */
+static struct yetty_ycore_void_result screen_resize_reflow(struct yetty_yvterm_grid *grid,
+                                                           struct yetty_yvterm_screen *screen,
+                                                           uint32_t new_cols, uint32_t new_rows,
+                                                           uint32_t *inout_cursor_row,
+                                                           uint32_t *inout_cursor_col)
+{
+    uint32_t old_cols = grid->cols;
+    uint32_t old_rows = grid->visible_rows;
+    int have_cursor = inout_cursor_row && inout_cursor_col;
+    uint32_t scrollback_cap = screen->line_count - old_rows;
+    uint32_t hist =
+        screen->total_scrolled < scrollback_cap ? screen->total_scrolled : scrollback_cap;
 
     /* Trim trailing blank rows below the content/cursor so the reflow does not
      * manufacture empty scrollback, but never trim history or the cursor line. */
     int content_bottom = -1;
     for (uint32_t row = 0; row < old_rows; ++row) {
-        if (line_used_cols(line_at(grid, row), old_cols) > 0) {
+        if (line_used_cols(screen_line_at(screen, row), old_cols) > 0) {
             content_bottom = (int)row;
         }
     }
     int last_kept = content_bottom;
-    if ((int)grid->cursor_row > last_kept) {
-        last_kept = (int)grid->cursor_row;
+    if (have_cursor && (int)*inout_cursor_row > last_kept) {
+        last_kept = (int)*inout_cursor_row;
     }
     uint32_t visible_kept = last_kept >= 0 ? (uint32_t)last_kept + 1u : 0u;
     uint32_t src_count = hist + visible_kept;
@@ -1155,16 +1254,16 @@ static struct yetty_ycore_void_result grid_resize_reflow(struct yetty_yvterm_gri
     if (!src || !logical) {
         free(src);
         free(logical);
-        return YETTY_ERR(yetty_ycore_void, "yvterm: grid_resize_reflow scratch alloc failed");
+        return YETTY_ERR(yetty_ycore_void, "yvterm: screen_resize_reflow scratch alloc failed");
     }
     for (uint32_t i = 0; i < src_count; ++i) {
-        struct yetty_yvterm_line *line = line_at_signed(grid, (int)i - (int)hist);
+        struct yetty_yvterm_line *line = screen_line_at_signed(screen, (int)i - (int)hist);
         src[i].line = line;
         /* The oldest gathered row starts a fresh logical line even if its flag is
          * set — whatever it continued from has already been evicted. */
         src[i].continuation = (i > 0) && line->continuation;
     }
-    uint32_t cursor_src = hist + grid->cursor_row;
+    uint32_t cursor_src = have_cursor ? hist + *inout_cursor_row : 0u;
 
     /* Pass 1: group into logical lines, size each at the new width, and locate
      * the cursor by its absolute cell offset within its logical line. */
@@ -1191,8 +1290,8 @@ static struct yetty_ycore_void_result grid_resize_reflow(struct yetty_yvterm_gri
         entry->new_height = new_height;
         entry->start_gidx = total_new;
 
-        if (!cursor_found && cursor_src >= first && cursor_src < i) {
-            uint32_t offset = (cursor_src - first) * old_cols + grid->cursor_col;
+        if (have_cursor && !cursor_found && cursor_src >= first && cursor_src < i) {
+            uint32_t offset = (cursor_src - first) * old_cols + *inout_cursor_col;
             if (offset > content_len) {
                 offset = content_len;
             }
@@ -1220,17 +1319,14 @@ static struct yetty_ycore_void_result grid_resize_reflow(struct yetty_yvterm_gri
     uint32_t new_line_count = new_rows + grid->scrollback_rows;
     uint32_t visible_top = total_new > new_rows ? total_new - new_rows : 0u;
 
-    struct yetty_yvterm_grid tmp = {0};
-    tmp.cols = new_cols;
-    tmp.default_fg = grid->default_fg;
-    tmp.default_bg = grid->default_bg;
-    struct yetty_ycore_void_result lines_r = grid_alloc_lines(&tmp, new_line_count, new_cols);
-    if (YETTY_IS_ERR(lines_r)) {
+    struct yetty_yvterm_screen tmp = {0};
+    struct yetty_ycore_void_result lines_res = screen_alloc_lines(&tmp, new_line_count, new_cols);
+    if (YETTY_IS_ERR(lines_res)) {
         free(src);
         free(logical);
-        return YETTY_ERR(yetty_ycore_void, "yvterm: grid_resize_reflow alloc_lines", lines_r);
+        return YETTY_ERR(yetty_ycore_void, "yvterm: screen_resize_reflow alloc_lines", lines_res);
     }
-    grid_blank_all_lines(&tmp);
+    screen_blank_all(&tmp, new_cols, grid->default_fg, grid->default_bg);
 
     /* Pass 2: emit each logical line's wrapped rows into the new ring. With base
      * 0, visible row v lives at slot v and scrollback row -k at slot
@@ -1281,37 +1377,32 @@ static struct yetty_ycore_void_result grid_resize_reflow(struct yetty_yvterm_gri
             }
             struct yetty_ycore_void_result merge_res = merge_line_rich(&tmp.lines[slot], src_line);
             if (YETTY_IS_ERR(merge_res)) {
-                grid_free_lines(&tmp);
+                screen_free_lines(&tmp);
                 free(src);
                 free(logical);
-                return YETTY_ERR(yetty_ycore_void, "yvterm: grid_resize_reflow merge rich",
+                return YETTY_ERR(yetty_ycore_void, "yvterm: screen_resize_reflow merge rich",
                                  merge_res);
             }
         }
     }
 
-    grid_free_lines(grid);
-    grid->lines = tmp.lines;
-    grid->line_count = tmp.line_count;
-    grid->cols = new_cols;
-    grid->visible_rows = new_rows;
-    grid->base = 0;
-    grid->total_scrolled = visible_top;
+    screen_free_lines(screen);
+    *screen = tmp;
+    screen->base = 0;
+    screen->total_scrolled = visible_top;
 
-    uint32_t cursor_row = cursor_gidx >= visible_top ? cursor_gidx - visible_top : 0u;
-    if (cursor_row >= new_rows) {
-        cursor_row = new_rows - 1u;
+    if (have_cursor) {
+        uint32_t reflowed_row = cursor_gidx >= visible_top ? cursor_gidx - visible_top : 0u;
+        if (reflowed_row >= new_rows) {
+            reflowed_row = new_rows - 1u;
+        }
+        *inout_cursor_row = reflowed_row;
+        *inout_cursor_col =
+            cursor_new_col < new_cols ? cursor_new_col : (new_cols ? new_cols - 1u : 0u);
     }
-    grid->cursor_row = cursor_row;
-    grid->cursor_col = cursor_new_col < new_cols ? cursor_new_col : (new_cols ? new_cols - 1u : 0u);
-    grid->selection_active = 0;
 
     free(src);
     free(logical);
-
-    /* State adopts the reflowed cursor + continuation through cb_resize. */
-    vterm_set_size(grid->vterm, (int)new_rows, (int)new_cols);
-    mark_dirty_all(grid);
     return YETTY_OK_VOID();
 }
 
@@ -1321,10 +1412,51 @@ static struct yetty_ycore_void_result grid_model_resize(struct yetty_yvterm_grid
     if (cols == grid->cols && rows == grid->visible_rows) {
         return YETTY_OK_VOID();
     }
+
+    /* BOTH rings resize, so the dormant screen is already right when the child
+     * switches back: the primary reflows its soft-wrapped text (keeping its
+     * whole scrollback, alt-screen sessions included), the alternate is
+     * rectangle-copied. The DORMANT ring goes first — if its allocation fails,
+     * the live ring and the grid dims are still consistent with each other. */
+    uint32_t reflow_cursor_row = grid->cursor_row;
+    uint32_t reflow_cursor_col = grid->cursor_col;
     if (grid->alt_screen) {
-        return grid_resize_altscreen(grid, cols, rows);
+        /* The live cursor belongs to the alternate screen; the dormant primary
+         * reflows cursor-less (its cursor is libvterm's saved one, restored
+         * and clamped on ?1049l). */
+        struct yetty_ycore_void_result primary_res =
+            screen_resize_reflow(grid, &grid->primary, cols, rows, NULL, NULL);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, primary_res, "yvterm: resize primary reflow");
+        struct yetty_ycore_void_result alternate_res =
+            screen_resize_rect(grid, &grid->alternate, cols, rows);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, alternate_res, "yvterm: resize alternate rect");
+        /* Rectangle semantics for the live alternate cursor: clamp. */
+        if (reflow_cursor_row >= rows) {
+            reflow_cursor_row = rows - 1u;
+        }
+        if (reflow_cursor_col >= cols) {
+            reflow_cursor_col = cols - 1u;
+        }
+    } else {
+        struct yetty_ycore_void_result alternate_res =
+            screen_resize_rect(grid, &grid->alternate, cols, rows);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, alternate_res, "yvterm: resize alternate rect");
+        struct yetty_ycore_void_result primary_res = screen_resize_reflow(
+            grid, &grid->primary, cols, rows, &reflow_cursor_row, &reflow_cursor_col);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, primary_res, "yvterm: resize primary reflow");
     }
-    return grid_resize_reflow(grid, cols, rows);
+
+    grid->cols = cols;
+    grid->visible_rows = rows;
+    grid->cursor_row = reflow_cursor_row;
+    grid->cursor_col = reflow_cursor_col;
+    grid->selection_active = 0;
+
+    /* State adopts the new size + the reflowed cursor/continuation through
+     * cb_resize. */
+    vterm_set_size(grid->vterm, (int)rows, (int)cols);
+    mark_dirty_all(grid);
+    return YETTY_OK_VOID();
 }
 
 /*===========================================================================
@@ -1474,15 +1606,16 @@ struct yetty_ycore_void_result yetty_yvterm_grid_cursor(struct yetty_yclass_obje
     return YETTY_OK_VOID();
 }
 
-/* Absolute row at the top of the screen (rows scrolled off so far). The cursor's
- * absolute output row is this + the visible cursor row — used to place anchored
- * rich content on the rolling-row scroll. */
+/* Absolute row at the top of the ACTIVE screen (rows scrolled off so far). The
+ * cursor's absolute output row is this + the visible cursor row — used to place
+ * anchored rich content on the rolling-row scroll. Each screen carries its own
+ * origin; the alternate one restarts at 0 on every entry. */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_yvterm_grid_scroll_origin(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_uint32, grid_res, "yvterm grid_scroll_origin: from_obj");
-    return YETTY_OK(yetty_ycore_uint32, grid_res.value->total_scrolled);
+    return YETTY_OK(yetty_ycore_uint32, active_screen(grid_res.value)->total_scrolled);
 }
 
 /*===========================================================================
@@ -1574,9 +1707,10 @@ struct yetty_ycore_void_result yetty_yvterm_grid_relocate_rich_to_bottom(
     }
     int bottom_row = (int)grid->cursor_row - 1;
     int top_row = (int)grid->cursor_row - (int)span_rows;
-    struct yetty_yvterm_line *bottom = line_at_signed(grid, bottom_row);
+    struct yetty_yvterm_screen *screen = active_screen(grid);
+    struct yetty_yvterm_line *bottom = screen_line_at_signed(screen, bottom_row);
     if (top_row != bottom_row) {
-        struct yetty_yvterm_line *top = line_at_signed(grid, top_row);
+        struct yetty_yvterm_line *top = screen_line_at_signed(screen, top_row);
         /* bottom is freshly blanked by the reserve scroll, so this steals the
          * top line's whole rich backing onto it (no copy). */
         struct yetty_ycore_void_result merge_res = merge_line_rich(bottom, top);
@@ -1611,13 +1745,17 @@ struct yetty_ycore_void_result yetty_yvterm_grid_clear_rich_all(struct yetty_ycl
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm clear_rich_all: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
-    /* Clear the WHOLE ring, not just the visible window: anchored rich content
-     * persists on scrolled-off history lines too (that is the point of the
-     * scrollback ring), and a terminal CLEAR must drop every figure, including
-     * the ones currently sitting in history. */
-    for (uint32_t slot = 0; slot < grid->line_count; ++slot) {
-        clear_line_rich(&grid->lines[slot], grid->cols);
-        grid->lines[slot].dirty = 1;
+    /* Clear BOTH whole rings, not just the visible window: anchored rich
+     * content persists on scrolled-off history lines too (that is the point of
+     * the scrollback ring), and a terminal CLEAR must drop every figure,
+     * including the ones sitting in history or on the dormant screen. */
+    for (uint32_t slot = 0; slot < grid->primary.line_count; ++slot) {
+        clear_line_rich(&grid->primary.lines[slot], grid->cols);
+        grid->primary.lines[slot].dirty = 1;
+    }
+    for (uint32_t slot = 0; slot < grid->alternate.line_count; ++slot) {
+        clear_line_rich(&grid->alternate.lines[slot], grid->cols);
+        grid->alternate.lines[slot].dirty = 1;
     }
     grid->has_dirty = 1;
     return YETTY_OK_VOID();
@@ -1919,7 +2057,7 @@ struct yetty_ycore_void_result yetty_yvterm_grid_dims(struct yetty_yclass_object
         *out_rows = grid->visible_rows;
     }
     if (out_base) {
-        *out_base = grid->base;
+        *out_base = active_screen(grid)->base;
     }
     return YETTY_OK_VOID();
 }
@@ -1990,11 +2128,11 @@ struct yetty_ydraw_composite_const_ptr_ptr_result yetty_yvterm_grid_slot_composi
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ydraw_composite_const_ptr_ptr, grid_res,
                         "yvterm grid_slot_composites: from_obj");
-    struct yetty_yvterm_grid *grid = grid_res.value;
-    if (slot >= grid->line_count) {
+    struct yetty_yvterm_screen *screen = active_screen(grid_res.value);
+    if (slot >= screen->line_count) {
         return YETTY_OK(yetty_ydraw_composite_const_ptr_ptr, NULL);
     }
-    struct yetty_yvterm_line *line = &grid->lines[slot];
+    struct yetty_yvterm_line *line = &screen->lines[slot];
     if (out_count) {
         *out_count = line->composite_count;
     }
@@ -2010,11 +2148,11 @@ struct yetty_ycore_uint32_result yetty_yvterm_grid_slot_primitive_count(
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_uint32, grid_res, "yvterm grid_slot_primitive_count: from_obj");
-    struct yetty_yvterm_grid *grid = grid_res.value;
-    if (slot >= grid->line_count) {
+    struct yetty_yvterm_screen *screen = active_screen(grid_res.value);
+    if (slot >= screen->line_count) {
         return YETTY_OK(yetty_ycore_uint32, 0u);
     }
-    return YETTY_OK(yetty_ycore_uint32, grid->lines[slot].primitive_count);
+    return YETTY_OK(yetty_ycore_uint32, screen->lines[slot].primitive_count);
 }
 
 /* Row-span of the rich-content block whose BOTTOM line is RAW ring slot `slot`.
@@ -2028,11 +2166,11 @@ struct yetty_ycore_uint32_result yetty_yvterm_grid_slot_span(struct yetty_yclass
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_uint32, grid_res, "yvterm grid_slot_span: from_obj");
-    struct yetty_yvterm_grid *grid = grid_res.value;
-    if (slot >= grid->line_count) {
+    struct yetty_yvterm_screen *screen = active_screen(grid_res.value);
+    if (slot >= screen->line_count) {
         return YETTY_OK(yetty_ycore_uint32, 0u);
     }
-    return YETTY_OK(yetty_ycore_uint32, grid->lines[slot].rich_span_rows);
+    return YETTY_OK(yetty_ycore_uint32, screen->lines[slot].rich_span_rows);
 }
 
 /* Words of primitive `index` on RAW ring slot `slot`. *out_word_count is set to the
@@ -2048,11 +2186,11 @@ struct yetty_ycore_const_uint32_ptr_result yetty_yvterm_grid_slot_primitive_word
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_const_uint32_ptr, grid_res,
                         "yvterm grid_slot_primitive_words: from_obj");
-    struct yetty_yvterm_grid *grid = grid_res.value;
-    if (slot >= grid->line_count) {
+    struct yetty_yvterm_screen *screen = active_screen(grid_res.value);
+    if (slot >= screen->line_count) {
         return YETTY_OK(yetty_ycore_const_uint32_ptr, NULL);
     }
-    struct yetty_yvterm_line *line = &grid->lines[slot];
+    struct yetty_yvterm_line *line = &screen->lines[slot];
     if (index >= line->primitive_count) {
         return YETTY_OK(yetty_ycore_const_uint32_ptr, NULL);
     }
@@ -2091,29 +2229,37 @@ struct yetty_ycore_void_result yetty_yvterm_grid_selection(
     return YETTY_OK_VOID();
 }
 
-/* Renderer has consumed the model; drop every dirty flag. */
+/* Renderer has consumed the model; drop every dirty flag (both screens — a
+ * dormant ring's stale flags would otherwise fire a spurious full repaint on
+ * the next switch, which mark_dirty_all re-arms anyway). */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_grid_clear_dirty(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_res, "yvterm grid_clear_dirty: from_obj");
     struct yetty_yvterm_grid *grid = grid_res.value;
-    for (uint32_t i = 0; i < grid->line_count; ++i) {
-        grid->lines[i].dirty = 0;
+    for (uint32_t i = 0; i < grid->primary.line_count; ++i) {
+        grid->primary.lines[i].dirty = 0;
+    }
+    for (uint32_t i = 0; i < grid->alternate.line_count; ++i) {
+        grid->alternate.lines[i].dirty = 0;
     }
     grid->has_dirty = 0;
     return YETTY_OK_VOID();
 }
 
-/* Raw ring-slot accessors (slot in [0, line_count)) for the text upload, which
- * is slot-indexed so the shader's root_row=base gives O(1) scroll. Distinct from
- * the visible-row accessors above (which resolve the ring). */
+/* Raw ring-slot accessors (slot in [0, slot_count)) for the text upload, which
+ * is slot-indexed so the shader's root_row=base gives O(1) scroll. Distinct
+ * from the visible-row accessors above (which resolve the ring). Slots address
+ * the ACTIVE screen's ring; its size changes when the alternate screen toggles
+ * (primary: visible + scrollback, alternate: visible only), so the renderer
+ * re-queries slot_count each pass. */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_yvterm_grid_slot_count(struct yetty_yclass_object *obj)
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_uint32, grid_res, "yvterm grid_slot_count: from_obj");
-    return YETTY_OK(yetty_ycore_uint32, grid_res.value->line_count);
+    return YETTY_OK(yetty_ycore_uint32, active_screen(grid_res.value)->line_count);
 }
 
 YETTY_ANNOTATE("expose")
@@ -2123,11 +2269,11 @@ struct yetty_yvterm_text_cell_const_ptr_result yetty_yvterm_grid_slot_cells(
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
     YETTY_RETURN_IF_ERR(yetty_yvterm_text_cell_const_ptr, grid_res,
                         "yvterm grid_slot_cells: from_obj");
-    struct yetty_yvterm_grid *grid = grid_res.value;
-    if (slot >= grid->line_count) {
+    struct yetty_yvterm_screen *screen = active_screen(grid_res.value);
+    if (slot >= screen->line_count) {
         return YETTY_OK(yetty_yvterm_text_cell_const_ptr, NULL);
     }
-    return YETTY_OK(yetty_yvterm_text_cell_const_ptr, grid->lines[slot].text_cells);
+    return YETTY_OK(yetty_yvterm_text_cell_const_ptr, screen->lines[slot].text_cells);
 }
 
 YETTY_ANNOTATE("expose")
@@ -2136,11 +2282,11 @@ struct yetty_ycore_int_result yetty_yvterm_grid_slot_dirty(struct yetty_yclass_o
 {
     struct yetty_yvterm_grid_ptr_result grid_res = yetty_yvterm_grid_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_int, grid_res, "yvterm grid_slot_dirty: from_obj");
-    struct yetty_yvterm_grid *grid = grid_res.value;
-    if (slot >= grid->line_count) {
+    struct yetty_yvterm_screen *screen = active_screen(grid_res.value);
+    if (slot >= screen->line_count) {
         return YETTY_OK(yetty_ycore_int, 0);
     }
-    return YETTY_OK(yetty_ycore_int, grid->lines[slot].dirty);
+    return YETTY_OK(yetty_ycore_int, screen->lines[slot].dirty);
 }
 
 #include "grid.gen.c"

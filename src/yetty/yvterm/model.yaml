@@ -9,12 +9,12 @@ classes:
     mixins: []
     data: struct yetty_yvterm_grid
     data_fields:
-      - name: lines
-        type: "struct yetty_yvterm_line *"
+      - name: primary
+        type: struct yetty_yvterm_screen
         get: false
         set: false
-      - name: line_count
-        type: uint32_t
+      - name: alternate
+        type: struct yetty_yvterm_screen
         get: false
         set: false
       - name: visible_rows
@@ -22,10 +22,6 @@ classes:
         get: false
         set: false
       - name: cols
-        type: uint32_t
-        get: false
-        set: false
-      - name: base
         type: uint32_t
         get: false
         set: false
@@ -141,16 +137,8 @@ classes:
         type: int
         get: false
         set: false
-      - name: total_scrolled
-        type: uint32_t
-        get: false
-        set: false
     ops: []
-    doc: "/* The unified terminal grid — the yclass data block. visible row N maps to:
- *
- *     lines[(base + N) % visible_rows]
- *
- * Whole-screen scroll advances base and reuses rolled-off line slots. */"
+    doc: "/* The unified terminal grid — the yclass data block. */"
   - name: vterm
     domain: yvterm
     accessor: yetty_yvterm_vterm_class_get
@@ -508,9 +496,10 @@ exposed:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-    doc: "/* Absolute row at the top of the screen (rows scrolled off so far). The cursor's
- * absolute output row is this + the visible cursor row — used to place anchored
- * rich content on the rolling-row scroll. */"
+    doc: "/* Absolute row at the top of the ACTIVE screen (rows scrolled off so far). The
+ * cursor's absolute output row is this + the visible cursor row — used to place
+ * anchored rich content on the rolling-row scroll. Each screen carries its own
+ * origin; the alternate one restarts at 0 on every entry. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_append_primitive
     return_type: struct yetty_ycore_uint32_result
@@ -765,16 +754,21 @@ exposed:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-    doc: "/* Renderer has consumed the model; drop every dirty flag. */"
+    doc: "/* Renderer has consumed the model; drop every dirty flag (both screens — a
+ * dormant ring's stale flags would otherwise fire a spurious full repaint on
+ * the next switch, which mark_dirty_all re-arms anyway). */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_slot_count
     return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-    doc: "/* Raw ring-slot accessors (slot in [0, line_count)) for the text upload, which
- * is slot-indexed so the shader's root_row=base gives O(1) scroll. Distinct from
- * the visible-row accessors above (which resolve the ring). */"
+    doc: "/* Raw ring-slot accessors (slot in [0, slot_count)) for the text upload, which
+ * is slot-indexed so the shader's root_row=base gives O(1) scroll. Distinct
+ * from the visible-row accessors above (which resolve the ring). Slots address
+ * the ACTIVE screen's ring; its size changes when the alternate screen toggles
+ * (primary: visible + scrollback, alternate: visible only), so the renderer
+ * re-queries slot_count each pass. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_slot_cells
     return_type: struct yetty_yvterm_text_cell_const_ptr_result
@@ -1358,6 +1352,17 @@ types:
             type: "struct yetty_yfigure_figure *"
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_yvterm_screen
+    kind: struct
+    fields:
+      - name: lines
+        type: "struct yetty_yvterm_line *"
+      - name: line_count
+        type: uint32_t
+      - name: base
+        type: uint32_t
+      - name: total_scrolled
+        type: uint32_t
   - name: yetty_yvterm_text_cell_const_ptr_result
     kind: result
     fields:
@@ -1375,6 +1380,7 @@ local_types:
   yetty_yvterm_text_cell: src/yetty/yvterm/grid.c
   yetty_yvterm_primitive: src/yetty/yvterm/grid.c
   yetty_yvterm_line: src/yetty/yvterm/grid.c
+  yetty_yvterm_screen: src/yetty/yvterm/grid.c
   yetty_yvterm_grid: src/yetty/yvterm/grid.c
   yetty_yvterm_grid_ptr_result: src/yetty/yvterm/grid.c
   yetty_yvterm_text_cell_const_ptr_result: src/yetty/yvterm/grid.c
