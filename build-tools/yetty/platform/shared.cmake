@@ -231,6 +231,13 @@ endif()
 # Libraries — guarded by YETTY_ENABLE_LIB_*
 #-----------------------------------------------------------------------------
 
+# Declared first: yetty_ycore (added via src/yetty below) links
+# mimalloc::mimalloc for the memstats sampler, so the imported target
+# must exist before the src/yetty subdirectory pass.
+if(YETTY_ENABLE_LIB_MIMALLOC)
+    include(${YETTY_ROOT}/build-tools/yetty/libs/mimalloc.cmake)
+endif()
+
 if(YETTY_ENABLE_LIB_INCBIN)
     include(${YETTY_ROOT}/build-tools/yetty/incbin.cmake)
 endif()
@@ -466,6 +473,10 @@ if(YETTY_ENABLE_LIB_THORVG)
     list(APPEND YETTY_DEFINITIONS YETTY_HAS_THORVG=1)
 endif()
 
+if(YETTY_ENABLE_LIB_MIMALLOC)
+    list(APPEND YETTY_DEFINITIONS YETTY_HAS_MIMALLOC=1)
+endif()
+
 # YETTY_HAS_YMGUI gates yframework's ymgui figure-kind registration. Off on
 # webasm (imgui prebuilt unavailable) — see webasm/variables.cmake.
 if(YETTY_ENABLE_FEATURE_YMGUI)
@@ -476,6 +487,12 @@ endif()
 set(YETTY_LIBS "")
 
 # Third-party library link platforms
+if(YETTY_ENABLE_LIB_MIMALLOC)
+    # First in the list: the archive defines malloc/free/realloc, and the
+    # linker must see those definitions before it falls through to libc so
+    # every allocation in the process routes through mimalloc.
+    list(APPEND YETTY_LIBS mimalloc::mimalloc)
+endif()
 if(YETTY_ENABLE_LIB_WEBGPU)
     list(APPEND YETTY_LIBS webgpu)
 endif()

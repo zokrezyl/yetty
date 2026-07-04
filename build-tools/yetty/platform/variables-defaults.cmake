@@ -12,6 +12,10 @@
 #-----------------------------------------------------------------------------
 
 # Core / always needed
+# mimalloc replaces the libc allocator via static-link override (the
+# archive defines malloc/free and is linked ahead of libc); it also
+# feeds the allocation statistics behind <yetty/ycore/memstats.h>.
+option(YETTY_ENABLE_LIB_MIMALLOC    "mimalloc — allocator + statistics"     ON)
 option(YETTY_ENABLE_LIB_INCBIN      "incbin — binary embedding"             ON)
 option(YETTY_ENABLE_LIB_ARGS        "args — command line parser"             ON)
 option(YETTY_ENABLE_LIB_LZ4         "lz4 — compression"                      ON)

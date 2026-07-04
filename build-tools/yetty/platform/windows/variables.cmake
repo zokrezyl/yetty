@@ -4,6 +4,11 @@ include(${CMAKE_CURRENT_LIST_DIR}/../variables-defaults.cmake)
 set(YETTY_ENABLE_LIB_TINYEMU ON CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_QEMU    ON CACHE BOOL "" FORCE)
 
+# Static mimalloc cannot redirect the CRT malloc on Windows (that needs
+# the mimalloc-redirect DLL); linking it would give mi_*-only stats that
+# read near-zero. Revisit alongside a DLL-based redirect setup.
+set(YETTY_ENABLE_LIB_MIMALLOC OFF CACHE BOOL "" FORCE)
+
 # msdfgen prebuilt ships /MT CRT; rest of 3rdparty uses /MD — mixing causes LNK2038.
 set(YETTY_ENABLE_FEATURE_YMSDF_GEN OFF CACHE BOOL "" FORCE)
 set(YETTY_ENABLE_LIB_MSDFGEN       OFF CACHE BOOL "" FORCE)
