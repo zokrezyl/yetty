@@ -407,8 +407,8 @@ static struct yetty_ycore_size_result emit_one(struct yetty_ywire_connection *co
     } else {
         /* Owned mode: queue only — pump_outbound drains the transport once
          * per pump, after the fair round has been assembled. */
-        ship_res = connection->reactor.ops->queue(connection->reactor.userdata, framed.data,
-                                                  framed.size);
+        ship_res =
+            connection->reactor.ops->queue(connection->reactor.userdata, framed.data, framed.size);
     }
     yetty_ycore_buffer_destroy(&framed);
     YETTY_RETURN_IF_ERR(yetty_ycore_size, ship_res, "ywire emit_one: ship");
@@ -692,8 +692,8 @@ struct yetty_ywire_channel_ptr_result yetty_ywire_connection_open_channel(
     init_dynamic_channel(channel, connection, id,
                          /*send_window=*/(int64_t)YETTY_YWIRE_CHANNEL_WINDOW_DEFAULT,
                          /*recv_window_initial=*/
-                             initial_recv_window ? (int64_t)initial_recv_window
-                                                 : (int64_t)YETTY_YWIRE_CHANNEL_WINDOW_DEFAULT);
+                         initial_recv_window ? (int64_t)initial_recv_window
+                                             : (int64_t)YETTY_YWIRE_CHANNEL_WINDOW_DEFAULT);
 
     struct yetty_ycore_void_result open_res = yetty_ywire_connection_send_control(
         connection, YETTY_YWIRE_CHANNEL_MSG_OPEN, id, initial_recv_window);
