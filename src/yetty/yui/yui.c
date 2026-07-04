@@ -631,15 +631,15 @@ static void yui_format_byte_size(uint64_t bytes, char *out, size_t out_size)
  * the rounded text is unchanged so an idle app stays render-quiet. */
 static void yui_memstats_show(struct yetty_yui *yui, const struct yetty_ycore_memstats *stats)
 {
-    char allocated_str[16];
+    char committed_str[16];
     char peak_str[16];
     char resident_str[16];
-    yui_format_byte_size(stats->allocated_bytes, allocated_str, sizeof(allocated_str));
-    yui_format_byte_size(stats->peak_allocated_bytes, peak_str, sizeof(peak_str));
+    yui_format_byte_size(stats->committed_bytes, committed_str, sizeof(committed_str));
+    yui_format_byte_size(stats->peak_committed_bytes, peak_str, sizeof(peak_str));
     yui_format_byte_size(stats->resident_bytes, resident_str, sizeof(resident_str));
 
     char text[sizeof(yui->memstats_text)];
-    snprintf(text, sizeof(text), "heap %s  peak %s  rss %s", allocated_str, peak_str, resident_str);
+    snprintf(text, sizeof(text), "heap %s  peak %s  rss %s", committed_str, peak_str, resident_str);
     if (strcmp(text, yui->memstats_text) == 0) {
         return;
     }

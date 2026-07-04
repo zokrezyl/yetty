@@ -21,15 +21,20 @@ trap 'rc=$?; echo "FAILED: rc=$rc line=$LINENO source=${BASH_SOURCE[0]} cmd: $BA
 : "${OUTPUT_DIR:?OUTPUT_DIR is required}"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Wrapper-producer version scheme: <upstream>-<rev> (see 3rdparty README).
+# The full VERSION names the tarball + release tag; the upstream component
+# drives the source fetch. Bump <rev> for packaging-only changes (cmake
+# flags, patches) on the same upstream release.
 VERSION="$(tr -d '[:space:]' < "$SCRIPT_DIR/version")"
+UPSTREAM_VERSION="${VERSION%%-*}"
 
 WORK_DIR="${WORK_DIR:-/tmp/yetty-3rdparty-mimalloc-$TARGET_PLATFORM}"
 CACHE_DIR="${CACHE_DIR:-$HOME/.cache/yetty-3rdparty}"
 NCPU="$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)"
 
-URL="https://github.com/microsoft/mimalloc/archive/refs/tags/v${VERSION}.tar.gz"
-TARBALL_CACHE="$CACHE_DIR/mimalloc-${VERSION}.tar.gz"
-SRC_DIR="$WORK_DIR/mimalloc-${VERSION}"
+URL="https://github.com/microsoft/mimalloc/archive/refs/tags/v${UPSTREAM_VERSION}.tar.gz"
+TARBALL_CACHE="$CACHE_DIR/mimalloc-${UPSTREAM_VERSION}.tar.gz"
+SRC_DIR="$WORK_DIR/mimalloc-${UPSTREAM_VERSION}"
 BUILD_DIR="$WORK_DIR/build-${TARGET_PLATFORM}"
 INSTALL_DIR="$WORK_DIR/install-${TARGET_PLATFORM}"
 STAGE="$WORK_DIR/stage-${TARGET_PLATFORM}"
@@ -42,7 +47,7 @@ if [ ! -f "$TARBALL_CACHE" ]; then
     (
         if command -v flock >/dev/null 2>&1; then flock -x 9; fi
         if [ ! -f "$TARBALL_CACHE" ]; then
-            echo "==> downloading mimalloc ${VERSION}"
+            echo "==> downloading mimalloc ${UPSTREAM_VERSION}"
             curl -fL --retry 8 --retry-delay 5 --retry-all-errors -o "$_part" "$URL"
             mv "$_part" "$TARBALL_CACHE"
         fi
@@ -89,9 +94,14 @@ CMAKE_ARGS=(
     # Compile the malloc/free/realloc/... entry points into the archive so
     # a static link overrides the libc allocator (link order does the rest).
     -DMI_OVERRIDE=ON
-    # Consumed by the alloc-override.c patch applied above: keep the C
-    # malloc-family override, skip the C++ operator new/delete symbols.
-    -DMI_EXTRA_CPPDEFS=MI_NO_NEW_DELETE_OVERRIDE=1
+    # MI_NO_NEW_DELETE_OVERRIDE: consumed by the alloc-override.c patch
+    # applied above — keep the C malloc-family override, skip the C++
+    # operator new/delete symbols.
+    # MI_STAT=1: compile the full allocation accounting in. The release
+    # default (MI_STAT=0) half-maintains the counters (huge-alloc
+    # increments run, free-side decrements are compiled out), so
+    # mi_stats_get reports a monotonically climbing fictional heap.
+    "-DMI_EXTRA_CPPDEFS=MI_NO_NEW_DELETE_OVERRIDE=1;MI_STAT=1"
     # Headers at include/, archive at lib/ — not the versioned subdirs.
     -DMI_INSTALL_TOPLEVEL=ON
     # No -march tuning: the tarball must run on any CPU of the target arch.
