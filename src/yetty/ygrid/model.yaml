@@ -170,6 +170,22 @@ classes:
         type: struct yetty_ycore_buffer
         get: false
         set: false
+      - name: effects_lib_rs
+        type: struct yetty_yrender_gpu_resource_set
+        get: false
+        set: false
+      - name: effects_lib_code
+        type: struct yetty_ycore_buffer
+        get: false
+        set: false
+      - name: effects_lib_loaded
+        type: int
+        get: false
+        set: false
+      - name: runtime
+        type: "struct yetty_yframework *"
+        get: false
+        set: false
       - name: layer_shader_code
         type: struct yetty_ycore_buffer
         get: false
