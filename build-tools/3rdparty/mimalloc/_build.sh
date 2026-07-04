@@ -54,6 +54,25 @@ if [ ! -d "$SRC_DIR" ]; then
     echo "==> extracting -> $SRC_DIR"
     tar -C "$WORK_DIR" -xzf "$TARBALL_CACHE"
 fi
+
+# Patch: drop the mangled C++ operator new/delete overrides from the
+# static override (alloc-override.c defines _Znwm/_ZdlPv/... whenever the
+# compiler is gcc/clang, even in C mode). Prebuilt archives we link next
+# to mimalloc (thorvg) carry their OWN global operator new/delete, and two
+# strong definitions across archives is a hard link error. Upstream marks
+# the operator override as a pure performance nicety — new/delete fall
+# through to malloc/free, which the archive still overrides, so every C++
+# allocation keeps routing through mimalloc.
+if ! grep -q 'MI_NO_NEW_DELETE_OVERRIDE' "$SRC_DIR/src/alloc-override.c"; then
+    echo "==> patching alloc-override.c (skip C++ operator new/delete overrides)"
+    sed -i.bak \
+        's~^#elif (defined(__GNUC__) || defined(__clang__))$~#elif (defined(__GNUC__) || defined(__clang__)) \&\& !defined(MI_NO_NEW_DELETE_OVERRIDE)~' \
+        "$SRC_DIR/src/alloc-override.c"
+    grep -q 'MI_NO_NEW_DELETE_OVERRIDE' "$SRC_DIR/src/alloc-override.c" || {
+        echo "alloc-override.c patch anchor not found — upstream changed?" >&2
+        exit 1
+    }
+fi
 rm -rf "$BUILD_DIR" "$INSTALL_DIR" "$STAGE"
 mkdir -p "$INSTALL_DIR" "$STAGE"
 
@@ -70,6 +89,9 @@ CMAKE_ARGS=(
     # Compile the malloc/free/realloc/... entry points into the archive so
     # a static link overrides the libc allocator (link order does the rest).
     -DMI_OVERRIDE=ON
+    # Consumed by the alloc-override.c patch applied above: keep the C
+    # malloc-family override, skip the C++ operator new/delete symbols.
+    -DMI_EXTRA_CPPDEFS=MI_NO_NEW_DELETE_OVERRIDE=1
     # Headers at include/, archive at lib/ — not the versioned subdirs.
     -DMI_INSTALL_TOPLEVEL=ON
     # No -march tuning: the tarball must run on any CPU of the target arch.
