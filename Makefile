@@ -324,6 +324,16 @@ test-asan: build-desktop-ytrace-asan ## Run the deterministic test gate under AS
 	PATH="$(SYSTEM_PATH)" LSAN_OPTIONS="suppressions=$(CURDIR)/test/lsan.supp:print_suppressions=0" \
 		ctest --test-dir $(BUILD_DIR_DESKTOP_YTRACE_ASAN) --output-on-failure -LE '$(CTEST_EXCLUDE_ASAN)'
 
+.PHONY: test-regression
+test-regression: build-desktop-ytrace-release ## Check ycat/decode-ydraw output against the published regression corpus (see test/regression/README.md)
+	mkdir -p tmp/regression
+	PATH="$(SYSTEM_PATH)" python3 test/regression/regression.py fetch --dest tmp/regression/corpus.zip
+	PATH="$(SYSTEM_PATH)" python3 test/regression/regression.py check --corpus tmp/regression/corpus.zip --evidence tmp/regression/evidence
+
+.PHONY: regression-record
+regression-record: build-desktop-ytrace-release ## Record a local regression reference corpus into tmp/regression/recorded
+	PATH="$(SYSTEM_PATH)" python3 test/regression/regression.py record --out tmp/regression/recorded --stability-runs 2
+
 .PHONY: test-desktop-ytrace-release
 test-desktop-ytrace-release: test-fast ## Deprecated alias for `make test-fast`
 

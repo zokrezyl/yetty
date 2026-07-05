@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "defaults": {
+    "ycat_args": ["-w", "100"],
+    "timeout_seconds": 120
+  },
+  "scenarios": [
+    {
+      "id": "svg-de-flag",
+      "description": "SVG with plain rect fills -> minimal SDF box primitives",
+      "input": "demo/assets/svg/de-flag.svg"
+    },
+    {
+      "id": "svg-smoke",
+      "description": "SVG smoke sample -> path/shape translation",
+      "input": "demo/assets/svg/smoke.svg"
+    },
+    {
+      "id": "svg-logo",
+      "description": "SVG logo with nested paths and text",
+      "input": "demo/assets/svg/svg-logo.svg"
+    },
+    {
+      "id": "svg-tiger",
+      "description": "Classic tiger.svg — large path-heavy stress input",
+      "input": "demo/assets/svg/tiger.svg"
+    },
+    {
+      "id": "markdown-overview",
+      "description": "Markdown rendering: headings, lists, emphasis, code",
+      "input": "demo/assets/ymarkdown/overview.md"
+    },
+    {
+      "id": "markdown-cheatsheet",
+      "description": "Markdown cheatsheet: tables and broad element coverage",
+      "input": "demo/assets/ymarkdown/cheatsheet.md"
+    },
+    {
+      "id": "chart-revenue",
+      "description": "ychart native .chart input",
+      "input": "demo/assets/ychart/revenue.chart"
+    },
+    {
+      "id": "chart-browsers-json",
+      "description": "ychart from JSON data",
+      "input": "demo/assets/ychart/browsers.json"
+    },
+    {
+      "id": "chart-regions-csv",
+      "description": "ychart from CSV data",
+      "input": "demo/assets/ychart/regions.csv"
+    },
+    {
+      "id": "chart-skills-yaml",
+      "description": "ychart from YAML data",
+      "input": "demo/assets/ychart/skills.yaml"
+    },
+    {
+      "id": "circuit-voltage-divider",
+      "description": "ycircuit schematic: voltage divider",
+      "input": "demo/assets/ycircuit/voltage-divider.circuit"
+    },
+    {
+      "id": "circuit-rc-lowpass",
+      "description": "ycircuit schematic: RC low-pass filter",
+      "input": "demo/assets/ycircuit/rc-lowpass.circuit"
+    },
+    {
+      "id": "diagram-cycle",
+      "description": "Mermaid flowchart with a cycle",
+      "input": "demo/assets/ydiagram/cycle.mmd"
+    },
+    {
+      "id": "diagram-sequence",
+      "description": "Mermaid sequence diagram",
+      "input": "demo/assets/ydiagram/sequence-diagram.mmd"
+    },
+    {
+      "id": "diagram-subgraphs",
+      "description": "Mermaid flowchart with subgraphs",
+      "input": "demo/assets/ydiagram/subgraphs.mmd"
+    },
+    {
+      "id": "music-c-major-scale",
+      "description": "LilyPond engraving: C major scale",
+      "input": "demo/assets/music/c-major-scale.ly"
+    },
+    {
+      "id": "music-ode-to-joy",
+      "description": "LilyPond engraving: Ode to Joy melody",
+      "input": "demo/assets/music/ode-to-joy.ly"
+    }
+  ]
+}

@@ -30,3 +30,24 @@ steps:
       # A green pipeline must mean the deterministic suite passed, not just
       # that yetty built. Excludes network/gpu/display/slow (see docs/testing.md).
       - make test-fast
+
+  # Regression corpus check (issue #454): compare deterministic ycat/
+  # decode-ydraw scenario output against the accepted reference corpus
+  # published as a GitHub Release asset. Read-only — this step never
+  # uploads or promotes references; promotion happens only through the
+  # manual promote-regression-reference GitHub Actions workflow.
+  regression:
+    image: yetty-build:latest
+    commands:
+      - |
+        mkdir -p tmp/regression
+        fetch_status=0
+        python3 test/regression/regression.py fetch --dest tmp/regression/corpus.zip || fetch_status=$?
+        if [ "$fetch_status" = "3" ]; then
+          echo "no regression corpus published yet — skipping check"
+        elif [ "$fetch_status" != "0" ]; then
+          echo "regression corpus unavailable (possibly mid-promotion) — restart this pipeline once the promotion has finished"
+          exit "$fetch_status"
+        else
+          python3 test/regression/regression.py check --corpus tmp/regression/corpus.zip --evidence tmp/regression/evidence
+        fi

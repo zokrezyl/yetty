@@ -1,0 +1,104 @@
+# Normal regression lane (issue #454).
+#
+# Downloads the accepted reference corpus (GitHub Release asset
+# `yetty-regression-corpus-current.zip` on the `regression-corpus` release),
+# builds yetty, and compares the deterministic ycat/decode-ydraw scenario
+# output against it. On mismatch only compact evidence (diffs + summary) is
+# uploaded — never a new corpus, and the release asset is never modified
+# here. Promotion of new references is exclusively the manual
+# promote-regression-reference workflow.
+#
+# The same check runs on the LAN CI (.woodpecker/linux.yml) after test-fast.
+name: regression
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '47 3 * * *'
+  # Per-push runs are opt-in to keep hosted-runner minutes bounded: set the
+  # repository variable YETTY_REGRESSION_ON_PUSH to 'true' to enable them.
+  push:
+    branches: ['**']
+
+concurrency:
+  group: regression-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    if: github.event_name != 'push' || vars.YETTY_REGRESSION_ON_PUSH == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The 3rdparty version resolver runs `git describe --tags HEAD`
+          # and needs a reachable yetty-X.Y.Z tag.
+          fetch-depth: 0
+
+      # Fetch before the (long) build so a missing corpus skips cheaply and
+      # a transient asset outage fails fast with a clear message.
+      - name: Fetch active reference corpus
+        id: fetch-corpus
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p tmp/regression
+          fetch_status=0
+          python3 test/regression/regression.py fetch \
+            --dest tmp/regression/corpus.zip || fetch_status=$?
+          if [ "$fetch_status" = "3" ]; then
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::No regression corpus published yet — run the promote-regression-reference workflow to bootstrap. Skipping check."
+            exit 0
+          fi
+          if [ "$fetch_status" != "0" ]; then
+            echo "::error::Regression corpus unavailable (possibly mid-promotion). Re-run this workflow once the promotion has finished."
+            exit "$fetch_status"
+          fi
+          echo "published=true" >> "$GITHUB_OUTPUT"
+
+      - name: Install Linux dependencies
+        if: steps.fetch-corpus.outputs.published == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            automake autoconf libtool \
+            meson ninja-build nasm \
+            brotli \
+            libfontconfig1-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libxext-dev \
+            libx11-dev \
+            libgl1-mesa-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            libwebp-dev \
+            clang-20 llvm-20-dev libclang-20-dev
+
+      - name: Build
+        if: steps.fetch-corpus.outputs.published == 'true'
+        run: make build-desktop-ytrace-release
+
+      - name: Check against reference corpus
+        if: steps.fetch-corpus.outputs.published == 'true'
+        run: |
+          python3 test/regression/regression.py check \
+            --corpus tmp/regression/corpus.zip \
+            --evidence tmp/regression/evidence
+
+      # Compact failure evidence only: summary.json + truncated unified
+      # diffs. The full new output is never uploaded (see issue #454).
+      - name: Upload failure evidence
+        if: failure() && steps.fetch-corpus.outputs.published == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: regression-evidence-${{ github.run_id }}
+          path: tmp/regression/evidence
+          retention-days: 14
+          if-no-files-found: ignore
