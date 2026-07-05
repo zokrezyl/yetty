@@ -340,6 +340,19 @@ int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int
 int yetty_ylexbor_test_box_data_test_at(const struct yetty_ylexbor *r, int index, char *out_buf,
                                         int cap);
 
+/* Test-only: size provenance — the short names of the layout decisions
+ * that produced this box's final width and height ("css", "flex-shrink",
+ * "abs-fit", ...). The pointers reference static storage; never freed.
+ * Emitted by --dump-boxes so the anchor comparator can cluster geometry
+ * divergences by the deciding engine branch. Returns 0 on success. */
+int yetty_ylexbor_test_box_sources_at(const struct yetty_ylexbor *r, int index,
+                                      const char **width_source_out,
+                                      const char **height_source_out);
+
+/* Short name for an enum yl_size_source value (internal enum; exposed for
+ * the dump tool). */
+const char *yetty_ylexbor_size_source_name(int source);
+
 /* Test-only: read an arbitrary attribute (`attr`) off the box's element into
  * out_buf (NUL-terminated, truncated to cap-1). Returns 0 on success, non-zero
  * for anonymous boxes or a missing attribute. Used by the upstream-WPT runner

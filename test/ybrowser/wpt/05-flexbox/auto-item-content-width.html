@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<!-- A non-growing auto-basis flex item is content-sized (max-content,
+     capped at its leftover share) — NOT handed the whole remainder. The
+     gnews source-attribution row: 14px icon + short text label; the label
+     must hug its text instead of seizing the remaining ~266px. -->
+<html>
+<head>
+<style>
+  .row   { display: flex; width: 300px; }
+  .icon  { width: 14px; height: 14px; }
+  .label { white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="row">
+  <div class="icon" data-test="icon" data-expect="8,8,14,14"></div>
+  <div class="label" data-test="label" data-expect="22,8,<=120,*">Source</div>
+</div>
+</body>
+</html>

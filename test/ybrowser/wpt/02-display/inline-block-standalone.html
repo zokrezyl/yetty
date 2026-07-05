@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<!-- Standalone inline-block promotion: an inline-block widget with NO text
+     run around it (toolbar/corner-button pattern) produces a shrink-to-fit
+     block box. An inline-block WITH surrounding text (Wikipedia citation
+     badge) stays inline — its paragraph must remain a single line. -->
+<html>
+<head>
+<style>
+  .widget { display: inline-block; }
+  .inner  { width: 50px; height: 40px; }
+  .badge  { display: inline-block; }
+</style>
+</head>
+<body>
+<div>
+  <span class="widget" data-test="widget" data-expect="8,8,<=60,40">
+    <div class="inner"></div>
+  </span>
+</div>
+<p data-test="text-para" data-expect="*,*,*,<=30">before
+  <span class="badge">[7]</span> after</p>
+</body>
+</html>

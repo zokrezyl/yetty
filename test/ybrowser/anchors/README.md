@@ -65,9 +65,22 @@ One screen per run: a summary table (missing / structure / geometry per
 page, each with the delta vs the previous run — persisted in
 `tmp/anchors-live/corpus-status.json`), then per page the top findings
 and the **mechanism clusters**: root-cause findings grouped by
-(kind, tag, class), e.g. `54x width <a .VDXfz> ΣΔ27810 e.g. a0200 …` —
-one line per divergence mechanism instead of hundreds of per-anchor
-lines. Chase a cluster's exemplar anchor with:
+(kind, tag, class, size provenance), e.g.
+`54x width <a .VDXfz> src=abs-fit ΣΔ27810 e.g. a0200 …` — one line per
+divergence mechanism instead of hundreds of per-anchor lines.
+
+`src=` is **size provenance**: the engine stamps every box with WHICH
+layout decision produced its final width/height (`css`, `avail`,
+`flex-grow`, `flex-shrink`, `flex-even`, `grid-tracks`, `abs-fit`,
+`abs-inset`, `content`, `img`, …; enum `yl_size_source`,
+`ybrowser-internal.h`) and `--dump-boxes` emits it as `ws=`/`hs=`
+columns. A wrong width therefore NAMES the deciding branch in
+`ybrowser-layout.c` — `src=abs-fit` points at the absolute
+shrink-to-fit path, `src=flex-shrink` at the shrink distribution,
+`src=content` at the max-content measurement (usually the naive font
+metrics) — no manual reduction needed to locate the code. `src=none`
+is itself a lead: the box's size was never assigned by any stamped
+path. Chase a cluster's exemplar anchor with:
 
 ```sh
 test/ybrowser/anchors/inspect.py tmp/anchors-live/gnews-story a0200

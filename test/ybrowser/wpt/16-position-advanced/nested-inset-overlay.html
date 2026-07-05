@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<!-- Nested inset:0 overlays: an absolutely-positioned link inside an
+     absolutely-positioned wrapper, both stretching over a card whose height
+     is content-driven. The nested child must resolve its top/bottom against
+     the wrapper's inset-stretched height, not the wrapper's in-flow content
+     height (which is 0 — the gnews card overlay collapse). -->
+<html>
+<head>
+<style>
+  .card { position: relative; width: 280px; }
+  .pad  { height: 150px; }
+  .wrap { position: absolute; top: 0; bottom: 0; left: 0; right: 0; }
+  .link { position: absolute; top: 0; bottom: 0; left: 0; right: 0;
+          display: block; }
+</style>
+</head>
+<body>
+<div class="card" data-test="card" data-expect="8,8,280,150">
+  <div class="pad"></div>
+  <div class="wrap" data-test="wrap" data-expect="8,8,280,150">
+    <a class="link" href="#" data-test="link" data-expect="8,8,280,150"></a>
+  </div>
+</div>
+</body>
+</html>

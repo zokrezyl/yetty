@@ -511,7 +511,11 @@ int main(int argc, char **argv)
         int count = yetty_ylexbor_test_box_count(yl);
         /* `dt` keys a box by its `data-test` attribute so the Chrome
          * geometry oracle can match boxes to its *.ref.json entries by name
-         * instead of by fragile DOM index. "-" when the box has none. */
+         * instead of by fragile DOM index. "-" when the box has none.
+         * `ws=`/`hs=` name the layout decision that produced the box's
+         * width/height (size provenance) — the anchor comparator clusters
+         * geometry divergences by them. The snippet stays the LAST column
+         * (consumers index it as field[-1]). */
         printf("#kind\ttag\tdt\tx\ty\tw\th\n");
         for (int bi = 0; bi < count; bi++) {
             float x = 0, y = 0, w = 0, h = 0;
@@ -525,9 +529,12 @@ int main(int argc, char **argv)
                                                  snippet, (int)sizeof(snippet));
             char data_test[64] = {0};
             (void)yetty_ylexbor_test_box_data_test_at(yl, bi, data_test, (int)sizeof(data_test));
-            printf("%d\t%s\t%s\t%.1f\t%.1f\t%.1f\t%.1f\tw=%d\ti=%d\tu=%d\t%s\n", kind,
-                   tag[0] ? tag : "-", data_test[0] ? data_test : "-", x, y, w, h, weight, italic,
-                   underline, snippet);
+            const char *width_source = "?";
+            const char *height_source = "?";
+            (void)yetty_ylexbor_test_box_sources_at(yl, bi, &width_source, &height_source);
+            printf("%d\t%s\t%s\t%.1f\t%.1f\t%.1f\t%.1f\tw=%d\ti=%d\tu=%d\tws=%s\ths=%s\t%s\n",
+                   kind, tag[0] ? tag : "-", data_test[0] ? data_test : "-", x, y, w, h, weight,
+                   italic, underline, width_source, height_source, snippet);
         }
         fflush(stdout);
         yetty_ylexbor_destroy(yl);

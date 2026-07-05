@@ -946,6 +946,59 @@ int yetty_ylexbor_test_box_data_test_at(const struct yetty_ylexbor *r, int index
     return 0;
 }
 
+const char *yetty_ylexbor_size_source_name(int source)
+{
+    static const char *const names[] = {
+        [YL_SRC_NONE] = "none",
+        [YL_SRC_VIEWPORT] = "viewport",
+        [YL_SRC_CSS] = "css",
+        [YL_SRC_AVAIL] = "avail",
+        [YL_SRC_SHRINK_TO_FIT] = "fit",
+        [YL_SRC_CONTENT] = "content",
+        [YL_SRC_FLEX_BASIS] = "flex-basis",
+        [YL_SRC_FLEX_EVEN] = "flex-even",
+        [YL_SRC_FLEX_SHARE] = "flex-share",
+        [YL_SRC_FLEX_GROW] = "flex-grow",
+        [YL_SRC_FLEX_SHRINK] = "flex-shrink",
+        [YL_SRC_FLEX_MIN] = "flex-min",
+        [YL_SRC_FLEX_STRETCH] = "flex-stretch",
+        [YL_SRC_GRID_TRACKS] = "grid-tracks",
+        [YL_SRC_GRID_STRETCH] = "grid-stretch",
+        [YL_SRC_TABLE_COLS] = "table-cols",
+        [YL_SRC_ABS_INSET] = "abs-inset",
+        [YL_SRC_ABS_FIT] = "abs-fit",
+        [YL_SRC_IMG_INTRINSIC] = "img",
+    };
+    if (source < 0 || (size_t)source >= sizeof(names) / sizeof(names[0]) ||
+        names[source] == NULL) {
+        return "?";
+    }
+    return names[source];
+}
+
+int yetty_ylexbor_test_box_sources_at(const struct yetty_ylexbor *r, int index,
+                                      const char **width_source_out,
+                                      const char **height_source_out)
+{
+    if (width_source_out) {
+        *width_source_out = "?";
+    }
+    if (height_source_out) {
+        *height_source_out = "?";
+    }
+    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size) {
+        return -1;
+    }
+    const struct yetty_ylexbor_box *b = &r->boxes.data[index];
+    if (width_source_out) {
+        *width_source_out = yetty_ylexbor_size_source_name(b->width_source);
+    }
+    if (height_source_out) {
+        *height_source_out = yetty_ylexbor_size_source_name(b->height_source);
+    }
+    return 0;
+}
+
 int yetty_ylexbor_test_box_path_at(const struct yetty_ylexbor *r, int index, char *out_buf, int cap)
 {
     if (out_buf && cap > 0) {

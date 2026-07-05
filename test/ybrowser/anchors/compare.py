@@ -79,13 +79,16 @@ def load_classes(fixture_path):
 
 
 def parse_dump(text):
-    """Parse `ybrowser --dump-boxes` TSV into {anchor_id: (x, y, w, h)}.
+    """Parse `ybrowser --dump-boxes` TSV into
+    ({anchor_id: (x, y, w, h)}, {anchor_id: (width_source, height_source)}).
 
     Later boxes win on a duplicate name, matching the hand-WPT runner's
     behaviour (an element contributes one principal box; fragments carry no
-    data-test).
+    data-test). The sources are the engine's size-provenance names
+    (`ws=`/`hs=` columns) — which layout decision produced the number.
     """
     boxes = {}
+    sources = {}
     for line in text.splitlines():
         if line.startswith("#") or not line.strip():
             continue
@@ -100,7 +103,14 @@ def parse_dump(text):
                            float(cols[5]), float(cols[6]))
         except ValueError:
             continue
-    return boxes
+        width_source = height_source = "?"
+        for token in cols[7:]:
+            if token.startswith("ws="):
+                width_source = token[3:]
+            elif token.startswith("hs="):
+                height_source = token[3:]
+        sources[name] = (width_source, height_source)
+    return boxes, sources
 
 
 def cluster_rows(rects):
@@ -127,10 +137,13 @@ def shape_of(rects):
 
 
 class Comparison:
-    def __init__(self, reference, boxes, classes=None):
+    def __init__(self, reference, boxes, classes=None, sources=None):
         self.reference = reference
         self.anchors = reference["anchors"]
         self.boxes = boxes
+        # anchor_id -> (width_source, height_source): the engine's size
+        # provenance, i.e. WHICH layout decision produced the number.
+        self.sources = sources or {}
         # anchor_id -> class attribute. Reference entries recorded with
         # `cls` win; a fixture-derived map (load_classes) fills the rest.
         self.classes = dict(classes or {})
@@ -213,16 +226,18 @@ class Comparison:
             relative_to = ("relative to %s" % ancestor_id
                            if ancestor_id else "absolute")
             label = self.element_label(anchor_id)
+            width_source, height_source = self.sources.get(anchor_id,
+                                                           ("?", "?"))
             if delta_w > max(TOL_W_PX, TOL_W_REL * ref_rect[2]):
                 self.add(anchor_id, "width",
-                         "width %g vs ref %g (Δ%.0f) %s display:%s"
+                         "width %g vs ref %g (Δ%.0f) %s display:%s src=%s"
                          % (got[2], ref_rect[2], delta_w,
-                            label, entry["display"]), delta_w)
+                            label, entry["display"], width_source), delta_w)
             if delta_h > max(TOL_H_PX, TOL_H_REL * ref_rect[3]):
                 self.add(anchor_id, "height",
-                         "height %g vs ref %g (Δ%.0f) %s display:%s"
+                         "height %g vs ref %g (Δ%.0f) %s display:%s src=%s"
                          % (got[3], ref_rect[3], delta_h,
-                            label, entry["display"]), delta_h)
+                            label, entry["display"], height_source), delta_h)
             if delta_x > TOL_X:
                 self.add(anchor_id, "pos",
                          "x offset Δ%.0f %s %s"
@@ -341,9 +356,10 @@ def root_cause_findings(comparison):
 
 def cluster_findings(comparison, kept):
     """Group root-cause findings by mechanism signature
-    (kind, tag, display, first class). Returns cluster dicts sorted by
-    count desc — each line is one *divergence mechanism* with exemplar
-    anchors to start reducing from."""
+    (kind, tag, display, first class, size provenance). Returns cluster
+    dicts sorted by count desc — each line is one *divergence mechanism*
+    with exemplar anchors to start reducing from, and `src` names the
+    engine decision that produced the wrong number."""
     groups = {}
     for anchor_id, kind, message, delta in kept:
         if anchor_id == "doc":
@@ -351,8 +367,12 @@ def cluster_findings(comparison, kept):
         entry = comparison.anchors.get(anchor_id, {})
         cls = comparison.classes.get(anchor_id, "")
         first_cls = cls.split()[0] if cls.split() else ""
+        width_source, height_source = comparison.sources.get(anchor_id,
+                                                             ("?", "?"))
+        source = (width_source if kind == "width"
+                  else height_source if kind == "height" else "")
         key = (kind, entry.get("tag", "?"), entry.get("display", "?"),
-               first_cls)
+               first_cls, source)
         group = groups.setdefault(key, {"count": 0, "total_delta": 0.0,
                                         "anchors": []})
         group["count"] += 1
@@ -360,9 +380,10 @@ def cluster_findings(comparison, kept):
         if len(group["anchors"]) < 3:
             group["anchors"].append(anchor_id)
     clusters = []
-    for (kind, tag, display, first_cls), group in groups.items():
+    for (kind, tag, display, first_cls, source), group in groups.items():
         clusters.append({
             "kind": kind, "tag": tag, "display": display, "cls": first_cls,
+            "source": source,
             "count": group["count"], "total_delta": group["total_delta"],
             "anchors": group["anchors"],
         })
@@ -388,9 +409,11 @@ def report(comparison, limit, cluster_limit=10):
             element = "<%s%s>" % (cluster["tag"],
                                   " ." + cluster["cls"] if cluster["cls"]
                                   else "")
-            print("    %4dx %-9s %-28s display:%-12s ΣΔ%-7.0f e.g. %s"
+            source = ("src=%s" % cluster["source"]) if cluster["source"] \
+                else ""
+            print("    %4dx %-9s %-28s display:%-12s %-15s ΣΔ%-7.0f e.g. %s"
                   % (cluster["count"], cluster["kind"], element,
-                     cluster["display"], cluster["total_delta"],
+                     cluster["display"], source, cluster["total_delta"],
                      " ".join(cluster["anchors"])))
         if len(clusters) > cluster_limit:
             print("    ... %d more clusters" % (len(clusters) - cluster_limit))
@@ -399,7 +422,8 @@ def report(comparison, limit, cluster_limit=10):
 
 def compare_texts(reference, dump_text, classes=None):
     """Library entry for run.py / corpus.py: returns the Comparison."""
-    comparison = Comparison(reference, parse_dump(dump_text), classes)
+    boxes, sources = parse_dump(dump_text)
+    comparison = Comparison(reference, boxes, classes, sources)
     comparison.run()
     return comparison
 

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<!-- An absolutely-positioned box anchored on ONE side with auto width
+     shrinks to fit its content — it must not stretch across the whole
+     containing block (the card corner-button pattern: right:0 kebab menu
+     taking the full row). -->
+<html>
+<head>
+<style>
+  .host   { position: relative; width: 300px; height: 60px; }
+  .corner { position: absolute; top: 0; right: 0; }
+  .icon   { width: 24px; height: 24px; }
+</style>
+</head>
+<body>
+<div class="host" data-test="host" data-expect="8,8,300,60">
+  <div class="corner" data-test="corner" data-expect=">=280,8,<=30,24">
+    <div class="icon"></div>
+  </div>
+</div>
+</body>
+</html>
