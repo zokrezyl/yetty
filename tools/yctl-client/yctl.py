@@ -216,6 +216,10 @@ class RpcClient:
         """Get UI tree (request, returns string)."""
         return await self.request(Channel.EventLoop, "ui_tree", {})
 
+    async def memtags(self) -> str:
+        """Dump per-owner allocation accounting (request, returns text table)."""
+        return await self.request(Channel.EventLoop, "memtags", {})
+
     # --- High-Level Commands ---
 
     async def type_text(self, text: str, delay: float = 0.01) -> None:
@@ -617,6 +621,16 @@ if click:
             async with RpcClient(ctx.obj["host"], ctx.obj["port"]) as client:
                 tree = await client.ui_tree()
                 click.echo(tree)
+        run_async(_run())
+
+    @cli.command()
+    @click.pass_context
+    def memtags(ctx):
+        """Dump per-owner allocation accounting (live/peak bytes per tag)."""
+        async def _run():
+            async with RpcClient(ctx.obj["host"], ctx.obj["port"]) as client:
+                table = await client.memtags()
+                click.echo(table if isinstance(table, str) else table.decode())
         run_async(_run())
 
     @cli.command("type")

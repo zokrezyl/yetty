@@ -11,6 +11,7 @@ extern "C" {
 #endif
 
 struct yetty_yctl_server;
+struct yetty_ycore_memtag_registry;
 struct yetty_yevent_event_loop;
 
 /* Result types */
@@ -112,6 +113,13 @@ struct yetty_ycore_void_result yetty_yctl_server_unregister_handler(
  * Get the number of connected clients.
  */
 size_t yetty_yctl_server_client_count(const struct yetty_yctl_server *server);
+
+/*
+ * Hand the server the (framework-owned) per-owner allocation-accounting
+ * registry; the built-in `memtags` method dumps it. NULL-safe.
+ */
+void yetty_yctl_server_set_memtag_registry(struct yetty_yctl_server *server,
+                                           struct yetty_ycore_memtag_registry *registry);
 
 #ifdef __cplusplus
 }

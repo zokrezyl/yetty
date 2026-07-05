@@ -128,8 +128,22 @@ msdf:
   generator: "gpu"
 
 scrollback:
-  # Number of lines to keep in scrollback buffer
-  lines: 10000
+  # Total scrollback retention in lines across all tiers. 0 = unlimited —
+  # RAM stays flat (hot ring + warm budget) and the depth is absorbed by a
+  # session-scoped spill file that vanishes on exit.
+  lines: 0
+  # Hot tier: the newest N history lines stay fully materialized (expanded
+  # text cells + anchored figure runtimes: decoded pixels, GPU binders,
+  # video decoders). Lines aging past it are serialized (lz4) with their
+  # creating wire envelopes and rebuilt on demand when scrolled back into.
+  hot-lines: 2000
+  # Warm tier: byte budget for the lz4-compressed history segments held in
+  # RAM. Oldest segments spill to the session file beyond it. 0 = built-in
+  # default (64 MiB).
+  warm-bytes: 0
+  # Cold tier: cap on the session spill file. 0 = unlimited (scrollback
+  # depth bounded only by disk).
+  file-max-bytes: 0
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Shell Configuration

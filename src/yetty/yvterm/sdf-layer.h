@@ -43,20 +43,21 @@ struct yetty_yvterm_sdf_layer_ptr_result yetty_yvterm_sdf_layer_create(
 /* Tear down the binder, fonts, shader, and staging buffers. NULL-safe. */
 void yetty_yvterm_sdf_layer_destroy(struct yetty_yvterm_sdf_layer *layer);
 
-/* Render the SDF / glyph / text primitives stored on `grid_obj`'s ring into
+/* Render the SDF / glyph / text primitives stored on `grid_obj`'s lines into
  * `target`, within the figure's pane-local `rect`. cell_width/cell_height are
- * the terminal cell metrics; cols/rows the visible grid; root_row + slot_count
- * the ring mapping the text pass uses (visible row r ↔ slot (r+root_row) %
- * slot_count) — passed in so figures land on exactly the rows their text does,
- * in both the live and scrolled-back views. `back` is root_row's offset behind
- * the live base (the scroll distance, 0 in the live view); it caps how far
- * BELOW the viewport bottom-anchored blocks are scanned for. */
+ * the terminal cell metrics; cols/rows the visible grid. `window_slots` is
+ * the resolved view window from yetty_yvterm_grid_view_window — one slot id
+ * per window row (visible rows + the bottom-anchor look-ahead); window row r
+ * draws at viewport row r, so primitives land on exactly the rows their text
+ * does, live and scrolled-back (including archive rows served from the tier
+ * cache). `slot_count` still bounds the ring for the whole-ring wire-font
+ * install pass. */
 struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
     struct yetty_yvterm_sdf_layer *layer, struct yetty_yclass_object *grid_obj,
     struct yetty_ydraw_target *target, struct yetty_ycore_rectangle rect, float cell_width,
-    float cell_height, uint32_t cols, uint32_t rows, uint32_t root_row, uint32_t slot_count,
-    uint32_t back, float visual_zoom_scale, float visual_zoom_off_x, float visual_zoom_off_y,
-    float cell_zoom_scale);
+    float cell_height, uint32_t cols, uint32_t rows, const uint32_t *window_slots,
+    uint32_t window_rows, uint32_t slot_count, float visual_zoom_scale, float visual_zoom_off_x,
+    float visual_zoom_off_y, float cell_zoom_scale);
 
 #ifdef __cplusplus
 }

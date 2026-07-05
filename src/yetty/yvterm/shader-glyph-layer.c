@@ -488,16 +488,16 @@ static struct yetty_ycore_int_result sg_on_anim_tick(struct yetty_yevent_event_l
  * Cell scan → instance packing
  *=========================================================================*/
 
-/* Walk the on-screen cells (resolving the ring slot the text pass draws at each
- * visible row) and pack one instance per shader-glyph cell. Returns the count;
- * grows layer->instances as needed. */
+/* Walk the on-screen cells (through the resolved view-window slots the text
+ * pass draws — ring or archive cache) and pack one instance per shader-glyph
+ * cell. Returns the count; grows layer->instances as needed. */
 static uint32_t sg_pack_instances(struct yetty_yvterm_shader_glyph_layer *layer,
                                   struct yetty_yclass_object *grid_obj, uint32_t cols,
-                                  uint32_t rows, uint32_t root_row, uint32_t slot_count)
+                                  uint32_t rows, const uint32_t *window_slots, uint32_t window_rows)
 {
     uint32_t count = 0;
-    for (uint32_t r = 0; r < rows; ++r) {
-        uint32_t slot = slot_count ? (root_row + r) % slot_count : r;
+    for (uint32_t r = 0; r < rows && r < window_rows; ++r) {
+        uint32_t slot = window_slots[r];
         struct yetty_yvterm_text_cell_const_ptr_result cells_res =
             yetty_yvterm_grid_slot_cells(grid_obj, slot);
         if (YETTY_IS_ERR(cells_res)) {
@@ -677,18 +677,18 @@ void yetty_yvterm_shader_glyph_layer_destroy(struct yetty_yvterm_shader_glyph_la
 struct yetty_ycore_void_result yetty_yvterm_shader_glyph_layer_render(
     struct yetty_yvterm_shader_glyph_layer *layer, struct yetty_yclass_object *grid_obj,
     struct yetty_ydraw_target *target, struct yetty_ycore_rectangle rect, float cell_width,
-    float cell_height, uint32_t cols, uint32_t rows, uint32_t root_row, uint32_t slot_count,
-    float visual_zoom_scale, float visual_zoom_off_x, float visual_zoom_off_y)
+    float cell_height, uint32_t cols, uint32_t rows, const uint32_t *window_slots,
+    uint32_t window_rows, float visual_zoom_scale, float visual_zoom_off_x, float visual_zoom_off_y)
 {
     if (!layer || layer->headless || !layer->binder || !grid_obj || !target || !target->ops ||
         !target->ops->get_view) {
         return YETTY_OK_VOID();
     }
-    if (cols == 0 || rows == 0 || cell_width <= 0.0f || cell_height <= 0.0f) {
+    if (cols == 0 || rows == 0 || cell_width <= 0.0f || cell_height <= 0.0f || !window_slots) {
         return YETTY_OK_VOID();
     }
 
-    uint32_t count = sg_pack_instances(layer, grid_obj, cols, rows, root_row, slot_count);
+    uint32_t count = sg_pack_instances(layer, grid_obj, cols, rows, window_slots, window_rows);
     if (count == 0) {
         /* No shader glyphs on screen — stop the co-driver timer and don't
          * schedule another frame; a later content change re-enters render and

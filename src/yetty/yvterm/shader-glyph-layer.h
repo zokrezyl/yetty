@@ -53,15 +53,16 @@ void yetty_yvterm_shader_glyph_layer_destroy(struct yetty_yvterm_shader_glyph_la
 
 /* Scan `grid_obj`'s on-screen cells for shader-glyph codepoints and draw the
  * animated glyphs into `target` within the pane-local `rect`. cell_width/height
- * are the cell metrics; cols/rows the visible grid; root_row + slot_count the
- * ring mapping the text pass uses (visible row r ↔ slot (r+root_row) %
- * slot_count) so glyphs land on exactly the rows their cells do, live and
+ * are the cell metrics; cols/rows the visible grid; `window_slots` the resolved
+ * view window from yetty_yvterm_grid_view_window (the same mapping the text
+ * pass draws) so glyphs land on exactly the rows their cells do, live and
  * scrolled-back. visual_zoom_* mirror the text shader's transform. */
 struct yetty_ycore_void_result yetty_yvterm_shader_glyph_layer_render(
     struct yetty_yvterm_shader_glyph_layer *layer, struct yetty_yclass_object *grid_obj,
     struct yetty_ydraw_target *target, struct yetty_ycore_rectangle rect, float cell_width,
-    float cell_height, uint32_t cols, uint32_t rows, uint32_t root_row, uint32_t slot_count,
-    float visual_zoom_scale, float visual_zoom_off_x, float visual_zoom_off_y);
+    float cell_height, uint32_t cols, uint32_t rows, const uint32_t *window_slots,
+    uint32_t window_rows, float visual_zoom_scale, float visual_zoom_off_x,
+    float visual_zoom_off_y);
 
 #ifdef __cplusplus
 }

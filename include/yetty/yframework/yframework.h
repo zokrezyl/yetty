@@ -37,6 +37,7 @@ struct yetty_yevent_event_loop;
 struct yetty_yplatform_wgpu;
 struct yetty_yvnc_server;
 struct yetty_yctl_server;
+struct yetty_ycore_memtag_registry;
 struct yetty_ydraw_target;
 struct yetty_yfigure_registry;
 struct yetty_context;
@@ -71,6 +72,12 @@ struct yetty_yframework {
     struct yetty_yvnc_server *vnc_server; /* NULL when vnc config off */
     struct yetty_yctl_server *rpc_server; /* NULL when rpc/port unset */
     struct yetty_ydraw_target *render_target;
+
+    /* Owned. Per-owner allocation accounting: bulk owners (grid rings,
+     * scrollback archives, image pixels, ...) register their memtags here;
+     * the yctl `memtags` command dumps them. May be NULL (create failure) —
+     * consumers must tolerate that. */
+    struct yetty_ycore_memtag_registry *memtag_registry;
 
     /* Per-kind factory args bundles (e.g. ymgui's lazy-pipeline cache).
      * The struct is private to yframework.c; consumers only see this

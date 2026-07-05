@@ -29,6 +29,70 @@ classes:
         type: uint32_t
         get: false
         set: false
+      - name: hot_rows
+        type: uint32_t
+        get: false
+        set: false
+      - name: ring_history_cap
+        type: uint32_t
+        get: false
+        set: false
+      - name: tiers
+        type: struct yetty_yvterm_tiers
+        get: false
+        set: false
+      - name: view_active
+        type: int
+        get: false
+        set: false
+      - name: view_top
+        type: uint64_t
+        get: false
+        set: false
+      - name: view_top_previous
+        type: uint64_t
+        get: false
+        set: false
+      - name: window_lines
+        type: "struct yetty_yvterm_line **"
+        get: false
+        set: false
+      - name: window_slots
+        type: "uint32_t *"
+        get: false
+        set: false
+      - name: window_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: window_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: window_stamp
+        type: uint32_t
+        get: false
+        set: false
+      - name: window_sweep_armed
+        type: int
+        get: false
+        set: false
+      - name: blank_line
+        type: struct yetty_yvterm_line
+        get: false
+        set: false
+      - name: ring_memtag
+        type: struct yetty_ycore_memtag
+        get: false
+        set: false
+      - name: archive_memtag
+        type: struct yetty_ycore_memtag
+        get: false
+        set: false
+      - name: memtag_registry
+        type: "struct yetty_ycore_memtag_registry *"
+        get: false
+        set: false
       - name: vterm
         type: "int *"
         get: false
@@ -102,6 +166,14 @@ classes:
         get: false
         set: false
       - name: card_sub_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: materialize_fn
+        type: yetty_yvterm_grid_materialize_fn
+        get: false
+        set: false
+      - name: materialize_userdata
         type: "void *"
         get: false
         set: false
@@ -407,6 +479,8 @@ exposed:
         type: uint32_t
       - name: scrollback_rows
         type: uint32_t
+      - name: hot_rows
+        type: uint32_t
     doc: null
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_dispose
@@ -448,6 +522,19 @@ exposed:
       - name: userdata
         type: "void *"
     doc: null
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_materialize
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fn
+        type: yetty_yvterm_grid_materialize_fn
+      - name: userdata
+        type: "void *"
+    doc: "/* Register the figure re-materialization hook. The integration layer (which
+ * owns the composite factory) supplies it; the grid replays retained wire
+ * envelopes through it when an evicted history line scrolls back into view. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_feed
     return_type: struct yetty_ycore_void_result
@@ -687,10 +774,11 @@ exposed:
         type: uint32_t
       - name: out_count
         type: "uint32_t *"
-    doc: "/* Composite array on RAW ring slot `slot` (0..slot_count). Distinct from the
- * visible-row accessor above: the text upload + shader address the ring by raw
- * slot via root_row, so the composite pass must read by the SAME slot to scroll
- * in lockstep (live AND scrolled-back). Sets *out_count; may be NULL. */"
+    doc: "/* Composite array on RAW ring slot `slot` (0..slot_count) or an extended
+ * view-window id. Distinct from the visible-row accessor above: the text
+ * upload + shader address the ring by raw slot via the resolved window, so
+ * the composite pass must read by the SAME slot to scroll in lockstep (live
+ * AND scrolled-back). Sets *out_count; may be NULL. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_slot_primitive_count
     return_type: struct yetty_ycore_uint32_result
@@ -730,6 +818,76 @@ exposed:
     doc: "/* Words of primitive `index` on RAW ring slot `slot`. *out_word_count is set to the
  * record's u32 length. Returns NULL (and *out_word_count 0) if slot/index are out of
  * range. The returned span aliases the line's arena — read it, do not retain it. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_live_anchor
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Timeline index of the live screen top (rows above it are history). */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_history_floor
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Timeline index of the oldest line still reachable across all tiers — the
+ * scrollback floor. With the cold tier unbounded this stays 0 for the whole
+ * session (\"effectively infinite\" scrollback). */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_view
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: active
+        type: int
+      - name: view_top_line
+        type: uint32_t
+    doc: "/* Enter/leave the scrolled-back view. `view_top_line` is the TIMELINE index
+ * of the line to show at the window's top row (see grid_live_anchor /
+ * grid_history_floor for the valid range). */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_view_window
+    return_type: struct yetty_ycore_const_uint32_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row_count
+        type: uint32_t
+      - name: out_row_count
+        type: "uint32_t *"
+    doc: "/* Resolve the renderer's window for this frame: `row_count` rows starting at
+ * the view top (live top when no view is active). Returns a grid-owned array
+ * of one slot id per window row — real ring slots for hot rows (the text,
+ * composite and SDF passes read them exactly as before), or extended ids
+ * (>= slot_count) that the slot accessors transparently serve from the
+ * archive materialization cache. Also sweeps archive figure runtimes whose
+ * lines left the window, and prefetches the adjacent segment in the scroll
+ * direction so figure re-decode hides behind the scroll. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_tier_budgets
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: warm_bytes
+        type: uint32_t
+      - name: file_max_bytes
+        type: uint32_t
+    doc: "/* Warm / cold tier budgets (scrollback/warm-bytes, scrollback/file-max-bytes;
+ * 0 keeps the built-in warm default / unlimited file). */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_register_memtags
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: registry
+        type: "struct yetty_ycore_memtag_registry *"
+    doc: "/* Register the grid's per-owner byte accounting (ring + archive tags) with
+ * the framework's memtag registry, feeding the yctl `memtags` dump. The grid
+ * unregisters itself at dispose. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_selection
     return_type: struct yetty_ycore_void_result
@@ -902,6 +1060,20 @@ exposed:
         type: "void *"
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_materialize
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fn
+        type: yetty_yvterm_materialize_fn
+      - name: userdata
+        type: "void *"
+    doc: "/* Register the figure re-materialization hook on the composed grid model: the
+ * terminal (which owns the composite factory) supplies a function that replays
+ * a retained wire envelope into a fresh figure instance when an evicted
+ * history line scrolls back into view. */"
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_cursor
     return_type: struct yetty_ycore_void_result
     args:
@@ -1048,17 +1220,17 @@ exposed:
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-    doc: "/* Absolute index of the line at the live screen top: everything scrolled off so
- * far. A wheel-up anchors one line below this and walks toward the floor. */"
+    doc: "/* Timeline index of the line at the live screen top: everything scrolled off
+ * so far. A wheel-up anchors one line below this and walks toward the floor. */"
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_get_scrollback_floor
     return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-    doc: "/* Oldest absolute line index still retained in the scrollback ring. Lines below
- * this have been evicted, so a wheel-up clamps here. The ring keeps
- * (slot_count - visible_rows) history lines. */"
+    doc: "/* Oldest timeline index still reachable across the scrollback tiers (hot ring
+ * → warm lz4 segments → cold spill file). A wheel-up clamps here. With the
+ * cold tier unbounded this is 0 for the whole session. */"
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_set_view_top
     return_type: struct yetty_ycore_void_result
@@ -1297,6 +1469,17 @@ types:
             type: int
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_ycore_memtag
+    kind: struct
+    fields:
+      - name: name
+        type: "const char *"
+      - name: live_bytes
+        type: _Atomic(int64_t)
+      - name: peak_bytes
+        type: _Atomic(int64_t)
+      - name: total_allocs
+        type: _Atomic(int64_t)
   - name: yetty_ycore_pixel_size
     kind: struct
     fields:
@@ -1352,6 +1535,39 @@ types:
             type: "struct yetty_yfigure_figure *"
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_yvterm_line
+    kind: struct
+    fields:
+      - name: text_cells
+        type: "struct yetty_yvterm_text_cell *"
+      - name: primitives
+        type: "struct yetty_yvterm_primitive *"
+      - name: primitive_count
+        type: uint32_t
+      - name: primitive_capacity
+        type: uint32_t
+      - name: arena
+        type: "uint32_t *"
+      - name: arena_count
+        type: uint32_t
+      - name: arena_capacity
+        type: uint32_t
+      - name: composites
+        type: "struct yetty_ydraw_composite **"
+      - name: composite_count
+        type: uint32_t
+      - name: composite_capacity
+        type: uint32_t
+      - name: rich_span_rows
+        type: uint32_t
+      - name: envelope_count
+        type: uint32_t
+      - name: view_stamp
+        type: uint32_t
+      - name: dirty
+        type: int
+      - name: continuation
+        type: int
   - name: yetty_yvterm_screen
     kind: struct
     fields:
@@ -1375,18 +1591,85 @@ types:
             type: "const struct yetty_yvterm_text_cell *"
           - name: error
             type: struct yetty_ycore_error
+  - name: yetty_yvterm_tier_builder
+    kind: struct
+    fields:
+      - name: bytes
+        type: "uint8_t *"
+      - name: byte_count
+        type: size_t
+      - name: byte_capacity
+        type: size_t
+      - name: line_offsets
+        type: "uint32_t *"
+      - name: line_count
+        type: uint32_t
+      - name: line_capacity
+        type: uint32_t
+      - name: first_line
+        type: uint64_t
+  - name: yetty_yvterm_tier_cache_entry
+    kind: struct
+    fields:
+      - name: valid
+        type: int
+      - name: first_line
+        type: uint64_t
+      - name: line_count
+        type: uint32_t
+      - name: lines
+        type: "struct yetty_yvterm_line *"
+      - name: last_used_tick
+        type: uint64_t
+  - name: yetty_yvterm_tiers
+    kind: struct
+    fields:
+      - name: segments
+        type: "struct yetty_yvterm_tier_segment *"
+      - name: segment_head
+        type: uint32_t
+      - name: segment_count
+        type: uint32_t
+      - name: segment_capacity
+        type: uint32_t
+      - name: builder
+        type: struct yetty_yvterm_tier_builder
+      - name: archived_lines
+        type: uint64_t
+      - name: dropped_lines
+        type: uint64_t
+      - name: warm_bytes_used
+        type: size_t
+      - name: warm_bytes_budget
+        type: size_t
+      - name: file_bytes_budget
+        type: uint64_t
+      - name: total_line_cap
+        type: uint64_t
+      - name: spill_file
+        type: "FILE *"
+      - name: spill_file_size
+        type: uint64_t
+      - name: spill_disabled
+        type: int
+      - name: rich_clear_watermark
+        type: uint64_t
+      - name: cache
+        type: "struct yetty_yvterm_tier_cache_entry[4]"
+      - name: cache_tick
+        type: uint64_t
+      - name: memtag
+        type: "struct yetty_ycore_memtag *"
 local_types:
   yetty_yvterm_text_attr: src/yetty/yvterm/grid.c
   yetty_yvterm_text_cell: src/yetty/yvterm/grid.c
-  yetty_yvterm_primitive: src/yetty/yvterm/grid.c
-  yetty_yvterm_line: src/yetty/yvterm/grid.c
-  yetty_yvterm_screen: src/yetty/yvterm/grid.c
   yetty_yvterm_grid: src/yetty/yvterm/grid.c
   yetty_yvterm_grid_ptr_result: src/yetty/yvterm/grid.c
   yetty_yvterm_text_cell_const_ptr_result: src/yetty/yvterm/grid.c
   yetty_ydraw_composite_const_ptr_ptr_result: src/yetty/yvterm/grid.c
   yetty_yvterm_reflow_source: src/yetty/yvterm/grid.c
   yetty_yvterm_reflow_logical: src/yetty/yvterm/grid.c
+  grid_view_sweep_state: src/yetty/yvterm/grid.c
   vterm_uniforms: src/yetty/yvterm/vterm.c
   yetty_yvterm_vterm: src/yetty/yvterm/vterm.c
 local_typedefs:
@@ -1411,12 +1694,18 @@ local_typedefs:
   yetty_yvterm_grid_clear_hook_fn:
     source_file: src/yetty/yvterm/grid.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *);"
+  yetty_yvterm_grid_materialize_fn:
+    source_file: src/yetty/yvterm/grid.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_materialize_fn)(const uint32_t *, uint32_t, void *, struct yetty_ydraw_composite **);"
   yetty_yvterm_grid_card_sub_fn:
     source_file: src/yetty/yvterm/grid.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int, int, void *);"
   yetty_yvterm_clear_hook_fn:
     source_file: src/yetty/yvterm/vterm.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_clear_hook_fn)(void *);"
+  yetty_yvterm_materialize_fn:
+    source_file: src/yetty/yvterm/vterm.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_materialize_fn)(const uint32_t *, uint32_t, void *, struct yetty_ydraw_composite **);"
 includes:
   src/yetty/yvterm/vterm.c:
     - yetty/yterminal/terminal.h

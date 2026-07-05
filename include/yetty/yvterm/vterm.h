@@ -25,6 +25,8 @@ struct yetty_ydraw_composite;
 struct yetty_ywire_wire_statemachine;
 
 typedef struct yetty_ycore_void_result (*yetty_yvterm_clear_hook_fn)(void *);
+typedef struct yetty_ycore_void_result (*yetty_yvterm_materialize_fn)(
+    const uint32_t *, uint32_t, void *, struct yetty_ydraw_composite **);
 
 struct yetty_yclass_ptr_result yetty_yvterm_vterm_class_get(void);
 
@@ -81,6 +83,13 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_get_content_inset(struct yetty
 struct yetty_ycore_void_result yetty_yvterm_vterm_set_clear_hook(struct yetty_yclass_object *obj,
                                                                  yetty_yvterm_clear_hook_fn fn,
                                                                  void *userdata);
+/* Register the figure re-materialization hook on the composed grid model: the
+ * terminal (which owns the composite factory) supplies a function that replays
+ * a retained wire envelope into a fresh figure instance when an evicted
+ * history line scrolls back into view. */
+struct yetty_ycore_void_result yetty_yvterm_vterm_set_materialize(struct yetty_yclass_object *obj,
+                                                                  yetty_yvterm_materialize_fn fn,
+                                                                  void *userdata);
 struct yetty_ycore_void_result yetty_yvterm_vterm_cursor(struct yetty_yclass_object *obj,
                                                          uint32_t *out_row, uint32_t *out_col,
                                                          uint32_t *out_visible);
@@ -111,13 +120,13 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_selection(struct yetty_ycl
                                                                 uint32_t head_col);
 struct yetty_ycore_void_result yetty_yvterm_vterm_get_selection_text(
     struct yetty_yclass_object *obj, struct yetty_ycore_buffer *out);
-/* Absolute index of the line at the live screen top: everything scrolled off so
- * far. A wheel-up anchors one line below this and walks toward the floor. */
+/* Timeline index of the line at the live screen top: everything scrolled off
+ * so far. A wheel-up anchors one line below this and walks toward the floor. */
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_get_live_anchor(
     struct yetty_yclass_object *obj);
-/* Oldest absolute line index still retained in the scrollback ring. Lines below
- * this have been evicted, so a wheel-up clamps here. The ring keeps
- * (slot_count - visible_rows) history lines. */
+/* Oldest timeline index still reachable across the scrollback tiers (hot ring
+ * → warm lz4 segments → cold spill file). A wheel-up clamps here. With the
+ * cold tier unbounded this is 0 for the whole session. */
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_get_scrollback_floor(
     struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_yvterm_vterm_set_view_top(struct yetty_yclass_object *obj,

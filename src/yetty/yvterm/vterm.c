@@ -1035,8 +1035,8 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
         return YETTY_OK_VOID();
     }
     struct yetty_yclass_object *grid = vterm->grid_obj;
-    uint32_t cols = 0, rows = 0, base = 0;
-    struct yetty_ycore_void_result dims_res = yetty_yvterm_grid_dims(grid, &cols, &rows, &base);
+    uint32_t cols = 0, rows = 0;
+    struct yetty_ycore_void_result dims_res = yetty_yvterm_grid_dims(grid, &cols, &rows, NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, dims_res, "vterm_render: grid dims");
     if (cols == 0 || rows == 0) {
         return YETTY_OK_VOID();
@@ -1053,24 +1053,32 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     struct yetty_ycore_void_result rsr = vterm_ensure_row_scratch(vterm, cols);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rsr, "vterm_render: row scratch");
 
-    /* root_row is the ring slot shown at visible row 0. Live view: the ring
-     * base. Scrolled-back view: shift base back by how far the requested top row
-     * (view_top_total_idx) sits behind the live top (total_scrolled), wrapping
-     * over the ring. Used to pick which model slots feed the visible GPU window,
-     * and by the composite / SDF / shader-glyph passes that read the model by
-     * slot. */
-    uint32_t root_row = base;
+    /* Resolve the frame's view window through the tiered scroll buffer: one
+     * slot id per window row (visible rows + the bottom-anchor look-ahead).
+     * Hot rows come back as real ring slots; archived rows come back as
+     * extended ids served from the grid's materialization cache — the slot
+     * accessors below read both uniformly, and the grid has already
+     * re-materialized figures, swept stale archive runtimes, and prefetched
+     * the adjacent segment. `back` (how deep the view sits behind the live
+     * top) caps the look-ahead exactly as before. */
+    uint32_t back = 0;
     if (vterm->view_top_active) {
-        struct yetty_ycore_uint32_result live_top_res = yetty_yvterm_grid_scroll_origin(grid);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, live_top_res, "vterm_render: scroll origin");
-        uint32_t live_top = live_top_res.value;
-        if (vterm->view_top_total_idx < live_top) {
-            uint32_t back_rows = live_top - vterm->view_top_total_idx;
-            if (slot_count > 0) {
-                back_rows %= slot_count;
-                root_row = (base + slot_count - back_rows) % slot_count;
-            }
+        struct yetty_ycore_uint32_result live_anchor_res = yetty_yvterm_grid_live_anchor(grid);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, live_anchor_res, "vterm_render: live anchor");
+        if (vterm->view_top_total_idx < live_anchor_res.value) {
+            back = live_anchor_res.value - vterm->view_top_total_idx;
         }
+    }
+    int comp_lookahead = (int)(back < (uint32_t)YVTERM_COMPOSITE_ANCHOR_LOOKAHEAD_ROWS
+                                   ? back
+                                   : (uint32_t)YVTERM_COMPOSITE_ANCHOR_LOOKAHEAD_ROWS);
+    uint32_t window_rows = 0;
+    struct yetty_ycore_const_uint32_ptr_result window_res =
+        yetty_yvterm_grid_view_window(grid, rows + (uint32_t)comp_lookahead, &window_rows);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, window_res, "vterm_render: view window");
+    const uint32_t *window_slots = window_res.value;
+    if (!window_slots || window_rows == 0) {
+        return YETTY_OK_VOID();
     }
 
     /* Pack ONLY the visible window into the GPU buffer, indexed by visible row
@@ -1079,10 +1087,9 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
      * The window is small (rows × cols), so re-packing it each frame is cheap
      * and glyph resolution stays cached in the font. */
     size_t row_bytes = (size_t)cols * YVTERM_WORDS_PER_CELL * sizeof(uint32_t);
-    for (uint32_t r = 0; r < rows; ++r) {
-        uint32_t slot = slot_count ? (root_row + r) % slot_count : r;
+    for (uint32_t r = 0; r < rows && r < window_rows; ++r) {
         struct yetty_yvterm_text_cell_const_ptr_result cells_res =
-            yetty_yvterm_grid_slot_cells(grid, slot);
+            yetty_yvterm_grid_slot_cells(grid, window_slots[r]);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, cells_res, "vterm_render: slot cells");
         const struct yetty_yvterm_text_cell *cells = cells_res.value;
         if (!cells) {
@@ -1260,31 +1267,19 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
                            ? vterm->cell_size.height / vterm->baseline_cell_height
                            : 1.0f;
     float figure_scale = zoom * cell_ratio;
-    /* A figure is anchored on its BOTTOM line and spans upward, so the scan runs
-     * the visible rows plus a look-ahead BELOW the bottom: in a scrolled-back
-     * view a figure whose bottom sits below the viewport may still have its top
-     * poking into the pane. The look-ahead is capped by the live scroll distance
-     * `back` (root_row's offset behind the live base) — in the live view back is
-     * 0, so nothing below the bottom is scanned and the oldest scrollback slots
-     * (which alias "below the bottom" on the ring) are never misread as figures. */
-    uint32_t back = slot_count ? (base + slot_count - root_row) % slot_count : 0u;
-    int comp_lookahead = (int)(back < (uint32_t)YVTERM_COMPOSITE_ANCHOR_LOOKAHEAD_ROWS
-                                   ? back
-                                   : (uint32_t)YVTERM_COMPOSITE_ANCHOR_LOOKAHEAD_ROWS);
-    for (int row = 0; row < (int)rows + comp_lookahead; ++row) {
+    /* A figure is anchored on its BOTTOM line and spans upward, so the scan
+     * runs the whole resolved window: the visible rows plus the look-ahead
+     * BELOW the bottom (already folded into window_rows above) — in a
+     * scrolled-back view a figure whose bottom sits below the viewport may
+     * still have its top poking into the pane. In the live view the window is
+     * exactly the visible rows. */
+    for (int row = 0; row < (int)window_rows; ++row) {
         uint32_t comp_count = 0;
-        /* Read composites by the SAME ring slot the text shader draws at this
-         * visible row — slot = (row + root_row) % ring_rows — so figures scroll
-         * in lockstep with the text in both live and scrolled-back views. Using
-         * the visible-row (live base) accessor instead desyncs under scrollback. */
-        uint32_t comp_slot;
-        if (slot_count) {
-            int wrapped =
-                ((row + (int)root_row) % (int)slot_count + (int)slot_count) % (int)slot_count;
-            comp_slot = (uint32_t)wrapped;
-        } else {
-            comp_slot = (uint32_t)row;
-        }
+        /* Read composites by the SAME window slot the text pass drew at this
+         * row, so figures scroll in lockstep with the text in both live and
+         * scrolled-back views (including archive rows served from the
+         * materialization cache). */
+        uint32_t comp_slot = window_slots[row];
         struct yetty_ydraw_composite_const_ptr_ptr_result comps_res =
             yetty_yvterm_grid_slot_composites(grid, comp_slot, &comp_count);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, comps_res, "vterm_render: slot composites");
@@ -1331,13 +1326,14 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     }
 
     /* Rich SDF pass: the raw ydraw records (ycat PDF/SVG/markdown — SDF shapes,
-     * glyphs, text runs) stored per line on the grid ring. Anchored by the same
-     * root_row/slot mapping as the text, so they scroll in lockstep. Drawn after
+     * glyphs, text runs) stored per line. Anchored by the same resolved window
+     * as the text, so they scroll in lockstep across all tiers. Drawn after
      * the text + composites, on top. Best-effort — never fail the frame on it. */
     if (vterm->sdf_layer) {
         struct yetty_ycore_void_result sdf_res = yetty_yvterm_sdf_layer_render(
             vterm->sdf_layer, grid, target, rect, vterm->cell_size.width, vterm->cell_size.height,
-            cols, rows, root_row, slot_count, back, zoom, vz_off_x, vz_off_y, cell_ratio);
+            cols, rows, window_slots, window_rows, slot_count, zoom, vz_off_x, vz_off_y,
+            cell_ratio);
         if (YETTY_IS_ERR(sdf_res)) {
             ywarn("vterm_render: SDF layer: %s", sdf_res.error.msg);
             yetty_ycore_error_destroy(sdf_res.error);
@@ -1345,11 +1341,12 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     }
 
     /* Shader-glyph pass: animated procedural glyphs for PUA-B cells, drawn on
-     * top of the text with the same root_row/zoom mapping. Best-effort. */
+     * top of the text with the same resolved-window mapping. Best-effort. */
     if (vterm->shader_glyph_layer) {
         struct yetty_ycore_void_result sg_res = yetty_yvterm_shader_glyph_layer_render(
             vterm->shader_glyph_layer, grid, target, rect, vterm->cell_size.width,
-            vterm->cell_size.height, cols, rows, root_row, slot_count, zoom, vz_off_x, vz_off_y);
+            vterm->cell_size.height, cols, rows, window_slots, window_rows, zoom, vz_off_x,
+            vz_off_y);
         if (YETTY_IS_ERR(sg_res)) {
             ywarn("vterm_render: shader-glyph layer: %s", sg_res.error.msg);
             yetty_ycore_error_destroy(sg_res.error);
@@ -1419,6 +1416,14 @@ static struct yetty_ycore_void_result vterm_destroy_slot(struct yetty_yclass_obj
  * the exposed setter references it. */
 typedef struct yetty_ycore_void_result (*yetty_yvterm_clear_hook_fn)(void *userdata);
 
+/* Re-creates one anchored figure from its retained wire envelope when an
+ * evicted history line scrolls back into view. Identical underlying type to
+ * grid.c's yetty_yvterm_grid_materialize_fn — a vterm-local typedef for the
+ * same reason as the clear hook above (codegen reproduces it into vterm.h). */
+typedef struct yetty_ycore_void_result (*yetty_yvterm_materialize_fn)(
+    const uint32_t *envelope_words, uint32_t envelope_word_count, void *userdata,
+    struct yetty_ydraw_composite **out_instance);
+
 /* Create the terminal-content figure for one pane. The rect is set in pixels;
  * cell_size is stored so the terminal can read it immediately after create. The
  * terminal hooks (pty write, render request, mouse subscription) are stored for
@@ -1455,17 +1460,22 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
     }
     struct yetty_yvterm_vterm *vterm = vterm_res.value;
 
-    /* Scrollback depth from config (`scrollback/lines`); fall back to the
-     * model's built-in default when config is unavailable. */
+    /* Scrollback depth + hot-window depth from config (`scrollback/lines`,
+     * `scrollback/hot-lines`); fall back to the model's built-in defaults when
+     * config is unavailable. */
     struct yetty_yconfig_config *config =
         (context && context->runtime) ? context->runtime->config : NULL;
     uint32_t scrollback_rows =
         config ? (uint32_t)config->ops->get_int(config, YETTY_YCONFIG_KEY_SCROLLBACK_LINES, 10000)
                : 0u;
+    uint32_t hot_rows =
+        config
+            ? (uint32_t)config->ops->get_int(config, YETTY_YCONFIG_KEY_SCROLLBACK_HOT_LINES, 2000)
+            : 0u;
 
     /* The model is a separate yvterm:grid object this figure composes/owns. */
     struct yetty_yclass_object_ptr_result grid_res =
-        yetty_yvterm_grid_make(cols, rows, scrollback_rows);
+        yetty_yvterm_grid_make(cols, rows, scrollback_rows, hot_rows);
     if (YETTY_IS_ERR(grid_res)) {
         struct yetty_ycore_void_result free_res = yetty_yclass_object_free(obj);
         if (YETTY_IS_ERR(free_res)) {
@@ -1474,6 +1484,28 @@ struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_figure_create(
         return YETTY_ERR(yetty_yclass_object_ptr, "yvterm vterm_create: grid_make", grid_res);
     }
     vterm->grid_obj = grid_res.value;
+    /* Warm/cold tier budgets (0 keeps the built-in warm default / unlimited
+     * spill file). Best-effort — the grid runs on defaults without them. */
+    if (config) {
+        uint32_t warm_bytes =
+            (uint32_t)config->ops->get_int(config, YETTY_YCONFIG_KEY_SCROLLBACK_WARM_BYTES, 0);
+        uint32_t file_max_bytes =
+            (uint32_t)config->ops->get_int(config, YETTY_YCONFIG_KEY_SCROLLBACK_FILE_MAX_BYTES, 0);
+        struct yetty_ycore_void_result budgets_res =
+            yetty_yvterm_grid_set_tier_budgets(vterm->grid_obj, warm_bytes, file_max_bytes);
+        if (YETTY_IS_ERR(budgets_res)) {
+            yetty_ycore_error_destroy(budgets_res.error);
+        }
+    }
+    /* Per-owner byte accounting for the scroll tiers (yctl `memtags` dump).
+     * Best-effort — headless/test contexts have no registry. */
+    if (context && context->runtime && context->runtime->memtag_registry) {
+        struct yetty_ycore_void_result memtags_res =
+            yetty_yvterm_grid_register_memtags(vterm->grid_obj, context->runtime->memtag_registry);
+        if (YETTY_IS_ERR(memtags_res)) {
+            yetty_ycore_error_destroy(memtags_res.error);
+        }
+    }
     /* The grid produces keyboard/query output; hand it the PTY hook. The
      * terminal's pty_write_fn matches the grid's pty_write signature. */
     struct yetty_ycore_void_result set_pty_res = yetty_yvterm_grid_set_pty_write(
@@ -1702,6 +1734,21 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_clear_hook(struct yetty_yc
                                             (yetty_yvterm_grid_clear_hook_fn)fn, userdata);
 }
 
+/* Register the figure re-materialization hook on the composed grid model: the
+ * terminal (which owns the composite factory) supplies a function that replays
+ * a retained wire envelope into a fresh figure instance when an evicted
+ * history line scrolls back into view. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_set_materialize(struct yetty_yclass_object *obj,
+                                                                  yetty_yvterm_materialize_fn fn,
+                                                                  void *userdata)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_set_materialize: from_obj");
+    return yetty_yvterm_grid_set_materialize(vterm_res.value->grid_obj,
+                                             (yetty_yvterm_grid_materialize_fn)fn, userdata);
+}
+
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_yvterm_vterm_cursor(struct yetty_yclass_object *obj,
                                                          uint32_t *out_row, uint32_t *out_col,
@@ -1834,10 +1881,8 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_get_selection_text(
     return yetty_yvterm_grid_get_selection_text(vterm_res.value->grid_obj, out);
 }
 
-/* Scrollback is not yet backed by a history ring; the live screen is all there
- * is, so the anchor and floor are both 0 (no wheel-up range). */
-/* Absolute index of the line at the live screen top: everything scrolled off so
- * far. A wheel-up anchors one line below this and walks toward the floor. */
+/* Timeline index of the line at the live screen top: everything scrolled off
+ * so far. A wheel-up anchors one line below this and walks toward the floor. */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_get_live_anchor(struct yetty_yclass_object *obj)
 {
@@ -1847,12 +1892,12 @@ struct yetty_ycore_uint32_result yetty_yvterm_vterm_get_live_anchor(struct yetty
     if (!vterm->grid_obj) {
         return YETTY_OK(yetty_ycore_uint32, 0u);
     }
-    return yetty_yvterm_grid_scroll_origin(vterm->grid_obj);
+    return yetty_yvterm_grid_live_anchor(vterm->grid_obj);
 }
 
-/* Oldest absolute line index still retained in the scrollback ring. Lines below
- * this have been evicted, so a wheel-up clamps here. The ring keeps
- * (slot_count - visible_rows) history lines. */
+/* Oldest timeline index still reachable across the scrollback tiers (hot ring
+ * → warm lz4 segments → cold spill file). A wheel-up clamps here. With the
+ * cold tier unbounded this is 0 for the whole session. */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_get_scrollback_floor(
     struct yetty_yclass_object *obj)
@@ -1864,20 +1909,7 @@ struct yetty_ycore_uint32_result yetty_yvterm_vterm_get_scrollback_floor(
     if (!vterm->grid_obj) {
         return YETTY_OK(yetty_ycore_uint32, 0u);
     }
-    struct yetty_ycore_uint32_result live_res = yetty_yvterm_grid_scroll_origin(vterm->grid_obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, live_res,
-                        "yvterm vterm_get_scrollback_floor: scroll origin");
-    uint32_t live = live_res.value;
-    uint32_t cols = 0, rows = 0;
-    struct yetty_ycore_void_result dims_res =
-        yetty_yvterm_grid_dims(vterm->grid_obj, &cols, &rows, NULL);
-    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, dims_res, "yvterm vterm_get_scrollback_floor: dims");
-    struct yetty_ycore_uint32_result ring_res = yetty_yvterm_grid_slot_count(vterm->grid_obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, ring_res,
-                        "yvterm vterm_get_scrollback_floor: slot count");
-    uint32_t ring = ring_res.value;
-    uint32_t history_cap = ring > rows ? ring - rows : 0u;
-    return YETTY_OK(yetty_ycore_uint32, live > history_cap ? live - history_cap : 0u);
+    return yetty_yvterm_grid_history_floor(vterm->grid_obj);
 }
 
 YETTY_ANNOTATE("expose")
@@ -1891,6 +1923,14 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_view_top(struct yetty_ycla
     vterm->view_top_active = active;
     vterm->view_top_total_idx = view_top_total_idx;
     vterm->view_dirty = 1;
+    /* The grid's tier resolver drives its window from this view state. */
+    if (vterm->grid_obj) {
+        struct yetty_ycore_void_result view_res =
+            yetty_yvterm_grid_set_view(vterm->grid_obj, active, view_top_total_idx);
+        if (YETTY_IS_ERR(view_res)) {
+            yetty_ycore_error_destroy(view_res.error);
+        }
+    }
     struct yetty_ycore_void_result dr = yetty_yfigure_figure_dirty_set(obj, 1);
     if (YETTY_IS_ERR(dr)) {
         yetty_ycore_error_destroy(dr.error);
