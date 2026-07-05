@@ -67,6 +67,16 @@ yetty_add_c_test(
     LABELS  golden browser
     TIMEOUT 30)
 
+# Network loader: request/response fetch round-trip + resource-cache hit.
+# Hits the network (see the `network` label); self-skips offline.
+yetty_add_c_test(
+    NAME    ybrowser_loader
+    SOURCES ybrowser-loader-test.c
+    LIBS    yetty_ybrowser yetty_ydraw yetty_ydraw_core yetty_ycore yetty_yplatform_core
+    SHIMS   trace workpool
+    LABELS  network browser
+    TIMEOUT 60)
+
 # Python-driven suites that need the built ybrowser CLI. Both self-skip
 # (exit 77) when the binary is unavailable.
 find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -92,6 +102,20 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(ybrowser_wpt PROPERTIES
         ENVIRONMENT      "YBROWSER=$<TARGET_FILE:ybrowser>"
         LABELS           "golden;browser;wpt"
+        TIMEOUT          120
+        SKIP_RETURN_CODE 77)
+
+    # Anchor suite: whole-page fixtures with stamped data-test anchors,
+    # compared against committed Chrome-generated geometry references
+    # (test/ybrowser/anchors). Catches the layout-class divergences (grid
+    # collapse, flex mis-splits) that per-feature WPT pins are too small to
+    # exhibit. Offline and headless — the Chrome oracle only runs at
+    # fixture-authoring time, never in CI.
+    add_test(NAME ybrowser_anchors
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../anchors/run.py)
+    set_tests_properties(ybrowser_anchors PROPERTIES
+        ENVIRONMENT      "YBROWSER=$<TARGET_FILE:ybrowser>"
+        LABELS           "golden;browser;anchors"
         TIMEOUT          120
         SKIP_RETURN_CODE 77)
 endif()

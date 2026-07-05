@@ -106,6 +106,10 @@ types:
         type: "struct yetty_yclass_object *"
       - name: address
         type: "struct yetty_yclass_object *"
+      - name: btn_reload
+        type: "struct yetty_yclass_object *"
+      - name: loading
+        type: int
       - name: scroll
         type: "struct yetty_yclass_object *"
       - name: page
@@ -146,6 +150,8 @@ types:
         type: int
       - name: img_last_render_ms
         type: double
+      - name: loader
+        type: "struct yetty_ybrowser_loader *"
   - name: cache_entry
     kind: struct
     fields:
@@ -265,7 +271,6 @@ local_types:
   url_cache: tools/ybrowser/browser-ui.c
   tab: tools/ybrowser/browser-ui.c
   app: tools/ybrowser/browser-ui.c
-  stdout_pty: tools/ybrowser/browser-ui.c
   yetty_ybrowser_app: tools/ybrowser/browser-ui.c
   yetty_ybrowser_app_ptr_result: tools/ybrowser/browser-ui.c
 local_typedefs:

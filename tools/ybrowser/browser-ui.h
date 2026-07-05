@@ -20,7 +20,12 @@ int ybrowser_looks_like_url(const char *s);
  * its length to *out_len; returns NULL on failure. When out_effective_url
  * is non-NULL it receives the post-redirect URL for a fetched URL (caller
  * frees), or NULL otherwise. Defined in main.c. */
-char *ybrowser_slurp_file(const char *path, size_t *out_len, char **out_effective_url);
+struct yetty_ybrowser_loader;
+/* `loader` supplies the shared libcurl caches for http(s) URLs (see
+ * yetty_ybrowser_loader_create); NULL still works, just without
+ * connection reuse. */
+char *ybrowser_slurp_file(struct yetty_ybrowser_loader *loader, const char *path, size_t *out_len,
+                          char **out_effective_url);
 
 /* Run the interactive Chrome-like browser UI as a ygui client of the host
  * yetty (OSC over stdout, input over stdin). `initial_url` is the optional

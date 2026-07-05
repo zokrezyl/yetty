@@ -1,0 +1,264 @@
+{
+ "anchors": {
+  "a0000": {
+   "display": "block",
+   "parent": null,
+   "rect": [
+    8,
+    8,
+    1184,
+    448.6
+   ],
+   "tag": "body"
+  },
+  "a0001": {
+   "display": "flex",
+   "parent": "a0000",
+   "rect": [
+    8,
+    8,
+    1184,
+    50
+   ],
+   "tag": "header"
+  },
+  "a0002": {
+   "display": "block",
+   "parent": "a0001",
+   "rect": [
+    32,
+    20,
+    128.4,
+    26
+   ],
+   "tag": "div"
+  },
+  "a0003": {
+   "display": "flex",
+   "parent": "a0001",
+   "rect": [
+    937.7,
+    24,
+    230.3,
+    18
+   ],
+   "tag": "nav"
+  },
+  "a0004": {
+   "display": "block",
+   "parent": "a0003",
+   "rect": [
+    937.7,
+    24,
+    40.9,
+    18
+   ],
+   "tag": "a"
+  },
+  "a0005": {
+   "display": "block",
+   "parent": "a0003",
+   "rect": [
+    1002.6,
+    24,
+    36.5,
+    18
+   ],
+   "tag": "a"
+  },
+  "a0006": {
+   "display": "block",
+   "parent": "a0003",
+   "rect": [
+    1063.1,
+    24,
+    43.6,
+    18
+   ],
+   "tag": "a"
+  },
+  "a0007": {
+   "display": "block",
+   "parent": "a0003",
+   "rect": [
+    1130.6,
+    24,
+    37.4,
+    18
+   ],
+   "tag": "a"
+  },
+  "a0008": {
+   "display": "block",
+   "parent": "a0000",
+   "rect": [
+    8,
+    79.4,
+    1184,
+    263.2
+   ],
+   "tag": "main"
+  },
+  "a0009": {
+   "display": "block",
+   "parent": "a0008",
+   "rect": [
+    32,
+    79.4,
+    1136,
+    37
+   ],
+   "tag": "h1"
+  },
+  "a0010": {
+   "display": "block",
+   "parent": "a0008",
+   "rect": [
+    32,
+    137.9,
+    1136,
+    36
+   ],
+   "tag": "p"
+  },
+  "a0011": {
+   "display": "flex",
+   "parent": "a0008",
+   "rect": [
+    32,
+    197.9,
+    1136,
+    144.7
+   ],
+   "tag": "div"
+  },
+  "a0012": {
+   "display": "block",
+   "parent": "a0011",
+   "rect": [
+    32,
+    197.9,
+    284.5,
+    144.7
+   ],
+   "tag": "div"
+  },
+  "a0013": {
+   "display": "block",
+   "parent": "a0012",
+   "rect": [
+    49,
+    214.9,
+    250.5,
+    22
+   ],
+   "tag": "h3"
+  },
+  "a0014": {
+   "display": "block",
+   "parent": "a0012",
+   "rect": [
+    49,
+    255.6,
+    250.5,
+    54
+   ],
+   "tag": "p"
+  },
+  "a0015": {
+   "display": "block",
+   "parent": "a0011",
+   "rect": [
+    332.5,
+    197.9,
+    535,
+    144.7
+   ],
+   "tag": "div"
+  },
+  "a0016": {
+   "display": "block",
+   "parent": "a0015",
+   "rect": [
+    349.5,
+    214.9,
+    501,
+    22
+   ],
+   "tag": "h3"
+  },
+  "a0017": {
+   "display": "block",
+   "parent": "a0015",
+   "rect": [
+    349.5,
+    255.6,
+    501,
+    36
+   ],
+   "tag": "p"
+  },
+  "a0018": {
+   "display": "block",
+   "parent": "a0011",
+   "rect": [
+    883.5,
+    197.9,
+    284.5,
+    144.7
+   ],
+   "tag": "div"
+  },
+  "a0019": {
+   "display": "block",
+   "parent": "a0018",
+   "rect": [
+    900.5,
+    214.9,
+    250.5,
+    22
+   ],
+   "tag": "h3"
+  },
+  "a0020": {
+   "display": "block",
+   "parent": "a0018",
+   "rect": [
+    900.5,
+    255.6,
+    250.5,
+    18
+   ],
+   "tag": "p"
+  },
+  "a0021": {
+   "display": "block",
+   "parent": "a0000",
+   "rect": [
+    8,
+    374.6,
+    1184,
+    82
+   ],
+   "tag": "footer"
+  },
+  "a0022": {
+   "display": "block",
+   "parent": "a0021",
+   "rect": [
+    32,
+    406.6,
+    1136,
+    18
+   ],
+   "tag": "p"
+  }
+ },
+ "meta": {
+  "budget_ms": 4000,
+  "chrome": "Google Chrome 150.0.7871.46",
+  "doc_height": 757,
+  "fixture": "fixture.html",
+  "width": 1200
+ }
+}

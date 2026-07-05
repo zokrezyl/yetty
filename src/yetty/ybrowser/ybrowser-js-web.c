@@ -2,11 +2,11 @@
  * ylexbor-js-web — WebAPI bindings on top of QuickJS for the bits
  * github / gitlab / any modern SPA needs to even *boot*:
  *
- *   fetch / Response / XMLHttpRequest          — sync libcurl behind a
- *                                                 Promise (good enough
- *                                                 to wake an SPA up;
- *                                                 swap to async libcurl
- *                                                 multi later)
+ *   fetch / Response / XMLHttpRequest          — request/response fetch
+ *                                                 layer; async on the
+ *                                                 worker pool when the
+ *                                                 host provides one,
+ *                                                 sync fallback otherwise
  *   setTimeout / setInterval / clearTimeout    — min-heap timer queue
  *   queueMicrotask / requestAnimationFrame     — onto the same queue
  *   window === globalThis (already set by DOM)
@@ -69,6 +69,7 @@
 #include <curl/curl.h>
 #endif
 
+#include <yetty/yplatform/yworkpool.h>
 #include <yetty/ytrace/ytrace.h>
 
 /* ===========================================================================
@@ -138,9 +139,18 @@ char *yetty_ylexbor_resolve_url(struct yetty_ylexbor *r, const char *href)
 
 #if YETTY_HAVE_CURL
 
-struct fetch_buf {
+struct fetch_transfer {
     char *data;
     size_t size, cap;
+    /* Cancellation: when cancel_generation is non-NULL and its current
+	 * value no longer matches generation, the write callback aborts the
+	 * transfer at the next received chunk. The pointed-to counter is
+	 * bumped by the engine on navigation; a torn read on a 32-bit
+	 * target merely delays or repeats one abort check by a chunk. */
+    uint64_t generation;
+    const uint64_t *cancel_generation;
+    /* Response headers we care about, captured by fetch_header_cb. */
+    char cache_control[160];
 };
 
 /* Hard ceiling on a single fetched response. Without it, an endpoint that
@@ -151,482 +161,944 @@ struct fetch_buf {
  * image a page legitimately serves, so this only ever trips on a runaway. */
 #define FETCH_MAX_RESPONSE (64u * 1024u * 1024u)
 
-static size_t fetch_write_cb(char *p, size_t sz, size_t n, void *ud)
+static size_t fetch_write_cb(char *chunk, size_t chunk_size, size_t chunk_count, void *userdata)
 {
-    struct fetch_buf *b = ud;
-    size_t add = sz * n;
-    /* Abort the transfer once the cap is exceeded. Returning a short count
-	 * makes curl fail the easy handle with CURLE_WRITE_ERROR; the caller
-	 * treats it as a failed fetch and moves on. */
-    if (b->size + add > FETCH_MAX_RESPONSE) {
+    struct fetch_transfer *transfer = userdata;
+    size_t add = chunk_size * chunk_count;
+    /* Stale transfer (the page navigated away) — abort now instead of
+	 * downloading the rest just to throw it away. Returning a short
+	 * count fails the easy handle with CURLE_WRITE_ERROR. */
+    if (transfer->cancel_generation != NULL &&
+        *transfer->cancel_generation != transfer->generation) {
         return 0;
     }
-    if (b->size + add + 1 > b->cap) {
-        size_t nc = b->cap ? b->cap * 2 : 16384;
-        while (nc < b->size + add + 1) {
-            nc *= 2;
+    if (transfer->size + add > FETCH_MAX_RESPONSE) {
+        return 0;
+    }
+    if (transfer->size + add + 1 > transfer->cap) {
+        size_t new_cap = transfer->cap ? transfer->cap * 2 : 16384;
+        while (new_cap < transfer->size + add + 1) {
+            new_cap *= 2;
         }
-        char *np = realloc(b->data, nc);
-        if (!np) {
+        char *grown = realloc(transfer->data, new_cap);
+        if (!grown) {
             return 0;
         }
-        b->data = np;
-        b->cap = nc;
+        transfer->data = grown;
+        transfer->cap = new_cap;
     }
-    memcpy(b->data + b->size, p, add);
-    b->size += add;
+    memcpy(transfer->data + transfer->size, chunk, add);
+    transfer->size += add;
     return add;
 }
 
-char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_t *out_len,
-                                     long *out_status);
-
-char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
+/* Capture the response headers the cache policy needs (Cache-Control).
+ * Content-Type comes from CURLINFO_CONTENT_TYPE after the transfer. */
+static size_t fetch_header_cb(char *line, size_t line_size, size_t line_count, void *userdata)
 {
-    return yetty_ylexbor_http_get_referer(url, NULL, out_len, out_status);
+    struct fetch_transfer *transfer = userdata;
+    size_t len = line_size * line_count;
+    const char *name = "cache-control:";
+    size_t name_len = 14;
+    if (len > name_len && strncasecmp(line, name, name_len) == 0) {
+        const char *value = line + name_len;
+        size_t value_len = len - name_len;
+        while (value_len > 0 && (*value == ' ' || *value == '\t')) {
+            value++;
+            value_len--;
+        }
+        while (value_len > 0 && (value[value_len - 1] == '\r' || value[value_len - 1] == '\n')) {
+            value_len--;
+        }
+        if (value_len >= sizeof(transfer->cache_control)) {
+            value_len = sizeof(transfer->cache_control) - 1;
+        }
+        memcpy(transfer->cache_control, value, value_len);
+        transfer->cache_control[value_len] = '\0';
+    }
+    return len;
 }
 
-/* Process-wide shared connection / DNS / TLS-session cache. The image
- * fetch loop in ybrowser-paint.c makes ~30 sequential curl_easy_init()
- * calls to the same CDN host (upload.wikimedia.org); without a share
- * handle each call does a fresh TCP+TLS handshake (~100ms × 30 = ~3s
- * wasted). With the share, the second through Nth easy handle reuse
- * the live connection from the pool, dropping the per-image cost to
- * just the transfer time. Equivalent of Chrome's connection pool but
- * single-threaded sequential — true parallelism would need curl_multi
- * (deferred). Thread-safe via libcurl's CURL_LOCK_DATA_* — we add the
- * per-data-type lock callbacks because curl can be called from the
- * JS-worker thread for fetch()/XHR. */
-static CURLSH *g_curl_share = NULL;
 #include <pthread.h>
-static pthread_once_t g_curl_share_once = PTHREAD_ONCE_INIT;
-static pthread_mutex_t g_curl_share_locks[CURL_LOCK_DATA_LAST];
 
-static void share_lock_cb(CURL *h, curl_lock_data data, curl_lock_access access, void *ud)
+/* Network loader — the owner of everything fetch-related that outlives a
+ * single request. The share handle is the workhorse: the image fetch
+ * paths make ~30 curl_easy_init() calls to the same CDN host
+ * (upload.wikimedia.org); without a share each call does a fresh TCP+TLS
+ * handshake (~100ms × 30 = ~3s wasted). With it, the second through Nth
+ * easy handle reuse the live connection from the pool. Thread-safe via
+ * libcurl's CURL_LOCK_DATA_* lock callbacks — fetches also run on image
+ * worker threads and the JS thread. The Alt-Svc cache path lives here
+ * too so BOTH the sequential and the curl_multi paths get HTTP/3
+ * upgrades, and so no racy static path buffer is needed. */
+/* One cached resource. `bytes` is the wire body; `pixels` is the decoded
+ * RGBA decoration published by the image pipeline so back/forward repaints
+ * skip both the network AND the decode. */
+struct loader_cache_entry {
+    char *url;
+    char *bytes;
+    size_t bytes_len;
+    long status;
+    char *content_type;
+    char *effective_url;
+    uint32_t *pixels;
+    int pixels_width, pixels_height;
+    time_t expires_at;       /* wall clock; entry is stale past this */
+    uint64_t last_used_tick; /* LRU ordinal */
+    size_t charge;           /* bytes accounted against the budget */
+};
+
+/* Default freshness when the server sends no max-age: a session-cache
+ * TTL. Long enough that every same-site navigation in a browsing burst
+ * hits, short enough that a long-running instance doesn't serve
+ * yesterday's stylesheet. */
+#define LOADER_CACHE_DEFAULT_TTL_SECONDS 300
+
+/* Total budget for bytes + pixels across all entries. */
+#define LOADER_CACHE_BUDGET (64u * 1024u * 1024u)
+
+struct yetty_ybrowser_loader {
+    CURLSH *share; /* NULL when curl_share_init failed — fetches still work */
+    pthread_mutex_t share_locks[CURL_LOCK_DATA_LAST];
+    /* $XDG_CACHE_HOME/yetty/altsvc-cache (or $HOME/.cache/...). Empty
+	 * string when no cache dir could be derived. */
+    char altsvc_path[1024];
+
+    /* Resource cache — shared by every engine on this loader, touched
+	 * from the loop thread and the image/fetch workers alike. */
+    pthread_mutex_t cache_mutex;
+    struct loader_cache_entry *cache_entries;
+    int cache_count, cache_cap;
+    size_t cache_charge;
+    uint64_t cache_tick;
+};
+
+static void loader_cache_entry_free(struct loader_cache_entry *entry)
 {
-    (void)h;
-    (void)access;
-    (void)ud;
-    if (data < CURL_LOCK_DATA_LAST) {
-        pthread_mutex_lock(&g_curl_share_locks[data]);
-    }
-}
-static void share_unlock_cb(CURL *h, curl_lock_data data, void *ud)
-{
-    (void)h;
-    (void)ud;
-    if (data < CURL_LOCK_DATA_LAST) {
-        pthread_mutex_unlock(&g_curl_share_locks[data]);
-    }
-}
-static void share_init_once(void)
-{
-    for (int i = 0; i < CURL_LOCK_DATA_LAST; i++) {
-        pthread_mutex_init(&g_curl_share_locks[i], NULL);
-    }
-    g_curl_share = curl_share_init();
-    if (!g_curl_share) {
-        return;
-    }
-    curl_share_setopt(g_curl_share, CURLSHOPT_LOCKFUNC, share_lock_cb);
-    curl_share_setopt(g_curl_share, CURLSHOPT_UNLOCKFUNC, share_unlock_cb);
-    /* Share the four caches that matter for sequential same-host
-	 * fetches. CONNECT is the big one — keeps the TCP+TLS connection
-	 * alive across easy handle lifetimes. DNS and SSL_SESSION are
-	 * smaller wins but free. */
-    curl_share_setopt(g_curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
-    curl_share_setopt(g_curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
-#ifdef CURL_LOCK_DATA_CONNECT
-    curl_share_setopt(g_curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
-#endif
-    curl_share_setopt(g_curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
+    free(entry->url);
+    free(entry->bytes);
+    free(entry->content_type);
+    free(entry->effective_url);
+    free(entry->pixels);
+    memset(entry, 0, sizeof(*entry));
 }
 
-void *yetty_ylexbor_curl_share(void)
+/* cache_mutex held. Returns the entry index or -1. */
+static int loader_cache_find(struct yetty_ybrowser_loader *loader, const char *url)
 {
-    pthread_once(&g_curl_share_once, share_init_once);
-    return g_curl_share;
-}
-
-char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_t *out_len,
-                                     long *out_status)
-{
-    if (!url) {
-        if (out_len) {
-            *out_len = 0;
+    for (int i = 0; i < loader->cache_count; i++) {
+        if (loader->cache_entries[i].url && strcmp(loader->cache_entries[i].url, url) == 0) {
+            return i;
         }
-        if (out_status) {
-            *out_status = 0;
-        }
-        return NULL;
     }
-    /* file:// — handle directly since libcurl is often built without
-	 * the FILE protocol. Used heavily by the WPT integration runner
-	 * to load `<script src=...>` siblings of the test page. */
-    if (strncmp(url, "file://", 7) == 0) {
-        const char *path = url + 7;
-        FILE *f = fopen(path, "rb");
-        if (!f) {
-            if (out_len) {
-                *out_len = 0;
+    return -1;
+}
+
+/* cache_mutex held. Drop the least-recently-used entries until the
+ * charge fits the budget again. */
+static void loader_cache_evict(struct yetty_ybrowser_loader *loader)
+{
+    while (loader->cache_charge > LOADER_CACHE_BUDGET && loader->cache_count > 0) {
+        int oldest = 0;
+        for (int i = 1; i < loader->cache_count; i++) {
+            if (loader->cache_entries[i].last_used_tick <
+                loader->cache_entries[oldest].last_used_tick) {
+                oldest = i;
             }
-            if (out_status) {
-                *out_status = 0;
-            }
-            return NULL;
         }
-        fseek(f, 0, SEEK_END);
-        long sz = ftell(f);
-        fseek(f, 0, SEEK_SET);
-        if (sz < 0) {
-            fclose(f);
-            if (out_status) {
-                *out_status = 0;
-            }
-            return NULL;
-        }
-        char *buf = malloc((size_t)sz + 1);
-        if (!buf) {
-            fclose(f);
-            return NULL;
-        }
-        size_t got = fread(buf, 1, (size_t)sz, f);
-        fclose(f);
-        buf[got] = '\0';
-        if (out_len) {
-            *out_len = got;
-        }
-        if (out_status) {
-            *out_status = 200;
-        }
-        return buf;
+        loader->cache_charge -= loader->cache_entries[oldest].charge;
+        loader_cache_entry_free(&loader->cache_entries[oldest]);
+        loader->cache_entries[oldest] = loader->cache_entries[loader->cache_count - 1];
+        memset(&loader->cache_entries[loader->cache_count - 1], 0,
+               sizeof(loader->cache_entries[0]));
+        loader->cache_count--;
     }
-    CURL *c = curl_easy_init();
-    if (!c) {
-        return NULL;
-    }
-    /* Attach the process-wide share handle so this easy handle reuses
-	 * the cached TCP+TLS connection, DNS resolution, and TLS session
-	 * from previous calls. First-touch initialization is one-shot via
-	 * pthread_once. */
-    pthread_once(&g_curl_share_once, share_init_once);
-    if (g_curl_share) {
-        curl_easy_setopt(c, CURLOPT_SHARE, g_curl_share);
-    }
-    struct fetch_buf b = {0};
-    curl_easy_setopt(c, CURLOPT_URL, url);
-    curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(c, CURLOPT_MAXREDIRS, 10L);
+}
 
-    /* HTTP version negotiation. Letting libcurl pick (the default) gives
-	 * HTTP/2 over TLS via ALPN — fast on its own. For HTTP/3 we use the
-	 * Alt-Svc cache: servers advertise H3 via the Alt-Svc response
-	 * header on HTTP/2, libcurl persists the advert, and switches to
-	 * H3 on the NEXT request to that origin. No timeout penalty for
-	 * non-H3 hosts — unlike CURL_HTTP_VERSION_3 which forces H3 and
-	 * cannot downgrade. Alt-Svc cache file lives next to the user's
-	 * runtime dir; persists across runs so warm sessions skip the
-	 * H2-discovery round-trip. */
-#ifdef CURLOPT_ALTSVC
-    {
-        curl_version_info_data *vi = curl_version_info(CURLVERSION_NOW);
-        (void)vi;
-#ifdef CURL_VERSION_HTTP3
-        if (vi && (vi->features & CURL_VERSION_HTTP3)) {
-            /* Cache file: $XDG_CACHE_HOME/yetty/altsvc-cache or
-			 * $HOME/.cache/yetty/altsvc-cache. Created on first
-			 * advert, ignored on read failure. */
-            static char altsvc_path[1024];
-            if (altsvc_path[0] == '\0') {
-                const char *xdg = getenv("XDG_CACHE_HOME");
-                const char *home = getenv("HOME");
-                if (xdg && *xdg) {
-                    snprintf(altsvc_path, sizeof(altsvc_path), "%s/yetty/altsvc-cache", xdg);
-                } else if (home && *home) {
-                    snprintf(altsvc_path, sizeof(altsvc_path), "%s/.cache/yetty/altsvc-cache",
-                             home);
+/* Only plain GETs of subresources are cacheable — API responses (XHR)
+ * and document navigations are not. */
+static int loader_cache_kind_ok(const struct yetty_ybrowser_request *request)
+{
+    if (request->body ||
+        (request->method && *request->method && strcasecmp(request->method, "GET") != 0)) {
+        return 0;
+    }
+    return request->kind == YETTY_YBROWSER_REQUEST_STYLE ||
+           request->kind == YETTY_YBROWSER_REQUEST_SCRIPT ||
+           request->kind == YETTY_YBROWSER_REQUEST_IMAGE;
+}
+
+/* Fresh-hit lookup: fills `response` with copies and returns 1, or
+ * returns 0 on miss/stale. */
+static int loader_cache_lookup(struct yetty_ybrowser_loader *loader,
+                               const struct yetty_ybrowser_request *request,
+                               struct yetty_ybrowser_response *response)
+{
+    if (!loader || !loader_cache_kind_ok(request)) {
+        return 0;
+    }
+    int hit = 0;
+    pthread_mutex_lock(&loader->cache_mutex);
+    int idx = loader_cache_find(loader, request->url);
+    if (idx >= 0) {
+        struct loader_cache_entry *entry = &loader->cache_entries[idx];
+        if (entry->expires_at <= time(NULL)) {
+            /* Stale — drop it; the caller re-fetches and re-stores. */
+            loader->cache_charge -= entry->charge;
+            loader_cache_entry_free(entry);
+            loader->cache_entries[idx] = loader->cache_entries[loader->cache_count - 1];
+            memset(&loader->cache_entries[loader->cache_count - 1], 0,
+                   sizeof(loader->cache_entries[0]));
+            loader->cache_count--;
+        } else {
+            entry->last_used_tick = ++loader->cache_tick;
+            response->status = entry->status;
+            response->body = malloc(entry->bytes_len + 1);
+            if (response->body) {
+                memcpy(response->body, entry->bytes, entry->bytes_len);
+                response->body[entry->bytes_len] = '\0';
+                response->body_len = entry->bytes_len;
+                response->effective_url =
+                    entry->effective_url ? strdup(entry->effective_url) : NULL;
+                response->content_type = entry->content_type ? strdup(entry->content_type) : NULL;
+                if (entry->pixels && entry->pixels_width > 0 && entry->pixels_height > 0) {
+                    size_t pixel_bytes =
+                        (size_t)entry->pixels_width * (size_t)entry->pixels_height * 4;
+                    response->image_pixels = malloc(pixel_bytes);
+                    if (response->image_pixels) {
+                        memcpy(response->image_pixels, entry->pixels, pixel_bytes);
+                        response->image_width = entry->pixels_width;
+                        response->image_height = entry->pixels_height;
+                    }
                 }
-            }
-            if (altsvc_path[0]) {
-                curl_easy_setopt(c, CURLOPT_ALTSVC, altsvc_path);
-                /* Restrict to h2→h3 and h3→h2 upgrades. */
-#ifdef CURLALTSVC_H1
-                curl_easy_setopt(c, CURLOPT_ALTSVC_CTRL,
-                                 (long)(CURLALTSVC_H1 | CURLALTSVC_H2 | CURLALTSVC_H3));
-#endif
-            }
-        }
-#endif
-    }
-#endif
-    /* Send a standard Chrome User-Agent so CDNs treat us as a real
-	 * browser. Wikimedia's bot-throttling, news.google.com's image
-	 * gate, and several CloudFlare WAFs all behave very differently
-	 * for unidentified vs browser UAs. The env var lets ops override
-	 * for cases where bot-identifying UAs are required by ToS. */
-    const char *ua = getenv("YETTY_USER_AGENT");
-    if (!ua || !*ua) {
-        ua = "Mozilla/5.0 (X11; Linux x86_64) "
-             "AppleWebKit/537.36 (KHTML, like Gecko) "
-             "Chrome/120.0.0.0 Safari/537.36";
-    }
-    curl_easy_setopt(c, CURLOPT_USERAGENT, ua);
-    curl_easy_setopt(c, CURLOPT_TIMEOUT, 30L);
-    curl_easy_setopt(c, CURLOPT_CONNECTTIMEOUT, 10L);
-    curl_easy_setopt(c, CURLOPT_ACCEPT_ENCODING, "");
-    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, fetch_write_cb);
-    curl_easy_setopt(c, CURLOPT_WRITEDATA, &b);
-    /* Browser-like header set: image-prioritised Accept, sec-fetch
-	 * hints (Chrome/Firefox always send these), and a Referer when
-	 * the caller knows the document URL — gstatic / Cloudflare WAF
-	 * / many CDN image endpoints 404 or 403 on fetches that lack
-	 * it. */
-    struct curl_slist *headers = NULL;
-    /* IMPORTANT: do NOT advertise webp/avif/apng — content-negotiating
-	 * CDNs (notably Wikimedia) will serve those formats over PNG/JPEG
-	 * when the URL itself ends in .png. We can't decode webp/avif/apng
-	 * (no libwebp / libavif / libapng linked), so claiming support
-	 * means every Wikimedia thumb comes back as a webp blob and our
-	 * decoder rejects it. Restrict to formats we actually handle. */
-    headers = curl_slist_append(
-        headers, "Accept: image/png,image/jpeg,image/gif,image/svg+xml,image/*;q=0.5,*/*;q=0.1");
-    headers = curl_slist_append(headers, "Accept-Language: en-US,en;q=0.9");
-    headers = curl_slist_append(headers, "Sec-Fetch-Dest: image");
-    headers = curl_slist_append(headers, "Sec-Fetch-Mode: no-cors");
-    headers = curl_slist_append(headers, "Sec-Fetch-Site: cross-site");
-    if (referer && *referer) {
-        curl_easy_setopt(c, CURLOPT_REFERER, referer);
-    }
-    if (headers) {
-        curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
-    }
-    double t_req = yetty_ylexbor_prof_now_ms();
-    CURLcode rc = curl_easy_perform(c);
-    long status = 0;
-    curl_easy_getinfo(c, CURLINFO_RESPONSE_CODE, &status);
-    yetty_ylexbor_prof("    HTTP %.0fms status=%ld bytes=%zu rc=%d %.90s",
-                       yetty_ylexbor_prof_now_ms() - t_req, status, b.size, (int)rc, url);
-    if (headers) {
-        curl_slist_free_all(headers);
-    }
-    curl_easy_cleanup(c);
-    if (rc != CURLE_OK) {
-        free(b.data);
-        return NULL;
-    }
-    if (out_len) {
-        *out_len = b.size;
-    }
-    if (out_status) {
-        *out_status = status;
-    }
-    if (b.data) {
-        b.data[b.size] = 0;
-    }
-    return b.data;
-}
-
-/* Configure one easy handle inside http_get_many with the same options
- * the sequential path uses. Extracted to avoid copy-paste drift. The
- * caller adds the curl_slist headers; we set everything else. */
-static void multi_configure_easy(CURL *c, const char *url, const char *referer, struct fetch_buf *b,
-                                 struct curl_slist *headers)
-{
-    pthread_once(&g_curl_share_once, share_init_once);
-    if (g_curl_share) {
-        curl_easy_setopt(c, CURLOPT_SHARE, g_curl_share);
-    }
-    curl_easy_setopt(c, CURLOPT_URL, url);
-    curl_easy_setopt(c, CURLOPT_FOLLOWLOCATION, 1L);
-    curl_easy_setopt(c, CURLOPT_MAXREDIRS, 10L);
-    const char *ua = getenv("YETTY_USER_AGENT");
-    if (!ua || !*ua) {
-        ua = "Mozilla/5.0 (X11; Linux x86_64) "
-             "AppleWebKit/537.36 (KHTML, like Gecko) "
-             "Chrome/120.0.0.0 Safari/537.36";
-    }
-    curl_easy_setopt(c, CURLOPT_USERAGENT, ua);
-    curl_easy_setopt(c, CURLOPT_TIMEOUT, 30L);
-    curl_easy_setopt(c, CURLOPT_CONNECTTIMEOUT, 10L);
-    curl_easy_setopt(c, CURLOPT_ACCEPT_ENCODING, "");
-    curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, fetch_write_cb);
-    curl_easy_setopt(c, CURLOPT_WRITEDATA, b);
-    if (referer && *referer) {
-        curl_easy_setopt(c, CURLOPT_REFERER, referer);
-    }
-    if (headers) {
-        curl_easy_setopt(c, CURLOPT_HTTPHEADER, headers);
-    }
-}
-
-void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *referer,
-                                 int concurrency, char **out_bodies, size_t *out_lens,
-                                 long *out_status)
-{
-    if (n <= 0) {
-        return;
-    }
-    if (concurrency < 1) {
-        concurrency = 1;
-    }
-    if (concurrency > n) {
-        concurrency = n;
-    }
-    yetty_ylexbor_prof("    http_get_many START n=%d conc=%d", n, concurrency);
-    double t_many = yetty_ylexbor_prof_now_ms();
-
-    /* Build the shared header list once — same set used by the
-	 * sequential path. curl_multi shares this slist among handles. */
-    struct curl_slist *headers = NULL;
-    headers = curl_slist_append(
-        headers, "Accept: image/png,image/jpeg,image/gif,image/svg+xml,image/*;q=0.5,*/*;q=0.1");
-    headers = curl_slist_append(headers, "Accept-Language: en-US,en;q=0.9");
-    headers = curl_slist_append(headers, "Sec-Fetch-Dest: image");
-    headers = curl_slist_append(headers, "Sec-Fetch-Mode: no-cors");
-    headers = curl_slist_append(headers, "Sec-Fetch-Site: cross-site");
-
-    /* Per-request scratch — one CURL*, one fetch_buf, one slot index.
-	 * Use a tag pointer (CURLOPT_PRIVATE) to recover the slot when a
-	 * handle finishes. */
-    struct slot {
-        CURL *c;
-        struct fetch_buf b;
-        int idx;
-        int started;
-        int done;
-    };
-    struct slot *slots = calloc((size_t)n, sizeof(*slots));
-    if (!slots) {
-        curl_slist_free_all(headers);
-        return;
-    }
-    for (int i = 0; i < n; i++) {
-        slots[i].idx = i;
-        out_bodies[i] = NULL;
-        out_lens[i] = 0;
-        out_status[i] = 0;
-    }
-
-    CURLM *mh = curl_multi_init();
-    if (!mh) {
-        curl_slist_free_all(headers);
-        free(slots);
-        return;
-    }
-    /* HTTP/2 multiplexing — when the server speaks H2, all in-flight
-	 * requests to the same origin share ONE TCP+TLS connection. This
-	 * is the big win vs sequential easy-handle calls. */
-    curl_multi_setopt(mh, CURLMOPT_PIPELINING, (long)CURLPIPE_MULTIPLEX);
-    curl_multi_setopt(mh, CURLMOPT_MAX_TOTAL_CONNECTIONS, (long)concurrency);
-    curl_multi_setopt(mh, CURLMOPT_MAX_HOST_CONNECTIONS, (long)concurrency);
-
-    /* Prime the first `concurrency` requests. */
-    int next_to_start = 0;
-    int running_handles = 0;
-    while (next_to_start < n && next_to_start < concurrency) {
-        struct slot *s = &slots[next_to_start];
-        s->c = curl_easy_init();
-        if (!s->c) {
-            next_to_start++;
-            continue;
-        }
-        multi_configure_easy(s->c, urls[next_to_start], referer, &s->b, headers);
-        curl_easy_setopt(s->c, CURLOPT_PRIVATE, s);
-        curl_multi_add_handle(mh, s->c);
-        s->started = 1;
-        next_to_start++;
-    }
-
-    do {
-        int numfds = 0;
-        curl_multi_perform(mh, &running_handles);
-        curl_multi_wait(mh, NULL, 0, 1000, &numfds);
-
-        /* Drain finished messages. */
-        int msgs_left = 0;
-        CURLMsg *m;
-        while ((m = curl_multi_info_read(mh, &msgs_left)) != NULL) {
-            if (m->msg != CURLMSG_DONE) {
-                continue;
-            }
-            struct slot *s = NULL;
-            curl_easy_getinfo(m->easy_handle, CURLINFO_PRIVATE, &s);
-            if (!s) {
-                continue;
-            }
-            long status = 0;
-            curl_easy_getinfo(m->easy_handle, CURLINFO_RESPONSE_CODE, &status);
-            if (m->data.result == CURLE_OK) {
-                if (s->b.data) {
-                    s->b.data[s->b.size] = 0;
-                }
-                out_bodies[s->idx] = s->b.data;
-                out_lens[s->idx] = s->b.size;
-                out_status[s->idx] = status;
+                hit = 1;
             } else {
-                free(s->b.data);
-                out_bodies[s->idx] = NULL;
-                out_lens[s->idx] = 0;
-                out_status[s->idx] = status;
-            }
-            curl_multi_remove_handle(mh, m->easy_handle);
-            curl_easy_cleanup(m->easy_handle);
-            s->c = NULL;
-            s->done = 1;
-
-            /* Start the next pending request. */
-            if (next_to_start < n) {
-                struct slot *ns = &slots[next_to_start];
-                ns->c = curl_easy_init();
-                if (ns->c) {
-                    multi_configure_easy(ns->c, urls[next_to_start], referer, &ns->b, headers);
-                    curl_easy_setopt(ns->c, CURLOPT_PRIVATE, ns);
-                    curl_multi_add_handle(mh, ns->c);
-                    ns->started = 1;
-                }
-                next_to_start++;
+                memset(response, 0, sizeof(*response));
             }
         }
-    } while (running_handles > 0 || next_to_start < n);
-
-    curl_multi_cleanup(mh);
-    curl_slist_free_all(headers);
-    free(slots);
-    yetty_ylexbor_prof("    http_get_many DONE  %.0f ms (n=%d)",
-                       yetty_ylexbor_prof_now_ms() - t_many, n);
+    }
+    pthread_mutex_unlock(&loader->cache_mutex);
+    return hit;
 }
 
-#else /* !YETTY_HAVE_CURL */
-
-char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status)
+/* Store a fresh 2xx response. `cache_control` is the captured response
+ * header value ("" when the server sent none). */
+static void loader_cache_store(struct yetty_ybrowser_loader *loader,
+                               const struct yetty_ybrowser_request *request,
+                               const struct yetty_ybrowser_response *response,
+                               const char *cache_control)
 {
-    (void)url;
+    if (!loader || !loader_cache_kind_ok(request) || !response->body || response->status < 200 ||
+        response->status >= 300) {
+        return;
+    }
+    long ttl_seconds = LOADER_CACHE_DEFAULT_TTL_SECONDS;
+    if (cache_control && *cache_control) {
+        if (strstr(cache_control, "no-store") || strstr(cache_control, "no-cache")) {
+            return;
+        }
+        const char *max_age = strstr(cache_control, "max-age=");
+        if (max_age) {
+            ttl_seconds = atol(max_age + 8);
+            if (ttl_seconds <= 0) {
+                return;
+            }
+        }
+    }
+    if (response->body_len > LOADER_CACHE_BUDGET / 4) {
+        return; /* one entry must not dominate the budget */
+    }
+    pthread_mutex_lock(&loader->cache_mutex);
+    if (loader_cache_find(loader, request->url) >= 0) {
+        pthread_mutex_unlock(&loader->cache_mutex); /* raced fetch already stored it */
+        return;
+    }
+    if (loader->cache_count == loader->cache_cap) {
+        int new_cap = loader->cache_cap ? loader->cache_cap * 2 : 32;
+        struct loader_cache_entry *entries =
+            realloc(loader->cache_entries, (size_t)new_cap * sizeof(*entries));
+        if (!entries) {
+            pthread_mutex_unlock(&loader->cache_mutex);
+            return;
+        }
+        loader->cache_entries = entries;
+        loader->cache_cap = new_cap;
+    }
+    struct loader_cache_entry *entry = &loader->cache_entries[loader->cache_count];
+    memset(entry, 0, sizeof(*entry));
+    entry->url = strdup(request->url);
+    entry->bytes = malloc(response->body_len + 1);
+    if (!entry->url || !entry->bytes) {
+        loader_cache_entry_free(entry);
+        pthread_mutex_unlock(&loader->cache_mutex);
+        return;
+    }
+    memcpy(entry->bytes, response->body, response->body_len);
+    entry->bytes[response->body_len] = '\0';
+    entry->bytes_len = response->body_len;
+    entry->status = response->status;
+    entry->content_type = response->content_type ? strdup(response->content_type) : NULL;
+    entry->effective_url = response->effective_url ? strdup(response->effective_url) : NULL;
+    entry->expires_at = time(NULL) + ttl_seconds;
+    entry->last_used_tick = ++loader->cache_tick;
+    entry->charge = response->body_len;
+    loader->cache_count++;
+    loader->cache_charge += entry->charge;
+    loader_cache_evict(loader);
+    pthread_mutex_unlock(&loader->cache_mutex);
+}
+
+/* Publish decoded pixels onto an existing cache entry so the NEXT
+ * navigation skips the decode as well as the network. Copies. */
+void yetty_ybrowser_loader_cache_put_pixels(struct yetty_ybrowser_loader *loader, const char *url,
+                                            const uint32_t *pixels, int width, int height)
+{
+    if (!loader || !url || !pixels || width <= 0 || height <= 0) {
+        return;
+    }
+    size_t pixel_bytes = (size_t)width * (size_t)height * 4;
+    if (pixel_bytes > LOADER_CACHE_BUDGET / 4) {
+        return;
+    }
+    pthread_mutex_lock(&loader->cache_mutex);
+    int idx = loader_cache_find(loader, url);
+    if (idx >= 0 && !loader->cache_entries[idx].pixels) {
+        struct loader_cache_entry *entry = &loader->cache_entries[idx];
+        entry->pixels = malloc(pixel_bytes);
+        if (entry->pixels) {
+            memcpy(entry->pixels, pixels, pixel_bytes);
+            entry->pixels_width = width;
+            entry->pixels_height = height;
+            entry->charge += pixel_bytes;
+            loader->cache_charge += pixel_bytes;
+            loader_cache_evict(loader);
+        }
+    }
+    pthread_mutex_unlock(&loader->cache_mutex);
+}
+
+static void share_lock_cb(CURL *handle, curl_lock_data data, curl_lock_access access,
+                          void *userdata)
+{
+    (void)handle;
+    (void)access;
+    struct yetty_ybrowser_loader *loader = userdata;
+    if (data < CURL_LOCK_DATA_LAST) {
+        pthread_mutex_lock(&loader->share_locks[data]);
+    }
+}
+static void share_unlock_cb(CURL *handle, curl_lock_data data, void *userdata)
+{
+    (void)handle;
+    struct yetty_ybrowser_loader *loader = userdata;
+    if (data < CURL_LOCK_DATA_LAST) {
+        pthread_mutex_unlock(&loader->share_locks[data]);
+    }
+}
+
+struct yetty_ybrowser_loader_ptr_result yetty_ybrowser_loader_create(void)
+{
+    struct yetty_ybrowser_loader *loader = calloc(1, sizeof(*loader));
+    if (loader == NULL) {
+        return YETTY_ERR(yetty_ybrowser_loader_ptr, "loader alloc");
+    }
+    for (int i = 0; i < CURL_LOCK_DATA_LAST; i++) {
+        pthread_mutex_init(&loader->share_locks[i], NULL);
+    }
+    pthread_mutex_init(&loader->cache_mutex, NULL);
+    loader->share = curl_share_init();
+    if (loader->share) {
+        curl_share_setopt(loader->share, CURLSHOPT_LOCKFUNC, share_lock_cb);
+        curl_share_setopt(loader->share, CURLSHOPT_UNLOCKFUNC, share_unlock_cb);
+        curl_share_setopt(loader->share, CURLSHOPT_USERDATA, loader);
+        /* Share the four caches that matter for repeated same-host
+		 * fetches. CONNECT is the big one — keeps the TCP+TLS connection
+		 * alive across easy handle lifetimes. DNS and SSL_SESSION are
+		 * smaller wins but free. */
+        curl_share_setopt(loader->share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+        curl_share_setopt(loader->share, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
+#ifdef CURL_LOCK_DATA_CONNECT
+        curl_share_setopt(loader->share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+#endif
+        curl_share_setopt(loader->share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
+    }
+    /* Alt-Svc cache file — lets a second visit to an H3-capable origin
+	 * skip the H2 round and go straight to HTTP/3. Only when this build
+	 * of libcurl actually speaks H3. */
+#if defined(CURLOPT_ALTSVC) && defined(CURL_VERSION_HTTP3)
+    {
+        curl_version_info_data *version_info = curl_version_info(CURLVERSION_NOW);
+        if (version_info && (version_info->features & CURL_VERSION_HTTP3)) {
+            const char *xdg = getenv("XDG_CACHE_HOME");
+            const char *home = getenv("HOME");
+            if (xdg && *xdg) {
+                snprintf(loader->altsvc_path, sizeof(loader->altsvc_path), "%s/yetty/altsvc-cache",
+                         xdg);
+            } else if (home && *home) {
+                snprintf(loader->altsvc_path, sizeof(loader->altsvc_path),
+                         "%s/.cache/yetty/altsvc-cache", home);
+            }
+        }
+    }
+#endif
+    return YETTY_OK(yetty_ybrowser_loader_ptr, loader);
+}
+
+struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrowser_loader *loader)
+{
+    if (loader == NULL) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result res = YETTY_OK_VOID();
+    if (loader->share) {
+        CURLSHcode code = curl_share_cleanup(loader->share);
+        if (code != CURLSHE_OK) {
+            res = YETTY_ERR(yetty_ycore_void, "curl_share_cleanup failed");
+        }
+    }
+    for (int i = 0; i < CURL_LOCK_DATA_LAST; i++) {
+        pthread_mutex_destroy(&loader->share_locks[i]);
+    }
+    for (int i = 0; i < loader->cache_count; i++) {
+        loader_cache_entry_free(&loader->cache_entries[i]);
+    }
+    free(loader->cache_entries);
+    pthread_mutex_destroy(&loader->cache_mutex);
+    free(loader);
+    return res;
+}
+
+void *yetty_ybrowser_loader_curl_share(struct yetty_ybrowser_loader *loader)
+{
+    return loader ? loader->share : NULL;
+}
+
+/* Apply the loader-owned bits (share handle, Alt-Svc cache) to one easy
+ * handle. Shared by the sequential and curl_multi paths so both get
+ * connection reuse AND HTTP/3 upgrades. */
+static void loader_configure_easy(struct yetty_ybrowser_loader *loader, CURL *easy)
+{
+    if (!loader) {
+        return;
+    }
+    if (loader->share) {
+        curl_easy_setopt(easy, CURLOPT_SHARE, loader->share);
+    }
+#ifdef CURLOPT_ALTSVC
+    if (loader->altsvc_path[0]) {
+        curl_easy_setopt(easy, CURLOPT_ALTSVC, loader->altsvc_path);
+        /* Permit h1/h2/h3 alternates. */
+#ifdef CURLALTSVC_H1
+        curl_easy_setopt(easy, CURLOPT_ALTSVC_CTRL,
+                         (long)(CURLALTSVC_H1 | CURLALTSVC_H2 | CURLALTSVC_H3));
+#endif
+    }
+#endif
+}
+
+/* file:// — read directly since libcurl is often built without the FILE
+ * protocol. Used heavily by the WPT integration runner to load
+ * `<script src=...>` siblings of the test page, and by fetch_many for
+ * local stylesheet links. Returns a malloc'd NUL-terminated buffer;
+ * *out_status is 200 on success, 0 on failure. */
+static char *fetch_local_file(const char *url, size_t *out_len, long *out_status)
+{
     if (out_len) {
         *out_len = 0;
     }
     if (out_status) {
         *out_status = 0;
     }
-    return NULL;
+    const char *path = url + 7; /* past "file://" */
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return NULL;
+    }
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (sz < 0) {
+        fclose(f);
+        return NULL;
+    }
+    char *buf = malloc((size_t)sz + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+    size_t got = fread(buf, 1, (size_t)sz, f);
+    fclose(f);
+    buf[got] = '\0';
+    if (out_len) {
+        *out_len = got;
+    }
+    if (out_status) {
+        *out_status = 200;
+    }
+    return buf;
 }
 
-void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *referer,
-                                 int concurrency, char **out_bodies, size_t *out_lens,
-                                 long *out_status)
+/* ===========================================================================
+ * Request → response. One configuration path for the sequential and the
+ * curl_multi fetchers, with headers derived from what the resource IS
+ * (document / stylesheet / script / image / API call) — content-
+ * negotiating CDNs and WAFs key on exactly these hints, and claiming
+ * "image" for a stylesheet gets the wrong (or no) representation.
+ * ===========================================================================*/
+
+/* Scheme-less host span of a URL — for the Sec-Fetch-Site hint. */
+static int url_host_span(const char *url, const char **out_start, size_t *out_len)
 {
-    (void)urls;
-    (void)referer;
-    (void)concurrency;
-    for (int i = 0; i < n; i++) {
-        out_bodies[i] = NULL;
-        out_lens[i] = 0;
-        out_status[i] = 0;
+    const char *scheme_end = strstr(url, "://");
+    if (!scheme_end) {
+        return 0;
+    }
+    const char *host = scheme_end + 3;
+    size_t len = strcspn(host, "/?#");
+    *out_start = host;
+    *out_len = len;
+    return len > 0;
+}
+
+/* We don't model registrable domains, so a subdomain reports cross-site
+ * where Chrome would say same-site; servers treat both as "not
+ * same-origin", which is the distinction the gatekeepers key on. */
+static const char *sec_fetch_site_for(const char *url, const char *referer)
+{
+    if (!referer || !*referer) {
+        return "none";
+    }
+    const char *url_host = NULL, *referer_host = NULL;
+    size_t url_host_len = 0, referer_host_len = 0;
+    if (!url_host_span(url, &url_host, &url_host_len) ||
+        !url_host_span(referer, &referer_host, &referer_host_len)) {
+        return "cross-site";
+    }
+    if (url_host_len == referer_host_len &&
+        strncasecmp(url_host, referer_host, url_host_len) == 0) {
+        return "same-origin";
+    }
+    return "cross-site";
+}
+
+static struct curl_slist *build_request_headers(const struct yetty_ybrowser_request *request)
+{
+    struct curl_slist *headers = NULL;
+    switch (request->kind) {
+    case YETTY_YBROWSER_REQUEST_DOCUMENT:
+        /* Wikipedia's caching tier serves the lightweight bot variant of
+		 * pages to requests without a browser-shape Accept header. */
+        headers = curl_slist_append(
+            headers, "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+        headers = curl_slist_append(headers, "Sec-Fetch-Dest: document");
+        headers = curl_slist_append(headers, "Sec-Fetch-Mode: navigate");
+        headers = curl_slist_append(headers, "Sec-Fetch-User: ?1");
+        headers = curl_slist_append(headers, "Upgrade-Insecure-Requests: 1");
+        break;
+    case YETTY_YBROWSER_REQUEST_STYLE:
+        headers = curl_slist_append(headers, "Accept: text/css,*/*;q=0.1");
+        headers = curl_slist_append(headers, "Sec-Fetch-Dest: style");
+        headers = curl_slist_append(headers, "Sec-Fetch-Mode: no-cors");
+        break;
+    case YETTY_YBROWSER_REQUEST_SCRIPT:
+        headers = curl_slist_append(headers, "Accept: */*");
+        headers = curl_slist_append(headers, "Sec-Fetch-Dest: script");
+        headers = curl_slist_append(headers, "Sec-Fetch-Mode: no-cors");
+        break;
+    case YETTY_YBROWSER_REQUEST_IMAGE:
+        /* IMPORTANT: do NOT advertise avif/apng — content-negotiating
+		 * CDNs (notably Wikimedia) will serve those formats over
+		 * PNG/JPEG when the URL itself ends in .png, and we can't
+		 * decode them. Restrict to formats the decoders handle. */
+        headers = curl_slist_append(
+            headers,
+            "Accept: image/png,image/jpeg,image/gif,image/svg+xml,image/*;q=0.5,*/*;q=0.1");
+        headers = curl_slist_append(headers, "Sec-Fetch-Dest: image");
+        headers = curl_slist_append(headers, "Sec-Fetch-Mode: no-cors");
+        break;
+    case YETTY_YBROWSER_REQUEST_XHR:
+        headers = curl_slist_append(headers, "Accept: */*");
+        headers = curl_slist_append(headers, "Sec-Fetch-Dest: empty");
+        headers = curl_slist_append(headers, "Sec-Fetch-Mode: cors");
+        break;
+    }
+    headers = curl_slist_append(headers, "Accept-Language: en-US,en;q=0.9");
+    {
+        char site_header[96];
+        snprintf(site_header, sizeof(site_header), "Sec-Fetch-Site: %s",
+                 sec_fetch_site_for(request->url, request->referer));
+        headers = curl_slist_append(headers, site_header);
+    }
+    /* Caller-supplied headers last (fetch()/XHR: Authorization,
+	 * Content-Type, X-*). */
+    for (int i = 0; i < request->extra_header_count; i++) {
+        if (request->extra_headers[i] && request->extra_headers[i][0]) {
+            headers = curl_slist_append(headers, request->extra_headers[i]);
+        }
+    }
+    return headers;
+}
+
+/* Everything below the loader bits that both fetch paths share. */
+static void fetch_configure_easy(struct yetty_ybrowser_loader *loader, CURL *easy,
+                                 const struct yetty_ybrowser_request *request,
+                                 struct fetch_transfer *transfer, struct curl_slist *headers)
+{
+    loader_configure_easy(loader, easy);
+    curl_easy_setopt(easy, CURLOPT_URL, request->url);
+    curl_easy_setopt(easy, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(easy, CURLOPT_MAXREDIRS, 10L);
+    /* Send a standard Chrome User-Agent so CDNs treat us as a real
+	 * browser. Wikimedia's bot-throttling, news.google.com's image
+	 * gate, and several CloudFlare WAFs all behave very differently
+	 * for unidentified vs browser UAs. The env var lets ops override
+	 * for cases where bot-identifying UAs are required by ToS. */
+    const char *user_agent = getenv("YETTY_USER_AGENT");
+    if (!user_agent || !*user_agent) {
+        user_agent = "Mozilla/5.0 (X11; Linux x86_64) "
+                     "AppleWebKit/537.36 (KHTML, like Gecko) "
+                     "Chrome/120.0.0.0 Safari/537.36";
+    }
+    curl_easy_setopt(easy, CURLOPT_USERAGENT, user_agent);
+    curl_easy_setopt(easy, CURLOPT_TIMEOUT, 30L);
+    curl_easy_setopt(easy, CURLOPT_CONNECTTIMEOUT, 10L);
+    /* Fail dead connections fast: under 1 KB/s for 15 s means the peer
+	 * is gone; don't sit out the full 30 s wall-clock cap. */
+    curl_easy_setopt(easy, CURLOPT_LOW_SPEED_LIMIT, 1024L);
+    curl_easy_setopt(easy, CURLOPT_LOW_SPEED_TIME, 15L);
+    /* Bigger receive buffer = fewer write-callback invocations on image
+	 * transfers (default is 16 KB). */
+    curl_easy_setopt(easy, CURLOPT_BUFFERSIZE, 262144L);
+    /* Library used from worker threads — no signal-based timeouts. */
+    curl_easy_setopt(easy, CURLOPT_NOSIGNAL, 1L);
+    /* Reject oversized Content-Length before the transfer starts; the
+	 * write callback still guards chunked/streamed responses. */
+    curl_easy_setopt(easy, CURLOPT_MAXFILESIZE_LARGE, (curl_off_t)FETCH_MAX_RESPONSE);
+    curl_easy_setopt(easy, CURLOPT_ACCEPT_ENCODING, "");
+    /* Enable the cookie engine (empty COOKIEFILE = no file, just parse)
+	 * for SUBRESOURCE and API fetches — session-gated image CDNs and
+	 * affinity-routed sheets need the cookies the document's redirect
+	 * chain set (shared across handles via CURL_LOCK_DATA_COOKIE on the
+	 * loader). Deliberately NOT for DOCUMENT navigations: cookie-capable
+	 * page requests make variant-sniffing sites serve their JS-heavy SPA
+	 * shell (news.google.com drops from 1.7 MB of static article markup
+	 * to a 650 KB shell our JS can't boot), while the cookie-less page
+	 * fetch gets the static variant this engine renders well. Revisit
+	 * when the JS surface can boot those shells. */
+    if (request->kind != YETTY_YBROWSER_REQUEST_DOCUMENT) {
+        curl_easy_setopt(easy, CURLOPT_COOKIEFILE, "");
+    }
+    curl_easy_setopt(easy, CURLOPT_WRITEFUNCTION, fetch_write_cb);
+    curl_easy_setopt(easy, CURLOPT_WRITEDATA, transfer);
+    curl_easy_setopt(easy, CURLOPT_HEADERFUNCTION, fetch_header_cb);
+    curl_easy_setopt(easy, CURLOPT_HEADERDATA, transfer);
+    if (request->referer && *request->referer) {
+        curl_easy_setopt(easy, CURLOPT_REFERER, request->referer);
+    }
+    if (headers) {
+        curl_easy_setopt(easy, CURLOPT_HTTPHEADER, headers);
+    }
+    /* Method + body (fetch()/XHR). COPYPOSTFIELDS keeps its own copy so
+	 * async jobs don't have to keep the caller's buffer alive. */
+    if (request->body && request->body_len > 0) {
+        curl_easy_setopt(easy, CURLOPT_POSTFIELDSIZE_LARGE, (curl_off_t)request->body_len);
+        curl_easy_setopt(easy, CURLOPT_COPYPOSTFIELDS, request->body);
+    }
+    if (request->method && *request->method && strcasecmp(request->method, "GET") != 0 &&
+        !(strcasecmp(request->method, "POST") == 0 && request->body)) {
+        curl_easy_setopt(easy, CURLOPT_CUSTOMREQUEST, request->method);
     }
 }
 
-void *yetty_ylexbor_curl_share(void)
+/* Move the transfer result into the response. Consumes the transfer's
+ * buffer on success; frees it on failure. */
+static void fetch_finish_response(CURL *easy, CURLcode curl_code, struct fetch_transfer *transfer,
+                                  struct yetty_ybrowser_response *response)
 {
+    long status = 0;
+    curl_easy_getinfo(easy, CURLINFO_RESPONSE_CODE, &status);
+    if (curl_code != CURLE_OK) {
+        free(transfer->data);
+        transfer->data = NULL;
+        response->status = 0;
+        return;
+    }
+    response->status = status;
+    if (transfer->data) {
+        transfer->data[transfer->size] = 0;
+    }
+    response->body = transfer->data;
+    response->body_len = transfer->size;
+    transfer->data = NULL;
+    char *effective_url = NULL;
+    if (curl_easy_getinfo(easy, CURLINFO_EFFECTIVE_URL, &effective_url) == CURLE_OK &&
+        effective_url && *effective_url) {
+        response->effective_url = strdup(effective_url);
+    }
+    char *content_type = NULL;
+    if (curl_easy_getinfo(easy, CURLINFO_CONTENT_TYPE, &content_type) == CURLE_OK && content_type &&
+        *content_type) {
+        response->content_type = strdup(content_type);
+    }
+}
+
+struct yetty_ycore_void_result yetty_ybrowser_fetch(struct yetty_ybrowser_loader *loader,
+                                                    const struct yetty_ybrowser_request *request,
+                                                    struct yetty_ybrowser_response *response)
+{
+    if (!request || !request->url || !response) {
+        return YETTY_ERR(yetty_ycore_void, "ybrowser_fetch: null request/response");
+    }
+    memset(response, 0, sizeof(*response));
+    if (strncmp(request->url, "file://", 7) == 0) {
+        response->body = fetch_local_file(request->url, &response->body_len, &response->status);
+        return YETTY_OK_VOID();
+    }
+    if (loader_cache_lookup(loader, request, response)) {
+        yetty_ylexbor_prof("    HTTP cache-hit bytes=%zu %.90s", response->body_len, request->url);
+        return YETTY_OK_VOID();
+    }
+    CURL *easy = curl_easy_init();
+    if (!easy) {
+        return YETTY_ERR(yetty_ycore_void, "ybrowser_fetch: curl_easy_init");
+    }
+    struct fetch_transfer transfer = {0};
+    transfer.generation = request->generation;
+    transfer.cancel_generation = request->cancel_generation;
+    struct curl_slist *headers = build_request_headers(request);
+    fetch_configure_easy(loader, easy, request, &transfer, headers);
+    double t_request = yetty_ylexbor_prof_now_ms();
+    CURLcode curl_code = curl_easy_perform(easy);
+    fetch_finish_response(easy, curl_code, &transfer, response);
+    yetty_ylexbor_prof("    HTTP %.0fms status=%ld bytes=%zu rc=%d kind=%d %.90s",
+                       yetty_ylexbor_prof_now_ms() - t_request, response->status,
+                       response->body_len, (int)curl_code, (int)request->kind, request->url);
+    loader_cache_store(loader, request, response, transfer.cache_control);
+    curl_slist_free_all(headers);
+    curl_easy_cleanup(easy);
+    return YETTY_OK_VOID();
+}
+
+void yetty_ybrowser_response_dispose(struct yetty_ybrowser_response *response)
+{
+    if (!response) {
+        return;
+    }
+    free(response->body);
+    free(response->effective_url);
+    free(response->content_type);
+    free(response->image_pixels);
+    memset(response, 0, sizeof(*response));
+}
+
+struct yetty_ycore_void_result yetty_ybrowser_fetch_many(
+    struct yetty_ybrowser_loader *loader, const struct yetty_ybrowser_request *requests, int count,
+    struct yetty_ybrowser_response *responses, int host_connection_cap)
+{
+    if (count <= 0) {
+        return YETTY_OK_VOID();
+    }
+    if (!requests || !responses) {
+        return YETTY_ERR(yetty_ycore_void, "ybrowser_fetch_many: null arrays");
+    }
+    if (host_connection_cap < 1) {
+        host_connection_cap = 1;
+    }
+    yetty_ylexbor_prof("    fetch_many START n=%d host_conns=%d", count, host_connection_cap);
+    double t_many = yetty_ylexbor_prof_now_ms();
+    memset(responses, 0, (size_t)count * sizeof(*responses));
+
+    /* Per-request scratch — a tag pointer (CURLOPT_PRIVATE) recovers the
+	 * slot when a handle finishes. */
+    struct fetch_slot {
+        CURL *easy;
+        struct fetch_transfer transfer;
+        struct curl_slist *headers;
+        int idx;
+    };
+    struct fetch_slot *slots = calloc((size_t)count, sizeof(*slots));
+    if (!slots) {
+        return YETTY_ERR(yetty_ycore_void, "ybrowser_fetch_many: slots alloc");
+    }
+    CURLM *multi = curl_multi_init();
+    if (!multi) {
+        free(slots);
+        return YETTY_ERR(yetty_ycore_void, "ybrowser_fetch_many: curl_multi_init");
+    }
+    /* HTTP/2 multiplexing — when the server speaks H2, concurrent
+	 * requests to the same origin share ONE TCP+TLS connection as
+	 * parallel streams. ALL transfers are added up front so libcurl can
+	 * multiplex the lot; the cap only limits CONNECTIONS per host (the
+	 * limit that matters for H1-only origins), not streams. */
+    curl_multi_setopt(multi, CURLMOPT_PIPELINING, (long)CURLPIPE_MULTIPLEX);
+    curl_multi_setopt(multi, CURLMOPT_MAX_HOST_CONNECTIONS, (long)host_connection_cap);
+    curl_multi_setopt(multi, CURLMOPT_MAX_TOTAL_CONNECTIONS, (long)(4 * host_connection_cap));
+
+    int added = 0;
+    for (int i = 0; i < count; i++) {
+        const struct yetty_ybrowser_request *request = &requests[i];
+        if (!request->url) {
+            continue;
+        }
+        /* file:// — libcurl is often built without the FILE protocol;
+		 * serve those slots directly (WPT pages link local sheets). */
+        if (strncmp(request->url, "file://", 7) == 0) {
+            responses[i].body =
+                fetch_local_file(request->url, &responses[i].body_len, &responses[i].status);
+            continue;
+        }
+        if (loader_cache_lookup(loader, request, &responses[i])) {
+            continue;
+        }
+        struct fetch_slot *slot = &slots[i];
+        slot->idx = i;
+        slot->easy = curl_easy_init();
+        if (!slot->easy) {
+            continue; /* slot stays failed (NULL body, status 0) */
+        }
+        slot->transfer.generation = request->generation;
+        slot->transfer.cancel_generation = request->cancel_generation;
+        slot->headers = build_request_headers(request);
+        fetch_configure_easy(loader, slot->easy, request, &slot->transfer, slot->headers);
+        curl_easy_setopt(slot->easy, CURLOPT_PRIVATE, slot);
+        if (curl_multi_add_handle(multi, slot->easy) != CURLM_OK) {
+            curl_easy_cleanup(slot->easy);
+            slot->easy = NULL;
+            continue;
+        }
+        added++;
+    }
+
+    /* Drive the transfers. Terminates when libcurl reports no running
+	 * handles — every added transfer has completed. curl_multi_poll (vs
+	 * _wait) actually sleeps when libcurl has no fds to watch — e.g.
+	 * during threaded-resolver DNS lookups — instead of returning
+	 * immediately and spinning this loop at 100% CPU. */
+    int running_handles = added;
+    while (running_handles > 0) {
+        CURLMcode multi_code = curl_multi_perform(multi, &running_handles);
+        if (multi_code != CURLM_OK) {
+            break;
+        }
+        if (running_handles > 0) {
+            int numfds = 0;
+            if (curl_multi_poll(multi, NULL, 0, 1000, &numfds) != CURLM_OK) {
+                break;
+            }
+        }
+        int msgs_left = 0;
+        CURLMsg *message;
+        while ((message = curl_multi_info_read(multi, &msgs_left)) != NULL) {
+            if (message->msg != CURLMSG_DONE) {
+                continue;
+            }
+            struct fetch_slot *slot = NULL;
+            curl_easy_getinfo(message->easy_handle, CURLINFO_PRIVATE, &slot);
+            if (!slot) {
+                continue;
+            }
+            fetch_finish_response(message->easy_handle, message->data.result, &slot->transfer,
+                                  &responses[slot->idx]);
+            loader_cache_store(loader, &requests[slot->idx], &responses[slot->idx],
+                               slot->transfer.cache_control);
+            curl_multi_remove_handle(multi, message->easy_handle);
+            curl_easy_cleanup(message->easy_handle);
+            slot->easy = NULL;
+        }
+    }
+
+    /* An early break (multi error) can leave transfers unfinished —
+	 * release their handles and buffers so nothing leaks. */
+    for (int i = 0; i < count; i++) {
+        if (slots[i].easy) {
+            curl_multi_remove_handle(multi, slots[i].easy);
+            curl_easy_cleanup(slots[i].easy);
+            free(slots[i].transfer.data);
+            slots[i].easy = NULL;
+        }
+        curl_slist_free_all(slots[i].headers);
+    }
+    curl_multi_cleanup(multi);
+    free(slots);
+    yetty_ylexbor_prof("    fetch_many DONE  %.0f ms (n=%d)", yetty_ylexbor_prof_now_ms() - t_many,
+                       count);
+    return YETTY_OK_VOID();
+}
+
+#else /* !YETTY_HAVE_CURL */
+
+void yetty_ybrowser_response_dispose(struct yetty_ybrowser_response *response)
+{
+    if (!response) {
+        return;
+    }
+    free(response->body);
+    free(response->effective_url);
+    free(response->content_type);
+    free(response->image_pixels);
+    memset(response, 0, sizeof(*response));
+}
+
+struct yetty_ycore_void_result yetty_ybrowser_fetch(struct yetty_ybrowser_loader *loader,
+                                                    const struct yetty_ybrowser_request *request,
+                                                    struct yetty_ybrowser_response *response)
+{
+    (void)loader;
+    (void)request;
+    if (response) {
+        memset(response, 0, sizeof(*response));
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ybrowser_fetch_many(
+    struct yetty_ybrowser_loader *loader, const struct yetty_ybrowser_request *requests, int count,
+    struct yetty_ybrowser_response *responses, int host_connection_cap)
+{
+    (void)loader;
+    (void)requests;
+    (void)host_connection_cap;
+    if (responses && count > 0) {
+        memset(responses, 0, (size_t)count * sizeof(*responses));
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Without libcurl there is nothing to own, but the lifecycle must still
+ * work so hosts can be compiled either way. */
+struct yetty_ybrowser_loader {
+    int unused;
+};
+
+struct yetty_ybrowser_loader_ptr_result yetty_ybrowser_loader_create(void)
+{
+    struct yetty_ybrowser_loader *loader = calloc(1, sizeof(*loader));
+    if (loader == NULL) {
+        return YETTY_ERR(yetty_ybrowser_loader_ptr, "loader alloc");
+    }
+    return YETTY_OK(yetty_ybrowser_loader_ptr, loader);
+}
+
+struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrowser_loader *loader)
+{
+    free(loader);
+    return YETTY_OK_VOID();
+}
+
+void *yetty_ybrowser_loader_curl_share(struct yetty_ybrowser_loader *loader)
+{
+    (void)loader;
     return NULL;
+}
+
+void yetty_ybrowser_loader_cache_put_pixels(struct yetty_ybrowser_loader *loader, const char *url,
+                                            const uint32_t *pixels, int width, int height)
+{
+    (void)loader;
+    (void)url;
+    (void)pixels;
+    (void)width;
+    (void)height;
 }
 
 #endif /* YETTY_HAVE_CURL */
@@ -989,6 +1461,191 @@ static JSValue make_response(JSContext *ctx, char *body, size_t len, long status
     return resp;
 }
 
+/* Owned copies of everything a fetch() call needs off the JS thread. */
+struct js_fetch_params {
+    char *url;
+    char *method;
+    char *body;
+    size_t body_len;
+    char **header_lines;
+    int header_count;
+};
+
+static void js_fetch_params_free(struct js_fetch_params *params)
+{
+    free(params->url);
+    free(params->method);
+    free(params->body);
+    for (int i = 0; i < params->header_count; i++) {
+        free(params->header_lines[i]);
+    }
+    free(params->header_lines);
+    memset(params, 0, sizeof(*params));
+}
+
+/* Parse the fetch() init object: method, body (string), headers (plain
+ * object of name → value). Anything else (FormData, streams, signals)
+ * is ignored — existence is enough for the SPA boot paths we serve. */
+static void js_fetch_parse_init(JSContext *ctx, JSValueConst init, struct js_fetch_params *params)
+{
+    if (!JS_IsObject(init)) {
+        return;
+    }
+    JSValue method_val = JS_GetPropertyStr(ctx, init, "method");
+    if (JS_IsString(method_val)) {
+        const char *method = JS_ToCString(ctx, method_val);
+        if (method) {
+            params->method = strdup(method);
+            JS_FreeCString(ctx, method);
+        }
+    }
+    JS_FreeValue(ctx, method_val);
+
+    JSValue body_val = JS_GetPropertyStr(ctx, init, "body");
+    if (JS_IsString(body_val)) {
+        size_t body_len = 0;
+        const char *body = JS_ToCStringLen(ctx, &body_len, body_val);
+        if (body) {
+            params->body = malloc(body_len + 1);
+            if (params->body) {
+                memcpy(params->body, body, body_len);
+                params->body[body_len] = '\0';
+                params->body_len = body_len;
+            }
+            JS_FreeCString(ctx, body);
+        }
+    }
+    JS_FreeValue(ctx, body_val);
+
+    JSValue headers_val = JS_GetPropertyStr(ctx, init, "headers");
+    if (JS_IsObject(headers_val)) {
+        JSPropertyEnum *props = NULL;
+        uint32_t prop_count = 0;
+        if (JS_GetOwnPropertyNames(ctx, &props, &prop_count, headers_val,
+                                   JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) == 0) {
+            params->header_lines =
+                calloc(prop_count ? prop_count : 1, sizeof(*params->header_lines));
+            for (uint32_t i = 0; params->header_lines && i < prop_count; i++) {
+                const char *name = JS_AtomToCString(ctx, props[i].atom);
+                JSValue value_val = JS_GetProperty(ctx, headers_val, props[i].atom);
+                const char *value = JS_ToCString(ctx, value_val);
+                if (name && value) {
+                    size_t line_len = strlen(name) + 2 + strlen(value) + 1;
+                    char *line = malloc(line_len);
+                    if (line) {
+                        snprintf(line, line_len, "%s: %s", name, value);
+                        params->header_lines[params->header_count++] = line;
+                    }
+                }
+                if (name) {
+                    JS_FreeCString(ctx, name);
+                }
+                if (value) {
+                    JS_FreeCString(ctx, value);
+                }
+                JS_FreeValue(ctx, value_val);
+            }
+            JS_FreePropertyEnum(ctx, props, prop_count);
+        }
+    }
+    JS_FreeValue(ctx, headers_val);
+}
+
+/* Deliver a completed fetch to JS: resolve with a Response (transfers
+ * body ownership to make_response) or reject with a network error. */
+static void js_fetch_deliver(JSContext *ctx, struct yetty_ybrowser_response *response,
+                             JSValueConst resolve_func, JSValueConst reject_func)
+{
+    if (response->body || response->status != 0) {
+        JSValue response_obj =
+            make_response(ctx, response->body, response->body_len, response->status);
+        response->body = NULL; /* ownership moved to make_response */
+        JS_Call(ctx, resolve_func, JS_UNDEFINED, 1, (JSValueConst[]){response_obj});
+        JS_FreeValue(ctx, response_obj);
+    } else {
+        JSValue error_obj = JS_NewError(ctx);
+        JS_SetPropertyStr(ctx, error_obj, "message", JS_NewString(ctx, "fetch: network error"));
+        JS_Call(ctx, reject_func, JS_UNDEFINED, 1, (JSValueConst[]){error_obj});
+        JS_FreeValue(ctx, error_obj);
+    }
+}
+
+/* Async fetch job — the network transfer runs on a worker thread; the
+ * promise resolves back on the loop thread. Same lifetime discipline as
+ * the image jobs in ybrowser-paint.c: the engine defers teardown until
+ * every job drains, so `r` (and its js context) outlive the job. */
+struct js_fetch_job {
+    struct yetty_ylexbor *r;
+    uint64_t generation;
+    struct yetty_ybrowser_loader *loader;
+    struct js_fetch_params params; /* owned */
+    char *referer;                 /* owned copy of base_url */
+    struct yetty_ybrowser_response response;
+    JSContext *ctx;
+    JSValue resolve_func, reject_func; /* dup'd refs, freed in done() */
+};
+
+/* WORKER THREAD — touches only the job's own copies, never the engine
+ * (except the read-only cancel counter, which the deferred teardown
+ * keeps alive for the job's whole life). */
+static void js_fetch_job_run(void *job_ptr)
+{
+    struct js_fetch_job *job = job_ptr;
+    struct yetty_ybrowser_request request = {
+        .url = job->params.url,
+        .kind = YETTY_YBROWSER_REQUEST_XHR,
+        .referer = job->referer,
+        .method = job->params.method,
+        .body = job->params.body,
+        .body_len = job->params.body_len,
+        .extra_headers = (const char *const *)job->params.header_lines,
+        .extra_header_count = job->params.header_count,
+        .generation = job->generation,
+        .cancel_generation = &job->r->fetch_generation,
+    };
+    struct yetty_ycore_void_result fetch_res =
+        yetty_ybrowser_fetch(job->loader, &request, &job->response);
+    if (YETTY_IS_ERR(fetch_res)) {
+        yetty_ycore_error_destroy(fetch_res.error);
+    }
+}
+
+/* LOOP THREAD. Resolve/reject the promise and drain microtasks so .then
+ * chains run now, then release the job. Signature dictated by the work
+ * pool (void (*)(void *)) — absorb inner Results at this boundary. */
+YETTY_EXTERNAL_CALLBACK
+static void js_fetch_job_done(void *job_ptr)
+{
+    struct js_fetch_job *job = job_ptr;
+    struct yetty_ylexbor *r = job->r;
+    r->img_jobs_in_flight--;
+
+    int stale = (job->generation != r->fetch_generation) || r->destroy_pending;
+    if (!stale && r->js_ctx) {
+        js_fetch_deliver(job->ctx, &job->response, job->resolve_func, job->reject_func);
+        yetty_ylexbor_js_drain_jobs(r);
+        if (r->on_resource_ready) {
+            r->on_resource_ready(r->resource_ready_user);
+        }
+    }
+    /* The context is still alive even on the deferred-teardown path —
+	 * _yetty_ylexbor_destroy_now only runs below, after the last job. */
+    JS_FreeValue(job->ctx, job->resolve_func);
+    JS_FreeValue(job->ctx, job->reject_func);
+    yetty_ybrowser_response_dispose(&job->response);
+    js_fetch_params_free(&job->params);
+    free(job->referer);
+    free(job);
+
+    if (r->destroy_pending && r->img_jobs_in_flight == 0) {
+        struct yetty_ycore_void_result destroy_res = _yetty_ylexbor_destroy_now(r);
+        if (YETTY_IS_ERR(destroy_res)) {
+            ydebug("js_fetch_job_done: deferred destroy failed: %s", destroy_res.error.msg);
+            yetty_ycore_error_destroy(destroy_res.error);
+        }
+    }
+}
+
 static JSValue js_fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv)
 {
     (void)this_val;
@@ -1001,41 +1658,86 @@ static JSValue js_fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValue
     }
 
     if (argc < 1 || !r) {
-        JSValue err = JS_NewError(ctx);
-        JS_SetPropertyStr(ctx, err, "message", JS_NewString(ctx, "fetch: missing url"));
-        JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, (JSValueConst[]){err});
-        JS_FreeValue(ctx, err);
+        JSValue error_obj = JS_NewError(ctx);
+        JS_SetPropertyStr(ctx, error_obj, "message", JS_NewString(ctx, "fetch: missing url"));
+        JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, (JSValueConst[]){error_obj});
+        JS_FreeValue(ctx, error_obj);
         goto out;
     }
     const char *url_arg = JS_ToCString(ctx, argv[0]);
     if (!url_arg) {
         goto out;
     }
-
-    char *url = yetty_ylexbor_resolve_url(r, url_arg);
+    struct js_fetch_params params = {0};
+    params.url = yetty_ylexbor_resolve_url(r, url_arg);
     JS_FreeCString(ctx, url_arg);
-    if (!url) {
-        JSValue err = JS_NewError(ctx);
-        JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, (JSValueConst[]){err});
-        JS_FreeValue(ctx, err);
+    if (!params.url) {
+        JSValue error_obj = JS_NewError(ctx);
+        JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, (JSValueConst[]){error_obj});
+        JS_FreeValue(ctx, error_obj);
         goto out;
     }
-
-    size_t blen = 0;
-    long status = 0;
-    char *body = yetty_ylexbor_http_get(url, &blen, &status);
-    free(url);
-
-    if (!body) {
-        JSValue err = JS_NewError(ctx);
-        JS_SetPropertyStr(ctx, err, "message", JS_NewString(ctx, "fetch: network error"));
-        JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, (JSValueConst[]){err});
-        JS_FreeValue(ctx, err);
-        goto out;
+    if (argc >= 2) {
+        js_fetch_parse_init(ctx, argv[1], &params);
     }
-    JSValue resp = make_response(ctx, body, blen, status);
-    JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 1, (JSValueConst[]){resp});
-    JS_FreeValue(ctx, resp);
+
+    /* Async path: hand the transfer to the worker pool and resolve from
+	 * its done() on the loop thread — three concurrent fetch()es overlap
+	 * on the wire and the UI pump keeps ticking. Without a pool (one-shot
+	 * render, in-yetty client) fall back to the synchronous fetch. */
+    if (r->img_pool) {
+        struct js_fetch_job *job = calloc(1, sizeof(*job));
+        if (job) {
+            job->r = r;
+            job->generation = r->fetch_generation;
+            job->loader = r->loader;
+            job->params = params; /* ownership moves to the job */
+            job->referer = r->base_url ? strdup(r->base_url) : NULL;
+            job->ctx = ctx;
+            job->resolve_func = JS_DupValue(ctx, resolving_funcs[0]);
+            job->reject_func = JS_DupValue(ctx, resolving_funcs[1]);
+            struct yetty_yplatform_yworkpool_job pool_job = {
+                .run = js_fetch_job_run,
+                .done = js_fetch_job_done,
+                .ctx = job,
+            };
+            struct yetty_ycore_void_result submit_res =
+                yetty_yplatform_yworkpool_submit(r->img_pool, pool_job);
+            if (YETTY_IS_OK(submit_res)) {
+                r->img_jobs_in_flight++;
+                goto out;
+            }
+            yetty_ycore_error_destroy(submit_res.error);
+            JS_FreeValue(ctx, job->resolve_func);
+            JS_FreeValue(ctx, job->reject_func);
+            params = job->params; /* take ownership back for the sync path */
+            free(job->referer);
+            free(job);
+        }
+    }
+
+    /* Synchronous path. */
+    {
+        struct yetty_ybrowser_request request = {
+            .url = params.url,
+            .kind = YETTY_YBROWSER_REQUEST_XHR,
+            .referer = r->base_url,
+            .method = params.method,
+            .body = params.body,
+            .body_len = params.body_len,
+            .extra_headers = (const char *const *)params.header_lines,
+            .extra_header_count = params.header_count,
+        };
+        struct yetty_ybrowser_response response = {0};
+        struct yetty_ycore_void_result fetch_res =
+            yetty_ybrowser_fetch(r->loader, &request, &response);
+        if (YETTY_IS_ERR(fetch_res)) {
+            yetty_ycore_error_destroy(fetch_res.error);
+        }
+        js_fetch_deliver(ctx, &response, resolving_funcs[0], resolving_funcs[1]);
+        yetty_ybrowser_response_dispose(&response);
+        js_fetch_params_free(&params);
+    }
 
 out:
     JS_FreeValue(ctx, resolving_funcs[0]);
@@ -1046,147 +1748,213 @@ out:
 /* ===========================================================================
  * Storage — in-memory backing for localStorage / sessionStorage.
  *
- * One global map per kind. Crude string→string. "Storage event"
- * dispatch and quota are TODO; this just satisfies feature-detection.
+ * One engine-owned map per kind (see yetty_ylexbor.web_local_storage /
+ * .web_session_storage) so two documents never see each other's keys.
+ * Crude string→string. "Storage event" dispatch and quota are TODO;
+ * this just satisfies feature-detection. Freed by the engine destroy.
  * ===========================================================================*/
 
-struct kvent {
-    char *k, *v;
-};
-static struct kvent g_local[1024];
-static int g_local_n = 0;
-static struct kvent g_session[1024];
-static int g_session_n = 0;
-
-static int kv_find(struct kvent *arr, int n, const char *k)
+static int kv_find(const struct yetty_ylexbor_kv_store *store, const char *key)
 {
-    for (int i = 0; i < n; i++) {
-        if (strcmp(arr[i].k, k) == 0) {
+    for (int i = 0; i < store->count; i++) {
+        if (strcmp(store->items[i].key, key) == 0) {
             return i;
         }
     }
     return -1;
 }
 
-#define DEFINE_STORAGE(NAME, MAP, MAP_N)                                                           \
+static JSValue storage_get_item(JSContext *ctx, struct yetty_ylexbor_kv_store *store, int argc,
+                                JSValueConst *argv)
+{
+    if (!store || argc < 1) {
+        return JS_NULL;
+    }
+    const char *key = JS_ToCString(ctx, argv[0]);
+    if (!key) {
+        return JS_NULL;
+    }
+    int i = kv_find(store, key);
+    JS_FreeCString(ctx, key);
+    return i < 0 ? JS_NULL : JS_NewString(ctx, store->items[i].value);
+}
+
+static JSValue storage_set_item(JSContext *ctx, struct yetty_ylexbor_kv_store *store, int argc,
+                                JSValueConst *argv)
+{
+    if (!store || argc < 2) {
+        return JS_UNDEFINED;
+    }
+    const char *key = JS_ToCString(ctx, argv[0]);
+    const char *value = JS_ToCString(ctx, argv[1]);
+    if (!key || !value) {
+        if (key) {
+            JS_FreeCString(ctx, key);
+        }
+        if (value) {
+            JS_FreeCString(ctx, value);
+        }
+        return JS_UNDEFINED;
+    }
+    int i = kv_find(store, key);
+    if (i >= 0) {
+        free(store->items[i].value);
+        store->items[i].value = strdup(value);
+    } else {
+        if (store->count == store->cap) {
+            int new_cap = store->cap ? store->cap * 2 : 16;
+            struct yetty_ylexbor_kv_entry *items =
+                realloc(store->items, (size_t)new_cap * sizeof(*items));
+            if (!items) {
+                JS_FreeCString(ctx, key);
+                JS_FreeCString(ctx, value);
+                return JS_UNDEFINED;
+            }
+            store->items = items;
+            store->cap = new_cap;
+        }
+        store->items[store->count].key = strdup(key);
+        store->items[store->count].value = strdup(value);
+        store->count++;
+    }
+    JS_FreeCString(ctx, key);
+    JS_FreeCString(ctx, value);
+    return JS_UNDEFINED;
+}
+
+static JSValue storage_remove_item(JSContext *ctx, struct yetty_ylexbor_kv_store *store, int argc,
+                                   JSValueConst *argv)
+{
+    if (!store || argc < 1) {
+        return JS_UNDEFINED;
+    }
+    const char *key = JS_ToCString(ctx, argv[0]);
+    if (!key) {
+        return JS_UNDEFINED;
+    }
+    int i = kv_find(store, key);
+    JS_FreeCString(ctx, key);
+    if (i < 0) {
+        return JS_UNDEFINED;
+    }
+    free(store->items[i].key);
+    free(store->items[i].value);
+    memmove(&store->items[i], &store->items[i + 1],
+            (size_t)(store->count - i - 1) * sizeof(store->items[0]));
+    store->count--;
+    return JS_UNDEFINED;
+}
+
+static JSValue storage_clear(struct yetty_ylexbor_kv_store *store)
+{
+    if (!store) {
+        return JS_UNDEFINED;
+    }
+    for (int i = 0; i < store->count; i++) {
+        free(store->items[i].key);
+        free(store->items[i].value);
+    }
+    store->count = 0;
+    return JS_UNDEFINED;
+}
+
+static JSValue storage_key(JSContext *ctx, struct yetty_ylexbor_kv_store *store, int argc,
+                           JSValueConst *argv)
+{
+    if (!store || argc < 1) {
+        return JS_NULL;
+    }
+    int i = 0;
+    JS_ToInt32(ctx, &i, argv[0]);
+    if (i < 0 || i >= store->count) {
+        return JS_NULL;
+    }
+    return JS_NewString(ctx, store->items[i].key);
+}
+
+/* Thin JS-callback wrappers routing to the right engine-owned store. */
+static struct yetty_ylexbor_kv_store *local_store(JSContext *ctx)
+{
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    return r ? &r->web_local_storage : NULL;
+}
+
+static struct yetty_ylexbor_kv_store *session_store(JSContext *ctx)
+{
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    return r ? &r->web_session_storage : NULL;
+}
+
+#define DEFINE_STORAGE(NAME, STORE_FOR_CTX)                                                        \
     static JSValue js_##NAME##_getItem(JSContext *ctx, JSValueConst self, int argc,                \
                                        JSValueConst *argv)                                         \
     {                                                                                              \
         (void)self;                                                                                \
-        if (argc < 1)                                                                              \
-            return JS_NULL;                                                                        \
-        const char *k = JS_ToCString(ctx, argv[0]);                                                \
-        if (!k)                                                                                    \
-            return JS_NULL;                                                                        \
-        int i = kv_find(MAP, MAP_N, k);                                                            \
-        JS_FreeCString(ctx, k);                                                                    \
-        return i < 0 ? JS_NULL : JS_NewString(ctx, MAP[i].v);                                      \
+        return storage_get_item(ctx, STORE_FOR_CTX(ctx), argc, argv);                              \
     }                                                                                              \
     static JSValue js_##NAME##_setItem(JSContext *ctx, JSValueConst self, int argc,                \
                                        JSValueConst *argv)                                         \
     {                                                                                              \
         (void)self;                                                                                \
-        if (argc < 2)                                                                              \
-            return JS_UNDEFINED;                                                                   \
-        const char *k = JS_ToCString(ctx, argv[0]);                                                \
-        const char *v = JS_ToCString(ctx, argv[1]);                                                \
-        if (!k || !v) {                                                                            \
-            if (k)                                                                                 \
-                JS_FreeCString(ctx, k);                                                            \
-            if (v)                                                                                 \
-                JS_FreeCString(ctx, v);                                                            \
-            return JS_UNDEFINED;                                                                   \
-        }                                                                                          \
-        int i = kv_find(MAP, MAP_N, k);                                                            \
-        if (i >= 0) {                                                                              \
-            free(MAP[i].v);                                                                        \
-            MAP[i].v = strdup(v);                                                                  \
-        } else if (MAP_N < (int)(sizeof(MAP) / sizeof(MAP[0]))) {                                  \
-            MAP[MAP_N].k = strdup(k);                                                              \
-            MAP[MAP_N].v = strdup(v);                                                              \
-            MAP_N++;                                                                               \
-        }                                                                                          \
-        JS_FreeCString(ctx, k);                                                                    \
-        JS_FreeCString(ctx, v);                                                                    \
-        return JS_UNDEFINED;                                                                       \
+        return storage_set_item(ctx, STORE_FOR_CTX(ctx), argc, argv);                              \
     }                                                                                              \
     static JSValue js_##NAME##_removeItem(JSContext *ctx, JSValueConst self, int argc,             \
                                           JSValueConst *argv)                                      \
     {                                                                                              \
         (void)self;                                                                                \
-        if (argc < 1)                                                                              \
-            return JS_UNDEFINED;                                                                   \
-        const char *k = JS_ToCString(ctx, argv[0]);                                                \
-        if (!k)                                                                                    \
-            return JS_UNDEFINED;                                                                   \
-        int i = kv_find(MAP, MAP_N, k);                                                            \
-        JS_FreeCString(ctx, k);                                                                    \
-        if (i < 0)                                                                                 \
-            return JS_UNDEFINED;                                                                   \
-        free(MAP[i].k);                                                                            \
-        free(MAP[i].v);                                                                            \
-        memmove(&MAP[i], &MAP[i + 1], (MAP_N - i - 1) * sizeof(MAP[0]));                           \
-        MAP_N--;                                                                                   \
-        return JS_UNDEFINED;                                                                       \
+        return storage_remove_item(ctx, STORE_FOR_CTX(ctx), argc, argv);                           \
     }                                                                                              \
     static JSValue js_##NAME##_clear(JSContext *ctx, JSValueConst self, int argc,                  \
                                      JSValueConst *argv)                                           \
     {                                                                                              \
-        (void)ctx;                                                                                 \
         (void)self;                                                                                \
         (void)argc;                                                                                \
         (void)argv;                                                                                \
-        for (int i = 0; i < MAP_N; i++) {                                                          \
-            free(MAP[i].k);                                                                        \
-            free(MAP[i].v);                                                                        \
-        }                                                                                          \
-        MAP_N = 0;                                                                                 \
-        return JS_UNDEFINED;                                                                       \
+        return storage_clear(STORE_FOR_CTX(ctx));                                                  \
     }                                                                                              \
     static JSValue js_##NAME##_key(JSContext *ctx, JSValueConst self, int argc,                    \
                                    JSValueConst *argv)                                             \
     {                                                                                              \
         (void)self;                                                                                \
-        if (argc < 1)                                                                              \
-            return JS_NULL;                                                                        \
-        int i = 0;                                                                                 \
-        JS_ToInt32(ctx, &i, argv[0]);                                                              \
-        if (i < 0 || i >= MAP_N)                                                                   \
-            return JS_NULL;                                                                        \
-        return JS_NewString(ctx, MAP[i].k);                                                        \
+        return storage_key(ctx, STORE_FOR_CTX(ctx), argc, argv);                                   \
     }
 
-DEFINE_STORAGE(local, g_local, g_local_n)
-DEFINE_STORAGE(session, g_session, g_session_n)
+DEFINE_STORAGE(local, local_store)
+DEFINE_STORAGE(session, session_store)
 
 /* ===========================================================================
- * Cookie store — shared with document.cookie.
+ * Cookie store — backs document.cookie. Engine-owned so tabs/documents
+ * never leak cookies into each other; freed by the engine destroy.
  * ===========================================================================*/
-
-static char *g_cookie_string = NULL;
 
 static JSValue js_doc_cookie_get(JSContext *ctx, JSValueConst this_val)
 {
     (void)this_val;
-    return JS_NewString(ctx, g_cookie_string ? g_cookie_string : "");
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    const char *cookie = r && r->web_cookie_string ? r->web_cookie_string : "";
+    return JS_NewString(ctx, cookie);
 }
 static JSValue js_doc_cookie_set(JSContext *ctx, JSValueConst this_val, JSValueConst val)
 {
     (void)this_val;
+    struct yetty_ylexbor *r = runtime_ylex_w(ctx);
+    if (!r) {
+        return JS_UNDEFINED;
+    }
     const char *s = JS_ToCString(ctx, val);
     if (!s) {
         return JS_UNDEFINED;
     }
     /* Append (real cookie semantics is way more complicated). */
-    if (!g_cookie_string) {
-        g_cookie_string = strdup(s);
+    if (!r->web_cookie_string) {
+        r->web_cookie_string = strdup(s);
     } else {
-        size_t a = strlen(g_cookie_string), b = strlen(s);
-        char *p = realloc(g_cookie_string, a + b + 3);
+        size_t old_len = strlen(r->web_cookie_string), add_len = strlen(s);
+        char *p = realloc(r->web_cookie_string, old_len + add_len + 3);
         if (p) {
             strcat(p, "; ");
             strcat(p, s);
-            g_cookie_string = p;
+            r->web_cookie_string = p;
         }
     }
     JS_FreeCString(ctx, s);
@@ -1293,21 +2061,6 @@ static void install_global_fn(JSContext *ctx, JSValue global, const char *name, 
 {
     JS_SetPropertyStr(ctx, global, name, JS_NewCFunction(ctx, fn, name, argc));
 }
-
-static const JSCFunctionListEntry local_funcs[] = {
-    JS_CFUNC_DEF("getItem", 1, js_local_getItem),
-    JS_CFUNC_DEF("setItem", 2, js_local_setItem),
-    JS_CFUNC_DEF("removeItem", 1, js_local_removeItem),
-    JS_CFUNC_DEF("clear", 0, js_local_clear),
-    JS_CFUNC_DEF("key", 1, js_local_key),
-};
-static const JSCFunctionListEntry session_funcs[] = {
-    JS_CFUNC_DEF("getItem", 1, js_session_getItem),
-    JS_CFUNC_DEF("setItem", 2, js_session_setItem),
-    JS_CFUNC_DEF("removeItem", 1, js_session_removeItem),
-    JS_CFUNC_DEF("clear", 0, js_session_clear),
-    JS_CFUNC_DEF("key", 1, js_session_key),
-};
 
 void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
 {
@@ -1426,6 +2179,20 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
     JS_SetPropertyStr(ctx, global, "history", hist);
 
     /* Storage instances. */
+    static const JSCFunctionListEntry local_funcs[] = {
+        JS_CFUNC_DEF("getItem", 1, js_local_getItem),
+        JS_CFUNC_DEF("setItem", 2, js_local_setItem),
+        JS_CFUNC_DEF("removeItem", 1, js_local_removeItem),
+        JS_CFUNC_DEF("clear", 0, js_local_clear),
+        JS_CFUNC_DEF("key", 1, js_local_key),
+    };
+    static const JSCFunctionListEntry session_funcs[] = {
+        JS_CFUNC_DEF("getItem", 1, js_session_getItem),
+        JS_CFUNC_DEF("setItem", 2, js_session_setItem),
+        JS_CFUNC_DEF("removeItem", 1, js_session_removeItem),
+        JS_CFUNC_DEF("clear", 0, js_session_clear),
+        JS_CFUNC_DEF("key", 1, js_session_key),
+    };
     JSValue ls = JS_NewObject(ctx);
     JS_SetPropertyFunctionList(ctx, ls, local_funcs, sizeof(local_funcs) / sizeof(local_funcs[0]));
     JS_SetPropertyStr(ctx, global, "localStorage", ls);
@@ -2094,11 +2861,13 @@ void yetty_ylexbor_js_web_install(struct yetty_ylexbor *r)
         "  this.open = (m,u) => { this._method=m; this._url=u; this.readyState=1; if "
         "(this.onreadystatechange) this.onreadystatechange(); };"
         "  this.setRequestHeader = (k,v) => { this._headers[k]=v; };"
-        "  this.send = (body) => { fetch(this._url).then(r => r.text()).then(t => {"
-        "    this.status=200; this.statusText='OK'; this.responseText=t; this.response=t; "
-        "this.readyState=4;"
+        "  this.send = (body) => { fetch(this._url, { method: this._method || 'GET', "
+        "headers: this._headers, body: (body === undefined || body === null) ? undefined : "
+        "String(body) }).then(r => r.text().then(t => {"
+        "    this.status=r.status; this.statusText=r.ok ? 'OK' : ''; this.responseText=t; "
+        "this.response=t; this.readyState=4;"
         "    if (this.onreadystatechange) this.onreadystatechange();"
-        "    if (this.onload) this.onload(); }).catch(() => {"
+        "    if (this.onload) this.onload(); })).catch(() => {"
         "    this.status=0; this.readyState=4; if (this.onerror) this.onerror(); }); };"
         "  this.abort = () => {}; this.getAllResponseHeaders = () => ''; this.getResponseHeader = "
         "() => null; this.addEventListener = (t, fn) => { this['on'+t] = fn; }; };"
@@ -2143,7 +2912,7 @@ int yetty_ylexbor_pump(struct yetty_ylexbor *r)
     (void)r;
     return -1;
 }
-/* resolve_url + http_get + http_get_referer are defined unconditionally
+/* resolve_url + the yetty_ybrowser_fetch layer are defined unconditionally
  * above (above the QuickJS gate) — they're network helpers used by
  * image and external-stylesheet loading whether JS is on or off. */
 

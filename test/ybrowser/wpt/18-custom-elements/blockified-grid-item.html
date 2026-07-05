@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<!-- Grid/flex items are blockified: an unstyled custom element (default
+     display:inline) that is a grid child must still produce a block-level
+     box occupying its cell — the gnews <c-wiz class="XPbmfb"> pattern,
+     where the inline wrapper produced no box and its subtree escaped the
+     grid placement. -->
+<html>
+<head>
+<style>
+  .grid { display: grid; grid-template-columns: 100px 100px; }
+  .tall { height: 40px; }
+</style>
+</head>
+<body>
+<div class="grid">
+  <c-thing data-test="custom-item" data-expect="8,8,100,40">
+    <div class="tall">left</div>
+  </c-thing>
+  <div data-test="plain-item" data-expect="108,8,100,40">
+    <div class="tall">right</div>
+  </div>
+</div>
+</body>
+</html>

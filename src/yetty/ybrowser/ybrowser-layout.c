@@ -48,6 +48,7 @@ static struct yetty_ycore_void_result flex_layout_absolute_children(struct yetty
 static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, float origin_x,
                                        float origin_y, float content_w);
 static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_idx, int *budget);
+static void resolve_pct_metrics(struct yetty_ylexbor_box *box, float cb_width);
 #define YL_CELL_MEASURE_BUDGET 256
 
 /* Walk the box subtree rooted at `idx` and return the largest known
@@ -216,6 +217,14 @@ static struct float_result wrap_inline_box(struct yetty_ylexbor *r, uint32_t idx
     float min_wrap_w = per_glyph * 8.0f; /* roughly one short word */
     if (content_w < per_glyph * 2.0f && wrap_w < min_wrap_w) {
         wrap_w = min_wrap_w;
+    }
+    /* `white-space: nowrap` content: no soft wrapping at all — the line
+	 * overflows its container exactly as in real browsers (a gnews nav
+	 * chip 1px too narrow must overflow by 1px, not wrap its label onto
+	 * a second line and double the row height). Explicit '\n' still
+	 * breaks via the hard-break path. */
+    if (b->nowrap) {
+        wrap_w = 1e9f;
     }
 
     float y = origin_y;
@@ -636,6 +645,32 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
     float flex_gap = self->grid_col_gap > 0.0f ? self->grid_col_gap : 0.0f;
     float total_flex_gap = n_children > 1 ? (float)(n_children - 1) * flex_gap : 0.0f;
 
+    /* Item margins consume main-axis space and offset each item on both
+	 * axes (a gnews nav chip's `margin:4px 16px` is what separates the
+	 * chips). Resolve percent metrics first — layout_block does this for
+	 * its own in-flow children, but flex items are laid out here. */
+    float margin_main_start[YL_FLEX_MAX_CHILDREN];
+    float margin_main_total[YL_FLEX_MAX_CHILDREN];
+    float margin_cross_start[YL_FLEX_MAX_CHILDREN];
+    float margin_cross_total[YL_FLEX_MAX_CHILDREN];
+    float total_margin_main = 0.0f;
+    for (uint32_t i = 0; i < n_children; i++) {
+        struct yetty_ylexbor_box *c = &r->boxes.data[children[i]];
+        resolve_pct_metrics(c, content_width);
+        if (column_dir) {
+            margin_main_start[i] = c->margin_top;
+            margin_main_total[i] = c->margin_top + c->margin_bottom;
+            margin_cross_start[i] = c->margin_left;
+            margin_cross_total[i] = c->margin_left + c->margin_right;
+        } else {
+            margin_main_start[i] = c->margin_left;
+            margin_main_total[i] = c->margin_left + c->margin_right;
+            margin_cross_start[i] = c->margin_top;
+            margin_cross_total[i] = c->margin_top + c->margin_bottom;
+        }
+        total_margin_main += margin_main_total[i];
+    }
+
     /* Main-axis budget. */
     float main_budget;
     if (column_dir) {
@@ -643,7 +678,7 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
     } else {
         main_budget = content_width;
     }
-    main_budget -= total_flex_gap;
+    main_budget -= total_flex_gap + total_margin_main;
     if (main_budget < 0.0f) {
         main_budget = 0.0f;
     }
@@ -684,25 +719,34 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
         }
     }
     bool is_auto[YL_FLEX_MAX_CHILDREN] = {false};
+    /* Main-axis size provenance per item, kept in lockstep with
+	 * main_size[] through every branch below and stamped on the box at
+	 * placement. */
+    uint8_t src_main[YL_FLEX_MAX_CHILDREN] = {YL_SRC_NONE};
     for (uint32_t i = 0; i < n_children; i++) {
         struct yetty_ylexbor_box *c = &r->boxes.data[children[i]];
         float basis;
         float fbp = c->flex_basis_px;
         if (fbp > 0.0f) {
             basis = fbp;
+            src_main[i] = YL_SRC_FLEX_BASIS;
         } else if (fbp < 0.0f) {
             basis = main_budget * (-fbp);
+            src_main[i] = YL_SRC_FLEX_BASIS;
         } else {
             float css_main = column_dir ? c->css_height : c->css_width;
             float img_main = column_dir ? img_h_intr[i] : img_w_intr[i];
             if (css_main > 0.0f) {
                 basis = css_main;
+                src_main[i] = YL_SRC_CSS;
             } else if (css_main < 0.0f) {
                 basis = main_budget * (-css_main);
+                src_main[i] = YL_SRC_CSS;
             } else if (img_main > 0.0f) {
                 /* Image with no flex-basis sizes to its intrinsic main-axis
                  * dimension, not the auto-distributed share. */
                 basis = img_main;
+                src_main[i] = YL_SRC_IMG_INTRINSIC;
             } else {
                 basis = 0.0f;
                 is_auto[i] = true;
@@ -745,39 +789,111 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
                     content_driven = true;
                 }
             }
+            /* A distributing justify-content only means anything when the
+			 * items are content-sized: `space-between` over evenly-split
+			 * items degenerates to zero visible gaps (the header-bar
+			 * symptom: logo and nav each take half the row instead of
+			 * shrink-to-fit at the two edges). Chrome sizes auto-basis
+			 * items to max-content in every one of these modes. */
+            if (justify == CSS_JUSTIFY_CONTENT_SPACE_BETWEEN ||
+                justify == CSS_JUSTIFY_CONTENT_SPACE_AROUND ||
+                justify == CSS_JUSTIFY_CONTENT_SPACE_EVENLY ||
+                justify == CSS_JUSTIFY_CONTENT_CENTER || justify == CSS_JUSTIFY_CONTENT_FLEX_END) {
+                content_driven = true;
+            }
         }
         if (content_driven) {
             total_basis = 0.0f;
             for (uint32_t i = 0; i < n_children; i++) {
-                main_size[i] = item_content[i];
+                /* +1px slack: an item sized to EXACTLY its measured
+				 * max-content can wrap its last word on float rounding. */
+                main_size[i] = item_content[i] + 1.0f;
                 is_auto[i] = false;
-                total_basis += item_content[i];
+                src_main[i] = YL_SRC_CONTENT;
+                total_basis += main_size[i];
             }
             autobasis_count = 0;
         } else {
             for (uint32_t i = 0; i < n_children; i++) {
                 main_size[i] = per;
+                src_main[i] = YL_SRC_FLEX_EVEN;
             }
             total_basis = main_budget;
         }
     }
 
-    /* Mixed sized + auto items with no explicit grow: the auto items share
-     * the leftover space (the dominant "fixed sidebar/thumbnail + flexible
-     * content" pattern — e.g. a news card's fixed thumbnail + flexible text
-     * body). Without this an auto item next to a sized one collapsed to 0.
-     * Skipped when something grows (that path distributes below) or when ALL
-     * items are auto (the even-split fallback above already handled it). */
-    if (autobasis_count > 0 && autobasis_count < (int)n_children && total_grow == 0.0f) {
+    /* Mixed sized + auto items with no explicit grow: a non-growing
+     * auto-basis item is CONTENT-sized (max-content), capped at its fair
+     * share of the leftover. This serves both dominant patterns: a card's
+     * flexible long-text body measures wider than the leftover and gets
+     * capped to fill it, while a short label next to an icon (gnews
+     * source-attribution rows) keeps its text width instead of seizing
+     * the whole remainder — which is what Chrome produces. Skipped when
+     * something grows (that path distributes below) or when ALL items
+     * are auto (the even-split fallback above already handled it). */
+    if (autobasis_count > 0 && autobasis_count < (int)n_children && total_grow == 0.0f &&
+        !column_dir) {
+        float leftover_auto = main_budget - total_basis;
+        if (leftover_auto > 0.0f) {
+            float per = leftover_auto / (float)autobasis_count;
+            for (uint32_t i = 0; i < n_children; i++) {
+                if (!is_auto[i]) {
+                    continue;
+                }
+                int measure_budget = YL_CELL_MEASURE_BUDGET;
+                const struct yetty_ylexbor_box *auto_item = &r->boxes.data[children[i]];
+                /* +1px slack: an item sized to exactly its measured
+				 * max-content can wrap its last word on float rounding. */
+                float content_main = measure_cell_content_width(r, children[i], &measure_budget) +
+                                     auto_item->padding_left + auto_item->padding_right + 1.0f;
+                float share = content_main < per ? content_main : per;
+                main_size[i] += share;
+                src_main[i] = content_main < per ? YL_SRC_CONTENT : YL_SRC_FLEX_SHARE;
+                total_basis += share;
+            }
+        }
+    } else if (autobasis_count > 0 && autobasis_count < (int)n_children && total_grow == 0.0f) {
+        /* Column direction: no main-axis content measurer (heights come
+		 * from layout) — keep the historical leftover split. */
         float leftover_auto = main_budget - total_basis;
         if (leftover_auto > 0.0f) {
             float per = leftover_auto / (float)autobasis_count;
             for (uint32_t i = 0; i < n_children; i++) {
                 if (is_auto[i]) {
                     main_size[i] += per;
+                    src_main[i] = YL_SRC_FLEX_SHARE;
                     total_basis += per;
                 }
             }
+        }
+    } else if (autobasis_count > 0 && autobasis_count < (int)n_children && total_grow > 0.0f &&
+               !column_dir) {
+        /* Mixed sized + auto items where SOMETHING grows: `flex-basis:auto`
+         * resolves to the item's content size — growers then take only the
+         * genuine leftover and non-growing auto items keep their content
+         * width. Without this every auto item started at 0 and the grower
+         * seized the whole row (the gnews header: `flex:1 0 auto` logo +
+         * `flex:1 1 100%` search bar + `flex:0 0 auto` buttons rendered
+         * 0 / full-width / 0). Overflow is resolved by the shrink pass
+         * below, which respects each item's flex-shrink (the search bar's
+         * `1 1 100%` gives back exactly what the content-sized siblings
+         * need, as in Chrome). */
+        for (uint32_t i = 0; i < n_children; i++) {
+            if (!is_auto[i]) {
+                continue;
+            }
+            int measure_budget = YL_CELL_MEASURE_BUDGET;
+            const struct yetty_ylexbor_box *auto_item = &r->boxes.data[children[i]];
+            /* +1px slack: an item sized to exactly its measured
+			 * max-content can wrap its last word on float rounding. */
+            float content_main = measure_cell_content_width(r, children[i], &measure_budget) +
+                                 auto_item->padding_left + auto_item->padding_right + 1.0f;
+            if (content_main > main_budget) {
+                content_main = main_budget;
+            }
+            main_size[i] = content_main;
+            src_main[i] = YL_SRC_CONTENT;
+            total_basis += content_main;
         }
     }
 
@@ -805,21 +921,24 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
 			 * piles up at the right edge. */
             if (item_main <= 0.0f && is_auto[i]) {
                 item_main = content_width;
+                src_main[i] = YL_SRC_AVAIL;
             }
             /* A single item never exceeds the line; clamp so it fits and the
 			 * following item wraps below it. */
             if (item_main > content_width) {
                 item_main = content_width;
             }
-            if (!first_in_line && (line_x - content_origin_x) + item_main > content_width + 0.5f) {
+            if (!first_in_line && (line_x - content_origin_x) + item_main + margin_main_total[i] >
+                                      content_width + 0.5f) {
                 line_top += line_h + self->grid_row_gap;
                 line_x = content_origin_x;
                 line_h = 0.0f;
                 first_in_line = true;
             }
-            c->x = line_x;
-            c->y = line_top;
+            c->x = line_x + margin_main_start[i];
+            c->y = line_top + margin_cross_start[i];
             c->w = item_main;
+            c->width_source = src_main[i];
             c->h = 0;
             float h = 0.0f;
             if (c->kind == YL_BOX_BLOCK) {
@@ -837,12 +956,15 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
             c = &r->boxes.data[cidx];
             if (c->css_height > 0.0f) {
                 h = c->css_height;
+                c->height_source = YL_SRC_CSS;
+            } else {
+                c->height_source = YL_SRC_CONTENT;
             }
             c->h = h;
-            if (h > line_h) {
-                line_h = h;
+            if (h + margin_cross_total[i] > line_h) {
+                line_h = h + margin_cross_total[i];
             }
-            line_x += item_main + flex_gap;
+            line_x += item_main + margin_main_total[i] + flex_gap;
             first_in_line = false;
         }
         float container_h = (line_top + line_h) - origin_y + pad_bottom;
@@ -859,6 +981,7 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
             struct yetty_ylexbor_box *c = &r->boxes.data[children[i]];
             if (c->flex_grow > 0.0f) {
                 main_size[i] += leftover * (c->flex_grow / total_grow);
+                src_main[i] = YL_SRC_FLEX_GROW;
             }
         }
         leftover = 0.0f;
@@ -889,6 +1012,9 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
                 if (sh < 0.0f) {
                     sh = 1.0f;
                 }
+                if (sh * main_size[i] > 0.0f) {
+                    src_main[i] = YL_SRC_FLEX_SHRINK;
+                }
                 main_size[i] -= overflow * (sh * main_size[i]) / total_scaled;
                 if (main_size[i] < 0.0f) {
                     main_size[i] = 0.0f;
@@ -911,6 +1037,7 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
             if (mn > 0.0f && main_size[i] < mn) {
                 deficit += mn - main_size[i];
                 main_size[i] = mn;
+                src_main[i] = YL_SRC_FLEX_MIN;
                 min_locked[i] = true;
             }
         }
@@ -975,16 +1102,24 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
         struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
         bool is_image = (c->kind == YL_BOX_INLINE_IMAGE);
         if (column_dir) {
-            c->x = content_origin_x;
-            c->y = cursor;
+            c->x = content_origin_x + margin_cross_start[i];
+            c->y = cursor + margin_main_start[i];
             /* A column image keeps its intrinsic width; other items stretch
              * to the content width. */
-            c->w = (is_image && img_w_intr[i] > 0.0f) ? img_w_intr[i] : content_width;
+            c->w = (is_image && img_w_intr[i] > 0.0f) ? img_w_intr[i]
+                                                      : content_width - margin_cross_total[i];
+            c->width_source = (is_image && img_w_intr[i] > 0.0f) ? YL_SRC_IMG_INTRINSIC
+                                                                 : YL_SRC_FLEX_STRETCH;
+            if (c->w < 0.0f) {
+                c->w = 0.0f;
+            }
             c->h = main_size[i];
+            c->height_source = src_main[i];
         } else {
-            c->x = cursor;
-            c->y = content_origin_y;
+            c->x = cursor + margin_main_start[i];
+            c->y = content_origin_y + margin_cross_start[i];
             c->w = main_size[i];
+            c->width_source = src_main[i];
             c->h = 0;
         }
         float h = 0.0f;
@@ -1012,22 +1147,27 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
 			 * story cards). */
             if (main_size[i] <= 0.0f) {
                 main_size[i] = h;
+                c->height_source = YL_SRC_CONTENT;
             }
             c->h = main_size[i];
         } else {
-            c->h = h;
+            /* Row direction: an explicit CSS height wins over the laid-out
+			 * content height (an empty form control keeps its intrinsic /
+			 * author height instead of collapsing to 0). */
+            c->h = c->css_height > 0.0f ? c->css_height : h;
+            c->height_source = c->css_height > 0.0f ? YL_SRC_CSS : YL_SRC_CONTENT;
         }
         natural_h[i] = c->h;
         natural_w[i] = c->w;
-        cursor += main_size[i] + gap + flex_gap;
+        cursor += main_size[i] + margin_main_total[i] + gap + flex_gap;
     }
 
-    /* Cross-axis: tallest item dictates row height (or container's
-	 * css_height when set). For align-items=stretch (default) we
-	 * normalise every item to that cross extent. */
+    /* Cross-axis: tallest item (margin box) dictates row height (or the
+	 * container's css_height when set). For align-items=stretch (default)
+	 * we normalise every item to that cross extent. */
     float max_cross = 0.0f;
     for (uint32_t i = 0; i < n_children; i++) {
-        float cross = column_dir ? natural_w[i] : natural_h[i];
+        float cross = (column_dir ? natural_w[i] : natural_h[i]) + margin_cross_total[i];
         if (cross > max_cross) {
             max_cross = cross;
         }
@@ -1041,9 +1181,16 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
         struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
         float cross = column_dir ? natural_w[i] : natural_h[i];
         float cross_origin = column_dir ? content_origin_x : content_origin_y;
-        float cross_used = cross_budget;
+        /* Stretch sizes the MARGIN box to the line — the border box gets
+		 * the budget minus the item's cross margins. */
+        float cross_used = cross_budget - margin_cross_total[i];
+        uint8_t cross_source = YL_SRC_FLEX_STRETCH;
+        if (cross_used < 0.0f) {
+            cross_used = 0.0f;
+        }
         if (!do_stretch) {
             cross_used = cross;
+            cross_source = 0; /* natural size — keep the first-pass stamp */
         }
         /* Images are replaced elements — never stretch them across the cross
          * axis; keep their intrinsic cross dimension (a row favicon stays its
@@ -1052,22 +1199,39 @@ static struct float_result layout_flex(struct yetty_ylexbor *r, uint32_t idx, fl
             float img_cross = column_dir ? img_w_intr[i] : img_h_intr[i];
             if (img_cross > 0.0f) {
                 cross_used = img_cross;
+                cross_source = YL_SRC_IMG_INTRINSIC;
             }
         }
-        float cross_pos = cross_origin;
+        /* `align-items: stretch` only applies to items whose cross size is
+		 * auto — an explicit CSS cross dimension pins the item (a 14px icon
+		 * in a text-height row stays 14px, as in Chrome). */
+        if ((column_dir ? c->css_width : c->css_height) > 0.0f) {
+            cross_used = cross;
+            cross_source = YL_SRC_CSS;
+        }
+        float cross_pos = cross_origin + margin_cross_start[i];
         if (!do_stretch) {
             if (align == CSS_ALIGN_ITEMS_FLEX_END) {
-                cross_pos = cross_origin + (cross_budget - cross_used);
+                cross_pos = cross_origin + (cross_budget - cross_used - margin_cross_total[i]) +
+                            margin_cross_start[i];
             } else if (align == CSS_ALIGN_ITEMS_CENTER) {
-                cross_pos = cross_origin + (cross_budget - cross_used) * 0.5f;
+                cross_pos = cross_origin +
+                            (cross_budget - cross_used - margin_cross_total[i]) * 0.5f +
+                            margin_cross_start[i];
             }
         }
         if (column_dir) {
             c->x = cross_pos;
             c->w = cross_used;
+            if (cross_source != 0) {
+                c->width_source = cross_source;
+            }
         } else {
             c->y = cross_pos;
             c->h = cross_used;
+            if (cross_source != 0) {
+                c->height_source = cross_source;
+            }
         }
     }
 
@@ -1191,6 +1355,21 @@ static uint32_t row_cell_count(struct yetty_ylexbor *r, uint32_t row_idx)
  * the whole row. */
 #define YL_CELL_MEASURE_BUDGET 256
 
+/* Horizontal margins of a measured child, skipping percent-flagged values
+ * (they resolve against a containing block the measure pass doesn't
+ * have). */
+static float measure_horizontal_margins(const struct yetty_ylexbor_box *box)
+{
+    float sum = 0.0f;
+    if (!(box->pct_mask & YL_PCT_MARGIN_LEFT)) {
+        sum += box->margin_left;
+    }
+    if (!(box->pct_mask & YL_PCT_MARGIN_RIGHT)) {
+        sum += box->margin_right;
+    }
+    return sum;
+}
+
 static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_idx, int *budget)
 {
     if (*budget <= 0) {
@@ -1199,6 +1378,12 @@ static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_i
     (*budget)--;
     float sum = 0;
     float max_line = 0;
+    /* A flex ROW lays its children side-by-side: its max-content is the
+	 * SUM of the children plus the inter-item gaps, not the widest line.
+	 * (A nav of four links with gap:24px is 3 gaps wider than its text.) */
+    int row_flex = (r->boxes.data[cell_idx].layout_mode == YL_LAYOUT_FLEX_ROW);
+    float item_gap = row_flex ? r->boxes.data[cell_idx].grid_col_gap : 0.0f;
+    int in_flow_items = 0;
     for (uint32_t cidx = r->boxes.data[cell_idx].first_child; cidx != 0;
          cidx = r->boxes.data[cidx].next_sibling) {
         struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
@@ -1206,25 +1391,40 @@ static float measure_cell_content_width(struct yetty_ylexbor *r, uint32_t cell_i
             float adv =
                 c->glyph_advance > 0.0f ? c->glyph_advance : yetty_ylexbor_glyph_advance_ratio(r);
             sum += yetty_ylexbor_naive_text_width(c->text, c->text_len, c->font_size, adv);
+            in_flow_items++;
         } else if (c->kind == YL_BOX_INLINE_IMAGE) {
-            if (c->w > 0 && c->w > sum) {
+            if (row_flex) {
+                sum += (c->w > 0 ? c->w : 0) + measure_horizontal_margins(c);
+            } else if (c->w > 0 && c->w > sum) {
                 sum = c->w;
             }
+            in_flow_items++;
         } else if (c->kind == YL_BOX_BLOCK) {
-            /* Block children inside a cell (nested layout); use the
-			 * larger of: sum of inline run so far, recursive measure
-			 * of the nested block's content. A row of two block
-			 * siblings stacks them vertically — each contributes its
-			 * own max-line, but they don't add horizontally. */
-            if (sum > max_line) {
-                max_line = sum;
-            }
-            sum = 0;
             float nested = measure_cell_content_width(r, cidx, budget);
-            if (nested > max_line) {
-                max_line = nested;
+            if (row_flex) {
+                /* Flex items sit side-by-side — they add horizontally,
+				 * padding and margins included (a gnews nav chip's
+				 * `margin:4px 16px` widens the tablist's max-content). */
+                sum += nested + c->padding_left + c->padding_right + measure_horizontal_margins(c);
+            } else {
+                /* Block children inside a cell (nested layout); use the
+				 * larger of: sum of inline run so far, recursive measure
+				 * of the nested block's content. A row of two block
+				 * siblings stacks them vertically — each contributes its
+				 * own max-line, but they don't add horizontally. */
+                if (sum > max_line) {
+                    max_line = sum;
+                }
+                sum = 0;
+                if (nested > max_line) {
+                    max_line = nested;
+                }
             }
+            in_flow_items++;
         }
+    }
+    if (row_flex && in_flow_items > 1) {
+        sum += (float)(in_flow_items - 1) * item_gap;
     }
     if (sum > max_line) {
         max_line = sum;
@@ -1418,6 +1618,7 @@ static struct float_result layout_table(struct yetty_ylexbor *r, uint32_t idx, f
             c->x = cell_x;
             c->y = cursor_y;
             c->w = this_col_w;
+            c->width_source = YL_SRC_TABLE_COLS;
             struct float_result cell_res = layout_block(r, cidx, cell_x, cursor_y, this_col_w);
             if (YETTY_IS_ERR(cell_res)) {
                 free(col_w);
@@ -1429,6 +1630,7 @@ static struct float_result layout_table(struct yetty_ylexbor *r, uint32_t idx, f
             c = &r->boxes.data[cidx];
             row = &r->boxes.data[row_idx];
             c->h = h;
+            c->height_source = YL_SRC_CONTENT;
             if (h > row_h) {
                 row_h = h;
             }
@@ -1443,6 +1645,9 @@ static struct float_result layout_table(struct yetty_ylexbor *r, uint32_t idx, f
             struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
             if (c->kind != YL_BOX_BLOCK) {
                 continue;
+            }
+            if (c->h != row_h) {
+                c->height_source = YL_SRC_GRID_STRETCH;
             }
             c->h = row_h;
         }
@@ -1616,18 +1821,29 @@ static struct float_result layout_absolute_child(struct yetty_ylexbor *r, uint32
     const float top = inset_value(c, 0, cb_w, cb_h);
     const float bottom = inset_value(c, 2, cb_w, cb_h);
 
-    /* Width: explicit width wins; else left+right both pin it; else
-     * shrink toward the inset edges (no intrinsic-size pass, so this is an
-     * approximation that still respects a single anchoring inset). */
+    /* Width: explicit width wins; left+right together pin it; a box
+     * anchored on one side (or none) shrinks to fit its content — capped
+     * at the space the anchoring inset leaves. Without the intrinsic
+     * measurement a corner widget (card kebab button, right:0) stretched
+     * across the whole containing block. */
     float width;
+    uint8_t width_source;
     if (c->css_width > 0.0f) {
         width = c->css_width;
+        width_source = YL_SRC_CSS;
     } else if (c->css_width < 0.0f) {
         width = cb_w * (-c->css_width); /* percent encoded as negative ratio */
+        width_source = YL_SRC_CSS;
     } else if (left_set && right_set) {
         width = cb_w - left - right;
+        width_source = YL_SRC_ABS_INSET;
     } else {
-        width = cb_w - (left_set ? left : 0.0f) - (right_set ? right : 0.0f);
+        float space = cb_w - (left_set ? left : 0.0f) - (right_set ? right : 0.0f);
+        int measure_budget = YL_CELL_MEASURE_BUDGET;
+        float fit_w = measure_cell_content_width(r, cidx, &measure_budget) + c->padding_left +
+                      c->padding_right + c->border_left + c->border_right + 1.0f;
+        width = fit_w < space ? fit_w : space;
+        width_source = fit_w < space ? YL_SRC_ABS_FIT : YL_SRC_ABS_INSET;
     }
     if (width < 0.0f) {
         width = 0.0f;
@@ -1656,12 +1872,14 @@ static struct float_result layout_absolute_child(struct yetty_ylexbor *r, uint32
     YETTY_RETURN_IF_ERR(float, measure, "layout_absolute_child: measure");
     c = &r->boxes.data[cidx];
     float height = (c->css_height > 0.0f) ? c->css_height : measure.value;
+    uint8_t height_source = (c->css_height > 0.0f) ? YL_SRC_CSS : YL_SRC_CONTENT;
     /* top + bottom both set with no explicit height stretches the box to the
      * containing block — the `inset:0` full-cover overlay pattern. */
     if (top_set && bottom_set && c->css_height <= 0.0f) {
         float stretched = cb_h - top - bottom;
         if (stretched > height) {
             height = stretched;
+            height_source = YL_SRC_ABS_INSET;
         }
     }
 
@@ -1681,14 +1899,106 @@ static struct float_result layout_absolute_child(struct yetty_ylexbor *r, uint32
         YETTY_RETURN_IF_ERR(float, place, "layout_absolute_child: place");
         c = &r->boxes.data[cidx];
         height = (c->css_height > 0.0f) ? c->css_height : place.value;
+        height_source = (c->css_height > 0.0f) ? YL_SRC_CSS : YL_SRC_CONTENT;
+        /* Re-apply the inset stretch — the re-lay recomputed content
+         * height and would otherwise drop it. */
+        if (top_set && bottom_set && c->css_height <= 0.0f) {
+            float stretched = cb_h - top - bottom;
+            if (stretched > height) {
+                height = stretched;
+                height_source = YL_SRC_ABS_INSET;
+            }
+        }
     }
+
+    /* Nested absolute children were placed by the measure pass above,
+     * BEFORE this box's inset-stretched height was known — a nested
+     * inset:0 overlay resolved top/bottom against in-flow height 0 and
+     * collapsed (the gnews card pattern: abs link inside abs wrapper).
+     * Re-place them against the final padding box. */
+    for (uint32_t nested_idx = r->boxes.data[cidx].first_child; nested_idx != 0;
+         nested_idx = r->boxes.data[nested_idx].next_sibling) {
+        if (r->boxes.data[nested_idx].position != YL_POS_ABSOLUTE) {
+            continue; /* fixed resolves against the viewport — already right */
+        }
+        struct yetty_ylexbor_box *final_self = &r->boxes.data[cidx];
+        float pad_x = x + final_self->border_left;
+        float pad_y = y + final_self->border_top;
+        float pad_h = height - final_self->border_top - final_self->border_bottom;
+        if (pad_h < 0.0f) {
+            pad_h = 0.0f;
+        }
+        struct float_result nested_res =
+            layout_absolute_child(r, nested_idx, pad_x, pad_y, content_w, pad_h);
+        YETTY_RETURN_IF_ERR(float, nested_res, "layout_absolute_child: nested absolute");
+    }
+    /* Re-fetch — the nested re-placement recursion may have grown the
+     * box vector. */
+    c = &r->boxes.data[cidx];
 
     c->x = x;
     c->y = y;
     c->w = width;
     c->h = height;
+    c->width_source = width_source;
+    c->height_source = height_source;
     apply_transform(r, cidx);
     return YETTY_OK(float, height);
+}
+
+/* Grid default `align-items: stretch`: block items without an explicit
+ * height fill their row (the tallest cell sets the row height). Text and
+ * replaced items keep their content height, matching Chrome. */
+static void grid_stretch_row_members(struct yetty_ylexbor *r, const uint32_t *members,
+                                     int member_count, float row_height)
+{
+    for (int i = 0; i < member_count; i++) {
+        struct yetty_ylexbor_box *member = &r->boxes.data[members[i]];
+        if (member->kind == YL_BOX_BLOCK && member->css_height <= 0.0f && member->h < row_height) {
+            member->h = row_height;
+            member->height_source = YL_SRC_GRID_STRETCH;
+        }
+    }
+}
+
+/* 2D cell-occupancy map for grid placement. Rows beyond the map are
+ * treated as free (very tall grids degrade to overlap, not to a crash). */
+enum { YL_GRID_FLOW_MAX_ROWS = 96 };
+struct yl_grid_occupancy {
+    bool cell[YL_GRID_FLOW_MAX_ROWS][YL_GRID_MAX_TRACKS];
+};
+
+/* One grid child with its resolved cell (0-based) and spans. */
+struct yl_grid_item {
+    uint32_t box;
+    int col;
+    int row; /* -1 until placed */
+    int col_span;
+    int row_span;
+    float bottom; /* laid-out bottom edge — folds multi-row overhang */
+};
+
+static bool grid_area_free(const struct yl_grid_occupancy *occupancy, int row, int col,
+                           int row_span, int col_span)
+{
+    for (int rr = row; rr < row + row_span && rr < YL_GRID_FLOW_MAX_ROWS; rr++) {
+        for (int cc = col; cc < col + col_span && cc < YL_GRID_MAX_TRACKS; cc++) {
+            if (occupancy->cell[rr][cc]) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static void grid_area_mark(struct yl_grid_occupancy *occupancy, int row, int col, int row_span,
+                           int col_span)
+{
+    for (int rr = row; rr < row + row_span && rr < YL_GRID_FLOW_MAX_ROWS; rr++) {
+        for (int cc = col; cc < col + col_span && cc < YL_GRID_MAX_TRACKS; cc++) {
+            occupancy->cell[rr][cc] = true;
+        }
+    }
 }
 
 /* display:grid with a parsed grid-template-columns. Resolves the column track
@@ -1722,10 +2032,116 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
     float col_gap = self->grid_col_gap;
     float row_gap = self->grid_row_gap > 0.0f ? self->grid_row_gap : 0.0f;
 
+    /* Collect the in-flow children and resolve every child's CELL up
+	 * front — placement is pure occupancy bookkeeping and needs no track
+	 * widths. Explicitly-placed items (numeric `grid-column` /
+	 * `grid-row`, the gnews card's thumbnail at column 3 spanning the
+	 * text rows) claim their cells first; the rest auto-flow row-major
+	 * around them with a forward-only cursor (CSS sparse packing). */
+    struct yl_grid_item *items = NULL;
+    uint32_t item_count = 0;
+    bool any_explicit = false;
+    if (self->child_count > 0) {
+        items = calloc(self->child_count, sizeof(struct yl_grid_item));
+        if (items == NULL) {
+            /* OOM: degrade to block flow rather than dropping children. */
+            r->boxes.data[idx].layout_mode = YL_LAYOUT_BLOCK;
+            return layout_block(r, idx, origin_x, origin_y, content_w);
+        }
+    }
+    if (items != NULL) {
+        for (uint32_t cc = self->first_child; cc != 0 && item_count < (uint32_t)self->child_count;
+             cc = r->boxes.data[cc].next_sibling) {
+            struct yetty_ylexbor_box *ch = &r->boxes.data[cc];
+            if (ch->position == YL_POS_ABSOLUTE || ch->position == YL_POS_FIXED ||
+                ch->float_side != 0) {
+                continue;
+            }
+            struct yl_grid_item *item = &items[item_count++];
+            item->box = cc;
+            item->col_span = ch->grid_col_span > 0 ? ch->grid_col_span : 1;
+            if (item->col_span > ncols) {
+                item->col_span = ncols;
+            }
+            item->row_span = ch->grid_row_span > 0 ? ch->grid_row_span : 1;
+            if (item->row_span > YL_GRID_FLOW_MAX_ROWS) {
+                item->row_span = YL_GRID_FLOW_MAX_ROWS;
+            }
+            item->col = ch->grid_col_start > 0 ? (int)ch->grid_col_start - 1 : -1;
+            if (item->col >= 0 && item->col + item->col_span > ncols) {
+                item->col = ncols - item->col_span;
+            }
+            item->row = ch->grid_row_start > 0 ? (int)ch->grid_row_start - 1 : -1;
+            if (item->row >= 0 && item->row >= YL_GRID_FLOW_MAX_ROWS) {
+                item->row = YL_GRID_FLOW_MAX_ROWS - 1;
+            }
+            if (item->col >= 0 || item->row >= 0) {
+                any_explicit = true;
+            }
+        }
+        struct yl_grid_occupancy occupancy = {0};
+        /* Pass 1: fully-explicit items claim their cells. */
+        for (uint32_t i = 0; i < item_count; i++) {
+            if (items[i].col >= 0 && items[i].row >= 0) {
+                grid_area_mark(&occupancy, items[i].row, items[i].col, items[i].row_span,
+                               items[i].col_span);
+            }
+        }
+        /* Pass 2: flow the rest in document order. */
+        int cursor_row = 0;
+        int cursor_col = 0;
+        for (uint32_t i = 0; i < item_count; i++) {
+            struct yl_grid_item *item = &items[i];
+            if (item->col >= 0 && item->row >= 0) {
+                continue;
+            }
+            if (item->col >= 0) {
+                /* Column locked, row auto: first row where the area fits. */
+                int rr = 0;
+                while (rr < YL_GRID_FLOW_MAX_ROWS - 1 &&
+                       !grid_area_free(&occupancy, rr, item->col, item->row_span, item->col_span)) {
+                    rr++;
+                }
+                item->row = rr;
+            } else if (item->row >= 0) {
+                /* Row locked, column auto: first fitting column. */
+                int cc_col = 0;
+                while (cc_col + item->col_span <= ncols &&
+                       !grid_area_free(&occupancy, item->row, cc_col, item->row_span,
+                                       item->col_span)) {
+                    cc_col++;
+                }
+                if (cc_col + item->col_span > ncols) {
+                    cc_col = 0; /* nothing free — overlap at the left edge */
+                }
+                item->col = cc_col;
+            } else {
+                /* Fully auto: forward-only row-major cursor. */
+                int rr = cursor_row;
+                int cc_col = cursor_col;
+                for (;;) {
+                    if (cc_col + item->col_span > ncols) {
+                        cc_col = 0;
+                        rr++;
+                    }
+                    if (rr >= YL_GRID_FLOW_MAX_ROWS - 1 ||
+                        grid_area_free(&occupancy, rr, cc_col, item->row_span, item->col_span)) {
+                        break;
+                    }
+                    cc_col++;
+                }
+                item->row = rr;
+                item->col = cc_col;
+                cursor_row = rr;
+                cursor_col = cc_col + item->col_span;
+            }
+            grid_area_mark(&occupancy, item->row, item->col, item->row_span, item->col_span);
+        }
+    }
+
     /* `auto` / min-content / max-content tracks size to the max-content of the
-	 * items placed in them. Pre-pass: simulate row-major placement (honoring
-	 * spans) and measure each single-span item's intrinsic content width into
-	 * its column. */
+	 * items placed in them: measure each single-span item's intrinsic content
+	 * width into its resolved column. */
     float auto_w[YL_GRID_MAX_TRACKS] = {0};
     bool any_auto = false;
     for (int c = 0; c < ncols; c++) {
@@ -1733,38 +2149,28 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
             any_auto = true;
         }
     }
-    if (any_auto) {
-        int acol = 0;
-        for (uint32_t cc = self->first_child; cc != 0; cc = r->boxes.data[cc].next_sibling) {
-            struct yetty_ylexbor_box *ch = &r->boxes.data[cc];
-            if (ch->position == YL_POS_ABSOLUTE || ch->position == YL_POS_FIXED ||
-                ch->float_side != 0) {
+    if (any_auto && items != NULL) {
+        for (uint32_t i = 0; i < item_count; i++) {
+            const struct yl_grid_item *item = &items[i];
+            struct yetty_ylexbor_box *ch = &r->boxes.data[item->box];
+            if (item->col_span != 1 || item->col < 0 || item->col >= ncols ||
+                !self->grid_tracks[item->col].is_auto) {
                 continue;
             }
-            int sp = ch->grid_col_span > 0 ? ch->grid_col_span : 1;
-            if (sp > ncols) {
-                sp = ncols;
-            }
-            if (acol + sp > ncols) {
-                acol = 0;
-            }
-            if (sp == 1 && self->grid_tracks[acol].is_auto) {
-                float iw;
-                if (ch->css_width > 0.0f) {
-                    iw = ch->css_width;
-                } else {
-                    int budget = YL_CELL_MEASURE_BUDGET;
-                    iw = measure_cell_content_width(r, cc, &budget) + ch->padding_left +
-                         ch->padding_right + ch->border_left + ch->border_right;
-                    if (ch->kind == YL_BOX_INLINE_IMAGE && ch->w > 0.0f) {
-                        iw = ch->w;
-                    }
-                }
-                if (iw > auto_w[acol]) {
-                    auto_w[acol] = iw;
+            float iw;
+            if (ch->css_width > 0.0f) {
+                iw = ch->css_width;
+            } else {
+                int budget = YL_CELL_MEASURE_BUDGET;
+                iw = measure_cell_content_width(r, item->box, &budget) + ch->padding_left +
+                     ch->padding_right + ch->border_left + ch->border_right;
+                if (ch->kind == YL_BOX_INLINE_IMAGE && ch->w > 0.0f) {
+                    iw = ch->w;
                 }
             }
-            acol += sp;
+            if (iw > auto_w[item->col]) {
+                auto_w[item->col] = iw;
+            }
         }
     }
 
@@ -1814,8 +2220,10 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
 	 * a track far narrower than the widest one, the grid isn't really
 	 * auto-flow — fall back to block so the content keeps full width. A real
 	 * card grid (text + thumbnail) puts only a leaf-ish image in the narrow
-	 * track, so it is unaffected. */
-    if (self->grid_line_spec == NULL) {
+	 * track, so it is unaffected. Skipped when any child is explicitly
+	 * placed — the site is using real placement, not auto-flow, and the
+	 * row-major probe below would be meaningless. */
+    if (self->grid_line_spec == NULL && !any_explicit) {
         float max_track = 0.0f;
         for (int c = 0; c < ncols; c++) {
             if (col_w[c] > max_track) {
@@ -1852,6 +2260,7 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
                     }
                 }
                 if (desc > 25) {
+                    free(items);
                     r->boxes.data[idx].layout_mode = YL_LAYOUT_BLOCK;
                     return layout_block(r, idx, origin_x, origin_y, content_w);
                 }
@@ -1867,6 +2276,8 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
 	 * track that begins at that line; an unresolved name falls back to track 0.
 	 * All children share one row here (the single-row idiom these shells use). */
     if (self->grid_line_spec != NULL) {
+        free(items); /* named placement ignores the numeric-cell resolution */
+        items = NULL;
         size_t spec_len = strlen(self->grid_line_spec);
         float row_top = content_origin_y;
         float band_h = 0.0f;
@@ -1893,11 +2304,13 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
                 c->x = cell_x;
                 c->y = row_top;
                 c->w = cell_w;
+                c->width_source = YL_SRC_GRID_TRACKS;
                 struct float_result gres = layout_block(r, cidx, cell_x, row_top, cell_w);
                 YETTY_RETURN_IF_ERR(float, gres, "layout_grid(named): child block");
                 c = &r->boxes.data[cidx];
                 child_h = (c->css_height > 0.0f) ? c->css_height : gres.value;
                 c->h = child_h;
+                c->height_source = (c->css_height > 0.0f) ? YL_SRC_CSS : YL_SRC_CONTENT;
             } else if (c->kind == YL_BOX_INLINE_TEXT) {
                 struct float_result gres = wrap_inline_box(r, cidx, cell_x, row_top, cell_w, 0);
                 YETTY_RETURN_IF_ERR(float, gres, "layout_grid(named): child text");
@@ -1934,78 +2347,122 @@ static struct float_result layout_grid(struct yetty_ylexbor *r, uint32_t idx, fl
         return YETTY_OK(float, named_h);
     }
 
-    /* Auto-flow children into cells, row-major. */
-    float row_y = content_origin_y;
-    float row_h = 0.0f;
-    int col = 0;
-    int placed_any = 0;
-    for (uint32_t cidx = self->first_child; cidx != 0; cidx = r->boxes.data[cidx].next_sibling) {
-        struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
-        if (c->position == YL_POS_ABSOLUTE || c->position == YL_POS_FIXED || c->float_side != 0) {
-            continue;
+    /* Lay the resolved cells out row by row. Each row's height is the max
+	 * of its single-row members; a multi-row member (a card thumbnail
+	 * spanning the text rows) folds any height still sticking out into
+	 * the LAST row of its range when that row closes. Rows close in
+	 * order, so every row_y is final by the time its members are laid
+	 * out — each child is laid out exactly once (re-running a child's
+	 * layout is not safe: the inline wrapper consumes its style segments
+	 * and emits fragment boxes). Members of a row are stretched to the
+	 * row height when it closes — the grid default `align-items:
+	 * stretch`. */
+    int stretch_items = (self->align_items == 0 || self->align_items == CSS_ALIGN_ITEMS_STRETCH);
+    int max_row_end = 0;
+    for (uint32_t i = 0; i < item_count; i++) {
+        int row_end = items[i].row + items[i].row_span;
+        if (row_end > max_row_end) {
+            max_row_end = row_end;
         }
-        /* Column span: the item occupies `span` consecutive columns (github's
-		 * 12-col cards: `grid-column: span N`). Clamp to the track count. */
-        int span = c->grid_col_span > 0 ? c->grid_col_span : 1;
-        if (span > ncols) {
-            span = ncols;
-        }
-        /* Wrap to a new row when this item won't fit in the columns left. */
-        if (col + span > ncols) {
-            col = 0;
-            row_y += row_h + row_gap;
-            row_h = 0.0f;
-        }
-        float cell_x = col_x[col];
-        /* Width spans `span` tracks plus the inter-track gaps between them. */
-        float cell_w = 0.0f;
-        for (int sc = 0; sc < span && (col + sc) < ncols; sc++) {
-            cell_w += col_w[col + sc];
-        }
-        cell_w += (float)(span - 1) * col_gap;
-        resolve_pct_metrics(c, cell_w);
-        float child_h = 0.0f;
-        if (c->kind == YL_BOX_BLOCK) {
-            c->x = cell_x;
-            c->y = row_y;
-            c->w = cell_w;
-            struct float_result block_res = layout_block(r, cidx, cell_x, row_y, cell_w);
-            YETTY_RETURN_IF_ERR(float, block_res, "layout_grid: child block");
-            c = &r->boxes.data[cidx];
-            child_h = (c->css_height > 0.0f) ? c->css_height : block_res.value;
-            c->h = child_h;
-        } else if (c->kind == YL_BOX_INLINE_TEXT) {
-            struct float_result wrap_res = wrap_inline_box(r, cidx, cell_x, row_y, cell_w, 0);
-            YETTY_RETURN_IF_ERR(float, wrap_res, "layout_grid: child text");
-            c = &r->boxes.data[cidx];
-            c->x = cell_x;
-            c->y = row_y;
-            c->w = cell_w;
-            child_h = wrap_res.value;
-            c->h = child_h;
-        } else if (c->kind == YL_BOX_INLINE_IMAGE) {
-            float img_w = c->w > 0.0f ? c->w : 100.0f;
-            float img_h = c->h > 0.0f ? c->h : 100.0f;
-            if (img_w > cell_w && cell_w > 0.0f) {
-                img_h *= cell_w / img_w;
-                img_w = cell_w;
-            }
-            c->x = cell_x;
-            c->y = row_y;
-            c->w = img_w;
-            c->h = img_h;
-            child_h = img_h;
-        }
-        if (child_h > row_h) {
-            row_h = child_h;
-        }
-        apply_transform(r, cidx);
-        placed_any = 1;
-        col += span;
     }
+    if (max_row_end > YL_GRID_FLOW_MAX_ROWS) {
+        max_row_end = YL_GRID_FLOW_MAX_ROWS;
+    }
+    float row_y = content_origin_y;
+    float last_row_bottom = content_origin_y;
+    uint32_t row_members[YL_GRID_MAX_TRACKS];
+    for (int rr = 0; rr < max_row_end; rr++) {
+        float row_h = 0.0f;
+        int row_member_count = 0;
+        for (uint32_t i = 0; i < item_count; i++) {
+            struct yl_grid_item *item = &items[i];
+            if (item->row != rr) {
+                continue;
+            }
+            uint32_t cidx = item->box;
+            struct yetty_ylexbor_box *c = &r->boxes.data[cidx];
+            float cell_x = col_x[item->col];
+            /* Width spans the item's tracks plus the inter-track gaps
+			 * between them. */
+            float cell_w = 0.0f;
+            for (int sc = 0; sc < item->col_span && (item->col + sc) < ncols; sc++) {
+                cell_w += col_w[item->col + sc];
+            }
+            cell_w += (float)(item->col_span - 1) * col_gap;
+            resolve_pct_metrics(c, cell_w);
+            float child_h = 0.0f;
+            if (c->kind == YL_BOX_BLOCK) {
+                c->x = cell_x;
+                c->y = row_y;
+                c->w = cell_w;
+                c->width_source = YL_SRC_GRID_TRACKS;
+                struct float_result block_res = layout_block(r, cidx, cell_x, row_y, cell_w);
+                if (YETTY_IS_ERR(block_res)) {
+                    free(items);
+                    return YETTY_ERR(float, "layout_grid: child block", block_res);
+                }
+                c = &r->boxes.data[cidx];
+                child_h = (c->css_height > 0.0f) ? c->css_height : block_res.value;
+                c->h = child_h;
+                c->height_source = (c->css_height > 0.0f) ? YL_SRC_CSS : YL_SRC_CONTENT;
+            } else if (c->kind == YL_BOX_INLINE_TEXT) {
+                struct float_result wrap_res = wrap_inline_box(r, cidx, cell_x, row_y, cell_w, 0);
+                if (YETTY_IS_ERR(wrap_res)) {
+                    free(items);
+                    return YETTY_ERR(float, "layout_grid: child text", wrap_res);
+                }
+                c = &r->boxes.data[cidx];
+                c->x = cell_x;
+                c->y = row_y;
+                c->w = cell_w;
+                child_h = wrap_res.value;
+                c->h = child_h;
+            } else if (c->kind == YL_BOX_INLINE_IMAGE) {
+                float img_w = c->w > 0.0f ? c->w : 100.0f;
+                float img_h = c->h > 0.0f ? c->h : 100.0f;
+                if (img_w > cell_w && cell_w > 0.0f) {
+                    img_h *= cell_w / img_w;
+                    img_w = cell_w;
+                }
+                c->x = cell_x;
+                c->y = row_y;
+                c->w = img_w;
+                c->h = img_h;
+                c->width_source = YL_SRC_IMG_INTRINSIC;
+                c->height_source = YL_SRC_IMG_INTRINSIC;
+                child_h = img_h;
+            }
+            item->bottom = row_y + child_h;
+            if (item->row_span == 1) {
+                if (child_h > row_h) {
+                    row_h = child_h;
+                }
+                if (row_member_count < YL_GRID_MAX_TRACKS) {
+                    row_members[row_member_count++] = cidx;
+                }
+            }
+            apply_transform(r, cidx);
+        }
+        /* Multi-row members ending here fold their overhang into this
+		 * row. */
+        for (uint32_t i = 0; i < item_count; i++) {
+            if (items[i].row_span > 1 && items[i].row + items[i].row_span - 1 == rr) {
+                float needed = items[i].bottom - row_y;
+                if (needed > row_h) {
+                    row_h = needed;
+                }
+            }
+        }
+        if (stretch_items) {
+            grid_stretch_row_members(r, row_members, row_member_count, row_h);
+        }
+        last_row_bottom = row_y + row_h;
+        row_y = last_row_bottom + row_gap;
+    }
+    free(items);
 
-    float block_height = (placed_any ? (row_y + row_h) : content_origin_y) - origin_y + pad_bottom;
-    self = &r->boxes.data[idx];
+    float block_height =
+        (item_count > 0 ? last_row_bottom : content_origin_y) - origin_y + pad_bottom;
     struct yetty_ycore_void_result abs_res =
         flex_layout_absolute_children(r, idx, origin_x, origin_y, content_w, block_height);
     YETTY_RETURN_IF_ERR(float, abs_res, "layout_grid: place out-of-flow");
@@ -2214,12 +2671,25 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
             float border_h = c->border_left + c->border_right;
             float box_extra = c->border_box ? 0.0f : (pad_h + border_h);
             float child_w;
+            uint8_t child_width_source;
             if (c->css_width > 0.0f) {
                 child_w = c->css_width + box_extra;
+                child_width_source = YL_SRC_CSS;
             } else if (c->css_width < 0.0f) {
                 child_w = avail_w * (-c->css_width) + box_extra;
+                child_width_source = YL_SRC_CSS;
+            } else if (c->shrink_to_fit) {
+                /* Promoted inline-block / inline-flex widget: max-content
+				 * width capped at the available area, never the full
+				 * parent content width. +1px wrap-rounding slack. */
+                int measure_budget = YL_CELL_MEASURE_BUDGET;
+                float fit_w =
+                    measure_cell_content_width(r, cidx, &measure_budget) + pad_h + border_h + 1.0f;
+                child_w = fit_w < avail ? fit_w : avail;
+                child_width_source = fit_w < avail ? YL_SRC_SHRINK_TO_FIT : YL_SRC_AVAIL;
             } else {
                 child_w = avail;
+                child_width_source = YL_SRC_AVAIL;
             }
 
             /* <figure> shrink-to-fit. Without this, a Wikipedia article
@@ -2303,6 +2773,7 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
             c->x = place_x;
             c->y = place_y;
             c->w = child_w;
+            c->width_source = child_width_source;
             /* The recursion subtracts only padding (not border) from the
              * width it is handed to derive the children's content area.
              * For a content-box explicit width, pre-subtract the border so
@@ -2344,6 +2815,9 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
                 c = &r->boxes.data[cidx];
             }
             c->h = child_h;
+            c->height_source = (c->css_height != 0.0f && child_h != child_res.value)
+                                   ? YL_SRC_CSS
+                                   : YL_SRC_CONTENT;
             cursor_y += child_h;
             prev_margin_bottom = c->margin_bottom;
             has_prev = 1;
@@ -2362,8 +2836,10 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
             if (avail_w < 0) {
                 avail_w = 0;
             }
+            /* Read text_align through the vector, not `self` — earlier
+             * iterations may have grown the box vector and moved it. */
             struct float_result wrap_res =
-                wrap_inline_box(r, cidx, avail_x, cursor_y, avail_w, self->text_align);
+                wrap_inline_box(r, cidx, avail_x, cursor_y, avail_w, r->boxes.data[idx].text_align);
             YETTY_RETURN_IF_ERR(float, wrap_res, "layout_block: wrap_inline_box");
             cursor_y += wrap_res.value;
             prev_margin_bottom = 0;
@@ -2393,6 +2869,8 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
             c->y = cursor_y;
             c->w = img_w;
             c->h = img_h;
+            c->width_source = YL_SRC_IMG_INTRINSIC;
+            c->height_source = YL_SRC_IMG_INTRINSIC;
             cursor_y += img_h;
             prev_margin_bottom = 0;
             has_prev = 1;
@@ -2426,6 +2904,10 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
         if (child_pos != YL_POS_ABSOLUTE && child_pos != YL_POS_FIXED) {
             continue;
         }
+        /* Re-fetch on every pass: the in-flow loop above (and each
+         * layout_absolute_child recursion below) can grow the box vector
+         * and relocate it, leaving `self` dangling. */
+        self = &r->boxes.data[idx];
         float cb_x, cb_y, cb_w, cb_h;
         if (child_pos == YL_POS_FIXED) {
             cb_x = 0.0f;
@@ -2459,8 +2941,6 @@ static struct float_result layout_block(struct yetty_ylexbor *r, uint32_t idx, f
         struct float_result placement_res =
             layout_absolute_child(r, child_idx, cb_x, cb_y, cb_w, cb_h);
         YETTY_RETURN_IF_ERR(float, placement_res, "layout_block: absolute child");
-        /* self / vector may have relocated during the recursion. */
-        self = &r->boxes.data[idx];
     }
 
     /* Total consumed height includes our own padding-top + content +
@@ -2486,6 +2966,8 @@ struct yetty_ycore_void_result yetty_ylexbor_layout(struct yetty_ylexbor *r)
     root->x = 0;
     root->y = 0;
     root->w = (float)r->viewport_w;
+    root->width_source = YL_SRC_VIEWPORT;
+    root->height_source = YL_SRC_CONTENT;
     /* The root's containing block is the viewport — resolve any percent
      * margins/paddings on it before layout_block reads them (children are
      * resolved inside the block loop against their own parent). */

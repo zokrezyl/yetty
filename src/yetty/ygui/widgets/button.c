@@ -29,17 +29,21 @@ struct yetty_ygui_button_ptr_result yetty_ygui_button_from(struct yetty_yclass_o
 #include <yetty/ygui/mixins/clickable.h>
 #include <yetty/ygui/theme.h>
 #include <yetty/ysdf/funcs.gen.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
 struct YETTY_ANNOTATE("class@ygui:button") YETTY_ANNOTATE("parent@ygui:primitive_widget")
     YETTY_ANNOTATE("uses@ygui:clickable") yetty_ygui_button {
     char *label;
-    /* Window-control icon drawn as an SDF primitive instead of a text label:
-     * 0=none (plain label button), 1=minimize (bar), 2=maximize (box outline),
-     * 3=close (X). In this mode the button paints a flat caption-strip cell with
-     * the same SDF icons + hover wash as ychrome's window controls, so titlebars
-     * that use ygui buttons (yetty's yui) match the ychrome-driven tools. */
+    /* Icon drawn as SDF primitives instead of a text label. 0 = none (plain
+     * label button).
+     * Window controls (flat caption-strip cell, square hover wash, matching
+     * ychrome so titlebars read identically): 1=minimize (bar), 2=maximize
+     * (box outline), 3=close (X).
+     * Browser-toolbar navigation (round hover wash, Chrome-style glyphs):
+     * 4=back arrow, 5=forward arrow, 6=reload (open ring + arrowhead),
+     * 7=stop (X) — 6/7 are the two states of a reload/stop toggle. */
     int chrome_icon;
 };
 
@@ -136,6 +140,94 @@ static struct yetty_ycore_void_result button_paint(struct yetty_yclass_object *y
     struct yetty_ycore_int_result hovered_res = yetty_ygui_widget_is_hovered(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, hovered_res, "button_paint: is_hovered");
     int hovered = hovered_res.value;
+
+    /* Browser-toolbar navigation icons: a round hover wash (Chrome-style)
+     * under a stroked SDF glyph. 4=back, 5=forward, 6=reload, 7=stop. */
+    if (d->chrome_icon >= 4) {
+        float cx = r.min.x + w * 0.5f;
+        float cy = r.min.y + h * 0.5f;
+        if (hovered || pressed) {
+            float wash_radius = (w < h ? w : h) * 0.5f - 3.0f;
+            /* Pressed darkens to BRAND_BORDER, hover to BRAND_BG_ROW. */
+            uint32_t wash_color = pressed ? 0xFF474A36u : BTN_BG_IDLE;
+            struct yetty_ysdf_circle wash = {cx, cy, wash_radius};
+            struct yetty_ycore_void_result wash_res = yetty_ydraw_drawable_list_add_cmd_add_circle(
+                ctx->ygrid_drawable_list, 0, 0, wash_color, 0u, 0.0f, &wash);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, wash_res, "button_paint: nav hover wash");
+        }
+        float ext = h * 0.16f;
+        float stroke = 1.5f;
+        struct yetty_ycore_void_result icon_res = YETTY_OK_VOID();
+        if (d->chrome_icon == 4 || d->chrome_icon == 5) {
+            /* Arrow: horizontal shaft plus a chevron head at the tip. */
+            float dir = (d->chrome_icon == 4) ? -1.0f : 1.0f;
+            float tip_x = cx + dir * ext;
+            float tail_x = cx - dir * ext;
+            struct yetty_ysdf_segment shaft = {tail_x, cy, tip_x, cy};
+            icon_res = yetty_ydraw_drawable_list_add_cmd_add_segment(ctx->ygrid_drawable_list, 0, 1,
+                                                                     0u, BTN_FG, stroke, &shaft);
+            if (YETTY_IS_OK(icon_res)) {
+                struct yetty_ysdf_segment head_upper = {tip_x, cy, tip_x - dir * ext * 0.9f,
+                                                        cy - ext * 0.9f};
+                icon_res = yetty_ydraw_drawable_list_add_cmd_add_segment(
+                    ctx->ygrid_drawable_list, 0, 1, 0u, BTN_FG, stroke, &head_upper);
+            }
+            if (YETTY_IS_OK(icon_res)) {
+                struct yetty_ysdf_segment head_lower = {tip_x, cy, tip_x - dir * ext * 0.9f,
+                                                        cy + ext * 0.9f};
+                icon_res = yetty_ydraw_drawable_list_add_cmd_add_segment(
+                    ctx->ygrid_drawable_list, 0, 1, 0u, BTN_FG, stroke, &head_lower);
+            }
+        } else if (d->chrome_icon == 6) {
+            /* Reload: a ring with its gap centered on top plus a filled
+			 * arrowhead at the gap's left edge pointing clockwise across
+			 * it (Material "refresh" reads the same way).
+			 *
+			 * Ring-SDF orientation: the shader folds x (mirror), rotates
+			 * by the normal (cos t, sin t), and keeps the half-plane x<0
+			 * — the visible span works out to 2t centered on the screen
+			 * BOTTOM. For a gap of 2g on top, t = 180° - g, so
+			 * normal = (-cos g, sin g). */
+            float gap_half_rad = 0.61f; /* ~35° — a ~70° top gap */
+            float ring_radius = ext * 1.15f;
+            float sin_gap = sinf(gap_half_rad);
+            float cos_gap = cosf(gap_half_rad);
+            struct yetty_ysdf_ring ring = {cx, cy, -cos_gap, sin_gap, ring_radius, stroke * 2.0f};
+            icon_res = yetty_ydraw_drawable_list_add_cmd_add_ring(ctx->ygrid_drawable_list, 0, 1,
+                                                                  BTN_FG, 0u, 0.0f, &ring);
+            if (YETTY_IS_OK(icon_res)) {
+                /* Arrowhead at the top-left gap edge; tangent (clockwise,
+				 * across the gap) points right and slightly up. */
+                float edge_x = cx - ring_radius * sin_gap;
+                float edge_y = cy - ring_radius * cos_gap;
+                float tangent_x = cos_gap;
+                float tangent_y = -sin_gap;
+                float head_len = ext * 0.85f;
+                float head_half_width = ext * 0.6f;
+                struct yetty_ysdf_triangle head = {
+                    edge_x + tangent_x * head_len,      edge_y + tangent_y * head_len,
+                    edge_x + sin_gap * head_half_width, edge_y + cos_gap * head_half_width,
+                    edge_x - sin_gap * head_half_width, edge_y - cos_gap * head_half_width,
+                };
+                icon_res = yetty_ydraw_drawable_list_add_cmd_add_triangle(
+                    ctx->ygrid_drawable_list, 0, 1, BTN_FG, 0u, 0.0f, &head);
+            }
+        } else {
+            /* Stop: an X, slightly larger than the window-control close
+			 * glyph so it fills the round wash the way Chrome's does. */
+            float x_ext = ext * 0.95f;
+            struct yetty_ysdf_segment diag_a = {cx - x_ext, cy - x_ext, cx + x_ext, cy + x_ext};
+            struct yetty_ysdf_segment diag_b = {cx - x_ext, cy + x_ext, cx + x_ext, cy - x_ext};
+            icon_res = yetty_ydraw_drawable_list_add_cmd_add_segment(ctx->ygrid_drawable_list, 0, 1,
+                                                                     0u, BTN_FG, stroke, &diag_a);
+            if (YETTY_IS_OK(icon_res)) {
+                icon_res = yetty_ydraw_drawable_list_add_cmd_add_segment(
+                    ctx->ygrid_drawable_list, 0, 1, 0u, BTN_FG, stroke, &diag_b);
+            }
+        }
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, icon_res, "button_paint: nav icon");
+        return YETTY_OK_VOID();
+    }
 
     /* Window-control mode: paint a flat caption cell with an SDF icon (no
      * rounded gradient surface, no text label), matching ychrome's controls so
@@ -290,9 +382,10 @@ struct yetty_ycore_void_result yetty_ygui_button_set_label(struct yetty_yclass_o
     return yetty_ygui_widget_set_dirty(obj);
 }
 
-/* Draw the button as a window-control cell with an SDF icon instead of a text
- * label: 0=none (normal label button), 1=minimize, 2=maximize, 3=close. Used by
- * yetty's yui titlebar so its controls match the ychrome-driven tools. */
+/* Draw the button as an SDF icon instead of a text label: 0=none (normal
+ * label button); window controls 1=minimize, 2=maximize, 3=close (used by
+ * yetty's yui titlebar so its controls match the ychrome-driven tools);
+ * browser-toolbar navigation 4=back, 5=forward, 6=reload, 7=stop. */
 YETTY_ANNOTATE("expose")
 struct yetty_ycore_void_result yetty_ygui_button_set_chrome_icon(struct yetty_yclass_object *obj,
                                                                  int kind)
@@ -303,7 +396,7 @@ struct yetty_ycore_void_result yetty_ygui_button_set_chrome_icon(struct yetty_yc
     struct yetty_ygui_button_ptr_result d_dr = yetty_ygui_button_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, d_dr, "yetty_ygui_button_set_chrome_icon: data_get");
     struct yetty_ygui_button *d = d_dr.value;
-    d->chrome_icon = (kind >= 1 && kind <= 3) ? kind : 0;
+    d->chrome_icon = (kind >= 1 && kind <= 7) ? kind : 0;
     return yetty_ygui_widget_set_dirty(obj);
 }
 

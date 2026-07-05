@@ -55,8 +55,6 @@ static void box_vec_clear(struct yetty_ylexbor_box_vec *v)
             v->data[i].segs = NULL;
             v->data[i].segs_count = 0;
         }
-        free(v->data[i].bg_image_url);
-        v->data[i].bg_image_url = NULL;
     }
     v->size = 0;
 }
@@ -65,11 +63,21 @@ static void box_vec_destroy(struct yetty_ylexbor_box_vec *v)
 {
     for (uint32_t i = 0; i < v->size; i++) {
         free(v->data[i].segs);
-        free(v->data[i].bg_image_url);
     }
     free(v->data);
     v->data = NULL;
     v->size = v->cap = 0;
+}
+
+static void kv_store_destroy(struct yetty_ylexbor_kv_store *store)
+{
+    for (int i = 0; i < store->count; i++) {
+        free(store->items[i].key);
+        free(store->items[i].value);
+    }
+    free(store->items);
+    store->items = NULL;
+    store->count = store->cap = 0;
 }
 
 /* ===========================================================================
@@ -159,11 +167,39 @@ float yetty_ylexbor_naive_text_width(const char *s, size_t len, float font_size,
  * Public lifecycle
  * ===========================================================================*/
 
+/* Unwind a partially-constructed engine on a create failure — releases
+ * the private loader (if one was made) and the engine allocation. */
+static void create_fail_cleanup(struct yetty_ylexbor *r)
+{
+    if (r->owns_loader) {
+        struct yetty_ycore_void_result loader_res = yetty_ybrowser_loader_destroy(r->loader);
+        if (YETTY_IS_ERR(loader_res)) {
+            yetty_ycore_error_destroy(loader_res.error);
+        }
+    }
+    free(r);
+}
+
 struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_config *cfg)
 {
     struct yetty_ylexbor *r = calloc(1, sizeof(*r));
     if (r == NULL) {
         return YETTY_ERR(yetty_ylexbor_ptr, "ylexbor alloc");
+    }
+
+    /* Network loader: borrow the host's (shared connection pool across
+	 * engines) or create a private one. */
+    if (cfg && cfg->loader) {
+        r->loader = cfg->loader;
+        r->owns_loader = 0;
+    } else {
+        struct yetty_ybrowser_loader_ptr_result loader_res = yetty_ybrowser_loader_create();
+        if (YETTY_IS_ERR(loader_res)) {
+            free(r);
+            return YETTY_ERR(yetty_ylexbor_ptr, "ylexbor_create: loader", loader_res);
+        }
+        r->loader = loader_res.value;
+        r->owns_loader = 1;
     }
 
     r->viewport_w = cfg && cfg->viewport_width > 0 ? cfg->viewport_width : 1024;
@@ -172,12 +208,12 @@ struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_
 
     r->document = lxb_html_document_create();
     if (r->document == NULL) {
-        free(r);
+        create_fail_cleanup(r);
         return YETTY_ERR(yetty_ylexbor_ptr, "html_document_create");
     }
     if (lxb_style_init(r->document) != LXB_STATUS_OK) {
         lxb_html_document_destroy(r->document);
-        free(r);
+        create_fail_cleanup(r);
         return YETTY_ERR(yetty_ylexbor_ptr, "lxb_style_init");
     }
 
@@ -187,7 +223,7 @@ struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_
             lxb_css_parser_destroy(r->css_parser, true);
         }
         lxb_html_document_destroy(r->document);
-        free(r);
+        create_fail_cleanup(r);
         return YETTY_ERR(yetty_ylexbor_ptr, "css_parser_init");
     }
 
@@ -219,6 +255,15 @@ struct yetty_ycore_void_result _yetty_ylexbor_destroy_now(struct yetty_ylexbor *
     yetty_ylexbor_grid_classes_free(r);
     free(r->text_chunks);
     free(r->base_url);
+    kv_store_destroy(&r->web_local_storage);
+    kv_store_destroy(&r->web_session_storage);
+    free(r->web_cookie_string);
+    if (r->owns_loader) {
+        struct yetty_ycore_void_result loader_res = yetty_ybrowser_loader_destroy(r->loader);
+        if (YETTY_IS_ERR(loader_res)) {
+            yetty_ycore_error_destroy(loader_res.error);
+        }
+    }
     for (int i = 0; i < r->img_cache_count; i++) {
         free(r->img_cache[i].url);
         free(r->img_cache[i].pixels);
@@ -305,12 +350,10 @@ void *yetty_ylexbor_internal_get_js_ctx(struct yetty_ylexbor *r)
     return r ? r->js_ctx : NULL;
 }
 
-static int g_css_loaded = 0, g_css_failed = 0, g_css_inline = 0;
-
 /* One CSS source to apply. EITHER `inline_body` is set (an inline
  * <style> block — body is owned, will be freed after add_css) OR `url`
- * is set (external <link>; after the parallel-fetch step, body[i] /
- * len[i] / status[i] in the parent arrays carry the fetched response).
+ * is set (external <link>; after the parallel-fetch step, the matching
+ * slot in the response array carries the fetched body).
  * Document order across the two types is preserved by appending to a
  * single list during the DOM walk — CSS cascade specificity depends
  * on source order, so we must apply inline + external in the order
@@ -431,35 +474,37 @@ static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_yle
             ext_n++;
         }
     }
-    char **fetch_urls = NULL;
-    char **bodies = NULL;
-    size_t *lens = NULL;
-    long *status = NULL;
+    struct yetty_ybrowser_request *fetch_requests = NULL;
+    struct yetty_ybrowser_response *fetch_responses = NULL;
     int *slot_to_entry = NULL;
     if (ext_n > 0) {
-        fetch_urls = calloc((size_t)ext_n, sizeof(*fetch_urls));
-        bodies = calloc((size_t)ext_n, sizeof(*bodies));
-        lens = calloc((size_t)ext_n, sizeof(*lens));
-        status = calloc((size_t)ext_n, sizeof(*status));
+        fetch_requests = calloc((size_t)ext_n, sizeof(*fetch_requests));
+        fetch_responses = calloc((size_t)ext_n, sizeof(*fetch_responses));
         slot_to_entry = calloc((size_t)ext_n, sizeof(*slot_to_entry));
-        if (!fetch_urls || !bodies || !lens || !status || !slot_to_entry) {
-            free(fetch_urls);
-            free(bodies);
-            free(lens);
-            free(status);
+        if (!fetch_requests || !fetch_responses || !slot_to_entry) {
+            free(fetch_requests);
+            free(fetch_responses);
             free(slot_to_entry);
+            fetch_requests = NULL;
+            fetch_responses = NULL;
+            slot_to_entry = NULL;
             ext_n = 0;
         } else {
             int j = 0;
             for (int i = 0; i < cc.count; i++) {
                 if (cc.items[i].is_external) {
-                    fetch_urls[j] = cc.items[i].url;
+                    fetch_requests[j].url = cc.items[i].url;
+                    fetch_requests[j].kind = YETTY_YBROWSER_REQUEST_STYLE;
+                    fetch_requests[j].referer = r->base_url;
                     slot_to_entry[j] = i;
                     j++;
                 }
             }
-            yetty_ylexbor_http_get_many((const char *const *)fetch_urls, ext_n, r->base_url,
-                                        /*concurrency=*/8, bodies, lens, status);
+            struct yetty_ycore_void_result many_res = yetty_ybrowser_fetch_many(
+                r->loader, fetch_requests, ext_n, fetch_responses, /*host_connection_cap=*/8);
+            if (YETTY_IS_ERR(many_res)) {
+                yetty_ycore_error_destroy(many_res.error);
+            }
         }
     }
 
@@ -478,9 +523,10 @@ static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_yle
                     break;
                 }
             }
-            if (slot >= 0 && bodies[slot] && status[slot] >= 200 && status[slot] < 300) {
+            struct yetty_ybrowser_response *response = slot >= 0 ? &fetch_responses[slot] : NULL;
+            if (response && response->body && response->status >= 200 && response->status < 300) {
                 struct yetty_ycore_void_result ar =
-                    yetty_ylexbor_add_css(r, bodies[slot], lens[slot]);
+                    yetty_ylexbor_add_css(r, response->body, response->body_len);
                 if (YETTY_IS_ERR(ar)) {
                     if (YETTY_IS_OK(apply_res)) {
                         apply_res =
@@ -489,13 +535,13 @@ static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_yle
                         yetty_ycore_error_destroy(ar.error);
                     }
                 } else {
-                    g_css_loaded++;
+                    r->css_sheets_loaded++;
                 }
             } else {
-                g_css_failed++;
+                r->css_sheets_failed++;
             }
-            if (slot >= 0) {
-                free(bodies[slot]);
+            if (response) {
+                yetty_ybrowser_response_dispose(response);
             }
             free(e->url);
         } else {
@@ -509,15 +555,13 @@ static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_yle
                     yetty_ycore_error_destroy(ar.error);
                 }
             } else {
-                g_css_inline++;
+                r->css_sheets_inline++;
             }
             free(e->inline_body);
         }
     }
-    free(fetch_urls);
-    free(bodies);
-    free(lens);
-    free(status);
+    free(fetch_requests);
+    free(fetch_responses);
     free(slot_to_entry);
     free(cc.items);
     return apply_res;
@@ -531,6 +575,18 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     }
 
     /* Replace the document — fresh parser state, drop any prior boxes. */
+
+    /* The re-parse below frees every node of the old DOM and recycles the
+	 * memory for the new one. The JS world is full of raw pointers into
+	 * that old tree — wrapper opaques, the listener pool, timer callbacks
+	 * closing over old elements — so it must die with the document. A
+	 * surviving timer from the previous page would otherwise mutate
+	 * recycled memory and corrupt the new DOM. Torn down while the old
+	 * document is still alive so the job-drain inside can run safely;
+	 * the next script run lazily re-creates the runtime against the new
+	 * document. */
+    yetty_ylexbor_js_destroy(r);
+
     box_vec_clear(&r->boxes);
     arena_reset(r);
     yetty_ylexbor_grid_classes_free(r);
@@ -539,6 +595,9 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     /* Invalidate any in-flight async image jobs from the previous document —
      * their done() will find a mismatched generation and discard. */
     r->fetch_generation++;
+    r->css_sheets_loaded = 0;
+    r->css_sheets_failed = 0;
+    r->css_sheets_inline = 0;
 
     yetty_ylexbor_prof("load_html START  html_bytes=%zu", html_len);
     double t_phase = yetty_ylexbor_prof_now_ms();
@@ -594,8 +653,8 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     yetty_ylexbor_prof("  run scripts    %.0f ms", yetty_ylexbor_prof_now_ms() - t_phase);
     t_phase = yetty_ylexbor_prof_now_ms();
 
-    ydebug("css sheets ext=%d inline=%d failed=%d customs=%d", g_css_loaded, g_css_inline,
-           g_css_failed, r->customs.size);
+    ydebug("css sheets ext=%d inline=%d failed=%d customs=%d", r->css_sheets_loaded,
+           r->css_sheets_inline, r->css_sheets_failed, r->customs.size);
     for (int i = 0; i < r->customs.size; i++) {
         ydebug("css   %s = %s", r->customs.data[i].name, r->customs.data[i].value);
     }
@@ -626,6 +685,17 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css(struct yetty_ylexbor *r, co
         return YETTY_ERR(yetty_ycore_void, "ylexbor_add_css: null");
     }
 
+    /* Expand `flex: …` shorthands into longhands FIRST — libcss parses
+	 * flex-grow/-shrink/-basis but not the shorthand, and stylesheets are
+	 * where real pages set flex. The rewritten copy (when any expansion
+	 * happened) feeds every consumer below: scanners, libcss, lexbor. */
+    size_t expanded_len = 0;
+    char *expanded_css = yetty_ylexbor_css_expand_flex(css, css_len, &expanded_len);
+    if (expanded_css != NULL) {
+        css = expanded_css;
+        css_len = expanded_len;
+    }
+
     /* Pre-scan for `:root { --x: y; }` etc. before lexbor parses,
 	 * so var() lookups see the latest definitions. */
     yetty_ylexbor_css_vars_scan(r, css, css_len);
@@ -634,21 +704,26 @@ struct yetty_ycore_void_result yetty_ylexbor_add_css(struct yetty_ylexbor *r, co
      * tracks. */
     yetty_ylexbor_css_scan_grid_content_width(r, css, css_len);
     yetty_ylexbor_css_scan_grid_templates(r, css, css_len);
+    yetty_ylexbor_css_scan_grid_spans(r, css, css_len);
+    yetty_ylexbor_css_scan_flex_gaps(r, css, css_len);
 
     /* Also push the same CSS through libcss so its cascade sees it. */
     (void)yetty_ybrowser_libcss_add_sheet(r, css, css_len, CSS_ORIGIN_AUTHOR);
 
     lxb_css_stylesheet_t *sheet = lxb_css_stylesheet_create(NULL);
     if (sheet == NULL) {
+        free(expanded_css);
         return YETTY_ERR(yetty_ycore_void, "stylesheet_create");
     }
     lxb_status_t s =
         lxb_css_stylesheet_parse(sheet, r->css_parser, (const lxb_char_t *)css, css_len);
     if (s != LXB_STATUS_OK) {
         lxb_css_stylesheet_destroy(sheet, true);
+        free(expanded_css);
         return YETTY_ERR(yetty_ycore_void, "stylesheet_parse");
     }
     s = lxb_html_document_stylesheet_attach(r->document, sheet);
+    free(expanded_css);
     if (s != LXB_STATUS_OK) {
         lxb_css_stylesheet_destroy(sheet, true);
         return YETTY_ERR(yetty_ycore_void, "stylesheet_attach");
@@ -871,6 +946,59 @@ int yetty_ylexbor_test_box_data_test_at(const struct yetty_ylexbor *r, int index
     return 0;
 }
 
+const char *yetty_ylexbor_size_source_name(int source)
+{
+    static const char *const names[] = {
+        [YL_SRC_NONE] = "none",
+        [YL_SRC_VIEWPORT] = "viewport",
+        [YL_SRC_CSS] = "css",
+        [YL_SRC_AVAIL] = "avail",
+        [YL_SRC_SHRINK_TO_FIT] = "fit",
+        [YL_SRC_CONTENT] = "content",
+        [YL_SRC_FLEX_BASIS] = "flex-basis",
+        [YL_SRC_FLEX_EVEN] = "flex-even",
+        [YL_SRC_FLEX_SHARE] = "flex-share",
+        [YL_SRC_FLEX_GROW] = "flex-grow",
+        [YL_SRC_FLEX_SHRINK] = "flex-shrink",
+        [YL_SRC_FLEX_MIN] = "flex-min",
+        [YL_SRC_FLEX_STRETCH] = "flex-stretch",
+        [YL_SRC_GRID_TRACKS] = "grid-tracks",
+        [YL_SRC_GRID_STRETCH] = "grid-stretch",
+        [YL_SRC_TABLE_COLS] = "table-cols",
+        [YL_SRC_ABS_INSET] = "abs-inset",
+        [YL_SRC_ABS_FIT] = "abs-fit",
+        [YL_SRC_IMG_INTRINSIC] = "img",
+    };
+    if (source < 0 || (size_t)source >= sizeof(names) / sizeof(names[0]) ||
+        names[source] == NULL) {
+        return "?";
+    }
+    return names[source];
+}
+
+int yetty_ylexbor_test_box_sources_at(const struct yetty_ylexbor *r, int index,
+                                      const char **width_source_out,
+                                      const char **height_source_out)
+{
+    if (width_source_out) {
+        *width_source_out = "?";
+    }
+    if (height_source_out) {
+        *height_source_out = "?";
+    }
+    if (r == NULL || index < 0 || (uint32_t)index >= r->boxes.size) {
+        return -1;
+    }
+    const struct yetty_ylexbor_box *b = &r->boxes.data[index];
+    if (width_source_out) {
+        *width_source_out = yetty_ylexbor_size_source_name(b->width_source);
+    }
+    if (height_source_out) {
+        *height_source_out = yetty_ylexbor_size_source_name(b->height_source);
+    }
+    return 0;
+}
+
 int yetty_ylexbor_test_box_path_at(const struct yetty_ylexbor *r, int index, char *out_buf, int cap)
 {
     if (out_buf && cap > 0) {
@@ -918,6 +1046,100 @@ int yetty_ylexbor_test_box_path_at(const struct yetty_ylexbor *r, int index, cha
         pos += written;
     }
     return 0;
+}
+
+/* Copy of `name`'s value on `element` when non-empty and containing
+ * `contains` (NULL = any content). NULL when absent/filtered. */
+static char *element_attr_copy(lxb_dom_element_t *element, const char *name, size_t name_len,
+                               const char *contains)
+{
+    size_t value_len = 0;
+    const lxb_char_t *value =
+        lxb_dom_element_get_attribute(element, (const lxb_char_t *)name, name_len, &value_len);
+    if (value == NULL || value_len == 0) {
+        return NULL;
+    }
+    char *copy = malloc(value_len + 1);
+    if (copy == NULL) {
+        return NULL;
+    }
+    memcpy(copy, value, value_len);
+    copy[value_len] = '\0';
+    if (contains != NULL && strstr(copy, contains) == NULL) {
+        free(copy);
+        return NULL;
+    }
+    return copy;
+}
+
+/* Depth-first scan of `node`'s subtree for the first element whose `name`
+ * attribute passes element_attr_copy's filter. Depth-capped — a match sits
+ * a handful of levels inside a card, never hundreds. */
+static char *subtree_attr_find(lxb_dom_node_t *node, const char *name, size_t name_len,
+                               const char *contains, int depth)
+{
+    if (depth > 64) {
+        return NULL;
+    }
+    for (lxb_dom_node_t *child = node->first_child; child; child = child->next) {
+        if (child->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+            char *found =
+                element_attr_copy(lxb_dom_interface_element(child), name, name_len, contains);
+            if (found) {
+                return found;
+            }
+        }
+        char *found = subtree_attr_find(child, name, name_len, contains, depth + 1);
+        if (found) {
+            return found;
+        }
+    }
+    return NULL;
+}
+
+char *yetty_ylexbor_ancestor_attr_at(struct yetty_ylexbor *r, float x, float y, const char *name,
+                                     const char *contains)
+{
+    if (r == NULL || name == NULL) {
+        return NULL;
+    }
+    size_t name_len = strlen(name);
+    /* Deepest box containing (x, y) — same scan as link_at. */
+    lxb_dom_element_t *target = NULL;
+    for (uint32_t i = 0; i < r->boxes.size; i++) {
+        struct yetty_ylexbor_box *b = &r->boxes.data[i];
+        if (b->element == NULL) {
+            continue;
+        }
+        if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h) {
+            target = b->element;
+        }
+    }
+    if (target == NULL) {
+        return NULL;
+    }
+    for (lxb_dom_node_t *n = lxb_dom_interface_node(target); n; n = n->parent) {
+        if (n->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+            continue;
+        }
+        char *found = element_attr_copy(lxb_dom_interface_element(n), name, name_len, contains);
+        if (found) {
+            return found;
+        }
+        /* Filtered search: the payload often lives on a SIBLING subtree of
+		 * the hit — e.g. gnews puts the article-URL jslog on a separate
+		 * overlay <a> next to the headline link, inside the same card. The
+		 * nearest ancestor whose subtree holds a match is that card. Only
+		 * done with a filter — the unfiltered walk keeps its plain
+		 * "attribute on an ancestor" contract. */
+        if (contains != NULL) {
+            found = subtree_attr_find(n, name, name_len, contains, 0);
+            if (found) {
+                return found;
+            }
+        }
+    }
+    return NULL;
 }
 
 char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y)

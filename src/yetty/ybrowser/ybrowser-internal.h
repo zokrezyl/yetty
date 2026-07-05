@@ -70,15 +70,97 @@ struct yl_grid_track {
  * via `grid-column: span N`). */
 #define YL_GRID_MAX_TRACKS 16
 
+/* Ancestor-context class requirements shared by the class-keyed grid
+ * tables: a selector's non-target classes, matched loosely against the
+ * element and its DOM ancestors at lookup time. */
+enum { YL_GRID_SPAN_CONTEXT_MAX = 4 };
+
 /* A class-scoped grid template parsed from the author CSS
- * (`.cls{display:grid;grid-template-columns:…;column-gap:…}`). Looked up by
- * class name at box-build for grid containers. */
+ * (`.cls{display:grid;grid-template-columns:…;column-gap:…}`,
+ * `.card.wide{grid-template-columns:1fr 16px auto}`). Looked up by class
+ * (+ ancestor context) at box-build for grid containers. */
 struct yl_grid_class {
-    char *cls; /* owned; freed on document replace */
+    char *cls;                               /* target class — owned; freed on document replace */
+    char *context[YL_GRID_SPAN_CONTEXT_MAX]; /* owned */
+    int context_count;
     struct yl_grid_track tracks[YL_GRID_MAX_TRACKS];
     uint8_t ntracks;
+    /* `grid-template-columns: inherit` (gnews subgrid idiom
+	 * `.Oc0wGc{display:inherit;grid-template-columns:inherit}`): ntracks
+	 * is 0 here — box-build copies the tracks from the parent box. */
+    uint8_t inherit_template;
     float col_gap;
     float row_gap;
+};
+
+/* A class-scoped `grid-column` / `grid-row` placement parsed from the
+ * author CSS (`.tile.feature { grid-column: span 2 }`,
+ * `.card.wide .thumb { grid-column: 3/3 }`,
+ * `.card .thumb { grid-row: 1/span 5 }`). Inline-style placement and
+ * span-in-class-name (Primer) are handled at box-build; this table
+ * covers the stylesheet-rule case libcss doesn't surface (no grid
+ * support). The selector's final compound names the TARGET class; every
+ * other class in the selector (ancestor compounds, extra classes on the
+ * final compound) is kept as a loose CONTEXT requirement checked against
+ * the element and its DOM ancestors at lookup time — combinators are not
+ * modelled. Entries keep stylesheet order; the last matching entry wins
+ * per axis (cascade approximation). */
+struct yl_grid_span_class {
+    char *cls;                               /* target class — owned; freed on document replace */
+    char *context[YL_GRID_SPAN_CONTEXT_MAX]; /* owned */
+    int context_count;
+    uint8_t axis;  /* 0 = grid-column, 1 = grid-row */
+    uint8_t start; /* 1-based explicit start line; 0 = auto */
+    uint8_t span;
+};
+
+/* Resolved grid placement for one element, both axes (0 = auto). */
+struct yl_grid_placement {
+    uint8_t col_start;
+    uint8_t col_span;
+    uint8_t row_start;
+    uint8_t row_span;
+};
+
+/* A `gap`/`column-gap` on a flex container from the author CSS
+ * (`.cards { display:flex; gap:16px }`, `header nav { display:flex;
+ * gap:24px }`). libcss in this tree models only the legacy multicol
+ * column-gap, so these are text-scanned like the grid tables. Keyed by
+ * the LAST simple selector: a class (match_tag=0) or a bare tag name
+ * (match_tag=1). */
+struct yl_flex_gap_class {
+    char *key; /* owned; freed on document replace */
+    uint8_t match_tag;
+    float col_gap;
+};
+
+/* Which engine decision produced a box's used width/height — stamped by
+ * the layout pass at every final size assignment, emitted by
+ * `--dump-boxes` (`ws=`/`hs=` columns) and clustered on by the anchor
+ * comparator. The point: a geometry delta then NAMES the deciding branch
+ * (`54x width src=abs-fit`) instead of requiring a manual reduction to
+ * find it. Coarse on purpose — one value per mechanism, not per line of
+ * code. */
+enum yl_size_source {
+    YL_SRC_NONE = 0,      /* never laid out */
+    YL_SRC_VIEWPORT,      /* root: viewport dimensions */
+    YL_SRC_CSS,           /* explicit css width/height (incl. resolved %) */
+    YL_SRC_AVAIL,         /* block flow: parent's available width */
+    YL_SRC_SHRINK_TO_FIT, /* promoted inline-block widget: max-content cap */
+    YL_SRC_CONTENT,       /* measured max-content / laid-out content height */
+    YL_SRC_FLEX_BASIS,    /* flex-basis px / % */
+    YL_SRC_FLEX_EVEN,     /* all-auto even split */
+    YL_SRC_FLEX_SHARE,    /* mixed-auto leftover share (content-capped) */
+    YL_SRC_FLEX_GROW,     /* grew into positive leftover */
+    YL_SRC_FLEX_SHRINK,   /* shrunk by main-axis overflow */
+    YL_SRC_FLEX_MIN,      /* min-width floor reclaim */
+    YL_SRC_FLEX_STRETCH,  /* cross-axis align-items:stretch */
+    YL_SRC_GRID_TRACKS,   /* grid cell width from tracks (+span) */
+    YL_SRC_GRID_STRETCH,  /* grid row-height stretch */
+    YL_SRC_TABLE_COLS,    /* table column distribution */
+    YL_SRC_ABS_INSET,     /* absolute: both insets pinned the size */
+    YL_SRC_ABS_FIT,       /* absolute: shrink-to-fit under one/no inset */
+    YL_SRC_IMG_INTRINSIC, /* replaced intrinsic size (+aspect caps) */
 };
 
 /* CSS `position` values. Mirrors the subset of CSS_POSITION_* the layout
@@ -188,6 +270,22 @@ struct yetty_ylexbor_box {
 	 * layout pass clamps `child_w` to [min_width, max_width] and pins
 	 * to width when set. */
     float css_width, css_max_width, css_min_width;
+
+    /* Promoted inline-level box (inline-block / inline-flex widget with
+	 * no surrounding text run): block layout sizes it to its content
+	 * (max-content, capped at the available width) instead of the full
+	 * parent content area. */
+    bool shrink_to_fit;
+
+    /* INLINE_TEXT run containing `white-space: nowrap` content — the
+	 * wrap pass emits it as a single line (explicit '\n' still breaks). */
+    bool nowrap;
+
+    /* Size provenance (enum yl_size_source) — which layout decision
+	 * produced the final w/h. Diagnostic only; never read back by
+	 * layout. */
+    uint8_t width_source;
+    uint8_t height_source;
     float css_height; /* explicit height — placeholder for tables/img */
 
     /* Flex item properties (only meaningful when this box is the
@@ -245,6 +343,15 @@ struct yetty_ylexbor_box {
 		 * single column (default). github's 12-col layout places every card with
 		 * one of these spans. */
     uint8_t grid_col_span;
+
+    /* Explicit numeric grid lines on a grid ITEM (`grid-column: 3/3`,
+		 * `grid-row: 1/span 5` — the gnews card pattern: thumbnail pinned to
+		 * the right track spanning the text rows). 0 = auto (flow-placed).
+		 * grid_row_span pairs with grid_row_start the way grid_col_span pairs
+		 * with grid_col_start. */
+    uint8_t grid_col_start;
+    uint8_t grid_row_start;
+    uint8_t grid_row_span;
 
     /* Float / clear. float_side: 0=none, 1=left, 2=right.
 	 * clear_side: 0=none, 1=left, 2=right, 3=both. Boxes with
@@ -327,13 +434,6 @@ struct yetty_ylexbor_box {
     const char *marker_text;
     size_t marker_text_len;
 
-    /* Background image URL (resolved absolute), if any. Owned, freed
-	 * on document destroy. The paint pass uses
-	 * yetty_ylexbor_img_cache_get_or_load to fetch + decode, then
-	 * emits a yimage prim sized to the box BEFORE the bg_color (so
-	 * authors can layer a tint on top). */
-    char *bg_image_url;
-
     /* Style segments — only populated on the source INLINE_TEXT box
 	 * emitted by flush_inline. wrap_inline_box reads `segs[]` to
 	 * split each laid-out line into one painted sub-box per styled
@@ -394,7 +494,27 @@ struct yetty_ylexbor_customs {
  * (paint / layout / js) don't need its headers. */
 struct yetty_ybrowser_libcss;
 
+/* String→string map backing the JS localStorage / sessionStorage
+ * bindings. Grows on demand; owned by the engine and freed with it, so
+ * two engines (tabs) never see each other's keys. */
+struct yetty_ylexbor_kv_entry {
+    char *key;
+    char *value;
+};
+
+struct yetty_ylexbor_kv_store {
+    struct yetty_ylexbor_kv_entry *items;
+    int count, cap;
+};
+
 struct yetty_ylexbor {
+    /* Network loader (share handle, Alt-Svc cache). Either borrowed from
+	 * the host via config (owns_loader = 0) or created privately at
+	 * engine create (owns_loader = 1, destroyed with the engine). Never
+	 * NULL after a successful create when libcurl is compiled in. */
+    struct yetty_ybrowser_loader *loader;
+    int owns_loader;
+
     /* lexbor objects — owned. */
     lxb_html_document_t *document;
     lxb_css_parser_t *css_parser;
@@ -434,6 +554,22 @@ struct yetty_ylexbor {
     struct JSRuntime *js_rt;
     struct JSContext *js_ctx;
     int js_error_count; /* uncaught exceptions encountered */
+
+    /* JS web-storage + document.cookie backing. Engine-owned so each
+	 * document/tab gets its own map — these were process-wide once and
+	 * leaked keys and cookies across tabs. Freed on destroy. Persistence
+	 * across navigations (real localStorage semantics) arrives with the
+	 * loader/profile object. */
+    struct yetty_ylexbor_kv_store web_local_storage;
+    struct yetty_ylexbor_kv_store web_session_storage;
+    char *web_cookie_string;
+
+    /* Stylesheet-load tallies for the post-load debug line: external
+	 * sheets applied / failed, inline <style> blocks applied. Reset at
+	 * each load_html. */
+    int css_sheets_loaded;
+    int css_sheets_failed;
+    int css_sheets_inline;
     /* When set, paint does NOT fetch <img> URLs over the network — it
      * draws a placeholder for any not-yet-cached image and leaves the URL
      * pending. Keeps paint (which runs on the host render / event-loop
@@ -470,6 +606,18 @@ struct yetty_ylexbor {
     struct yl_grid_class *grid_classes;
     int grid_class_count;
     int grid_class_cap;
+
+    /* Class-scoped `grid-column: span N` rules from author CSS (see
+     * yetty_ylexbor_css_scan_grid_spans). Freed with grid_classes. */
+    struct yl_grid_span_class *grid_span_classes;
+    int grid_span_class_count;
+    int grid_span_class_cap;
+
+    /* Flex-container gaps from author CSS (see
+     * yetty_ylexbor_css_scan_flex_gaps). Freed with grid_classes. */
+    struct yl_flex_gap_class *flex_gap_classes;
+    int flex_gap_class_count;
+    int flex_gap_class_cap;
 
     /* Set once the MediaWiki float-helper stylesheet has been injected for a
      * MediaWiki page (see yetty_ybrowser_libcss_apply_wikipedia_quirks). Those
@@ -612,6 +760,49 @@ void yetty_ylexbor_css_scan_grid_content_width(struct yetty_ylexbor *r, const ch
  * (`.cls{display:grid;grid-template-columns:…;column-gap/gap/grid-gap:…}`) and
  * record them in r->grid_classes for box-build to look up by class name.
  * Cheap substring pass; safe to call per sheet. */
+/* Scan author CSS for class-scoped `grid-column` / `grid-row` placement
+ * declarations (`span N`, `A`, `A/B`, `A/span N`). Comma lists and
+ * descendant/child chains are accepted: each alternative is keyed by the
+ * last class of its final compound, with the selector's remaining classes
+ * stored as loose ancestor-context requirements. Consumed at box-build
+ * for grid items whose placement isn't set inline or encoded in a class
+ * name. */
+void yetty_ylexbor_css_scan_grid_spans(struct yetty_ylexbor *r, const char *css_source,
+                                       size_t css_len);
+
+/* Resolve both-axis grid placement for an element against the scanned
+ * table: the element must carry an entry's target class and every context
+ * class must appear on the element or one of its DOM ancestors. The last
+ * matching entry per axis (stylesheet order) wins. Fields are 0 where no
+ * entry matched. */
+struct yl_grid_placement yetty_ylexbor_grid_span_class_lookup(struct yetty_ylexbor *r,
+                                                              const lxb_dom_element_t *element);
+
+/* Parse a `grid-column` / `grid-row` declaration value ([val_start,
+ * val_end) in `src`) into a 1-based start line (0 = auto) and a span.
+ * Accepted forms: `span N`, `A`, `A/B` (span B-A), `A/span N`,
+ * `auto/span N`. Returns 0 for values it can't model (named lines,
+ * negative lines). */
+int yetty_ylexbor_grid_parse_placement(const char *src, size_t val_start, size_t val_end,
+                                       int *out_start, int *out_span);
+
+/* Scan author CSS for `gap`/`column-gap` on display:flex rules. */
+void yetty_ylexbor_css_scan_flex_gaps(struct yetty_ylexbor *r, const char *css_source,
+                                      size_t css_len);
+
+/* Resolve a flex gap for an element (by class attribute, then tag name)
+ * against the scanned table. Returns the gap in px, or 0. */
+float yetty_ylexbor_flex_gap_lookup(struct yetty_ylexbor *r, const char *class_attr,
+                                    size_t class_len, const char *tag_name, size_t tag_len);
+
+/* Expand every `flex: …` shorthand declaration in `css_source` into its
+ * longhands (flex-grow / flex-shrink / flex-basis). libcss in this tree
+ * parses the longhands but not the shorthand, and real pages set flex
+ * almost exclusively via the stylesheet shorthand. Returns a malloc'd
+ * rewritten stylesheet (caller frees, *out_len set) or NULL when nothing
+ * needed expanding. */
+char *yetty_ylexbor_css_expand_flex(const char *css_source, size_t css_len, size_t *out_len);
+
 void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *css_source,
                                            size_t len);
 
@@ -643,8 +834,7 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r);
 /* Look up a parsed grid template by an element's class attribute (space-
  * separated class list). Returns the matching entry or NULL. */
 const struct yl_grid_class *yetty_ylexbor_grid_class_lookup(struct yetty_ylexbor *r,
-                                                            const char *class_attr,
-                                                            size_t class_len);
+                                                            const lxb_dom_element_t *element);
 
 /* Resolve every `var(--name [, fallback])` reference in `value`. Returns
  * a freshly malloc'd NUL-terminated string the caller must free.
@@ -721,29 +911,11 @@ void yetty_ylexbor_js_dispatch_event_type(struct yetty_ylexbor *r, const char *t
  * the returned string. Returns NULL on failure. */
 char *yetty_ylexbor_resolve_url(struct yetty_ylexbor *r, const char *href);
 
-/* Synchronous HTTP(S) fetch — used by the script loader and fetch()
- * binding. Returns body bytes (caller frees) and HTTP status. */
-char *yetty_ylexbor_http_get(const char *url, size_t *out_len, long *out_status);
-/* Variant that sends a Referer header — needed for many CDN image
- * endpoints that 403/404 fetches without it (gstatic, cloudflare WAFs,
- * news-site image proxies). */
-char *yetty_ylexbor_http_get_referer(const char *url, const char *referer, size_t *out_len,
-                                     long *out_status);
-
-/* Parallel HTTP(S) fetch — runs up to `concurrency` requests at once
- * via curl_multi (HTTP/2 multiplexing reuses one connection per origin,
- * cutting total wall-time vs N sequential easy-handle calls). All
- * requests share the global referer (typically the document URL).
- *
- * For i in [0,n): on return, out_bodies[i] is malloc'd bytes (caller
- * frees) or NULL on failure; out_lens[i] is the body length; out_status[i]
- * is the HTTP status. Pre-allocate the three output arrays to length n.
- *
- * Used by ybrowser-paint to fetch every `<img>` URL on a page in one
- * batch before the synchronous decode/emit loop. */
-void yetty_ylexbor_http_get_many(const char *const *urls, int n, const char *referer,
-                                 int concurrency, char **out_bodies, size_t *out_lens,
-                                 long *out_status);
+/* Publish decoded RGBA pixels onto the loader's resource cache entry for
+ * `url` (copies), so the next navigation reuses the decode as well as
+ * the bytes. No-op when the entry is gone or libcurl is compiled out. */
+void yetty_ybrowser_loader_cache_put_pixels(struct yetty_ybrowser_loader *loader, const char *url,
+                                            const uint32_t *pixels, int width, int height);
 
 /* Dispatch a click event to the JS handlers attached to the element
  * whose box contains (x,y) in pane-local pixels. Returns 1 if a handler

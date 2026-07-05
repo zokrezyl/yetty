@@ -472,6 +472,45 @@ static struct yetty_ycore_void_result paint_label(struct yetty_ygui_emit_ctx *ct
                                               /*layer=*/0, /*font_id=*/-1, /*rotation=*/0.0f);
 }
 
+/* Paint at most `max_glyphs` of `text`; a longer label gets its tail
+ * replaced by one ellipsis glyph so it stops before whatever sits to its
+ * right (the close-x band). Glyphs are counted as UTF-8 sequence starts —
+ * good enough for tab titles. */
+static struct yetty_ycore_void_result paint_label_elided(struct yetty_ygui_emit_ctx *ctx,
+                                                         const char *text, int max_glyphs, float x,
+                                                         float y, uint32_t color, float font_size)
+{
+    if (!text || !text[0] || max_glyphs <= 0) {
+        return YETTY_OK_VOID();
+    }
+    int glyph_count = 0;
+    for (const char *p = text; *p; p++) {
+        if (((unsigned char)*p & 0xC0) != 0x80) {
+            glyph_count++;
+        }
+    }
+    if (glyph_count <= max_glyphs) {
+        return paint_label(ctx, text, x, y, color, font_size);
+    }
+    char clipped[256];
+    int keep_glyphs = max_glyphs - 1; /* room for the ellipsis */
+    size_t out = 0;
+    int glyphs_kept = 0;
+    for (const char *p = text; *p && out < sizeof(clipped) - 4; p++) {
+        if (((unsigned char)*p & 0xC0) != 0x80) {
+            if (glyphs_kept == keep_glyphs) {
+                break;
+            }
+            glyphs_kept++;
+        }
+        clipped[out++] = *p;
+    }
+    memcpy(clipped + out, "\xE2\x80\xA6", 3); /* … */
+    out += 3;
+    clipped[out] = '\0';
+    return paint_label(ctx, clipped, x, y, color, font_size);
+}
+
 YETTY_ANNOTATE("override@ygui:tabbar:widget_paint")
 static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_object *yclass_obj,
                                                    struct yetty_ygui_emit_ctx *ctx)
@@ -559,7 +598,11 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_object *y
             }
         }
 
-        /* Label — vertically centered, TABBAR_PILL_PAD_X from the left. */
+        /* Label — vertically centered, TABBAR_PILL_PAD_X from the left.
+         * Elided so it never runs under the close-x band: long URLs used
+         * to collide with the × and hide it. The host renders with its
+         * mono MSDF font (~0.60 em advance); 0.62 is deliberately a touch
+         * generous so we elide a character early rather than collide. */
         struct yetty_yclass_void_ptr_result hd_dr =
             yetty_yclass_object_data(c, header_class_get().value);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, hd_dr, "tabbar_paint: data_get");
@@ -568,7 +611,10 @@ static struct yetty_ycore_void_result tabbar_paint(struct yetty_yclass_object *y
             float font_size = base_font_size;
             float tx = pr.min.x + TABBAR_PILL_PAD_X;
             float ty = pr.min.y + (ph + font_size) * 0.5f - 2.0f;
-            rr = paint_label(ctx, hd->label, tx, ty, text_color, font_size);
+            float reserved_right = td->close_cb ? TABBAR_CLOSE_W : TABBAR_PILL_PAD_X;
+            float label_avail = pw - TABBAR_PILL_PAD_X - reserved_right;
+            int max_glyphs = (int)(label_avail / (font_size * 0.62f));
+            rr = paint_label_elided(ctx, hd->label, max_glyphs, tx, ty, text_color, font_size);
             YETTY_RETURN_IF_ERR(yetty_ycore_void, rr, "tabbar_paint: label");
         }
 

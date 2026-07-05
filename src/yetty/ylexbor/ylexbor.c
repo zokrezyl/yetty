@@ -320,6 +320,16 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     }
 
     /* Replace the document — fresh parser state, drop any prior boxes. */
+
+    /* The re-parse below frees every node of the old DOM and recycles the
+	 * memory for the new one. The JS world is full of raw pointers into
+	 * that old tree — wrapper opaques, the listener pool, timer callbacks
+	 * closing over old elements — so it must die with the document. Torn
+	 * down while the old document is still alive so the job-drain inside
+	 * can run safely; the next script run lazily re-creates the runtime
+	 * against the new document. */
+    yetty_ylexbor_js_destroy(r);
+
     box_vec_clear(&r->boxes);
     arena_reset(r);
     r->content_height = 0;

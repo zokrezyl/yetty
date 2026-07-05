@@ -1,0 +1,17 @@
+# Live-site anchor corpus — `corpus.py` captures each page to
+# tmp/anchors-live/<name>/ and compares ybrowser's geometry against the
+# Chrome reference. One page per line: name  width  url.
+#
+# Story URLs and article URLs rot (news cycles out) — refresh a line when
+# its capture starts 404ing and recapture with `corpus.py <name> --recapture`.
+gnews-home     1200  https://news.google.com/?hl=en-US&gl=US&ceid=US:en
+gnews-topic-1  1200  https://news.google.com/topics/CAAqHAgKIhZDQklTQ2pvSWJHOWpZV3hmZGpJb0FBUAE?hl=en-US&gl=US&ceid=US%3Aen
+gnews-topic-2  1200  https://news.google.com/topics/CAAqIQgKIhtDQkFTRGdvSUwyMHZNR3QwTlRFU0FtVnVLQUFQAQ?hl=en-US&gl=US&ceid=US%3Aen
+gnews-topic-3  1200  https://news.google.com/topics/CAAqIggKIhxDQkFTRHdvSkwyMHZNRGxqTjNjd0VnSmxiaWdBUAE?hl=en-US&gl=US&ceid=US%3Aen
+gnews-topic-4  1200  https://news.google.com/topics/CAAqJggKIiBDQkFTRWdvSUwyMHZNREpxYW5RU0FtVnVHZ0pWVXlnQVAB?hl=en-US&gl=US&ceid=US%3Aen
+gnews-story    1200  https://news.google.com/stories/CAAqNggKIjBDQklTSGpvSmMzUnZjbmt0TXpZd1NoRUtEd2lmeU96QkVSSG1yRUJXNUstR0FTZ0FQAQ?hl=en-US&gl=US&ceid=US%3Aen
+bbc-article    1200  https://www.bbc.com/news/articles/cp36l4e6v9po
+nyt-article    1200  https://www.nytimes.com/2026/07/03/us/politics/trump-mount-rushmore-america-250.html
+pbs-article    1200  https://www.pbs.org/newshour/nation/watch-trump-hails-u-s-exceptionalism-warns-of-communist-threat-in-speech-at-mount-rushmore
+guardian-art   1200  https://www.theguardian.com/us-news/2026/jul/04/trump-launches-americas-250th-birthday-celebrations-with-partisan-attack
+aljazeera-art  1200  https://www.aljazeera.com/news/2026/7/4/america250-how-the-us-heatwave-will-affect-fourth-of-july-celebrations

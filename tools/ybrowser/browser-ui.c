@@ -4,7 +4,7 @@
  *
  * Layout (root vbox):
  *   ┌ tabbar ─────────────────────────────────────────────── + ┐
- *   │ [<] [>] [Reload] [ address bar ............................ ] │  toolbar
+ *   │ [←] [→] [⟳/✕] [ address bar .............................. ] │  toolbar
  *   ├──────────────────────────────────────────────────────────┤
  *   │ scrollarea → ydraw_embed  (the rendered page)              │
  *   └──────────────────────────────────────────────────────────┘
@@ -37,6 +37,7 @@
 #include <yetty/ybrowser/ybrowser.h>
 #include <yetty/ycore/result.h>
 #include <yetty/ycore/types.h>
+#include <yetty/ycore/util.h>
 #include <yetty/ydraw-core/drawable-list.h>
 #include <yetty/yevent/event-loop.h>
 #include <yetty/yface/yface.h>
@@ -168,11 +169,13 @@ struct app {
     struct yetty_yclass_object *fw;
     struct yetty_yclass_object *root;
     struct yetty_yclass_object *tabbar;
-    struct yetty_yclass_object *address; /* textinput */
-    struct yetty_yclass_object *scroll;  /* scrollarea */
-    struct yetty_yclass_object *page;    /* ydraw_embed (HTML/SVG) — shared */
-    struct yetty_yclass_object *image;   /* yimage widget (raster) — shared */
-    int showing_image;                   /* which content widget is visible */
+    struct yetty_yclass_object *address;    /* textinput */
+    struct yetty_yclass_object *btn_reload; /* reload/stop toggle button */
+    int loading;                            /* active tab is loading — reload button shows an X */
+    struct yetty_yclass_object *scroll;     /* scrollarea */
+    struct yetty_yclass_object *page;       /* ydraw_embed (HTML/SVG) — shared */
+    struct yetty_yclass_object *image;      /* yimage widget (raster) — shared */
+    int showing_image;                      /* which content widget is visible */
 
     /* `--no-ui`: hide the tab strip + toolbar so only the page content is
 	 * rendered (the whole window is the page). Useful for clean recordings /
@@ -211,11 +214,23 @@ struct app {
 	 * IMG_RENDER_DEBOUNCE_MS window (img_last_render_ms = last such repaint). */
     int img_dirty;
     double img_last_render_ms;
+
+    /* Shared network loader — one per app so the page prefetch, every
+	 * tab's engine, and the image workers all reuse the same connection
+	 * pool / TLS sessions / Alt-Svc cache. Owned; destroyed after every
+	 * engine is gone. NULL when creation failed (fetches still work,
+	 * just without reuse). */
+    struct yetty_ybrowser_loader *loader;
 };
 
 static inline void err_ok(struct yetty_ycore_void_result r)
 {
     if (YETTY_IS_ERR(r)) {
+        /* Deliberately-tolerated failures still deserve a trace line —
+		 * a silent swallow here cost a day of debugging a black pane. */
+        char chain[512];
+        yetty_ycore_error_snprint(chain, sizeof(chain), r.error);
+        ydebug("ybrowser: tolerated error: %s", chain);
         yetty_ycore_error_destroy(r.error);
     }
 }
@@ -278,62 +293,6 @@ static void reload(struct app *a);
 static void sync_active_ui(struct app *a);
 static void render_active(struct app *a);
 static int build_ui(struct app *a);
-
-/* ===========================================================================
- * Output bridge — the framework writes OSC envelopes here; we blocking-
- * write them to stdout and flush after each emit.
- * ===========================================================================*/
-struct stdout_pty {
-    struct yetty_platform_pty base;
-};
-
-static struct yetty_ycore_size_result so_write(struct yetty_platform_pty *self, const char *data,
-                                               size_t len)
-{
-    (void)self;
-    if (len) {
-        fwrite(data, 1, len, stdout);
-    }
-    return YETTY_OK(yetty_ycore_size, len);
-}
-static struct yetty_ycore_size_result so_read(struct yetty_platform_pty *self, char *buf, size_t n)
-{
-    (void)self;
-    (void)buf;
-    (void)n;
-    return YETTY_OK(yetty_ycore_size, 0);
-}
-static struct yetty_ycore_void_result so_noop(struct yetty_platform_pty *self)
-{
-    (void)self;
-    return YETTY_OK_VOID();
-}
-static struct yetty_ycore_void_result so_resize(struct yetty_platform_pty *self, uint32_t c,
-                                                uint32_t r, uint32_t pw, uint32_t ph)
-{
-    (void)self;
-    (void)r;
-    (void)pw;
-    (void)ph;
-    return YETTY_OK_VOID();
-}
-static struct yetty_platform_pty_pipe_source *so_pipe(struct yetty_platform_pty *self)
-{
-    (void)self;
-    return NULL;
-}
-static const struct yetty_platform_pty_ops *stdout_pty_ops(void)
-{
-    static const struct yetty_platform_pty_ops ops = {
-        .destroy = so_noop,
-        .read = so_read,
-        .write = so_write,
-        .resize = so_resize,
-        .stop = so_noop,
-        .pipe_source = so_pipe,
-    };
-    return &ops;
-}
 
 /* ===========================================================================
  * History stacks.
@@ -513,7 +472,8 @@ static void cache_free(struct url_cache *c)
 
 /* Fetch `url`, preferring the cache. Always returns owned bytes (caller
  * frees *out and *out_eff); NULL on failure. Misses are fetched and cached. */
-static uint8_t *cache_fetch(struct url_cache *c, const char *url, size_t *out_len, char **out_eff)
+static uint8_t *cache_fetch(struct yetty_ybrowser_loader *loader, struct url_cache *c,
+                            const char *url, size_t *out_len, char **out_eff)
 {
     *out_len = 0;
     *out_eff = NULL;
@@ -534,7 +494,7 @@ static uint8_t *cache_fetch(struct url_cache *c, const char *url, size_t *out_le
     size_t len = 0;
     char *eff = NULL;
     double t_fetch = yetty_ylexbor_prof_now_ms();
-    char *raw = ybrowser_slurp_file(url, &len, &eff);
+    char *raw = ybrowser_slurp_file(loader, url, &len, &eff);
     yetty_ylexbor_prof("HTML fetch     %.0f ms  bytes=%zu  %.80s",
                        yetty_ylexbor_prof_now_ms() - t_fetch, len, url);
     if (!raw) {
@@ -604,6 +564,7 @@ static int tab_ensure_engine(struct app *a, struct tab *t)
         .viewport_width = a->viewport_w > 0 ? (int)a->viewport_w : 1024,
         .viewport_height = a->viewport_h > 0 ? (int)a->viewport_h : 768,
         .default_font_size = a->font_size,
+        .loader = a->loader,
     };
     struct yetty_ylexbor_ptr_result r = yetty_ylexbor_create(&cfg);
     if (YETTY_IS_ERR(r)) {
@@ -708,11 +669,113 @@ static void load_start_page(struct app *a, struct tab *t)
     yetty_ygui_framework_mark_dirty(a->fw);
 }
 
+/* Google News wraps every story link in a JS-only redirect trampoline
+ * (news.google.com/read/<token>) whose target resolves only inside their
+ * script framework — the page renders blank without it. The listing card
+ * carries the real article URL in its `jslog` attribute as a `5:<base64>`
+ * segment holding a JSON array with the URL. Unwrap at click time so a
+ * story click lands on the publisher page. Returns a malloc'd URL, or
+ * NULL when `href` is not a read-trampoline / no URL is recoverable. */
+static char *unwrap_gnews_read_link(struct yetty_ylexbor *engine, const char *href, float x,
+                                    float y)
+{
+    /* Relative story hrefs ("./read/<token>") resolve without dot-segment
+	 * normalisation, so the wire form is often "news.google.com/./read/".
+	 * Match host and path separately to catch both shapes. */
+    if (href == NULL || strstr(href, "news.google.com/") == NULL ||
+        strstr(href, "/read/") == NULL) {
+        return NULL;
+    }
+    /* The nearest jslog is usually the headline's interaction-tracking one
+	 * ("…; 3:<id>"); the article URL lives in the CARD's jslog further up
+	 * ("…; 5:<base64>"). Filter the ancestor walk to the payload we need. */
+    char *jslog = yetty_ylexbor_ancestor_attr_at(engine, x, y, "jslog", "5:");
+    if (jslog == NULL) {
+        return NULL;
+    }
+    char *result = NULL;
+    for (char *segment = strstr(jslog, "5:"); segment != NULL && result == NULL;
+         segment = strstr(segment + 2, "5:")) {
+        const char *blob = segment + 2;
+        size_t blob_len = strcspn(blob, "; \t");
+        if (blob_len < 24) { /* too short to hold a URL payload */
+            continue;
+        }
+        /* The blob may use URL-safe base64 — normalise for the decoder. */
+        char *base64_copy = malloc(blob_len + 1);
+        if (base64_copy == NULL) {
+            break;
+        }
+        for (size_t i = 0; i < blob_len; i++) {
+            char ch = blob[i];
+            base64_copy[i] = ch == '-' ? '+' : (ch == '_' ? '/' : ch);
+        }
+        base64_copy[blob_len] = '\0';
+        char *decoded = malloc(blob_len + 1); /* decoded is always shorter */
+        if (decoded == NULL) {
+            free(base64_copy);
+            break;
+        }
+        size_t decoded_len = yetty_ycore_base64_decode(base64_copy, blob_len, decoded, blob_len);
+        free(base64_copy);
+        /* First quoted non-Google http(s) URL inside the decoded JSON. */
+        for (size_t i = 0; i + 6 < decoded_len && result == NULL; i++) {
+            if (memcmp(decoded + i, "\"http", 5) != 0) {
+                continue;
+            }
+            size_t url_start = i + 1;
+            size_t url_end = url_start;
+            while (url_end < decoded_len && decoded[url_end] != '"') {
+                url_end++;
+            }
+            if (url_end >= decoded_len) {
+                break;
+            }
+            size_t url_len = url_end - url_start;
+            char *candidate = malloc(url_len + 1);
+            if (candidate == NULL) {
+                break;
+            }
+            memcpy(candidate, decoded + url_start, url_len);
+            candidate[url_len] = '\0';
+            if (strstr(candidate, "google.") == NULL && strstr(candidate, "gstatic.") == NULL) {
+                result = candidate;
+            } else {
+                free(candidate);
+                i = url_end;
+            }
+        }
+        free(decoded);
+    }
+    free(jslog);
+    return result;
+}
+
+/* Reload/stop toggle (Chrome-style): the toolbar's reload button shows a
+ * circular-arrow glyph when idle and an X while the active tab loads. On
+ * entering the loading state the frame is emitted eagerly — the document
+ * fetch in navigate() blocks the UI loop, so without the flush the X
+ * would only appear once the page had already arrived. */
+static void set_loading(struct app *a, int loading)
+{
+    if (a->loading == loading || a->btn_reload == NULL) {
+        return;
+    }
+    a->loading = loading;
+    err_ok(yetty_ygui_button_set_chrome_icon(a->btn_reload, loading ? 7 : 6));
+    yetty_ygui_framework_mark_dirty(a->fw);
+    if (loading) {
+        err_ok(yetty_ygui_framework_emit(a->fw));
+        fflush(stdout);
+    }
+}
+
 /* Load `url` (owned — navigate takes ownership) into tab `t`. With
  * push_to_back, the previous location is pushed onto the back stack and the
  * forward stack cleared (a fresh navigation, not a history move). */
 static void navigate(struct app *a, struct tab *t, char *url, int push_to_back)
 {
+    set_loading(a, 1);
     if (push_to_back && t->url && strcmp(t->url, START_URL) != 0) {
         hist_push(&t->back, &t->n_back, &t->cap_back, str_dup(t->url));
         hist_clear(t->fwd, &t->n_fwd);
@@ -720,7 +783,7 @@ static void navigate(struct app *a, struct tab *t, char *url, int push_to_back)
 
     size_t len = 0;
     char *eff = NULL;
-    uint8_t *data = cache_fetch(&a->cache, url, &len, &eff);
+    uint8_t *data = cache_fetch(a->loader, &a->cache, url, &len, &eff);
     if (data) {
         const char *base = eff ? eff : (ybrowser_looks_like_url(url) ? url : NULL);
         tab_set_document(a, t, (const char *)data, len, base);
@@ -875,7 +938,16 @@ static struct yetty_ycore_void_result on_fwd_click(struct yetty_yclass_object *o
 static struct yetty_ycore_void_result on_reload_click(struct yetty_yclass_object *o, void *ud)
 {
     (void)o;
-    reload((struct app *)ud);
+    struct app *a = ud;
+    if (a->loading) {
+        /* Stop: drop the pending deferred-script run and leave the page as
+		 * painted. Images already in flight finish on their own; no new
+		 * work is started for this load. */
+        a->tabs[a->active].scripts_pending = 0;
+        set_loading(a, 0);
+    } else {
+        reload(a);
+    }
     return YETTY_OK_VOID();
 }
 
@@ -1001,6 +1073,11 @@ static void page_click(struct app *a, float x, float y)
     float ly = y - pr.min.y;
     char *href = yetty_ylexbor_link_at(t->engine, lx, ly);
     if (href) {
+        char *unwrapped = unwrap_gnews_read_link(t->engine, href, lx, ly);
+        if (unwrapped) {
+            free(href);
+            href = unwrapped;
+        }
         navigate(a, t, href, 1);
     } else if (yetty_ylexbor_dispatch_click(t->engine, lx, ly) &&
                yetty_ylexbor_dom_dirty(t->engine)) {
@@ -1033,6 +1110,7 @@ static int pump_active(struct app *a)
 {
     struct tab *t = &a->tabs[a->active];
     int wait_ms = 100;
+    int images_fetched = 0;
     if (t->engine) {
         /* Progressive rendering: scripts were deferred so the initial HTML+CSS
 		 * could paint immediately. Once that first paint has landed
@@ -1084,14 +1162,36 @@ static int pump_active(struct app *a)
             if (yetty_ylexbor_images_in_flight(t->engine) > 0 || a->img_dirty) {
                 wait_ms = 0;
             }
-        } else if (yetty_ylexbor_fetch_one_pending_image(t->engine)) {
-            /* In-yetty client (no pool): stream one image per pump, blocking
-             * only for that single image. */
-            t->needs_render = 1;
-            a->pending_render = 1;
-            wait_ms = 0;
+        } else {
+            /* In-yetty client (no pool): stream a small parallel batch per
+             * pump — one multiplexed round-trip for four images instead of
+             * one blocking round-trip for one. */
+            images_fetched = yetty_ylexbor_fetch_pending_images(t->engine, 4);
+            if (images_fetched > 0) {
+                t->needs_render = 1;
+                a->pending_render = 1;
+                wait_ms = 0;
+            }
         }
     }
+
+    /* Reload/stop toggle: `loading` is raised by navigate() and lowered
+	 * here on the first quiet tick — deferred scripts done and no image
+	 * work this round. One-way per navigation (Chrome-like): image churn
+	 * that page JS causes later does not re-raise the X, otherwise script
+	 * heavy pages (Wikipedia's lazy loader) would show "loading" forever. */
+    if (a->loading) {
+        int quiet = t->engine == NULL ||
+                    (t->scripts_pending == 0 && images_fetched == 0 &&
+                     (a->img_pool == NULL ||
+                      (yetty_ylexbor_images_in_flight(t->engine) == 0 && a->img_dirty == 0)));
+        yetty_ylexbor_prof("pump loading: scripts_pending=%d images_fetched=%d quiet=%d",
+                           t->engine ? t->scripts_pending : -1, images_fetched, quiet);
+        if (quiet) {
+            set_loading(a, 0);
+        }
+    }
+
     return wait_ms;
 }
 
@@ -1294,9 +1394,21 @@ static int build_ui(struct app *a)
         err_ok(yetty_ygui_widget_set_visible(toolbar, 0));
     }
 
-    add_nav_button(toolbar, "<", 40.0f, on_back_click, a);
-    add_nav_button(toolbar, ">", 40.0f, on_fwd_click, a);
-    add_nav_button(toolbar, "Reload", 72.0f, on_reload_click, a);
+    /* Nav buttons carry Chrome-style SDF icons (labels are a fallback for
+	 * builds where the icon mode is unavailable): back / forward arrows and
+	 * the reload ring that set_loading() swaps to an X while loading. */
+    struct yetty_yclass_object *btn_back = add_nav_button(toolbar, "<", 40.0f, on_back_click, a);
+    if (btn_back) {
+        err_ok(yetty_ygui_button_set_chrome_icon(btn_back, 4));
+    }
+    struct yetty_yclass_object *btn_forward = add_nav_button(toolbar, ">", 40.0f, on_fwd_click, a);
+    if (btn_forward) {
+        err_ok(yetty_ygui_button_set_chrome_icon(btn_forward, 5));
+    }
+    a->btn_reload = add_nav_button(toolbar, "Reload", 40.0f, on_reload_click, a);
+    if (a->btn_reload) {
+        err_ok(yetty_ygui_button_set_chrome_icon(a->btn_reload, 6));
+    }
 
     struct yetty_yclass_object_ptr_result ar =
         yetty_ygui_widget_add(toolbar, yetty_ygui_textinput_class_get().value);
@@ -1456,6 +1568,22 @@ static void render_doc(struct app *a, struct tab *t)
     t->dl_hash = h2;
     t->dl_size = dl_sz;
 
+    /* In-yetty the page ships as one figure-body RPC, and the wire caps
+	 * bodies at 16 MiB (#437) — worse, ONE oversized body aborts the whole
+	 * widget emit walk, silently freezing every other widget (reload/stop
+	 * icon, hover washes, tab titles). Keep the previous page frame instead
+	 * of shipping an oversized one: the page stays at its last good state
+	 * while the chrome keeps updating. Standalone (own GPU window, no RPC)
+	 * has no such cap. */
+    if (a->event_loop == NULL && dl_sz > 15u * 1024u * 1024u) {
+        yetty_ylexbor_prof("render_doc: draw list %zu bytes exceeds the wire cap — frame kept",
+                           dl_sz);
+        yetty_ydraw_drawable_list_destroy(dl);
+        t->needs_render = 0;
+        t->rendered_w = w;
+        return;
+    }
+
     /* Embed takes ownership of dl (frees the previous buffer). */
     err_ok(yetty_ygui_ydraw_embed_set_buffer(a->page, dl));
     if (content_h < (int)h) {
@@ -1572,9 +1700,15 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
     a.viewport_w = (float)viewport_w;
     a.viewport_h = (float)viewport_h;
     a.font_size = font_size > 0.0f ? font_size : 16.0f;
+    {
+        struct yetty_ybrowser_loader_ptr_result loader_res = yetty_ybrowser_loader_create();
+        if (YETTY_IS_OK(loader_res)) {
+            a.loader = loader_res.value;
+        } else {
+            yetty_ycore_error_destroy(loader_res.error);
+        }
+    }
 
-    struct stdout_pty out = {0};
-    out.base.ops = stdout_pty_ops();
     struct yetty_yclass_object_ptr_result fr = yetty_ygui_framework_create(NULL);
     if (YETTY_IS_ERR(fr)) {
         fprintf(stderr, "ybrowser: framework_create: %s\n", fr.error.msg);
@@ -1587,6 +1721,27 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
     a.fw = fr.value;
     err_ok(yetty_ygui_framework_set_viewport(a.fw, (float)viewport_w, (float)viewport_h));
     yetty_ygui_framework_set_key_cb(a.fw, key_cb, &a);
+
+    /* Attach to the host yetty's root figure container over the yclass-RPC
+	 * DCS transport (stdin = responses, stdout = requests). The handshake
+	 * reads stdin synchronously ONCE — it must run before this loop starts
+	 * consuming stdin, and after raw mode is on (a cooked tty would echo the
+	 * handshake bytes back through the parser). Without the attach the
+	 * framework has no container and every emit fails with "no container" —
+	 * the pane stays black while the client happily renders into the void. */
+    {
+        struct yetty_ycore_void_result attach_res =
+            yetty_ygui_framework_attach(a.fw, STDIN_FILENO, STDOUT_FILENO, /*compressed=*/1);
+        if (YETTY_IS_ERR(attach_res)) {
+            fprintf(stderr, "ybrowser: framework_attach: %s\n", attach_res.error.msg);
+            yetty_ycore_error_destroy(attach_res.error);
+            err_ok(yetty_ygui_framework_destroy(a.fw));
+            if (raw_ok) {
+                tcsetattr(STDIN_FILENO, TCSANOW, &saved);
+            }
+            return 1;
+        }
+    }
 
     if (build_ui(&a) < 0) {
         err_ok(yetty_ygui_framework_destroy(a.fw));
@@ -1634,7 +1789,14 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
         }
 
         if (yetty_ygui_framework_is_dirty(a.fw)) {
-            err_ok(yetty_ygui_framework_emit(a.fw));
+            /* Emit failures matter here: a silently dropped frame leaves the
+			 * host showing stale widget state (e.g. a reload/stop icon stuck
+			 * on the previous glyph), so surface them to the profiler. */
+            struct yetty_ycore_void_result emit_res = yetty_ygui_framework_emit(a.fw);
+            if (YETTY_IS_ERR(emit_res)) {
+                yetty_ycore_error_print(stderr, "ybrowser: framework_emit", emit_res.error);
+                yetty_ycore_error_destroy(emit_res.error);
+            }
             fflush(stdout);
         }
 
@@ -1671,6 +1833,8 @@ int ybrowser_ui_run(const char *initial_url, int viewport_w, int viewport_h, flo
         tab_free(&a.tabs[i]);
     }
     cache_free(&a.cache);
+    (void)yetty_ybrowser_loader_destroy(a.loader);
+    a.loader = NULL;
     err_ok(yetty_ygui_framework_destroy(a.fw));
     if (yf) {
         yetty_yface_destroy(yf);
@@ -1771,7 +1935,8 @@ struct yetty_ycore_void_result yetty_yplatform_platform_run(struct yetty_yclass_
 static void *sa_prefetch_main(void *arg)
 {
     struct yetty_ybrowser_app *s = arg;
-    s->prefetch_data = ybrowser_slurp_file(s->prefetch_url, &s->prefetch_len, &s->prefetch_eff);
+    s->prefetch_data =
+        ybrowser_slurp_file(s->app.loader, s->prefetch_url, &s->prefetch_len, &s->prefetch_eff);
     return NULL;
 }
 
@@ -2311,6 +2476,8 @@ static struct yetty_ycore_void_result sa_worker(struct yetty_yclass_object *obj,
         tab_free(&s->app.tabs[i]);
     }
     cache_free(&s->app.cache);
+    (void)yetty_ybrowser_loader_destroy(s->app.loader);
+    s->app.loader = NULL;
     if (s->app.fw) {
         err_ok(yetty_ygui_framework_destroy(s->app.fw));
         s->app.fw = NULL;
@@ -2380,6 +2547,14 @@ int ybrowser_ui_run_standalone(const char *initial_url, float font_size, int no_
     struct yetty_ybrowser_app *s = app_data.value;
     s->app.running = 1;
     s->app.font_size = font_size > 0.0f ? font_size : 16.0f;
+    {
+        struct yetty_ybrowser_loader_ptr_result loader_res = yetty_ybrowser_loader_create();
+        if (YETTY_IS_OK(loader_res)) {
+            s->app.loader = loader_res.value;
+        } else {
+            yetty_ycore_error_destroy(loader_res.error);
+        }
+    }
     s->app.no_ui = no_ui;
     s->initial_url = initial_url;
 

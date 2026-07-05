@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<title>grid-sidebar</title>
+<style>
+  body { font-family: sans-serif; }
+  .shell { display: grid; grid-template-columns: 220px 1fr; gap: 20px;
+           padding: 0 20px; }
+  aside { background: #f0f2f4; padding: 12px; }
+  aside ul { list-style: none; margin: 0; padding: 0; }
+  aside li { padding: 6px 0; border-bottom: 1px solid #ddd; }
+  .content h2 { margin-top: 0; }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .tile { border: 1px solid #bbb; padding: 12px; }
+  .tile.feature { grid-column: span 2; background: #fafafa; }
+  .banner { margin: 18px 0; padding: 14px; background: #dde4ea; }
+</style>
+</head>
+<body data-test="a0000">
+<div class="shell" data-test="a0001">
+  <aside data-test="a0002">
+    <ul data-test="a0003">
+      <li data-test="a0004">Overview</li>
+      <li data-test="a0005">Sections</li>
+      <li data-test="a0006">Archive</li>
+      <li data-test="a0007">Contact</li>
+      <li data-test="a0008">Colophon</li>
+    </ul>
+  </aside>
+  <div class="content" data-test="a0009">
+    <h2 data-test="a0010">Grid content area beside a fixed sidebar</h2>
+    <div class="banner" data-test="a0011">A full-width banner between heading and tile grid,
+      with enough words that it wraps on narrow content columns.</div>
+    <div class="tiles" data-test="a0012">
+      <div class="tile feature" data-test="a0013">
+        <h3 data-test="a0014">Feature tile spanning two tracks</h3>
+        <p data-test="a0015">Longer feature description filling the double-width cell with a
+           couple of wrapped lines of plain filler text.</p>
+      </div>
+      <div class="tile" data-test="a0016"><h3 data-test="a0017">Tile two</h3><p data-test="a0018">Small blurb.</p></div>
+      <div class="tile" data-test="a0019"><h3 data-test="a0020">Tile three</h3><p data-test="a0021">Another small blurb, slightly
+         longer than the previous one.</p></div>
+      <div class="tile" data-test="a0022"><h3 data-test="a0023">Tile four</h3><p data-test="a0024">Copy.</p></div>
+      <div class="tile" data-test="a0025"><h3 data-test="a0026">Tile five</h3><p data-test="a0027">More copy, wrapping once at
+         typical tile widths.</p></div>
+    </div>
+  </div>
+</div>
+
+
+
+
+</body></html>

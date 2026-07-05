@@ -45,10 +45,96 @@ extern "C" {
 struct yetty_ylexbor;
 YETTY_YRESULT_DECLARE(yetty_ylexbor_ptr, struct yetty_ylexbor *);
 
+/* Network loader — owns everything fetch-related that outlives a single
+ * request: the libcurl share handle (connection pool + DNS + TLS-session
+ * caches), its locks, and the Alt-Svc (HTTP/3 upgrade) cache path. Create
+ * ONE per process and hand it to every engine via the config below so the
+ * page fetch, stylesheet fetches, and image fetches all reuse the same
+ * warm connections. An engine created without one makes its own (private
+ * connection pool — correct, just no cross-engine reuse). Destroy only
+ * after every engine using it is gone. */
+struct yetty_ybrowser_loader;
+YETTY_YRESULT_DECLARE(yetty_ybrowser_loader_ptr, struct yetty_ybrowser_loader *);
+
+struct yetty_ybrowser_loader_ptr_result yetty_ybrowser_loader_create(void);
+struct yetty_ycore_void_result yetty_ybrowser_loader_destroy(struct yetty_ybrowser_loader *loader);
+
+/* ---- Request / response objects ------------------------------------------
+ * A fetch is described by a request object and produces a response object.
+ * The request's `kind` drives the wire shape (Accept / Sec-Fetch-* headers)
+ * — content-negotiating CDNs and WAFs serve different representations per
+ * kind, so a stylesheet fetched "as an image" gets the wrong bytes. The
+ * response accumulates decorations (decoded image pixels today) on its way
+ * to the render end of the pipeline. */
+
+enum yetty_ybrowser_request_kind {
+    YETTY_YBROWSER_REQUEST_DOCUMENT, /* top-level page navigation */
+    YETTY_YBROWSER_REQUEST_STYLE,    /* <link rel=stylesheet> */
+    YETTY_YBROWSER_REQUEST_SCRIPT,   /* external <script src> */
+    YETTY_YBROWSER_REQUEST_IMAGE,    /* <img> / background image */
+    YETTY_YBROWSER_REQUEST_XHR,      /* JS fetch() / XMLHttpRequest */
+};
+
+struct yetty_ybrowser_request {
+    const char *url; /* required; borrowed */
+    enum yetty_ybrowser_request_kind kind;
+    const char *referer; /* document URL, or NULL */
+
+    /* fetch()/XHR extras — leave NULL/0 for a plain GET. */
+    const char *method; /* "POST", "PUT", …; NULL/"GET" for GET */
+    const char *body;   /* request body; copied by the fetcher */
+    size_t body_len;
+    const char *const *extra_headers; /* "Name: value" strings */
+    int extra_header_count;
+
+    /* Cancellation. When cancel_generation is non-NULL, the transfer
+	 * aborts at the next received chunk once *cancel_generation no
+	 * longer equals generation (the engine bumps its counter on
+	 * navigation). NULL → not cancellable. */
+    uint64_t generation;
+    const uint64_t *cancel_generation;
+};
+
+struct yetty_ybrowser_response {
+    long status; /* HTTP status; 200 for file://; 0 on transport failure */
+    char *body;  /* malloc'd, NUL-terminated; NULL on failure */
+    size_t body_len;
+    char *effective_url; /* post-redirect URL; may be NULL */
+    char *content_type;  /* Content-Type header value; may be NULL */
+
+    /* Decorations — attached by pipeline stages after the transfer,
+	 * consumed at render time. */
+    uint32_t *image_pixels; /* RGBA8, row-major */
+    int image_width, image_height;
+};
+
+/* Free every owned member and zero the struct. Safe on NULL and on an
+ * already-disposed response. */
+void yetty_ybrowser_response_dispose(struct yetty_ybrowser_response *response);
+
+/* Synchronous single fetch. The result is an error only for setup-level
+ * failures (bad arguments, out of memory, curl init); network and HTTP
+ * failures are data — inspect response->status / ->body. */
+struct yetty_ycore_void_result yetty_ybrowser_fetch(struct yetty_ybrowser_loader *loader,
+                                                    const struct yetty_ybrowser_request *request,
+                                                    struct yetty_ybrowser_response *response);
+
+/* Parallel batch fetch through one curl_multi: requests to the same
+ * H2 origin multiplex over a single connection; `host_connection_cap`
+ * bounds CONNECTIONS per host (matters for H1-only origins), not
+ * streams. Failed slots come back zeroed (status 0, NULL body). */
+struct yetty_ycore_void_result yetty_ybrowser_fetch_many(
+    struct yetty_ybrowser_loader *loader, const struct yetty_ybrowser_request *requests, int count,
+    struct yetty_ybrowser_response *responses, int host_connection_cap);
+
 struct yetty_ylexbor_config {
     int viewport_width;      /* px */
     int viewport_height;     /* px (unused by current layout — content height is computed) */
     float default_font_size; /* px; falls back to 16 if 0 */
+    /* Optional shared network loader (see above). NULL → the engine
+	 * creates and owns a private one. Borrowed, never freed by the
+	 * engine when supplied. */
+    struct yetty_ybrowser_loader *loader;
 };
 
 struct yetty_ylexbor_ptr_result yetty_ylexbor_create(const struct yetty_ylexbor_config *cfg);
@@ -89,6 +175,17 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y);
  * DOM/box tree directly — so plain hyperlinks are navigable. */
 char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y);
 
+/* First non-empty attribute `name` on the deepest element at document
+ * coords (x, y) or its ancestors — malloc'd copy (caller frees), NULL
+ * when absent. With a non-NULL `contains`, values lacking that substring
+ * are skipped AND each ancestor's subtree is searched too: the payload
+ * often sits on a sibling of the hit (e.g. gnews's article-URL jslog
+ * lives on a separate overlay <a> inside the same story card as the
+ * clicked headline). Generic companion to link_at for callers needing
+ * element context around a hit. */
+char *yetty_ylexbor_ancestor_attr_at(struct yetty_ylexbor *r, float x, float y, const char *name,
+                                     const char *contains);
+
 /* True iff JS mutated the DOM since the last relayout. Cleared by
  * yetty_ylexbor_relayout. */
 int yetty_ylexbor_dom_dirty(const struct yetty_ylexbor *r);
@@ -103,17 +200,17 @@ struct yetty_ycore_void_result yetty_ylexbor_relayout(struct yetty_ylexbor *r);
  * Optional — if not set, only absolute URLs work. */
 struct yetty_ycore_void_result yetty_ylexbor_set_base_url(struct yetty_ylexbor *r, const char *url);
 
-/* Process-wide libcurl share handle (CURLSH*, returned as void* to keep
+/* The loader's libcurl share handle (CURLSH*, returned as void* to keep
  * the public header free of <curl/curl.h>). Use it from external
  * fetchers that go through their own `curl_easy_init()` so the
- * connection they open stays warm for subsequent yetty fetches:
- *     curl_easy_setopt(c, CURLOPT_SHARE, yetty_ylexbor_curl_share());
+ * connection they open stays warm for subsequent engine fetches:
+ *     curl_easy_setopt(c, CURLOPT_SHARE, yetty_ybrowser_loader_curl_share(loader));
  * Without this, the page fetch in tools/ybrowser/main.c opens a TLS
  * connection to e.g. en.wikipedia.org and immediately discards it —
  * then load_external_stylesheets has to re-handshake to the same host
  * for the CSS fetch (~100ms wasted). Returns NULL when libcurl isn't
- * compiled in. */
-void *yetty_ylexbor_curl_share(void);
+ * compiled in or loader is NULL. */
+void *yetty_ybrowser_loader_curl_share(struct yetty_ybrowser_loader *loader);
 
 /* Run any pending timers whose deadline has elapsed and drain Promise
  * microtasks. Returns milliseconds until the next timer fires (-1 if
@@ -162,6 +259,12 @@ struct yetty_ycore_void_result yetty_ylexbor_run_deferred_scripts(struct yetty_y
  * call it once per frame from the host loop to stream a page's images in
  * without ever blocking for the whole set at once. */
 int yetty_ylexbor_fetch_one_pending_image(struct yetty_ylexbor *r);
+
+/* Batch variant: fetch up to `max_count` pending images in one parallel
+ * HTTP/2-multiplexed batch. Returns how many were processed (0 = page
+ * fully loaded). Prefer this over the one-at-a-time call when the host
+ * pumps per frame. */
+int yetty_ylexbor_fetch_pending_images(struct yetty_ylexbor *r, int max_count);
 
 struct yetty_yplatform_yworkpool;
 
@@ -236,6 +339,19 @@ int yetty_ylexbor_test_box_info_at(const struct yetty_ylexbor *r, int index, int
  * to "" on any non-success. */
 int yetty_ylexbor_test_box_data_test_at(const struct yetty_ylexbor *r, int index, char *out_buf,
                                         int cap);
+
+/* Test-only: size provenance — the short names of the layout decisions
+ * that produced this box's final width and height ("css", "flex-shrink",
+ * "abs-fit", ...). The pointers reference static storage; never freed.
+ * Emitted by --dump-boxes so the anchor comparator can cluster geometry
+ * divergences by the deciding engine branch. Returns 0 on success. */
+int yetty_ylexbor_test_box_sources_at(const struct yetty_ylexbor *r, int index,
+                                      const char **width_source_out,
+                                      const char **height_source_out);
+
+/* Short name for an enum yl_size_source value (internal enum; exposed for
+ * the dump tool). */
+const char *yetty_ylexbor_size_source_name(int source);
 
 /* Test-only: read an arbitrary attribute (`attr`) off the box's element into
  * out_buf (NUL-terminated, truncated to cap-1). Returns 0 on success, non-zero

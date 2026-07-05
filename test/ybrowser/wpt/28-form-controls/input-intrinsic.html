@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<!-- Form controls are replaced-like: an unstyled <input> still renders at
+     an intrinsic size. Without it a search bar (flex row around an input)
+     collapses to 0 height — the gnews header pattern. Bounds are loose:
+     the pin is "produces a real box", not Chrome's exact control metrics. -->
+<html>
+<head>
+<style>
+  .bar { display: flex; width: 400px; }
+</style>
+</head>
+<body>
+<div>
+  <input type="text" data-test="lone-input" data-expect="8,8,>=120,>=18">
+</div>
+<div class="bar">
+  <input type="text" data-test="flex-input" data-expect="*,*,>=120,>=18">
+</div>
+</body>
+</html>

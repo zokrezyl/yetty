@@ -432,6 +432,39 @@ static char *data_uri_decode(const char *url, size_t *out_len)
     return buf;
 }
 
+/* 2xx acceptance — one rule for every image path (a 203 or 206 image is
+ * as decodable as a 200; anything else is a failure). */
+static int image_response_ok(const struct yetty_ybrowser_response *response)
+{
+    return response->body != NULL && response->body_len > 0 && response->status >= 200 &&
+           response->status < 300;
+}
+
+/* The image decoration stage: decode a fetched response's bytes and
+ * attach the pixels to the response object. The render side consumes
+ * the decorated response (pixels move into the per-document cache).
+ * A response that already carries pixels (loader cache hit) skips the
+ * decode; a fresh decode is published back so the NEXT document skips
+ * it too. */
+static int decorate_image_response(struct yetty_ybrowser_loader *loader, const char *url,
+                                   struct yetty_ybrowser_response *response)
+{
+    if (response->image_pixels) {
+        return 1; /* decoration arrived with the cache hit */
+    }
+    uint32_t *pixels = NULL;
+    int width = 0, height = 0;
+    if (!decode_image((const uint8_t *)response->body, response->body_len, &pixels, &width,
+                      &height)) {
+        return 0;
+    }
+    response->image_pixels = pixels;
+    response->image_width = width;
+    response->image_height = height;
+    yetty_ybrowser_loader_cache_put_pixels(loader, url, pixels, width, height);
+    return 1;
+}
+
 /* Look up `url` in the document's image cache. Returns the cache slot
  * (existing or freshly allocated) or NULL on alloc failure. The slot
  * may have failed=1 to indicate a previous fetch/decode error — caller
@@ -470,26 +503,35 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(struct
         return NULL;
     }
 
-    long status = 0;
-    size_t blen = 0;
-    char *bytes = NULL;
+    struct yetty_ybrowser_response response = {0};
     if (strncmp(url, "data:", 5) == 0) {
-        bytes = data_uri_decode(url, &blen);
-        status = bytes ? 200 : 0;
+        response.body = data_uri_decode(url, &response.body_len);
+        response.status = response.body ? 200 : 0;
     } else {
         /* Pass the document's base URL as Referer — CDNs route
 		 * image-fetch authorisation through this. Without it,
 		 * gstatic's faviconV2 endpoints return 404, several
 		 * image hot-link blockers return 403, and Cloudflare's
 		 * "verifying you are human" page returns 503. */
-        bytes = yetty_ylexbor_http_get_referer(url, r->base_url, &blen, &status);
+        struct yetty_ybrowser_request request = {
+            .url = url,
+            .kind = YETTY_YBROWSER_REQUEST_IMAGE,
+            .referer = r->base_url,
+        };
+        struct yetty_ycore_void_result fetch_res =
+            yetty_ybrowser_fetch(r->loader, &request, &response);
+        if (YETTY_IS_ERR(fetch_res)) {
+            yetty_ycore_error_destroy(fetch_res.error);
+        }
     }
-    if (!bytes || blen == 0 || (status != 0 && status != 200)) {
-        ydebug("img FETCH FAIL status=%ld len=%zu url=%s", status, blen, url);
-        free(bytes);
+    if (!image_response_ok(&response)) {
+        ydebug("img FETCH FAIL status=%ld len=%zu url=%s", response.status, response.body_len, url);
+        yetty_ybrowser_response_dispose(&response);
         e->failed = 1;
         return e;
     }
+    const char *bytes = response.body;
+    size_t blen = response.body_len;
 
     /* Identify the format from the magic bytes for the log. */
     const char *fmt = "unknown";
@@ -513,23 +555,22 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(struct
     }
     (void)fmt; /* consumed only by the ydebug() calls below */
 
-    uint32_t *pixels = NULL;
-    int w = 0, h = 0;
-    int ok = decode_image((const uint8_t *)bytes, blen, &pixels, &w, &h);
-    if (!ok) {
+    if (!decorate_image_response(r->loader, url, &response)) {
         ydebug("img DECODE FAIL fmt=%s len=%zu first8=%02x%02x%02x%02x%02x%02x%02x%02x url=%s", fmt,
                blen, (uint8_t)bytes[0], (uint8_t)bytes[1], (uint8_t)bytes[2], (uint8_t)bytes[3],
                blen >= 5 ? (uint8_t)bytes[4] : 0, blen >= 6 ? (uint8_t)bytes[5] : 0,
                blen >= 7 ? (uint8_t)bytes[6] : 0, blen >= 8 ? (uint8_t)bytes[7] : 0, url);
-        free(bytes);
+        yetty_ybrowser_response_dispose(&response);
         e->failed = 1;
         return e;
     }
-    free(bytes);
-    ydebug("img DECODE OK   fmt=%s wh=%dx%d url=%s", fmt, w, h, url);
-    e->pixels = pixels;
-    e->w = w;
-    e->h = h;
+    ydebug("img DECODE OK   fmt=%s wh=%dx%d url=%s", fmt, response.image_width,
+           response.image_height, url);
+    e->pixels = response.image_pixels;
+    e->w = response.image_width;
+    e->h = response.image_height;
+    response.image_pixels = NULL; /* ownership moved into the cache */
+    yetty_ybrowser_response_dispose(&response);
     return e;
 }
 
@@ -540,12 +581,29 @@ void yetty_ylexbor_set_defer_image_fetch(struct yetty_ylexbor *r, int on)
     }
 }
 
-int yetty_ylexbor_fetch_one_pending_image(struct yetty_ylexbor *r)
+/* Fetch up to `max_count` pending <img> URLs in ONE parallel batch and
+ * fold them into the cache. Returns how many URLs were processed. The
+ * in-yetty client (no worker pool) calls this once per pump — batching
+ * turns its former one-blocking-RTT-per-frame trickle into a handful of
+ * multiplexed transfers per frame. */
+int yetty_ylexbor_fetch_pending_images(struct yetty_ylexbor *r, int max_count)
 {
-    if (r == NULL) {
+    if (r == NULL || max_count <= 0) {
         return 0;
     }
-    for (uint32_t i = 0; i < r->boxes.size; i++) {
+    char **urls = calloc((size_t)max_count, sizeof(*urls));
+    struct yetty_ybrowser_request *fetch_requests =
+        calloc((size_t)max_count, sizeof(*fetch_requests));
+    struct yetty_ybrowser_response *fetch_responses =
+        calloc((size_t)max_count, sizeof(*fetch_responses));
+    if (!urls || !fetch_requests || !fetch_responses) {
+        free(urls);
+        free(fetch_requests);
+        free(fetch_responses);
+        return 0;
+    }
+    int pending = 0;
+    for (uint32_t i = 0; i < r->boxes.size && pending < max_count; i++) {
         struct yetty_ylexbor_box *b = &r->boxes.data[i];
         if (b->kind != YL_BOX_INLINE_IMAGE || b->element == NULL) {
             continue;
@@ -558,29 +616,75 @@ int yetty_ylexbor_fetch_one_pending_image(struct yetty_ylexbor *r)
             free(url); /* inline bytes — no network, handled during paint */
             continue;
         }
-        int cached = 0;
-        for (int k = 0; k < r->img_cache_count; k++) {
+        int already = 0;
+        for (int k = 0; !already && k < r->img_cache_count; k++) {
             if (r->img_cache[k].url && strcmp(r->img_cache[k].url, url) == 0) {
-                cached = 1;
-                break;
+                already = 1;
             }
         }
-        if (cached) {
+        for (int k = 0; !already && k < pending; k++) {
+            if (strcmp(urls[k], url) == 0) {
+                already = 1;
+            }
+        }
+        if (already) {
             free(url);
             continue;
         }
-        /* Fetch exactly this one, bypassing defer so get_or_load does the
-         * network + decode + cache-insert. Restore defer afterwards so the
-         * next paint stays placeholder-only for the remaining pending
-         * images. */
-        int saved = r->defer_image_fetch;
-        r->defer_image_fetch = 0;
-        (void)yetty_ylexbor_img_cache_get_or_load(r, url);
-        r->defer_image_fetch = saved;
-        free(url);
-        return 1;
+        urls[pending] = url;
+        fetch_requests[pending].url = url;
+        fetch_requests[pending].kind = YETTY_YBROWSER_REQUEST_IMAGE;
+        fetch_requests[pending].referer = r->base_url;
+        pending++;
     }
-    return 0;
+    if (pending > 0) {
+        struct yetty_ycore_void_result many_res = yetty_ybrowser_fetch_many(
+            r->loader, fetch_requests, pending, fetch_responses, /*host_connection_cap=*/4);
+        if (YETTY_IS_ERR(many_res)) {
+            yetty_ycore_error_destroy(many_res.error);
+        }
+        for (int k = 0; k < pending; k++) {
+            struct yetty_ybrowser_response *response = &fetch_responses[k];
+            if (r->img_cache_count == r->img_cache_cap) {
+                int new_cap = r->img_cache_cap ? r->img_cache_cap * 2 : 8;
+                struct yetty_ylexbor_img_cache_entry *grown =
+                    realloc(r->img_cache, (size_t)new_cap * sizeof(*grown));
+                if (!grown) {
+                    yetty_ybrowser_response_dispose(response);
+                    continue;
+                }
+                r->img_cache = grown;
+                r->img_cache_cap = new_cap;
+            }
+            struct yetty_ylexbor_img_cache_entry *e = &r->img_cache[r->img_cache_count++];
+            memset(e, 0, sizeof(*e));
+            e->url = urls[k]; /* transfer ownership */
+            urls[k] = NULL;
+            if (!image_response_ok(response) ||
+                !decorate_image_response(r->loader, e->url, response)) {
+                yetty_ybrowser_response_dispose(response);
+                e->failed = 1;
+                continue;
+            }
+            e->pixels = response->image_pixels;
+            e->w = response->image_width;
+            e->h = response->image_height;
+            response->image_pixels = NULL; /* moved into the cache */
+            yetty_ybrowser_response_dispose(response);
+        }
+    }
+    for (int k = 0; k < pending; k++) {
+        free(urls[k]);
+    }
+    free(urls);
+    free(fetch_requests);
+    free(fetch_responses);
+    return pending;
+}
+
+int yetty_ylexbor_fetch_one_pending_image(struct yetty_ylexbor *r)
+{
+    return yetty_ylexbor_fetch_pending_images(r, 1);
 }
 
 /* ===========================================================================
@@ -592,9 +696,13 @@ int yetty_ylexbor_fetch_one_pending_image(struct yetty_ylexbor *r)
 
 struct ylexbor_img_job {
     struct yetty_ylexbor *r;
-    uint64_t generation; /* engine fetch_generation at submit; stale if changed */
-    char *url;           /* owned */
-    char *base_url;      /* owned copy — read on the worker thread */
+    uint64_t generation;                  /* engine fetch_generation at submit; stale if changed */
+    struct yetty_ybrowser_loader *loader; /* borrowed from the engine; the engine
+                                           * outlives every job (destroy defers) */
+    const uint64_t *cancel_generation;    /* &engine->fetch_generation — valid for
+                                           * the job's whole life (teardown defers) */
+    char *url;                            /* owned */
+    char *base_url;                       /* owned copy — read on the worker thread */
     /* Filled by run() on the worker thread: */
     uint32_t *pixels;
     int w, h;
@@ -606,25 +714,34 @@ struct ylexbor_img_job {
 static void img_job_run(void *ctx)
 {
     struct ylexbor_img_job *job = ctx;
-    long status = 0;
-    size_t blen = 0;
-    char *bytes = yetty_ylexbor_http_get_referer(job->url, job->base_url, &blen, &status);
-    if (!bytes || blen == 0 || (status != 0 && status != 200)) {
-        free(bytes);
+    /* cancel_generation points into the engine, but reading it here is
+	 * safe: the engine defers its teardown until every job has drained,
+	 * so the pointer outlives the job. A navigation bumps the counter
+	 * and this transfer aborts at its next received chunk. */
+    struct yetty_ybrowser_request request = {
+        .url = job->url,
+        .kind = YETTY_YBROWSER_REQUEST_IMAGE,
+        .referer = job->base_url,
+        .generation = job->generation,
+        .cancel_generation = job->cancel_generation,
+    };
+    struct yetty_ybrowser_response response = {0};
+    struct yetty_ycore_void_result fetch_res =
+        yetty_ybrowser_fetch(job->loader, &request, &response);
+    if (YETTY_IS_ERR(fetch_res)) {
+        yetty_ycore_error_destroy(fetch_res.error);
+    }
+    if (!image_response_ok(&response) ||
+        !decorate_image_response(job->loader, job->url, &response)) {
+        yetty_ybrowser_response_dispose(&response);
         job->failed = 1;
         return;
     }
-    uint32_t *pixels = NULL;
-    int w = 0, h = 0;
-    int ok = decode_image((const uint8_t *)bytes, blen, &pixels, &w, &h);
-    free(bytes);
-    if (!ok) {
-        job->failed = 1;
-        return;
-    }
-    job->pixels = pixels;
-    job->w = w;
-    job->h = h;
+    job->pixels = response.image_pixels;
+    job->w = response.image_width;
+    job->h = response.image_height;
+    response.image_pixels = NULL; /* ownership moved to the job */
+    yetty_ybrowser_response_dispose(&response);
 }
 
 /* LOOP THREAD. Fold the result into the cache (if still valid) and notify the
@@ -754,6 +871,8 @@ struct yetty_ycore_int_result yetty_ylexbor_start_image_fetch(struct yetty_ylexb
         }
         job->r = r;
         job->generation = r->fetch_generation;
+        job->cancel_generation = &r->fetch_generation;
+        job->loader = r->loader;
         job->url = url; /* ownership transferred to the job */
         job->base_url = r->base_url ? strdup(r->base_url) : NULL;
 
@@ -919,13 +1038,13 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
         }
         if (img_count > 0) {
             char **urls = calloc(img_count, sizeof(*urls));
-            char **bodies = calloc(img_count, sizeof(*bodies));
-            size_t *lens = calloc(img_count, sizeof(*lens));
-            long *status = calloc(img_count, sizeof(*status));
-            int slot_to_cache_idx[1024];
+            struct yetty_ybrowser_request *fetch_requests =
+                calloc(img_count, sizeof(*fetch_requests));
+            struct yetty_ybrowser_response *fetch_responses =
+                calloc(img_count, sizeof(*fetch_responses));
             int n = 0;
-            if (urls && bodies && lens && status) {
-                for (uint32_t i = 0; i < r->boxes.size && n < 1024; i++) {
+            if (urls && fetch_requests && fetch_responses) {
+                for (uint32_t i = 0; i < r->boxes.size && n < (int)img_count; i++) {
                     struct yetty_ylexbor_box *b = &r->boxes.data[i];
                     if (b->kind != YL_BOX_INLINE_IMAGE || !b->element) {
                         continue;
@@ -958,12 +1077,20 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                         continue;
                     }
                     urls[n] = u; /* transferred — freed below */
-                    slot_to_cache_idx[n] = -1;
                     n++;
                 }
                 if (n > 0) {
-                    yetty_ylexbor_http_get_many((const char *const *)urls, n, r->base_url,
-                                                /*concurrency=*/8, bodies, lens, status);
+                    for (int k = 0; k < n; k++) {
+                        fetch_requests[k].url = urls[k];
+                        fetch_requests[k].kind = YETTY_YBROWSER_REQUEST_IMAGE;
+                        fetch_requests[k].referer = r->base_url;
+                    }
+                    struct yetty_ycore_void_result many_res =
+                        yetty_ybrowser_fetch_many(r->loader, fetch_requests, n, fetch_responses,
+                                                  /*host_connection_cap=*/8);
+                    if (YETTY_IS_ERR(many_res)) {
+                        yetty_ycore_error_destroy(many_res.error);
+                    }
                     /* Insert fetched bytes into the cache, decoding
 					 * each in turn. Decode is fast enough that
 					 * parallelising it via worker threads turned
@@ -971,12 +1098,13 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
 					 * overhead — measured 0.77s vs 0.80s on the
 					 * Photography page; reverted. */
                     for (int k = 0; k < n; k++) {
+                        struct yetty_ybrowser_response *response = &fetch_responses[k];
                         if (r->img_cache_count == r->img_cache_cap) {
                             int nc = r->img_cache_cap ? r->img_cache_cap * 2 : 8;
                             struct yetty_ylexbor_img_cache_entry *p =
                                 realloc(r->img_cache, (size_t)nc * sizeof(*p));
                             if (!p) {
-                                free(bodies[k]);
+                                yetty_ybrowser_response_dispose(response);
                                 continue;
                             }
                             r->img_cache = p;
@@ -987,22 +1115,17 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                         memset(e, 0, sizeof(*e));
                         e->url = urls[k]; /* transfer ownership */
                         urls[k] = NULL;
-                        if (!bodies[k] || lens[k] == 0 || (status[k] != 0 && status[k] != 200)) {
-                            free(bodies[k]);
+                        if (!image_response_ok(response) ||
+                            !decorate_image_response(r->loader, e->url, response)) {
+                            yetty_ybrowser_response_dispose(response);
                             e->failed = 1;
                             continue;
                         }
-                        uint32_t *pixels = NULL;
-                        int w = 0, h = 0;
-                        int ok = decode_image((const uint8_t *)bodies[k], lens[k], &pixels, &w, &h);
-                        free(bodies[k]);
-                        if (!ok) {
-                            e->failed = 1;
-                            continue;
-                        }
-                        e->pixels = pixels;
-                        e->w = w;
-                        e->h = h;
+                        e->pixels = response->image_pixels;
+                        e->w = response->image_width;
+                        e->h = response->image_height;
+                        response->image_pixels = NULL; /* moved into the cache */
+                        yetty_ybrowser_response_dispose(response);
                     }
                 }
             }
@@ -1010,9 +1133,8 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
                 free(urls[k]);
             }
             free(urls);
-            free(bodies);
-            free(lens);
-            free(status);
+            free(fetch_requests);
+            free(fetch_responses);
         }
     }
 
@@ -1133,6 +1255,13 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
         }
 
         case YL_BOX_INLINE_IMAGE: {
+            /* <svg> replaced boxes reserve layout space but have no
+			 * raster to draw and no URL to fetch — emit NOTHING. The
+			 * grey placeholder here turned every icon on a story page
+			 * into a grey slab and bloated the drawable payload. */
+            if (b->element != NULL && b->element->node.local_name == LXB_TAG_SVG) {
+                break;
+            }
             char *url = yetty_ylexbor_img_pick_url(r, b->element);
             struct yetty_ylexbor_img_cache_entry *cached = NULL;
             if (url) {
