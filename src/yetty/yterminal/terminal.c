@@ -378,18 +378,33 @@ static void terminal_pty_pipe_read(void *ctx, const char *buf, long nread)
             }
         }
     } else if (nread < 0 && !terminal->shutting_down) {
-        /* PTY closed (UV_EOF / read error): the child shell exited — typically
-     * Ctrl-D in the prompt, or the user typed `exit`. Post CLOSE with this
-     * terminal's view id through the platform input pipe; the yetty event
-     * handler resolves the hosting pane and closes just that pane (or the
-     * workspace when it was the pane's only tab — and only when it is also
-     * the last workspace does this escalate to a full SHUTDOWN).
+        /* Negative read: the child shell exited (UV_EOF after Ctrl-D /
+     * `exit`) — OR a tty hangup the CLIENT side provoked while the shell
+     * is perfectly alive: a pty master reads EIO after session-leader
+     * games or a SIGKILLed foreground group (a `timeout`-killed client,
+     * Ctrl-C at the wrong moment). Closing the pane — and with it,
+     * potentially the whole app — is only correct when the child is
+     * verifiably gone; otherwise keep the terminal (its output may stall
+     * until the next feed, but the session survives).
+     *
+     * Post CLOSE with this terminal's view id through the platform input
+     * pipe; the yetty event handler resolves the hosting pane and closes
+     * just that pane (or the workspace when it was the pane's only tab —
+     * and only when it is also the last workspace does this escalate to a
+     * full SHUTDOWN).
      *
      * The shutting_down guard avoids re-posting if teardown already
      * started (e.g. fork_pty_stop closed the master while we were tearing
      * down for another reason). Setting it here also stops this terminal's
      * render path from doing further GPU work while the close event is in
      * flight. */
+        struct yetty_platform_pty *pty = terminal->context.pty;
+        if (pty && pty->ops->child_alive && pty->ops->child_alive(pty) == 1) {
+            ywarn("terminal_pty_pipe_read: PTY read error (nread=%ld) with the child still "
+                  "alive — transient tty hangup, keeping the terminal open",
+                  nread);
+            return;
+        }
         ydebug("terminal_pty_pipe_read: PTY EOF (nread=%ld), posting CLOSE for view %llu", nread,
                (unsigned long long)terminal->view.id);
         terminal->shutting_down = 1;

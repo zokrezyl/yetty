@@ -41,6 +41,7 @@ static struct yetty_ycore_void_result fork_pty_resize(struct yetty_platform_pty 
                                                       uint32_t pixel_w, uint32_t pixel_h);
 static struct yetty_ycore_void_result fork_pty_stop(struct yetty_platform_pty *self);
 static struct yetty_platform_pty_pipe_source *fork_pty_pipe_source(struct yetty_platform_pty *self);
+static int fork_pty_child_alive(struct yetty_platform_pty *self);
 
 /* Ops table */
 static const struct yetty_platform_pty_ops fork_pty_ops = {
@@ -50,7 +51,27 @@ static const struct yetty_platform_pty_ops fork_pty_ops = {
     .resize = fork_pty_resize,
     .stop = fork_pty_stop,
     .pipe_source = fork_pty_pipe_source,
+    .child_alive = fork_pty_child_alive,
 };
+
+/* 1 = child running, 0 = exited (reaped here — stop/destroy then skip their
+ * own kill/wait escalation via the child_pid guard). */
+static int fork_pty_child_alive(struct yetty_platform_pty *self)
+{
+    struct yetty_yplatform_fork_pty *pty =
+        container_of(self, struct yetty_yplatform_fork_pty, base);
+    if (pty->child_pid <= 0) {
+        return 0;
+    }
+    int status = 0;
+    pid_t reaped = waitpid(pty->child_pid, &status, WNOHANG);
+    if (reaped == 0) {
+        return 1; /* still running */
+    }
+    /* Exited (reaped now) or already gone (ECHILD). */
+    pty->child_pid = -1;
+    return 0;
+}
 
 static struct yetty_ycore_void_result fork_pty_destroy(struct yetty_platform_pty *self)
 {
