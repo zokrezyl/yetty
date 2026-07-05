@@ -107,7 +107,7 @@ EPILOGUE_JS = r"""
       var rect = el.getBoundingClientRect();
       var parentAnchor = el.parentElement
           ? el.parentElement.closest("[data-test]") : null;
-      anchors[el.getAttribute("data-test")] = {
+      var record = {
         tag: el.tagName.toLowerCase(),
         rect: [+(rect.left + scrollLeft).toFixed(1),
                +(rect.top + scrollTop).toFixed(1),
@@ -116,6 +116,11 @@ EPILOGUE_JS = r"""
         parent: parentAnchor ? parentAnchor.getAttribute("data-test") : null,
         display: getComputedStyle(el).display
       };
+      /* Element classes name the divergence mechanism in the comparator's
+       * cluster output (`23x height <div .EctEBd>`). */
+      var classAttr = el.getAttribute("class");
+      if (classAttr) record.cls = classAttr.slice(0, 120);
+      anchors[el.getAttribute("data-test")] = record;
     }
 
     var payload = {

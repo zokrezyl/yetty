@@ -1351,6 +1351,15 @@ static JSValue js_el_textContent_set(JSContext *ctx, JSValueConst this_val, JSVa
     size_t slen;
     const char *s = JS_ToCStringLen(ctx, &slen, val);
     if (s) {
+        /* Detach the old children instead of letting lexbor's
+		 * text_content_set destroy_deep them: JS wrappers (and laid-out
+		 * boxes) hold raw pointers into the subtree, so freeing it here
+		 * turns any retained reference into a use-after-free. Detached
+		 * nodes stay allocated until the document dies — same contract
+		 * as the innerHTML setter below. */
+        while (n->first_child) {
+            lxb_dom_node_remove(n->first_child);
+        }
         lxb_dom_node_text_content_set(n, (const lxb_char_t *)s, slen);
         JS_FreeCString(ctx, s);
         mark_dirty(ctx);

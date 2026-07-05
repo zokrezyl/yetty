@@ -95,8 +95,8 @@ static char *slurp_url(struct yetty_ybrowser_loader *loader, const char *url, si
     return body;
 }
 
-char *ybrowser_slurp_file(struct yetty_ybrowser_loader *loader, const char *path,
-                          size_t *out_len, char **out_effective_url)
+char *ybrowser_slurp_file(struct yetty_ybrowser_loader *loader, const char *path, size_t *out_len,
+                          char **out_effective_url)
 {
     if (ybrowser_looks_like_url(path)) {
         return slurp_url(loader, path, out_len, out_effective_url);
@@ -307,6 +307,16 @@ int main(int argc, char **argv)
         } else if (a[0] != '-' || !strcmp(a, "-")) {
             path = a;
         }
+    }
+
+    /* OSC mode shares the PTY between the DCS envelope stream (stdout)
+	 * and diagnostics (stderr). An unbuffered stderr write can split an
+	 * envelope mid-frame and spill raw escape bytes into the host
+	 * terminal (a failed navigation's "HTTP 403" line was enough). When
+	 * stderr still points at that same terminal, silence it; an explicit
+	 * `2>file` redirection keeps trace/profile output working. */
+    if (osc && isatty(STDERR_FILENO)) {
+        (void)freopen("/dev/null", "w", stderr);
     }
 
     /* Interactive mode: hand off to the ygui browser UI. The positional

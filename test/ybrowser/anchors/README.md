@@ -51,6 +51,36 @@ ctest --test-dir <build> -R ybrowser_anchors
 
 Env: `YBROWSER=<path>` overrides the binary (default release build path).
 
+## The fast live-site loop — corpus.py / inspect.py
+
+For "did the engine change move the main sites, and what broke":
+
+```sh
+test/ybrowser/anchors/corpus.py --capture   # first time: capture corpus.txt
+test/ybrowser/anchors/corpus.py             # render+compare ALL pages (parallel)
+test/ybrowser/anchors/corpus.py gnews       # filter by name substring
+```
+
+One screen per run: a summary table (missing / structure / geometry per
+page, each with the delta vs the previous run — persisted in
+`tmp/anchors-live/corpus-status.json`), then per page the top findings
+and the **mechanism clusters**: root-cause findings grouped by
+(kind, tag, class), e.g. `54x width <a .VDXfz> ΣΔ27810 e.g. a0200 …` —
+one line per divergence mechanism instead of hundreds of per-anchor
+lines. Chase a cluster's exemplar anchor with:
+
+```sh
+test/ybrowser/anchors/inspect.py tmp/anchors-live/gnews-story a0200
+test/ybrowser/anchors/inspect.py tmp/anchors-live/gnews-story --children a0199
+test/ybrowser/anchors/inspect.py tmp/anchors-live/gnews-story --parents a0200
+```
+
+(`corpus.py` leaves each page's box dump at `<page-dir>/dump.tsv`, which
+`inspect.py` reads by default.) The page list is `corpus.txt`
+(`name width url`); story/article URLs rot — refresh the line, then
+`corpus.py <name> --recapture`. Captures are live-site content and stay
+under `tmp/anchors-live/`, per the corpus policy below.
+
 ## Authoring a fixture
 
 ```sh

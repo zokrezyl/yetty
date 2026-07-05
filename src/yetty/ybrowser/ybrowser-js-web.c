@@ -207,8 +207,7 @@ static size_t fetch_header_cb(char *line, size_t line_size, size_t line_count, v
             value++;
             value_len--;
         }
-        while (value_len > 0 &&
-               (value[value_len - 1] == '\r' || value[value_len - 1] == '\n')) {
+        while (value_len > 0 && (value[value_len - 1] == '\r' || value[value_len - 1] == '\n')) {
             value_len--;
         }
         if (value_len >= sizeof(transfer->cache_control)) {
@@ -320,8 +319,8 @@ static void loader_cache_evict(struct yetty_ybrowser_loader *loader)
  * and document navigations are not. */
 static int loader_cache_kind_ok(const struct yetty_ybrowser_request *request)
 {
-    if (request->body || (request->method && *request->method &&
-                          strcasecmp(request->method, "GET") != 0)) {
+    if (request->body ||
+        (request->method && *request->method && strcasecmp(request->method, "GET") != 0)) {
         return 0;
     }
     return request->kind == YETTY_YBROWSER_REQUEST_STYLE ||
@@ -361,11 +360,10 @@ static int loader_cache_lookup(struct yetty_ybrowser_loader *loader,
                 response->body_len = entry->bytes_len;
                 response->effective_url =
                     entry->effective_url ? strdup(entry->effective_url) : NULL;
-                response->content_type =
-                    entry->content_type ? strdup(entry->content_type) : NULL;
+                response->content_type = entry->content_type ? strdup(entry->content_type) : NULL;
                 if (entry->pixels && entry->pixels_width > 0 && entry->pixels_height > 0) {
-                    size_t pixel_bytes = (size_t)entry->pixels_width *
-                                         (size_t)entry->pixels_height * 4;
+                    size_t pixel_bytes =
+                        (size_t)entry->pixels_width * (size_t)entry->pixels_height * 4;
                     response->image_pixels = malloc(pixel_bytes);
                     if (response->image_pixels) {
                         memcpy(response->image_pixels, entry->pixels, pixel_bytes);
@@ -390,8 +388,8 @@ static void loader_cache_store(struct yetty_ybrowser_loader *loader,
                                const struct yetty_ybrowser_response *response,
                                const char *cache_control)
 {
-    if (!loader || !loader_cache_kind_ok(request) || !response->body ||
-        response->status < 200 || response->status >= 300) {
+    if (!loader || !loader_cache_kind_ok(request) || !response->body || response->status < 200 ||
+        response->status >= 300) {
         return;
     }
     long ttl_seconds = LOADER_CACHE_DEFAULT_TTL_SECONDS;
@@ -534,8 +532,8 @@ struct yetty_ybrowser_loader_ptr_result yetty_ybrowser_loader_create(void)
             const char *xdg = getenv("XDG_CACHE_HOME");
             const char *home = getenv("HOME");
             if (xdg && *xdg) {
-                snprintf(loader->altsvc_path, sizeof(loader->altsvc_path),
-                         "%s/yetty/altsvc-cache", xdg);
+                snprintf(loader->altsvc_path, sizeof(loader->altsvc_path), "%s/yetty/altsvc-cache",
+                         xdg);
             } else if (home && *home) {
                 snprintf(loader->altsvc_path, sizeof(loader->altsvc_path),
                          "%s/.cache/yetty/altsvc-cache", home);
@@ -814,8 +812,7 @@ static void fetch_configure_easy(struct yetty_ybrowser_loader *loader, CURL *eas
 
 /* Move the transfer result into the response. Consumes the transfer's
  * buffer on success; frees it on failure. */
-static void fetch_finish_response(CURL *easy, CURLcode curl_code,
-                                  struct fetch_transfer *transfer,
+static void fetch_finish_response(CURL *easy, CURLcode curl_code, struct fetch_transfer *transfer,
                                   struct yetty_ybrowser_response *response)
 {
     long status = 0;
@@ -839,8 +836,8 @@ static void fetch_finish_response(CURL *easy, CURLcode curl_code,
         response->effective_url = strdup(effective_url);
     }
     char *content_type = NULL;
-    if (curl_easy_getinfo(easy, CURLINFO_CONTENT_TYPE, &content_type) == CURLE_OK &&
-        content_type && *content_type) {
+    if (curl_easy_getinfo(easy, CURLINFO_CONTENT_TYPE, &content_type) == CURLE_OK && content_type &&
+        *content_type) {
         response->content_type = strdup(content_type);
     }
 }
@@ -858,8 +855,7 @@ struct yetty_ycore_void_result yetty_ybrowser_fetch(struct yetty_ybrowser_loader
         return YETTY_OK_VOID();
     }
     if (loader_cache_lookup(loader, request, response)) {
-        yetty_ylexbor_prof("    HTTP cache-hit bytes=%zu %.90s", response->body_len,
-                           request->url);
+        yetty_ylexbor_prof("    HTTP cache-hit bytes=%zu %.90s", response->body_len, request->url);
         return YETTY_OK_VOID();
     }
     CURL *easy = curl_easy_init();
@@ -1024,8 +1020,8 @@ struct yetty_ycore_void_result yetty_ybrowser_fetch_many(
     }
     curl_multi_cleanup(multi);
     free(slots);
-    yetty_ylexbor_prof("    fetch_many DONE  %.0f ms (n=%d)",
-                       yetty_ylexbor_prof_now_ms() - t_many, count);
+    yetty_ylexbor_prof("    fetch_many DONE  %.0f ms (n=%d)", yetty_ylexbor_prof_now_ms() - t_many,
+                       count);
     return YETTY_OK_VOID();
 }
 
@@ -1490,8 +1486,7 @@ static void js_fetch_params_free(struct js_fetch_params *params)
 /* Parse the fetch() init object: method, body (string), headers (plain
  * object of name → value). Anything else (FormData, streams, signals)
  * is ignored — existence is enough for the SPA boot paths we serve. */
-static void js_fetch_parse_init(JSContext *ctx, JSValueConst init,
-                                struct js_fetch_params *params)
+static void js_fetch_parse_init(JSContext *ctx, JSValueConst init, struct js_fetch_params *params)
 {
     if (!JS_IsObject(init)) {
         return;
@@ -1528,8 +1523,8 @@ static void js_fetch_parse_init(JSContext *ctx, JSValueConst init,
         uint32_t prop_count = 0;
         if (JS_GetOwnPropertyNames(ctx, &props, &prop_count, headers_val,
                                    JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) == 0) {
-            params->header_lines = calloc(prop_count ? prop_count : 1,
-                                          sizeof(*params->header_lines));
+            params->header_lines =
+                calloc(prop_count ? prop_count : 1, sizeof(*params->header_lines));
             for (uint32_t i = 0; params->header_lines && i < prop_count; i++) {
                 const char *name = JS_AtomToCString(ctx, props[i].atom);
                 JSValue value_val = JS_GetProperty(ctx, headers_val, props[i].atom);

@@ -70,13 +70,12 @@ int main(void)
     int failures = 0;
     if (second.body == NULL || second.body_len != first.body_len ||
         memcmp(second.body, first.body, first.body_len) != 0) {
-        printf("FAIL: cached body differs from the original (%zu vs %zu bytes)\n",
-               second.body_len, first.body_len);
+        printf("FAIL: cached body differs from the original (%zu vs %zu bytes)\n", second.body_len,
+               first.body_len);
         failures++;
     }
     if (second.status != first.status) {
-        printf("FAIL: cached status %ld differs from original %ld\n", second.status,
-               first.status);
+        printf("FAIL: cached status %ld differs from original %ld\n", second.status, first.status);
         failures++;
     }
 

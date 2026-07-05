@@ -61,17 +61,25 @@ static const struct yl_default_style *default_for(lxb_tag_id_t tag)
     static const struct yl_default_style YL_DEFAULT_BLOCK = {
         YL_DISP_BLOCK, 1.0f, 0, -1, 1.0f, 1.0f, INHERIT_RGB, 0,
     };
-    static const struct yl_default_style h1 = {YL_DISP_BLOCK, 2.00f, 700, -1, 0.67f, 0.67f, INHERIT_RGB};
-    static const struct yl_default_style h2 = {YL_DISP_BLOCK, 1.50f, 700, -1, 0.83f, 0.83f, INHERIT_RGB};
-    static const struct yl_default_style h3 = {YL_DISP_BLOCK, 1.17f, 700, -1, 1.00f, 1.00f, INHERIT_RGB};
-    static const struct yl_default_style h4 = {YL_DISP_BLOCK, 1.00f, 700, -1, 1.33f, 1.33f, INHERIT_RGB};
-    static const struct yl_default_style h5 = {YL_DISP_BLOCK, 0.83f, 700, -1, 1.67f, 1.67f, INHERIT_RGB};
-    static const struct yl_default_style h6 = {YL_DISP_BLOCK, 0.67f, 700, -1, 2.33f, 2.33f, INHERIT_RGB};
+    static const struct yl_default_style h1 = {YL_DISP_BLOCK, 2.00f, 700,        -1,
+                                               0.67f,         0.67f, INHERIT_RGB};
+    static const struct yl_default_style h2 = {YL_DISP_BLOCK, 1.50f, 700,        -1,
+                                               0.83f,         0.83f, INHERIT_RGB};
+    static const struct yl_default_style h3 = {YL_DISP_BLOCK, 1.17f, 700,        -1,
+                                               1.00f,         1.00f, INHERIT_RGB};
+    static const struct yl_default_style h4 = {YL_DISP_BLOCK, 1.00f, 700,        -1,
+                                               1.33f,         1.33f, INHERIT_RGB};
+    static const struct yl_default_style h5 = {YL_DISP_BLOCK, 0.83f, 700,        -1,
+                                               1.67f,         1.67f, INHERIT_RGB};
+    static const struct yl_default_style h6 = {YL_DISP_BLOCK, 0.67f, 700,        -1,
+                                               2.33f,         2.33f, INHERIT_RGB};
 
-    static const struct yl_default_style strong = {YL_DISP_INLINE, 1.0f, 700, -1, 0, 0, INHERIT_RGB, 0};
+    static const struct yl_default_style strong = {YL_DISP_INLINE, 1.0f, 700, -1, 0, 0,
+                                                   INHERIT_RGB,    0};
     static const struct yl_default_style em = {YL_DISP_INLINE, 1.0f, 0, 1, 0, 0, INHERIT_RGB, 0};
     static const struct yl_default_style anchor = {YL_DISP_INLINE, 1.0f, 0, -1, 0, 0, 0x0000eeu, 1};
-    static const struct yl_default_style small_e = {YL_DISP_INLINE, 0.83f, 0, -1, 0, 0, INHERIT_RGB, 0};
+    static const struct yl_default_style small_e = {YL_DISP_INLINE, 0.83f, 0, -1, 0, 0,
+                                                    INHERIT_RGB,    0};
     static const struct yl_default_style code_e = {YL_DISP_INLINE, 1.0f, 0, -1, 0, 0, 0x444444u, 0};
     static const struct yl_default_style none = {YL_DISP_NONE, 1.0f, 0, -1, 0, 0, INHERIT_RGB, 0};
 
@@ -118,9 +126,10 @@ static const struct yl_default_style *default_for(lxb_tag_id_t tag)
     /* Embedded content the renderer doesn't handle: walking into
      * these accumulates their text-node descendants as visible
      * inline text (the "garbage characters" Wikipedia produces from
-     * its inline SVG icons / math markup). We hide the subtrees
-     * outright until we render them properly. */
-    case LXB_TAG_SVG:
+     * its math markup). We hide the subtrees outright until we render
+     * them properly. <svg> is NOT here: it gets a replaced box (sized
+     * from CSS/attrs/viewBox, subtree never walked) so icon/logo
+     * layout reserves the right space. */
     case LXB_TAG_MATH:
     case LXB_TAG_AUDIO:
     case LXB_TAG_VIDEO:
@@ -189,6 +198,8 @@ struct yl_style_state {
 	                  * whose default_for() flags underline=1) */
     bool line_through;   /* `text-decoration: line-through` from CSS */
     bool overline;       /* `text-decoration: overline` from CSS */
+    bool nowrap;         /* `white-space: nowrap` (inherited) — text runs
+	                  * under this style never soft-wrap */
     struct yetty_ylexbor_color fg;
     int text_align; /* inherited; 0=left, 1=center, 2=right, 3=justify */
     /* Deepest inline ancestor element on the recursion stack — used to
@@ -247,6 +258,10 @@ struct yl_inline_buf {
 	 * (white-space: pre / pre-wrap) so source-line breaks and
 	 * indentation aren't collapsed away. */
     int preserve_ws;
+    /* Set when any text contributing to the run was under
+	 * `white-space: nowrap` — the flushed box then never soft-wraps
+	 * (a whole-run approximation; per-segment nowrap isn't modelled). */
+    int any_nowrap;
     /* Style segments — one entry per contiguous run of text written
 	 * with the same fg/weight/italic/underline. inline_buf_append_styled
 	 * opens a new segment whenever the style changes between calls,
@@ -880,6 +895,7 @@ static struct yetty_ycore_void_result flush_inline(struct yetty_ylexbor *r,
         coll->segs_count = 0;
         coll->segs_cap = 0;
         coll->last_was_space = 0;
+        coll->any_nowrap = 0;
         return YETTY_OK_VOID();
     }
 
@@ -906,11 +922,37 @@ static struct yetty_ycore_void_result flush_inline(struct yetty_ylexbor *r,
         coll->segs_count = 0;
         coll->segs_cap = 0;
     }
+    b->nowrap = coll->any_nowrap != 0;
     link_child(r, parent_idx, cidx);
 
     coll->len = 0;
     coll->last_was_space = 0;
+    coll->any_nowrap = 0;
     return YETTY_OK_VOID();
+}
+
+/* True when `parent_node` has at least one non-whitespace text child —
+ * i.e. an inline-level element under it flows WITHIN a text run (a
+ * Wikipedia citation badge inside a paragraph). False for widget rows
+ * whose children are all elements (toolbars, card corner buttons). */
+static bool has_inline_text_siblings(const lxb_dom_node_t *parent_node)
+{
+    for (const lxb_dom_node_t *sibling = parent_node->first_child; sibling != NULL;
+         sibling = sibling->next) {
+        if (sibling->type != LXB_DOM_NODE_TYPE_TEXT) {
+            continue;
+        }
+        const lxb_dom_text_t *text_node = lxb_dom_interface_text(sibling);
+        const char *bytes = (const char *)text_node->char_data.data.data;
+        size_t text_len = text_node->char_data.data.length;
+        for (size_t byte_index = 0; byte_index < text_len; byte_index++) {
+            unsigned char ch = (unsigned char)bytes[byte_index];
+            if (ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r') {
+                return true;
+            }
+        }
+    }
+    return false;
 }
 
 static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node_t *node,
@@ -932,6 +974,9 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 				 * underline. */
                 inline_buf_open_seg(inline_collect, parent_style);
                 inline_buf_append(inline_collect, bytes, len);
+                if (parent_style->nowrap) {
+                    inline_collect->any_nowrap = 1;
+                }
             }
             continue;
         }
@@ -1004,6 +1049,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 		 * inline-* at the tag-default disposition: <span> stays
 		 * inline, <div> stays block. */
         enum yl_disp effective_disp = d->disp;
+        bool promote_shrink_to_fit = false;
         if (libcss_disp >= 0) {
             switch (libcss_disp) {
             case CSS_DISPLAY_INLINE:
@@ -1023,19 +1069,26 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
             case CSS_DISPLAY_FLEX:
                 effective_disp = YL_DISP_BLOCK;
                 break;
-            case CSS_DISPLAY_INLINE_BLOCK: {
-                /* Promote an inline-block to a block box only when it carries
-				 * an explicit width or height — it's being used as a sized box,
-				 * which block layout approximates (left-aligned at the given
-				 * size). Content-sized inline-blocks (Wikipedia citation
-				 * badges / year-pills / sidebar tags) stay inline so they don't
-				 * each seize their own line and scatter. */
+            case CSS_DISPLAY_INLINE_BLOCK:
+            case CSS_DISPLAY_INLINE_FLEX: {
+                /* Promote an inline-level box (inline-block / inline-flex)
+				 * to a shrink-to-fit block when it is either explicitly
+				 * sized inline OR standalone — no text run flows around it
+				 * (toolbars, card corner buttons, icon wrappers). An
+				 * inline-block WITH surrounding text (Wikipedia citation
+				 * badges / year-pills / sidebar tags) stays inline: block
+				 * layout would seize a line per badge and scatter
+				 * fragments. The promoted box is marked shrink_to_fit so
+				 * it takes its content width, not the parent's. */
                 size_t ibs_len = 0;
                 const lxb_char_t *ibs =
                     lxb_dom_element_get_attribute(el, (const lxb_char_t *)"style", 5, &ibs_len);
-                if (ibs != NULL && (find_inline_decl(ibs, ibs_len, "width", 5, NULL) != NULL ||
-                                    find_inline_decl(ibs, ibs_len, "height", 6, NULL) != NULL)) {
+                bool sized_inline =
+                    ibs != NULL && (find_inline_decl(ibs, ibs_len, "width", 5, NULL) != NULL ||
+                                    find_inline_decl(ibs, ibs_len, "height", 6, NULL) != NULL);
+                if (sized_inline || !has_inline_text_siblings(node)) {
                     effective_disp = YL_DISP_BLOCK;
+                    promote_shrink_to_fit = true;
                 }
                 break;
             }
@@ -1046,11 +1099,37 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 break;
             }
         }
-        /* <img> is special — even when CSS reports inline (the
-		 * default), we still produce a YL_BOX_INLINE_IMAGE rather
-		 * than recursing as text. Fall through to the existing
-		 * else-branch which handles the img case. */
-        if (child->local_name == LXB_TAG_IMG) {
+        /* Grid/flex items are blockified: an inline-level element child
+		 * of a grid/flex container computes to a block-level box. Without
+		 * this an unstyled wrapper (gnews <c-wiz>, plain <a>/<span>
+		 * items) stays inline, produces no box, and its whole subtree
+		 * escapes the grid/flex placement. Text runs are untouched —
+		 * they still flow as anonymous inline content. */
+        {
+            enum yetty_ylexbor_layout_mode parent_mode = r->boxes.data[parent_idx].layout_mode;
+            if ((parent_mode == YL_LAYOUT_GRID || parent_mode == YL_LAYOUT_FLEX_ROW ||
+                 parent_mode == YL_LAYOUT_FLEX_COLUMN) &&
+                effective_disp == YL_DISP_INLINE) {
+                effective_disp = YL_DISP_BLOCK;
+            }
+        }
+
+        /* Replaced form controls render as real boxes even at the inline
+		 * default — promote standalone ones (no surrounding text run)
+		 * exactly like inline-block widgets; their intrinsic size comes
+		 * from the cascade-fallback below. */
+        if (effective_disp == YL_DISP_INLINE &&
+            (child->local_name == LXB_TAG_INPUT || child->local_name == LXB_TAG_SELECT ||
+             child->local_name == LXB_TAG_TEXTAREA) &&
+            !has_inline_text_siblings(node)) {
+            effective_disp = YL_DISP_BLOCK;
+            promote_shrink_to_fit = true;
+        }
+
+        /* <img> and <svg> are replaced elements — even when CSS (or the
+		 * blockification above) says otherwise, they route to the
+		 * replaced-box branch below rather than recursing as content. */
+        if (child->local_name == LXB_TAG_IMG || child->local_name == LXB_TAG_SVG) {
             effective_disp = YL_DISP_INLINE;
         }
 
@@ -1069,6 +1148,7 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
             struct yetty_ylexbor_box *b = &r->boxes.data[bidx];
             b->kind = YL_BOX_BLOCK;
             b->element = el;
+            b->shrink_to_fit = promote_shrink_to_fit;
 
             /* Single cascade path: libcss. The inline `style=` is
              * read here only so we can hand it to css_select_style
@@ -1176,6 +1256,24 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     if (yetty_ybrowser_libcss_height(r, cs, s.font_size, pct_basis, &px)) {
                         b->css_height = px;
                     }
+                    /* Form controls are replaced-like: with no author
+					 * width/height they still render at an intrinsic size
+					 * (Chrome's text input is ~170x22 at the default font).
+					 * Without this a promoted <input> box measures empty and
+					 * a search bar collapses to 0. Author CSS wins above. */
+                    if (child->local_name == LXB_TAG_INPUT || child->local_name == LXB_TAG_SELECT ||
+                        child->local_name == LXB_TAG_TEXTAREA) {
+                        if (b->css_width == 0.0f) {
+                            b->css_width = child->local_name == LXB_TAG_TEXTAREA
+                                               ? s.font_size * 30.0f
+                                               : s.font_size * 10.6f;
+                        }
+                        if (b->css_height == 0.0f) {
+                            b->css_height = child->local_name == LXB_TAG_TEXTAREA
+                                                ? s.font_size * 4.5f
+                                                : s.font_size * 1.4f;
+                        }
+                    }
                     if (yetty_ybrowser_libcss_max_width(r, cs, s.font_size, pct_basis, &px)) {
                         b->css_max_width = px;
                     }
@@ -1244,6 +1342,26 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                     }
 
                     int disp = yetty_ybrowser_libcss_display(cs, parent_style == NULL);
+                    /* `display: inherit` — styles are selected per element
+					 * (no parent composition), so libcss can't resolve the
+					 * keyword itself. Map it from the parent box's resolved
+					 * layout (the gnews subgrid idiom:
+					 * `.Oc0wGc{display:inherit;grid-template-columns:inherit}`
+					 * nests grid wrappers several levels deep). */
+                    if (disp == CSS_DISPLAY_INHERIT) {
+                        switch (r->boxes.data[parent_idx].layout_mode) {
+                        case YL_LAYOUT_GRID:
+                            disp = CSS_DISPLAY_GRID;
+                            break;
+                        case YL_LAYOUT_FLEX_ROW:
+                        case YL_LAYOUT_FLEX_COLUMN:
+                            disp = CSS_DISPLAY_FLEX;
+                            break;
+                        default:
+                            disp = CSS_DISPLAY_BLOCK;
+                            break;
+                        }
+                    }
                     /* libcss's compiled-in UA stylesheet reports computed
 				 * display=CSS_DISPLAY_TABLE (6) for several non-table
 				 * HTML elements (most notably <figure>). Without this
@@ -1343,18 +1461,27 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 						 * grid-column spans, which the many-column page grids
 						 * (repeat(12,…)) rely on — those safely stay block. */
                         {
-                            size_t cls_len = 0;
-                            const lxb_char_t *cls_attr = lxb_dom_element_get_attribute(
-                                el, (const lxb_char_t *)"class", 5, &cls_len);
-                            if (cls_attr && cls_len > 0) {
-                                const struct yl_grid_class *gt = yetty_ylexbor_grid_class_lookup(
-                                    r, (const char *)cls_attr, cls_len);
-                                if (gt && gt->ntracks >= 1 && gt->ntracks <= YL_GRID_MAX_TRACKS) {
+                            const struct yl_grid_class *gt = yetty_ylexbor_grid_class_lookup(r, el);
+                            if (gt && gt->ntracks >= 1 && gt->ntracks <= YL_GRID_MAX_TRACKS) {
+                                b->layout_mode = YL_LAYOUT_GRID;
+                                memcpy(b->grid_tracks, gt->tracks, sizeof(b->grid_tracks));
+                                b->grid_ntracks = gt->ntracks;
+                                b->grid_col_gap = gt->col_gap;
+                                b->grid_row_gap = gt->row_gap;
+                            } else if (gt && gt->inherit_template) {
+                                /* `grid-template-columns: inherit` — copy the
+								 * parent box's resolved tracks (CSS inherit =
+								 * the parent's computed value; a non-grid
+								 * parent contributes nothing). */
+                                const struct yetty_ylexbor_box *parent_box =
+                                    &r->boxes.data[parent_idx];
+                                if (parent_box->grid_ntracks > 0) {
                                     b->layout_mode = YL_LAYOUT_GRID;
-                                    memcpy(b->grid_tracks, gt->tracks, sizeof(b->grid_tracks));
-                                    b->grid_ntracks = gt->ntracks;
-                                    b->grid_col_gap = gt->col_gap;
-                                    b->grid_row_gap = gt->row_gap;
+                                    memcpy(b->grid_tracks, parent_box->grid_tracks,
+                                           sizeof(b->grid_tracks));
+                                    b->grid_ntracks = parent_box->grid_ntracks;
+                                    b->grid_col_gap = parent_box->grid_col_gap;
+                                    b->grid_row_gap = parent_box->grid_row_gap;
                                 }
                             }
                         }
@@ -1503,21 +1630,13 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                             /* `span N` (in `span N` or `auto / span N`) — the item
 							 * occupies N columns when auto-flowed. github's whole
 							 * 12-col layout places cards this way. */
-                            const char *sp = NULL;
-                            for (size_t k = 0; k + 4 <= gc_len; k++) {
-                                if (strncasecmp(gc + k, "span", 4) == 0) {
-                                    sp = gc + k + 4;
-                                    break;
-                                }
-                            }
-                            if (sp != NULL) {
-                                while (sp < gc + gc_len && (*sp == ' ' || *sp == '\t')) {
-                                    sp++;
-                                }
-                                int span = atoi(sp);
-                                if (span >= 1 && span <= YL_GRID_MAX_TRACKS) {
-                                    b->grid_col_span = (uint8_t)span;
-                                }
+                            int gc_start = 0;
+                            int gc_span = 0;
+                            if (yetty_ylexbor_grid_parse_placement(gc, 0, gc_len, &gc_start,
+                                                                   &gc_span) &&
+                                gc_span <= YL_GRID_MAX_TRACKS && gc_start <= 255) {
+                                b->grid_col_start = (uint8_t)gc_start;
+                                b->grid_col_span = (uint8_t)gc_span;
                             }
                             /* A leading line NAME (not a number / `span` / `auto`)
 							 * — for named-line placement. */
@@ -1540,26 +1659,50 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                                 }
                             }
                         }
+                        /* Inline `grid-row` — numeric start/span for explicit
+						 * row placement (`1/span 5`, `2/4`). */
+                        size_t gr_len = 0;
+                        const char *gr =
+                            find_inline_decl(istyle, istyle ? istylen : 0, "grid-row", 8, &gr_len);
+                        if (gr != NULL && gr_len > 0) {
+                            int gr_start = 0;
+                            int gr_span = 0;
+                            if (yetty_ylexbor_grid_parse_placement(gr, 0, gr_len, &gr_start,
+                                                                   &gr_span) &&
+                                gr_start <= 255 && gr_span <= 255) {
+                                b->grid_row_start = (uint8_t)gr_start;
+                                b->grid_row_span = (uint8_t)gr_span;
+                            }
+                        }
                     }
-                    /* No inline span? Try the author-stylesheet span table
-					 * first (`.tile.feature { grid-column: span 2 }` — libcss has
-					 * no grid support, so add_css text-scans these), then the
+                    /* No inline placement? Try the author-stylesheet placement
+					 * table first (`.tile.feature { grid-column: span 2 }`,
+					 * `.card.wide .thumb { grid-column: 3/3 }` — libcss has no
+					 * grid support, so add_css text-scans these), then the
 					 * responsive design systems (github's Primer Brand) that
 					 * encode the span in the CLASS name
 					 * (`Grid__column--medium-span-7`), resolved for the current
 					 * viewport width. Without these every card in a 12-col grid
 					 * defaults to one column and the sections stack. */
+                    if (b->grid_col_span == 0 || b->grid_row_span == 0) {
+                        struct yl_grid_placement table_placement =
+                            yetty_ylexbor_grid_span_class_lookup(r, el);
+                        if (b->grid_col_span == 0 && table_placement.col_span > 0) {
+                            b->grid_col_start = table_placement.col_start;
+                            b->grid_col_span = table_placement.col_span;
+                        }
+                        if (b->grid_row_span == 0 && table_placement.row_span > 0) {
+                            b->grid_row_start = table_placement.row_start;
+                            b->grid_row_span = table_placement.row_span;
+                        }
+                    }
                     if (b->grid_col_span == 0) {
                         size_t cls_len2 = 0;
                         const lxb_char_t *cls2 = lxb_dom_element_get_attribute(
                             el, (const lxb_char_t *)"class", 5, &cls_len2);
                         if (cls2 != NULL && cls_len2 > 0) {
-                            int span = yetty_ylexbor_grid_span_class_lookup(r, (const char *)cls2,
-                                                                            cls_len2);
-                            if (span < 1) {
-                                span = grid_span_from_classes((const char *)cls2, cls_len2,
+                            int span = grid_span_from_classes((const char *)cls2, cls_len2,
                                                               r->viewport_w, YL_GRID_MAX_TRACKS);
-                            }
                             if (span >= 1) {
                                 b->grid_col_span = (uint8_t)span;
                             }
@@ -1642,8 +1785,12 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
 					 * CSS `white-space: pre / pre-wrap` (common on
 					 * docs-site code blocks inside <div class="..."")
 					 * actually preserves source whitespace, not just
-					 * the legacy <pre>/<textarea> tags. */
+					 * the legacy <pre>/<textarea> tags. The computed
+					 * value already folds in inheritance, so `nowrap`
+					 * is re-derived (set or cleared) at every element
+					 * libcss styled. */
                     css_white_space = yetty_ybrowser_libcss_white_space(cs);
+                    s.nowrap = (css_white_space == CSS_WHITE_SPACE_NOWRAP);
 
                     /* `text-decoration` — bitmask from libcss. UNDERLINE
 					 * folds into the existing s.underline so the
@@ -1967,6 +2114,98 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                 link_child(r, parent_idx, iidx);
                 continue;
             }
+            if (child->local_name == LXB_TAG_SVG) {
+                /* Inline <svg> is a replaced element for layout: a box
+                 * sized from CSS, its width/height attributes, or the
+                 * viewBox — and its vector subtree is NOT walked
+                 * (<path>/<title> are not layout content; the svg <title>
+                 * otherwise leaks into the text run). Painting the vector
+                 * is a separate concern — reserving the right space fixes
+                 * toolbar/logo/icon layout. */
+                struct yetty_ycore_void_result flush_res =
+                    flush_inline(r, parent_style, parent_idx, inline_collect);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, flush_res, "walk: flush before svg");
+                uint32_t svg_idx;
+                struct yetty_ycore_void_result alloc_res = box_alloc(r, &svg_idx);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, alloc_res, "walk: box_alloc svg");
+                struct yetty_ylexbor_box *svg_box = &r->boxes.data[svg_idx];
+                svg_box->kind = YL_BOX_INLINE_IMAGE;
+                svg_box->element = el;
+
+                float attr_w = 0.0f, attr_h = 0.0f;
+                size_t alen = 0;
+                const lxb_char_t *aw =
+                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"width", 5, &alen);
+                if (aw && alen > 0) {
+                    attr_w = (float)atof((const char *)aw);
+                }
+                const lxb_char_t *ah =
+                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"height", 6, &alen);
+                if (ah && alen > 0) {
+                    attr_h = (float)atof((const char *)ah);
+                }
+                float view_w = 0.0f, view_h = 0.0f;
+                const lxb_char_t *vb =
+                    lxb_dom_element_get_attribute(el, (const lxb_char_t *)"viewBox", 7, &alen);
+                if (vb && alen > 0) {
+                    float view_min_x = 0.0f, view_min_y = 0.0f;
+                    if (sscanf((const char *)vb, "%f %f %f %f", &view_min_x, &view_min_y, &view_w,
+                               &view_h) != 4) {
+                        view_w = 0.0f;
+                        view_h = 0.0f;
+                    }
+                }
+
+                float css_w = 0.0f, css_h = 0.0f;
+                {
+                    size_t svg_istylen = 0;
+                    const lxb_char_t *svg_istyle = lxb_dom_element_get_attribute(
+                        el, (const lxb_char_t *)"style", 5, &svg_istylen);
+                    css_computed_style *svg_cs = yetty_ybrowser_libcss_select(
+                        r, el, (const char *)svg_istyle, svg_istyle ? svg_istylen : 0);
+                    /* box vector may have moved during select. */
+                    svg_box = &r->boxes.data[svg_idx];
+                    if (svg_cs) {
+                        float px = 0.0f;
+                        float pct_basis_svg = s.font_size * 16.0f;
+                        if (yetty_ybrowser_libcss_width(r, svg_cs, s.font_size, pct_basis_svg,
+                                                        &px) &&
+                            px > 0.0f) {
+                            css_w = px;
+                        }
+                        if (yetty_ybrowser_libcss_height(r, svg_cs, s.font_size, pct_basis_svg,
+                                                         &px) &&
+                            px > 0.0f) {
+                            css_h = px;
+                        }
+                        yetty_ybrowser_libcss_release(svg_cs);
+                        svg_box = &r->boxes.data[svg_idx];
+                    }
+                }
+
+                /* Per-axis priority: CSS, then attribute; a missing axis
+                 * derives from the viewBox aspect; nothing at all falls
+                 * back to the viewBox size, else the CSS replaced default
+                 * (300x150). */
+                float box_w = css_w > 0.0f ? css_w : attr_w;
+                float box_h = css_h > 0.0f ? css_h : attr_h;
+                if (box_w > 0.0f && box_h <= 0.0f) {
+                    box_h = (view_w > 0.0f && view_h > 0.0f) ? box_w * view_h / view_w : box_w;
+                } else if (box_h > 0.0f && box_w <= 0.0f) {
+                    box_w = (view_w > 0.0f && view_h > 0.0f) ? box_h * view_w / view_h : box_h;
+                } else if (box_w <= 0.0f && box_h <= 0.0f) {
+                    /* No CSS, no attrs: viewBox size, else assume a small
+					 * icon. (Chrome's replaced default is 300x150, but we
+					 * don't paint the vector — a giant invisible spacer
+					 * hurts more than an undersized one.) */
+                    box_w = view_w > 0.0f ? view_w : 24.0f;
+                    box_h = view_h > 0.0f ? view_h : 24.0f;
+                }
+                svg_box->w = box_w;
+                svg_box->h = box_h;
+                link_child(r, parent_idx, svg_idx);
+                continue;
+            }
             /* Inline element: recurse, accumulating into the
 			 * parent block's inline buffer. Track the deepest
 			 * CLICKABLE inline ancestor on s.link_element so seg
@@ -2038,6 +2277,13 @@ static struct yetty_ycore_void_result walk(struct yetty_ylexbor *r, lxb_dom_node
                         if (inl_dec & CSS_TEXT_DECORATION_OVERLINE) {
                             s.overline = true;
                         }
+                    }
+                    /* `white-space: nowrap` on an inline link/button label
+					 * (gnews nav chips, Material button text) — the run it
+					 * contributes to must not soft-wrap. Only SET here:
+					 * clearing is the block path's job. */
+                    if (yetty_ybrowser_libcss_white_space(inl_cs) == CSS_WHITE_SPACE_NOWRAP) {
+                        s.nowrap = true;
                     }
                     yetty_ybrowser_libcss_release(inl_cs);
                 }

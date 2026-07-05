@@ -17,6 +17,10 @@
 #include "ybrowser-internal.h"
 #include "ybrowser-libcss.h"
 
+#ifndef YETTY_HAVE_QUICKJS
+#define YETTY_HAVE_QUICKJS 0
+#endif
+
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
@@ -54,7 +58,6 @@ static inline css_fixed float_to_fixed(float v)
  * already doing in code, just expressed as CSS so libcss can cascade
  * over it. CSS_ORIGIN_UA gives it the lowest precedence.
  * ===========================================================================*/
-
 
 int yetty_ybrowser_libcss_apply_wikipedia_quirks(struct yetty_ylexbor *r)
 {
@@ -672,7 +675,6 @@ static css_error cb_get_libcss_node_data(void *pw, void *node, void **data)
     return CSS_OK;
 }
 
-
 /* libcss requires a URL resolution callback at stylesheet_create time
  * (rejects with CSS_BADPARM otherwise). We don't resolve @import /
  * background-image URLs through libcss — fetching is the host's job
@@ -799,14 +801,25 @@ int yetty_ybrowser_libcss_init(struct yetty_ylexbor *r)
         "ul, ol { display: block; margin: 1em 0; padding-left: 40px; }\n"
         "li { display: list-item; margin: 0; }\n"
         "head, title, meta, link, script, style, template { display: none; }\n"
-        /* <noscript> intentionally rendered: this build runs with
-         * QuickJS off, so the no-JS fallbacks (often <img> versions of
-         * what JS would otherwise inject) ARE the page content. */
+#if YETTY_HAVE_QUICKJS
+        /* Scripts run in this build — <noscript> fallbacks stay hidden
+         * exactly as in any JS-capable browser. Without this, Google's
+         * "activate JavaScript" interstitial paints over the real,
+         * script-built page (maps.google.com). !important so an author
+         * rule can't resurrect it. */
+        "noscript { display: none !important; }\n"
+#else
+        /* QuickJS is compiled out: the no-JS fallbacks (often <img>
+         * versions of what JS would otherwise inject) ARE the page
+         * content. */
         "noscript { display: block; }\n"
+#endif
         /* Embedded content we don't render — hide outright so the walker
-         * doesn't surface their text content (SVG <text>, MathML, etc.)
-         * as garbage at the top of the page. */
-        "svg, math, audio, video, object, embed, iframe, canvas { display: none; }\n"
+         * doesn't surface their text content (MathML etc.) as garbage at
+         * the top of the page. <svg> is NOT hidden: the box builder gives
+         * it a replaced box (subtree never walked) so icon/logo layout
+         * reserves the right space. */
+        "math, audio, video, object, embed, iframe, canvas { display: none; }\n"
         "span, a, strong, b, em, i, cite, code, small, sub, sup, mark, ins, del,"
         " s, u, kbd, samp, var, time, q, abbr, dfn { display: inline; }\n"
         "br { display: inline; }\n"

@@ -525,8 +525,7 @@ struct yetty_ylexbor_img_cache_entry *yetty_ylexbor_img_cache_get_or_load(struct
         }
     }
     if (!image_response_ok(&response)) {
-        ydebug("img FETCH FAIL status=%ld len=%zu url=%s", response.status, response.body_len,
-               url);
+        ydebug("img FETCH FAIL status=%ld len=%zu url=%s", response.status, response.body_len, url);
         yetty_ybrowser_response_dispose(&response);
         e->failed = 1;
         return e;
@@ -697,13 +696,13 @@ int yetty_ylexbor_fetch_one_pending_image(struct yetty_ylexbor *r)
 
 struct ylexbor_img_job {
     struct yetty_ylexbor *r;
-    uint64_t generation; /* engine fetch_generation at submit; stale if changed */
+    uint64_t generation;                  /* engine fetch_generation at submit; stale if changed */
     struct yetty_ybrowser_loader *loader; /* borrowed from the engine; the engine
                                            * outlives every job (destroy defers) */
     const uint64_t *cancel_generation;    /* &engine->fetch_generation — valid for
                                            * the job's whole life (teardown defers) */
-    char *url;           /* owned */
-    char *base_url;      /* owned copy — read on the worker thread */
+    char *url;                            /* owned */
+    char *base_url;                       /* owned copy — read on the worker thread */
     /* Filled by run() on the worker thread: */
     uint32_t *pixels;
     int w, h;
@@ -1256,6 +1255,13 @@ struct yetty_ycore_void_result yetty_ylexbor_paint(struct yetty_ylexbor *r,
         }
 
         case YL_BOX_INLINE_IMAGE: {
+            /* <svg> replaced boxes reserve layout space but have no
+			 * raster to draw and no URL to fetch — emit NOTHING. The
+			 * grey placeholder here turned every icon on a story page
+			 * into a grey slab and bloated the drawable payload. */
+            if (b->element != NULL && b->element->node.local_name == LXB_TAG_SVG) {
+                break;
+            }
             char *url = yetty_ylexbor_img_pick_url(r, b->element);
             struct yetty_ylexbor_img_cache_entry *cached = NULL;
             if (url) {

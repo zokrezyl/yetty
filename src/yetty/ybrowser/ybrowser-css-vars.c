@@ -1125,6 +1125,11 @@ static bool grid_media_active_at(const char *src, size_t len, size_t pos, float 
     return true;
 }
 
+static int grid_selector_alternative_classes(const char *src, size_t alt_start, size_t alt_end,
+                                             char target[64],
+                                             char context[YL_GRID_SPAN_CONTEXT_MAX][64],
+                                             int *out_context_count);
+
 void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *src, size_t len)
 {
     if (r == NULL || src == NULL || len < 12) {
@@ -1156,57 +1161,6 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
                src[sel_start - 1] != ';') {
             sel_start--;
         }
-        /* Selector must be a single `.classname` (no combinators/compound).
-         * Skip leading whitespace and any CSS comment block — a comment right
-         * before the rule would otherwise make the selector look like it
-         * starts with a slash. */
-        for (;;) {
-            while (sel_start < sel_end && (src[sel_start] == ' ' || src[sel_start] == '\n' ||
-                                           src[sel_start] == '\t' || src[sel_start] == '\r')) {
-                sel_start++;
-            }
-            if (sel_start + 1 < sel_end && src[sel_start] == '/' && src[sel_start + 1] == '*') {
-                sel_start += 2;
-                while (sel_start + 1 < sel_end &&
-                       !(src[sel_start] == '*' && src[sel_start + 1] == '/')) {
-                    sel_start++;
-                }
-                sel_start += 2;
-                continue;
-            }
-            break;
-        }
-        if (sel_start >= sel_end || src[sel_start] != '.') {
-            continue;
-        }
-        size_t cls_start = sel_start + 1;
-        size_t cls_end = cls_start;
-        while (cls_end < sel_end) {
-            unsigned char ch = (unsigned char)src[cls_end];
-            if (ch == '\\' && cls_end + 1 < sel_end) {
-                /* Escaped char in the selector (Tailwind `.lg\:grid-cols-5`).
-                 * Consume the backslash and the char it escapes as part of the
-                 * class name. */
-                cls_end += 2;
-            } else if (isalnum(ch) || ch == '-' || ch == '_') {
-                cls_end++;
-            } else {
-                break;
-            }
-        }
-        /* Reject compound/descendant selectors (anything after the class). */
-        {
-            size_t t = cls_end;
-            while (t < sel_end && (src[t] == ' ' || src[t] == '\n')) {
-                t++;
-            }
-            if (t != sel_end) {
-                continue;
-            }
-        }
-        if (cls_end == cls_start) {
-            continue;
-        }
         /* Value of grid-template-columns. */
         size_t val_start = i + nlen;
         size_t val_end = val_start;
@@ -1216,8 +1170,20 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
         struct yl_grid_track tracks[YL_GRID_MAX_TRACKS];
         int ntracks =
             grid_parse_tracks(src + val_start, val_end - val_start, tracks, YL_GRID_MAX_TRACKS);
+        /* `grid-template-columns: inherit` (subgrid idiom): register an
+         * inherit entry — box-build copies the parent's tracks. */
+        int inherit_template = 0;
         if (ntracks < 2) {
-            continue; /* a single column is just a block — nothing to gain */
+            size_t v = val_start;
+            while (v < val_end && (src[v] == ' ' || src[v] == '\t')) {
+                v++;
+            }
+            if (v + 7 <= val_end && strncasecmp(src + v, "inherit", 7) == 0) {
+                inherit_template = 1;
+                ntracks = 0;
+            } else {
+                continue; /* a single column is just a block — nothing to gain */
+            }
         }
         /* Gaps from the same block. */
         size_t block_end = brace + 1;
@@ -1243,39 +1209,81 @@ void yetty_ylexbor_css_scan_grid_templates(struct yetty_ylexbor *r, const char *
             row_gap = grid_find_len(block, blen, "grid-gap", 0);
         }
 
-        /* Store (grow the array; skip if this class is already recorded). */
-        char cls[64];
-        grid_cls_copy_unescape(src + cls_start, cls_end - cls_start, cls, sizeof(cls));
-        int dup = 0;
-        for (int e = 0; e < r->grid_class_count; e++) {
-            if (strcmp(r->grid_classes[e].cls, cls) == 0) {
-                dup = 1;
-                break;
+        /* One entry per comma-alternative of the selector, keyed by the
+         * last class of its final compound; the selector's other classes
+         * become ancestor-context requirements (the gnews card template
+         * lives on a compound: `.MQsxIb.q4atFc{…:1fr 16px auto}`). */
+        size_t alt_start = sel_start;
+        while (alt_start < sel_end) {
+            size_t alt_end = alt_start;
+            while (alt_end < sel_end && src[alt_end] != ',') {
+                alt_end++;
             }
-        }
-        if (dup) {
-            continue;
-        }
-        if (r->grid_class_count == r->grid_class_cap) {
-            int cap = r->grid_class_cap ? r->grid_class_cap * 2 : 16;
-            struct yl_grid_class *grown =
-                realloc(r->grid_classes, (size_t)cap * sizeof(struct yl_grid_class));
-            if (!grown) {
+            char cls[64];
+            char context[YL_GRID_SPAN_CONTEXT_MAX][64];
+            int context_count = 0;
+            if (!grid_selector_alternative_classes(src, alt_start, alt_end, cls, context,
+                                                   &context_count)) {
+                alt_start = alt_end + 1;
+                continue;
+            }
+            int dup = 0;
+            for (int e = 0; e < r->grid_class_count; e++) {
+                const struct yl_grid_class *existing = &r->grid_classes[e];
+                if (strcmp(existing->cls, cls) != 0 || existing->context_count != context_count) {
+                    continue;
+                }
+                int same = 1;
+                for (int k = 0; k < context_count; k++) {
+                    if (strcmp(existing->context[k], context[k]) != 0) {
+                        same = 0;
+                        break;
+                    }
+                }
+                if (same) {
+                    dup = 1;
+                    break;
+                }
+            }
+            if (dup) {
+                alt_start = alt_end + 1;
+                continue;
+            }
+            if (r->grid_class_count == r->grid_class_cap) {
+                int cap = r->grid_class_cap ? r->grid_class_cap * 2 : 16;
+                struct yl_grid_class *grown =
+                    realloc(r->grid_classes, (size_t)cap * sizeof(struct yl_grid_class));
+                if (!grown) {
+                    return;
+                }
+                r->grid_classes = grown;
+                r->grid_class_cap = cap;
+            }
+            struct yl_grid_class *entry = &r->grid_classes[r->grid_class_count];
+            entry->cls = strdup(cls);
+            if (!entry->cls) {
                 return;
             }
-            r->grid_classes = grown;
-            r->grid_class_cap = cap;
+            entry->context_count = 0;
+            for (int k = 0; k < context_count; k++) {
+                entry->context[k] = strdup(context[k]);
+                if (entry->context[k] == NULL) {
+                    for (int f = 0; f < k; f++) {
+                        free(entry->context[f]);
+                    }
+                    free(entry->cls);
+                    return;
+                }
+                entry->context_count++;
+            }
+            memcpy(entry->tracks, tracks, sizeof(tracks));
+            entry->ntracks = (uint8_t)ntracks;
+            entry->inherit_template = (uint8_t)inherit_template;
+            entry->col_gap = col_gap > 0.0f ? col_gap : 0.0f;
+            entry->row_gap = row_gap > 0.0f ? row_gap : 0.0f;
+            r->grid_class_count++;
+            alt_start = alt_end + 1;
         }
-        struct yl_grid_class *entry = &r->grid_classes[r->grid_class_count];
-        entry->cls = strdup(cls);
-        if (!entry->cls) {
-            return;
-        }
-        memcpy(entry->tracks, tracks, sizeof(tracks));
-        entry->ntracks = (uint8_t)ntracks;
-        entry->col_gap = col_gap > 0.0f ? col_gap : 0.0f;
-        entry->row_gap = row_gap > 0.0f ? row_gap : 0.0f;
-        r->grid_class_count++;
     }
 }
 
@@ -1425,6 +1433,9 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
     }
     for (int e = 0; e < r->grid_class_count; e++) {
         free(r->grid_classes[e].cls);
+        for (int k = 0; k < r->grid_classes[e].context_count; k++) {
+            free(r->grid_classes[e].context[k]);
+        }
     }
     free(r->grid_classes);
     r->grid_classes = NULL;
@@ -1432,6 +1443,9 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
     r->grid_class_cap = 0;
     for (int e = 0; e < r->grid_span_class_count; e++) {
         free(r->grid_span_classes[e].cls);
+        for (int k = 0; k < r->grid_span_classes[e].context_count; k++) {
+            free(r->grid_span_classes[e].context[k]);
+        }
     }
     free(r->grid_span_classes);
     r->grid_span_classes = NULL;
@@ -1446,76 +1460,308 @@ void yetty_ylexbor_grid_classes_free(struct yetty_ylexbor *r)
     r->flex_gap_class_cap = 0;
 }
 
+static int class_attr_has_token(const char *attr, size_t attr_len, const char *cls);
+static int element_or_ancestor_has_class(const lxb_dom_element_t *element, const char *cls);
+
 const struct yl_grid_class *yetty_ylexbor_grid_class_lookup(struct yetty_ylexbor *r,
-                                                            const char *class_attr,
-                                                            size_t class_len)
+                                                            const lxb_dom_element_t *element)
 {
-    if (r == NULL || class_attr == NULL || r->grid_class_count == 0) {
+    if (r == NULL || element == NULL || r->grid_class_count == 0) {
         return NULL;
     }
-    size_t i = 0;
-    while (i < class_len) {
-        while (i < class_len && (class_attr[i] == ' ' || class_attr[i] == '\t')) {
-            i++;
-        }
-        size_t start = i;
-        while (i < class_len && class_attr[i] != ' ' && class_attr[i] != '\t') {
-            i++;
-        }
-        size_t tlen = i - start;
-        if (tlen == 0) {
+    size_t attr_len = 0;
+    const lxb_char_t *attr = lxb_dom_element_get_attribute(
+        (lxb_dom_element_t *)element, (const lxb_char_t *)"class", 5, &attr_len);
+    if (attr == NULL || attr_len == 0) {
+        return NULL;
+    }
+    const struct yl_grid_class *found = NULL;
+    for (int e = 0; e < r->grid_class_count; e++) {
+        const struct yl_grid_class *entry = &r->grid_classes[e];
+        if (!class_attr_has_token((const char *)attr, attr_len, entry->cls)) {
             continue;
         }
-        for (int e = 0; e < r->grid_class_count; e++) {
-            const char *cls = r->grid_classes[e].cls;
-            if (strlen(cls) == tlen && strncmp(cls, class_attr + start, tlen) == 0) {
-                return &r->grid_classes[e];
+        int context_ok = 1;
+        for (int k = 0; k < entry->context_count; k++) {
+            if (!element_or_ancestor_has_class(element, entry->context[k])) {
+                context_ok = 0;
+                break;
             }
         }
+        if (context_ok) {
+            /* Keep scanning: entries are in stylesheet order and the last
+             * matching rule wins (cascade approximation). */
+            found = entry;
+        }
     }
-    return NULL;
+    return found;
+}
+
+/* Extract the class structure of ONE comma-alternative of a selector
+ * ([alt_start, alt_end) in `src`): `target` gets the last class of the
+ * final compound; every other class in the alternative lands in
+ * `context`. Pseudo-classes and attribute selectors are skipped. Returns
+ * 0 when the alternative can't be keyed by a class (final compound is a
+ * bare tag / `*`, malformed, or oversized). */
+static int grid_selector_alternative_classes(const char *src, size_t alt_start, size_t alt_end,
+                                             char target[64],
+                                             char context[YL_GRID_SPAN_CONTEXT_MAX][64],
+                                             int *out_context_count)
+{
+    enum { CLASS_TOKEN_MAX = 8 };
+    struct {
+        size_t start;
+        size_t end;
+        int compound;
+    } tokens[CLASS_TOKEN_MAX];
+    int token_count = 0;
+    int compound_ordinal = -1; /* increments when a new compound opens */
+    bool compound_open = false;
+
+    size_t pos = alt_start;
+    while (pos < alt_end) {
+        unsigned char ch = (unsigned char)src[pos];
+        if (ch == ' ' || ch == '\t' || ch == '\n' || ch == '\r' || ch == '>' || ch == '+' ||
+            ch == '~') {
+            compound_open = false;
+            pos++;
+            continue;
+        }
+        if (!compound_open) {
+            compound_ordinal++;
+            compound_open = true;
+        }
+        if (ch == '.') {
+            pos++;
+            size_t tok_start = pos;
+            while (pos < alt_end) {
+                unsigned char tc = (unsigned char)src[pos];
+                if (tc == '\\' && pos + 1 < alt_end) {
+                    pos += 2;
+                } else if (isalnum(tc) || tc == '-' || tc == '_') {
+                    pos++;
+                } else {
+                    break;
+                }
+            }
+            if (pos == tok_start || token_count == CLASS_TOKEN_MAX) {
+                return 0; /* malformed / oversized selector — skip it */
+            }
+            tokens[token_count].start = tok_start;
+            tokens[token_count].end = pos;
+            tokens[token_count].compound = compound_ordinal;
+            token_count++;
+            continue;
+        }
+        if (ch == '[') {
+            while (pos < alt_end && src[pos] != ']') {
+                pos++;
+            }
+            pos++;
+            continue;
+        }
+        if (ch == ':') {
+            pos++;
+            while (pos < alt_end &&
+                   (isalnum((unsigned char)src[pos]) || src[pos] == '-' || src[pos] == ':')) {
+                pos++;
+            }
+            if (pos < alt_end && src[pos] == '(') {
+                int depth = 0;
+                while (pos < alt_end) {
+                    if (src[pos] == '(') {
+                        depth++;
+                    } else if (src[pos] == ')' && --depth == 0) {
+                        pos++;
+                        break;
+                    }
+                    pos++;
+                }
+            }
+            continue;
+        }
+        /* Tag name / universal / anything else — part of the compound but
+         * not a class token. */
+        pos++;
+    }
+    /* The final compound must contribute at least one class (reject
+     * `.foo > div`); the last class token overall is the target,
+     * everything else is context. */
+    if (token_count == 0 || tokens[token_count - 1].compound != compound_ordinal) {
+        return 0;
+    }
+    int target_token = token_count - 1;
+    grid_cls_copy_unescape(src + tokens[target_token].start,
+                           tokens[target_token].end - tokens[target_token].start, target, 64);
+    int context_count = 0;
+    for (int t = 0; t < token_count - 1 && context_count < YL_GRID_SPAN_CONTEXT_MAX; t++) {
+        grid_cls_copy_unescape(src + tokens[t].start, tokens[t].end - tokens[t].start,
+                               context[context_count], 64);
+        context_count++;
+    }
+    *out_context_count = context_count;
+    return 1;
+}
+
+/* Parse ONE comma-alternative of a `grid-column`/`grid-row` rule's
+ * selector and append a placement entry keyed by the last class of the
+ * final compound, with every other class stored as an ancestor-context
+ * requirement. */
+static void grid_span_scan_alternative(struct yetty_ylexbor *r, const char *src, size_t alt_start,
+                                       size_t alt_end, int axis, int start, int span)
+{
+    char target[64];
+    char context[YL_GRID_SPAN_CONTEXT_MAX][64];
+    int context_count = 0;
+    if (!grid_selector_alternative_classes(src, alt_start, alt_end, target, context,
+                                           &context_count)) {
+        return;
+    }
+
+    /* Dedupe identical entries (re-scans of the same sheet). */
+    for (int e = 0; e < r->grid_span_class_count; e++) {
+        const struct yl_grid_span_class *existing = &r->grid_span_classes[e];
+        if (existing->axis != (uint8_t)axis || existing->start != (uint8_t)start ||
+            existing->span != (uint8_t)span || strcmp(existing->cls, target) != 0 ||
+            existing->context_count != context_count) {
+            continue;
+        }
+        int same = 1;
+        for (int k = 0; k < context_count; k++) {
+            if (strcmp(existing->context[k], context[k]) != 0) {
+                same = 0;
+                break;
+            }
+        }
+        if (same) {
+            return;
+        }
+    }
+
+    if (r->grid_span_class_count == r->grid_span_class_cap) {
+        int cap = r->grid_span_class_cap ? r->grid_span_class_cap * 2 : 8;
+        struct yl_grid_span_class *grown =
+            realloc(r->grid_span_classes, (size_t)cap * sizeof(struct yl_grid_span_class));
+        if (grown == NULL) {
+            return;
+        }
+        r->grid_span_classes = grown;
+        r->grid_span_class_cap = cap;
+    }
+    struct yl_grid_span_class *entry = &r->grid_span_classes[r->grid_span_class_count];
+    entry->cls = strdup(target);
+    if (entry->cls == NULL) {
+        return;
+    }
+    entry->context_count = 0;
+    for (int k = 0; k < context_count; k++) {
+        entry->context[k] = strdup(context[k]);
+        if (entry->context[k] == NULL) {
+            for (int f = 0; f < k; f++) {
+                free(entry->context[f]);
+            }
+            free(entry->cls);
+            return;
+        }
+        entry->context_count++;
+    }
+    entry->axis = (uint8_t)axis;
+    entry->start = (uint8_t)start;
+    entry->span = (uint8_t)span;
+    r->grid_span_class_count++;
+}
+
+int yetty_ylexbor_grid_parse_placement(const char *src, size_t val_start, size_t val_end,
+                                       int *out_start, int *out_span)
+{
+    size_t p = val_start;
+    while (p < val_end && (src[p] == ' ' || src[p] == '\t')) {
+        p++;
+    }
+    int start = 0;
+    int span = 0;
+    if (p < val_end && src[p] >= '1' && src[p] <= '9') {
+        start = atoi(src + p);
+        while (p < val_end && src[p] >= '0' && src[p] <= '9') {
+            p++;
+        }
+    } else if (p + 4 <= val_end && strncasecmp(src + p, "auto", 4) == 0) {
+        p += 4;
+    } else if (!(p + 4 <= val_end && strncasecmp(src + p, "span", 4) == 0)) {
+        return 0; /* named line / negative index — not modelled */
+    }
+    while (p < val_end && (src[p] == ' ' || src[p] == '\t')) {
+        p++;
+    }
+    if (p < val_end && src[p] == '/') {
+        p++;
+        while (p < val_end && (src[p] == ' ' || src[p] == '\t')) {
+            p++;
+        }
+    }
+    if (p + 4 <= val_end && strncasecmp(src + p, "span", 4) == 0) {
+        p += 4;
+        while (p < val_end && (src[p] == ' ' || src[p] == '\t')) {
+            p++;
+        }
+        if (p < val_end && src[p] >= '0' && src[p] <= '9') {
+            span = atoi(src + p);
+        }
+    } else if (p < val_end && src[p] >= '1' && src[p] <= '9') {
+        int end_line = atoi(src + p);
+        span = end_line > start ? end_line - start : 1;
+    } else if (start > 0) {
+        span = 1; /* bare `A` */
+    }
+    if (span < 1) {
+        return 0;
+    }
+    *out_start = start;
+    *out_span = span;
+    return 1;
 }
 
 void yetty_ylexbor_css_scan_grid_spans(struct yetty_ylexbor *r, const char *src, size_t len)
 {
-    if (r == NULL || src == NULL || len < 14) {
+    if (r == NULL || src == NULL || len < 12) {
         return;
     }
-    static const char needle[] = "grid-column:";
-    const size_t nlen = sizeof(needle) - 1;
-    for (size_t i = 0; i + nlen < len; i++) {
-        if (memcmp(src + i, needle, nlen) != 0) {
+    static const char column_needle[] = "grid-column:";
+    static const char row_needle[] = "grid-row:";
+    const size_t column_nlen = sizeof(column_needle) - 1;
+    const size_t row_nlen = sizeof(row_needle) - 1;
+    for (size_t i = 0; i + row_nlen < len; i++) {
+        int axis;
+        size_t nlen;
+        if (i + column_nlen < len && memcmp(src + i, column_needle, column_nlen) == 0) {
+            axis = 0;
+            nlen = column_nlen;
+        } else if (memcmp(src + i, row_needle, row_nlen) == 0) {
+            axis = 1;
+            nlen = row_nlen;
+        } else {
             continue;
         }
         if (!grid_media_active_at(src, len, i, (float)r->viewport_w)) {
             continue;
         }
-        /* Value must be a `span N` placement (`span 2`, `auto / span 2`).
-         * Line indexes / named lines are handled elsewhere. */
         size_t val_start = i + nlen;
         size_t val_end = val_start;
         while (val_end < len && src[val_end] != ';' && src[val_end] != '}') {
             val_end++;
         }
+        int start = 0;
         int span = 0;
-        for (size_t k = val_start; k + 4 <= val_end; k++) {
-            if (strncasecmp(src + k, "span", 4) == 0) {
-                size_t d = k + 4;
-                while (d < val_end && (src[d] == ' ' || src[d] == '\t')) {
-                    d++;
-                }
-                if (d < val_end && src[d] >= '0' && src[d] <= '9') {
-                    span = atoi(src + d);
-                }
-                break;
-            }
-        }
-        if (span < 1 || span > YL_GRID_MAX_TRACKS) {
+        if (!yetty_ylexbor_grid_parse_placement(src, val_start, val_end, &start, &span)) {
             continue;
         }
-        /* Enclosing rule's selector. Same walk as the template scanner,
-         * but a chain of classes (`.tile.feature`) is accepted — the rule
-         * is keyed by the LAST class in the chain. */
+        if (span > YL_GRID_MAX_TRACKS || start > 255) {
+            continue;
+        }
+        /* Enclosing rule's selector list. Comma alternatives and
+         * descendant/child chains are accepted: each alternative is keyed
+         * by the last class of its final compound; every other class in
+         * the alternative becomes an ancestor-context requirement. */
         size_t brace = i;
         while (brace > 0 && src[brace] != '{') {
             brace--;
@@ -1529,118 +1775,97 @@ void yetty_ylexbor_css_scan_grid_spans(struct yetty_ylexbor *r, const char *src,
                src[sel_start - 1] != ';') {
             sel_start--;
         }
-        for (;;) {
-            while (sel_start < sel_end && (src[sel_start] == ' ' || src[sel_start] == '\n' ||
-                                           src[sel_start] == '\t' || src[sel_start] == '\r')) {
-                sel_start++;
+        size_t alt_start = sel_start;
+        while (alt_start < sel_end) {
+            size_t alt_end = alt_start;
+            while (alt_end < sel_end && src[alt_end] != ',') {
+                alt_end++;
             }
-            if (sel_start + 1 < sel_end && src[sel_start] == '/' && src[sel_start + 1] == '*') {
-                sel_start += 2;
-                while (sel_start + 1 < sel_end &&
-                       !(src[sel_start] == '*' && src[sel_start + 1] == '/')) {
-                    sel_start++;
-                }
-                sel_start += 2;
-                continue;
-            }
-            break;
+            grid_span_scan_alternative(r, src, alt_start, alt_end, axis, start, span);
+            alt_start = alt_end + 1;
         }
-        /* Walk the class chain; remember the last class token. */
-        size_t last_cls_start = 0, last_cls_end = 0;
-        size_t pos = sel_start;
-        while (pos < sel_end && src[pos] == '.') {
-            size_t cls_start = pos + 1;
-            size_t cls_end = cls_start;
-            while (cls_end < sel_end) {
-                unsigned char ch = (unsigned char)src[cls_end];
-                if (ch == '\\' && cls_end + 1 < sel_end) {
-                    cls_end += 2;
-                } else if (isalnum(ch) || ch == '-' || ch == '_') {
-                    cls_end++;
-                } else {
-                    break;
-                }
-            }
-            if (cls_end == cls_start) {
-                break;
-            }
-            last_cls_start = cls_start;
-            last_cls_end = cls_end;
-            pos = cls_end;
-        }
-        if (last_cls_end == 0) {
-            continue;
-        }
-        /* Reject anything after the class chain (descendants, elements). */
-        {
-            size_t t = pos;
-            while (t < sel_end && (src[t] == ' ' || src[t] == '\n')) {
-                t++;
-            }
-            if (t != sel_end) {
-                continue;
-            }
-        }
-        char cls[64];
-        grid_cls_copy_unescape(src + last_cls_start, last_cls_end - last_cls_start, cls,
-                               sizeof(cls));
-        int dup = 0;
-        for (int e = 0; e < r->grid_span_class_count; e++) {
-            if (strcmp(r->grid_span_classes[e].cls, cls) == 0) {
-                dup = 1;
-                break;
-            }
-        }
-        if (dup) {
-            continue;
-        }
-        if (r->grid_span_class_count == r->grid_span_class_cap) {
-            int cap = r->grid_span_class_cap ? r->grid_span_class_cap * 2 : 8;
-            struct yl_grid_span_class *grown =
-                realloc(r->grid_span_classes, (size_t)cap * sizeof(struct yl_grid_span_class));
-            if (!grown) {
-                return;
-            }
-            r->grid_span_classes = grown;
-            r->grid_span_class_cap = cap;
-        }
-        struct yl_grid_span_class *entry = &r->grid_span_classes[r->grid_span_class_count];
-        entry->cls = strdup(cls);
-        if (!entry->cls) {
-            return;
-        }
-        entry->span = (uint8_t)span;
-        r->grid_span_class_count++;
     }
 }
 
-int yetty_ylexbor_grid_span_class_lookup(struct yetty_ylexbor *r, const char *class_attr,
-                                         size_t class_len)
+/* True when `cls` appears as a whole token in a space-separated class
+ * attribute value. */
+static int class_attr_has_token(const char *attr, size_t attr_len, const char *cls)
 {
-    if (r == NULL || class_attr == NULL || r->grid_span_class_count == 0) {
-        return 0;
-    }
+    size_t cls_len = strlen(cls);
     size_t i = 0;
-    while (i < class_len) {
-        while (i < class_len && (class_attr[i] == ' ' || class_attr[i] == '\t')) {
+    while (i < attr_len) {
+        while (i < attr_len && (attr[i] == ' ' || attr[i] == '\t')) {
             i++;
         }
         size_t start = i;
-        while (i < class_len && class_attr[i] != ' ' && class_attr[i] != '\t') {
+        while (i < attr_len && attr[i] != ' ' && attr[i] != '\t') {
             i++;
         }
-        size_t tlen = i - start;
-        if (tlen == 0) {
-            continue;
-        }
-        for (int e = 0; e < r->grid_span_class_count; e++) {
-            const char *cls = r->grid_span_classes[e].cls;
-            if (strlen(cls) == tlen && strncmp(cls, class_attr + start, tlen) == 0) {
-                return r->grid_span_classes[e].span;
-            }
+        if (i - start == cls_len && strncmp(attr + start, cls, cls_len) == 0) {
+            return 1;
         }
     }
     return 0;
+}
+
+/* True when the element or one of its DOM ancestors carries class `cls`. */
+static int element_or_ancestor_has_class(const lxb_dom_element_t *element, const char *cls)
+{
+    for (const lxb_dom_node_t *node = lxb_dom_interface_node(element); node != NULL;
+         node = node->parent) {
+        if (node->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+            continue;
+        }
+        size_t attr_len = 0;
+        const lxb_char_t *attr =
+            lxb_dom_element_get_attribute(lxb_dom_interface_element((lxb_dom_node_t *)node),
+                                          (const lxb_char_t *)"class", 5, &attr_len);
+        if (attr != NULL && class_attr_has_token((const char *)attr, attr_len, cls)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+struct yl_grid_placement yetty_ylexbor_grid_span_class_lookup(struct yetty_ylexbor *r,
+                                                              const lxb_dom_element_t *element)
+{
+    struct yl_grid_placement placement = {0};
+    if (r == NULL || element == NULL || r->grid_span_class_count == 0) {
+        return placement;
+    }
+    size_t attr_len = 0;
+    const lxb_char_t *attr = lxb_dom_element_get_attribute(
+        (lxb_dom_element_t *)element, (const lxb_char_t *)"class", 5, &attr_len);
+    if (attr == NULL || attr_len == 0) {
+        return placement;
+    }
+    for (int e = 0; e < r->grid_span_class_count; e++) {
+        const struct yl_grid_span_class *entry = &r->grid_span_classes[e];
+        if (!class_attr_has_token((const char *)attr, attr_len, entry->cls)) {
+            continue;
+        }
+        int context_ok = 1;
+        for (int k = 0; k < entry->context_count; k++) {
+            if (!element_or_ancestor_has_class(element, entry->context[k])) {
+                context_ok = 0;
+                break;
+            }
+        }
+        if (!context_ok) {
+            continue;
+        }
+        /* Keep scanning: entries are in stylesheet order and the last
+         * matching declaration per axis wins (cascade approximation). */
+        if (entry->axis == 0) {
+            placement.col_start = entry->start;
+            placement.col_span = entry->span;
+        } else {
+            placement.row_start = entry->start;
+            placement.row_span = entry->span;
+        }
+    }
+    return placement;
 }
 
 void yetty_ylexbor_css_scan_flex_gaps(struct yetty_ylexbor *r, const char *src, size_t len)
@@ -1721,9 +1946,8 @@ void yetty_ylexbor_css_scan_flex_gaps(struct yetty_ylexbor *r, const char *src, 
         }
         /* Trim trailing whitespace, then scan back to the last whitespace to
          * isolate the final simple selector. */
-        while (sel_end > sel_start &&
-               (src[sel_end - 1] == ' ' || src[sel_end - 1] == '\n' ||
-                src[sel_end - 1] == '\t' || src[sel_end - 1] == '\r')) {
+        while (sel_end > sel_start && (src[sel_end - 1] == ' ' || src[sel_end - 1] == '\n' ||
+                                       src[sel_end - 1] == '\t' || src[sel_end - 1] == '\r')) {
             sel_end--;
         }
         size_t simple_start = sel_end;

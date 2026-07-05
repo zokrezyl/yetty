@@ -1457,6 +1457,15 @@ static JSValue js_el_textContent_set(JSContext *ctx, JSValueConst this_val, JSVa
     size_t slen;
     const char *s = JS_ToCStringLen(ctx, &slen, val);
     if (s) {
+        /* Detach the old children instead of letting lexbor's
+		 * text_content_set destroy_deep them: JS wrappers (and laid-out
+		 * boxes) hold raw pointers into the subtree, so freeing it here
+		 * turns any retained reference into a use-after-free. Detached
+		 * nodes stay allocated until the document dies — same contract
+		 * as the innerHTML setter below. */
+        while (n->first_child) {
+            lxb_dom_node_remove(n->first_child);
+        }
         lxb_dom_node_text_content_set(n, (const lxb_char_t *)s, slen);
         JS_FreeCString(ctx, s);
         mark_dirty(ctx);
@@ -2552,7 +2561,6 @@ static int style_set_property(JSContext *ctx, JSValueConst obj, JSAtom prop, JSV
     return 1; /* property set */
 }
 
-
 static JSValue js_el_style_get(JSContext *ctx, JSValueConst this_val)
 {
     lxb_dom_element_t *el = unwrap_element(ctx, this_val);
@@ -3457,10 +3465,8 @@ void yetty_ylexbor_js_dom_install(struct yetty_ylexbor *r)
     const JSClassDef class_element_def = {"Element", .finalizer = node_finalizer};
     const JSClassDef class_document_def = {"Document", .finalizer = node_finalizer};
     const JSClassDef class_classlist_def = {"DOMTokenList", .finalizer = node_finalizer};
-    const JSClassDef class_style_def = {"CSSStyleDeclaration",
-                                        .finalizer = node_finalizer,
-                                        .exotic =
-                                            (JSClassExoticMethods *)&style_exotic_methods};
+    const JSClassDef class_style_def = {"CSSStyleDeclaration", .finalizer = node_finalizer,
+                                        .exotic = (JSClassExoticMethods *)&style_exotic_methods};
     JS_NewClass(rt, state->class_node_id, &class_node_def);
     JS_NewClass(rt, state->class_element_id, &class_element_def);
     JS_NewClass(rt, state->class_document_id, &class_document_def);

@@ -68,7 +68,8 @@ def run_fixture(name, directory):
         sys.stdout.write(result.stderr[-1500:])
         return False
 
-    comparison = compare.compare_texts(reference, result.stdout)
+    comparison = compare.compare_texts(reference, result.stdout,
+                                       compare.load_classes(fixture_path))
     stats = comparison.stats
     ok = not comparison.findings
     known = name in KNOWN_FAILURES

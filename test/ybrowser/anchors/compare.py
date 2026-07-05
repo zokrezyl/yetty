@@ -27,14 +27,23 @@ Tolerances are deliberately loose (this suite hunts layout-class bugs, not
     height:    ±max(16px, 10%)   (text-metric slack: fonts differ)
     doc height ratio outside [0.8, 1.25] is a global finding
 
+  * CLUSTERS. After the finding list, root-cause findings are grouped by
+    signature (kind + tag + display + element class) and printed by
+    count x magnitude — one line per *mechanism* instead of one line per
+    anchor, which is what makes a 700-finding page triageable.
+
 Usage:
     compare.py <ref.json> <dump.tsv>     # dump.tsv from ybrowser --dump-boxes
     compare.py <ref.json> -              # dump on stdin
-Options: --limit N (top findings shown, default 15), --json <path>.
+Options: --limit N (top findings shown, default 15), --json <path>,
+         --fixture <fixture.html> (element classes in findings/clusters),
+         --clusters N (cluster lines shown, default 10; 0 disables).
 Exit: 0 clean, 1 findings, 2 usage/input error.
 """
 import argparse
 import json
+import os
+import re
 import sys
 
 TOL_X = 8.0
@@ -47,6 +56,26 @@ ROW_CLUSTER_MIN_GAP = 8.0
 # Anchors whose reference box is essentially zero-area carry no signal
 # (empty spacer divs, display:contents wrappers) — ignored entirely.
 ZERO_AREA_LIMIT = 1.0
+
+
+ANCHOR_TAG_RE = re.compile(r'<[a-zA-Z][^>]*?data-test="(a\d+)"[^>]*>')
+CLASS_ATTR_RE = re.compile(r'class="([^"]*)"')
+
+
+def load_classes(fixture_path):
+    """One-pass anchor_id -> class-attribute map from a stamped fixture.
+    Lets findings and clusters name the element (`<div .EctEBd>`) without
+    re-capturing — refs recorded before `cls` was added stay usable."""
+    classes = {}
+    try:
+        html = open(fixture_path, encoding="utf-8", errors="replace").read()
+    except OSError:
+        return classes
+    for match in ANCHOR_TAG_RE.finditer(html):
+        cls_match = CLASS_ATTR_RE.search(match.group(0))
+        if cls_match:
+            classes[match.group(1)] = cls_match.group(1).strip()
+    return classes
 
 
 def parse_dump(text):
@@ -98,28 +127,47 @@ def shape_of(rects):
 
 
 class Comparison:
-    def __init__(self, reference, boxes):
+    def __init__(self, reference, boxes, classes=None):
         self.reference = reference
         self.anchors = reference["anchors"]
         self.boxes = boxes
-        # Anchors worth comparing at all: non-zero reference area.
+        # anchor_id -> class attribute. Reference entries recorded with
+        # `cls` win; a fixture-derived map (load_classes) fills the rest.
+        self.classes = dict(classes or {})
+        for anchor_id, entry in self.anchors.items():
+            if entry.get("cls"):
+                self.classes[anchor_id] = entry["cls"]
+        # Anchors worth comparing at all: non-zero reference area, and not
+        # parked offscreen (screen-reader-only nodes at x:-9999 — their
+        # geometry is meaningless and their placement order differs
+        # between engines, producing phantom structure flips).
         self.active = {
             anchor_id: entry for anchor_id, entry in self.anchors.items()
-            if entry["rect"][2] >= ZERO_AREA_LIMIT
-            or entry["rect"][3] >= ZERO_AREA_LIMIT
+            if (entry["rect"][2] >= ZERO_AREA_LIMIT
+                or entry["rect"][3] >= ZERO_AREA_LIMIT)
+            and entry["rect"][0] + entry["rect"][2] > 0
+            and entry["rect"][1] + entry["rect"][3] > 0
         }
         self.findings = {}   # anchor_id -> [message, ...]
         self.stats = {"anchors": len(self.active), "missing": 0,
                       "structure": 0, "geometry": 0}
 
-    def add(self, anchor_id, kind, message):
-        self.findings.setdefault(anchor_id, []).append((kind, message))
+    def add(self, anchor_id, kind, message, delta=0.0):
+        self.findings.setdefault(anchor_id, []).append((kind, message, delta))
         self.stats["missing" if kind == "missing"
                    else "structure" if kind == "structure"
                    else "geometry"] += 1
 
     def kinds_of(self, anchor_id):
-        return {kind for kind, message in self.findings.get(anchor_id, ())}
+        return {kind for kind, message, delta in self.findings.get(anchor_id, ())}
+
+    def element_label(self, anchor_id):
+        """`<tag .firstClass>` — how findings/clusters name an element."""
+        entry = self.anchors.get(anchor_id, {})
+        tag = entry.get("tag", "?")
+        cls = self.classes.get(anchor_id, "")
+        first_cls = cls.split()[0] if cls.split() else ""
+        return "<%s%s>" % (tag, " ." + first_cls if first_cls else "")
 
     def anchored_ancestor_present_in_both(self, anchor_id):
         """Nearest ancestor anchor that produced a box on both sides."""
@@ -142,8 +190,9 @@ class Comparison:
             got = self.boxes.get(anchor_id)
             if got is None:
                 self.add(anchor_id, "missing",
-                         "no box in ybrowser (ref %s <%s> display:%s)"
-                         % (fmt_rect(entry["rect"]), entry["tag"],
+                         "no box in ybrowser (ref %s %s display:%s)"
+                         % (fmt_rect(entry["rect"]),
+                            self.element_label(anchor_id),
                             entry["display"]))
                 continue
             ref_rect = entry["rect"]
@@ -163,24 +212,25 @@ class Comparison:
 
             relative_to = ("relative to %s" % ancestor_id
                            if ancestor_id else "absolute")
+            label = self.element_label(anchor_id)
             if delta_w > max(TOL_W_PX, TOL_W_REL * ref_rect[2]):
                 self.add(anchor_id, "width",
-                         "width %g vs ref %g (Δ%.0f) <%s> display:%s"
+                         "width %g vs ref %g (Δ%.0f) %s display:%s"
                          % (got[2], ref_rect[2], delta_w,
-                            entry["tag"], entry["display"]))
+                            label, entry["display"]), delta_w)
             if delta_h > max(TOL_H_PX, TOL_H_REL * ref_rect[3]):
                 self.add(anchor_id, "height",
-                         "height %g vs ref %g (Δ%.0f) <%s> display:%s"
+                         "height %g vs ref %g (Δ%.0f) %s display:%s"
                          % (got[3], ref_rect[3], delta_h,
-                            entry["tag"], entry["display"]))
+                            label, entry["display"]), delta_h)
             if delta_x > TOL_X:
                 self.add(anchor_id, "pos",
-                         "x offset Δ%.0f %s <%s>"
-                         % (delta_x, relative_to, entry["tag"]))
+                         "x offset Δ%.0f %s %s"
+                         % (delta_x, relative_to, label), delta_x)
             if delta_y > TOL_Y:
                 self.add(anchor_id, "pos",
-                         "y offset Δ%.0f %s <%s>"
-                         % (delta_y, relative_to, entry["tag"]))
+                         "y offset Δ%.0f %s %s"
+                         % (delta_y, relative_to, label), delta_y)
 
     def check_structure(self):
         children_of = {}
@@ -201,10 +251,10 @@ class Comparison:
                 parent_entry = self.anchors.get(parent_id, {})
                 self.add(parent_id, "structure",
                          "children shape ref %d rows x %d cols vs got "
-                         "%d rows x %d cols (%d children) <%s> display:%s"
+                         "%d rows x %d cols (%d children) %s display:%s"
                          % (ref_shape[0], ref_shape[1], got_shape[0],
                             got_shape[1], len(child_ids),
-                            parent_entry.get("tag", "?"),
+                            self.element_label(parent_id),
                             parent_entry.get("display", "?")))
 
     def check_doc_height(self):
@@ -229,9 +279,8 @@ def fmt_rect(rect):
     return "(%g,%g %gx%g)" % tuple(rect)
 
 
-def report(comparison, limit):
-    """Print root-cause findings in document order; derived findings are
-    folded by how each defect propagates through layout:
+def root_cause_findings(comparison):
+    """Fold derived findings by how each defect propagates through layout:
 
       * a STRUCTURE or MISSING ancestor makes descendant geometry
         meaningless -> fold everything beneath it;
@@ -241,11 +290,12 @@ def report(comparison, limit):
         DESCENDANT also has one (the deepest wrong height is the cause);
       * POS findings are parent-relative already and never folded.
 
-    Returns the number of findings kept."""
+    Returns (kept, folded_count) with kept entries
+    (anchor_id, kind, message, delta) in document order."""
     findings = comparison.findings
-    if not findings:
-        return 0
     anchors = comparison.anchors
+    if not findings:
+        return [], 0
 
     children_of = {}
     for anchor_id, entry in anchors.items():
@@ -278,28 +328,78 @@ def report(comparison, limit):
         if ancestor_kinds & {"structure", "missing"}:
             folded += len(findings[anchor_id])
             continue
-        for kind, message in findings[anchor_id]:
+        for kind, message, delta in findings[anchor_id]:
             if kind == "width" and "width" in ancestor_kinds:
                 folded += 1
             elif kind == "height" and anchor_id != "doc" \
                     and subtree_has_height_finding(anchor_id):
                 folded += 1
             else:
-                kept.append((anchor_id, kind, message))
+                kept.append((anchor_id, kind, message, delta))
+    return kept, folded
 
-    for index, (anchor_id, kind, message) in enumerate(kept):
+
+def cluster_findings(comparison, kept):
+    """Group root-cause findings by mechanism signature
+    (kind, tag, display, first class). Returns cluster dicts sorted by
+    count desc — each line is one *divergence mechanism* with exemplar
+    anchors to start reducing from."""
+    groups = {}
+    for anchor_id, kind, message, delta in kept:
+        if anchor_id == "doc":
+            continue
+        entry = comparison.anchors.get(anchor_id, {})
+        cls = comparison.classes.get(anchor_id, "")
+        first_cls = cls.split()[0] if cls.split() else ""
+        key = (kind, entry.get("tag", "?"), entry.get("display", "?"),
+               first_cls)
+        group = groups.setdefault(key, {"count": 0, "total_delta": 0.0,
+                                        "anchors": []})
+        group["count"] += 1
+        group["total_delta"] += delta
+        if len(group["anchors"]) < 3:
+            group["anchors"].append(anchor_id)
+    clusters = []
+    for (kind, tag, display, first_cls), group in groups.items():
+        clusters.append({
+            "kind": kind, "tag": tag, "display": display, "cls": first_cls,
+            "count": group["count"], "total_delta": group["total_delta"],
+            "anchors": group["anchors"],
+        })
+    clusters.sort(key=lambda c: (-c["count"], -c["total_delta"]))
+    return clusters
+
+
+def report(comparison, limit, cluster_limit=10):
+    """Print root-cause findings in document order, then the cluster
+    summary. Returns the number of findings kept."""
+    kept, folded = root_cause_findings(comparison)
+    for index, (anchor_id, kind, message, delta) in enumerate(kept):
         if index >= limit:
             print("    ... %d more findings" % (len(kept) - index))
             break
         print("    %-6s [%-9s] %s" % (anchor_id, kind, message))
     if folded:
         print("    (%d derived finding(s) folded into the above)" % folded)
+    if cluster_limit > 0 and kept:
+        clusters = cluster_findings(comparison, kept)
+        print("    -- clusters (root causes by mechanism) --")
+        for cluster in clusters[:cluster_limit]:
+            element = "<%s%s>" % (cluster["tag"],
+                                  " ." + cluster["cls"] if cluster["cls"]
+                                  else "")
+            print("    %4dx %-9s %-28s display:%-12s ΣΔ%-7.0f e.g. %s"
+                  % (cluster["count"], cluster["kind"], element,
+                     cluster["display"], cluster["total_delta"],
+                     " ".join(cluster["anchors"])))
+        if len(clusters) > cluster_limit:
+            print("    ... %d more clusters" % (len(clusters) - cluster_limit))
     return len(kept)
 
 
-def compare_texts(reference, dump_text):
-    """Library entry for run.py: returns (comparison, top_level_count)."""
-    comparison = Comparison(reference, parse_dump(dump_text))
+def compare_texts(reference, dump_text, classes=None):
+    """Library entry for run.py / corpus.py: returns the Comparison."""
+    comparison = Comparison(reference, parse_dump(dump_text), classes)
     comparison.run()
     return comparison
 
@@ -309,6 +409,12 @@ def main():
     parser.add_argument("ref", help="ref.json from make-fixture.py")
     parser.add_argument("dump", help="ybrowser --dump-boxes output, or -")
     parser.add_argument("--limit", type=int, default=15)
+    parser.add_argument("--clusters", type=int, default=10,
+                        help="cluster-summary lines (0 disables)")
+    parser.add_argument("--fixture",
+                        help="stamped fixture.html — element classes in "
+                             "findings and clusters (default: fixture.html "
+                             "next to the ref when present)")
     parser.add_argument("--json", dest="json_out",
                         help="also write findings as JSON to this path")
     args = parser.parse_args()
@@ -318,22 +424,34 @@ def main():
     except (OSError, ValueError) as error:
         print("error reading %s: %s" % (args.ref, error), file=sys.stderr)
         return 2
-    dump_text = sys.stdin.read() if args.dump == "-" \
-        else open(args.dump, encoding="utf-8").read()
+    # The dump's trailing snippet column may cut a multibyte sequence in
+    # half — decode tolerantly, the geometry columns are pure ASCII.
+    dump_text = sys.stdin.buffer.read().decode("utf-8", errors="replace") \
+        if args.dump == "-" \
+        else open(args.dump, encoding="utf-8", errors="replace").read()
 
-    comparison = compare_texts(reference, dump_text)
+    fixture_path = args.fixture
+    if fixture_path is None:
+        sibling = os.path.join(os.path.dirname(os.path.abspath(args.ref)),
+                               "fixture.html")
+        fixture_path = sibling if os.path.exists(sibling) else None
+    classes = load_classes(fixture_path) if fixture_path else None
+
+    comparison = compare_texts(reference, dump_text, classes)
     stats = comparison.stats
     print("%d anchors: %d missing, %d structure, %d geometry findings"
           % (stats["anchors"], stats["missing"], stats["structure"],
              stats["geometry"]))
-    report(comparison, args.limit)
+    report(comparison, args.limit, args.clusters)
 
     if args.json_out:
+        kept, folded = root_cause_findings(comparison)
         with open(args.json_out, "w", encoding="utf-8") as handle:
             json.dump({"stats": stats,
+                       "clusters": cluster_findings(comparison, kept),
                        "findings": {anchor_id: [
-                           {"kind": kind, "message": message}
-                           for kind, message in messages]
+                           {"kind": kind, "message": message, "delta": delta}
+                           for kind, message, delta in messages]
                            for anchor_id, messages in
                            comparison.findings.items()}},
                       handle, indent=1, sort_keys=True)

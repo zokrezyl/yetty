@@ -123,10 +123,9 @@ struct yetty_ycore_void_result yetty_ybrowser_fetch(struct yetty_ybrowser_loader
  * H2 origin multiplex over a single connection; `host_connection_cap`
  * bounds CONNECTIONS per host (matters for H1-only origins), not
  * streams. Failed slots come back zeroed (status 0, NULL body). */
-struct yetty_ycore_void_result
-yetty_ybrowser_fetch_many(struct yetty_ybrowser_loader *loader,
-                          const struct yetty_ybrowser_request *requests, int count,
-                          struct yetty_ybrowser_response *responses, int host_connection_cap);
+struct yetty_ycore_void_result yetty_ybrowser_fetch_many(
+    struct yetty_ybrowser_loader *loader, const struct yetty_ybrowser_request *requests, int count,
+    struct yetty_ybrowser_response *responses, int host_connection_cap);
 
 struct yetty_ylexbor_config {
     int viewport_width;      /* px */
@@ -175,6 +174,17 @@ int yetty_ylexbor_dispatch_click(struct yetty_ylexbor *r, float x, float y);
  * in-page "#fragment" target. Works without JavaScript — it reads the
  * DOM/box tree directly — so plain hyperlinks are navigable. */
 char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y);
+
+/* First non-empty attribute `name` on the deepest element at document
+ * coords (x, y) or its ancestors — malloc'd copy (caller frees), NULL
+ * when absent. With a non-NULL `contains`, values lacking that substring
+ * are skipped AND each ancestor's subtree is searched too: the payload
+ * often sits on a sibling of the hit (e.g. gnews's article-URL jslog
+ * lives on a separate overlay <a> inside the same story card as the
+ * clicked headline). Generic companion to link_at for callers needing
+ * element context around a hit. */
+char *yetty_ylexbor_ancestor_attr_at(struct yetty_ylexbor *r, float x, float y, const char *name,
+                                     const char *contains);
 
 /* True iff JS mutated the DOM since the last relayout. Cleared by
  * yetty_ylexbor_relayout. */

@@ -435,8 +435,7 @@ static void script_collect_push(struct script_collect *collect, struct script_en
 {
     if (collect->count == collect->cap) {
         int new_cap = collect->cap ? collect->cap * 2 : 8;
-        struct script_entry *items =
-            realloc(collect->items, (size_t)new_cap * sizeof(*items));
+        struct script_entry *items = realloc(collect->items, (size_t)new_cap * sizeof(*items));
         if (!items) {
             free(entry.url);
             free(entry.inline_body);
@@ -558,8 +557,7 @@ static void run_collected_scripts(struct yetty_ylexbor *r, JSContext *ctx, lxb_d
         if (entry->url) {
             struct yetty_ybrowser_response *response =
                 entry_to_slot ? &fetch_responses[entry_to_slot[i]] : NULL;
-            if (response && response->body && response->status >= 200 &&
-                response->status < 300) {
+            if (response && response->body && response->status >= 200 && response->status < 300) {
                 eval_buf(r, ctx, response->body, response->body_len, entry->url);
             } else {
                 ydebug("js script-load %s status=%ld", entry->url,

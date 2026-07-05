@@ -524,8 +524,7 @@ static struct yetty_ycore_void_result load_external_stylesheets(struct yetty_yle
                 }
             }
             struct yetty_ybrowser_response *response = slot >= 0 ? &fetch_responses[slot] : NULL;
-            if (response && response->body && response->status >= 200 &&
-                response->status < 300) {
+            if (response && response->body && response->status >= 200 && response->status < 300) {
                 struct yetty_ycore_void_result ar =
                     yetty_ylexbor_add_css(r, response->body, response->body_len);
                 if (YETTY_IS_ERR(ar)) {
@@ -576,6 +575,18 @@ struct yetty_ycore_void_result yetty_ylexbor_load_html(struct yetty_ylexbor *r, 
     }
 
     /* Replace the document — fresh parser state, drop any prior boxes. */
+
+    /* The re-parse below frees every node of the old DOM and recycles the
+	 * memory for the new one. The JS world is full of raw pointers into
+	 * that old tree — wrapper opaques, the listener pool, timer callbacks
+	 * closing over old elements — so it must die with the document. A
+	 * surviving timer from the previous page would otherwise mutate
+	 * recycled memory and corrupt the new DOM. Torn down while the old
+	 * document is still alive so the job-drain inside can run safely;
+	 * the next script run lazily re-creates the runtime against the new
+	 * document. */
+    yetty_ylexbor_js_destroy(r);
+
     box_vec_clear(&r->boxes);
     arena_reset(r);
     yetty_ylexbor_grid_classes_free(r);
@@ -982,6 +993,100 @@ int yetty_ylexbor_test_box_path_at(const struct yetty_ylexbor *r, int index, cha
         pos += written;
     }
     return 0;
+}
+
+/* Copy of `name`'s value on `element` when non-empty and containing
+ * `contains` (NULL = any content). NULL when absent/filtered. */
+static char *element_attr_copy(lxb_dom_element_t *element, const char *name, size_t name_len,
+                               const char *contains)
+{
+    size_t value_len = 0;
+    const lxb_char_t *value =
+        lxb_dom_element_get_attribute(element, (const lxb_char_t *)name, name_len, &value_len);
+    if (value == NULL || value_len == 0) {
+        return NULL;
+    }
+    char *copy = malloc(value_len + 1);
+    if (copy == NULL) {
+        return NULL;
+    }
+    memcpy(copy, value, value_len);
+    copy[value_len] = '\0';
+    if (contains != NULL && strstr(copy, contains) == NULL) {
+        free(copy);
+        return NULL;
+    }
+    return copy;
+}
+
+/* Depth-first scan of `node`'s subtree for the first element whose `name`
+ * attribute passes element_attr_copy's filter. Depth-capped — a match sits
+ * a handful of levels inside a card, never hundreds. */
+static char *subtree_attr_find(lxb_dom_node_t *node, const char *name, size_t name_len,
+                               const char *contains, int depth)
+{
+    if (depth > 64) {
+        return NULL;
+    }
+    for (lxb_dom_node_t *child = node->first_child; child; child = child->next) {
+        if (child->type == LXB_DOM_NODE_TYPE_ELEMENT) {
+            char *found =
+                element_attr_copy(lxb_dom_interface_element(child), name, name_len, contains);
+            if (found) {
+                return found;
+            }
+        }
+        char *found = subtree_attr_find(child, name, name_len, contains, depth + 1);
+        if (found) {
+            return found;
+        }
+    }
+    return NULL;
+}
+
+char *yetty_ylexbor_ancestor_attr_at(struct yetty_ylexbor *r, float x, float y, const char *name,
+                                     const char *contains)
+{
+    if (r == NULL || name == NULL) {
+        return NULL;
+    }
+    size_t name_len = strlen(name);
+    /* Deepest box containing (x, y) — same scan as link_at. */
+    lxb_dom_element_t *target = NULL;
+    for (uint32_t i = 0; i < r->boxes.size; i++) {
+        struct yetty_ylexbor_box *b = &r->boxes.data[i];
+        if (b->element == NULL) {
+            continue;
+        }
+        if (x >= b->x && x < b->x + b->w && y >= b->y && y < b->y + b->h) {
+            target = b->element;
+        }
+    }
+    if (target == NULL) {
+        return NULL;
+    }
+    for (lxb_dom_node_t *n = lxb_dom_interface_node(target); n; n = n->parent) {
+        if (n->type != LXB_DOM_NODE_TYPE_ELEMENT) {
+            continue;
+        }
+        char *found = element_attr_copy(lxb_dom_interface_element(n), name, name_len, contains);
+        if (found) {
+            return found;
+        }
+        /* Filtered search: the payload often lives on a SIBLING subtree of
+		 * the hit — e.g. gnews puts the article-URL jslog on a separate
+		 * overlay <a> next to the headline link, inside the same card. The
+		 * nearest ancestor whose subtree holds a match is that card. Only
+		 * done with a filter — the unfiltered walk keeps its plain
+		 * "attribute on an ancestor" contract. */
+        if (contains != NULL) {
+            found = subtree_attr_find(n, name, name_len, contains, 0);
+            if (found) {
+                return found;
+            }
+        }
+    }
+    return NULL;
 }
 
 char *yetty_ylexbor_link_at(struct yetty_ylexbor *r, float x, float y)

@@ -3069,9 +3069,10 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: kind
         type: int
-    doc: "/* Draw the button as a window-control cell with an SDF icon instead of a text
- * label: 0=none (normal label button), 1=minimize, 2=maximize, 3=close. Used by
- * yetty's yui titlebar so its controls match the ychrome-driven tools. */"
+    doc: "/* Draw the button as an SDF icon instead of a text label: 0=none (normal
+ * label button); window controls 1=minimize, 2=maximize, 3=close (used by
+ * yetty's yui titlebar so its controls match the ychrome-driven tools);
+ * browser-toolbar navigation 4=back, 5=forward, 6=reload, 7=stop. */"
   - source_file: src/yetty/ygui/widgets/button.c
     name: yetty_ygui_button_get_label
     return_type: struct yetty_ycore_const_char_ptr_result
